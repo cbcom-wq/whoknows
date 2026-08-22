@@ -22,6 +22,21 @@ project/assembly_name="WhoKnows"
 
 enabled=PackedStringArray("res://addons/gut/plugin.cfg")
 
+[input]
+
+move_forward={"deadzone":0.2,"events":[{"device":-1,"keycode":87,"physical_keycode":0,"type":"InputEventKey","pressed":true}]}
+move_back={"deadzone":0.2,"events":[{"device":-1,"keycode":83,"physical_keycode":0,"type":"InputEventKey","pressed":true}]}
+move_left={"deadzone":0.2,"events":[{"device":-1,"keycode":65,"physical_keycode":0,"type":"InputEventKey","pressed":true}]}
+move_right={"deadzone":0.2,"events":[{"device":-1,"keycode":68,"physical_keycode":0,"type":"InputEventKey","pressed":true}]}
+sprint={"deadzone":0.2,"events":[{"device":-1,"keycode":4194325,"physical_keycode":0,"type":"InputEventKey","pressed":true}]}
+crouch={"deadzone":0.2,"events":[{"device":-1,"keycode":4194326,"physical_keycode":0,"type":"InputEventKey","pressed":true}]}
+interact={"deadzone":0.2,"events":[{"device":-1,"keycode":70,"physical_keycode":0,"type":"InputEventKey","pressed":true}]}
+roll_left={"deadzone":0.2,"events":[{"device":-1,"keycode":81,"physical_keycode":0,"type":"InputEventKey","pressed":true}]}
+roll_right={"deadzone":0.2,"events":[{"device":-1,"keycode":69,"physical_keycode":0,"type":"InputEventKey","pressed":true}]}
+boost={"deadzone":0.2,"events":[{"device":-1,"keycode":32,"physical_keycode":0,"type":"InputEventKey","pressed":true}]}
+toggle_assist={"deadzone":0.2,"events":[{"device":-1,"keycode":90,"physical_keycode":0,"type":"InputEventKey","pressed":true}]}
+cycle_camera={"deadzone":0.2,"events":[{"device":-1,"keycode":86,"physical_keycode":0,"type":"InputEventKey","pressed":true}]}
+
 [physics]
 
 3d/default_gravity=0.0
