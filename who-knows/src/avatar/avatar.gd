@@ -36,6 +36,17 @@ func set_control_enabled(enabled: bool) -> void:
 		velocity = Vector3.ZERO
 
 func _unhandled_input(event: InputEvent) -> void:
+	# Mouse capture is released and regained regardless of who currently has
+	# control. This node captured the cursor, so it owns letting go of it --
+	# and being unable to release it while seated would trap the player.
+	if event.is_action_pressed("ui_cancel"):
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		return
+	if event is InputEventMouseButton and event.pressed \
+			and Input.mouse_mode == Input.MOUSE_MODE_VISIBLE:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		return
+
 	if not _control_enabled:
 		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
