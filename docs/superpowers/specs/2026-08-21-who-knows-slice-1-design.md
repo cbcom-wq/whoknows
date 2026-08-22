@@ -128,7 +128,9 @@ Every block is exactly one of three things:
 
 - **SOLID** — machinery and armour. Fills the cell. Not walkable.
 - **DECK** — open volume, floor plus 2m of headroom. Walkable. Stack two vertically for a 4m room.
-- **MOUNT** — a fixture sitting *inside* a deck cell: pilot seat, console, locker, and later a turret pedestal.
+- **MOUNT** — a fixture: pilot seat, ladder, console, locker, and later a turret pedestal.
+
+The grid holds exactly one `BlockInstance` per cell, so a MOUNT **occupies its own cell** rather than nesting inside a DECK cell — you stand in the same cell as the seat. MOUNT cells are therefore walkable. The **walkable set is DECK ∪ MOUNT**, and that is the set the deck graph and Rule 4 operate on.
 
 A ship is therefore a solid mass of machinery with **negative space carved through it** where people go. Corridors are deliberate. Every cubic metre given to a hallway is a cubic metre not generating power, and that tension is the entire ship-design game.
 
@@ -173,7 +175,7 @@ Fifteen blocks. No weapons — those are Slice 2.
 1. Exactly one **Ship Core**.
 2. Every block face-connected back to the Core.
 3. At least one **Pilot Seat**.
-4. **Every MOUNT is reachable on foot from the Pilot Seat.** Formally: every MOUNT occupies a DECK cell, and all such cells lie in one connected component of the deck graph, where two DECK cells are connected if they are face-adjacent (horizontally, or vertically when joined by a Ladder). A closed Powered Door is treated as connected — doors are obstacles at runtime, not layout errors.
+4. **Every MOUNT is reachable on foot from the Pilot Seat.** Formally: every MOUNT cell lies in the same connected component of the deck graph as the Pilot Seat. The deck graph spans the walkable set (DECK ∪ MOUNT). Two walkable cells are connected when face-adjacent horizontally (±X, ±Z), or vertically (±Y) when at least one of the pair is a Ladder. A closed Powered Door counts as connected — doors are runtime obstacles, not layout errors.
 5. Power generation ≥ power draw. *(Warning, not error — brownouts become a mechanic later.)*
 
 Rules 1–4 are errors and block launch. Rule 5 is a warning.
