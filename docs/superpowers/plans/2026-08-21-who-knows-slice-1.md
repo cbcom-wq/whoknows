@@ -36,6 +36,12 @@
 
   The avatar detects interior geometry and nothing else. Hulls detect only other hulls. Interior geometry is static
   and detects nothing.
+
+  **Queries need masks too, and their defaults differ.** Any `RayCast3D`, `ShapeCast3D`, or `Area3D` that looks for
+  something must mask the layer it expects to find. A `RayCast3D` node defaults to `collision_mask = 1`, so it sees
+  only hulls and will silently never hit interior geometry — a failure with no error, just a feature that never
+  fires. (`PhysicsRayQueryParameters3D.create()` defaults to all layers instead, so direct-space queries do not
+  share this trap.) When a body moves to a new layer, audit every query that was looking for it.
 - **Test naming:** GUT test files are `test/unit/test_<subject>.gd`, classes `extends GutTest`, methods `test_<behaviour>()`.
 
 ## Task type legend
@@ -660,6 +666,9 @@ var _current: Node = null
 func _ready() -> void:
 	target_position = Vector3(0, 0, -2.5)
 	collide_with_areas = true
+	# RayCast3D defaults to mask 1 (exterior_hull). Interactables live on
+	# interior_geometry, so without this the ray finds nothing, forever.
+	collision_mask = 2   # interior_geometry
 
 func _physics_process(_delta: float) -> void:
 	var hit: Node = get_collider() if is_colliding() else null
