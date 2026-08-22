@@ -1,4 +1,4 @@
-[gd_scene load_steps=17 format=3]
+[gd_scene load_steps=24 format=3]
 
 [ext_resource type="Script" path="res://src/ship/ship.gd" id="1_ship"]
 [ext_resource type="PackedScene" path="res://scenes/avatar.tscn" id="2_avatar"]
@@ -6,6 +6,7 @@
 [ext_resource type="Script" path="res://src/avatar/interactor.gd" id="4_interactor"]
 [ext_resource type="Script" path="res://src/avatar/pilot_seat.gd" id="5_pilot_seat"]
 [ext_resource type="Script" path="res://src/camera/camera_director.gd" id="6_camera_director"]
+[ext_resource type="Script" path="res://src/camera/motion_coupling.gd" id="7_motion_coupling"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_flighttest"]
 sky_top_color = Color(0.02, 0.02, 0.05, 1)
@@ -43,6 +44,41 @@ size = Vector3(0.8, 1.2, 0.8)
 
 [sub_resource type="BoxMesh" id="BoxMesh_seat"]
 size = Vector3(0.8, 1.2, 0.8)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_wall_pillar"]
+size = Vector3(1.5, 2, 0.2)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_window"]
+size = Vector3(3, 2, 0.2)
+
+[sub_resource type="Gradient" id="Gradient_starfield"]
+# Cellular noise returns low values right at each cell's feature point and
+# rises quickly away from it, so a narrow white band near 0 with a fast
+# falloff to black reads as sparse, pinpoint stars rather than clouds.
+offsets = PackedFloat32Array(0, 0.04, 0.12)
+colors = PackedColorArray(1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1)
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_starfield"]
+noise_type = 2
+seed = 1337
+frequency = 0.35
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_starfield"]
+width = 1024
+generate_mipmaps = false
+noise = SubResource("FastNoiseLite_starfield")
+color_ramp = SubResource("Gradient_starfield")
+seamless = true
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_sky"]
+shading_mode = 0
+albedo_texture = SubResource("NoiseTexture2D_starfield")
+
+[sub_resource type="SphereMesh" id="SphereMesh_sky"]
+material = SubResource("StandardMaterial3D_sky")
+flip_faces = true
+radius = 500.0
+height = 1000.0
 
 [node name="FlightTest" type="Node3D"]
 
@@ -96,8 +132,27 @@ position = Vector3(0, 1, -5)
 collision_layer = 2
 collision_mask = 0
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="Ship/Interior/WallN"]
-shape = SubResource("BoxShape3D_wall_ns")
+[node name="CollisionShape3D_L" type="CollisionShape3D" parent="Ship/Interior/WallN"]
+position = Vector3(-2.25, 0, 0)
+shape = SubResource("BoxShape3D_wall_pillar")
+
+[node name="CollisionShape3D_R" type="CollisionShape3D" parent="Ship/Interior/WallN"]
+position = Vector3(2.25, 0, 0)
+shape = SubResource("BoxShape3D_wall_pillar")
+
+[node name="Window" type="StaticBody3D" parent="Ship/Interior"]
+# Physically seals the 3m gap left between WallN's two pillars. Without
+# this, the gap in the collider is a gap the avatar can walk (or crawl)
+# straight through — the interior shell has no visual wall meshes at all
+# yet, so nothing else would stop them from stepping into deep interior
+# space. Sealed floor-to-ceiling; see task-6-report.md for why this and
+# WallN's pillars aren't a single centered 3m x 1.5m cutout.
+position = Vector3(0, 1, -5)
+collision_layer = 2
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Ship/Interior/Window"]
+shape = SubResource("BoxShape3D_window")
 
 [node name="WallS" type="StaticBody3D" parent="Ship/Interior"]
 position = Vector3(0, 1, 5)
@@ -122,6 +177,15 @@ collision_mask = 0
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Ship/Interior/WallW"]
 shape = SubResource("BoxShape3D_wall_ew")
+
+[node name="SkyPivot" type="Node3D" parent="Ship/Interior"]
+# Visual only, no collider. Left at the default local transform (identity)
+# so its global position always equals Interior's — MotionCoupling only
+# ever writes global_basis (rotation), never touches the origin, so the
+# 5km interior-slot offset never displaces it.
+
+[node name="SkySphere" type="MeshInstance3D" parent="Ship/Interior/SkyPivot"]
+mesh = SubResource("SphereMesh_sky")
 
 [node name="SeatMarker" type="Marker3D" parent="Ship/Interior"]
 position = Vector3(0, 0, -3.5)
@@ -156,3 +220,9 @@ avatar_path = NodePath("../Interior/Avatar")
 flight_computer_path = NodePath("../FlightComputer")
 interior_camera_path = NodePath("../Interior/Avatar/Head/Camera3D")
 chase_camera_path = NodePath("../Exterior/ChaseCamera")
+
+[node name="MotionCoupling" type="Node" parent="Ship"]
+script = ExtResource("7_motion_coupling")
+hull_path = NodePath("../Exterior")
+avatar_path = NodePath("../Interior/Avatar")
+interior_sky_path = NodePath("../Interior/SkyPivot")
