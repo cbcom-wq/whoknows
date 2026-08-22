@@ -1,7 +1,9 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=13 format=3]
 
 [ext_resource type="Script" path="res://src/ship/ship.gd" id="1_ship"]
 [ext_resource type="PackedScene" path="res://scenes/avatar.tscn" id="2_avatar"]
+[ext_resource type="Script" path="res://src/flight/flight_computer.gd" id="3_flight_computer"]
+[ext_resource type="Script" path="res://scenes/flight_test.gd" id="4_flight_test"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_flighttest"]
 sky_top_color = Color(0.02, 0.02, 0.05, 1)
@@ -35,6 +37,7 @@ size = Vector3(6, 2, 0.2)
 size = Vector3(0.2, 2, 10)
 
 [node name="FlightTest" type="Node3D"]
+script = ExtResource("4_flight_test")
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_flighttest")
@@ -47,12 +50,21 @@ shadow_enabled = true
 script = ExtResource("1_ship")
 
 [node name="Exterior" type="RigidBody3D" parent="Ship"]
+mass = 42000.0
 
 [node name="Hull" type="MeshInstance3D" parent="Ship/Exterior"]
 mesh = SubResource("BoxMesh_hull")
 
 [node name="Collider" type="CollisionShape3D" parent="Ship/Exterior"]
 shape = SubResource("BoxShape3D_hull")
+
+[node name="ChaseCamera" type="Camera3D" parent="Ship/Exterior"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4, 18)
+current = true
+
+[node name="FlightComputer" type="Node" parent="Ship"]
+script = ExtResource("3_flight_computer")
+hull_path = NodePath("../Exterior")
 
 [node name="Interior" type="Node3D" parent="Ship"]
 
@@ -97,3 +109,6 @@ position = Vector3(0, 0, -3.5)
 
 [node name="Avatar" parent="Ship/Interior" instance=ExtResource("2_avatar")]
 position = Vector3(0, 0.1, 3.0)
+
+[node name="Camera3D" parent="Ship/Interior/Avatar/Head" index="0"]
+current = false
