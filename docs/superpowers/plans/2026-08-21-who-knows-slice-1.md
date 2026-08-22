@@ -990,6 +990,109 @@ git commit -m "feat: couple hull motion into interior as shove force, shake, and
 
 ---
 
+### Task 6b: Interior visuals and true vacuum [FEEL]
+
+**Files:**
+- Modify: `who-knows/project.godot`
+- Modify: `who-knows/scenes/flight_test.tscn`
+
+**Interfaces:**
+- Consumes: everything from Tasks 1-6
+- Produces: a *visible* interior, and a hull that genuinely coasts. No new script API.
+
+Added after Task 6's review confirmed two problems that would each invalidate the go/no-go
+walkthrough. Neither is a Task 6 defect; both live in earlier tasks' files.
+
+**Problem 1 — the interior is invisible.** Task 2 specified floor, ceiling, and walls as
+`StaticBody3D` + `CollisionShape3D` with no `MeshInstance3D` anywhere. The room has collision
+but no surfaces, so the walkthrough shows an avatar apparently floating in a starfield beside a
+floating box. "Walk to the back of your ship and watch the stars roll past the window" cannot be
+judged against that.
+
+**Problem 2 — space has drag.** `project.godot` sets `3d/default_gravity=0.0` but leaves
+`default_linear_damp` and `default_angular_damp` at Godot's default of `0.1`. `RigidBody3D`
+defaults to `DAMP_MODE_COMBINE`, so `ship.gd` setting the body's damp to `0.0` does not win: the
+effective damp stays `0.1` and the hull decays to a stop with roughly a ten-second time constant.
+This directly contradicts §7.1's "no gravity and no damping. Momentum is real," and it would read
+as a MotionCoupling bug during the `shove_scale` sweep.
+
+- [ ] **Step 1: Turn off damping globally**
+
+In `who-knows/project.godot`, under `[physics]`:
+
+```ini
+3d/default_gravity=0.0
+3d/default_linear_damp=0.0
+3d/default_angular_damp=0.0
+```
+
+There is no drag anywhere in this game, so zeroing the project defaults is more honest than
+overriding damp modes per body. Assist-off flight now genuinely drifts and genuinely spins
+forever, which is the intent. The flight computer's `ROTATION_DAMPING` is applied as torque, not
+as physics damping, so it is unaffected.
+
+- [ ] **Step 2: Add visual layers so interior and exterior light independently**
+
+Interior space sits 5 km below the arena, but lights are global — the exterior `DirectionalLight3D`
+would otherwise wash out an interior that is supposed to be lit only by its own practicals.
+Add to `project.godot`:
+
+```ini
+[layer_names]
+
+3d_render/layer_1="exterior"
+3d_render/layer_2="interior"
+```
+
+Set `layers = 1` on exterior visual instances, `layers = 2` on interior ones, and give each light a
+matching `cull_mask`. This mirrors the collision-layer scheme and is what keeps the canopy
+viewport honest in Task 20.
+
+- [ ] **Step 3: Give every interior collider a matching mesh**
+
+One `MeshInstance3D` per interior collider — floor, ceiling, all four walls, both window pillars,
+and the window's sealing pane — each matching its collider's dimensions and position exactly, so
+what you see is what you collide with. Flat-shaded `StandardMaterial3D`, no textures.
+
+Palette per §11: a tight, dark, desaturated set. Deck a shade lighter than the walls so the floor
+reads as floor. The window pane gets a transparent material so the starfield shows through while
+the avatar still cannot walk out.
+
+- [ ] **Step 4: Light it with practicals**
+
+Per §11, interiors are lit almost entirely by practicals, so corridors are dim and pooled. Two or
+three `OmniLight3D` nodes along the ceiling with a warm-neutral colour and a modest range, plus a
+small emissive strip mesh at each one so the source is visible rather than implied. `cull_mask`
+set to the interior render layer.
+
+The room should read as dim with pools of light and shadowed corners — not a flat ambient wash.
+This is half of what the go/no-go session is judging.
+
+- [ ] **Step 5: Verify headlessly**
+
+```bash
+powershell -File "D:/git/whoknows/who-knows/run_tests.ps1"
+```
+
+Then the scene load, which must stay clean:
+
+```
+--headless --path "D:\git\whoknows\who-knows" --quit-after 120 "res://scenes/flight_test.tscn"
+```
+
+Additionally, prove Problem 2 is actually fixed rather than assumed: give the hull a velocity, run
+several hundred physics ticks with no thrust, and assert the velocity is unchanged to within
+floating-point noise. Report the before and after numbers.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add -A who-knows/
+git commit -m "feat: make the interior visible and space frictionless"
+```
+
+---
+
 # Phase B — The grid
 
 Phase A proved the feel on hand-built scenes. Phase B builds the real data model behind it. Everything here is **[LOGIC]** and strictly test-driven.
