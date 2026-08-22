@@ -6,7 +6,7 @@
 
 **Architecture:** One `ShipGrid` (a `Dictionary[Vector3i, BlockInstance]`) is the single source of truth. Two independent readers render it: an `ExteriorBuilder` that produces a flying `RigidBody3D` hull, and an `InteriorBuilder` that produces a permanently stationary walkable interior parked in a separate physics world. The avatar always walks in the stationary interior, so there is never a moving floor; the hull's real acceleration is piped into interior space deliberately as a shove force and camera shake.
 
-**Tech Stack:** Godot 4.5.1 (mono build, GDScript only), GUT 9.x for unit tests, PowerShell wrapper for headless test runs.
+**Tech Stack:** Godot 4.5.1 (mono build, GDScript only), GUT 9.5.0 for unit tests, PowerShell wrapper for headless test runs.
 
 ## Global Constraints
 
@@ -36,7 +36,7 @@ Tasks are marked by how they are verified. Both kinds are mandatory; they differ
 who-knows/
   project.godot                     modified: input map, autoloads, physics
   .gutconfig.json                   created: headless test config
-  addons/gut/                       created: vendored GUT 9.x
+  addons/gut/                       created: vendored GUT 9.5.0
 
   data/blocks/*.tres                created: 15 BlockDefinition resources
   data/blueprints/                  created: saved ShipBlueprint resources
@@ -101,12 +101,12 @@ Phase A builds the feel prototype on hand-authored scenes, **before** the grid o
 
 - [ ] **Step 1: Vendor GUT**
 
-Download GUT 9.7.1 and place it so that `who-knows/addons/gut/plugin.cfg` exists.
+Download GUT 9.5.0 and place it so that `who-knows/addons/gut/plugin.cfg` exists.
 
 ```bash
-curl -L -o /tmp/gut.zip https://github.com/bitwes/Gut/archive/refs/tags/v9.7.1.zip
+curl -L -o /tmp/gut.zip https://github.com/bitwes/Gut/archive/refs/tags/v9.5.0.zip
 unzip -q /tmp/gut.zip -d /tmp/gut
-cp -r /tmp/gut/Gut-9.7.1/addons/gut "D:/git/whoknows/who-knows/addons/gut"
+cp -r /tmp/gut/Gut-9.5.0/addons/gut "D:/git/whoknows/who-knows/addons/gut"
 ls "D:/git/whoknows/who-knows/addons/gut/plugin.cfg"
 ```
 
