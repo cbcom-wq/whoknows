@@ -37,6 +37,12 @@ boost={"deadzone":0.2,"events":[{"device":-1,"keycode":32,"physical_keycode":0,"
 toggle_assist={"deadzone":0.2,"events":[{"device":-1,"keycode":90,"physical_keycode":0,"type":"InputEventKey","pressed":true}]}
 cycle_camera={"deadzone":0.2,"events":[{"device":-1,"keycode":86,"physical_keycode":0,"type":"InputEventKey","pressed":true}]}
 
+[layer_names]
+
+3d_physics/layer_1="exterior_hull"
+3d_physics/layer_2="interior_geometry"
+3d_physics/layer_3="avatar"
+
 [physics]
 
 3d/default_gravity=0.0

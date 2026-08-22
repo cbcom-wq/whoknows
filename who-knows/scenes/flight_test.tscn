@@ -77,36 +77,48 @@ hull_path = NodePath("../Exterior")
 
 [node name="Floor" type="StaticBody3D" parent="Ship/Interior"]
 position = Vector3(0, -0.1, 0)
+collision_layer = 2
+collision_mask = 0
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Ship/Interior/Floor"]
 shape = SubResource("BoxShape3D_slab")
 
 [node name="Ceiling" type="StaticBody3D" parent="Ship/Interior"]
 position = Vector3(0, 2.1, 0)
+collision_layer = 2
+collision_mask = 0
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Ship/Interior/Ceiling"]
 shape = SubResource("BoxShape3D_slab")
 
 [node name="WallN" type="StaticBody3D" parent="Ship/Interior"]
 position = Vector3(0, 1, -5)
+collision_layer = 2
+collision_mask = 0
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Ship/Interior/WallN"]
 shape = SubResource("BoxShape3D_wall_ns")
 
 [node name="WallS" type="StaticBody3D" parent="Ship/Interior"]
 position = Vector3(0, 1, 5)
+collision_layer = 2
+collision_mask = 0
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Ship/Interior/WallS"]
 shape = SubResource("BoxShape3D_wall_ns")
 
 [node name="WallE" type="StaticBody3D" parent="Ship/Interior"]
 position = Vector3(3, 1, 0)
+collision_layer = 2
+collision_mask = 0
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Ship/Interior/WallE"]
 shape = SubResource("BoxShape3D_wall_ew")
 
 [node name="WallW" type="StaticBody3D" parent="Ship/Interior"]
 position = Vector3(-3, 1, 0)
+collision_layer = 2
+collision_mask = 0
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Ship/Interior/WallW"]
 shape = SubResource("BoxShape3D_wall_ew")
@@ -116,6 +128,8 @@ position = Vector3(0, 0, -3.5)
 
 [node name="PilotSeat" type="StaticBody3D" parent="Ship/Interior"]
 position = Vector3(0, 0, -3.5)
+collision_layer = 2
+collision_mask = 0
 script = ExtResource("5_pilot_seat")
 camera_director_path = NodePath("../../CameraDirector")
 
