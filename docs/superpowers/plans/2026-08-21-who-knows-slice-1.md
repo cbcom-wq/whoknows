@@ -101,12 +101,12 @@ Phase A builds the feel prototype on hand-authored scenes, **before** the grid o
 
 - [ ] **Step 1: Vendor GUT**
 
-Download GUT 9.4.0 and place it so that `who-knows/addons/gut/plugin.cfg` exists.
+Download GUT 9.7.1 and place it so that `who-knows/addons/gut/plugin.cfg` exists.
 
 ```bash
-curl -L -o /tmp/gut.zip https://github.com/bitwes/Gut/archive/refs/tags/v9.4.0.zip
+curl -L -o /tmp/gut.zip https://github.com/bitwes/Gut/archive/refs/tags/v9.7.1.zip
 unzip -q /tmp/gut.zip -d /tmp/gut
-cp -r /tmp/gut/Gut-9.4.0/addons/gut "D:/git/whoknows/who-knows/addons/gut"
+cp -r /tmp/gut/Gut-9.7.1/addons/gut "D:/git/whoknows/who-knows/addons/gut"
 ls "D:/git/whoknows/who-knows/addons/gut/plugin.cfg"
 ```
 
@@ -544,6 +544,13 @@ Create `who-knows/scenes/flight_test.gd`:
 extends Node3D
 
 @onready var _fc: FlightComputer = $Ship/FlightComputer
+
+func _ready() -> void:
+	# This temporary driver borrows the same WASD actions the avatar walks
+	# with. Without this, W would walk the avatar AND fire the engines.
+	# Task 5 replaces the whole arrangement with the pilot seat, which hands
+	# control back and forth properly.
+	$Ship/Interior/Avatar.set_control_enabled(false)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("toggle_assist"):
