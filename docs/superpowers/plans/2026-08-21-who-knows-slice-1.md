@@ -18,7 +18,24 @@
 - **Thrust direction:** a thruster's force acts along its block-local **−Z** (Godot's forward). Exhaust vents the opposite way. `thrust_kn` is kilonewtons; multiply by `1000.0` for newtons.
 - **Walkable set:** `DECK ∪ MOUNT`. One `BlockInstance` per cell; MOUNT blocks occupy their own cell and are walkable.
 - **Grid mutation:** only `ShipGrid.set_block()` and `ShipGrid.clear_block()` may write to the cell dictionary. Every other system reacts to the `cell_changed` signal. This is the architectural choke point — a reviewer should reject any code that writes cells directly.
-- **Interior world slots:** interiors are parked on a slot grid with `10000.0` metre spacing, `slot_origin(i) = Vector3(i * 10000.0, 0, 0)`. Slice 1 uses slot `0` only.
+- **Interior world slots:** interior space is parked **away from the combat arena**, and interiors sit on a slot grid within it:
+  `INTERIOR_WORLD_BASE = Vector3(0.0, -5000.0, 0.0)`, `SLOT_SPACING = 2000.0`,
+  `slot_origin(i) = INTERIOR_WORLD_BASE + Vector3(i * SLOT_SPACING, 0.0, 0.0)`. Slice 1 uses slot `0` only.
+  Combat arenas are bounded to **±3 km** around the world origin, leaving a 2 km margin.
+  The distance is deliberately modest: Godot uses single-precision floats, so positional resolution degrades with
+  distance from the origin. At 5 km the ULP is roughly 0.5 mm, which a first-person character controller does not
+  notice; at 100 km it would be ~8 mm, which jitters visibly. Do not push interior space further out.
+- **Collision layers.** Interior and exterior geometry must not be able to touch each other, by construction rather
+  than by luck. Three layers, named in `project.godot`:
+
+  | Layer | Name | Used by | `collision_layer` | `collision_mask` |
+  |---|---|---|---|---|
+  | 1 | `exterior_hull` | flying hulls | `1` | `1` |
+  | 2 | `interior_geometry` | floors, walls, seats | `2` | `0` |
+  | 3 | `avatar` | the player on foot | `4` | `2` |
+
+  The avatar detects interior geometry and nothing else. Hulls detect only other hulls. Interior geometry is static
+  and detects nothing.
 - **Test naming:** GUT test files are `test/unit/test_<subject>.gd`, classes `extends GutTest`, methods `test_<behaviour>()`.
 
 ## Task type legend
@@ -216,7 +233,8 @@ extends Node3D
 ## Owns one ship's two representations. In Slice 1 the geometry under
 ## each is hand-authored; from Task 15 both are generated from a ShipGrid.
 
-const SLOT_SPACING := 10000.0
+const INTERIOR_WORLD_BASE := Vector3(0.0, -5000.0, 0.0)
+const SLOT_SPACING := 2000.0
 
 @export var interior_slot: int = 0
 
@@ -228,10 +246,15 @@ func _ready() -> void:
 	exterior.linear_damp = 0.0
 	exterior.angular_damp = 0.0
 	exterior.can_sleep = false
+	exterior.collision_layer = 1   # exterior_hull
+	exterior.collision_mask = 1    # detects only other hulls
 	interior.global_position = interior_slot_origin()
 
 func interior_slot_origin() -> Vector3:
-	return Vector3(interior_slot * SLOT_SPACING, 0.0, 0.0)
+	# Interior space sits well clear of the combat arena so the walkable
+	# interior can never intersect a flying hull. Collision layers enforce
+	# the same separation independently.
+	return INTERIOR_WORLD_BASE + Vector3(interior_slot * SLOT_SPACING, 0.0, 0.0)
 ```
 
 - [ ] **Step 2: Build the flight test scene**
@@ -2907,7 +2930,8 @@ extends Node3D
 
 signal stats_changed(stats: ShipStats)
 
-const SLOT_SPACING := 10000.0
+const INTERIOR_WORLD_BASE := Vector3(0.0, -5000.0, 0.0)
+const SLOT_SPACING := 2000.0
 
 @export var interior_slot: int = 0
 
@@ -2926,12 +2950,17 @@ func _ready() -> void:
 	exterior.linear_damp = 0.0
 	exterior.angular_damp = 0.0
 	exterior.can_sleep = false
+	exterior.collision_layer = 1   # exterior_hull
+	exterior.collision_mask = 1    # detects only other hulls
 	interior.global_position = interior_slot_origin()
 	if catalog == null:
 		catalog = BlockCatalog.load_from_dir("res://data/blocks")
 
 func interior_slot_origin() -> Vector3:
-	return Vector3(interior_slot * SLOT_SPACING, 0.0, 0.0)
+	# Interior space sits well clear of the combat arena so the walkable
+	# interior can never intersect a flying hull. Collision layers enforce
+	# the same separation independently.
+	return INTERIOR_WORLD_BASE + Vector3(interior_slot * SLOT_SPACING, 0.0, 0.0)
 
 func load_blueprint(bp: ShipBlueprint) -> void:
 	set_grid(bp.to_grid())
