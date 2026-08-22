@@ -1,0 +1,95 @@
+[gd_scene load_steps=10 format=3]
+
+[ext_resource type="Script" path="res://src/ship/ship.gd" id="1_ship"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_flighttest"]
+sky_top_color = Color(0.02, 0.02, 0.05, 1)
+sky_horizon_color = Color(0.05, 0.05, 0.09, 1)
+sky_curve = 0.15
+ground_bottom_color = Color(0.01, 0.01, 0.02, 1)
+ground_horizon_color = Color(0.05, 0.05, 0.09, 1)
+ground_curve = 0.15
+sun_angle_max = 1.0
+
+[sub_resource type="Sky" id="Sky_flighttest"]
+sky_material = SubResource("ProceduralSkyMaterial_flighttest")
+
+[sub_resource type="Environment" id="Environment_flighttest"]
+background_mode = 2
+sky = SubResource("Sky_flighttest")
+
+[sub_resource type="BoxMesh" id="BoxMesh_hull"]
+size = Vector3(8, 4, 12)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_hull"]
+size = Vector3(8, 4, 12)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_slab"]
+size = Vector3(6, 0.2, 10)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_wall_ns"]
+size = Vector3(6, 2, 0.2)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_wall_ew"]
+size = Vector3(0.2, 2, 10)
+
+[node name="FlightTest" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_flighttest")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+rotation_degrees = Vector3(-45, 30, 0)
+shadow_enabled = true
+
+[node name="Ship" type="Node3D" parent="."]
+script = ExtResource("1_ship")
+
+[node name="Exterior" type="RigidBody3D" parent="Ship"]
+
+[node name="Hull" type="MeshInstance3D" parent="Ship/Exterior"]
+mesh = SubResource("BoxMesh_hull")
+
+[node name="Collider" type="CollisionShape3D" parent="Ship/Exterior"]
+shape = SubResource("BoxShape3D_hull")
+
+[node name="Interior" type="Node3D" parent="Ship"]
+
+[node name="Floor" type="StaticBody3D" parent="Ship/Interior"]
+position = Vector3(0, -0.1, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Ship/Interior/Floor"]
+shape = SubResource("BoxShape3D_slab")
+
+[node name="Ceiling" type="StaticBody3D" parent="Ship/Interior"]
+position = Vector3(0, 2.1, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Ship/Interior/Ceiling"]
+shape = SubResource("BoxShape3D_slab")
+
+[node name="WallN" type="StaticBody3D" parent="Ship/Interior"]
+position = Vector3(0, 1, -5)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Ship/Interior/WallN"]
+shape = SubResource("BoxShape3D_wall_ns")
+
+[node name="WallS" type="StaticBody3D" parent="Ship/Interior"]
+position = Vector3(0, 1, 5)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Ship/Interior/WallS"]
+shape = SubResource("BoxShape3D_wall_ns")
+
+[node name="WallE" type="StaticBody3D" parent="Ship/Interior"]
+position = Vector3(3, 1, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Ship/Interior/WallE"]
+shape = SubResource("BoxShape3D_wall_ew")
+
+[node name="WallW" type="StaticBody3D" parent="Ship/Interior"]
+position = Vector3(-3, 1, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Ship/Interior/WallW"]
+shape = SubResource("BoxShape3D_wall_ew")
+
+[node name="SeatMarker" type="Marker3D" parent="Ship/Interior"]
+position = Vector3(0, 0, -3.5)
