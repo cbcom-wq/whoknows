@@ -11,6 +11,9 @@ var _current: Node = null
 func _ready() -> void:
 	target_position = Vector3(0, 0, -2.5)
 	collide_with_areas = true
+	# RayCast3D defaults to mask 1 (exterior_hull). Interactables live on
+	# interior_geometry, so without this the ray finds nothing, forever.
+	collision_mask = 2   # interior_geometry
 
 func _physics_process(_delta: float) -> void:
 	var hit: Node = get_collider() if is_colliding() else null
