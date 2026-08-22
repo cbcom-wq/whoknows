@@ -45,22 +45,27 @@ func _unhandled_input(event: InputEvent) -> void:
 		head.rotation.x = _pitch
 
 func _physics_process(delta: float) -> void:
+	if not _control_enabled:
+		# Parked — seated, or handed off to something else. Integrate
+		# nothing: otherwise the body keeps accumulating gravity and
+		# external_accel and slides off the seat while the pilot flies.
+		return
+
 	# Gravity plus whatever the hull is doing to us. Both are just
 	# accelerations; the avatar cannot tell them apart, which is the point.
 	velocity += (Vector3.DOWN * grav_strength + external_accel) * delta
 
-	if _control_enabled:
-		var crouching := Input.is_action_pressed("crouch")
-		_apply_height(CROUCH_HEIGHT if crouching else STAND_HEIGHT)
+	var crouching := Input.is_action_pressed("crouch")
+	_apply_height(CROUCH_HEIGHT if crouching else STAND_HEIGHT)
 
-		var speed := CROUCH_SPEED if crouching else (
-			SPRINT_SPEED if Input.is_action_pressed("sprint") else WALK_SPEED
-		)
-		var input_2d := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
-		var wish := (transform.basis * Vector3(input_2d.x, 0.0, input_2d.y)).normalized()
-		var target := wish * speed
-		velocity.x = move_toward(velocity.x, target.x, ACCEL * delta)
-		velocity.z = move_toward(velocity.z, target.z, ACCEL * delta)
+	var speed := CROUCH_SPEED if crouching else (
+		SPRINT_SPEED if Input.is_action_pressed("sprint") else WALK_SPEED
+	)
+	var input_2d := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	var wish := (transform.basis * Vector3(input_2d.x, 0.0, input_2d.y)).normalized()
+	var target := wish * speed
+	velocity.x = move_toward(velocity.x, target.x, ACCEL * delta)
+	velocity.z = move_toward(velocity.z, target.z, ACCEL * delta)
 
 	move_and_slide()
 
