@@ -1,0 +1,140 @@
+# Slice 1 — status and handoff
+
+**Last updated:** 2026-08-23
+**Branch history:** `design/slice-1` (Tasks 1–12, merged) → `feat/slice-1-builders` (Tasks 13–15)
+**Suite:** 88 tests, green, pristine output, zero orphans
+
+Governing documents:
+
+- `docs/superpowers/specs/2026-08-21-who-knows-slice-1-design.md` — the slice spec
+- `docs/superpowers/specs/2026-08-23-starter-shuttle-art-direction.md` — the ship's visual design
+- `docs/superpowers/plans/2026-08-21-who-knows-slice-1.md` — the 20-task implementation plan
+- `.superpowers/sdd/2026-08-21-who-knows-slice-1/progress.md` — the execution ledger, including
+  every deferred finding with its reasoning
+- `CLAUDE.md` — repo conventions, including the `.tscn`/`.tres` comment hazard
+
+---
+
+## What works
+
+Tasks 1–15 of 20 are implemented and reviewed.
+
+**The ship is fully generated from a `ShipGrid`.** 84 blocks produce the hull mesh, hull
+colliders, the walkable interior, and the derived stats. Nothing about the craft is hand-authored
+scenery any more.
+
+- Fly it, steer with the mouse, roll with Q/E, toggle flight assist with Z
+- Walk the interior, sit in the pilot seat with a continuous camera move, stand up mid-burn
+- A live cockpit canopy showing the real exterior through the bow windows
+- A 700-instance debris field so motion is legible
+- A livery stripe painted by a vertex shader from genuinely ship-local height
+- 16 block types, six with real meshes, the rest placeholder boxes
+
+Derived stats for the starter shuttle: 88,500 kg, torque imbalance 4.3% of budget, power 36.0
+gen / 25.2 draw MW, **zero validation issues**, `can_launch = true`.
+
+---
+
+## What does not exist yet
+
+**Phase C — Tasks 16 to 20, the entire shipyard editor.** This is the largest remaining gap and
+it is what turns the project from "a ship" into "ships you build":
+
+- Task 16 — block placement, orbit camera, ghost preview
+- Task 17 — deck slicer cutaway, block palette
+- Task 18 — live stats and validation panel
+- Task 19 — mirror mode, blueprint save/load
+- Task 20 — Walk Test, Launch, the full loop
+
+Until these exist the player cannot build anything; they fly the one blueprint defined in
+`scenes/flight_test.gd::_starter_grid()`.
+
+Slice 1's Definition of Done (spec §14) is therefore **not met**.
+
+---
+
+## Known open problems
+
+### Unverified: the feel verdict
+
+The whole slice was ordered to front-load one question and it is still unanswered:
+
+- Does the seat transition **travel** rather than cut?
+- Does standing up mid-burn **shove you aft** — does it feel like weight rather than a push?
+- Is `shove_scale` (currently `0.35`, on the `MotionCoupling` node) the right value? The plan
+  says sweep 0.1–0.6 and pick where a hard burn is clearly felt but you can still walk.
+
+No agent can answer these. They need a human at a display.
+
+### Unreviewed change
+
+Commit `c6448ad` (avatar spawn height, deck slab thickness, pilot seat placement) was applied
+directly by the controller to unblock a broken build rather than dispatched and reviewed. It is
+verified by runtime probe but has not been through a review pass. **Fold it into the next
+review.**
+
+### Open design decision — two engine bells or five
+
+The starter shuttle currently has five engine bells (two outboard pods plus a three-bell stern
+bank) rather than the two-pod silhouette the art direction is built around.
+
+This was measured, not chosen carelessly. The governing relationship is:
+
+```
+torque_imbalance.x = −F_total × (thruster_height − centre_of_mass_height)
+```
+
+The z-position of mass drops out entirely, so fore/aft ballast cannot affect pitch. Only the
+vertical gap between the thrust line and the centre of mass matters. The equipment deck at
+y = +1 over a hollow cabin puts the centre of mass at ~1.2 m, and a 2 m grid quantises thruster
+height to 0 m or 2 m — so no two-pod layout can reach it. Pods at 0 m pitch one way (+680 kN·m),
+pods at 2 m pitch the other (−382 kN·m). The stern bank works by straddling the centre of mass
+instead of trying to match it.
+
+**To get two bells, the deck layout has to change** — bring the heavy equipment down to the cabin
+level so the centre of mass drops to where pods can sit. That costs art-direction §3.2's
+rationale (a flat roof, and the Ship Core buried where Slice 3 boarders must work for it). It is
+a real trade and it is unresolved.
+
+### Deferred findings
+
+Seventeen Minor findings are recorded in the ledger with full reasoning. None are correctness
+bugs. The ones most likely to matter later:
+
+- **`avatar.tscn`'s `CapsuleShape3D` is not `resource_local_to_scene`.** Any instance calling
+  `_apply_height()` mutates the collider for *every* Avatar instance. Harmless with one avatar;
+  **must be fixed before Slice 3's boarding squads.**
+- **`ShipGrid.get_block()` returns the live `BlockInstance`.** A caller can mutate `.orientation`
+  in place with no `cell_changed` emission — a second, quieter route to the interior/exterior
+  drift the architecture exists to prevent. The shipyard editor is where that temptation arises.
+- **One shared `hull_inverse` uniform on one shared livery material.** Correct for a single-ship
+  scene; two independently-rotating hulls would race on it. Slice 4 (fleet) must address this.
+- **`deck`/`door`/`ladder` use thin slab meshes, not full boxes.** Verified necessary — the avatar
+  camera has no `cull_mask`, so full boxes read as phantom walls at aisle boundaries. Latent gap
+  if a player ever places `deck` on a hull boundary in the shipyard.
+
+### No final whole-branch review has run
+
+The subagent-driven process calls for one before integration, and it is also where the deferred
+findings get triaged for merge. It has not happened.
+
+---
+
+## Hard-won lessons worth not relearning
+
+- **A clean headless load proves nothing.** Godot's `.tscn` parser silently drops properties, and
+  entire nodes, adjacent to `#` comments — with zero warnings. This cost a window collider, a
+  starfield, and a ceiling light before it was found. See `CLAUDE.md`. Always read state back at
+  runtime.
+- **`assert()` is stripped from release builds.** It cannot be the only guard on an invariant.
+- **`queue_free()` leaves a `CollisionShape3D` parented and physics-registered** until the engine
+  flushes its delete queue, which never happens between two synchronous calls. Use `remove_child()`
+  then `free()`.
+- **`RayCast3D` defaults to `collision_mask = 1`.** It silently never hits anything on another
+  layer. `PhysicsRayQueryParameters3D.create()` defaults to all layers — the inconsistency is a
+  trap.
+- **A test that only asserts on a builder's internal arrays** will pass happily while stale nodes
+  accumulate in the scene tree. Assert on real children.
+- **Godot's input map needs `Object(InputEventKey, ...)` syntax** in `project.godot`. A
+  JSON-shaped `events` array parses without error and registers the action with **zero bindings** —
+  the game runs, renders, responds to the mouse, and no key does anything.
