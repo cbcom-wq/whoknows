@@ -71,3 +71,20 @@ func test_coords_returns_every_occupied_cell():
 	var c := _grid.coords()
 	assert_eq(c.size(), 2)
 	assert_true(c.has(Vector3i(0, 0, 1)))
+
+func test_set_block_with_null_is_rejected_not_stored():
+	# assert() is stripped from release builds, so the null guard on
+	# set_block() — the sole mutation choke point — must also hold via
+	# push_error()+return. A null slipping through would leave
+	# has_block() true while get_block() returns null: the exact
+	# exterior/interior drift this class exists to prevent.
+	_grid.set_block(Vector3i(9, 9, 9), null)
+	assert_push_error("use clear_block", "set_block(null) should push an error")
+	# The retained assert(false, ...) also fires in this debug test build
+	# and is tracked by GUT as a separate "engine" error; consume it too
+	# so this expected, deliberately-triggered condition doesn't register
+	# as an unhandled failure.
+	assert_engine_error("use clear_block", "the retained debug-mode assert should also fire")
+	assert_eq(_grid.size(), 0, "a rejected null must not be stored")
+	assert_false(_grid.has_block(Vector3i(9, 9, 9)))
+	assert_eq(_changes.size(), 0, "a rejected null must not emit cell_changed")
