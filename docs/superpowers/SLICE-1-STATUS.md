@@ -96,6 +96,67 @@ level so the centre of mass drops to where pods can sit. That costs art-directio
 rationale (a flat roof, and the Ship Core buried where Slice 3 boarders must work for it). It is
 a real trade and it is unresolved.
 
+### Reported by playtest, 2026-08-23 — not yet fixed
+
+Six problems observed by the human. Diagnosis below where it was established.
+
+**1. The pilot seat is invisible.** *Root cause found.* Two compounding reasons, and the second
+also explains problem 6:
+
+- The hand-built `PilotSeat` in `flight_test.tscn` has a `CollisionShape3D` and an `Eye` node but
+  **no `MeshInstance3D`**. It is pure collision.
+- **`InteriorBuilder` never renders block meshes at all** — zero references to `def.mesh`. It
+  emits structure (floors, ceilings, walls, canopy faces) and nothing else. So `pilot_seat.tres`'s
+  real mesh, `airlock.tres`'s emissive arch, and every future fixture exist only in *exterior*
+  space, 5 km away, where the player can never see them.
+
+  This is an architectural gap, not a bug: the interior renders **structure but not fixtures**.
+  Fixing it properly means `InteriorBuilder` instantiating `def.mesh` for MOUNT (and probably
+  DECK) cells on render layer 2. That also removes the need for a hand-authored seat node
+  entirely — the seat becomes what the grid says it is.
+
+**2. The ceiling is weirdly low.** By construction, and the art direction acknowledges it
+(§2: "a 2 m cell forces a 2 m cabin"). Clear headroom is `CELL_SIZE − FLOOR_THICKNESS` = 1.9 m for
+a 1.8 m avatar. Options: stack two DECK cells vertically for a 4 m cabin (the spec explicitly
+allows this and `DeckGraph` already treats stacked decks as a second storey unless laddered — so
+this needs thought), thin the slabs further, or shorten the avatar. A 4 m cabin over a 16 m hull
+would change the ship's proportions, so this is partly an art-direction decision.
+
+**3. Flying feels sluggish.** *Root cause found — two compounding causes.*
+
+- **Peak yaw acceleration is 3.83 °/s².** Reaching even 30 °/s takes about eight seconds of full
+  input. Torque budget is 160,000 N·m against a yaw inertia of 2,395,121 kg·m².
+- **Assist damping exceeds control authority by 1.66×.** `FlightComputer` applies
+  `ROTATION_DAMPING (3.0) × mass` = 265,500 N·m of damping at 1 rad/s, against 160,000 N·m of
+  control torque. The ship actively fights every input. Worse, **damping scales with mass while
+  the torque budget scales with RCS count** — so a heavier ship fights you harder no matter how
+  much RCS you bolt on. That relationship is backwards.
+
+  Underlying both: `ShipStats.torque_budget` is the crude proxy the plan flagged as a known rough
+  edge — `Vector3(vertical, lateral, lateral) × CELL_SIZE` — not a real moment sum. It badly
+  understates true authority, since it ignores each thruster's actual lever arm about the centre
+  of mass. The plan says to revisit it "if turn rates feel wrong in playtest". **This is that
+  moment.**
+
+  Fix: compute `torque_budget` as a genuine `Σ r × F` over RCS and manoeuvring thrusters, and make
+  assist damping proportional to *available torque* rather than to mass.
+
+**4. Thruster visuals should respond to throttle.** Not implemented. The engine bells carry a
+static emissive material (`#7FD4FF`, energy 3.0, art direction §5.1). They should scale emission —
+and ideally bell length or a flame element — with commanded thrust. Note the constraint from §4:
+one `MultiMesh` per block type with no per-instance material, so this needs either a shader
+uniform driven from `FlightComputer`, or per-instance custom data.
+
+**5. Hold-C free-look orbit.** Not implemented. Wanted: hold C to orbit the camera around the
+player without altering movement or heading, releasing to return. Applies on foot and probably
+seated. `CameraDirector` already owns all view state and is the natural home.
+
+**6. The interior is plain and boring.** Largely downstream of problem 1 — no fixture meshes
+render inside at all, so the cabin is bare structural surfaces. Beyond fixing that: the palette is
+implemented but flat, there is no panel detail, no greebling, and the three ceiling practicals are
+the only lighting. Art direction §5.2 and §5.3 describe the intended read (bright, warm,
+lived-in), and it is not there yet.
+
 ### Deferred findings
 
 Seventeen Minor findings are recorded in the ledger with full reasoning. None are correctness
