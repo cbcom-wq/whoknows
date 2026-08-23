@@ -1625,7 +1625,13 @@ const FACE_OFFSETS: Array[Vector3i] = [
 var _cells: Dictionary = {}   # Vector3i -> BlockInstance
 
 func set_block(coord: Vector3i, inst: BlockInstance) -> void:
-	assert(inst != null, "use clear_block() to empty a cell")
+	# assert() is stripped from release builds, so it cannot be the only
+	# guard on the choke point: a null slipping through would leave
+	# has_block() true while get_block() returns null.
+	if inst == null:
+		push_error("ShipGrid.set_block: use clear_block() to empty a cell")
+		assert(false, "use clear_block() to empty a cell")
+		return
 	_cells[coord] = inst
 	cell_changed.emit(coord)
 
