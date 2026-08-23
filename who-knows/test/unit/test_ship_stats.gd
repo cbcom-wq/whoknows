@@ -83,6 +83,32 @@ func test_two_forward_thrusters_double_the_budget():
 	var s := ShipStats.compute(_grid, _cat)
 	assert_almost_eq(s.thrust_budget[&"forward"], 200_000.0, 1.0)
 
+func test_lateral_thruster_fills_only_lateral_budget():
+	# orientation 8 = (o >> 2 == 2) selects Vector3.LEFT as forward;
+	# roll (o & 3) doesn't affect thrust direction, only the roll about it.
+	_put(Vector3i.ZERO, &"thruster", 8)
+	var s := ShipStats.compute(_grid, _cat)
+	assert_almost_eq(s.thrust_budget[&"lateral"], 100_000.0, 1.0)
+	assert_almost_eq(s.thrust_budget[&"forward"], 0.0, 1.0)
+	assert_almost_eq(s.thrust_budget[&"reverse"], 0.0, 1.0)
+	assert_almost_eq(s.thrust_budget[&"vertical"], 0.0, 1.0)
+
+func test_vertical_thruster_fills_only_vertical_budget():
+	# orientation 16 = (o >> 2 == 4) selects Vector3.UP as forward.
+	_put(Vector3i.ZERO, &"thruster", 16)
+	var s := ShipStats.compute(_grid, _cat)
+	assert_almost_eq(s.thrust_budget[&"vertical"], 100_000.0, 1.0)
+	assert_almost_eq(s.thrust_budget[&"forward"], 0.0, 1.0)
+	assert_almost_eq(s.thrust_budget[&"reverse"], 0.0, 1.0)
+	assert_almost_eq(s.thrust_budget[&"lateral"], 0.0, 1.0)
+
+func test_backward_thruster_fills_reverse_not_forward():
+	# orientation 4 = (o >> 2 == 1) selects Vector3.BACK as forward.
+	_put(Vector3i.ZERO, &"thruster", 4)
+	var s := ShipStats.compute(_grid, _cat)
+	assert_almost_eq(s.thrust_budget[&"reverse"], 100_000.0, 1.0)
+	assert_almost_eq(s.thrust_budget[&"forward"], 0.0, 1.0)
+
 func test_centred_thrusters_produce_no_torque_imbalance():
 	_put(Vector3i(-1, 0, 2), &"thruster", 0)
 	_put(Vector3i(1, 0, 2), &"thruster", 0)
