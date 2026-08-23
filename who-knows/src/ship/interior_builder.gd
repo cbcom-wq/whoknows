@@ -18,6 +18,18 @@ const FLOOR_THICKNESS := 0.2
 const DEFAULT_GRAVITY := 9.8
 const CANOPY_ID := &"canopy"
 
+## Names the parent under which this builder creates and owns its own
+## StaticBody3D each rebuild() -- NOT a body to attach colliders to.
+## This is the opposite of ExteriorBuilder.body_path, which names a
+## scene-supplied RigidBody3D that colliders attach to directly. Same
+## export name, deliberately different meaning between the two builders:
+## a bare CollisionShape3D parented under a plain Node3D (which is what
+## body_path would point at here, e.g. a Node3D "Interior" placeholder)
+## never registers with the physics server, so InteriorBuilder cannot
+## reuse ExteriorBuilder's shape -- it must own a StaticBody3D itself to
+## carry the interior_geometry convention (collision_layer = 2,
+## collision_mask = 0; see _physics_body below). If empty, the owned body
+## is parented directly under this node.
 @export var body_path: NodePath
 ## Wired by Task 15 to the material carrying the canopy SubViewport's
 ## ViewportTexture. Stays null in tests -- falls back to an ordinary
@@ -200,6 +212,12 @@ func _deck_mat() -> StandardMaterial3D:
 		_deck_material.albedo_color = Color("6e2822")   # deck plank
 	return _deck_material
 
+## §5.2 has no separate ceiling entry, so this deliberately reuses the
+## bulkhead colour -- but as its own StandardMaterial3D object, not a
+## shared reference to _wall_mat()'s. Kept distinct on purpose: a future
+## ceiling-specific palette change (e.g. a duller tone so eyes read the
+## deck as "down") is then a one-line edit here, not a search through
+## every _wall_mat() call site to see which boxes were secretly ceilings.
 func _ceiling_mat() -> StandardMaterial3D:
 	if _ceiling_material == null:
 		_ceiling_material = StandardMaterial3D.new()
