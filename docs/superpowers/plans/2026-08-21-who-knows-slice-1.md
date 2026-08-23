@@ -3285,7 +3285,17 @@ func _apply_stats() -> void:
 
 In `flight_test.tscn`:
 - Delete the hand-built `Hull` mesh and `Collider` under `Exterior`; add `ExteriorBuilder` (Node3D) with `body_path = ..`.
-- Delete the hand-built `Floor`, `Ceiling`, and four `Wall` nodes under `Interior`; add a `StaticBody3D` named `InteriorBody` and, under it, `InteriorBuilder` with `body_path = ..`.
+- Delete the hand-built `Floor`, `Ceiling`, `Window`, and `Wall` nodes under `Interior`; add
+  `InteriorBuilder` **directly under `Interior`** (a plain `Node3D`) and **leave `body_path`
+  unset**. Wire its `canopy_material` to the material carrying the canopy `SubViewport`'s
+  `ViewportTexture` — the same one the hand-built `Window` pane used.
+
+  Do **not** add a `StaticBody3D` wrapper. Unlike `ExteriorBuilder`, which attaches colliders
+  directly to a scene-supplied body, `InteriorBuilder` creates and owns its own `StaticBody3D`
+  (`InteriorGeometry`) on every rebuild, carrying `collision_layer = 2` / `collision_mask = 0`
+  itself. Its `body_path` names the *parent* for that owned body, not a body to attach to, so a
+  wrapper would end up an empty inert node with the real geometry one level deeper — and any
+  `collision_layer` assigned to it would land on the wrong node.
 - Keep `SkyPivot`, `Avatar`, and `PilotSeat`.
 - Add a bootstrap script to the root that builds a starter ship in code so the scene has something to show.
 
@@ -3520,7 +3530,7 @@ Shipyard (Node3D, shipyard.gd)
     ├── Exterior (StaticBody3D)
     │   └── ExteriorBuilder     body_path = ..
     └── Interior (StaticBody3D) visible = false in Slice 1
-        └── InteriorBuilder     body_path = ..
+        └── InteriorBuilder     body_path unset — it owns its own StaticBody3D
 ```
 
 The preview exterior is a `StaticBody3D`, not a `RigidBody3D` — in the dry dock the ship must not drift, and the builder does not care which body it attaches to.
