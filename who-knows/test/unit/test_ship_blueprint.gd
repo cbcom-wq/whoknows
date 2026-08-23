@@ -1,5 +1,21 @@
 extends GutTest
 
+# Tracks the user:// path (if any) written by the current test, so
+# after_each() can remove it regardless of how the test body exits —
+# including a null-dereference abort, which GUT's assert_* calls do not
+# themselves stop.
+var _disk_test_path := ""
+
+func after_each():
+	if _disk_test_path != "":
+		_delete_if_exists(_disk_test_path)
+		_disk_test_path = ""
+
+func _delete_if_exists(path: String) -> void:
+	var abs_path := ProjectSettings.globalize_path(path)
+	if FileAccess.file_exists(abs_path):
+		DirAccess.remove_absolute(abs_path)
+
 func _grid_with(cells: Array) -> ShipGrid:
 	var g := ShipGrid.new()
 	for cell in cells:
@@ -49,15 +65,26 @@ func test_coords_are_sorted_for_deterministic_diffs():
 	assert_eq(first[0], Vector3i(0, 0, 0), "sorted ascending")
 
 func test_saves_and_loads_from_disk():
+	var path := "user://test_blueprint.tres"
+	_disk_test_path = path
+	# Defensive: clear out anything a previously aborted run left behind,
+	# so a stale file can't masquerade as this run's output.
+	_delete_if_exists(path)
+
 	var g := _grid_with([[Vector3i(2, -1, 4), &"reactor", 9, 55]])
 	var bp := ShipBlueprint.from_grid(g, "DiskTest")
-	var path := "user://test_blueprint.tres"
 	assert_eq(ResourceSaver.save(bp, path), OK)
 
 	var loaded := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE) as ShipBlueprint
-	assert_not_null(loaded)
+	assert_not_null(loaded, "blueprint failed to load back from disk")
+	if loaded == null:
+		return
+
 	var restored := loaded.to_grid()
 	assert_eq(restored.size(), 1)
-	assert_eq(restored.get_block(Vector3i(2, -1, 4)).block_id, &"reactor")
-	assert_eq(restored.get_block(Vector3i(2, -1, 4)).orientation, 9)
-	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	var block := restored.get_block(Vector3i(2, -1, 4))
+	assert_not_null(block, "restored grid is missing the saved cell")
+	if block == null:
+		return
+	assert_eq(block.block_id, &"reactor")
+	assert_eq(block.orientation, 9)
