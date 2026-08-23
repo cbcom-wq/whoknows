@@ -1,4 +1,4 @@
-[gd_scene load_steps=36 format=3]
+[gd_scene load_steps=24 format=3]
 
 [ext_resource type="Script" path="res://src/ship/ship.gd" id="1_ship"]
 [ext_resource type="PackedScene" path="res://scenes/avatar.tscn" id="2_avatar"]
@@ -8,6 +8,9 @@
 [ext_resource type="Script" path="res://src/camera/camera_director.gd" id="6_camera_director"]
 [ext_resource type="Script" path="res://src/camera/motion_coupling.gd" id="7_motion_coupling"]
 [ext_resource type="Script" path="res://src/world/debris_field.gd" id="8_debris_field"]
+[ext_resource type="Script" path="res://src/ship/exterior_builder.gd" id="9_exterior_builder"]
+[ext_resource type="Script" path="res://src/ship/interior_builder.gd" id="10_interior_builder"]
+[ext_resource type="Script" path="res://scenes/flight_test.gd" id="11_flight_test"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_flighttest"]
 sky_top_color = Color(0.02, 0.02, 0.05, 1)
@@ -24,33 +27,6 @@ sky_material = SubResource("ProceduralSkyMaterial_flighttest")
 [sub_resource type="Environment" id="Environment_flighttest"]
 background_mode = 2
 sky = SubResource("Sky_flighttest")
-
-[sub_resource type="BoxMesh" id="BoxMesh_hull"]
-size = Vector3(8, 4, 12)
-
-[sub_resource type="BoxShape3D" id="BoxShape3D_hull"]
-size = Vector3(8, 4, 12)
-
-[sub_resource type="BoxShape3D" id="BoxShape3D_slab"]
-size = Vector3(6, 0.2, 10)
-
-[sub_resource type="BoxShape3D" id="BoxShape3D_wall_ns"]
-size = Vector3(6, 2, 0.2)
-
-[sub_resource type="BoxShape3D" id="BoxShape3D_wall_ew"]
-size = Vector3(0.2, 2, 10)
-
-[sub_resource type="BoxShape3D" id="BoxShape3D_seat"]
-size = Vector3(0.8, 1.2, 0.8)
-
-[sub_resource type="BoxMesh" id="BoxMesh_seat"]
-size = Vector3(0.8, 1.2, 0.8)
-
-[sub_resource type="BoxShape3D" id="BoxShape3D_wall_pillar"]
-size = Vector3(1.5, 2, 0.2)
-
-[sub_resource type="BoxShape3D" id="BoxShape3D_window"]
-size = Vector3(3, 2, 0.2)
 
 [sub_resource type="Gradient" id="Gradient_starfield"]
 offsets = PackedFloat32Array(0, 0.04, 0.12)
@@ -78,27 +54,6 @@ flip_faces = true
 radius = 500.0
 height = 1000.0
 
-[sub_resource type="BoxMesh" id="BoxMesh_slab"]
-size = Vector3(6, 0.2, 10)
-
-[sub_resource type="BoxMesh" id="BoxMesh_wall_ns"]
-size = Vector3(6, 2, 0.2)
-
-[sub_resource type="BoxMesh" id="BoxMesh_wall_ew"]
-size = Vector3(0.2, 2, 10)
-
-[sub_resource type="BoxMesh" id="BoxMesh_wall_pillar"]
-size = Vector3(1.5, 2, 0.2)
-
-[sub_resource type="BoxMesh" id="BoxMesh_window"]
-size = Vector3(3, 2, 0.2)
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_wall"]
-albedo_color = Color(0.11, 0.115, 0.125, 1)
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_deck"]
-albedo_color = Color(0.19, 0.195, 0.2, 1)
-
 [sub_resource type="ViewportTexture" id="ViewportTexture_canopy"]
 resource_local_to_scene = true
 viewport_path = NodePath("Ship/Canopy")
@@ -117,7 +72,11 @@ emission_enabled = true
 emission = Color(1, 0.85, 0.55, 1)
 emission_energy_multiplier = 2.0
 
+[sub_resource type="BoxShape3D" id="BoxShape3D_seat"]
+size = Vector3(1.4, 1.6, 1.4)
+
 [node name="FlightTest" type="Node3D"]
+script = ExtResource("11_flight_test")
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_flighttest")
@@ -136,19 +95,16 @@ script = ExtResource("1_ship")
 [node name="Exterior" type="RigidBody3D" parent="Ship"]
 mass = 42000.0
 
-[node name="Hull" type="MeshInstance3D" parent="Ship/Exterior"]
-layers = 1
-mesh = SubResource("BoxMesh_hull")
-
-[node name="Collider" type="CollisionShape3D" parent="Ship/Exterior"]
-shape = SubResource("BoxShape3D_hull")
+[node name="ExteriorBuilder" type="Node3D" parent="Ship/Exterior"]
+script = ExtResource("9_exterior_builder")
+body_path = NodePath("..")
 
 [node name="ChaseCamera" type="Camera3D" parent="Ship/Exterior"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4, 18)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5, 26)
 current = false
 
 [node name="CanopyRemote" type="RemoteTransform3D" parent="Ship/Exterior"]
-position = Vector3(0, 0.5, -5)
+position = Vector3(0, 0.5, -9)
 remote_path = NodePath("../../Canopy/CanopyCam")
 
 [node name="FlightComputer" type="Node" parent="Ship"]
@@ -165,112 +121,12 @@ cull_mask = 1
 
 [node name="Interior" type="Node3D" parent="Ship"]
 
-[node name="Floor" type="StaticBody3D" parent="Ship/Interior"]
-position = Vector3(0, -0.1, 0)
-collision_layer = 2
-collision_mask = 0
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="Ship/Interior/Floor"]
-shape = SubResource("BoxShape3D_slab")
-
-[node name="MeshInstance3D" type="MeshInstance3D" parent="Ship/Interior/Floor"]
-layers = 2
-mesh = SubResource("BoxMesh_slab")
-material_override = SubResource("StandardMaterial3D_deck")
-
-[node name="Ceiling" type="StaticBody3D" parent="Ship/Interior"]
-position = Vector3(0, 2.1, 0)
-collision_layer = 2
-collision_mask = 0
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="Ship/Interior/Ceiling"]
-shape = SubResource("BoxShape3D_slab")
-
-[node name="MeshInstance3D" type="MeshInstance3D" parent="Ship/Interior/Ceiling"]
-layers = 2
-mesh = SubResource("BoxMesh_slab")
-material_override = SubResource("StandardMaterial3D_wall")
-
-[node name="WallN" type="StaticBody3D" parent="Ship/Interior"]
-position = Vector3(0, 1, -5)
-collision_layer = 2
-collision_mask = 0
-
-[node name="CollisionShape3D_L" type="CollisionShape3D" parent="Ship/Interior/WallN"]
-position = Vector3(-2.25, 0, 0)
-shape = SubResource("BoxShape3D_wall_pillar")
-
-[node name="CollisionShape3D_R" type="CollisionShape3D" parent="Ship/Interior/WallN"]
-position = Vector3(2.25, 0, 0)
-shape = SubResource("BoxShape3D_wall_pillar")
-
-[node name="MeshInstance3D_L" type="MeshInstance3D" parent="Ship/Interior/WallN"]
-layers = 2
-position = Vector3(-2.25, 0, 0)
-mesh = SubResource("BoxMesh_wall_pillar")
-material_override = SubResource("StandardMaterial3D_wall")
-
-[node name="MeshInstance3D_R" type="MeshInstance3D" parent="Ship/Interior/WallN"]
-layers = 2
-position = Vector3(2.25, 0, 0)
-mesh = SubResource("BoxMesh_wall_pillar")
-material_override = SubResource("StandardMaterial3D_wall")
-
-[node name="Window" type="StaticBody3D" parent="Ship/Interior"]
-position = Vector3(0, 1, -5)
-collision_layer = 2
-collision_mask = 0
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="Ship/Interior/Window"]
-shape = SubResource("BoxShape3D_window")
-
-[node name="MeshInstance3D" type="MeshInstance3D" parent="Ship/Interior/Window"]
-layers = 2
-cast_shadow = 0
-mesh = SubResource("BoxMesh_window")
-material_override = SubResource("StandardMaterial3D_canopy")
-
-[node name="WallS" type="StaticBody3D" parent="Ship/Interior"]
-position = Vector3(0, 1, 5)
-collision_layer = 2
-collision_mask = 0
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="Ship/Interior/WallS"]
-shape = SubResource("BoxShape3D_wall_ns")
-
-[node name="MeshInstance3D" type="MeshInstance3D" parent="Ship/Interior/WallS"]
-layers = 2
-mesh = SubResource("BoxMesh_wall_ns")
-material_override = SubResource("StandardMaterial3D_wall")
-
-[node name="WallE" type="StaticBody3D" parent="Ship/Interior"]
-position = Vector3(3, 1, 0)
-collision_layer = 2
-collision_mask = 0
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="Ship/Interior/WallE"]
-shape = SubResource("BoxShape3D_wall_ew")
-
-[node name="MeshInstance3D" type="MeshInstance3D" parent="Ship/Interior/WallE"]
-layers = 2
-mesh = SubResource("BoxMesh_wall_ew")
-material_override = SubResource("StandardMaterial3D_wall")
-
-[node name="WallW" type="StaticBody3D" parent="Ship/Interior"]
-position = Vector3(-3, 1, 0)
-collision_layer = 2
-collision_mask = 0
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="Ship/Interior/WallW"]
-shape = SubResource("BoxShape3D_wall_ew")
-
-[node name="MeshInstance3D" type="MeshInstance3D" parent="Ship/Interior/WallW"]
-layers = 2
-mesh = SubResource("BoxMesh_wall_ew")
-material_override = SubResource("StandardMaterial3D_wall")
+[node name="InteriorBuilder" type="Node3D" parent="Ship/Interior"]
+script = ExtResource("10_interior_builder")
+canopy_material = SubResource("StandardMaterial3D_canopy")
 
 [node name="CeilingLight1" type="OmniLight3D" parent="Ship/Interior"]
-position = Vector3(0, 1.9, -3)
+position = Vector3(0, 0.85, -5)
 light_color = Color(1, 0.87, 0.7, 1)
 light_energy = 4.0
 light_cull_mask = 2
@@ -283,7 +139,7 @@ mesh = SubResource("BoxMesh_light_strip")
 material_override = SubResource("StandardMaterial3D_light_strip")
 
 [node name="CeilingLight2" type="OmniLight3D" parent="Ship/Interior"]
-position = Vector3(0, 1.9, 0)
+position = Vector3(0, 0.85, 0)
 light_color = Color(1, 0.87, 0.7, 1)
 light_energy = 4.0
 light_cull_mask = 2
@@ -296,7 +152,7 @@ mesh = SubResource("BoxMesh_light_strip")
 material_override = SubResource("StandardMaterial3D_light_strip")
 
 [node name="CeilingLight3" type="OmniLight3D" parent="Ship/Interior"]
-position = Vector3(0, 1.9, 3)
+position = Vector3(0, 0.85, 5)
 light_color = Color(1, 0.87, 0.7, 1)
 light_energy = 4.0
 light_cull_mask = 2
@@ -315,23 +171,18 @@ layers = 2
 mesh = SubResource("SphereMesh_sky")
 
 [node name="SeatMarker" type="Marker3D" parent="Ship/Interior"]
-position = Vector3(0, 0, -3.5)
+position = Vector3(0, 0, -4)
 
 [node name="PilotSeat" type="StaticBody3D" parent="Ship/Interior"]
-position = Vector3(0, 0, -3.5)
+position = Vector3(0, 0, -4)
 collision_layer = 2
 collision_mask = 0
 script = ExtResource("5_pilot_seat")
 camera_director_path = NodePath("../../CameraDirector")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Ship/Interior/PilotSeat"]
-position = Vector3(0, 0.6, 0)
+position = Vector3(0, -0.1, 0)
 shape = SubResource("BoxShape3D_seat")
-
-[node name="MeshInstance3D" type="MeshInstance3D" parent="Ship/Interior/PilotSeat"]
-layers = 2
-position = Vector3(0, 0.6, 0)
-mesh = SubResource("BoxMesh_seat")
 
 [node name="Eye" type="Node3D" parent="Ship/Interior/PilotSeat"]
 position = Vector3(0, 1.2, -0.2)

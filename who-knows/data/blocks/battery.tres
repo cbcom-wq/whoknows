@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="BlockDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/ship/block_definition.gd" id="1_script"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_battery"]
+size = Vector3(2, 2, 2)
+
+[resource]
+script = ExtResource("1_script")
+id = &"battery"
+display_name = "Battery"
+category = 1
+occupancy = 0
+mass_t = 2.0
+hp = 120
+power_gen = 0.0
+power_draw = 0.0
+thrust_kn = 0.0
+grav_radius = 0.0
+mesh = SubResource("BoxMesh_battery")
