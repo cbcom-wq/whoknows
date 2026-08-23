@@ -316,23 +316,67 @@ git commit -m "feat: add Ship node with interior/exterior split scaffold"
 
 - [ ] **Step 1: Add the input map**
 
-In `who-knows/project.godot`, add:
+In `who-knows/project.godot`, add the block below **verbatim**.
+
+> **The format matters and fails silently.** Godot 4 serializes input events as
+> `Object(InputEventKey, ...)` constructor calls, not as JSON dictionaries. A dictionary-shaped
+> `events` array parses without any error and registers the action **with zero bindings** — the
+> game then launches, renders, and responds to the mouse while every single key does nothing.
+> `test/unit/test_input_map.gd` guards against this; run it after touching this block.
+
+Bindings use `physical_keycode` so they follow key *position* rather than keyboard layout.
 
 ```ini
 [input]
 
-move_forward={"deadzone":0.2,"events":[{"device":-1,"keycode":87,"physical_keycode":0,"type":"InputEventKey","pressed":true}]}
-move_back={"deadzone":0.2,"events":[{"device":-1,"keycode":83,"physical_keycode":0,"type":"InputEventKey","pressed":true}]}
-move_left={"deadzone":0.2,"events":[{"device":-1,"keycode":65,"physical_keycode":0,"type":"InputEventKey","pressed":true}]}
-move_right={"deadzone":0.2,"events":[{"device":-1,"keycode":68,"physical_keycode":0,"type":"InputEventKey","pressed":true}]}
-sprint={"deadzone":0.2,"events":[{"device":-1,"keycode":4194325,"physical_keycode":0,"type":"InputEventKey","pressed":true}]}
-crouch={"deadzone":0.2,"events":[{"device":-1,"keycode":4194326,"physical_keycode":0,"type":"InputEventKey","pressed":true}]}
-interact={"deadzone":0.2,"events":[{"device":-1,"keycode":70,"physical_keycode":0,"type":"InputEventKey","pressed":true}]}
-roll_left={"deadzone":0.2,"events":[{"device":-1,"keycode":81,"physical_keycode":0,"type":"InputEventKey","pressed":true}]}
-roll_right={"deadzone":0.2,"events":[{"device":-1,"keycode":69,"physical_keycode":0,"type":"InputEventKey","pressed":true}]}
-boost={"deadzone":0.2,"events":[{"device":-1,"keycode":32,"physical_keycode":0,"type":"InputEventKey","pressed":true}]}
-toggle_assist={"deadzone":0.2,"events":[{"device":-1,"keycode":90,"physical_keycode":0,"type":"InputEventKey","pressed":true}]}
-cycle_camera={"deadzone":0.2,"events":[{"device":-1,"keycode":86,"physical_keycode":0,"type":"InputEventKey","pressed":true}]}
+move_forward={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":87,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)]
+}
+move_back={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":83,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)]
+}
+move_left={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":65,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)]
+}
+move_right={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":68,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)]
+}
+sprint={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":4194325,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)]
+}
+crouch={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":4194326,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)]
+}
+interact={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":70,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)]
+}
+roll_left={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":81,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)]
+}
+roll_right={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":69,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)]
+}
+boost={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":32,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)]
+}
+toggle_assist={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":90,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)]
+}
+cycle_camera={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":86,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)]
+}
 ```
 
 - [ ] **Step 2: Write the avatar controller**
