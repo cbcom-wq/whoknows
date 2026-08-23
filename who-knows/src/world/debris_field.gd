@@ -19,16 +19,19 @@ extends MultiMeshInstance3D
 ## Render layer 1 (exterior) only, so the directional light lights these
 ## and the interior practicals (layer 2, 5 km away besides) never can.
 
-## Rock size range in metres -- this is the per-instance uniform scale
-## applied to the shared unit-ish rock mesh, not a separate parameter.
+## Rock diameter range in metres. _build_rock_mesh() below builds a base
+## mesh with a true unit diameter (vertices at radius ~0.5, not ~1 -- see
+## its own comment), so the per-instance uniform scale applied to it in
+## _build_multimesh() equals this directly. Measured, not assumed: see
+## task-6c-report.md for the built mesh's actual AABB at both ends.
 const MIN_ROCK_METRES := 5.0
 const MAX_ROCK_METRES := 40.0
 
 ## Nothing scatters closer to the field's centre than this. `Ship.exterior`
 ## spawns at the world origin (Task 2), so keeping this clearance around
 ## the origin -- comfortably past the hull's half-diagonal (~7.3 m for the
-## 8x4x12 box) plus the largest possible rock radius (40 m) -- keeps a rock
-## from ever landing on top of the ship at spawn.
+## 8x4x12 box) plus the largest possible rock radius (MAX_ROCK_METRES / 2 =
+## 20 m) -- keeps a rock from ever landing on top of the ship at spawn.
 const CLEARANCE_METRES := 80.0
 
 ## How much the base rock shape's vertices are pushed in/out from a unit
@@ -81,11 +84,12 @@ func _scatter_point(rng: RandomNumberGenerator) -> Vector3:
 	push_error("DebrisField: radius %f leaves no room outside CLEARANCE_METRES %f" % [radius, CLEARANCE_METRES])
 	return Vector3(radius, 0.0, 0.0)
 
-## One low-poly rock, shared by every instance via MultiMesh: an
-## icosahedron with each vertex's radius jittered outward or inward, built
-## with hard per-face normals (three unique vertices per triangle, all
-## sharing that triangle's own normal) so it renders flat-shaded with hard
-## edges -- the same look Task 6b's interior shell uses, no textures.
+## One low-poly rock, shared by every instance via MultiMesh: a
+## unit-diameter icosahedron with each vertex's radius jittered outward or
+## inward, built with hard per-face normals (three unique vertices per
+## triangle, all sharing that triangle's own normal) so it renders
+## flat-shaded with hard edges -- the same look Task 6b's interior shell
+## uses, no textures.
 func _build_rock_mesh(rng: RandomNumberGenerator) -> ArrayMesh:
 	var phi := (1.0 + sqrt(5.0)) / 2.0
 	var corners := [
@@ -100,10 +104,15 @@ func _build_rock_mesh(rng: RandomNumberGenerator) -> ArrayMesh:
 		[4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1],
 	]
 
+	# 0.5 so the base shape's diameter (not radius) is ~1: MIN/MAX_ROCK_METRES
+	# are a diameter range, and the per-instance scale in _build_multimesh()
+	# is applied directly to this mesh, so a unit-diameter base makes that
+	# scale equal the rock's final diameter in metres -- verified by
+	# measuring the built mesh's AABB, not assumed (task-6c-report.md).
 	var jittered: Array[Vector3] = []
 	for corner in corners:
 		var jitter := 1.0 + rng.randf_range(-ROCK_JITTER, ROCK_JITTER)
-		jittered.append(corner.normalized() * jitter)
+		jittered.append(corner.normalized() * jitter * 0.5)
 
 	var positions := PackedVector3Array()
 	var normals := PackedVector3Array()
