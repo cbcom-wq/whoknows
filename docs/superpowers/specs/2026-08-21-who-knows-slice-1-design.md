@@ -142,6 +142,8 @@ One block is a 2m cube — roughly a person's height plus reach. A single-cell c
 
 Fifteen blocks. No weapons — those are Slice 2.
 
+> **Amended 2026-08-23:** a sixteenth block, **Canopy** (Structure / SOLID), is added by `docs/superpowers/specs/2026-08-23-starter-shuttle-art-direction.md` §7. It is the raked bow glazing, the exterior face of the cockpit `SubViewport`, and a deliberate hp weak point for Slice 2.
+
 | Block | Category | Occupancy | Notes |
 |-------|----------|-----------|-------|
 | Hull Block | Structure | SOLID | Baseline mass and hp |
@@ -314,7 +316,9 @@ Feel cannot be unit tested.
 
 Flat-shaded low-poly, hard edges, a tight palette, and **emissive accents carrying the storytelling** — engine glow, deck strip lighting, the amber of a warning panel. Exteriors read as silhouettes against starfield. Interiors are lit almost entirely by practicals, so corridors are dim and pooled: costs nothing now, pays off enormously when Slice 3 puts armed strangers in them.
 
-Fifteen blocks is a weekend of modelling, not a bottleneck.
+Sixteen blocks is a weekend of modelling, not a bottleneck.
+
+> **Amended 2026-08-23:** the starter craft's concrete realisation of this direction — silhouette, blueprint, block meshes, palette, and the livery-stripe shader — is specified in `docs/superpowers/specs/2026-08-23-starter-shuttle-art-direction.md`. Note in particular its §5.3: "dim and pooled" describes derelict and enemy interiors, not the player's own ship, which is bright and lived-in.
 
 ---
 

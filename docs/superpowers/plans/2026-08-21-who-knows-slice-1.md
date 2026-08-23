@@ -2572,6 +2572,8 @@ git commit -m "feat: add diffable ShipBlueprint serialization"
 
 ### Task 13: Exterior builder and parity [LOGIC]
 
+> **ART DIRECTION APPLIES.** Read `docs/superpowers/specs/2026-08-23-starter-shuttle-art-direction.md` §7 item 6 before writing this task: `MultiMeshInstance3D.layers` must remain 1 so the canopy `SubViewport` (`cull_mask = 1`) renders the hull.
+
 **Files:**
 - Create: `who-knows/src/ship/exterior_builder.gd`
 - Test: `who-knows/test/unit/test_exterior_builder.gd`
@@ -2796,6 +2798,8 @@ git commit -m "feat: build hull mesh and collision from grid with parity test"
 ---
 
 ### Task 14: Interior builder and parity [LOGIC]
+
+> **ART DIRECTION APPLIES.** Read `docs/superpowers/specs/2026-08-23-starter-shuttle-art-direction.md` §7 items 4 and 5 before writing this task: the builder must emit interior **meshes on render layer 2**, not colliders alone (this is BLOCKER-A from Task 6b and will recur verbatim), and a walkable cell facing a `canopy` cell gets the canopy `SubViewport` material instead of a wall.
 
 **Files:**
 - Create: `who-knows/src/ship/interior_builder.gd`
@@ -3074,7 +3078,9 @@ git commit -m "feat: build walkable interior from grid with parity test"
 
 ---
 
-### Task 15: Author the fifteen blocks and wire the grid into the ship [FEEL]
+### Task 15: Author the sixteen blocks and wire the grid into the ship [FEEL]
+
+> **ART DIRECTION APPLIES — READ FIRST.** `docs/superpowers/specs/2026-08-23-starter-shuttle-art-direction.md` supersedes parts of this task. It adds a sixteenth block (`canopy`), replaces the BoxMesh-placeholder instruction in Step 1 for six blocks, and replaces the `_starter_grid()` corvette in Step 5 with a shuttle blueprint. Its §7 is the full amendment list.
 
 **Files:**
 - Create: `who-knows/data/blocks/*.tres` (15 resources)
@@ -3090,7 +3096,9 @@ This is where Phase A's hand-built scenery is replaced by generated geometry.
 
 - [ ] **Step 1: Author the fifteen block resources**
 
-Create one `.tres` per row in `who-knows/data/blocks/`. Use `BoxMesh` placeholders sized `2 × 2 × 2` for every block for now; real art comes later and changes nothing but the `mesh` field.
+Create one `.tres` per row in `who-knows/data/blocks/`, **plus a sixteenth `canopy.tres`** (Structure / SOLID / mass 0.5 / hp 60 / no power, thrust or grav). Six of the sixteen carry the starter shuttle's read and need the real meshes specified in `docs/superpowers/specs/2026-08-23-starter-shuttle-art-direction.md` §4 — `hull`, `hull_wedge`, `canopy`, `thruster`, `airlock`, `pilot_seat`. The remaining ten stay `BoxMesh` placeholders sized `2 × 2 × 2`; real art for those comes later and changes nothing but the `mesh` field. Materials and palette are §5 of the same document; the hull livery stripe is §6.
+
+The block-count assertion in Step 2 (`test_all_fifteen_blocks_load`) becomes 16 and is renamed accordingly.
 
 | File | id | category | occupancy | mass_t | hp | power_gen | power_draw | thrust_kn | grav_radius |
 |---|---|---|---|---|---|---|---|---|---|
@@ -3280,6 +3288,9 @@ func _ready() -> void:
 
 func _starter_grid() -> ShipGrid:
 	var g := ShipGrid.new()
+	# SUPERSEDED: build the starter shuttle from docs/superpowers/specs/2026-08-23-starter-shuttle-art-direction.md §3 instead of this corvette.
+	# Keep the _put() helper; replace the layout and honour §3.4's acceptance criteria
+	# (all five validation rules pass, and induced_torque under full burn is ~zero).
 	# A 3-wide, 7-long single-deck corvette: bridge forward, engines aft.
 	for z in range(-3, 4):
 		for x in range(-1, 2):
