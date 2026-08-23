@@ -9,6 +9,12 @@ signal stats_changed(stats: ShipStats)
 const INTERIOR_WORLD_BASE := Vector3(0.0, -5000.0, 0.0)
 const SLOT_SPACING := 2000.0
 
+## The exact ShaderMaterial `hull`/`hull_wedge` meshes reference (their .tres
+## surfaces point at this same path, and Godot's resource cache guarantees a
+## single shared instance) -- not a duplicate. Loading it here needs no
+## change to ExteriorBuilder.
+const HULL_LIVERY_MATERIAL: ShaderMaterial = preload("res://data/materials/hull_livery.tres")
+
 @export var interior_slot: int = 0
 
 var grid: ShipGrid
@@ -31,6 +37,17 @@ func _ready() -> void:
 	interior.global_position = interior_slot_origin()
 	if catalog == null:
 		catalog = BlockCatalog.load_from_dir("res://data/blocks")
+
+func _process(_delta: float) -> void:
+	# hull_livery.gdshader paints its stripe from ship-local height, but
+	# MultiMesh's MODEL_MATRIX is model-to-*world* -- it carries the hull
+	# RigidBody3D's own rotation along with each block's per-instance
+	# transform. Pushing the hull's inverse transform every frame lets the
+	# shader cancel that rotation (`hull_inverse * MODEL_MATRIX`) before
+	# testing height, so the stripe stays fixed on the hull under roll and
+	# pitch instead of swimming across it. See hull_livery.gdshader's header
+	# comment for the full derivation.
+	HULL_LIVERY_MATERIAL.set_shader_parameter(&"hull_inverse", exterior.global_transform.affine_inverse())
 
 func interior_slot_origin() -> Vector3:
 	# Interior space sits well clear of the combat arena so the walkable
