@@ -61,6 +61,33 @@ func test_rebuild_is_idempotent():
 	_builder.rebuild()
 	assert_eq(_builder.collider_coords().size(), 1, "rebuild must not accumulate")
 
+## The bookkeeping array above (collider_coords) clears itself unconditionally
+## regardless of node-tree timing, so it cannot catch a stale-node leak. This
+## asserts on what the body actually carries: a burst of rebuild() calls with
+## no yield -- structurally identical to several cell_changed signals firing
+## in the same frame from the shipyard editor -- must not leave old
+## CollisionShape3D/MultiMeshInstance3D nodes still parented (and, for
+## colliders, still physics-registered) alongside the freshly built ones.
+func test_rebuild_does_not_leave_stale_nodes_in_the_tree():
+	_put(Vector3i.ZERO, &"hull")
+	_builder.rebuild()
+	_builder.rebuild()
+	_builder.rebuild()
+
+	var colliders_under_body := 0
+	for child in _body.get_children():
+		if child is CollisionShape3D:
+			colliders_under_body += 1
+	assert_eq(colliders_under_body, 1,
+		"stale colliders must be fully detached, not merely queued")
+
+	var meshes_under_builder := 0
+	for child in _builder.get_children():
+		if child is MultiMeshInstance3D:
+			meshes_under_builder += 1
+	assert_eq(meshes_under_builder, 1,
+		"stale mesh instances must be fully detached, not merely queued")
+
 func test_clearing_a_block_removes_its_collider():
 	_put(Vector3i(0, 0, 0), &"hull")
 	_put(Vector3i(1, 0, 0), &"hull")

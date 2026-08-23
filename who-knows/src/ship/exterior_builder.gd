@@ -30,23 +30,31 @@ func collider_coords() -> Array:
 	return _collider_coords.duplicate()
 
 func _clear() -> void:
-	# queue_free() alone both detaches and deletes a node, atomically at
-	# the same deferred point. Detaching immediately with remove_child()
-	# first (as one might expect to mirror "removed synchronously") instead
-	# leaves the node parentless-but-not-yet-freed for the rest of the
-	# current frame, which is exactly what Godot's orphan-node tracking
-	# flags — confirmed empirically: three synchronous rebuild() calls
-	# produced real GUT "Orphans" warnings until this was reverted to
-	# queue_free()-only. Mesh instances never had this problem because
-	# they were already queue_free()-only.
+	# remove_child() then free() -- not queue_free(). remove_child() is
+	# synchronous and fires NOTIFICATION_UNPARENTED immediately, which is
+	# what actually deregisters a CollisionShape3D from its body's physics
+	# representation. queue_free() alone does not do that: the node stays
+	# parented (and, for a CollisionShape3D, physics-registered) until the
+	# delete queue is flushed, which never happens between two synchronous
+	# rebuild() calls. That previously left a stale, still-registered
+	# collider coincident with the freshly built one for the lifetime of a
+	# rebuild burst (e.g. several cell_changed signals firing in the same
+	# frame from the shipyard editor) -- a real double-collision bug, not
+	# just stray bookkeeping. free() (rather than queue_free()) then deletes
+	# the node immediately instead of leaving it parentless-but-alive for
+	# the rest of the frame. Safe here: these are plain, unconnected nodes,
+	# never mid-signal on the call stack when _clear() runs.
+	var body := _body()
 	for collider in _colliders:
 		if is_instance_valid(collider):
-			collider.queue_free()
+			body.remove_child(collider)
+			collider.free()
 	_colliders.clear()
 	_collider_coords.clear()
 	for mmi in _multimeshes.values():
 		if is_instance_valid(mmi):
-			mmi.queue_free()
+			remove_child(mmi)
+			mmi.free()
 	_multimeshes.clear()
 
 func _body() -> Node:
