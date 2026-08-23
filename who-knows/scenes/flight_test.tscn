@@ -1,4 +1,4 @@
-[gd_scene load_steps=34 format=3]
+[gd_scene load_steps=36 format=3]
 
 [ext_resource type="Script" path="res://src/ship/ship.gd" id="1_ship"]
 [ext_resource type="PackedScene" path="res://scenes/avatar.tscn" id="2_avatar"]
@@ -7,6 +7,7 @@
 [ext_resource type="Script" path="res://src/avatar/pilot_seat.gd" id="5_pilot_seat"]
 [ext_resource type="Script" path="res://src/camera/camera_director.gd" id="6_camera_director"]
 [ext_resource type="Script" path="res://src/camera/motion_coupling.gd" id="7_motion_coupling"]
+[ext_resource type="Script" path="res://src/world/debris_field.gd" id="8_debris_field"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_flighttest"]
 sky_top_color = Color(0.02, 0.02, 0.05, 1)
@@ -52,9 +53,6 @@ size = Vector3(1.5, 2, 0.2)
 size = Vector3(3, 2, 0.2)
 
 [sub_resource type="Gradient" id="Gradient_starfield"]
-# Cellular noise returns low values right at each cell's feature point and
-# rises quickly away from it, so a narrow white band near 0 with a fast
-# falloff to black reads as sparse, pinpoint stars rather than clouds.
 offsets = PackedFloat32Array(0, 0.04, 0.12)
 colors = PackedColorArray(1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1)
 
@@ -101,9 +99,14 @@ albedo_color = Color(0.11, 0.115, 0.125, 1)
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_deck"]
 albedo_color = Color(0.19, 0.195, 0.2, 1)
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_window"]
-transparency = 1
-albedo_color = Color(0.55, 0.65, 0.7, 0.12)
+[sub_resource type="ViewportTexture" id="ViewportTexture_canopy"]
+resource_local_to_scene = true
+viewport_path = NodePath("Ship/Canopy")
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_canopy"]
+resource_local_to_scene = true
+shading_mode = 0
+albedo_texture = SubResource("ViewportTexture_canopy")
 
 [sub_resource type="BoxMesh" id="BoxMesh_light_strip"]
 size = Vector3(1, 0.06, 0.2)
@@ -124,6 +127,9 @@ rotation_degrees = Vector3(-45, 30, 0)
 shadow_enabled = true
 light_cull_mask = 1
 
+[node name="DebrisField" type="MultiMeshInstance3D" parent="."]
+script = ExtResource("8_debris_field")
+
 [node name="Ship" type="Node3D" parent="."]
 script = ExtResource("1_ship")
 
@@ -141,9 +147,21 @@ shape = SubResource("BoxShape3D_hull")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4, 18)
 current = false
 
+[node name="CanopyRemote" type="RemoteTransform3D" parent="Ship/Exterior"]
+position = Vector3(0, 0.5, -5)
+remote_path = NodePath("../../Canopy/CanopyCam")
+
 [node name="FlightComputer" type="Node" parent="Ship"]
 script = ExtResource("3_flight_computer")
 hull_path = NodePath("../Exterior")
+
+[node name="Canopy" type="SubViewport" parent="Ship"]
+size = Vector2i(1024, 512)
+render_target_update_mode = 4
+
+[node name="CanopyCam" type="Camera3D" parent="Ship/Canopy"]
+current = true
+cull_mask = 1
 
 [node name="Interior" type="Node3D" parent="Ship"]
 
@@ -199,11 +217,6 @@ mesh = SubResource("BoxMesh_wall_pillar")
 material_override = SubResource("StandardMaterial3D_wall")
 
 [node name="Window" type="StaticBody3D" parent="Ship/Interior"]
-# Physically seals the 3m gap left between WallN's two pillars. Without
-# this, the gap in the collider is a gap the avatar can walk (or crawl)
-# straight through into deep interior space, with no floor beyond z=-5 to
-# catch them. Sealed floor-to-ceiling; see task-6-report.md for why this
-# and WallN's pillars aren't a single centered 3m x 1.5m cutout.
 position = Vector3(0, 1, -5)
 collision_layer = 2
 collision_mask = 0
@@ -212,13 +225,10 @@ collision_mask = 0
 shape = SubResource("BoxShape3D_window")
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="Ship/Interior/Window"]
-# Transparent glass, not the seal — collision still comes entirely from
-# the CollisionShape3D above. cast_shadow off so the pane doesn't throw
-# an opaque shadow rectangle across the deck from the ceiling practicals.
 layers = 2
 cast_shadow = 0
 mesh = SubResource("BoxMesh_window")
-material_override = SubResource("StandardMaterial3D_window")
+material_override = SubResource("StandardMaterial3D_canopy")
 
 [node name="WallS" type="StaticBody3D" parent="Ship/Interior"]
 position = Vector3(0, 1, 5)
@@ -260,11 +270,6 @@ mesh = SubResource("BoxMesh_wall_ew")
 material_override = SubResource("StandardMaterial3D_wall")
 
 [node name="CeilingLight1" type="OmniLight3D" parent="Ship/Interior"]
-# Practicals per §11 — dim, pooled light with shadowed corners, not a
-# flat ambient wash. Three fixtures spaced along the room's long axis
-# (z), deliberately not reaching the window (z=-5) or the back wall
-# (z=5), so both ends stay dim. cull_mask restricted to the interior
-# render layer so this can never bleed onto exterior geometry.
 position = Vector3(0, 1.9, -3)
 light_color = Color(1, 0.87, 0.7, 1)
 light_energy = 4.0
@@ -304,10 +309,6 @@ mesh = SubResource("BoxMesh_light_strip")
 material_override = SubResource("StandardMaterial3D_light_strip")
 
 [node name="SkyPivot" type="Node3D" parent="Ship/Interior"]
-# Visual only, no collider. Left at the default local transform (identity)
-# so its global position always equals Interior's — MotionCoupling only
-# ever writes global_basis (rotation), never touches the origin, so the
-# 5km interior-slot offset never displaces it.
 
 [node name="SkySphere" type="MeshInstance3D" parent="Ship/Interior/SkyPivot"]
 layers = 2
