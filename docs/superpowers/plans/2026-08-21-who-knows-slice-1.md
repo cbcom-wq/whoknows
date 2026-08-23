@@ -1137,6 +1137,79 @@ git commit -m "feat: make the interior visible and space frictionless"
 
 ---
 
+### Task 6c: Something to fly past, and a window to see it through [FEEL]
+
+**Files:**
+- Create: `who-knows/src/world/debris_field.gd`
+- Modify: `who-knows/scenes/flight_test.tscn`
+
+**Interfaces:**
+- Consumes: `Ship.exterior`
+- Produces: `DebrisField` with `@export var seed: int`, `@export var count: int`, `@export var radius: float`.
+
+Added after the Phase A walkthrough found that flying is invisible. The hull genuinely reaches
+31.8 m/s and covers 23.8 m under a held burn -- but nothing on screen changes, for two reasons
+that compound:
+
+1. **The exterior world is empty.** There is nothing to move relative to. Stars sit at infinity
+   and do not parallax, so flying past nothing looks exactly like sitting still. This is a gap in
+   the plan: the arena was never given any contents.
+2. **The cockpit cannot see out.** The canopy `SubViewport` from §3.2 was scheduled as Task 20
+   Step 3, dead last -- so the plan asked the player to judge flight while deferring the only
+   thing that makes flight visible until after everything else was built.
+
+Task 20 Step 3 is superseded by this task.
+
+- [ ] **Step 1: Scatter a debris field**
+
+Create `who-knows/src/world/debris_field.gd`: a `MultiMeshInstance3D` that scatters low-poly rocks
+through the arena from a fixed seed, so the field is identical every run and a tester comparing two
+sessions is comparing like with like.
+
+Sizing matters more than variety here. The reference object is a 42-tonne corvette travelling
+30-120 m/s in an arena bounded to ±3 km. Rocks in the 5-40 m range spaced on the order of
+100-300 m give a steady sense of passage without turning the arena into an obstacle course.
+Vary scale and rotation per instance; one shared mesh.
+
+**No collision.** These exist to be looked at. A hull that clips a rock at 100 m/s during a feel
+test teaches nothing except annoyance, and Slice 2 is where collision becomes interesting.
+
+Put the debris on render layer `1` (`exterior`) so the interior practicals cannot light it and the
+directional light can.
+
+- [ ] **Step 2: Wire the canopy**
+
+Add a `SubViewport` under `Ship` containing a `Camera3D` named `CanopyCam`. Leave `own_world_3d`
+off so the viewport renders the same `World3D` the hull flies through. Set the camera's `cull_mask`
+to render only layer `1`, so it shows the exterior and never the interior parked 5 km below.
+
+Drive it from the hull with a `RemoteTransform3D` under `Ship/Exterior`, positioned at the bridge
+and pointing forward. No script needed -- the remote transform copies the hull's global transform
+every frame, so the canopy view is exactly what the ship is actually looking at.
+
+Then set the interior window pane's material to an unshaded `StandardMaterial3D` whose
+`albedo_texture` is the `SubViewport`'s `ViewportTexture`. The pane keeps its collider: the view is
+real, the glass is still solid.
+
+- [ ] **Step 3: Verify headlessly**
+
+```bash
+powershell -File "D:/git/whoknows/who-knows/run_tests.ps1"
+```
+
+Then the scene load, which must stay clean. Beyond that, prove the canopy is actually live rather
+than a static texture: run physics ticks with thrust applied and assert the `CanopyCam`'s global
+transform tracks the hull's, rather than sitting at the origin. Report the numbers.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add -A who-knows/
+git commit -m "feat: add a debris field and wire the cockpit canopy"
+```
+
+---
+
 # Phase B — The grid
 
 Phase A proved the feel on hand-built scenes. Phase B builds the real data model behind it. Everything here is **[LOGIC]** and strictly test-driven.
@@ -3956,7 +4029,7 @@ func _put(g: ShipGrid, coord: Vector3i, id: StringName) -> void:
 	g.set_block(coord, i)
 ```
 
-- [ ] **Step 3: Add the canopy viewport**
+- [ ] **Step 3: Add the canopy viewport** — *superseded by Task 6c; verify it still works and move on.*
 
 In `flight_test.tscn`:
 - Add `SubViewport` (size 1024 × 512, `render_target_update_mode = ALWAYS`) under `Ship`.
