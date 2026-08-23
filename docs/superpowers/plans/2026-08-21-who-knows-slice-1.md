@@ -2726,16 +2726,29 @@ func collider_coords() -> Array:
 	return _collider_coords.duplicate()
 
 func _clear() -> void:
+	# remove_child() then free(), never queue_free().
+	#
+	# remove_child() synchronously deregisters a CollisionShape3D from its
+	# body's physics representation. queue_free() alone does not: the node
+	# stays parented AND physics-registered until the engine flushes its
+	# delete queue, which never happens between two synchronous calls. Since
+	# Task 15 rebuilds on every cell_changed, a burst of edits would leave
+	# several live coincident colliders per cell.
+	#
+	# free() rather than queue_free() then closes the parentless-but-alive
+	# window that GUT's orphan counter reports. These are plain unconnected
+	# nodes, never mid-signal, so an immediate free is safe.
 	var body := _body()
 	for collider in _colliders:
 		if is_instance_valid(collider):
 			body.remove_child(collider)
-			collider.queue_free()
+			collider.free()
 	_colliders.clear()
 	_collider_coords.clear()
 	for mmi in _multimeshes.values():
 		if is_instance_valid(mmi):
-			mmi.queue_free()
+			remove_child(mmi)
+			mmi.free()
 	_multimeshes.clear()
 
 func _body() -> Node:
@@ -2990,10 +3003,13 @@ func gravity_at(coord: Vector3i) -> float:
 	return _gravity.get(coord, 0.0)
 
 func _clear() -> void:
+	# remove_child() then free(), never queue_free() -- see the same note in
+	# ExteriorBuilder._clear(). queue_free() leaves the shape physics-live
+	# until the delete queue flushes, and free() avoids the orphan window.
 	for node in _walls + _floors:
 		if is_instance_valid(node):
 			node.get_parent().remove_child(node)
-			node.queue_free()
+			node.free()
 	_walls.clear()
 	_floors.clear()
 	_walkable.clear()
