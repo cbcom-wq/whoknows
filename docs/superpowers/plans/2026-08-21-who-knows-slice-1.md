@@ -64,7 +64,7 @@ who-knows/
   data/blocks/*.tres                created: 15 BlockDefinition resources
   data/blueprints/                  created: saved ShipBlueprint resources
 
-  src/ship/orientation.gd           the 24 axis-aligned rotations
+  src/ship/block_orientation.gd           the 24 axis-aligned rotations
   src/ship/block_definition.gd      Resource: one block type
   src/ship/block_instance.gd        Resource: one placed block
   src/ship/block_catalog.gd         id -> BlockDefinition lookup
@@ -1237,38 +1237,38 @@ Phase A proved the feel on hand-built scenes. Phase B builds the real data model
 
 ---
 
-### Task 7: Orientation and block definitions [LOGIC]
+### Task 7: Block orientation and block definitions [LOGIC]
 
 **Files:**
-- Create: `who-knows/src/ship/orientation.gd`
+- Create: `who-knows/src/ship/block_orientation.gd`
 - Create: `who-knows/src/ship/block_definition.gd`
 - Create: `who-knows/src/ship/block_instance.gd`
 - Create: `who-knows/src/ship/block_catalog.gd`
-- Test: `who-knows/test/unit/test_orientation.gd`
+- Test: `who-knows/test/unit/test_block_orientation.gd`
 - Test: `who-knows/test/unit/test_block_catalog.gd`
 
 **Interfaces:**
 - Consumes: nothing
-- Produces: `Orientation.basis_for(o: int) -> Basis` and `Orientation.COUNT`; `BlockDefinition` with `Category` and `Occupancy` enums and the fields listed below; `BlockInstance`; `BlockCatalog` with `register(def)`, `get_def(id) -> BlockDefinition`, `has(id) -> bool`, and `static load_from_dir(path) -> BlockCatalog`.
+- Produces: `BlockOrientation.basis_for(o: int) -> Basis` and `BlockOrientation.COUNT`; `BlockDefinition` with `Category` and `Occupancy` enums and the fields listed below; `BlockInstance`; `BlockCatalog` with `register(def)`, `get_def(id) -> BlockDefinition`, `has(id) -> bool`, and `static load_from_dir(path) -> BlockCatalog`.
 
 - [ ] **Step 1: Write the failing orientation test**
 
-Create `who-knows/test/unit/test_orientation.gd`:
+Create `who-knows/test/unit/test_block_orientation.gd`:
 
 ```gdscript
 extends GutTest
 
 func test_identity_orientation_points_forward():
-	var b := Orientation.basis_for(0)
+	var b := BlockOrientation.basis_for(0)
 	assert_almost_eq(b * Vector3(0, 0, -1), Vector3.FORWARD, Vector3.ONE * 0.001)
 
 func test_there_are_twenty_four_orientations():
-	assert_eq(Orientation.COUNT, 24, "24 axis-aligned rotations of a cube")
+	assert_eq(BlockOrientation.COUNT, 24, "24 axis-aligned rotations of a cube")
 
 func test_all_orientations_are_distinct():
 	var seen: Array[String] = []
-	for o in range(Orientation.COUNT):
-		var b := Orientation.basis_for(o)
+	for o in range(BlockOrientation.COUNT):
+		var b := BlockOrientation.basis_for(o)
 		var key := "%.2f,%.2f,%.2f|%.2f,%.2f,%.2f" % [
 			b.x.x, b.x.y, b.x.z, b.y.x, b.y.y, b.y.z
 		]
@@ -1276,16 +1276,16 @@ func test_all_orientations_are_distinct():
 		seen.append(key)
 
 func test_all_orientations_are_right_handed_and_axis_aligned():
-	for o in range(Orientation.COUNT):
-		var b := Orientation.basis_for(o)
+	for o in range(BlockOrientation.COUNT):
+		var b := BlockOrientation.basis_for(o)
 		assert_almost_eq(b.determinant(), 1.0, 0.001, "orientation %d is not a rotation" % o)
 		for axis in [b.x, b.y, b.z]:
 			var longest := maxf(absf(axis.x), maxf(absf(axis.y), absf(axis.z)))
 			assert_almost_eq(longest, 1.0, 0.001, "orientation %d is not axis-aligned" % o)
 
 func test_four_rolls_return_to_start():
-	var start := Orientation.basis_for(0)
-	var rolled := Orientation.basis_for(3)  # same forward, three rolls
+	var start := BlockOrientation.basis_for(0)
+	var rolled := BlockOrientation.basis_for(3)  # same forward, three rolls
 	assert_almost_eq((rolled * Vector3(0, 0, -1)), (start * Vector3(0, 0, -1)), Vector3.ONE * 0.001)
 ```
 
@@ -1295,17 +1295,22 @@ func test_four_rolls_return_to_start():
 powershell -File "D:/git/whoknows/who-knows/run_tests.ps1"
 ```
 
-Expected: FAIL — `Identifier "Orientation" not declared`.
+Expected: FAIL — `Identifier "BlockOrientation" not declared`.
 
 - [ ] **Step 3: Implement orientation**
 
-Create `who-knows/src/ship/orientation.gd`:
+Create `who-knows/src/ship/block_orientation.gd`:
 
 ```gdscript
-class_name Orientation
+class_name BlockOrientation
 extends RefCounted
 
 ## The 24 axis-aligned rotations of a cube, encoded as 0..23.
+##
+## Named BlockOrientation rather than Orientation: Godot has a built-in
+## global enum called Orientation (HORIZONTAL/VERTICAL, used by Container,
+## HSlider and friends). Shadowing it fails loudly rather than silently,
+## but the error reads like a typo and would cost real debugging time.
 ## Layout: `o >> 2` selects one of six forward directions,
 ##         `o & 3` selects one of four quarter-turn rolls about it.
 
@@ -1432,7 +1437,7 @@ extends Resource
 ## salvage will be a new field rather than a schema change.
 
 @export var block_id: StringName
-@export var orientation: int = 0     ## 0..23, see Orientation
+@export var orientation: int = 0     ## 0..23, see BlockOrientation
 @export var hp_current: int = 0
 
 func duplicate_instance() -> BlockInstance:
@@ -2156,7 +2161,7 @@ git commit -m "feat: add the five ship validation rules"
 - Test: `who-knows/test/unit/test_ship_stats.gd`
 
 **Interfaces:**
-- Consumes: `ShipGrid`, `BlockCatalog`, `Orientation`
+- Consumes: `ShipGrid`, `BlockCatalog`, `BlockOrientation`
 - Produces: `ShipStats` with fields `total_mass_kg: float`, `center_of_mass: Vector3`, `inertia: Vector3`, `thrust_budget: Dictionary`, `torque_budget: Vector3`, `torque_imbalance: Vector3`, `power_gen: float`, `power_draw: float`; and `static compute(grid, catalog) -> ShipStats`.
 
 - [ ] **Step 1: Write the failing test**
@@ -2333,7 +2338,7 @@ static func _gather(grid: ShipGrid, catalog: BlockCatalog) -> Array:
 			continue
 		var force := Vector3.ZERO
 		if def.thrust_kn > 0.0:
-			var basis := Orientation.basis_for(inst.orientation)
+			var basis := BlockOrientation.basis_for(inst.orientation)
 			force = basis * Vector3(0, 0, -1) * def.thrust_kn * N_PER_KN
 		out.append({
 			"def": def,
@@ -2566,7 +2571,7 @@ git commit -m "feat: add diffable ShipBlueprint serialization"
 - Test: `who-knows/test/unit/test_exterior_builder.gd`
 
 **Interfaces:**
-- Consumes: `ShipGrid`, `BlockCatalog`, `Orientation`
+- Consumes: `ShipGrid`, `BlockCatalog`, `BlockOrientation`
 - Produces: `ExteriorBuilder` (extends `Node3D`) with `func bind(grid, catalog) -> void`, `func rebuild() -> void`, `func collider_coords() -> Array`. Attaches its output under a target `RigidBody3D` set via `@export var body_path: NodePath`.
 
 Every occupied cell gets an exterior collider — DECK cells are still hull volume seen from outside.
@@ -2750,7 +2755,7 @@ func _build_meshes() -> void:
 		if def == null or def.mesh == null:
 			continue
 		var xform := Transform3D(
-			Orientation.basis_for(inst.orientation), ShipGrid.cell_center(coord)
+			BlockOrientation.basis_for(inst.orientation), ShipGrid.cell_center(coord)
 		)
 		if not by_type.has(inst.block_id):
 			by_type[inst.block_id] = []
@@ -3319,7 +3324,7 @@ git commit -m "feat: author 15 block definitions and drive the ship from its gri
 - Create: `who-knows/scenes/shipyard.tscn`
 
 **Interfaces:**
-- Consumes: `ShipGrid`, `BlockCatalog`, `Orientation`, `ExteriorBuilder`, `InteriorBuilder`
+- Consumes: `ShipGrid`, `BlockCatalog`, `BlockOrientation`, `ExteriorBuilder`, `InteriorBuilder`
 - Produces: `Shipyard` with `var selected_block: StringName`, `var ghost_orientation: int`, `signal grid_dirty`, and `func focus_coord() -> Vector3i`.
 
 - [ ] **Step 1: Write the shipyard script**
@@ -3392,7 +3397,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			-PI * 0.49, PI * 0.49)
 		_update_camera()
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_R:
-		ghost_orientation = (ghost_orientation + 1) % Orientation.COUNT
+		ghost_orientation = (ghost_orientation + 1) % BlockOrientation.COUNT
 
 func _handle_mouse_button(event: InputEventMouseButton) -> void:
 	match event.button_index:
@@ -3421,7 +3426,7 @@ func _process(_delta: float) -> void:
 		_ghost_coord = target
 		_ghost.visible = true
 		_ghost.position = ShipGrid.cell_center(_ghost_coord)
-		_ghost.basis = Orientation.basis_for(ghost_orientation)
+		_ghost.basis = BlockOrientation.basis_for(ghost_orientation)
 	else:
 		_ghost.visible = false
 
@@ -3795,7 +3800,7 @@ git commit -m "feat: add live stats and validation panel to shipyard"
 - Test: `who-knows/test/unit/test_mirror.gd`
 
 **Interfaces:**
-- Consumes: `ShipBlueprint`, `Orientation`
+- Consumes: `ShipBlueprint`, `BlockOrientation`
 - Produces: `Shipyard.mirror_x: bool`, `static Shipyard.mirror_coord(coord) -> Vector3i`, `static Shipyard.mirror_orientation(o) -> int`, `Shipyard.save_blueprint(name)`, `Shipyard.load_blueprint(path)`.
 
 - [ ] **Step 1: Write the failing mirror test**
@@ -3816,16 +3821,16 @@ func test_mirror_is_an_involution():
 		assert_eq(Shipyard.mirror_coord(Shipyard.mirror_coord(coord)), coord)
 
 func test_mirrored_orientation_is_a_valid_orientation():
-	for o in range(Orientation.COUNT):
+	for o in range(BlockOrientation.COUNT):
 		var m := Shipyard.mirror_orientation(o)
-		assert_true(m >= 0 and m < Orientation.COUNT,
+		assert_true(m >= 0 and m < BlockOrientation.COUNT,
 			"orientation %d mirrored out of range to %d" % [o, m])
 
 func test_mirroring_forward_orientation_keeps_it_forward():
 	# A thruster pointing aft still points aft on the other side of the hull.
 	var mirrored := Shipyard.mirror_orientation(0)
-	var forward := Orientation.basis_for(0) * Vector3(0, 0, -1)
-	var mirrored_forward := Orientation.basis_for(mirrored) * Vector3(0, 0, -1)
+	var forward := BlockOrientation.basis_for(0) * Vector3(0, 0, -1)
+	var mirrored_forward := BlockOrientation.basis_for(mirrored) * Vector3(0, 0, -1)
 	assert_almost_eq(mirrored_forward.z, forward.z, 0.001)
 ```
 
@@ -3850,14 +3855,14 @@ static func mirror_coord(coord: Vector3i) -> Vector3i:
 ## Reflection is not a rotation, so we search the 24 rotations for the one
 ## that best matches the reflected forward and up axes.
 static func mirror_orientation(o: int) -> int:
-	var source := Orientation.basis_for(o)
+	var source := BlockOrientation.basis_for(o)
 	var want_forward := _reflect_x(source * Vector3(0, 0, -1))
 	var want_up := _reflect_x(source * Vector3(0, 1, 0))
 
 	var best := o
 	var best_score := -INF
-	for candidate in range(Orientation.COUNT):
-		var b := Orientation.basis_for(candidate)
+	for candidate in range(BlockOrientation.COUNT):
+		var b := BlockOrientation.basis_for(candidate)
 		var score := (b * Vector3(0, 0, -1)).dot(want_forward) \
 			+ (b * Vector3(0, 1, 0)).dot(want_up)
 		if score > best_score:
