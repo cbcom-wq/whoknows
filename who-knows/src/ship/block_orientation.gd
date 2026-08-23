@@ -1,9 +1,14 @@
-class_name Orientation
+class_name BlockOrientation
 extends RefCounted
 
 ## The 24 axis-aligned rotations of a cube, encoded as 0..23.
 ## Layout: `o >> 2` selects one of six forward directions,
 ##         `o & 3` selects one of four quarter-turn rolls about it.
+##
+## Named BlockOrientation rather than Orientation: Godot has a built-in
+## global enum called Orientation (HORIZONTAL/VERTICAL, used by Container,
+## HSlider and friends). Shadowing it fails loudly rather than silently,
+## but the error reads like a typo and would cost real debugging time.
 
 const COUNT := 24
 

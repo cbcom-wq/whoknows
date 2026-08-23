@@ -6,7 +6,7 @@ extends Resource
 ## salvage will be a new field rather than a schema change.
 
 @export var block_id: StringName
-@export var orientation: int = 0     ## 0..23, see Orientation
+@export var orientation: int = 0     ## 0..23, see BlockOrientation
 @export var hp_current: int = 0
 
 func duplicate_instance() -> BlockInstance:
