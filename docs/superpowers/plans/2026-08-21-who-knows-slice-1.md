@@ -775,6 +775,9 @@ enum View { COCKPIT, CHASE, FOOT_FIRST, FOOT_THIRD }
 
 const SIT_DURATION := 0.75
 const THIRD_PERSON_OFFSET := Vector3(0.5, 0.4, 2.5)
+## Mouse pixels to rotation command. Tuned so an ordinary flick gives a
+## firm turn without slamming straight to full deflection.
+const MOUSE_STEER_SENSITIVITY := 0.03
 
 @export var avatar_path: NodePath
 @export var flight_computer_path: NodePath
@@ -785,6 +788,7 @@ var view: View = View.FOOT_FIRST
 var is_seated: bool = false
 
 var _seat: PilotSeat = null
+var _mouse_delta: Vector2 = Vector2.ZERO
 var _tween: Tween = null
 
 @onready var _avatar: Avatar = get_node(avatar_path)
@@ -871,16 +875,33 @@ func _unhandled_input(event: InputEvent) -> void:
 		cycle_view()
 	elif event.is_action_pressed("interact") and is_seated:
 		stand()
+	elif is_seated and event is InputEventMouseMotion \n			and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		# Steer with the mouse. Deltas accumulate here and are consumed once
+		# per frame in _process, so a frame that receives several motion
+		# events still produces one coherent command.
+		_mouse_delta += event.relative
 
 func _process(_delta: float) -> void:
 	if not is_seated:
+		_mouse_delta = Vector2.ZERO
 		return
+
 	var translate := Vector3(
 		Input.get_axis("move_left", "move_right"),
 		Input.get_axis("crouch", "sprint"),
 		Input.get_axis("move_forward", "move_back"),
 	)
-	var rotate := Vector3(0, 0, Input.get_axis("roll_left", "roll_right"))
+
+	# Mouse up pitches the nose up; mouse left yaws left. Both axes are
+	# negated because Godot reports mouse motion with +Y downward and the
+	# corresponding torques are right-handed about the ship's local axes.
+	var rotate := Vector3(
+		clampf(-_mouse_delta.y * MOUSE_STEER_SENSITIVITY, -1.0, 1.0),
+		clampf(-_mouse_delta.x * MOUSE_STEER_SENSITIVITY, -1.0, 1.0),
+		Input.get_axis("roll_left", "roll_right"),
+	)
+	_mouse_delta = Vector2.ZERO
+
 	_flight.set_pilot_input(translate, rotate, Input.is_action_pressed("boost"))
 	if Input.is_action_just_pressed("toggle_assist"):
 		_flight.assist_enabled = not _flight.assist_enabled
