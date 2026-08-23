@@ -14,7 +14,11 @@ extends Node3D
 ## Never references ExteriorBuilder. Both are independent readers of the
 ## same ShipGrid, which is what makes the parity test honest.
 
-const FLOOR_THICKNESS := 0.2
+## Deck and overhead slab thickness. Each slab eats half its thickness from
+## the cell, so clear headroom is CELL_SIZE - FLOOR_THICKNESS. At 0.2 that
+## was exactly 1.8 m for an exactly 1.8 m avatar -- zero margin, and the
+## player jammed into the overhead. 0.1 leaves 1.9 m clear.
+const FLOOR_THICKNESS := 0.1
 const DEFAULT_GRAVITY := 9.8
 const CANOPY_ID := &"canopy"
 

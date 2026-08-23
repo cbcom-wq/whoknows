@@ -23,6 +23,7 @@ const O_RCS_DOWN := 20       ## DOWN: thrust along -Y
 
 func _ready() -> void:
 	_ship.set_grid(_starter_grid())
+	_place_avatar_on_deck()
 
 func _starter_grid() -> ShipGrid:
 	var g := ShipGrid.new()
@@ -137,6 +138,30 @@ func _starter_grid() -> ShipGrid:
 	_put(g, Vector3i(2, 1, -4), &"rcs", O_FORWARD)
 
 	return g
+
+func _place_avatar_on_deck() -> void:
+	# The avatar's scene position was authored for the hand-built room, whose
+	# floor surface sat at local y = 0. Generated cells are centred on their
+	# coordinate, so the deck surface is half a cell lower. Derive the spawn
+	# from the grid instead of hardcoding it, so it survives blueprint edits.
+	var seat := Vector3i.ZERO
+	var found := false
+	for coord in _ship.grid.coords():
+		if _ship.grid.get_block(coord).block_id == &"pilot_seat":
+			seat = coord
+			found = true
+			break
+	if not found:
+		return
+
+	# Stand one cell aft of the seat when that cell exists, else on the seat.
+	var cell := seat + Vector3i(0, 0, 1)
+	if not _ship.grid.has_block(cell):
+		cell = seat
+
+	var centre := ShipGrid.cell_center(cell)
+	var deck_surface := centre.y - ShipGrid.CELL_SIZE * 0.5 + InteriorBuilder.FLOOR_THICKNESS * 0.5
+	$Ship/Interior/Avatar.position = Vector3(centre.x, deck_surface + 0.05, centre.z)
 
 func _put(g: ShipGrid, coord: Vector3i, id: StringName, orientation: int = 0) -> void:
 	var i := BlockInstance.new()

@@ -171,10 +171,10 @@ layers = 2
 mesh = SubResource("SphereMesh_sky")
 
 [node name="SeatMarker" type="Marker3D" parent="Ship/Interior"]
-position = Vector3(0, 0, -4)
+position = Vector3(0, -0.95, -4)
 
 [node name="PilotSeat" type="StaticBody3D" parent="Ship/Interior"]
-position = Vector3(0, 0, -4)
+position = Vector3(0, -0.95, -4)
 collision_layer = 2
 collision_mask = 0
 script = ExtResource("5_pilot_seat")
