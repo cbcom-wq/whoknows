@@ -59,3 +59,64 @@ func test_velocity_panel_survives_a_zero_ceiling():
 	var p := _velocity_panel()
 	p.render(_telemetry(50.0, 0.0, false, false))
 	assert_almost_eq(p.bar_fill.size.x, 0.0, 0.5, "no ceiling means no meaningful fill")
+
+func _spinning(pitch: float, yaw: float, roll: float) -> VehicleTelemetry:
+	return VehicleTelemetry.from_state(
+		Basis.IDENTITY, Vector3.ZERO,
+		Vector3.ZERO, Vector3(pitch, yaw, roll),
+		true, false, 120.0
+	)
+
+func _attitude_panel() -> AttitudePanel:
+	var p := AttitudePanel.new()
+	add_child_autofree(p)
+	return p
+
+func test_attitude_pips_centre_when_not_rotating():
+	var p := _attitude_panel()
+	p.render(_spinning(0.0, 0.0, 0.0))
+	var centre := p.track_width * 0.5 - p.pitch_pip.size.x * 0.5
+	assert_almost_eq(p.pitch_pip.position.x, centre, 0.5, "pitch centred")
+	assert_almost_eq(p.yaw_pip.position.x, centre, 0.5, "yaw centred")
+	assert_almost_eq(p.roll_pip.position.x, centre, 0.5, "roll centred")
+
+func test_attitude_pip_travels_right_at_full_positive_rate():
+	var p := _attitude_panel()
+	p.render(_spinning(AttitudePanel.DISPLAY_MAX_RAD, 0.0, 0.0))
+	assert_almost_eq(
+		p.pitch_pip.position.x, p.track_width - p.pitch_pip.size.x * 0.5, 0.5,
+		"full positive pitch pins right"
+	)
+
+func test_attitude_pip_travels_left_at_full_negative_rate():
+	var p := _attitude_panel()
+	p.render(_spinning(0.0, -AttitudePanel.DISPLAY_MAX_RAD, 0.0))
+	assert_almost_eq(
+		p.yaw_pip.position.x, -p.yaw_pip.size.x * 0.5, 0.5,
+		"full negative yaw pins left"
+	)
+
+func test_attitude_pip_clamps_beyond_the_display_maximum():
+	var p := _attitude_panel()
+	p.render(_spinning(0.0, 0.0, AttitudePanel.DISPLAY_MAX_RAD * 10.0))
+	assert_almost_eq(
+		p.roll_pip.position.x, p.track_width - p.roll_pip.size.x * 0.5, 0.5,
+		"a wild tumble pins rather than leaving the panel"
+	)
+
+func test_attitude_reports_settled_when_rotation_is_negligible():
+	var p := _attitude_panel()
+	p.render(_spinning(0.001, 0.001, 0.001))
+	assert_true(p.settled_label.visible, "settled shown")
+
+func test_attitude_hides_settled_while_still_turning():
+	var p := _attitude_panel()
+	p.render(_spinning(0.5, 0.0, 0.0))
+	assert_false(p.settled_label.visible, "not settled while pitching")
+
+func test_attitude_ignores_a_null_snapshot():
+	var p := _attitude_panel()
+	p.render(_spinning(AttitudePanel.DISPLAY_MAX_RAD, 0.0, 0.0))
+	var before := p.pitch_pip.position.x
+	p.render(null)
+	assert_almost_eq(p.pitch_pip.position.x, before, 0.5, "last good reading left alone")
