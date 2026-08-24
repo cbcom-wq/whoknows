@@ -1,4 +1,4 @@
-[gd_scene load_steps=24 format=3]
+[gd_scene load_steps=29 format=3]
 
 [ext_resource type="Script" path="res://src/ship/ship.gd" id="1_ship"]
 [ext_resource type="PackedScene" path="res://scenes/avatar.tscn" id="2_avatar"]
@@ -11,6 +11,11 @@
 [ext_resource type="Script" path="res://src/ship/exterior_builder.gd" id="9_exterior_builder"]
 [ext_resource type="Script" path="res://src/ship/interior_builder.gd" id="10_interior_builder"]
 [ext_resource type="Script" path="res://scenes/flight_test.gd" id="11_flight_test"]
+[ext_resource type="Script" path="res://src/ui/hud_root.gd" id="12_hud_root"]
+[ext_resource type="Script" path="res://src/ui/velocity_marker.gd" id="13_velocity_marker"]
+[ext_resource type="Script" path="res://src/ui/panels/velocity_panel.gd" id="14_velocity_panel"]
+[ext_resource type="Script" path="res://src/ui/panels/attitude_panel.gd" id="15_attitude_panel"]
+[ext_resource type="Script" path="res://src/ui/hud_band.gd" id="16_hud_band"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_flighttest"]
 sky_top_color = Color(0.02, 0.02, 0.05, 1)
@@ -119,6 +124,20 @@ render_target_update_mode = 4
 current = true
 cull_mask = 1
 
+[node name="CanopyOverlay" type="Control" parent="Ship/Canopy"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+
+[node name="CockpitMarker" type="Control" parent="Ship/Canopy/CanopyOverlay"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+script = ExtResource("13_velocity_marker")
+camera_path = NodePath("../../CanopyCam")
+
 [node name="Interior" type="Node3D" parent="Ship"]
 
 [node name="InteriorBuilder" type="Node3D" parent="Ship/Interior"]
@@ -205,3 +224,45 @@ script = ExtResource("7_motion_coupling")
 hull_path = NodePath("../Exterior")
 avatar_path = NodePath("../Interior/Avatar")
 interior_sky_path = NodePath("../Interior/SkyPivot")
+
+[node name="HudRoot" type="CanvasLayer" parent="."]
+script = ExtResource("12_hud_root")
+screen_path = NodePath("Screen")
+
+[node name="Screen" type="Control" parent="HudRoot"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+
+[node name="Band" type="PanelContainer" parent="HudRoot/Screen"]
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 120.0
+offset_top = -110.0
+offset_right = -120.0
+offset_bottom = -40.0
+mouse_filter = 2
+script = ExtResource("16_hud_band")
+
+[node name="Row" type="HBoxContainer" parent="HudRoot/Screen/Band"]
+theme_override_constants/separation = 28
+mouse_filter = 2
+
+[node name="VelocityPanel" type="Control" parent="HudRoot/Screen/Band/Row"]
+mouse_filter = 2
+script = ExtResource("14_velocity_panel")
+
+[node name="AttitudePanel" type="Control" parent="HudRoot/Screen/Band/Row"]
+mouse_filter = 2
+script = ExtResource("15_attitude_panel")
+
+[node name="ChaseMarker" type="Control" parent="HudRoot/Screen"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+script = ExtResource("13_velocity_marker")
+camera_path = NodePath("../../../Ship/Exterior/ChaseCamera")

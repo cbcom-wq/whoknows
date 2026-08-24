@@ -6,6 +6,9 @@ extends Node3D
 ## (Task 20) this loads a saved blueprint instead.
 
 @onready var _ship: Ship = $Ship
+@onready var _hud: HudRoot = $HudRoot
+@onready var _director: CameraDirector = $Ship/CameraDirector
+@onready var _cockpit_marker: VelocityMarker = $Ship/Canopy/CanopyOverlay/CockpitMarker
 
 ## BlockOrientation values used below. `_FORWARDS` order is
 ## [FORWARD, BACK, LEFT, RIGHT, UP, DOWN]; o = (forward_index << 2) | roll.
@@ -24,6 +27,7 @@ const O_RCS_DOWN := 20       ## DOWN: thrust along -Y
 func _ready() -> void:
 	_ship.set_grid(_starter_grid())
 	_place_avatar_on_deck()
+	_wire_hud()
 
 func _starter_grid() -> ShipGrid:
 	var g := ShipGrid.new()
@@ -162,6 +166,24 @@ func _place_avatar_on_deck() -> void:
 	var centre := ShipGrid.cell_center(cell)
 	var deck_surface := centre.y - ShipGrid.CELL_SIZE * 0.5 + InteriorBuilder.FLOOR_THICKNESS * 0.5
 	$Ship/Interior/Avatar.position = Vector3(centre.x, deck_surface + 0.05, centre.z)
+
+## Connects the HUD to this scene's ship.
+##
+## Done here rather than inside HudRoot on purpose: it keeps src/ui ignorant
+## of Ship, CameraDirector and FlightComputer, which is what makes the HUD
+## reusable for any future vehicle. The bootstrap is the only place that
+## knows both halves.
+func _wire_hud() -> void:
+	# The cockpit marker lives in the ship's SubViewport, so it cannot be
+	# discovered as one of HudRoot's descendants.
+	_hud.register_element(_cockpit_marker)
+	# The bootstrap is the one place that legitimately knows both halves of
+	# this: the HUD's fade-in and the seat transition it is timed against.
+	_hud.fade_in = CameraDirector.SIT_DURATION
+	_director.piloting_changed.connect(_on_piloting_changed)
+
+func _on_piloting_changed(piloting: bool) -> void:
+	_hud.set_active_vehicle(_ship.flight_computer if piloting else null)
 
 func _put(g: ShipGrid, coord: Vector3i, id: StringName, orientation: int = 0) -> void:
 	var i := BlockInstance.new()

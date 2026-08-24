@@ -97,3 +97,18 @@ func _apply_rotation(_delta: float) -> void:
 		var residual := _hull.angular_velocity
 		var damping := -residual * ROTATION_DAMPING * _hull.mass
 		_hull.apply_torque(damping)
+
+## The vehicle-facing half of the HUD contract. Any node with this method is
+## a telemetry source as far as HudRoot is concerned -- there is no interface
+## type and no base class to inherit, which is what lets a future ground
+## vehicle or turret station light the same HUD.
+func build_telemetry() -> VehicleTelemetry:
+	return VehicleTelemetry.from_state(
+		_hull.global_transform.basis,
+		_hull.global_position,
+		_hull.linear_velocity,
+		_hull.angular_velocity,
+		assist_enabled,
+		_boost,
+		CRUISE_LIMIT_MPS
+	)
