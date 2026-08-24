@@ -28,7 +28,7 @@ func test_local_velocity_is_expressed_in_hull_basis():
 		true, false, 120.0
 	)
 	assert_almost_eq(t.local_velocity.z, 0.0, 0.001, "nothing along local Z")
-	assert_almost_eq(absf(t.local_velocity.x), 10.0, 0.001, "all of it across the beam")
+	assert_almost_eq(t.local_velocity.x, 10.0, 0.001, "all of it across the beam, to local +X")
 
 func test_local_angular_velocity_is_expressed_in_hull_basis():
 	# Godot reports angular_velocity in the world frame. Rolling about the

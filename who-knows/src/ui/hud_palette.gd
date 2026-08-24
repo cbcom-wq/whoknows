@@ -14,6 +14,6 @@ const WARNING := Color("ffb03a")
 ## The band's own ground. Dark and slightly transparent so it reads as a lit
 ## panel rather than as an opaque rectangle pasted over the scene.
 const BACKDROP := Color(0.07, 0.10, 0.13, 0.92)
-const BORDER := Color(0.498, 0.831, 1.0, 0.28)
+const BORDER := Color(READOUT, 0.28)
 ## Labels and rules that should recede.
-const DIM := Color(0.498, 0.831, 1.0, 0.55)
+const DIM := Color(READOUT, 0.55)

@@ -8,6 +8,13 @@ extends HudElement
 ## screen-space for chase view (projected with ChaseCamera). Same code, two
 ## cameras -- see the design doc §6 for why the cockpit case cannot be done
 ## screen-space.
+##
+## The two mounts fade differently, which is easy to miss when reading only
+## this file: the screen-space mount lives inside the faded `Screen` Control
+## and fades with the rest of the HUD, while the canopy mount lives inside
+## the ship's own SubViewport and hard-cuts instead. That is acceptable --
+## stale world geometry should stop drawing rather than linger -- but it
+## surprises readers expecting one fade behaviour for both.
 
 enum Mode {
 	HIDDEN,           ## below the speed deadband, or nothing to show

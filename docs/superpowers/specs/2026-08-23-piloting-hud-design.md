@@ -6,6 +6,13 @@
 **Relates to:** slice spec §3.2 (selling the illusion), §7 (flight and cameras), §11 (art direction);
 starter shuttle art direction §5.2 (console palette)
 
+**Superseded on these points by:** docs/superpowers/plans/2026-08-23-piloting-hud.md --
+`HudPanel` shipped as `HudElement`; `register_marker()`/`unregister_marker()` shipped as
+`register_element()`/`unregister_element()`; a `Screen` Control node exists under `HudRoot`
+(needed because `CanvasLayer` has no `modulate` of its own to fade), where this document
+described no such node; and elements are re-walked on every `refresh()` rather than
+collected once in `_ready()`.
+
 ---
 
 ## 1. Why this document exists

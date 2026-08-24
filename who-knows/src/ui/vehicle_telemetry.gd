@@ -3,17 +3,23 @@ extends RefCounted
 
 ## One frame's worth of a vehicle's state, as the HUD needs to read it.
 ##
-## Built fresh each frame and never mutated afterwards. Deliberately holds
-## no node references: an element that receives this cannot reach back into
-## the ship, which is what keeps src/ui free of vehicle-specific types.
+## Built fresh each frame. Treat it as immutable once returned from
+## from_state() -- nothing here enforces that, and a caller that mutates a
+## shared instance after handing it out would create an order-dependent bug
+## that is miserable to trace back to its cause. Deliberately holds no node
+## references: an element that receives this cannot reach back into the
+## vehicle, which is what keeps src/ui free of vehicle-specific types.
 
+## Speed, m/s.
 var speed: float = 0.0
 ## The vehicle's own cruise ceiling, so no readout hardcodes 120.
 var cruise_limit: float = 0.0
 ## World frame. The velocity marker projects `hull_origin + world_velocity`.
 var world_velocity: Vector3 = Vector3.ZERO
 ## Velocity in the hull's frame. X is drift across the beam, Y is vertical,
-## -Z is out the nose. This is the drift readout.
+## -Z is out the nose. Reserved for the drift readout the design doc
+## describes but that has not been built yet -- currently computed every
+## frame and read by nothing but this file's own test.
 var local_velocity: Vector3 = Vector3.ZERO
 ## Rotation about the hull's own axes as (pitch, yaw, roll), radians/sec.
 var local_angular_velocity: Vector3 = Vector3.ZERO
