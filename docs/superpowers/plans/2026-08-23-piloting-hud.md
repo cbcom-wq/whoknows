@@ -1293,11 +1293,12 @@ var _tween: Tween = null
 @onready var _screen: Control = get_node(screen_path)
 
 func _ready() -> void:
-	_collect(self)
 	_screen.modulate.a = 0.0
 
-## Walks the whole subtree once. Elements may be nested inside layout
-## containers, so a direct-children scan would miss them.
+## Walks the whole subtree fresh each call. Elements may be nested inside
+## layout containers, so a direct-children scan would miss them; walking on
+## every refresh (rather than caching once in _ready()) also means an
+## element added to the tree later is picked up on its very next frame.
 func _collect(node: Node) -> void:
 	for child in node.get_children():
 		if child is HudElement:
@@ -1336,6 +1337,9 @@ func _process(_delta: float) -> void:
 ## Builds one snapshot and gives every element the same instance. Elements
 ## must never pull their own -- two snapshots in one frame can disagree.
 func refresh() -> void:
+	_descendants.clear()
+	_collect(self)
+
 	var telemetry: VehicleTelemetry = null
 	if _source != null:
 		telemetry = _source.build_telemetry()
