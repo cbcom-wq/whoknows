@@ -8,6 +8,11 @@ extends Node
 
 signal transition_finished
 
+## Emitted when control of the ship is taken or given up. Anything that cares
+## about "is the player flying right now" listens here rather than polling
+## `is_seated`, so the moment is defined in exactly one place.
+signal piloting_changed(piloting: bool)
+
 enum View { COCKPIT, CHASE, FOOT_FIRST, FOOT_THIRD }
 
 const SIT_DURATION := 0.75
@@ -43,11 +48,13 @@ func sit(seat: PilotSeat) -> void:
 	is_seated = true
 	_avatar.set_control_enabled(false)
 	_move_camera_to(seat.eye.global_transform)
+	piloting_changed.emit(true)
 
 func stand() -> void:
 	if not is_seated or _tween != null:
 		return
 	is_seated = false
+	piloting_changed.emit(false)
 	_flight.clear_pilot_input()
 	# Put the avatar beside the seat, then fly the camera back to its head.
 	_avatar.global_position = _seat.global_position + _seat.global_basis * Vector3(0.9, 0, 0)
