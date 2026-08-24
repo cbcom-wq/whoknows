@@ -255,12 +255,13 @@ git commit -m "feat: add VehicleTelemetry snapshot and the build_telemetry contr
 **Files:**
 - Create: `who-knows/src/ui/hud_palette.gd`
 - Create: `who-knows/src/ui/hud_element.gd`
+- Create: `who-knows/src/ui/hud_band.gd`
 - Create: `who-knows/src/ui/panels/velocity_panel.gd`
 - Test: `who-knows/test/unit/test_hud_panels.gd`
 
 **Interfaces:**
 - Consumes: `VehicleTelemetry` from Task 1.
-- Produces: `HudPalette.READOUT`, `.WARNING`, `.BACKDROP`, `.BORDER` (all `Color` constants); `HudElement` with `render(telemetry: VehicleTelemetry) -> void`; `VelocityPanel` with `const AMBER_FRACTION := 0.9` and readable members `speed_label: Label`, `mode_label: Label`, `bar_fill: ColorRect`, `bar_track: ColorRect`.
+- Produces: `HudPalette.READOUT`, `.WARNING`, `.BACKDROP`, `.BORDER`, `.DIM` (all `Color` constants); `HudElement` with `render(telemetry: VehicleTelemetry) -> void`; `HudBand` (extends `PanelContainer`, no public API — it styles itself); `VelocityPanel` with `const AMBER_FRACTION := 0.9` and readable members `speed_label: Label`, `mode_label: Label`, `bar_fill: ColorRect`, `bar_track: ColorRect`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -338,7 +339,10 @@ pwsh -File D:\git\whoknows\who-knows\run_tests.ps1 "-gselect=test_hud_panels.gd"
 
 Expected: FAIL — `VelocityPanel` and `HudPalette` are unresolved identifiers.
 
-- [ ] **Step 3: Write the palette**
+- [ ] **Step 3: Write the palette and the band's chrome**
+
+Two files here, because they are the same concern: the colours, and the one surface that paints
+with them.
 
 Create `who-knows/src/ui/hud_palette.gd`:
 
@@ -362,6 +366,37 @@ const BACKDROP := Color(0.07, 0.10, 0.13, 0.92)
 const BORDER := Color(0.498, 0.831, 1.0, 0.28)
 ## Labels and rules that should recede.
 const DIM := Color(0.498, 0.831, 1.0, 0.55)
+```
+
+Then create `who-knows/src/ui/hud_band.gd`:
+
+```gdscript
+class_name HudBand
+extends PanelContainer
+
+## The console band's own surface -- the lit panel the readouts sit on.
+##
+## Without this the band is bare text floating over the scene, which reads as
+## game chrome rather than as the ship's instrumentation. Built in code, not
+## authored, for two reasons: the colours must come from HudPalette rather
+## than being restated as literals in the scene file, and a StyleBoxFlat
+## authored in .tscn would be another sub_resource block in exactly the file
+## CLAUDE.md warns about.
+
+const CORNER_RADIUS := 4
+const CONTENT_MARGIN := 14
+
+func _ready() -> void:
+	var box := StyleBoxFlat.new()
+	box.bg_color = HudPalette.BACKDROP
+	box.border_color = HudPalette.BORDER
+	box.set_border_width_all(1)
+	box.set_corner_radius_all(CORNER_RADIUS)
+	box.content_margin_left = CONTENT_MARGIN
+	box.content_margin_right = CONTENT_MARGIN
+	box.content_margin_top = CONTENT_MARGIN * 0.5
+	box.content_margin_bottom = CONTENT_MARGIN * 0.5
+	add_theme_stylebox_override("panel", box)
 ```
 
 - [ ] **Step 4: Write the element base**
@@ -482,8 +517,8 @@ Expected: PASS, 8 tests.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add who-knows/src/ui/hud_palette.gd who-knows/src/ui/hud_element.gd who-knows/src/ui/panels/velocity_panel.gd who-knows/test/unit/test_hud_panels.gd
-git commit -m "feat: add HUD palette, element base, and the velocity panel"
+git add who-knows/src/ui/hud_palette.gd who-knows/src/ui/hud_element.gd who-knows/src/ui/hud_band.gd who-knows/src/ui/panels/velocity_panel.gd who-knows/test/unit/test_hud_panels.gd
+git commit -m "feat: add HUD palette, band chrome, element base, and the velocity panel"
 ```
 
 ---
@@ -589,6 +624,13 @@ extends HudElement
 ## residual spin will curve away from wherever they aimed it.
 
 ## Rate that pins a pip to the end of its track, radians/sec.
+##
+## Deliberately set for a ship that turns properly, not for the one that
+## exists today. SLICE-1-STATUS.md records peak yaw acceleration at
+## 3.83 deg/s^2 with assist damping exceeding control authority by 1.66x, so
+## until torque_budget is reworked the pips will sit closer to centre than
+## this constant implies. Tuning it down to flatter the current defect would
+## only mean retuning it once that defect is fixed.
 const DISPLAY_MAX_RAD := 1.5
 ## Total rotation magnitude below which the ship counts as settled.
 const SETTLED_RAD := 0.05
@@ -1382,13 +1424,20 @@ func test_hud_root_screen_path_survived_the_parse():
 
 func test_band_holds_both_panels():
 	assert_not_null(
-		_root.get_node_or_null("HudRoot/Screen/Band/VelocityPanel"),
+		_root.get_node_or_null("HudRoot/Screen/Band/Row/VelocityPanel"),
 		"velocity panel present"
 	)
 	assert_not_null(
-		_root.get_node_or_null("HudRoot/Screen/Band/AttitudePanel"),
+		_root.get_node_or_null("HudRoot/Screen/Band/Row/AttitudePanel"),
 		"attitude panel present"
 	)
+
+func test_band_carries_its_chrome_script():
+	# Without HudBand the readouts float over the scene with no lit surface
+	# behind them, which is the layout that was explicitly not chosen.
+	var band := _root.get_node_or_null("HudRoot/Screen/Band")
+	assert_not_null(band, "band present")
+	assert_true(band is HudBand, "band carries its script")
 
 func test_chase_marker_camera_path_survived_the_parse():
 	var marker: VelocityMarker = _root.get_node_or_null("HudRoot/Screen/ChaseMarker")
@@ -1499,9 +1548,10 @@ Add these `ext_resource` lines alongside the existing ones at the top, giving th
 [ext_resource type="Script" path="res://src/ui/velocity_marker.gd" id="13_velocity_marker"]
 [ext_resource type="Script" path="res://src/ui/panels/velocity_panel.gd" id="14_velocity_panel"]
 [ext_resource type="Script" path="res://src/ui/panels/attitude_panel.gd" id="15_attitude_panel"]
+[ext_resource type="Script" path="res://src/ui/hud_band.gd" id="16_hud_band"]
 ```
 
-Increment `load_steps` in the `[gd_scene]` header by 4.
+Increment `load_steps` in the `[gd_scene]` header by 5.
 
 Add the canopy overlay as a child of the existing `Ship/Canopy` SubViewport, immediately after the `CanopyCam` node block:
 
@@ -1534,23 +1584,27 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
 
-[node name="Band" type="HBoxContainer" parent="HudRoot/Screen"]
+[node name="Band" type="PanelContainer" parent="HudRoot/Screen"]
 anchors_preset = 12
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = 120.0
-offset_top = -104.0
+offset_top = -110.0
 offset_right = -120.0
 offset_bottom = -40.0
+mouse_filter = 2
+script = ExtResource("16_hud_band")
+
+[node name="Row" type="HBoxContainer" parent="HudRoot/Screen/Band"]
 theme_override_constants/separation = 28
 mouse_filter = 2
 
-[node name="VelocityPanel" type="Control" parent="HudRoot/Screen/Band"]
+[node name="VelocityPanel" type="Control" parent="HudRoot/Screen/Band/Row"]
 mouse_filter = 2
 script = ExtResource("14_velocity_panel")
 
-[node name="AttitudePanel" type="Control" parent="HudRoot/Screen/Band"]
+[node name="AttitudePanel" type="Control" parent="HudRoot/Screen/Band/Row"]
 mouse_filter = 2
 script = ExtResource("15_attitude_panel")
 
@@ -1563,9 +1617,9 @@ script = ExtResource("13_velocity_marker")
 camera_path = NodePath("../../../Ship/Exterior/ChaseCamera")
 ```
 
-`Band` is an `HBoxContainer` holding two panels, so the right end of the band is empty by
+`Row` is an `HBoxContainer` holding two panels, so the right end of the band is empty by
 construction. That empty space is the reserved area design doc §7 describes: a Slice 2 weapons or
-hull-condition panel is added by dropping a third child in here, with no change to either existing
+hull-condition panel is added by dropping a third child into `Row`, with no change to either existing
 panel.
 
 - [ ] **Step 6: Run the test to verify it passes**
@@ -1574,7 +1628,7 @@ panel.
 pwsh -File D:\git\whoknows\who-knows\run_tests.ps1 "-gselect=test_hud_scene_wiring.gd"
 ```
 
-Expected: PASS, 7 tests. If any `camera_path` or `screen_path` assertion fails while the node itself is found, that is the `CLAUDE.md` parser defect: look for a comment adjacent to the dropped property line and remove it.
+Expected: PASS, 8 tests. If any `camera_path` or `screen_path` assertion fails while the node itself is found, that is the `CLAUDE.md` parser defect: look for a comment adjacent to the dropped property line and remove it.
 
 - [ ] **Step 7: Run the whole suite**
 
