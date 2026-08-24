@@ -23,8 +23,8 @@ var hull_origin: Vector3 = Vector3.ZERO
 
 ## Takes plain values rather than a body on purpose: it is the seam that lets
 ## every derivation here be tested headless, with no nodes and no physics
-## steps. Callers holding a RigidBody3D adapt in one line -- see
-## FlightComputer.build_telemetry().
+## steps. Callers holding a physics body adapt in one line; see the vehicle's
+## own telemetry adapter.
 static func from_state(
 	basis: Basis,
 	origin: Vector3,
