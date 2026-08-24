@@ -69,3 +69,36 @@ func test_clamped_points_land_on_the_inset_rectangle():
 		var on_y: bool = is_equal_approx(s["position"].y, m) \
 			or is_equal_approx(s["position"].y, VP.y - m)
 		assert_true(on_x or on_y, "sits on the inset boundary for %s" % pos)
+
+func _marker() -> VelocityMarker:
+	var m := VelocityMarker.new()
+	m.size = VP
+	add_child_autofree(m)
+	return m
+
+func _moving(speed: float) -> VehicleTelemetry:
+	return VehicleTelemetry.from_state(
+		Basis.IDENTITY, Vector3.ZERO,
+		Vector3(0.0, 0.0, -speed), Vector3.ZERO,
+		true, false, 120.0
+	)
+
+func test_marker_is_disarmed_without_a_snapshot():
+	var m := _marker()
+	m.render(null)
+	assert_false(m.armed, "no telemetry means nothing to point at")
+	assert_eq(m.mode, VelocityMarker.Mode.HIDDEN)
+
+func test_marker_is_disarmed_without_a_camera():
+	# camera_path is left empty, as it would be for a marker whose exported
+	# path was dropped by the .tscn parser defect described in CLAUDE.md.
+	var m := _marker()
+	m.render(_moving(50.0))
+	assert_false(m.armed, "no camera means no projection, so draw nothing")
+	assert_eq(m.mode, VelocityMarker.Mode.HIDDEN)
+
+func test_marker_disarms_again_when_piloting_ends():
+	var m := _marker()
+	m.render(_moving(50.0))
+	m.render(null)
+	assert_false(m.armed, "a stale reticle would point at a lie")

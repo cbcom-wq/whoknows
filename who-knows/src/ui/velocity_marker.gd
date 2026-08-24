@@ -71,3 +71,102 @@ static func _clamp_to_edge(offset: Vector2, viewport_size: Vector2) -> Vector2:
 	var sx := INF if is_zero_approx(offset.x) else half.x / absf(offset.x)
 	var sy := INF if is_zero_approx(offset.y) else half.y / absf(offset.y)
 	return centre + offset * minf(sx, sy)
+
+const RING_RADIUS := 13.0
+const RING_WING := 9.0
+const BORESIGHT_GAP := 6.0
+const BORESIGHT_ARM := 11.0
+const CHEVRON_SIZE := 10.0
+const LINE_WIDTH := 2.0
+## How much a behind-the-camera marker is faded, so it never reads as a real
+## position the pilot could steer toward.
+const BEHIND_ALPHA := 0.5
+
+## The camera whose projection this marker annotates. CanopyCam for the
+## cockpit mount, ChaseCamera for the screen-space one.
+@export var camera_path: NodePath
+
+## True when there is a vehicle to report on and a camera to project with.
+var armed: bool = false
+var mode: int = Mode.HIDDEN
+
+var _position: Vector2 = Vector2.ZERO
+var _camera: Camera3D = null
+
+func _ready() -> void:
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if not camera_path.is_empty():
+		_camera = get_node_or_null(camera_path) as Camera3D
+
+func render(telemetry: VehicleTelemetry) -> void:
+	# `current` is what gates the two mounts against each other: the chase
+	# marker draws only while the chase camera is live, and the cockpit one
+	# draws whenever its SubViewport camera is. Cycling views therefore needs
+	# no signal -- whoever owns the view already flips `current`, and this
+	# just notices.
+	armed = telemetry != null and _camera != null and _camera.current
+	if not armed:
+		mode = Mode.HIDDEN
+		queue_redraw()
+		return
+
+	var target := telemetry.hull_origin + telemetry.world_velocity
+	var state := resolve(
+		telemetry.speed,
+		_camera.is_position_behind(target),
+		_camera.unproject_position(target),
+		size
+	)
+	mode = state["mode"]
+	_position = state["position"]
+	queue_redraw()
+
+func _draw() -> void:
+	if not armed:
+		return
+	_draw_boresight()
+	match mode:
+		Mode.ON_FRAME:
+			_draw_ring(_position, 1.0)
+		Mode.CLAMPED_AHEAD:
+			_draw_chevron(_position, 1.0)
+		Mode.CLAMPED_BEHIND:
+			_draw_chevron(_position, BEHIND_ALPHA)
+
+## The nose reference: four ticks around viewport centre. Static, because
+## viewport centre IS where the hull points, by construction. The gap between
+## this and the ring is the actual readout.
+func _draw_boresight() -> void:
+	var centre := size * 0.5
+	var colour := Color(HudPalette.READOUT, 0.45)
+	for direction in [Vector2.LEFT, Vector2.RIGHT, Vector2.UP, Vector2.DOWN]:
+		draw_line(
+			centre + direction * BORESIGHT_GAP,
+			centre + direction * (BORESIGHT_GAP + BORESIGHT_ARM),
+			colour,
+			1.0
+		)
+
+func _draw_ring(at: Vector2, alpha: float) -> void:
+	var colour := Color(HudPalette.READOUT, alpha)
+	draw_arc(at, RING_RADIUS, 0.0, TAU, 32, colour, LINE_WIDTH)
+	draw_line(at + Vector2(-RING_RADIUS - RING_WING, 0.0), at + Vector2(-RING_RADIUS, 0.0), colour, LINE_WIDTH)
+	draw_line(at + Vector2(RING_RADIUS, 0.0), at + Vector2(RING_RADIUS + RING_WING, 0.0), colour, LINE_WIDTH)
+	draw_line(at + Vector2(0.0, -RING_RADIUS - RING_WING), at + Vector2(0.0, -RING_RADIUS), colour, LINE_WIDTH)
+
+## Clamped markers render as a chevron rather than a ring, so an edge-pinned
+## marker never reads as a real position.
+func _draw_chevron(at: Vector2, alpha: float) -> void:
+	var colour := Color(HudPalette.READOUT, alpha)
+	var direction := (at - size * 0.5).normalized()
+	if direction == Vector2.ZERO:
+		direction = Vector2.DOWN
+	var perpendicular := Vector2(-direction.y, direction.x)
+	draw_colored_polygon(
+		PackedVector2Array([
+			at + direction * CHEVRON_SIZE,
+			at - direction * CHEVRON_SIZE * 0.4 + perpendicular * CHEVRON_SIZE * 0.8,
+			at - direction * CHEVRON_SIZE * 0.4 - perpendicular * CHEVRON_SIZE * 0.8,
+		]),
+		colour
+	)
