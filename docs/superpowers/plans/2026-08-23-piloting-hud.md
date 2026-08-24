@@ -1020,7 +1020,8 @@ func render(telemetry: VehicleTelemetry) -> void:
 	# `current` is what gates the two mounts against each other: the chase
 	# marker draws only while the chase camera is live, and the cockpit one
 	# draws whenever its SubViewport camera is. Cycling views therefore needs
-	# no signal -- CameraDirector already flips `current`.
+	# no signal -- whoever owns the view already flips `current`, and this
+	# just notices.
 	armed = telemetry != null and _camera != null and _camera.current
 	if not armed:
 		mode = Mode.HIDDEN
@@ -1272,8 +1273,10 @@ extends CanvasLayer
 ## a vehicle becomes active and tells it. That ignorance is deliberate -- it
 ## is what lets a future vehicle of any kind light this same HUD.
 
-## Matches CameraDirector.SIT_DURATION, so the band arrives exactly as the
-## camera settles into the seat rather than popping in ahead of it.
+## Matches the seat transition's duration, so the band arrives exactly as
+## the camera settles into the seat rather than popping in ahead of it.
+## Kept as a local constant rather than read from the camera code: this
+## layer deliberately knows nothing about seats or who moves the view.
 const FADE_IN := 0.75
 ## Leaving is quicker than arriving: the instruments go with the chair.
 const FADE_OUT := 0.2
