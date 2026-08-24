@@ -177,6 +177,9 @@ func _wire_hud() -> void:
 	# The cockpit marker lives in the ship's SubViewport, so it cannot be
 	# discovered as one of HudRoot's descendants.
 	_hud.register_element(_cockpit_marker)
+	# The bootstrap is the one place that legitimately knows both halves of
+	# this: the HUD's fade-in and the seat transition it is timed against.
+	_hud.fade_in = CameraDirector.SIT_DURATION
 	_director.piloting_changed.connect(_on_piloting_changed)
 
 func _on_piloting_changed(piloting: bool) -> void:

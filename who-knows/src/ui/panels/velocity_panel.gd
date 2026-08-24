@@ -40,12 +40,18 @@ func _ready() -> void:
 	bar_track.color = Color(HudPalette.READOUT, 0.18)
 	bar_track.position = Vector2(0.0, 40.0)
 	bar_track.size = Vector2(BAR_WIDTH, BAR_HEIGHT)
+	# ColorRect defaults to MOUSE_FILTER_STOP and mouse_filter is not
+	# inherited from a parent Control, so without this every bar would eat
+	# clicks meant for the world behind it -- even while the HUD is faded
+	# fully transparent, since alpha does not affect hit-testing.
+	bar_track.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(bar_track)
 
 	bar_fill = ColorRect.new()
 	bar_fill.color = HudPalette.READOUT
 	bar_fill.position = Vector2(0.0, 40.0)
 	bar_fill.size = Vector2(0.0, BAR_HEIGHT)
+	bar_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(bar_fill)
 
 	mode_label = Label.new()

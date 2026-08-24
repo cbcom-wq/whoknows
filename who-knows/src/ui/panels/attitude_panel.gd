@@ -4,18 +4,18 @@ extends HudElement
 ## Rotation rate about each of the hull's own axes, as three centre-zero
 ## tracks, plus a settled indicator.
 ##
-## This is what tells the pilot whether the flight computer's rotation
-## damping has actually finished before they commit to a burn -- a ship that
-## still has residual spin will curve away from wherever they aimed it.
+## This is what tells the pilot whether residual spin has actually damped
+## out before they commit to a burn -- a hull that is still turning will
+## curve away from wherever it was aimed.
 
 ## Rate that pins a pip to the end of its track, radians/sec.
 ##
-## Deliberately set for a ship that turns properly, not for the one that
-## exists today. SLICE-1-STATUS.md records peak yaw acceleration at
-## 3.83 deg/s^2 with assist damping exceeding control authority by 1.66x, so
-## until torque_budget is reworked the pips will sit closer to centre than
-## this constant implies. Tuning it down to flatter the current defect would
-## only mean retuning it once that defect is fixed.
+## Deliberately set for a hull that turns properly, not for the one that
+## exists today. Today's rotation authority is measurably outmatched by its
+## own damping (see SLICE-1-STATUS.md), so until that imbalance is corrected
+## the pips will sit closer to centre than this constant implies. Tuning it
+## down to flatter the current defect would only mean retuning it once that
+## defect is fixed.
 const DISPLAY_MAX_RAD := 1.5
 ## Total rotation magnitude below which the ship counts as settled.
 const SETTLED_RAD := 0.05
@@ -26,7 +26,6 @@ const PIP_WIDTH := 3.0
 const PIP_HEIGHT := 7.0
 const ROW_SPACING := 14.0
 
-var track_width: float = TRACK_WIDTH
 var pitch_pip: ColorRect
 var yaw_pip: ColorRect
 var roll_pip: ColorRect
@@ -61,6 +60,12 @@ func _build_row(caption: String, row: int) -> ColorRect:
 	track.color = Color(HudPalette.READOUT, 0.18)
 	track.position = Vector2(40.0, y + 3.0)
 	track.size = Vector2(TRACK_WIDTH, TRACK_HEIGHT)
+	# ColorRect defaults to MOUSE_FILTER_STOP, and mouse_filter is not
+	# inherited from a parent Control -- the .tscn setting it on the panel
+	# above does nothing for a rect built here in code. Without this, the
+	# track would eat clicks meant for the world behind it, even while the
+	# HUD is faded fully transparent, since alpha does not affect hit-testing.
+	track.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(track)
 
 	# The zero rule. Reading a pip against the centre is the whole point, so
@@ -69,10 +74,12 @@ func _build_row(caption: String, row: int) -> ColorRect:
 	zero.color = Color(HudPalette.READOUT, 0.35)
 	zero.position = Vector2(40.0 + TRACK_WIDTH * 0.5, y + 1.0)
 	zero.size = Vector2(1.0, PIP_HEIGHT)
+	zero.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(zero)
 
 	var pip := ColorRect.new()
 	pip.color = HudPalette.READOUT
+	pip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	pip.size = Vector2(PIP_WIDTH, PIP_HEIGHT)
 	# Parented to the track, so this position is relative to it: centred
 	# horizontally, and lifted so the taller pip straddles the thin track.
