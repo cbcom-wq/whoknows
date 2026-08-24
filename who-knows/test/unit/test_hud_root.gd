@@ -119,6 +119,16 @@ func test_one_snapshot_is_built_per_frame_and_shared():
 	assert_eq(source.calls, 1, "exactly one snapshot built")
 	assert_eq(_child.last_telemetry, second.last_telemetry, "and both saw the same one")
 
+func test_elements_added_after_ready_are_still_discovered():
+	# _collect() re-walks on every refresh rather than caching in _ready().
+	# Caching would work for the static scene tree, but would fail silently
+	# for anything added later -- an element that never renders and never errors.
+	var late := RecordingElement.new()
+	_screen.add_child(late)
+	_hud.set_active_vehicle(_source())
+	_hud.refresh()
+	assert_not_null(late.last_telemetry, "an element added after _ready() still receives frames")
+
 func test_a_freed_external_element_does_not_break_distribution():
 	var external := RecordingElement.new()
 	add_child(external)
