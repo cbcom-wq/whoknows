@@ -87,3 +87,4 @@ func _apply_stats() -> void:
 	exterior.inertia = stats.inertia
 	flight_computer.thrust_budget = stats.thrust_budget.duplicate()
 	flight_computer.torque_budget = stats.torque_budget
+	flight_computer.inertia = stats.inertia

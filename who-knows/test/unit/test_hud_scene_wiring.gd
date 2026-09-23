@@ -84,3 +84,45 @@ func test_camera_director_exports_survived_the_parse():
 func test_camera_director_announces_piloting_changes():
 	var director: CameraDirector = _root.get_node_or_null("Ship/CameraDirector")
 	assert_has_signal(director, "piloting_changed")
+
+## The cockpit view is a SubViewport painted onto the canopy panes, so the
+## same parser defect that drops a HUD property would silently turn the
+## windshield back into a wall. These read the values back at runtime.
+
+func test_canopy_camera_looks_out_from_the_pilots_eye():
+	# Not from a point out ahead of the nose, which renders a view the pilot
+	# is not standing at -- the ship appears to be flying from outside itself.
+	# Interior and exterior are both grid space, so the eye's interior-local
+	# position is exactly where the camera belongs on the hull.
+	var remote: RemoteTransform3D = _root.get_node_or_null("Ship/Exterior/CanopyRemote")
+	assert_not_null(remote, "CanopyRemote survived the parse")
+	var ship: Ship = _root.get_node("Ship")
+	var eye: Node3D = _root.get_node_or_null("Ship/Interior/PilotSeat/Eye")
+	assert_almost_eq(
+		remote.position, ship.interior.to_local(eye.global_position), Vector3.ONE * 0.001,
+		"canopy camera sits at the pilot's eye"
+	)
+
+func test_canopy_camera_excludes_the_ships_own_hull():
+	var cam: Camera3D = _root.get_node_or_null("Ship/Canopy/CanopyCam")
+	assert_not_null(cam)
+	assert_eq(cam.cull_mask & ExteriorBuilder.OWN_HULL_LAYER, 0,
+		"own hull is excluded; the camera is inside it")
+
+func test_chase_camera_still_sees_the_hull():
+	var cam: Camera3D = _root.get_node_or_null("Ship/Exterior/ChaseCamera")
+	assert_ne(cam.cull_mask & ExteriorBuilder.OWN_HULL_LAYER, 0)
+
+func test_sunlight_reaches_the_hull_layer():
+	var light: DirectionalLight3D = _root.get_node_or_null("DirectionalLight3D")
+	assert_ne(light.light_cull_mask & ExteriorBuilder.OWN_HULL_LAYER, 0,
+		"moving the hull to its own layer must not unlight it")
+
+func test_canopy_viewport_matches_the_windshield_shape():
+	# Three panes wide by one tall, so a 3:1 viewport keeps the view from
+	# being stretched across the glass.
+	var viewport: SubViewport = _root.get_node_or_null("Ship/Canopy")
+	assert_almost_eq(float(viewport.size.x) / float(viewport.size.y), 3.0, 0.01)
+
+func test_interact_prompt_label_is_present():
+	assert_not_null(_root.get_node_or_null("Prompt/Label"), "prompt label survived the parse")

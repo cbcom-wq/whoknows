@@ -137,3 +137,32 @@ func test_unknown_block_ids_are_ignored():
 	_put(Vector3i.ZERO, &"mystery")
 	var s := ShipStats.compute(_grid, _cat)
 	assert_almost_eq(s.total_mass_kg, 0.0, 0.001)
+
+func test_torque_budget_uses_the_real_moment_arm():
+	# Mass pinned at the origin, an RCS pair four cells forward of it: the
+	# arm is 8 m, not the one cell the old estimate assumed.
+	_put(Vector3i(0, 0, 0), &"heavy")
+	_put(Vector3i(0, 0, -4), &"thruster", 16)   # UP, at the nose
+	_put(Vector3i(1, 0, -4), &"thruster", 20)   # DOWN, beside it
+	var s := ShipStats.compute(_grid, _cat)
+	# The thrusters carry 1 t each, so the centre of mass sits at
+	# z = (9*0 + 1*-8 + 1*-8) / 11 = -1.4545, leaving a 6.545 m arm.
+	assert_almost_eq(s.torque_budget.x, 654_545.0, 1_000.0,
+		"100 kN on a 6.5 m arm is ~654 kN*m of pitch authority")
+
+func test_unopposed_rcs_gives_no_guaranteed_authority():
+	# One nose thruster can only pitch the ship one way. Authority is what
+	# the pilot can command in *either* direction, so this is zero.
+	_put(Vector3i(0, 0, 0), &"heavy")
+	_put(Vector3i(0, 0, -4), &"thruster", 16)
+	var s := ShipStats.compute(_grid, _cat)
+	assert_almost_eq(s.torque_budget.x, 0.0, 1.0)
+
+func test_main_engines_do_not_count_as_attitude_authority():
+	# Forward and reverse engines are the thrust budget. They fire along the
+	# axis the pilot is translating on, so they are not available to steer.
+	_put(Vector3i(0, 0, 0), &"heavy")
+	_put(Vector3i(0, 1, 2), &"thruster", 0)
+	_put(Vector3i(0, -1, 2), &"thruster", 4)
+	var s := ShipStats.compute(_grid, _cat)
+	assert_almost_eq(s.torque_budget, Vector3.ZERO, Vector3.ONE * 1.0)
