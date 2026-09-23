@@ -65,8 +65,8 @@ func _starter_grid() -> ShipGrid:
 	_put(g, Vector3i(-1, 1, -3), &"hull_wedge", O_FORWARD)
 	_put(g, Vector3i(1, 1, -3), &"hull_wedge", O_FORWARD)
 	_put(g, Vector3i(0, 1, -3), &"hull")
-	_put(g, Vector3i(-2, 1, -2), &"hull_wedge", O_FORWARD)
-	_put(g, Vector3i(2, 1, -2), &"hull_wedge", O_FORWARD)
+	_put(g, Vector3i(-2, 1, -2), &"rcs", O_STERN)
+	_put(g, Vector3i(2, 1, -2), &"rcs", O_STERN)
 	for x in [-1, 0, 1]:
 		_put(g, Vector3i(x, 1, -2), &"hull")
 	for x in [-2, -1, 1, 2]:
@@ -99,14 +99,31 @@ func _starter_grid() -> ShipGrid:
 	#
 	# 1. RCS thrust authority. §3 places no RCS blocks anywhere, so as
 	#    literally specified the ship has thrust only along -Z (both main
-	#    pods fire straight aft) and ShipStats bins thrust_budget.lateral
-	#    and .vertical -- and therefore torque_budget for every rotation
-	#    axis -- from the X/Y components of thrusting blocks only. Zero
-	#    RCS means zero rotational authority: FlightComputer could not
-	#    turn the ship at all under assist, mouse-steering included. Four
-	#    RCS units (2 lateral, 2 vertical) sit in cells the nose taper
-	#    otherwise leaves empty, each face-adjacent to an already-placed
-	#    block so Rule 2 (ALL_CONNECTED) still holds.
+	#    pods fire straight aft) and ShipStats reads torque_budget from
+	#    the X/Y-thrusting blocks only. Zero RCS means zero rotational
+	#    authority: FlightComputer could not turn the ship at all,
+	#    mouse-steering included. Six RCS units sit in cells the nose
+	#    taper otherwise leaves empty, each face-adjacent to an
+	#    already-placed block so Rule 2 (ALL_CONNECTED) still holds.
+	#
+	#    They are laid out in opposed pairs, which ShipStats requires:
+	#    authority you only have one way is not authority, so each axis
+	#    counts the smaller of its two directions. Two lateral units at
+	#    the nose (one thrusting +X, one -X) give yaw both ways. Four
+	#    vertical units -- UP at z=-3, DOWN at z=-4, mirrored port and
+	#    starboard -- give pitch both ways, and, fired differentially
+	#    across the 8 m between them, roll both ways too. An earlier
+	#    layout had a single UP and a single DOWN unit on opposite sides:
+	#    both rolled the ship the *same* way, so roll authority was
+	#    effectively nil.
+	#
+	# 1b. Braking. Every main engine faces aft, so thrust_budget.reverse
+	#    was 0: S did nothing and, once burning, the ship could never be
+	#    slowed or stopped. Two RCS units at (+-2, 1, -2), thrusting +Z,
+	#    are the retro pair -- 500 kN, which stops the shuttle from its
+	#    2-second sprint speed of 32 m/s in about 6 s. They also give the
+	#    assist's drift correction something to spend along Z, which is
+	#    what cancels residual drift when the stick is centred.
 	#
 	# 2. Pitch balance. §3.4 flags the real risk directly: mounting both
 	#    main thrusters at y=0 while the equipment deck's mass sits at
@@ -118,28 +135,31 @@ func _starter_grid() -> ShipGrid:
 	#    sanctions "moving equipment-deck mass or the pod row" to fix
 	#    this; the stern roof's three hull cells became a second thruster
 	#    bank instead (thrust higher, closer to the mass-weighted centre),
-	#    which alone brought it to -14,371 N*m. Two more small
-	#    forward-facing RCS units at the nose (cheap, 40 kN each, for fine
-	#    trim) landed the final grid at -6,870 N*m -- 4% of pitch
-	#    authority, and a 99% reduction from the naive layout.
+	#    which alone brought it to -14,371 N*m. The nose RCS trim the
+	#    remainder: the grid now sits at +101,408 N*m, 3% of its own pitch
+	#    authority, so the assist holds the nose through a full burn.
 	#
 	# 3. Power margin. The extra stern thrusters draw 9.0 MW more than
 	#    §3.4's two-reactor estimate covers (that estimate assumed four
 	#    thrusters total, not five). A third reactor restores comfortable
-	#    margin: 36.0 MW generated against 25.2 MW drawn.
+	#    margin: 36.0 MW generated against 30.8 MW drawn.
 	#
 	# Real numbers for this exact grid (via ShipStats/ShipValidator,
-	# res://data/blocks catalog): 84 blocks, 88,500 kg, center_of_mass =
-	# (0, 1.236, 0.626), torque_budget = (160000, 160000, 160000),
-	# torque_imbalance = (-6870, 0, 0), power_gen = 36.0 MW, power_draw =
-	# 25.2 MW, zero validation issues, can_launch = true. See
-	# task-15-report.md for the full derivation.
+	# res://data/blocks catalog): 84 blocks, 92,300 kg, center_of_mass =
+	# (0, 1.268, 0.327), inertia = (1.82, 2.65, 1.06) million kg*m²,
+	# torque_budget = (3163597, 2081799, 2183099), torque_imbalance =
+	# (101408, 0, 0), thrust_budget forward/reverse/lateral/vertical =
+	# 1500/500/500/1000 kN, power_gen = 36.0 MW, power_draw = 30.8 MW,
+	# zero validation issues, can_launch = true. Measured handling under
+	# assist: 58 deg/s pitch and roll, 45 deg/s yaw, each reached within a
+	# second of full stick. See task-15-report.md for the original
+	# derivation.
 	_put(g, Vector3i(-1, 1, -4), &"rcs", O_RCS_STARBOARD)
 	_put(g, Vector3i(1, 1, -4), &"rcs", O_RCS_PORT)
 	_put(g, Vector3i(-2, 1, -3), &"rcs", O_RCS_UP)
-	_put(g, Vector3i(2, 1, -3), &"rcs", O_RCS_DOWN)
-	_put(g, Vector3i(-2, 1, -4), &"rcs", O_FORWARD)
-	_put(g, Vector3i(2, 1, -4), &"rcs", O_FORWARD)
+	_put(g, Vector3i(2, 1, -3), &"rcs", O_RCS_UP)
+	_put(g, Vector3i(-2, 1, -4), &"rcs", O_RCS_DOWN)
+	_put(g, Vector3i(2, 1, -4), &"rcs", O_RCS_DOWN)
 
 	return g
 

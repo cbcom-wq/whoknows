@@ -16,7 +16,12 @@ var inertia: Vector3 = Vector3.ZERO
 var thrust_budget: Dictionary = {
 	&"forward": 0.0, &"reverse": 0.0, &"lateral": 0.0, &"vertical": 0.0,
 }
-## Newton-metres available about (pitch, yaw, roll) from RCS and main engines.
+## Newton-metres the pilot can command about (pitch, yaw, roll), in either
+## direction. Only RCS -- thrust along local X or Y -- counts: the main
+## engines fire along the axis the pilot is translating on, so they are not
+## available to steer with. Each axis takes the *smaller* of its two
+## directions, because authority you only have one way is not authority:
+## a lone nose-up thruster cannot pitch back down.
 var torque_budget: Vector3 = Vector3.ZERO
 ## Net torque induced by a full forward burn. Non-zero means the ship
 ## fights itself under acceleration.
@@ -80,6 +85,11 @@ func _accumulate_power(entries: Array) -> void:
 		power_draw += e["def"].power_draw
 
 func _accumulate_thrust(entries: Array) -> void:
+	# Attitude authority, accumulated per axis and per direction so the two
+	# can be compared at the end. See torque_budget above.
+	var nose_up := Vector3.ZERO
+	var nose_down := Vector3.ZERO
+
 	for e in entries:
 		var f: Vector3 = e["force"]
 		if f.is_zero_approx():
@@ -92,11 +102,20 @@ func _accumulate_thrust(entries: Array) -> void:
 		thrust_budget[&"lateral"] += absf(f.x)
 		thrust_budget[&"vertical"] += absf(f.y)
 
+		var r: Vector3 = e["center"] - center_of_mass
+
 		# Torque about the centre of mass from a full forward burn.
 		if f.z < 0.0:
-			var r: Vector3 = e["center"] - center_of_mass
 			torque_imbalance += r.cross(f)
 
+		if is_zero_approx(f.x) and is_zero_approx(f.y):
+			continue   # a main engine: thrust, not steering
+		var torque := r.cross(f)
+		nose_up += Vector3(maxf(torque.x, 0.0), maxf(torque.y, 0.0), maxf(torque.z, 0.0))
+		nose_down += Vector3(-minf(torque.x, 0.0), -minf(torque.y, 0.0), -minf(torque.z, 0.0))
+
 	torque_budget = Vector3(
-		thrust_budget[&"vertical"], thrust_budget[&"lateral"], thrust_budget[&"lateral"]
-	) * ShipGrid.CELL_SIZE
+		minf(nose_up.x, nose_down.x),
+		minf(nose_up.y, nose_down.y),
+		minf(nose_up.z, nose_down.z)
+	)
