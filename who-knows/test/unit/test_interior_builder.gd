@@ -157,3 +157,63 @@ func test_rebuild_does_not_leave_stale_nodes_in_the_tree():
 		"stale mesh instances must be fully detached, not merely queued")
 	for mesh in meshes:
 		assert_eq(mesh.layers, 2, "interior visuals render on layer 2, or the exterior sun washes them out")
+
+## Art direction §3: a MOUNT block is a fixture that occupies its own cell --
+## a seat, a console, a ladder. The interior has to draw it, or the player
+## walks up to an invisible collider and has to guess it is there.
+func test_mount_block_with_a_mesh_is_drawn_as_a_fixture():
+	var seat_def := _cat.get_def(&"seat")
+	seat_def.mesh = BoxMesh.new()
+	_put(Vector3i(0, 0, 0), &"deck")
+	_put(Vector3i(1, 0, 0), &"seat")
+	_builder.rebuild()
+	assert_eq(_builder.fixture_count(), 1, "the seat is drawn, the deck is not")
+
+func test_fixture_sits_at_its_own_cell_centre():
+	var seat_def := _cat.get_def(&"seat")
+	seat_def.mesh = BoxMesh.new()
+	_put(Vector3i(2, 0, -3), &"seat")
+	_builder.rebuild()
+	assert_almost_eq(
+		_builder.fixture_positions()[0], ShipGrid.cell_center(Vector3i(2, 0, -3)),
+		Vector3.ONE * 0.001
+	)
+
+func test_mount_block_without_a_mesh_draws_nothing():
+	_put(Vector3i(0, 0, 0), &"seat")
+	_builder.rebuild()
+	assert_eq(_builder.fixture_count(), 0)
+
+func test_fixtures_are_cleared_on_rebuild():
+	_cat.get_def(&"seat").mesh = BoxMesh.new()
+	_put(Vector3i(0, 0, 0), &"seat")
+	_builder.rebuild()
+	_builder.rebuild()
+	assert_eq(_builder.fixture_count(), 1, "rebuilding must not stack fixtures")
+
+## Every canopy pane shows the same SubViewport, so without a UV split each
+## pane renders the whole forward view and the windshield reads as three
+## copies of the same picture side by side rather than one window.
+func test_canopy_panes_split_the_view_between_them():
+	_cat.register(_def(&"canopy", BlockDefinition.Occupancy.SOLID))
+	for x in [-1, 0, 1]:
+		_put(Vector3i(x, 0, 0), &"deck")
+		_put(Vector3i(x, 0, -1), &"canopy")
+	_builder.rebuild()
+	assert_eq(_builder.canopy_face_count(), 3)
+	var uvs := _builder.canopy_pane_uvs()   # [{scale, offset}], ordered by x
+	for pane in uvs:
+		assert_almost_eq(pane["scale"].x, 1.0 / 3.0, 0.001, "each pane is a third")
+		assert_almost_eq(pane["scale"].y, 1.0, 0.001, "one row of panes")
+	assert_almost_eq(uvs[0]["offset"].x, 0.0, 0.001, "port pane shows the left third")
+	assert_almost_eq(uvs[1]["offset"].x, 1.0 / 3.0, 0.001)
+	assert_almost_eq(uvs[2]["offset"].x, 2.0 / 3.0, 0.001)
+
+func test_a_lone_canopy_pane_shows_the_whole_view():
+	_cat.register(_def(&"canopy", BlockDefinition.Occupancy.SOLID))
+	_put(Vector3i(0, 0, 0), &"deck")
+	_put(Vector3i(0, 0, -1), &"canopy")
+	_builder.rebuild()
+	var pane: Dictionary = _builder.canopy_pane_uvs()[0]
+	assert_almost_eq(pane["scale"], Vector2.ONE, Vector2.ONE * 0.001)
+	assert_almost_eq(pane["offset"], Vector2.ZERO, Vector2.ONE * 0.001)

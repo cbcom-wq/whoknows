@@ -9,6 +9,8 @@ extends Node3D
 @onready var _hud: HudRoot = $HudRoot
 @onready var _director: CameraDirector = $Ship/CameraDirector
 @onready var _cockpit_marker: VelocityMarker = $Ship/Canopy/CanopyOverlay/CockpitMarker
+@onready var _prompt: Label = $Prompt/Label
+@onready var _interactor: Interactor = $Ship/Interior/Avatar/Head/Interactor
 
 ## BlockOrientation values used below. `_FORWARDS` order is
 ## [FORWARD, BACK, LEFT, RIGHT, UP, DOWN]; o = (forward_index << 2) | roll.
@@ -27,7 +29,37 @@ const O_RCS_DOWN := 20       ## DOWN: thrust along -Y
 func _ready() -> void:
 	_ship.set_grid(_starter_grid())
 	_place_avatar_on_deck()
+	_aim_canopy_view()
 	_wire_hud()
+	_wire_prompt()
+
+## Puts the canopy camera where the pilot's head is.
+##
+## Interior space and exterior space are both grid space, offset from each
+## other, so the eye's interior-local position is exactly where that eye
+## sits on the hull. Copying it here rather than authoring the camera's
+## position in the scene keeps one source of truth: move the seat and the
+## view through the glass moves with it.
+##
+## The old hardcoded value put the camera five metres ahead of the nose,
+## which is why flying felt like watching the ship from outside it.
+func _aim_canopy_view() -> void:
+	var eye: Node3D = $Ship/Interior/PilotSeat/Eye
+	$Ship/Exterior/CanopyRemote.position = _ship.interior.to_local(eye.global_position)
+
+## Shows what the avatar is looking at. Interactor has emitted this since it
+## was written, with nothing listening: the seat was an invisible collider
+## that answered an unadvertised keypress, which is no way to find a chair.
+func _wire_prompt() -> void:
+	_prompt.text = ""
+	_interactor.prompt_changed.connect(func(text: String) -> void: _prompt.text = text)
+	# The prompt belongs to the avatar, not the pilot. Sitting down hands the
+	# view to the seat, so anything the raycast still reports is stale.
+	_director.piloting_changed.connect(
+		func(piloting: bool) -> void:
+			if piloting:
+				_prompt.text = ""
+	)
 
 func _starter_grid() -> ShipGrid:
 	var g := ShipGrid.new()
@@ -186,6 +218,14 @@ func _place_avatar_on_deck() -> void:
 	var centre := ShipGrid.cell_center(cell)
 	var deck_surface := centre.y - ShipGrid.CELL_SIZE * 0.5 + InteriorBuilder.FLOOR_THICKNESS * 0.5
 	$Ship/Interior/Avatar.position = Vector3(centre.x, deck_surface + 0.05, centre.z)
+
+	# The interactable seat is the same object the interior draws a seat mesh
+	# for, so derive its transform from the same cell rather than authoring it
+	# twice. Hardcoding it in the scene is what let the collider and the
+	# blueprint drift apart in the first place.
+	var seat_centre := ShipGrid.cell_center(seat)
+	var seat_floor := seat_centre.y - ShipGrid.CELL_SIZE * 0.5 + InteriorBuilder.FLOOR_THICKNESS * 0.5
+	$Ship/Interior/PilotSeat.position = Vector3(seat_centre.x, seat_floor, seat_centre.z)
 
 ## Connects the HUD to this scene's ship.
 ##

@@ -7,6 +7,12 @@ extends Node3D
 ## This never references InteriorBuilder. Both are independent readers of
 ## the same source of truth, which is what makes the parity test honest.
 
+## Render layer for the ship's own hull -- layer 3, "own_hull". The canopy
+## camera sits at the pilot's eye, inside the hull, and excludes this layer;
+## without it the windshield would render the inside of the ship's own
+## blocks instead of the space beyond them.
+const OWN_HULL_LAYER := 4
+
 @export var body_path: NodePath
 
 var _grid: ShipGrid
@@ -98,5 +104,6 @@ func _build_meshes() -> void:
 
 		var mmi := MultiMeshInstance3D.new()
 		mmi.multimesh = mm
+		mmi.layers = OWN_HULL_LAYER
 		add_child(mmi)
 		_multimeshes[block_id] = mmi

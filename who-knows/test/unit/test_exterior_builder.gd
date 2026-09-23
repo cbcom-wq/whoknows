@@ -119,3 +119,17 @@ func test_parity_survives_random_mutation():
 		assert_true(built.has(coord), "grid cell %s has no collider" % coord)
 	for coord in built:
 		assert_true(_grid.has_block(coord), "collider %s has no grid cell" % coord)
+
+## The canopy camera looks out from the pilot's eye, which is inside the
+## hull. Own-hull meshes therefore need a render layer of their own so that
+## camera can exclude them; without it the windshield renders the inside of
+## the ship's own blocks.
+func test_hull_meshes_are_drawn_on_the_own_hull_layer():
+	_put(Vector3i.ZERO, &"hull")
+	_builder.rebuild()
+	var drawn := 0
+	for child in _builder.get_children():
+		if child is MultiMeshInstance3D:
+			drawn += 1
+			assert_eq(child.layers, ExteriorBuilder.OWN_HULL_LAYER)
+	assert_eq(drawn, 1, "one MultiMesh for the one block type")
