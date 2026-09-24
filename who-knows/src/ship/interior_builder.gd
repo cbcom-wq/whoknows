@@ -252,14 +252,15 @@ func _add_doorway(at: Vector3, normal: Vector3i) -> void:
 
 ## Draws every MOUNT block that has a mesh: seats, consoles, ladders -- the
 ## fixtures a player sees and walks up to. Without this the pilot seat is an
-## invisible collider with an interact prompt and nothing to look at.
+## invisible collider with an interact prompt and nothing to look at. Fixtures
+## the dressing draws as props (InteriorDressing.draws_fixture) are left to it.
 func _build_fixtures() -> void:
 	for coord in _grid.coords():
 		var inst := _grid.get_block(coord)
 		var def := _catalog.get_def(inst.block_id)
 		if def == null or def.mesh == null:
 			continue
-		if def.occupancy != BlockDefinition.Occupancy.MOUNT:
+		if def.occupancy != BlockDefinition.Occupancy.MOUNT or InteriorDressing.draws_fixture(inst.block_id):
 			continue
 		var fixture := MeshInstance3D.new()
 		fixture.mesh = def.mesh

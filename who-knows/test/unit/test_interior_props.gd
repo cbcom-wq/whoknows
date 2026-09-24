@@ -156,3 +156,67 @@ func test_portholes_sit_at_eye_level():
 
 func test_doors_are_door_height_not_ceiling_height():
 	assert_between(InteriorProps.DOOR_HEIGHT, 2.0, InteriorProps.HEADROOM - 0.2)
+
+func _batch_names() -> Array:
+	return _kit.commit().map(func(mi): return String(mi.name))
+
+## Cockpit pod spec §4: the pod builds in its own frame, jutting out along -z,
+## and brings everything that stops the avatar -- the builder leaves its mouth
+## open.
+func test_cockpit_pod_builds_its_own_floor_roof_and_walls():
+	InteriorProps.cockpit_pod(_kit, Transform3D.IDENTITY)
+	assert_has(_batch_names(), "DressingPortals", "the glazing shows the real view outside")
+	assert_eq(_colliders().size(), 2 + InteriorProps.POD_OUTLINE.size() - 1,
+		"a floor, a roof and a wall per outline segment")
+	for c in _colliders():
+		assert_lt(c.position.z, 0.0, "all of it beyond the canopy plane, out in the pod")
+	assert_eq(_lights(&"ceiling").size(), 1)
+
+func test_the_pod_mouth_is_one_cell_face_wide():
+	assert_eq(InteriorProps.POD_OUTLINE[0], Vector2(-InteriorProps.BAY * 0.5, 0.0))
+	assert_eq(InteriorProps.POD_OUTLINE[-1], Vector2(InteriorProps.BAY * 0.5, 0.0))
+
+func test_the_pod_glazing_sits_between_a_low_sill_and_a_roof_under_the_ceiling():
+	assert_lt(InteriorProps.POD_SILL, InteriorProps.SEATED_EYE.y - 0.5, "a seated pilot sees well down past it")
+	assert_lt(InteriorProps.POD_GLASS_TOP, InteriorProps.POD_ROOF)
+	assert_lt(InteriorProps.POD_ROOF, InteriorProps.HEADROOM, "a header closes the mouth above it")
+
+func test_shoulder_has_a_portal_window_and_a_console_desk():
+	InteriorProps.shoulder(_kit, Transform3D.IDENTITY, 0.4)
+	assert_has(_batch_names(), "DressingPortals")
+	assert_eq(_colliders().size(), 1, "the desk")
+	assert_eq(_lights(&"console").size(), 1)
+
+func _screen_vertices() -> int:
+	for mi in _kit.commit():
+		if mi.material_override == InteriorMaterials.screen():
+			return mi.mesh.surface_get_array_len(0)
+	return 0
+
+func test_a_console_can_leave_off_its_wall_screen():
+	InteriorProps.console(_kit, Transform3D.IDENTITY, 0.4)
+	var both := _screen_vertices()
+	InteriorProps.console(_kit, Transform3D.IDENTITY, 0.4, false)
+	assert_eq(_screen_vertices(), both / 2, "the desk screen stays, the wall screen goes")
+
+## Cockpit pod spec §5: the captain's chair and helm console, in a fixture
+## frame -- origin on the floor under the seat, -z the way it faces.
+func test_pilot_station_builds_without_a_grid():
+	InteriorProps.pilot_station(_kit, Transform3D.IDENTITY, 0.5)
+	assert_gt(_kit.commit().size(), 0)
+	assert_eq(_colliders().size(), 1, "the helm console; the seat's interactable box covers the chair")
+	assert_lt(_colliders()[0].position.z, 0.0, "the helm stands ahead of the chair")
+	assert_eq(_lights(&"helm").size(), 1)
+
+## Seated in a pod, the pilot must see the bottom of the front glass over the
+## helm console.
+func test_the_helm_stays_under_the_seated_sightline():
+	InteriorProps.pilot_station(_kit, Transform3D.IDENTITY, 0.5)
+	var c: CollisionShape3D = _colliders()[0]
+	var half := (c.shape as BoxShape3D).size * 0.5
+	var helm_top := c.position.y + half.y
+	var helm_front := c.position.z - half.z
+	var front_glass := InteriorProps.POD_OUTLINE[3].y + InteriorProps.POD_SEAT_DEPTH
+	var eye := InteriorProps.SEATED_EYE
+	var t := (eye.z - helm_front) / (eye.z - front_glass)
+	assert_lt(helm_top, lerpf(eye.y, InteriorProps.POD_SILL, t))

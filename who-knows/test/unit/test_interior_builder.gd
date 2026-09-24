@@ -317,3 +317,16 @@ func test_a_pod_face_has_no_collider():
 	var beside := InteriorBuilder.interior_center(Vector3i(1, 0, 0)) + ahead
 	assert_eq(_structure_colliders().filter(func(c): return c.position.is_equal_approx(pod)).size(), 0)
 	assert_eq(_structure_colliders().filter(func(c): return c.position.is_equal_approx(beside)).size(), 1)
+
+## Cockpit pod spec §5: the helm is the dressing's captain's chair now; any
+## other MOUNT block is still drawn from its own mesh.
+func test_the_helm_is_not_drawn_from_its_block_mesh():
+	var helm := _def(InteriorLayout.HELM_ID, BlockDefinition.Occupancy.MOUNT)
+	helm.mesh = BoxMesh.new()
+	_cat.register(helm)
+	_cat.get_def(&"seat").mesh = BoxMesh.new()
+	_put(Vector3i(0, 0, 0), InteriorLayout.HELM_ID)
+	_put(Vector3i(1, 0, 0), &"seat")
+	_builder.rebuild()
+	assert_eq(_builder.fixture_count(), 1, "only the other mount")
+	assert_almost_eq(_builder.fixture_positions()[0].x, ShipGrid.cell_center(Vector3i(1, 0, 0)).x, 0.001)

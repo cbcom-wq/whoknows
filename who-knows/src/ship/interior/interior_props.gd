@@ -69,6 +69,33 @@ const NOSE_WINDOWS: Array[Vector4] = [
 	Vector4(1.95, 1.3, 0.5, 0.3),
 ]
 
+## The wraparound cockpit pod (cockpit pod spec §4), in a pod frame: origin at
+## the floor centre of the mouth, on the canopy plane; -z out into the pod, +x
+## across, +y up. The outline runs round the pod from one side of the mouth to
+## the other: a 2 m mouth, 2.4 m wide inside, jutting 1.9 m. Its first and last
+## segments are solid jambs; the rest are glazed from the sill to the glass top,
+## with a band above to the roof.
+const POD_OUTLINE: Array[Vector2] = [
+	Vector2(-1.0, 0.0), Vector2(-1.2, -0.25), Vector2(-1.2, -1.2), Vector2(-0.6, -1.9),
+	Vector2(0.6, -1.9), Vector2(1.2, -1.2), Vector2(1.2, -0.25), Vector2(1.0, 0.0),
+]
+const POD_SILL := 0.75
+const POD_GLASS_TOP := 2.05
+const POD_ROOF := 2.2
+## How far beyond the canopy plane the captain's chair stands in a pod: the
+## seated eye is then 1.65 m behind the front glass, with glass on both flanks.
+const POD_SEAT_DEPTH := 0.7
+
+## A pod shoulder's window, floor-relative, and its half width.
+const SHOULDER_WINDOW_LOW := 1.15
+const SHOULDER_WINDOW_HIGH := 1.95
+const SHOULDER_WINDOW_HALF := 0.55
+
+## The seated pilot's eye in the captain's chair's fixture frame (origin on
+## the floor under the seat, -z the way it faces): the chair's headrest sits
+## just behind it, and the scene's PilotSeat/Eye must match it.
+const SEATED_EYE := Vector3(0, 1.35, 0.45)
+
 ## Pilasters, a kick band, a terracotta belt, a light shelf with a warm strip
 ## above it, and a cove up to the ceiling: what makes a bare wall read as a
 ## ship's wall. Neighbouring walls both build a pilaster on their shared
@@ -98,8 +125,9 @@ static func ceiling_light(kit: InteriorKit, ceiling_centre: Vector3) -> void:
 	kit.light(ceiling_centre + Vector3(0, -0.9, 0), InteriorPalette.LIGHT_WARM, 0.45, 4.0, &"ceiling")
 
 ## A station console: glowing plinth, bevelled body, a sloped screen, four big
-## buttons (one blinks) and a framed screen on the wall above.
-static func console(kit: InteriorKit, f: Transform3D, variety: float) -> void:
+## buttons (one blinks) and, unless `wall_screen` is false (a window needs the
+## wall), a framed screen on the wall above.
+static func console(kit: InteriorKit, f: Transform3D, variety: float, wall_screen := true) -> void:
 	var body := _c(InteriorPalette.TRIM)
 	kit.box(GLOW, f * _at(Vector3(0, 0.05, 0.12)), Vector3(1.1, 0.1, 0.24), _lit(InteriorPalette.LIGHT_WARM, 2.5))
 	kit.bevel_box(SOLID, f * _at(Vector3(0, 0.41, 0.19)), Vector3(1.4, 0.62, 0.38), 0.05, body)
@@ -117,8 +145,10 @@ static func console(kit: InteriorKit, f: Transform3D, variety: float) -> void:
 	for i in buttons.size():
 		kit.bevel_box(GLOW, f * _at(Vector3(-0.45 + i * 0.3, 0.58, 0.405)), Vector3(0.14, 0.08, 0.05), 0.015,
 			_lit(buttons[i], 1.6, 0.4 if i == 2 else 1.0))
-	kit.bevel_box(SOLID, f * _at(Vector3(0, 1.45, 0.03)), Vector3(1.0, 0.5, 0.06), 0.03, body)
-	kit.screen(f * _at(Vector3(0, 1.45, 0.061)), Vector2(0.86, 0.36), _mode(first + 1), fposmod(variety + 0.37, 1.0))
+	if wall_screen:
+		kit.bevel_box(SOLID, f * _at(Vector3(0, 1.45, 0.03)), Vector3(1.0, 0.5, 0.06), 0.03, body)
+		kit.screen(f * _at(Vector3(0, 1.45, 0.061)), Vector2(0.86, 0.36), _mode(first + 1),
+			fposmod(variety + 0.37, 1.0))
 	kit.collider(f * _at(Vector3(0, 0.55, 0.2)), Vector3(1.4, 1.1, 0.4))
 	kit.light(f * Vector3(0, 1.0, 0.45), InteriorPalette.LIGHT_WARM, 0.35, 1.8, &"console")
 
@@ -335,6 +365,170 @@ static func _dash(kit: InteriorKit, frame: Transform3D, width: float) -> void:
 			_c(InteriorPalette.TRIM))
 		kit.screen(frame * desk * _at(Vector3(0, 0, 0.031)), Vector2(minf(1.18, width * 0.22), 0.24),
 			_mode(k), 0.2 + 0.3 * k)
+
+## The wraparound cockpit pod, in a pod frame (see POD_OUTLINE): a mauve floor
+## with a lit edge strip, lower panels, portal glass all round from the sill up,
+## a header band and a sill ledge on every glazed segment, chunky posts at the
+## glazed corners, a roof with a round light, and a header over the mouth up to
+## the cabin ceiling. It brings its own colliders -- a floor, a roof and a wall
+## per segment -- because the mouth it opens from has none.
+static func cockpit_pod(kit: InteriorKit, f: Transform3D) -> void:
+	var trim := _c(InteriorPalette.TRIM)
+	var low := _c(InteriorPalette.WALL_LOW)
+	var floor_colour := _c(InteriorPalette.FLOOR_BRIDGE)
+	var ceiling := _c(InteriorPalette.CEILING)
+	var up := (f.basis * Vector3.UP).normalized()
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	for p in POD_OUTLINE:
+		lo = lo.min(p)
+		hi = hi.max(p)
+	var centre := Vector3((lo.x + hi.x) * 0.5, 0.0, (lo.y + hi.y) * 0.5)
+	var lift := Vector3(0, 0.004, 0)
+	var roof := Vector3(0, POD_ROOF, 0)
+	var last := POD_OUTLINE.size() - 1
+	# Floor and roof fans, the mouth's triangle included.
+	for i in POD_OUTLINE.size():
+		var p0 := _pod_point(i)
+		var p1 := _pod_point((i + 1) % POD_OUTLINE.size())
+		kit.tri(SOLID, f * (centre + lift), f * (p0 + lift), f * (p1 + lift), up, floor_colour)
+		kit.tri(SOLID, f * (centre + roof), f * (p0 + roof), f * (p1 + roof), -up, ceiling)
+	for i in last:
+		var p0 := _pod_point(i)
+		var p1 := _pod_point(i + 1)
+		var along := (p1 - p0).normalized()
+		var inward := Vector3.UP.cross(along)
+		if inward.dot(centre - (p0 + p1) * 0.5) < 0.0:
+			inward = -inward
+		var n := (f.basis * inward).normalized()
+		var strip := Vector3(0, 0.006, 0)
+		kit.quad(GLOW, f * (p0 + inward * 0.02 + strip), f * (p1 + inward * 0.02 + strip),
+			f * (p1 + inward * 0.06 + strip), f * (p0 + inward * 0.06 + strip), up,
+			_lit(InteriorPalette.LIGHT_WARM, 2.0))
+		var glazed := i > 0 and i < last - 1
+		var panel_top := Vector3(0, POD_SILL if glazed else POD_ROOF, 0)
+		kit.quad(SOLID, f * p0, f * p1, f * (p1 + panel_top), f * (p0 + panel_top), n, low)
+		var wall := Basis(along, Vector3.UP, along.cross(Vector3.UP))
+		if glazed:
+			var sill := Vector3(0, POD_SILL, 0)
+			var top := Vector3(0, POD_GLASS_TOP, 0)
+			kit.quad(PORTAL, f * (p0 + sill), f * (p1 + sill), f * (p1 + top), f * (p0 + top), n,
+				_c(InteriorPalette.GLASS))
+			kit.quad(SOLID, f * (p0 + top), f * (p1 + top), f * (p1 + roof), f * (p0 + roof), n, trim)
+			kit.bevel_box(SOLID, f * Transform3D(wall, (p0 + p1) * 0.5 + inward * 0.06 + sill),
+				Vector3(p0.distance_to(p1), 0.06, 0.14), 0.02, trim)
+		kit.collider(f * Transform3D(wall, (p0 + p1) * 0.5 - inward * 0.05 + Vector3(0, POD_ROOF * 0.5, 0)),
+			Vector3(p0.distance_to(p1) + 0.1, POD_ROOF, 0.1))
+	for i in range(1, last):
+		kit.bevel_box(SOLID, f * _at(_pod_point(i) + Vector3(0, POD_ROOF * 0.5, 0)),
+			Vector3(0.14, POD_ROOF, 0.14), 0.04, trim)
+	var span := Vector3(hi.x - lo.x, 0.1, hi.y - lo.y)
+	kit.collider(f * _at(centre + Vector3(0, -0.05, 0)), span)
+	kit.collider(f * _at(centre + Vector3(0, POD_ROOF + 0.05, 0)), span)
+	ceiling_light(kit, f * (centre + roof))
+	kit.bevel_box(SOLID, f * _at(Vector3(0, (POD_ROOF + HEADROOM) * 0.5, 0)),
+		Vector3(BAY + 0.3, HEADROOM - POD_ROOF, 0.16), 0.04, trim)
+	kit.box(GLOW, f * _at(Vector3(0, POD_ROOF + 0.03, 0.085)), Vector3(BAY, 0.03, 0.02),
+		_lit(InteriorPalette.LIGHT_WARM, 2.2))
+
+static func _pod_point(i: int) -> Vector3:
+	return Vector3(POD_OUTLINE[i].x, 0.0, POD_OUTLINE[i].y)
+
+## A shoulder of the front wall beside a pod, in a wall frame on the canopy
+## face: the wall itself (the builder draws none at canopy faces) round a
+## portal window at eye height in a chunky frame, the usual trim, and a
+## console desk under the window.
+static func shoulder(kit: InteriorKit, f: Transform3D, variety: float) -> void:
+	var wall := _c(InteriorPalette.WALL)
+	var trim := _c(InteriorPalette.TRIM)
+	var back := -WALL_THICKNESS * 0.5
+	var n := (f.basis * Vector3.BACK).normalized()
+	var half := BAY * 0.5
+	var w := SHOULDER_WINDOW_HALF
+	for band: Vector2 in [Vector2(0.0, SHOULDER_WINDOW_LOW), Vector2(SHOULDER_WINDOW_HIGH, HEADROOM)]:
+		kit.quad(SOLID, f * Vector3(-half, band.x, back), f * Vector3(half, band.x, back),
+			f * Vector3(half, band.y, back), f * Vector3(-half, band.y, back), n, wall)
+	for side: Vector2 in [Vector2(-half, -w), Vector2(w, half)]:
+		kit.quad(SOLID, f * Vector3(side.x, SHOULDER_WINDOW_LOW, back), f * Vector3(side.y, SHOULDER_WINDOW_LOW, back),
+			f * Vector3(side.y, SHOULDER_WINDOW_HIGH, back), f * Vector3(side.x, SHOULDER_WINDOW_HIGH, back), n, wall)
+	kit.quad(PORTAL, f * Vector3(-w, SHOULDER_WINDOW_LOW, back), f * Vector3(w, SHOULDER_WINDOW_LOW, back),
+		f * Vector3(w, SHOULDER_WINDOW_HIGH, back), f * Vector3(-w, SHOULDER_WINDOW_HIGH, back), n,
+		_c(InteriorPalette.GLASS))
+	var mid := (SHOULDER_WINDOW_LOW + SHOULDER_WINDOW_HIGH) * 0.5
+	var tall := SHOULDER_WINDOW_HIGH - SHOULDER_WINDOW_LOW
+	for x in [-(w + 0.05), w + 0.05]:
+		kit.bevel_box(SOLID, f * _at(Vector3(x, mid, 0.03)), Vector3(0.1, tall + 0.1, 0.08), 0.03, trim)
+	for y in [SHOULDER_WINDOW_LOW - 0.05, SHOULDER_WINDOW_HIGH + 0.05]:
+		kit.bevel_box(SOLID, f * _at(Vector3(0, y, 0.03)), Vector3(2.0 * w + 0.2, 0.1, 0.08), 0.03, trim)
+	wall_trim(kit, f)
+	console(kit, f, variety, false)
+
+## The captain's chair and helm console, in a fixture frame: origin on the
+## floor under the seat, -z the way it faces, +y up (cockpit pod spec §5). A
+## pedestal with a glowing base; a seat pan and cushion; a backrest tilted back
+## with channel stitching, side bolsters and a shell; a headrest just behind
+## SEATED_EYE; armrests with control pads, a flight stick on the right and a
+## throttle on the left; and a low helm console ahead with two screens and lit
+## buttons, under the seated sightline. Only the helm has a collider: the
+## chair itself is the scene's interactable seat box.
+static func pilot_station(kit: InteriorKit, f: Transform3D, variety: float) -> void:
+	var trim := _c(InteriorPalette.TRIM)
+	var low := _c(InteriorPalette.WALL_LOW)
+	var seat := _c(InteriorPalette.SEAT)
+	# Pedestal: a glowing base, a chunky foot and a column.
+	kit.disc(GLOW, f * Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), Vector3(0, 0.012, 0.25)), 0.36,
+		_lit(InteriorPalette.LIGHT_WARM, 2.2))
+	kit.bevel_box(SOLID, f * _at(Vector3(0, 0.06, 0.25)), Vector3(0.62, 0.1, 0.62), 0.04, trim)
+	kit.tube_between(SOLID, f * Vector3(0, 0.1, 0.25), f * Vector3(0, 0.34, 0.25), 0.09, low)
+	# Seat pan and cushion.
+	kit.bevel_box(SOLID, f * _at(Vector3(0, 0.37, 0.26)), Vector3(0.7, 0.08, 0.64), 0.03, low)
+	kit.bevel_box(SOLID, f * _at(Vector3(0, 0.47, 0.25)), Vector3(0.62, 0.14, 0.58), 0.06, seat)
+	# Backrest, tilted back 12 degrees: a shell, the cushion, channel stitching
+	# and side bolsters.
+	var back := f * Transform3D(Basis(Vector3.RIGHT, deg_to_rad(12.0)), Vector3(0, 0.95, 0.66))
+	kit.bevel_box(SOLID, back * _at(Vector3(0, 0, 0.06)), Vector3(0.68, 0.86, 0.1), 0.04, low)
+	kit.bevel_box(SOLID, back, Vector3(0.6, 0.8, 0.12), 0.06, seat)
+	for x in [-0.15, 0.0, 0.15]:
+		kit.box(SOLID, back * _at(Vector3(x, 0, -0.061)), Vector3(0.012, 0.66, 0.004), low)
+	for side in [-1.0, 1.0]:
+		kit.bevel_box(SOLID, back * _at(Vector3(side * 0.33, -0.05, -0.04)), Vector3(0.08, 0.7, 0.16), 0.035, seat)
+	kit.bevel_box(SOLID, back * _at(Vector3(0, 0.52, 0.0)), Vector3(0.4, 0.2, 0.13), 0.06, seat)
+	# Armrests with control pads.
+	for side in [-1.0, 1.0]:
+		var x: float = side * 0.4
+		kit.bevel_box(SOLID, f * _at(Vector3(x, 0.52, 0.42)), Vector3(0.08, 0.3, 0.08), 0.02, low)
+		kit.bevel_box(SOLID, f * _at(Vector3(x, 0.7, 0.22)), Vector3(0.13, 0.08, 0.56), 0.035, trim)
+		var pad := f * Transform3D(Basis(Vector3.RIGHT, deg_to_rad(-20.0)), Vector3(x, 0.75, 0.02))
+		kit.bevel_box(SOLID, pad, Vector3(0.15, 0.03, 0.18), 0.01, _c(InteriorPalette.SCREEN_BACK))
+		kit.screen(pad * Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), Vector3(0, 0.016, 0.02)),
+			Vector2(0.11, 0.08), InteriorKit.Screen.DOTS, fposmod(variety + side * 0.2, 1.0))
+		kit.bevel_box(GLOW, pad * _at(Vector3(0, 0.02, -0.06)), Vector3(0.1, 0.012, 0.025), 0.004,
+			_lit(InteriorPalette.AMBER if side > 0.0 else InteriorPalette.SKY, 1.6))
+	# Flight stick on the right, throttle on the left.
+	kit.tube_between(SOLID, f * Vector3(0.4, 0.74, 0.14), f * Vector3(0.4, 0.9, 0.1), 0.022, low)
+	kit.bevel_box(SOLID, f * _at(Vector3(0.4, 0.93, 0.1)), Vector3(0.06, 0.09, 0.06), 0.02, trim)
+	kit.bevel_box(GLOW, f * _at(Vector3(0.4, 0.98, 0.1)), Vector3(0.03, 0.012, 0.03), 0.005,
+		_lit(InteriorPalette.CORAL, 1.8))
+	kit.bevel_box(SOLID, f * _at(Vector3(-0.4, 0.8, 0.2)), Vector3(0.05, 0.14, 0.07), 0.015, low)
+	kit.bevel_box(SOLID, f * _at(Vector3(-0.4, 0.88, 0.2)), Vector3(0.09, 0.04, 0.09), 0.015, trim)
+	# The helm console, low and ahead.
+	kit.box(GLOW, f * _at(Vector3(0, 0.04, -0.72)), Vector3(0.9, 0.08, 0.22), _lit(InteriorPalette.LIGHT_WARM, 2.5))
+	kit.bevel_box(SOLID, f * _at(Vector3(0, 0.36, -0.72)), Vector3(1.1, 0.56, 0.3), 0.05, trim)
+	var face := f * Transform3D(Basis(Vector3.RIGHT, deg_to_rad(-55.0)), Vector3(0, 0.7, -0.64))
+	kit.bevel_box(SOLID, face, Vector3(1.1, 0.3, 0.05), 0.02, trim)
+	kit.bevel_box(SOLID, face * _at(Vector3(0, 0, 0.03)), Vector3(1.0, 0.24, 0.012), 0.005,
+		_c(InteriorPalette.SCREEN_BACK))
+	var first := int(variety * 3.0)
+	kit.screen(face * _at(Vector3(-0.26, 0, 0.038)), Vector2(0.44, 0.19), _mode(first), variety)
+	kit.screen(face * _at(Vector3(0.26, 0, 0.038)), Vector2(0.44, 0.19), _mode(first + 1),
+		fposmod(variety + 0.52, 1.0))
+	var buttons: Array[Color] = [InteriorPalette.AMBER, InteriorPalette.SKY, InteriorPalette.LIGHT_WARM,
+		InteriorPalette.CORAL, InteriorPalette.SKY]
+	for i in buttons.size():
+		kit.bevel_box(GLOW, f * _at(Vector3(-0.3 + i * 0.15, 0.5, -0.565)), Vector3(0.08, 0.05, 0.02), 0.008,
+			_lit(buttons[i], 1.6, 0.4 if i == 3 else 1.0))
+	kit.collider(f * _at(Vector3(0, 0.4, -0.72)), Vector3(1.1, 0.8, 0.3))
+	kit.light(f * Vector3(0, 0.9, -0.3), InteriorPalette.LIGHT_WARM, 0.35, 1.6, &"helm")
 
 ## A bunk bed along the wall, two tiers with a reading strip under the top one;
 ## or, where the wall has a porthole above, one low bunk under it.
