@@ -13,11 +13,11 @@ extends Node3D
 ## Puffs: a chunky low-poly sphere, lit, fading through a colour ramp.
 const PUFF_SEGMENTS := 8
 const PUFF_RINGS := 4
-const JET_PUFFS := 36
+const JET_PUFFS := 18
 const JET_LIFETIME := 1.9
 const JET_SPEED := 3.4
 const JET_TIME := 1.2
-const FOG_PUFFS := 70
+const FOG_PUFFS := 48
 const FOG_LIFETIME := 2.4
 ## Distance fog density at full haze. The peaks below stay well short of it: a
 ## mist going out, thicker steam coming in (1 - exp(-d x) is about 60% at the
@@ -91,7 +91,7 @@ func apply(cycle: AirlockCycle, delta: float) -> void:
 		jet.emitting = cycling and not out and t < JET_TIME
 	if _fog != null:
 		_fog.emitting = cycling or (stage == AirlockCycle.Stage.OPENING and cycle.outer_open < 0.5 and out)
-		_fog.amount_ratio = 0.8 if out else 0.4
+		_fog.amount_ratio = 0.8 if out else 0.35
 		# Going out, the fog streams out through the opening hatch; coming in, it
 		# sinks into the vents.
 		if stage == AirlockCycle.Stage.OPENING and out:
@@ -209,7 +209,7 @@ static func _jet_process() -> ParticleProcessMaterial:
 	m.gravity = Vector3.ZERO
 	m.scale_min = 0.12
 	m.scale_max = 0.18
-	m.scale_curve = _grow(1.0, 5.5)
+	m.scale_curve = _grow(1.0, 4.5)
 	m.color_ramp = _fade(0.8)
 	m.angle_min = 0.0
 	m.angle_max = 360.0
