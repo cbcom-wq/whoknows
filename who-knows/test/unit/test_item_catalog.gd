@@ -36,3 +36,9 @@ func test_a_hand_built_catalog_needs_no_disk():
 	assert_true(cat.has(&"thing"))
 	assert_eq(cat.get_def(&"thing"), def)
 	assert_null(cat.get_def(&"missing"))
+
+func test_the_pistol_fires_plasma():
+	var def := _cat.get_def(&"plasma_pistol")
+	assert_not_null(def.use, "the use survived the .tres parse")
+	var use = autofree(def.use.new())
+	assert_true(use is PlasmaEmitter)
