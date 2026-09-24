@@ -33,6 +33,9 @@ const PAINTING_FILES := [
 	"res://src/ship/airlock/airlock_show.gd",
 	"res://src/world/rock_mesh.gd",
 	"res://src/world/asteroid_recipe.gd",
+	"res://src/world/asteroid_stream.gd",
+	"res://src/world/asteroid_bubble.gd",
+	"res://src/world/asteroid_body.gd",
 ]
 
 ## The reusable asset library and what it builds with. Ships are generated
