@@ -37,6 +37,28 @@ const PORTHOLE_RADIUS := 0.26
 const PORTHOLE_FRAME_RADIUS := 0.42
 const PORTHOLE_OPENING := 0.27
 
+## The rounded cockpit nose (spec §6), in a frame on the canopy plane at
+## floor level: +x across the windshield, +y up, +z back into the room.
+const NOSE_DEPTH := 1.4
+## Fraction of the height that stays vertical before the nose curves back.
+const NOSE_VERTICAL := 0.45
+const NOSE_COLUMNS := 48
+const NOSE_ROWS := 20
+## Height of the lit brow line along the curve.
+const NOSE_BROW := 1.8
+## Ribs between and beside the windows, as arc length from the centre line.
+const NOSE_RIBS: Array[float] = [-2.75, -1.3, 1.3, 2.75]
+const DASH_HEIGHT := 0.9
+## How far the dash's curved front edge reaches forward of the plane.
+const DASH_INSET := 0.55
+## Windows as (centre across, centre height, half width, half height), in
+## metres; across is arc length along the nose from its centre line.
+const NOSE_WINDOWS: Array[Vector4] = [
+	Vector4(0.0, 1.325, 0.9, 0.375),
+	Vector4(-1.95, 1.3, 0.5, 0.3),
+	Vector4(1.95, 1.3, 0.5, 0.3),
+]
+
 ## Pilasters, a kick band, a terracotta belt, a light shelf with a warm strip
 ## above it, and a cove up to the ceiling: what makes a bare wall read as a
 ## ship's wall. Neighbouring walls both build a pilaster on their shared
@@ -140,6 +162,166 @@ static func hatch(kit: InteriorKit, f: Transform3D) -> void:
 	kit.box(GLOW, f * _at(Vector3(0, 1.62, 0.08)), Vector3(1.1, 0.02, 0.04), _lit(InteriorPalette.LIGHT_WARM, 2.0))
 	kit.disc(GLOW, f * _at(Vector3(0.85, 1.1, 0.011)), 0.04, _lit(InteriorPalette.AMBER, 1.6, 0.5))
 	kit.light(f * Vector3(0, 1.5, 0.4), InteriorPalette.LIGHT_WARM, 0.5, 2.5, &"hatch")
+
+## The rounded cockpit nose over a windshield `width` wide, bulging forward
+## (-z) from the canopy plane: a shell with window cut-outs (the material's
+## job; see canopy_window.gdshader), ribs that follow the curve, a lit brow, a
+## curved dash with a wooden rail and a glowing plinth, three screen desks and
+## the cockpit's key light. Returns the shell.
+static func nose(kit: InteriorKit, frame: Transform3D, width: float, material: Material) -> MeshInstance3D:
+	if material == null:
+		material = InteriorMaterials.canopy_fallback()
+	if material is ShaderMaterial:
+		for k in NOSE_WINDOWS.size():
+			material.set_shader_parameter("window_%d" % k, NOSE_WINDOWS[k])
+		material.set_shader_parameter(&"shell_color", InteriorPalette.WALL)
+		material.set_shader_parameter(&"frame_color", InteriorPalette.TRIM)
+
+	# Arc length along the floor-level curve, so windows and ribs are placed
+	# in metres rather than in angle.
+	var arc := PackedFloat32Array()
+	arc.resize(NOSE_COLUMNS + 1)
+	var total := 0.0
+	for i in range(1, NOSE_COLUMNS + 1):
+		total += _nose_point(i, 0.0, width).distance_to(_nose_point(i - 1, 0.0, width))
+		arc[i] = total
+
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for j in NOSE_ROWS + 1:
+		var v := float(j) / NOSE_ROWS
+		for i in NOSE_COLUMNS + 1:
+			st.set_uv(Vector2(arc[i] - total * 0.5, v * HEADROOM))
+			st.add_vertex(frame * _nose_point(i, v, width))
+	for j in NOSE_ROWS:
+		for i in NOSE_COLUMNS:
+			# Clockwise as seen from the room: Godot's front face.
+			var a := j * (NOSE_COLUMNS + 1) + i
+			var c := a + NOSE_COLUMNS + 1
+			st.add_index(a)
+			st.add_index(c)
+			st.add_index(a + 1)
+			st.add_index(a + 1)
+			st.add_index(c)
+			st.add_index(c + 1)
+	st.generate_normals()
+	var shell := kit.add_mesh(st.commit(), material, "NoseShell")
+
+	for target in NOSE_RIBS:
+		if absf(target) > total * 0.5 - 0.1:
+			continue
+		var best := 0
+		for i in NOSE_COLUMNS + 1:
+			if absf(arc[i] - total * 0.5 - target) < absf(arc[best] - total * 0.5 - target):
+				best = i
+		_nose_rib(kit, frame, width, PI * float(best) / NOSE_COLUMNS)
+	_nose_band(kit, frame, width, NOSE_BROW, NOSE_BROW + 0.03)
+	_dash(kit, frame, width)
+	kit.light(frame * Vector3(0, 1.6, 0.6), InteriorPalette.LIGHT_WARM, 0.5, 3.0, &"cockpit")
+	return shell
+
+## The shell's depth at height fraction v: vertical up to NOSE_VERTICAL, then
+## curving back to meet the ceiling edge.
+static func _nose_depth(v: float) -> float:
+	if v <= NOSE_VERTICAL:
+		return NOSE_DEPTH
+	var t := (v - NOSE_VERTICAL) / (1.0 - NOSE_VERTICAL)
+	return NOSE_DEPTH * sqrt(maxf(0.0, 1.0 - t * t))
+
+static func _nose_point(i: int, v: float, width: float) -> Vector3:
+	return _nose_at(PI * float(i) / NOSE_COLUMNS, v, width)
+
+static func _nose_at(theta: float, v: float, width: float) -> Vector3:
+	return Vector3(-width * 0.5 * cos(theta), HEADROOM * v, -_nose_depth(v) * sin(theta))
+
+## The shell's normal at (theta, v), pointing into the room.
+static func _nose_normal(theta: float, v: float, width: float) -> Vector3:
+	var e := 0.001
+	var dt := _nose_at(theta + e, v, width) - _nose_at(theta - e, v, width)
+	var dv := _nose_at(theta, minf(v + e, 1.0), width) - _nose_at(theta, maxf(v - e, 0.0), width)
+	var n := dt.cross(dv).normalized()
+	return n if n.z > 0.0 else -n
+
+## A chunky rib, 0.1 m wide and 0.05 m proud, from the dash to the ceiling
+## along one meridian of the shell: a face and two sides.
+static func _nose_rib(kit: InteriorKit, frame: Transform3D, width: float, theta: float) -> void:
+	var half := 0.05 / (width * 0.5)
+	var steps := 10
+	var v0 := DASH_HEIGHT / HEADROOM
+	var color := _c(InteriorPalette.TRIM)
+	for k in steps:
+		var va := lerpf(v0, 1.0, float(k) / steps)
+		var vb := lerpf(v0, 1.0, float(k + 1) / steps)
+		var na := _nose_normal(theta, va, width)
+		var nb := _nose_normal(theta, vb, width)
+		var la := _nose_at(theta - half, va, width)
+		var ra := _nose_at(theta + half, va, width)
+		var lb := _nose_at(theta - half, vb, width)
+		var rb := _nose_at(theta + half, vb, width)
+		kit.quad(SOLID, frame * (la + na * 0.05), frame * (ra + na * 0.05), frame * (rb + nb * 0.05),
+			frame * (lb + nb * 0.05), (frame.basis * na).normalized(), color)
+		var side_n := (ra - la).normalized()
+		kit.quad(SOLID, frame * la, frame * (la + na * 0.05), frame * (lb + nb * 0.05), frame * lb,
+			(frame.basis * -side_n).normalized(), color)
+		kit.quad(SOLID, frame * ra, frame * (ra + na * 0.05), frame * (rb + nb * 0.05), frame * rb,
+			(frame.basis * side_n).normalized(), color)
+
+## A lit ribbon along the whole curve between two floor-relative heights,
+## lifted just off the shell so it never z-fights it.
+static func _nose_band(kit: InteriorKit, frame: Transform3D, width: float, h_lo: float, h_hi: float) -> void:
+	var v_lo := h_lo / HEADROOM
+	var v_hi := h_hi / HEADROOM
+	var color := _lit(InteriorPalette.LIGHT_WARM, 2.2)
+	for i in NOSE_COLUMNS:
+		var t0 := PI * float(i) / NOSE_COLUMNS
+		var t1 := PI * float(i + 1) / NOSE_COLUMNS
+		var n := _nose_normal((t0 + t1) * 0.5, (v_lo + v_hi) * 0.5, width)
+		kit.quad(GLOW, frame * (_nose_at(t0, v_lo, width) + n * 0.01), frame * (_nose_at(t1, v_lo, width) + n * 0.01),
+			frame * (_nose_at(t1, v_hi, width) + n * 0.01), frame * (_nose_at(t0, v_hi, width) + n * 0.01),
+			(frame.basis * n).normalized(), color)
+
+## The dash's front edge: a shallower curve inside the shell, so the rail on
+## top of it sweeps round the cockpit the way the shell does.
+static func _dash_front(i: int, width: float) -> Vector3:
+	var theta := PI * float(i) / NOSE_COLUMNS
+	return Vector3(-width * 0.5 * cos(theta), 0.0, -DASH_INSET * sin(theta))
+
+## The alcove floor, the dash top, its curved face, the glowing plinth under
+## it, the wooden rail on it and three screen desks.
+static func _dash(kit: InteriorKit, frame: Transform3D, width: float) -> void:
+	var up := (frame.basis * Vector3.UP).normalized()
+	var toward_room := (frame.basis * Vector3.BACK).normalized()
+	var cap_v := DASH_HEIGHT / HEADROOM
+	var lift := Vector3(0, DASH_HEIGHT, 0)
+	for i in NOSE_COLUMNS:
+		var f0 := _dash_front(i, width)
+		var f1 := _dash_front(i + 1, width)
+		var s0 := _nose_point(i, cap_v, width)
+		var s1 := _nose_point(i + 1, cap_v, width)
+		var g0 := _nose_point(i, 0.0, width)
+		var g1 := _nose_point(i + 1, 0.0, width)
+		kit.quad(SOLID, frame * Vector3(f0.x, 0.001, 0.0), frame * Vector3(f1.x, 0.001, 0.0),
+			frame * Vector3(g1.x, 0.001, g1.z), frame * Vector3(g0.x, 0.001, g0.z), up,
+			_c(InteriorPalette.FLOOR_BRIDGE))
+		kit.quad(SOLID, frame * (f0 + lift), frame * (f1 + lift), frame * Vector3(s1.x, DASH_HEIGHT, s1.z),
+			frame * Vector3(s0.x, DASH_HEIGHT, s0.z), up, _c(InteriorPalette.TRIM))
+		var face_n := (frame.basis * (f1 - f0).cross(Vector3.UP)).normalized()
+		if face_n.dot(toward_room) < 0.0:
+			face_n = -face_n
+		kit.quad(SOLID, frame * (f0 + Vector3(0, 0.1, 0)), frame * (f1 + Vector3(0, 0.1, 0)),
+			frame * (f1 + lift), frame * (f0 + lift), face_n, _c(InteriorPalette.WALL_LOW))
+		kit.quad(GLOW, frame * (f0 + Vector3(0, 0.0, -0.05)), frame * (f1 + Vector3(0, 0.0, -0.05)),
+			frame * (f1 + Vector3(0, 0.1, -0.05)), frame * (f0 + Vector3(0, 0.1, -0.05)), face_n,
+			_lit(InteriorPalette.LIGHT_WARM, 2.5))
+		kit.tube_between(SOLID, frame * (f0 + lift + Vector3(0, 0.04, 0)),
+			frame * (f1 + lift + Vector3(0, 0.04, 0)), 0.055, _c(InteriorPalette.WOOD))
+	for k in 3:
+		var desk := Transform3D(Basis(Vector3.RIGHT, deg_to_rad(-60.0)),
+			Vector3((k - 1) * width * 0.28, DASH_HEIGHT + 0.09, -0.8))
+		kit.bevel_box(SOLID, frame * desk, Vector3(minf(1.3, width * 0.25), 0.32, 0.06), 0.025,
+			_c(InteriorPalette.TRIM))
+		kit.screen(frame * desk * _at(Vector3(0, 0, 0.031)), Vector2(minf(1.18, width * 0.22), 0.24),
+			_mode(k), 0.2 + 0.3 * k)
 
 static func _at(offset: Vector3) -> Transform3D:
 	return InteriorKit.at(offset)

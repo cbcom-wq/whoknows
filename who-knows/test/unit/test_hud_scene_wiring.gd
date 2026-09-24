@@ -85,9 +85,9 @@ func test_camera_director_announces_piloting_changes():
 	var director: CameraDirector = _root.get_node_or_null("Ship/CameraDirector")
 	assert_has_signal(director, "piloting_changed")
 
-## The cockpit view is a SubViewport painted onto the canopy panes, so the
-## same parser defect that drops a HUD property would silently turn the
-## windshield back into a wall. These read the values back at runtime.
+## The cockpit view is a SubViewport projected through the nose's windows, so
+## the same parser defect that drops a HUD property would silently blank the
+## windshield. These read the values back at runtime.
 
 func test_canopy_camera_looks_out_from_the_pilots_eye():
 	# Not from a point out ahead of the nose, which renders a view the pilot
@@ -126,3 +126,21 @@ func test_canopy_viewport_matches_the_windshield_shape():
 
 func test_interact_prompt_label_is_present():
 	assert_not_null(_root.get_node_or_null("Prompt/Label"), "prompt label survived the parse")
+
+## The nose's windows look the canopy view up by direction from the pilot's
+## eye, so the material must carry that eye and the camera's projection -- and
+## still carry the viewport texture itself.
+func test_canopy_material_projects_the_view_from_the_pilots_eye():
+	var builder: InteriorBuilder = _root.get_node("Ship/Interior/InteriorBuilder")
+	var mat := builder.canopy_material as ShaderMaterial
+	assert_not_null(mat, "canopy material is a ShaderMaterial")
+	assert_eq(mat.shader, InteriorMaterials.CANOPY_SHADER)
+	assert_true(mat.get_shader_parameter(&"canopy_view") is ViewportTexture, "fed by the canopy SubViewport")
+	var eye: Node3D = _root.get_node("Ship/Interior/PilotSeat/Eye")
+	assert_almost_eq(mat.get_shader_parameter(&"eye_world"), eye.global_position, Vector3.ONE * 0.001)
+	var cam: Camera3D = _root.get_node("Ship/Canopy/CanopyCam")
+	assert_almost_eq(mat.get_shader_parameter(&"tan_half_fov_y"), tan(deg_to_rad(cam.fov) * 0.5), 0.0001)
+	assert_almost_eq(mat.get_shader_parameter(&"aspect"), 3.0, 0.01)
+
+func test_the_cabin_has_one_rounded_nose():
+	assert_eq(_root.find_children("NoseShell*", "MeshInstance3D", true, false).size(), 1)

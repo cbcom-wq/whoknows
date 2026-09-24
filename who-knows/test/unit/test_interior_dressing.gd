@@ -115,3 +115,28 @@ func test_wall_frame_sits_on_the_inner_surface_facing_the_room():
 	assert_almost_eq(f.origin, Vector3(0.95, -0.95, 0.0), Vector3.ONE * 0.0001)
 	assert_almost_eq(f.basis.z, Vector3(-1, 0, 0), Vector3.ONE * 0.0001, "+z points into the room")
 	assert_almost_eq(f.basis.y, Vector3.UP, Vector3.ONE * 0.0001)
+
+func _noses() -> Array:
+	return _builder.find_children("NoseShell*", "MeshInstance3D", true, false)
+
+func test_a_windshield_gets_one_nose():
+	for x in [-1, 0, 1]:
+		_put(Vector3i(x, 0, 0), &"deck")
+		_put(Vector3i(x, 0, -1), &"canopy")
+	_builder.rebuild()
+	assert_eq(_noses().size(), 1)
+
+func test_no_windshield_no_nose():
+	_put(Vector3i.ZERO, &"deck")
+	_builder.rebuild()
+	assert_eq(_noses().size(), 0)
+
+func test_nose_spans_its_windshield_and_sits_beyond_it():
+	for x in [-1, 0, 1]:
+		_put(Vector3i(x, 0, 0), &"deck")
+		_put(Vector3i(x, 0, -1), &"canopy")
+	_builder.rebuild()
+	var shell: MeshInstance3D = _noses()[0]
+	var box := shell.mesh.get_aabb()
+	assert_almost_eq(box.size.x, 6.0, 0.01)
+	assert_lt(box.end.z, -0.99, "the whole shell is forward of the canopy plane (z = -1)")

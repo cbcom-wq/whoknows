@@ -1,4 +1,4 @@
-[gd_scene load_steps=29 format=3]
+[gd_scene load_steps=30 format=3]
 
 [ext_resource type="Script" path="res://src/ship/ship.gd" id="1_ship"]
 [ext_resource type="PackedScene" path="res://scenes/avatar.tscn" id="2_avatar"]
@@ -16,6 +16,7 @@
 [ext_resource type="Script" path="res://src/ui/panels/velocity_panel.gd" id="14_velocity_panel"]
 [ext_resource type="Script" path="res://src/ui/panels/attitude_panel.gd" id="15_attitude_panel"]
 [ext_resource type="Script" path="res://src/ui/hud_band.gd" id="16_hud_band"]
+[ext_resource type="Shader" path="res://data/materials/interior/canopy_window.gdshader" id="17_canopy_window"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_flighttest"]
 sky_top_color = Color(0.02, 0.02, 0.05, 1)
@@ -63,10 +64,10 @@ height = 1000.0
 resource_local_to_scene = true
 viewport_path = NodePath("Ship/Canopy")
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_canopy"]
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_canopy"]
 resource_local_to_scene = true
-shading_mode = 0
-albedo_texture = SubResource("ViewportTexture_canopy")
+shader = ExtResource("17_canopy_window")
+shader_parameter/canopy_view = SubResource("ViewportTexture_canopy")
 
 [sub_resource type="BoxMesh" id="BoxMesh_light_strip"]
 size = Vector3(1, 0.06, 0.2)
@@ -144,7 +145,7 @@ camera_path = NodePath("../../CanopyCam")
 
 [node name="InteriorBuilder" type="Node3D" parent="Ship/Interior"]
 script = ExtResource("10_interior_builder")
-canopy_material = SubResource("StandardMaterial3D_canopy")
+canopy_material = SubResource("ShaderMaterial_canopy")
 
 [node name="CeilingLight1" type="OmniLight3D" parent="Ship/Interior"]
 position = Vector3(0, 0.85, -5)

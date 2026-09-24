@@ -199,33 +199,6 @@ func test_fixtures_are_cleared_on_rebuild():
 	_builder.rebuild()
 	assert_eq(_builder.fixture_count(), 1, "rebuilding must not stack fixtures")
 
-## Every canopy pane shows the same SubViewport, so without a UV split each
-## pane renders the whole forward view and the windshield reads as three
-## copies of the same picture side by side rather than one window.
-func test_canopy_panes_split_the_view_between_them():
-	_cat.register(_def(&"canopy", BlockDefinition.Occupancy.SOLID))
-	for x in [-1, 0, 1]:
-		_put(Vector3i(x, 0, 0), &"deck")
-		_put(Vector3i(x, 0, -1), &"canopy")
-	_builder.rebuild()
-	assert_eq(_builder.canopy_face_count(), 3)
-	var uvs := _builder.canopy_pane_uvs()   # [{scale, offset}], ordered by x
-	for pane in uvs:
-		assert_almost_eq(pane["scale"].x, 1.0 / 3.0, 0.001, "each pane is a third")
-		assert_almost_eq(pane["scale"].y, 1.0, 0.001, "one row of panes")
-	assert_almost_eq(uvs[0]["offset"].x, 0.0, 0.001, "port pane shows the left third")
-	assert_almost_eq(uvs[1]["offset"].x, 1.0 / 3.0, 0.001)
-	assert_almost_eq(uvs[2]["offset"].x, 2.0 / 3.0, 0.001)
-
-func test_a_lone_canopy_pane_shows_the_whole_view():
-	_cat.register(_def(&"canopy", BlockDefinition.Occupancy.SOLID))
-	_put(Vector3i(0, 0, 0), &"deck")
-	_put(Vector3i(0, 0, -1), &"canopy")
-	_builder.rebuild()
-	var pane: Dictionary = _builder.canopy_pane_uvs()[0]
-	assert_almost_eq(pane["scale"], Vector2.ONE, Vector2.ONE * 0.001)
-	assert_almost_eq(pane["offset"], Vector2.ZERO, Vector2.ONE * 0.001)
-
 ## A porthole is glass, not a way out: the picture has a hole, the collider
 ## does not.
 func test_porthole_wall_keeps_a_whole_collider_and_draws_four_boxes():
@@ -252,3 +225,14 @@ func test_floor_takes_its_zone_colour():
 			continue
 		var expected := InteriorPalette.FLOOR if is_equal_approx(m.position.z, 4.0) else InteriorPalette.FLOOR_BRIDGE
 		assert_eq((m.material_override as StandardMaterial3D).albedo_color, expected)
+
+## The canopy is the dressing's rounded nose now; the builder keeps only the
+## collider, so the avatar still stops at the windshield plane.
+func test_canopy_face_has_a_collider_and_no_box():
+	_cat.register(_def(&"canopy", BlockDefinition.Occupancy.SOLID))
+	_put(Vector3i(0, 0, 0), &"deck")
+	_put(Vector3i(1, 0, 0), &"canopy")
+	_builder.rebuild()
+	var plane := Vector3(ShipGrid.CELL_SIZE * 0.5, 0, 0)
+	assert_eq(_structure_colliders().filter(func(c): return c.position.is_equal_approx(plane)).size(), 1)
+	assert_eq(_structure_meshes().filter(func(m): return m.position.is_equal_approx(plane)).size(), 0)

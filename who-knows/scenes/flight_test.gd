@@ -33,7 +33,8 @@ func _ready() -> void:
 	_wire_hud()
 	_wire_prompt()
 
-## Puts the canopy camera where the pilot's head is.
+## Puts the canopy camera where the pilot's head is, and tells the nose's
+## windows where that is.
 ##
 ## Interior space and exterior space are both grid space, offset from each
 ## other, so the eye's interior-local position is exactly where that eye
@@ -41,11 +42,20 @@ func _ready() -> void:
 ## position in the scene keeps one source of truth: move the seat and the
 ## view through the glass moves with it.
 ##
-## The old hardcoded value put the camera five metres ahead of the nose,
-## which is why flying felt like watching the ship from outside it.
+## The windows sample the canopy view by direction from the eye
+## (canopy_window.gdshader), so the material needs the eye's world position
+## and the camera's projection -- set here, from the same camera and viewport.
 func _aim_canopy_view() -> void:
 	var eye: Node3D = $Ship/Interior/PilotSeat/Eye
 	$Ship/Exterior/CanopyRemote.position = _ship.interior.to_local(eye.global_position)
+	var material := _ship.interior_builder.canopy_material as ShaderMaterial
+	if material == null:
+		return
+	var cam: Camera3D = $Ship/Canopy/CanopyCam
+	var view: SubViewport = $Ship/Canopy
+	material.set_shader_parameter(&"eye_world", eye.global_position)
+	material.set_shader_parameter(&"tan_half_fov_y", tan(deg_to_rad(cam.fov) * 0.5))
+	material.set_shader_parameter(&"aspect", float(view.size.x) / float(view.size.y))
 
 ## Shows what the avatar is looking at. Interactor has emitted this since it
 ## was written, with nothing listening: the seat was an invisible collider

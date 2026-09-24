@@ -16,6 +16,8 @@ static func build(layout: InteriorLayout, body: StaticBody3D, canopy_material: M
 	var kit := InteriorKit.new(root, body)
 	for face in layout.faces():
 		_dress(kit, face)
+	for group in layout.canopy_groups():
+		_nose(kit, group, canopy_material)
 	kit.commit()
 	return root
 
@@ -37,6 +39,24 @@ static func floor_y(coord: Vector3i) -> float:
 ## A face's stable 0..1 variety, for what its props show.
 static func face_variety(face: Dictionary) -> float:
 	return float(InteriorLayout.face_hash(face["coord"], face["normal"]) % 1000) / 1000.0
+
+## One rounded nose over a windshield group, in a frame on the canopy plane at
+## floor level: +x across the group, +y up, +z back into the room.
+static func _nose(kit: InteriorKit, group: Dictionary, material: Material) -> void:
+	var normal: Vector3i = group["normal"]
+	var n := Vector3(normal)
+	var across := Vector3.UP.cross(-n)
+	var coords: Array = group["coords"]
+	var lo := INF
+	var hi := -INF
+	for coord: Vector3i in coords:
+		var c := ShipGrid.cell_center(coord).dot(across)
+		lo = minf(lo, c - ShipGrid.CELL_SIZE * 0.5)
+		hi = maxf(hi, c + ShipGrid.CELL_SIZE * 0.5)
+	var first: Vector3i = coords[0]
+	var plane := (ShipGrid.cell_center(first) + n * ShipGrid.CELL_SIZE * 0.5).dot(n)
+	var origin := across * ((lo + hi) * 0.5) + n * plane + Vector3.UP * floor_y(first)
+	InteriorProps.nose(kit, Transform3D(Basis(across, Vector3.UP, -n), origin), hi - lo, material)
 
 static func _dress(kit: InteriorKit, face: Dictionary) -> void:
 	var coord: Vector3i = face["coord"]

@@ -76,3 +76,26 @@ func test_props_honour_a_rotated_frame():
 	var c: CollisionShape3D = _colliders()[0]
 	var local := f.affine_inverse() * c.position
 	assert_gt(local.z, 0.0, "still in front of its wall, in the wall's own frame")
+
+func test_nose_builds_a_rounded_shell_the_width_of_its_group():
+	var shell := InteriorProps.nose(_kit, Transform3D.IDENTITY, 6.0, InteriorMaterials.canopy_fallback())
+	var box := shell.mesh.get_aabb()
+	assert_almost_eq(box.size.x, 6.0, 0.01)
+	assert_almost_eq(box.size.y, InteriorProps.HEADROOM, 0.01)
+	assert_almost_eq(box.size.z, InteriorProps.NOSE_DEPTH, 0.01, "bulges forward, away from the room")
+	assert_lt(box.position.z, -1.0, "forward is -z in the nose's frame")
+
+func test_nose_pushes_its_windows_and_colours_to_the_material():
+	var m: ShaderMaterial = InteriorMaterials.canopy_fallback().duplicate()
+	InteriorProps.nose(_kit, Transform3D.IDENTITY, 6.0, m)
+	assert_eq(m.get_shader_parameter(&"window_0"), InteriorProps.NOSE_WINDOWS[0])
+	assert_eq(m.get_shader_parameter(&"shell_color"), InteriorPalette.WALL)
+
+func test_nose_has_a_cockpit_light():
+	InteriorProps.nose(_kit, Transform3D.IDENTITY, 6.0, InteriorMaterials.canopy_fallback())
+	assert_eq(_lights(&"cockpit").size(), 1)
+
+func test_a_narrow_nose_still_builds():
+	var shell := InteriorProps.nose(_kit, Transform3D.IDENTITY, 2.0, null)
+	assert_not_null(shell)
+	assert_true(shell.material_override is ShaderMaterial, "null material falls back, never a hole")

@@ -8,10 +8,10 @@ extends Node3D
 ## InteriorLayout; everything attached to the surfaces is InteriorDressing's
 ## (docs/superpowers/specs/2026-09-23-ship-interior-redesign-design.md §4-§5).
 ##
-## A walkable cell whose face touches a `canopy` cell gets a canopy surface
-## there instead of a wall (art direction §7 item 4) -- the same box
-## geometry, a different material and a separate count, so the shuttle's raked
-## windshield is real glass with a real collider, not a hole in the hull.
+## A walkable cell whose face touches a `canopy` cell keeps a collider there
+## but no box: the visible canopy is the rounded nose InteriorDressing builds
+## over the whole windshield (spec §6), so the avatar stops at the plane like
+## a railing while the pilot looks out through the nose's windows.
 ##
 ## The output never moves. That is the whole architecture.
 ##
@@ -40,10 +40,10 @@ const _SLAB := Vector3(ShipGrid.CELL_SIZE, FLOOR_THICKNESS, ShipGrid.CELL_SIZE)
 ## collision_mask = 0; see _physics_body below). If empty, the owned body
 ## is parented directly under this node.
 @export var body_path: NodePath
-## Wired by Task 15 to the material carrying the canopy SubViewport's
-## ViewportTexture. Stays null in tests -- falls back to an ordinary
-## opaque material so a headless build still produces a complete,
-## collidable interior and never crashes or leaves a hole.
+## The nose shell's material: a ShaderMaterial on canopy_window.gdshader
+## carrying the canopy SubViewport's ViewportTexture. Stays null in tests,
+## where the nose falls back to the same shader with black windows -- never a
+## hole.
 @export var canopy_material: Material
 
 var _grid: ShipGrid
@@ -52,7 +52,6 @@ var _layout: InteriorLayout
 var _walkable: Array[Vector3i] = []
 var _walls: Array[CollisionShape3D] = []
 var _canopy_faces: Array[CollisionShape3D] = []
-var _canopy_panes: Array[Dictionary] = []   # [{scale, offset}], see canopy_pane_uvs()
 var _fixtures: Array[MeshInstance3D] = []
 var _gravity: Dictionary = {}   # Vector3i -> float
 
@@ -63,8 +62,6 @@ var _gravity: Dictionary = {}   # Vector3i -> float
 # interior_geometry collision convention (layer 2, mask 0) a single
 # assignment instead of one per box.
 var _physics_body: StaticBody3D
-
-var _canopy_fallback_material: StandardMaterial3D
 
 func bind(grid: ShipGrid, catalog: BlockCatalog) -> void:
 	_grid = grid
@@ -103,12 +100,6 @@ func wall_count() -> int:
 func canopy_face_count() -> int:
 	return _canopy_faces.size()
 
-## Each canopy pane's share of the SubViewport, as {scale, offset} in UV
-## units, ordered as the panes were built. One pane shows the whole view;
-## three in a row show a third each, so together they read as one window.
-func canopy_pane_uvs() -> Array[Dictionary]:
-	return _canopy_panes.duplicate()
-
 func fixture_count() -> int:
 	return _fixtures.size()
 
@@ -144,7 +135,6 @@ func _clear() -> void:
 	_layout = null
 	_walls.clear()
 	_canopy_faces.clear()
-	_canopy_panes.clear()
 	_fixtures.clear()
 	_walkable.clear()
 	_gravity.clear()
@@ -154,7 +144,6 @@ func _body() -> Node:
 
 func _build_structure() -> void:
 	var half := ShipGrid.CELL_SIZE * 0.5
-	var panes: Array[Dictionary] = []
 	for face in _layout.faces():
 		var coord: Vector3i = face["coord"]
 		var normal: Vector3i = face["normal"]
@@ -172,8 +161,7 @@ func _build_structure() -> void:
 					_walls.append(_add_box(_physics_body, _wall_size(normal), at,
 						InteriorMaterials.flat(InteriorPalette.WALL)))
 			InteriorLayout.Kind.CANOPY:
-				panes.append({"coord": coord, "face": normal, "size": _wall_size(normal), "position": at})
-	_build_canopy_panes(panes)
+				_canopy_faces.append(_add_collider(_physics_body, _wall_size(normal), at))
 
 static func _floor_colour(zone: StringName) -> Color:
 	return InteriorPalette.FLOOR_BRIDGE if zone == InteriorLayout.ZONE_BRIDGE else InteriorPalette.FLOOR
@@ -205,67 +193,6 @@ func _add_porthole_wall(at: Vector3, normal: Vector3i) -> void:
 	var above := half - (hole_y + s)
 	_add_visual(_physics_body, thick + along * 2.0 * s + Vector3.UP * above,
 		at + Vector3.UP * (half - above * 0.5), material)
-
-## Builds the canopy faces once every pane is known, because each pane's
-## material depends on how many panes share its plane.
-##
-## All panes show the same SubViewport. Left alone, each would render the
-## whole forward view, and a three-cell windshield would read as three
-## copies of one picture rather than one window -- so each pane takes its
-## own share of the texture, by column and row within its plane.
-func _build_canopy_panes(panes: Array[Dictionary]) -> void:
-	var groups: Dictionary = {}   # plane key -> Array[Dictionary]
-	for pane in panes:
-		var face: Vector3i = pane["face"]
-		var coord: Vector3i = pane["coord"]
-		var across: int = coord.x if face.z != 0 else coord.z
-		var key := "%s:%d" % [face, coord.z if face.z != 0 else coord.x]
-		pane["across"] = across
-		groups.get_or_add(key, []).append(pane)
-
-	for key in groups:
-		var group: Array = groups[key]
-		var columns := _sorted_unique(group, "across", false)
-		var rows := _sorted_unique(group, "row", true)
-		var scale := Vector2(1.0 / columns.size(), 1.0 / rows.size())
-		group.sort_custom(func(a, b): return a["across"] < b["across"])
-		for pane in group:
-			var offset := Vector2(
-				columns.find(pane["across"]) * scale.x,
-				rows.find(pane["coord"].y) * scale.y
-			)
-			_canopy_panes.append({"scale": scale, "offset": offset})
-			_canopy_faces.append(_add_box(
-				_physics_body, pane["size"], pane["position"], _pane_mat(scale, offset)
-			))
-
-## The distinct values of `field` across a pane group, sorted. Rows sort
-## downward (v increases down the texture); columns sort upward.
-func _sorted_unique(group: Array, field: String, descending: bool) -> Array:
-	var values: Array = []
-	for pane in group:
-		var value: int = pane["coord"].y if field == "row" else pane[field]
-		if not values.has(value):
-			values.append(value)
-	values.sort()
-	if descending:
-		values.reverse()
-	return values
-
-## One pane's slice of the shared canopy material. Duplicated per pane
-## because uv1_scale/uv1_offset live on the material, not the surface; the
-## duplicate is shallow, so every pane still samples the one ViewportTexture
-## rather than a copy of it.
-func _pane_mat(scale: Vector2, offset: Vector2) -> Material:
-	var base := _canopy_mat()
-	if not base is BaseMaterial3D:
-		return base
-	if scale.is_equal_approx(Vector2.ONE) and offset.is_zero_approx():
-		return base
-	var mat: BaseMaterial3D = base.duplicate()
-	mat.uv1_scale = Vector3(scale.x, scale.y, 1.0)
-	mat.uv1_offset = Vector3(offset.x, offset.y, 0.0)
-	return mat
 
 ## Draws every MOUNT block that has a mesh: seats, consoles, ladders -- the
 ## fixtures a player sees and walks up to. Without this the pilot seat is an
@@ -330,13 +257,3 @@ func _compute_gravity() -> void:
 				g = DEFAULT_GRAVITY
 				break
 		_gravity[coord] = g
-
-## Falls back to an ordinary opaque material when canopy_material hasn't
-## been wired by the scene (always true in this builder's own tests).
-func _canopy_mat() -> Material:
-	if canopy_material != null:
-		return canopy_material
-	if _canopy_fallback_material == null:
-		_canopy_fallback_material = StandardMaterial3D.new()
-		_canopy_fallback_material.albedo_color = Color("141a22")   # canopy glass, unlit
-	return _canopy_fallback_material
