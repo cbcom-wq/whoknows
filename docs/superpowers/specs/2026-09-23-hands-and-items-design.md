@@ -24,6 +24,10 @@ the items, the bolt and the flashes.
 > 2. **No grab.** Taking something now plays a **grab swipe** (§8.3).
 > 3. **Too precise an aim.** When the ray is not on anything usable, the item **nearest the line
 >    of sight** is offered (§7.2).
+>
+> **Amended 2026-09-24, later: the ship-and-space set.** The owner asked for more things to handle,
+> "mostly props and a few uses". Twelve more items, three of them with a use, a `tool` stow class,
+> a hold angle, and a status in the prompt: §4.5.
 
 ---
 
@@ -158,6 +162,7 @@ enum Grip { WIELD, CARRY }
 @export var use: Script              ## optional; extends ItemUse
 @export var grip_point: Vector3      ## WIELD: item-local point the palm closes on
 @export var use_point: Vector3       ## item-local point a use comes out of (the muzzle)
+@export var hold_rotation: Vector3   ## degrees; turns it in the hands (amended 2026-09-24, §4.5)
 ```
 
 **Item-local frame:** origin at the collider's centre, +y up, −z forward (the muzzle direction).
@@ -171,7 +176,7 @@ enum Grip { WIELD, CARRY }
 | `canister` | Canister | wield (by its neck; amended 2026-09-24) | 4 kg | 0.16 × 0.34 × 0.16 | `small` | — |
 | `crate` | Crate | carry | 12 kg | 0.45 × 0.35 × 0.35 | `crate` | — |
 
-Sizes are pinned in the plan by rendering the looks.
+Sizes are pinned in the plan by rendering the looks. Twelve more items join the set in §4.5.
 
 ### 4.3 The looks
 
@@ -223,6 +228,75 @@ of what an item knows about who holds it.
 
 **Where items live.** `Ship` creates `Interior/Items` in code, and every item is its child whenever
 it is not wielded. Interior rebuilds never touch it (§5.3).
+
+### 4.5 The ship-and-space set (amended 2026-09-24)
+
+Twelve more items. Most are props to pick up, carry, throw and put back; three do something.
+
+| Id | Name | Grip | Mass | Size (m) | Stow class | Use | Where it lives |
+|---|---|---|---|---|---|---|---|
+| `toolbox` | Toolbox | carry | 8 kg | 0.50 × 0.26 × 0.20 | `crate` | — | closet shelves |
+| `spare_helmet` | Spare helmet | carry | 2.5 kg | 0.34 × 0.34 × 0.36 | `crate` | — | closet, narrow shelves |
+| `power_cell` | Power cell | wield | 2 kg | 0.10 × 0.18 × 0.10 | `small` | — | closet shelves |
+| `o2_tank` | O2 tank | wield | 5 kg | 0.13 × 0.40 × 0.13 | `small` | — | closet, narrow shelves |
+| `spanner` | Spanner | wield | 0.8 kg | 0.06 × 0.025 × 0.30 | `tool` | — | closet shelves |
+| `spare_module` | Spare module | wield | 0.5 kg | 0.18 × 0.03 × 0.12 | `tool` | — | closet shelves |
+| `medkit` | Medkit | wield | 1.5 kg | 0.30 × 0.22 × 0.12 | `tool` | — | washstand bracket |
+| `ration_tin` | Ration tin | wield | 0.4 kg | 0.08 × 0.10 × 0.08 | `small` | — | closet, narrow shelves |
+| `rock_sample` | Rock sample | wield | 3 kg | 0.16 × 0.12 × 0.14 | `small` | — | closet shelves |
+| `hand_lamp` | Hand lamp | wield | 0.6 kg | 0.06 × 0.07 × 0.22 | `tool` | `HandLamp` | closet shelves |
+| `flare` | Flare | wield | 0.3 kg | 0.04 × 0.04 × 0.26 | `tool` | `Flare` | two on the ammo crates |
+| `datapad` | Datapad | wield | 0.5 kg | 0.18 × 0.02 × 0.26 | `tool` | `Datapad` | the lower bunk |
+
+**The uses.** Each extends `ItemUse`, which is now a `Node3D` so a use can carry lights and glow.
+
+- **`HandLamp`:** use switches a warm `SpotLight3D` beam (energy 2.6, range 10 m, 22°, no
+  shadows) and a glowing lens on and off. It keeps its state when dropped, stowed or thrown.
+- **`Flare`:** use strikes it, once. It burns for 60 s with a flickering warm `OmniLight3D`
+  (energy 1.3, range 6 m) and a coral flame, wherever it is, then goes out for good.
+- **`Datapad`:** use toggles its screen, drawn with the kit's screen shader.
+
+Every light is `LIGHT_WARM` (visual style guide §2.3): the flare burns warm, not signal red, and its
+tip carries the plasma coral. The lamp and flare light layers 1 and 2, so they still light the
+hull on a spacewalk. The shader budget stays three.
+
+**`ItemUse` gains two hooks,** both with quiet defaults:
+
+- `status() -> String`, shown in the prompt: *Pick up Hand lamp (on)*, *Pick up Flare (burning)*,
+  *Take Flare (spent)*. Default `""`.
+- `recoil() -> float`, the hand's kick on use. Only `PlasmaEmitter` kicks (1.0); default 0.
+
+**The hold angle.** `hold_rotation` turns an item in the hands, in degrees about x, y and z. A
+one-handed item pivots on its grip point; a crate on its centre. It exists because long, thin items
+held straight ahead hide behind the fist. Pinned by rendering each item at eye height:
+
+| Item | Hold angle | Why |
+|---|---|---|
+| spanner | 50, 0, 0 | its head shows above the fist |
+| spare_module | 30, 0, 0 | the board faces you |
+| medkit | 60, 0, 0 | held out in front, lid up, not hanging out of view |
+| hand_lamp | −6, 5, 0 | the beam lands on the reticle at a few metres |
+| flare | 60, 0, 0 | held up like a torch |
+| datapad | 55, 0, 0 | the screen faces you |
+| spare_helmet | −35, 0, 0 | carried with the visor toward you |
+
+**The `tool` stow class** (`InteriorProps.STOW_CLEARANCE` 0.14 m) holds flat, one-handed things.
+New spots, each published by its prop in its own frame (§5.2):
+
+| Prop | New spots |
+|---|---|
+| `shelves` (1.7 m) | a `crate` on the lowest tier; 3 `small` on the second tier; 3 `tool` on the third |
+| `shelves` (0.85 m) | 2 `small` on a middle tier; a `crate` on the lowest tier |
+| `bunks` | a `tool` on the lower mattress; the upper bunk now has its own collider |
+| `washstand` | a `tool` on a new bracket 1.15 m up |
+| `ammo_crates` | 2 `tool` on the lids |
+
+**Stocking from lists.** `InteriorDressing` stocks each shelf spot by cycling a list per stow class,
+so the closet holds a mix, and the spots that already existed keep their old stock:
+
+- 1.7 m shelves: `small` canister, canister, power cell, power cell, rock sample; `crate` crate,
+  toolbox; `tool` spanner, spare module, hand lamp.
+- 0.85 m shelves: `small` canister, O2 tank, ration tin; `crate` spare helmet.
 
 ---
 
