@@ -427,8 +427,6 @@ static func shelves(kit: InteriorKit, f: Transform3D, variety: float, width := 1
 	var half := width * 0.5
 	for x in [-(half - 0.03), half - 0.03]:
 		kit.bevel_box(SOLID, f * _at(Vector3(x, 1.0, 0.2)), Vector3(0.05, 2.0, 0.4), 0.015, _c(InteriorPalette.WALL_LOW))
-	var crates: Array[Color] = [InteriorPalette.AMBER, InteriorPalette.SKY, InteriorPalette.CORAL,
-		InteriorPalette.OLIVE, InteriorPalette.TRIM]
 	for level in 4:
 		var y := 0.25 + level * 0.47
 		kit.bevel_box(SOLID, f * _at(Vector3(0, y, 0.2)), Vector3(width - 0.06, 0.04, 0.4), 0.015,
@@ -442,7 +440,7 @@ static func shelves(kit: InteriorKit, f: Transform3D, variety: float, width := 1
 				break
 			var tall := 0.18 + 0.18 * fposmod(h * 5.7, 1.0)
 			kit.bevel_box(SOLID, f * _at(Vector3(x + w * 0.5, y + 0.02 + tall * 0.5, 0.2)),
-				Vector3(w - 0.03, tall, 0.3), 0.03, _c(crates[int(h * 5.0) % 5]))
+				Vector3(w - 0.03, tall, 0.3), 0.03, _c(InteriorPalette.CRATES[int(h * 5.0) % 5]))
 			x += w + 0.04
 			k += 1
 	kit.collider(f * _at(Vector3(0, 1.0, 0.2)), Vector3(width, 2.0, 0.4))

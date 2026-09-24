@@ -43,3 +43,13 @@ const MATTRESS := Color("6f9c9a")
 const GUNMETAL := Color("3a3d44")
 const OLIVE := Color("8a9a5b")
 const MIRROR := Color("5a7e96")
+
+## The suit (docs/superpowers/specs/2026-09-23-hands-and-items-design.md §8.2):
+## a warm off-white glove, with dark padding on the knuckles and finger backs.
+const SUIT := Color("e8dfcc")
+const SUIT_PAD := Color("4b4641")
+## Plasma (hands-and-items spec §9): the bolt, the muzzle flash and the impact
+## flash. Hot coral-amber, between CORAL and AMBER.
+const PLASMA := Color("ff9a52")
+## Crates, on shelves and as items: one of these, chosen by variety.
+const CRATES: Array[Color] = [AMBER, SKY, CORAL, OLIVE, TRIM]
