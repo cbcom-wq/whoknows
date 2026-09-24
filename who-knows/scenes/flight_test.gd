@@ -12,10 +12,12 @@ extends Node3D
 @onready var _prompt: Label = $Prompt/Label
 @onready var _interactor: Interactor = $Ship/Interior/Avatar/Head/Interactor
 @onready var _avatar: Avatar = $Ship/Interior/Avatar
+@onready var _universe: Universe = $Universe
 
 var _reticle: Reticle
 var _interact_prompt := ""
 var _grasp_prompt := ""
+var _universe_readout: Label
 
 ## The interior's own mood (spec §3.3): dim and warm, with bloom turning the
 ## thin lit strips into light. It goes on the interior camera, not the world,
@@ -43,6 +45,7 @@ func _ready() -> void:
 	_wire_hud()
 	_wire_prompt()
 	_wire_hands()
+	_wire_universe()
 
 ## The interior camera is also the seated camera -- CameraDirector moves it
 ## between head and seat -- so one assignment covers walking and flying.
@@ -96,6 +99,33 @@ func _on_view_changed(view: CameraDirector.View, moving: bool) -> void:
 	_avatar.grasp.first_person = first_person
 	_avatar.hands.shown = first_person and not moving
 	_reticle.visible = first_person and not moving
+
+## The floating origin (asteroids spec §4) follows whoever is outside: the
+## hull, or you on a spacewalk. Wired here so neither Ship nor Avatar needs to
+## know about Universe. F3 shows where you are in the universe.
+func _wire_universe() -> void:
+	_universe.set_focus(_ship.exterior)
+	_avatar.mode_changed.connect(
+		func(mode: Avatar.Mode) -> void:
+			_universe.set_focus(_avatar if mode == Avatar.Mode.SUIT else _ship.exterior)
+	)
+	_universe_readout = Label.new()
+	_universe_readout.name = "UniverseReadout"
+	_universe_readout.position = Vector2(16, 16)
+	_universe_readout.visible = false
+	$Prompt.add_child(_universe_readout)
+
+func _unhandled_key_input(event: InputEvent) -> void:
+	var key := event as InputEventKey
+	if key != null and key.pressed and not key.echo and key.keycode == KEY_F3:
+		_universe_readout.visible = not _universe_readout.visible
+
+func _process(_delta: float) -> void:
+	if not _universe_readout.visible or _universe.focus == null:
+		return
+	var u := _universe.to_universe(_universe.focus.global_position)
+	_universe_readout.text = "universe %.3f, %.3f, %.3f km   origin shifts %d" % [
+		(u.x + u.fx) / 1000.0, (u.y + u.fy) / 1000.0, (u.z + u.fz) / 1000.0, _universe.shifts]
 
 func _starter_grid() -> ShipGrid:
 	var g := ShipGrid.new()

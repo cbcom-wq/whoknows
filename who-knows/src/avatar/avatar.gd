@@ -174,6 +174,7 @@ func _process(delta: float) -> void:
 func enter_suit(outside: Node3D, pose: Transform3D, start_velocity: Vector3, ship_hull: RigidBody3D) -> void:
 	_interior_environment = camera.environment
 	_move_to(outside)
+	add_to_group(Universe.EXTERIOR_SPACE)
 	global_transform = pose
 	mode = Mode.SUIT
 	hull = ship_hull
@@ -199,6 +200,7 @@ func enter_plating(interior: Node3D, pose: Transform3D, pitch: float, start_velo
 		righting: Quaternion, eye_from := Vector3.INF) -> void:
 	_camera_home = camera.position
 	_move_to(interior)
+	remove_from_group(Universe.EXTERIOR_SPACE)
 	global_transform = pose
 	mode = Mode.PLATING
 	hull = null

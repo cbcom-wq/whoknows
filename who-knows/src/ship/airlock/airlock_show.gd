@@ -70,6 +70,9 @@ func setup(room_frame: Transform3D, nozzles: Array[Transform3D], light: OmniLigh
 		_burst = _emitter("Burst", _puff_mesh(true), layer, BURST_PUFFS, BURST_LIFETIME, _burst_process())
 		_burst.one_shot = true
 		_burst.explosiveness = 0.85
+		# Its puffs are in world space, which a floating-origin shift cannot
+		# move: the shift waits for them (asteroids spec §4.3).
+		_burst.add_to_group(Universe.HOLDS_SHIFT)
 		_burst.transform = room_frame * Transform3D(Basis.IDENTITY,
 			Vector3(0, InteriorProps.HATCH_HEIGHT * 0.5, -InteriorProps.BAY * 0.5))
 		return

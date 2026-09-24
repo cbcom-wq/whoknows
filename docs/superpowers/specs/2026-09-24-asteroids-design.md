@@ -504,3 +504,22 @@ Following the style guide's "chunky low-poly shapes in flat colour":
 | A crash flings you across the room | The 12 m/s² shove cap and the jolt (§7.5). |
 | Promoted bodies overlap and explode apart | The recipe guarantees no overlaps (§5.4), tested over thousands of cells. |
 | Precision of the density noise far from the universe origin | Density is sampled at cell centres in kilometres; 15 km features need no finer precision. |
+
+---
+
+## 15. As built (plan 1: the floating origin, 2026-09-24)
+
+- The focus is set by `flight_test.gd` (the scene bootstrap) on `Avatar.mode_changed`, rather
+  than by `Ship` and `Avatar` as §4.2 had it: neither needs to know about `Universe`. The hull
+  and the spacewalker join `&"exterior_space"` themselves.
+- `F3` in the flight test toggles a readout of your universe position and the shift count.
+- **Live check (§4.5),** real scene, windowed, chase camera, a marker cube every 400 m:
+  - 50 km at 1 km/s (25 shifts) and 10 km at 300 m/s (5 shifts). Every marker's motion relative
+    to the hull across a shift tick matched an ordinary tick to float noise (2.6 mm at 1 km/s,
+    under 2 mm at 300 m/s).
+  - The image change at shift frames (max 0.0031) stayed below ordinary frames near a shift
+    (mean 0.0059–0.0105, max 0.0195).
+  - Frame times with no captures running: 1,440 frames through 11 shifts, none over 33 ms, every
+    shift frame 16.7 ms (one vsync).
+  - A spacewalk beside the ship at 300 m/s across 2 shifts: 0.1 mm drift from the ship, 0.1 mm
+    change in distance to the airlock beacon.

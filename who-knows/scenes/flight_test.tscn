@@ -1,4 +1,4 @@
-[gd_scene load_steps=26 format=3]
+[gd_scene load_steps=27 format=3]
 
 [ext_resource type="Script" path="res://src/ship/ship.gd" id="1_ship"]
 [ext_resource type="PackedScene" path="res://scenes/avatar.tscn" id="2_avatar"]
@@ -19,6 +19,7 @@
 [ext_resource type="Shader" path="res://data/materials/interior/canopy_window.gdshader" id="17_canopy_window"]
 [ext_resource type="Script" path="res://src/ship/canopy_portal.gd" id="18_canopy_portal"]
 [ext_resource type="Script" path="res://src/ui/airlock_marker.gd" id="19_airlock_marker"]
+[ext_resource type="Script" path="res://src/world/universe.gd" id="20_universe"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_flighttest"]
 sky_top_color = Color(0.02, 0.02, 0.05, 1)
@@ -58,6 +59,9 @@ environment = SubResource("Environment_flighttest")
 rotation_degrees = Vector3(-45, 30, 0)
 shadow_enabled = true
 light_cull_mask = 5
+
+[node name="Universe" type="Node" parent="."]
+script = ExtResource("20_universe")
 
 [node name="DebrisField" type="MultiMeshInstance3D" parent="."]
 script = ExtResource("8_debris_field")
