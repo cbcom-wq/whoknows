@@ -33,6 +33,9 @@ var airlocks: Dictionary = {}   # Vector3i -> Airlock
 
 var _stocked := false
 var _airlocks_root: Node
+## The ship's air handling (airlock spec §6): heard everywhere aboard,
+## through the Ship bus, so it drains away with the air in the airlock.
+var _hum: AudioStreamPlayer
 
 @onready var exterior: RigidBody3D = $Exterior
 @onready var interior: Node3D = $Interior
@@ -58,6 +61,13 @@ func _ready() -> void:
 	_airlocks_root = Node.new()
 	_airlocks_root.name = "Airlocks"
 	add_child(_airlocks_root)
+	AudioBuses.ensure()
+	Synth.warm_up()
+	_hum = AudioStreamPlayer.new()
+	_hum.name = "Hum"
+	_hum.bus = AudioBuses.SHIP
+	_hum.volume_db = -16.0
+	add_child(_hum)
 
 func _process(_delta: float) -> void:
 	# hull_livery.gdshader paints its stripe from ship-local height, but
@@ -69,6 +79,19 @@ func _process(_delta: float) -> void:
 	# pitch instead of swimming across it. See hull_livery.gdshader's header
 	# comment for the full derivation.
 	HULL_LIVERY_MATERIAL.set_shader_parameter(&"hull_inverse", exterior.global_transform.affine_inverse())
+	_update_hum()
+
+## The hum plays while the listener is aboard, and stops outside.
+func _update_hum() -> void:
+	var cam := get_viewport().get_camera_3d()
+	var aboard := cam != null and interior.is_ancestor_of(cam)
+	if aboard and not _hum.playing:
+		var s := Synth.sound(&"ship_hum")
+		if s != null:
+			_hum.stream = s
+			_hum.play()
+	elif not aboard and _hum.playing:
+		_hum.stop()
 
 func interior_slot_origin() -> Vector3:
 	# Interior space sits well clear of the combat arena so the walkable

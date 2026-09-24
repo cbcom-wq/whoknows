@@ -36,6 +36,10 @@ var _ship: Ship
 var _hazed_camera: Camera3D
 var _saved_environment: Environment
 var _haze_environment: Environment
+## Positional players in the room (§6), one per place a sound comes from.
+var _players: Dictionary = {}   # StringName -> AudioStreamPlayer3D
+## True while this airlock is setting how much air carries sound.
+var _owns_air := false
 
 func setup(ship: Ship, at: Vector3i) -> void:
 	_ship = ship
@@ -50,6 +54,7 @@ func bind(new_room: AirlockRoom, new_alcove: Node = null) -> void:
 	show = AirlockShow.new()
 	room.add_child(show)
 	show.setup(room.room_frame, room.nozzles, room.ceiling_light, InteriorKit.LAYER)
+	_make_players()
 	for panel in panels():
 		panel.prompt_source = cycle.prompt.bind(panel.role)
 		if not panel.pressed.is_connected(_on_pressed):
@@ -78,8 +83,10 @@ func tick(delta: float) -> void:
 	_apply()
 	show.apply(cycle, delta)
 	_update_haze()
+	_update_air()
 	for c in cues:
 		cue.emit(c, cycle.cue_side)
+		_sound(c, cycle.cue_side)
 
 func _physics_process(delta: float) -> void:
 	tick(delta)
@@ -138,7 +145,72 @@ func _restore_environment() -> void:
 
 func _on_pressed(role: StringName) -> void:
 	cycle.press(role)
+	for panel in panels():
+		if panel.role == role and _players.has(&"panel"):
+			var beep: AudioStreamPlayer3D = _players[&"panel"]
+			beep.global_position = panel.global_position
 	cue.emit(&"panel_beep", AirlockCycle.Door.NONE)
+	_play(&"panel", &"panel_beep")
+
+## The positional player for `key` (&"inner_motor", &"inner_bolt",
+## &"outer_motor", &"outer_bolt", &"room", &"panel").
+func player(key: StringName) -> AudioStreamPlayer3D:
+	return _players.get(key)
+
+func _make_players() -> void:
+	_players.clear()
+	var up := Vector3(0, InteriorProps.HATCH_HEIGHT * 0.7, 0)
+	var spots := {&"outer_motor": room.outer_frame.origin + up, &"outer_bolt": room.outer_frame.origin + up,
+		&"room": room.room_frame.origin + Vector3(0, 1.2, 0), &"panel": room.room_frame.origin}
+	if room.inner_hatch != null:
+		spots[&"inner_motor"] = room.inner_frame.origin + up
+		spots[&"inner_bolt"] = room.inner_frame.origin + up
+	for key: StringName in spots:
+		var p := AudioStreamPlayer3D.new()
+		p.name = "Sound_%s" % key
+		p.bus = AudioBuses.SHIP
+		p.unit_size = 3.0
+		p.max_distance = 30.0
+		p.position = spots[key]
+		room.add_child(p)
+		_players[key] = p
+
+func _play(key: StringName, sound_name: StringName) -> void:
+	var p: AudioStreamPlayer3D = _players.get(key)
+	var s := Synth.sound(sound_name)
+	if p == null or s == null:
+		return
+	p.stream = s
+	p.play()
+
+## Each cue's sound, from the hatch it was about.
+func _sound(c: StringName, door: AirlockCycle.Door) -> void:
+	var side := &"inner" if door == AirlockCycle.Door.INNER else &"outer"
+	match c:
+		&"leaves_closing", &"leaves_opening":
+			_play(StringName(side + "_motor"), &"hatch_motor")
+		&"bolts_home", &"bolts_out":
+			_play(StringName(side + "_bolt"), &"bolt_clunk")
+		&"leaves_shut":
+			_play(StringName(side + "_bolt"), &"seal_thump")
+		&"cycle_start":
+			if cycle.going_out():
+				_play(&"room", &"hiss_out")
+		&"steam_jets":
+			_play(&"room", &"steam_in")
+
+## While the listener is in the room, air carries sound only as well as the
+## room's pressure lets it; leaving hands the air back.
+func _update_air() -> void:
+	var cam := get_viewport().get_camera_3d() if is_inside_tree() else null
+	var inside := cam != null and _ship != null and _ship.interior.is_ancestor_of(cam) \
+		and in_room(_ship.interior.to_local(cam.global_position), room.room_frame)
+	if inside:
+		AudioBuses.set_air(cycle.pressure / AirlockCycle.ATMOSPHERE)
+		_owns_air = true
+	elif _owns_air:
+		AudioBuses.set_air(1.0)
+		_owns_air = false
 
 func _update_warning() -> void:
 	if _ship == null or _ship.exterior == null:
