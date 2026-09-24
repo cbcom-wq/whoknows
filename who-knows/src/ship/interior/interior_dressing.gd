@@ -13,13 +13,61 @@ static func build(layout: InteriorLayout, body: StaticBody3D, canopy_material: M
 	var root := Node3D.new()
 	root.name = "Dressing"
 	body.add_child(root)
-	var kit := InteriorKit.new(root, body)
+	var kit := InteriorKit.new(root, body, portal_material(canopy_material))
 	for face in layout.faces():
 		_dress(kit, face)
 	for group in layout.canopy_groups():
-		_nose(kit, group, canopy_material)
+		var pods: Array = group["pods"]
+		if pods.is_empty():
+			_nose(kit, group, canopy_material)
+		else:
+			_cockpit(kit, group)
+	for fixture in layout.fixtures():
+		_fixture(kit, layout, fixture)
 	kit.commit()
 	return root
+
+## Whether the dressing draws this MOUNT block itself, as a prop. The builder
+## draws a block's own mesh only for the fixtures this leaves out.
+static func draws_fixture(id: StringName) -> bool:
+	return id == InteriorLayout.HELM_ID
+
+## A fixture's frame (cockpit pod spec §5): origin on the floor under it, -z
+## the way it faces, +y up. A helm with a pod ahead stands POD_SEAT_DEPTH
+## beyond the canopy plane, out in the pod; any other fixture at its cell's
+## floor centre.
+static func fixture_frame(layout: InteriorLayout, coord: Vector3i) -> Transform3D:
+	var facing := Vector3i(0, 0, -1)
+	for fixture in layout.fixtures():
+		if fixture["coord"] == coord:
+			facing = InteriorLayout.facing(fixture["orientation"])
+	if facing.y != 0:
+		facing = Vector3i(0, 0, -1)   # a fixture stands upright, whichever way its block points
+	for pod in layout.pods():
+		if pod["coord"] == coord:
+			return pod_frame(coord, pod["normal"]) * InteriorKit.at(Vector3(0, 0, -InteriorProps.POD_SEAT_DEPTH))
+	var origin := ShipGrid.cell_center(coord)
+	origin.y = floor_y(coord)
+	return Transform3D(Basis.looking_at(Vector3(facing), Vector3.UP), origin)
+
+## A pod's frame, as InteriorProps.cockpit_pod expects it: origin at the floor
+## centre of the canopy face it juts out through, on the canopy plane; -z out
+## into the pod, +x across, +y up.
+static func pod_frame(coord: Vector3i, normal: Vector3i) -> Transform3D:
+	var n := Vector3(normal)
+	var origin := ShipGrid.cell_center(coord) + n * ShipGrid.CELL_SIZE * 0.5
+	origin.y = floor_y(coord)
+	return Transform3D(Basis(Vector3.UP.cross(-n), Vector3.UP, -n), origin)
+
+## The PORTAL batch's material: the scene's canopy material -- the window
+## shader fed by the canopy view -- made all window. Without one wired, black
+## glass.
+static func portal_material(canopy_material: Material) -> Material:
+	if canopy_material is ShaderMaterial:
+		var m: ShaderMaterial = canopy_material.duplicate()
+		m.set_shader_parameter(&"all_glass", true)
+		return m
+	return InteriorMaterials.portal_fallback()
 
 ## A wall's frame, as InteriorProps expects it: origin on the wall's inner
 ## surface at floor level, centred along the wall; +x along the wall, +y up,
@@ -57,6 +105,30 @@ static func _nose(kit: InteriorKit, group: Dictionary, material: Material) -> vo
 	var plane := (ShipGrid.cell_center(first) + n * ShipGrid.CELL_SIZE * 0.5).dot(n)
 	var origin := across * ((lo + hi) * 0.5) + n * plane + Vector3.UP * floor_y(first)
 	InteriorProps.nose(kit, Transform3D(Basis(across, Vector3.UP, -n), origin), hi - lo, material)
+
+## A windshield with a helm behind it: the pod out through the helm's face,
+## with a CockpitPod marker at its frame, and a shoulder on every other face.
+static func _cockpit(kit: InteriorKit, group: Dictionary) -> void:
+	var normal: Vector3i = group["normal"]
+	var pods: Array = group["pods"]
+	for coord: Vector3i in group["coords"]:
+		if pods.has(coord):
+			var f := pod_frame(coord, normal)
+			InteriorProps.cockpit_pod(kit, f)
+			var marker := Node3D.new()
+			marker.name = "CockpitPod"
+			marker.transform = f
+			kit.root.add_child(marker)
+		else:
+			InteriorProps.shoulder(kit, wall_frame(coord, normal),
+				face_variety({"coord": coord, "normal": normal}))
+
+## The fixtures the dressing draws itself (draws_fixture), at their frames.
+static func _fixture(kit: InteriorKit, layout: InteriorLayout, fixture: Dictionary) -> void:
+	var coord: Vector3i = fixture["coord"]
+	if fixture["id"] == InteriorLayout.HELM_ID:
+		InteriorProps.pilot_station(kit, fixture_frame(layout, coord),
+			face_variety({"coord": coord, "normal": Vector3i.ZERO}))
 
 static func _dress(kit: InteriorKit, face: Dictionary) -> void:
 	var coord: Vector3i = face["coord"]

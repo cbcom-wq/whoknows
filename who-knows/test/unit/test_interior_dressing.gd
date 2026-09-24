@@ -23,9 +23,10 @@ func _def(id: StringName, occ: BlockDefinition.Occupancy) -> BlockDefinition:
 	d.occupancy = occ
 	return d
 
-func _put(coord: Vector3i, id: StringName) -> void:
+func _put(coord: Vector3i, id: StringName, orientation := 0) -> void:
 	var i := BlockInstance.new()
 	i.block_id = id
+	i.orientation = orientation
 	_grid.set_block(coord, i)
 
 func _dressing() -> Node3D:
@@ -91,7 +92,8 @@ func test_meshes_are_merged_by_material():
 	_builder.rebuild()
 	var batches := _dressing().get_children().filter(
 		func(n): return n is MeshInstance3D and String(n.name).begins_with("Dressing"))
-	assert_between(batches.size(), 1, 4, "one merged mesh per material, not one per piece")
+	assert_between(batches.size(), 1, InteriorKit.BATCH_NAMES.size(),
+		"one merged mesh per material, not one per piece")
 
 func test_dressing_stays_on_the_interior_layer_under_churn():
 	var rng := RandomNumberGenerator.new()
@@ -181,3 +183,67 @@ func test_rooms_survive_churn():
 			_grid.clear_block(coord)
 	_builder.rebuild()
 	assert_eq(_doors().size(), _builder.doorway_count(), "a door for every doorway, however tangled")
+
+## A helm at (0, 0, 0) facing -z, into a three-wide windshield.
+func _helm_behind_a_windshield() -> void:
+	_cat.register(_def(InteriorLayout.HELM_ID, BlockDefinition.Occupancy.MOUNT))
+	for x in [-1, 0, 1]:
+		_put(Vector3i(x, 0, -1), &"canopy")
+	_put(Vector3i(-1, 0, 0), &"deck")
+	_put(Vector3i(0, 0, 0), InteriorLayout.HELM_ID)
+	_put(Vector3i(1, 0, 0), &"deck")
+
+func _pods() -> Array:
+	return _builder.find_children("CockpitPod", "Node3D", true, false)
+
+## Cockpit pod spec §4.
+func test_a_helm_behind_a_windshield_gets_a_pod_not_a_nose():
+	_helm_behind_a_windshield()
+	_builder.rebuild()
+	assert_eq(_noses().size(), 0)
+	assert_eq(_pods().size(), 1)
+	assert_true(_pods()[0].global_transform.is_equal_approx(
+		InteriorDressing.pod_frame(Vector3i.ZERO, Vector3i(0, 0, -1))), "the marker is the pod's frame")
+
+func test_shoulders_flank_the_pod_each_with_a_console_desk():
+	_helm_behind_a_windshield()
+	_builder.rebuild()
+	var consoles := _builder.layout().faces().filter(
+		func(f): return f["variant"] == InteriorLayout.WallVariant.CONSOLE).size()
+	assert_eq(_lights(&"console").size(), consoles + 2)
+
+func test_the_helm_gets_its_chair_and_console():
+	_helm_behind_a_windshield()
+	_builder.rebuild()
+	assert_eq(_lights(&"helm").size(), 1)
+
+func test_pod_frame_sits_on_the_canopy_plane_at_floor_level():
+	var f := InteriorDressing.pod_frame(Vector3i.ZERO, Vector3i(0, 0, -1))
+	assert_almost_eq(f.origin, Vector3(0, -0.95, -1), Vector3.ONE * 0.0001)
+	assert_almost_eq(f.basis * Vector3.FORWARD, Vector3(0, 0, -1), Vector3.ONE * 0.0001, "-z runs out into the pod")
+	var g := InteriorDressing.pod_frame(Vector3i.ZERO, Vector3i(1, 0, 0))
+	assert_almost_eq(g.origin, Vector3(1, -0.95, 0), Vector3.ONE * 0.0001)
+	assert_almost_eq(g.basis * Vector3.FORWARD, Vector3(1, 0, 0), Vector3.ONE * 0.0001)
+	assert_almost_eq(g.basis.y, Vector3.UP, Vector3.ONE * 0.0001)
+
+## Cockpit pod spec §5: in a pod, the chair stands POD_SEAT_DEPTH beyond the
+## canopy plane, facing out through it.
+func test_the_helm_sits_in_its_pod():
+	_helm_behind_a_windshield()
+	_builder.rebuild()
+	var f := InteriorDressing.fixture_frame(_builder.layout(), Vector3i.ZERO)
+	assert_almost_eq(f.origin, Vector3(0, -0.95, -1.0 - InteriorProps.POD_SEAT_DEPTH), Vector3.ONE * 0.0001)
+	assert_almost_eq(f.basis * Vector3.FORWARD, Vector3(0, 0, -1), Vector3.ONE * 0.0001)
+
+func test_a_fixture_without_a_pod_sits_at_its_cell_floor_centre():
+	_cat.register(_def(InteriorLayout.HELM_ID, BlockDefinition.Occupancy.MOUNT))
+	_put(Vector3i(2, 0, 3), InteriorLayout.HELM_ID, 12)   # facing +x
+	_builder.rebuild()
+	var f := InteriorDressing.fixture_frame(_builder.layout(), Vector3i(2, 0, 3))
+	assert_almost_eq(f.origin, Vector3(4, -0.95, 6), Vector3.ONE * 0.0001)
+	assert_almost_eq(f.basis * Vector3.FORWARD, Vector3(1, 0, 0), Vector3.ONE * 0.0001)
+	assert_almost_eq(f.basis.y, Vector3.UP, Vector3.ONE * 0.0001)
+
+func test_the_dressing_draws_the_helm():
+	assert_true(InteriorDressing.draws_fixture(InteriorLayout.HELM_ID))
+	assert_false(InteriorDressing.draws_fixture(&"seat"))

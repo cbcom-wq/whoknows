@@ -70,6 +70,10 @@ Replaces `_starter_grid()` in Task 15 Step 5. Read the tables as plan views, bow
 
 > **Superseded for the cabin interior** by docs/superpowers/specs/2026-09-23-ship-interior-redesign-design.md §7.5 (2026-09-23): rows z = 0..2 are now
 > a centreline corridor with five room blocks either side. The hull and every other cell are unchanged.
+>
+> **Amended** by docs/superpowers/specs/2026-09-23-cockpit-pod-design.md §7 (2026-09-24): `pilot_seat` moves forward to (0, 0, −3) and (0, 0, −2)
+> becomes `deck`, so the helm faces the middle canopy cell and sits in a cockpit pod. The flight
+> balance is unchanged (0.1 t moved 2 m).
 
 ```
  z \ x     −2        −1         0          1         2
@@ -150,7 +154,10 @@ shuttle read and need real meshes; the other ten stay boxes and change nothing.
 | `canopy` | Wedge profile matching `hull_wedge` so the nose line is continuous, with the sloped face as dark glass. |
 | `thruster` | The nacelle pod: a rounded 2 m tube, emissive bell on the aft face, small emissive dome forward. Two surfaces so the bell gets its own emissive material. |
 | `airlock` | Hatch frame with a cyan emissive arch overhead — the aft doorway from the reference interior. Legible from across the cabin as "the way out", which pays off in Slice 3. |
-| `pilot_seat` | Seat plus a raked forward console with emissive readout panels. |
+| `pilot_seat` | Seat plus a raked forward console with emissive readout panels. *Replaced 2026-09-24:* inside, the dressing draws a captain's chair prop (`InteriorProps.pilot_station`); the block keeps a plain `BoxMesh` placeholder for the exterior, and the baked mesh is deleted (cockpit pod spec §5). |
+
+*Every mesh baked for this table was wound backwards, so it rendered inside-out, until 2026-09-24.
+They are fixed, and `test_mesh_winding.gd` keeps them fixed (cockpit pod spec §6).*
 
 **Constraint that shapes all of these:** `ExteriorBuilder` builds **one MultiMesh per block type**
 with `mm.mesh = def.mesh`. There is no per-instance material. Any multi-material block must be an

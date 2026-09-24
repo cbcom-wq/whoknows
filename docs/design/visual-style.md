@@ -1,6 +1,7 @@
 # Who Knows — visual style guide
 
-**Status:** Living document. Owner-approved 2026-09-23, after the ship interior redesign.
+**Status:** Living document. Owner-approved 2026-09-23, after the ship interior redesign; extended
+2026-09-24 for the cockpit pod and portal windows (owner-approved design, `docs/superpowers/specs/2026-09-23-cockpit-pod-design.md`).
 **Authority:** This is the standing rulebook for how the game looks, and interiors most of all.
 Feature specs apply these rules; they do not override them. **To change a rule, get the owner's
 approval first and update this document in the same change.** Code, a spec and this guide
@@ -79,16 +80,35 @@ If a new piece of work doesn't fit that paragraph, it's wrong, however good it l
 ### 2.5 The shader budget is three
 
 `glow.gdshader`, `screen.gdshader` and `canopy_window.gdshader` are the only custom interior
-shaders. **Reach for geometry and flat colour first.** A fourth shader needs a reason no geometry
+shaders. `canopy_window.gdshader` is every window's glass (§2.7). **Reach for geometry and flat
+colour first.** A fourth shader needs a reason no geometry
 can meet, and the owner's approval. A test pins the list (§5).
 
 ### 2.6 Performance budget
 
 The interior must hold **at least 120 fps at 1280 × 720 on the reference GPU (GTX 960)** with the
-canopy view rendering. With the 2.5 m storeys and five furnished rooms it measured 149–184 fps
-(2026-09-23). Looking down the corridor with the hands in view it measured 145 fps, and 123 fps
-with eight plasma bolts in flight, each carrying its own warm light (2026-09-24). Measure after
-any change that adds lights, pieces or post-processing.
+canopy view rendering. The canopy view renders the outside a second time, at full screen, whenever
+the viewer is inside the ship. With portal windows, the cockpit pod and five furnished rooms it
+measured 148–218 fps (2026-09-24); the seat in the pod, mostly glass, is the cheapest view.
+Looking down the corridor with the hands in view it measured 143 fps, and 125–126 fps with eight
+plasma bolts in flight, each carrying its own warm light (2026-09-24). Measure after any change
+that adds lights, pieces, windows or post-processing.
+
+### 2.7 Windows show the real outside
+
+Every window is a **portal**. `CanopyPortal` renders the outside each frame from exactly where the
+viewing camera would be if the interior were inside the hull, with the viewer's field of view,
+into a view the size of the screen. Window glass shows that view at its own screen position. So a
+window of any shape, anywhere, lines up with the world outside from wherever the player stands or
+sits.
+
+- **Window glass goes in the `InteriorKit` `PORTAL` batch.** Its material is the scene's canopy
+  material made all glass (`InteriorDressing.portal_material`). With none wired, as in every unit
+  test, it falls back to black glass, never a hole.
+- Porthole glass is a portal too; the cartoon glint stays on top of it, in the `GLASS` batch.
+- Windows show space, **never the ship's own hull**: the canopy camera leaves the hull's layer
+  out.
+- In the chase view no window is on screen, and the canopy view stops rendering.
 
 ---
 
@@ -101,13 +121,19 @@ Ships are generated from player blueprints, so every asset is placed by generato
   `InteriorDressing`; a test enforces this (§5). **The frame:** origin on the wall's inner surface
   at floor level, centred along the wall; +x along the wall, +y up, +z into the room. Props are
   designed for a 2 m bay and 2.5 m of headroom (§3.2).
+- **Two more frames.** A **fixture** (a MOUNT block drawn as a prop, like the captain's chair)
+  builds in a *fixture frame*: origin on the floor under it, −z the way it faces, +y up
+  (`InteriorDressing.fixture_frame`). A **pod** builds in a *pod frame*: origin at the floor centre
+  of the canopy face it juts out through, on the canopy plane; −z out into the pod, +x across
+  (`InteriorDressing.pod_frame`).
 - **Placement lives in one place.** `InteriorLayout` decides what every face is.
   `InteriorDressing` maps each face to a prop. Neither draws anything itself.
 - **Rooms are grid data:** a room is a room block, so a blueprint generator can emit one. Walls
   between rooms and one doorway per room follow automatically.
 - **Batching:** props add geometry to an `InteriorKit`, which commits one merged mesh per material.
   A prop that needs its own node (it animates, like `SlidingDoor`, or has its own material, like
-  the nose shell) uses `InteriorKit.add_mesh` or its own small kit.
+  the nose shell) uses `InteriorKit.add_mesh` or its own small kit. Window glass is the `PORTAL`
+  batch (§2.7).
 - **Conventions:** interior visuals are on render layer 2; interior lights use
   `light_cull_mask = 2`; anything more than 0.15 m proud of a wall gets a box collider through
   `InteriorKit.collider` (group `interior_dressing`).
@@ -147,6 +173,28 @@ it can be bigger inside than out.
   1.45 m, wall screens at 1.45 m, and doors are 2.1 m (`DOOR_HEIGHT`) with a lintel above. Doors
   are never full ceiling height.
 
+### 3.3 Cockpits: a pod, or a nose
+
+The pilot has to be able to fly from inside, so the helm sits where the glass is.
+
+- **A windshield with a helm behind it gets a cockpit pod.** When a `pilot_seat` looks straight at
+  a canopy face, `InteriorLayout` marks that face a pod. The dressing builds a **wraparound pod**
+  there: a 2 m mouth, 2.4 m wide inside, jutting 1.9 m beyond the canopy plane; glazed from a
+  0.75 m sill to 2.05 m in front and on both sides; a **solid roof** at 2.2 m with a round light;
+  and a header over the mouth up to the cabin ceiling. The **captain's chair** stands 0.7 m out in
+  the pod (`POD_SEAT_DEPTH`), so the seated eye has glass ahead and on both flanks.
+- **The windshield's other faces become shoulders:** a wall with a portal window at 1.15–1.95 m in
+  a chunky frame, and a console desk under it, without the console's wall screen, which would
+  cover the window.
+- **A windshield with no helm behind it keeps the rounded nose**, with portal windows.
+- **The pod brings its own colliders** (a floor, a roof, a wall per segment); the builder leaves its
+  mouth open. The pod reaches beyond the grid, which interior space allows. The seated eye stays
+  inside the hull's canopy cells, so the view outside starts from inside the ship.
+- **The helm console stays under the seated sightline** to the bottom of the front glass; a test
+  holds it there.
+- **Later, not built:** a **bubble canopy** (the roof glazed too) as a pod variant for other ships
+  and player-built ships.
+
 ---
 
 ## 4. Adding something new
@@ -159,6 +207,17 @@ it can be bigger inside than out.
 4. Test it in a bare frame in `test_interior_props.gd`: it builds with no grid, its colliders sit
    in front of the wall, and its collider count is pinned.
 5. Render it (§6) before calling it done.
+
+**A new fixture** (a MOUNT block drawn as a prop):
+
+1. Add a prop in the fixture frame (§3), tested in a bare frame like any other.
+2. Add its id to `InteriorDressing.draws_fixture` and a branch in `InteriorDressing._fixture`. The
+   builder then stops drawing the block's own mesh inside.
+3. Place anything interactable from `InteriorDressing.fixture_frame`, never from a second set of
+   numbers.
+
+**A new window:** put its glass in the `PORTAL` batch (§2.7) and give the wall behind it a hole.
+Glass on its own is not a way out: keep the wall's collider whole.
 
 **A new room type:**
 
@@ -198,7 +257,10 @@ it can be bigger inside than out.
 - the set of interior shaders changes.
 
 Other interior tests pin the rest: render layer 2 and cull mask 2, no interior shadows, colliders
-on protruding props, one light per cell, and the doorway clearance.
+on protruding props, one light per cell, the doorway clearance, window glass in the `PORTAL`
+batch, the pod's colliders, and the helm under the seated sightline.
+`test/unit/test_mesh_winding.gd` holds every baked block mesh to Godot's winding (clockwise seen
+from the front): a mesh wound the other way renders inside-out with no warning at all.
 
 If one of these fails, the answer is almost always to fix the code, not the test. Change a test
 only together with this guide, and only with the owner's approval.
@@ -210,8 +272,10 @@ only together with this guide, and only with the owner's approval.
 A green test suite proves the structure, not the look. For visual work:
 
 - **Render the real scene** from fixed viewpoints at the player's eye height (1.6 m above the
-  deck): the bridge, the pilot's eye, a corridor, and inside each room. Send the screenshots to the
-  owner.
+  deck): the bridge, the seated pilot's eye, a corridor, and inside each room. Send the screenshots
+  to the owner.
+- **Look out of the windows** from the seat and from standing: what they show must line up with
+  the world outside.
 - **Read scene and resource edits back at runtime** (CLAUDE.md: a clean load proves nothing for
   `.tscn`/`.tres`).
 - **Compile shaders on a real renderer.** Headless runs never compile them, so run once without

@@ -39,35 +39,10 @@ const O_RCS_DOWN := 20       ## DOWN: thrust along -Y
 func _ready() -> void:
 	_ship.set_grid(_starter_grid())
 	_place_avatar_on_deck()
-	_aim_canopy_view()
 	_set_interior_mood()
 	_wire_hud()
 	_wire_prompt()
 	_wire_hands()
-
-## Puts the canopy camera where the pilot's head is, and tells the nose's
-## windows where that is.
-##
-## Interior space and exterior space are both grid space, offset from each
-## other, so the eye's interior-local position is exactly where that eye
-## sits on the hull. Copying it here rather than authoring the camera's
-## position in the scene keeps one source of truth: move the seat and the
-## view through the glass moves with it.
-##
-## The windows sample the canopy view by direction from the eye
-## (canopy_window.gdshader), so the material needs the eye's world position
-## and the camera's projection -- set here, from the same camera and viewport.
-func _aim_canopy_view() -> void:
-	var eye: Node3D = $Ship/Interior/PilotSeat/Eye
-	$Ship/Exterior/CanopyRemote.position = _ship.interior.to_local(eye.global_position)
-	var material := _ship.interior_builder.canopy_material as ShaderMaterial
-	if material == null:
-		return
-	var cam: Camera3D = $Ship/Canopy/CanopyCam
-	var view: SubViewport = $Ship/Canopy
-	material.set_shader_parameter(&"eye_world", eye.global_position)
-	material.set_shader_parameter(&"tan_half_fov_y", tan(deg_to_rad(cam.fov) * 0.5))
-	material.set_shader_parameter(&"aspect", float(view.size.x) / float(view.size.y))
 
 ## The interior camera is also the seated camera -- CameraDirector moves it
 ## between head and seat -- so one assignment covers walking and flying.
@@ -130,14 +105,16 @@ func _starter_grid() -> ShipGrid:
 		_put(g, Vector3i(x, 0, -4), &"canopy", O_FORWARD)
 	_put(g, Vector3i(-2, 0, -3), &"hull_wedge", O_PORT_FWD)
 	_put(g, Vector3i(2, 0, -3), &"hull_wedge", O_STARBOARD_FWD)
-	for x in [-1, 0, 1]:
-		_put(g, Vector3i(x, 0, -3), &"deck")
+	# The helm sits in the front row, facing the windshield: the cockpit pod
+	# juts out through the canopy face ahead of it (cockpit pod spec §7).
+	_put(g, Vector3i(-1, 0, -3), &"deck")
+	_put(g, Vector3i(0, 0, -3), &"pilot_seat")
+	_put(g, Vector3i(1, 0, -3), &"deck")
 	for z in [-2, -1, 0, 1, 2]:
 		_put(g, Vector3i(-2, 0, z), &"hull")
 		_put(g, Vector3i(2, 0, z), &"hull")
-	_put(g, Vector3i(-1, 0, -2), &"deck")
-	_put(g, Vector3i(0, 0, -2), &"pilot_seat")
-	_put(g, Vector3i(1, 0, -2), &"deck")
+	for x in [-1, 0, 1]:
+		_put(g, Vector3i(x, 0, -2), &"deck")
 	for x in [-1, 0, 1]:
 		_put(g, Vector3i(x, 0, -1), &"deck")
 	# Behind the bridge, a corridor down the centreline with rooms either side
@@ -249,8 +226,8 @@ func _starter_grid() -> ShipGrid:
 	#
 	# Real numbers for this exact grid (via ShipStats/ShipValidator,
 	# res://data/blocks catalog): 84 blocks, 92,300 kg, center_of_mass =
-	# (0, 1.268, 0.327), inertia = (1.82, 2.65, 1.06) million kg*m²,
-	# torque_budget = (3163597, 2081799, 2183099), torque_imbalance =
+	# (0, 1.268, 0.325), inertia = (1.82, 2.65, 1.06) million kg*m²,
+	# torque_budget = (3162514, 2081257, 2183099), torque_imbalance =
 	# (101408, 0, 0), thrust_budget forward/reverse/lateral/vertical =
 	# 1500/500/500/1000 kN, power_gen = 36.0 MW, power_draw = 30.8 MW,
 	# zero validation issues, can_launch = true. Measured handling under
@@ -290,13 +267,12 @@ func _place_avatar_on_deck() -> void:
 	var deck_surface := InteriorBuilder.floor_y(cell)
 	$Ship/Interior/Avatar.position = Vector3(centre.x, deck_surface + 0.05, centre.z)
 
-	# The interactable seat is the same object the interior draws a seat mesh
-	# for, so derive its transform from the same cell rather than authoring it
-	# twice. Hardcoding it in the scene is what let the collider and the
-	# blueprint drift apart in the first place.
-	var seat_centre := ShipGrid.cell_center(seat)
-	var seat_floor := InteriorBuilder.floor_y(seat)
-	$Ship/Interior/PilotSeat.position = Vector3(seat_centre.x, seat_floor, seat_centre.z)
+	# The interactable seat is the captain's chair the interior's dressing
+	# draws, so take its transform from the same fixture frame -- out in the
+	# cockpit pod when there is one -- rather than authoring it twice.
+	# Hardcoding it in the scene is what let the collider and the blueprint
+	# drift apart in the first place.
+	$Ship/Interior/PilotSeat.transform = InteriorDressing.fixture_frame(_ship.interior_builder.layout(), seat)
 
 ## Connects the HUD to this scene's ship.
 ##

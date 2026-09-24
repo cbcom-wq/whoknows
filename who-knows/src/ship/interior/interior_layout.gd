@@ -8,7 +8,7 @@ extends RefCounted
 ## variant (docs/superpowers/specs/2026-09-23-ship-interior-redesign-design.md
 ## §5.1).
 ##
-## A record is {coord, normal, kind, variant, zone, porthole, owner}. `zone`
+## A record is {coord, normal, kind, variant, zone, porthole, owner, pod}. `zone`
 ## is the cell's: bridge for the command area, common otherwise. `porthole`
 ## tells the builder to cut one. `owner` says which record builds a face's
 ## structure; every face has exactly one.
@@ -18,6 +18,11 @@ extends RefCounted
 ## exactly one doorway (kind DOORWAY on both records), and each room cell
 ## picks one FEATURE wall for its main furniture and at most one SECONDARY
 ## wall beside it for a smaller piece; the rest keep their trim (PANEL).
+##
+## Fixtures and pods (docs/superpowers/specs/2026-09-23-cockpit-pod-design.md
+## §4-§5): every MOUNT cell is a fixture, with the way it faces. The canopy
+## face straight ahead of a helm is a pod (`pod` true on its record): the
+## cockpit juts out through it.
 ##
 ## Pure: reads the grid, returns records, touches no nodes. The same grid
 ## always yields the same layout.
@@ -33,6 +38,8 @@ const ZONE_BRIDGE := &"bridge"
 const ZONE_COMMON := &"common"
 const CANOPY_ID := &"canopy"
 const AIRLOCK_ID := &"airlock"
+## The fixture the ship is flown from. A canopy face ahead of it becomes a pod.
+const HELM_ID := &"pilot_seat"
 const _HORIZONTAL: Array[Vector3i] = [
 	Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 0, 1), Vector3i(0, 0, -1),
 ]
@@ -42,6 +49,8 @@ var _groups: Array[Dictionary] = []
 var _walkable: Array[Vector3i] = []
 var _zones: Dictionary = {}   # Vector3i -> StringName
 var _rooms: Array[Dictionary] = []
+var _fixtures: Array[Dictionary] = []
+var _pods: Array[Dictionary] = []
 
 static func plan(grid: ShipGrid, catalog: BlockCatalog, walkable: Array) -> InteriorLayout:
 	var layout := InteriorLayout.new()
@@ -75,7 +84,7 @@ static func plan(grid: ShipGrid, catalog: BlockCatalog, walkable: Array) -> Inte
 			if _id_at(grid, neighbour) == CANOPY_ID:
 				layout._faces.append(_record(coord, normal, Kind.CANOPY, zone))
 				var key := "%s:%d:%d" % [normal, _along(neighbour, normal), coord.y]
-				groups.get_or_add(key, {"normal": normal, "coords": []})["coords"].append(coord)
+				groups.get_or_add(key, {"normal": normal, "coords": [], "pods": []})["coords"].append(coord)
 				continue
 			var face := _record(coord, normal, Kind.WALL, zone)
 			face["skin_flank"] = normal.x != 0 and _is_outer_skin(grid, coord, normal)
@@ -89,16 +98,34 @@ static func plan(grid: ShipGrid, catalog: BlockCatalog, walkable: Array) -> Inte
 	for key in groups:
 		layout._groups.append(groups[key])
 	layout._resolve_rooms()
+	for coord: Vector3i in layout._walkable:
+		if _is_mount(grid, catalog, coord):
+			var inst := grid.get_block(coord)
+			layout._fixtures.append({"coord": coord, "id": inst.block_id, "orientation": inst.orientation})
+	layout._mark_pods()
 	return layout
 
 func faces() -> Array[Dictionary]:
 	return _faces.duplicate()
 
-## One entry per windshield plane: {normal, coords} -- the walkable cells
-## whose face on that plane is canopy. InteriorDressing builds one rounded
-## nose over each.
+## One entry per windshield plane: {normal, coords, pods} -- the walkable
+## cells whose face on that plane is canopy, and those of them that are pods.
+## InteriorDressing builds a rounded nose over a group with no pod, and a
+## cockpit over one with.
 func canopy_groups() -> Array[Dictionary]:
 	return _groups.duplicate()
+
+## Every MOUNT cell: {coord, id, orientation}.
+func fixtures() -> Array[Dictionary]:
+	return _fixtures.duplicate()
+
+## Every pod: {coord, normal} of the canopy face it juts out through.
+func pods() -> Array[Dictionary]:
+	return _pods.duplicate()
+
+## The horizontal grid direction a block with this orientation faces.
+static func facing(orientation: int) -> Vector3i:
+	return Vector3i((BlockOrientation.basis_for(orientation) * Vector3.FORWARD).round())
 
 func walkable_coords() -> Array[Vector3i]:
 	return _walkable.duplicate()
@@ -123,7 +150,7 @@ static func _record(coord: Vector3i, normal: Vector3i, kind: Kind, zone: StringN
 	return {
 		"coord": coord, "normal": normal, "kind": kind, "variant": WallVariant.NONE,
 		"zone": zone, "porthole": false, "owner": true, "partition": false, "skin_flank": false,
-		"feature_normal": Vector3i.ZERO,
+		"feature_normal": Vector3i.ZERO, "pod": false,
 	}
 
 ## Wall variants for bridge and common cells, in strict priority order. A
@@ -157,6 +184,22 @@ static func _room_of(zone: StringName) -> StringName:
 
 static func _key(coord: Vector3i, normal: Vector3i) -> String:
 	return "%s|%s" % [coord, normal]
+
+## A helm looking straight at a canopy face makes that face a pod.
+func _mark_pods() -> void:
+	for fixture in _fixtures:
+		if fixture["id"] != HELM_ID:
+			continue
+		var coord: Vector3i = fixture["coord"]
+		var normal := facing(fixture["orientation"])
+		for face in _faces:
+			if face["kind"] == Kind.CANOPY and face["coord"] == coord and face["normal"] == normal:
+				face["pod"] = true
+				_pods.append({"coord": coord, "normal": normal})
+				for group in _groups:
+					var coords: Array = group["coords"]
+					if group["normal"] == normal and coords.has(coord):
+						group["pods"].append(coord)
 
 ## Finds every room, gives each one doorway and each room cell a feature wall.
 func _resolve_rooms() -> void:

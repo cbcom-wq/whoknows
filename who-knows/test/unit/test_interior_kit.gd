@@ -77,3 +77,16 @@ func test_screen_quad_carries_its_mode_and_variety():
 	var colors: PackedColorArray = _kit.commit()[0].mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
 	assert_almost_eq(colors[0].r, 0.25, 0.01, "mode 1 of 4")
 	assert_almost_eq(colors[0].g, 0.3, 0.01)
+
+func test_portal_glass_uses_the_supplied_material():
+	var portal := ShaderMaterial.new()
+	var kit := InteriorKit.new(_root, _body, portal)
+	kit.box(InteriorKit.Batch.PORTAL, Transform3D.IDENTITY, Vector3.ONE, Color.WHITE)
+	var meshes := kit.commit()
+	assert_eq(meshes.size(), 1)
+	assert_eq(meshes[0].material_override, portal)
+
+func test_portal_glass_falls_back_without_a_view():
+	_kit.box(InteriorKit.Batch.PORTAL, Transform3D.IDENTITY, Vector3.ONE, Color.WHITE)
+	assert_eq(_kit.commit()[0].material_override, InteriorMaterials.portal_fallback(),
+		"black glass, never a hole")

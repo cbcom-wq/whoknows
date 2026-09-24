@@ -5,7 +5,7 @@ extends RefCounted
 ## are plain StandardMaterial3D in flat colour: the stylized look needs no
 ## texture work, and it keeps the GPU cost down. Only three things need
 ## custom shaders -- lit strips and indicators (glow), animated screens
-## (screen), and the cockpit nose's projected windows (canopy_window).
+## (screen), and window glass showing the real view outside (canopy_window).
 
 const GLOW_SHADER: Shader = preload("res://data/materials/interior/glow.gdshader")
 const SCREEN_SHADER: Shader = preload("res://data/materials/interior/screen.gdshader")
@@ -85,3 +85,14 @@ static func canopy_fallback() -> ShaderMaterial:
 		m.set_shader_parameter(&"frame_color", InteriorPalette.TRIM)
 		_cache[&"canopy_fallback"] = m
 	return _cache[&"canopy_fallback"]
+
+## Portal glass with no canopy view wired: all window, all black. A kit given
+## no portal material uses it, so a headless build never leaves a hole where a
+## window should be.
+static func portal_fallback() -> ShaderMaterial:
+	if not _cache.has(&"portal_fallback"):
+		var m := ShaderMaterial.new()
+		m.shader = CANOPY_SHADER
+		m.set_shader_parameter(&"all_glass", true)
+		_cache[&"portal_fallback"] = m
+	return _cache[&"portal_fallback"]

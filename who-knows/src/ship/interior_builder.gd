@@ -11,7 +11,9 @@ extends Node3D
 ## A walkable cell whose face touches a `canopy` cell keeps a collider there
 ## but no box: the visible canopy is the rounded nose InteriorDressing builds
 ## over the whole windshield (spec §6), so the avatar stops at the plane like
-## a railing while the pilot looks out through the nose's windows.
+## a railing while the pilot looks out through the nose's windows. A pod face
+## (cockpit pod spec §4) has no collider either: the pod's mouth is open, and
+## the pod prop brings its own walls.
 ##
 ## The output never moves. That is the whole architecture.
 ##
@@ -213,7 +215,8 @@ func _build_structure() -> void:
 				if face["owner"]:
 					_add_doorway(at, normal)
 			InteriorLayout.Kind.CANOPY:
-				_canopy_faces.append(_add_collider(_physics_body, _wall_size(normal), at))
+				if not face["pod"]:
+					_canopy_faces.append(_add_collider(_physics_body, _wall_size(normal), at))
 
 static func _floor_colour(zone: StringName) -> Color:
 	if InteriorPalette.ROOM_FLOOR.has(zone):
@@ -268,14 +271,15 @@ func _add_doorway(at: Vector3, normal: Vector3i) -> void:
 
 ## Draws every MOUNT block that has a mesh: seats, consoles, ladders -- the
 ## fixtures a player sees and walks up to. Without this the pilot seat is an
-## invisible collider with an interact prompt and nothing to look at.
+## invisible collider with an interact prompt and nothing to look at. Fixtures
+## the dressing draws as props (InteriorDressing.draws_fixture) are left to it.
 func _build_fixtures() -> void:
 	for coord in _grid.coords():
 		var inst := _grid.get_block(coord)
 		var def := _catalog.get_def(inst.block_id)
 		if def == null or def.mesh == null:
 			continue
-		if def.occupancy != BlockDefinition.Occupancy.MOUNT:
+		if def.occupancy != BlockDefinition.Occupancy.MOUNT or InteriorDressing.draws_fixture(inst.block_id):
 			continue
 		var fixture := MeshInstance3D.new()
 		fixture.mesh = def.mesh
