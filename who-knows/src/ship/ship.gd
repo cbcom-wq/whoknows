@@ -54,6 +54,8 @@ func _ready() -> void:
 	exterior.can_sleep = false
 	exterior.collision_layer = 1   # exterior_hull
 	exterior.collision_mask = 1    # detects only other hulls
+	# Outside, so the floating origin moves it (asteroids spec §4.2).
+	exterior.add_to_group(Universe.EXTERIOR_SPACE)
 	interior.global_position = interior_slot_origin()
 	outside = get_node_or_null(outside_path) as Node3D if not outside_path.is_empty() else null
 	if outside == null:

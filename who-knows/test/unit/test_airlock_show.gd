@@ -92,3 +92,10 @@ func test_the_light_turns_amber_while_cycling_and_dims_onto_space():
 	assert_true(_light.light_color.is_equal_approx(InteriorPalette.AMBER), "amber through the cycle")
 	_run(4.0)
 	assert_almost_eq(_light.light_energy, 0.55 * AirlockShow.OPEN_ENERGY, 0.001, "dimmed with the outer hatch open")
+
+func test_the_burst_on_the_hull_holds_the_origin_shift():
+	var hull_show := AirlockShow.new()
+	add_child_autofree(hull_show)
+	hull_show.setup(Transform3D.IDENTITY, [] as Array[Transform3D], null, 1, true)
+	var burst: GPUParticles3D = hull_show.get_node("Burst")
+	assert_true(burst.is_in_group(Universe.HOLDS_SHIFT), "its puffs are in world space")

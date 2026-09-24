@@ -45,6 +45,9 @@ const ROCK_JITTER := 0.35
 
 func _ready() -> void:
 	layers = 1
+	# Moved by the floating origin until the asteroid stream replaces this
+	# field (asteroids spec §10).
+	add_to_group(Universe.EXTERIOR_SPACE)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed
 	multimesh = _build_multimesh(rng)
