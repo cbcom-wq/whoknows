@@ -11,4 +11,4 @@ size = Vector3(0.16, 0.34, 0.16)
 grip = 0
 stow_class = &"small"
 look = &"canister"
-grip_point = Vector3(0.075, 0, 0)
+grip_point = Vector3(0.05, 0.13, 0)

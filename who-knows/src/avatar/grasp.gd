@@ -42,7 +42,7 @@ const WALL_MARGIN := 0.15
 ## Where the right hand closes, and where a two-handed item's near face sits,
 ## head-local, until Hands provides sockets.
 const DEFAULT_WIELD_SOCKET := Vector3(0.17, -0.2, -0.42)
-const DEFAULT_CARRY_SOCKET := Vector3(0.0, -0.3, -0.4)
+const DEFAULT_CARRY_SOCKET := Vector3(0.0, -0.34, -0.4)
 ## interior_geometry | items.
 const RAY_MASK := 2 | 32
 const STOW_PROMPT := "[G] Stow"

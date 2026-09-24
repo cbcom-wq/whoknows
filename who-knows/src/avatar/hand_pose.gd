@@ -13,9 +13,9 @@ extends RefCounted
 const PALM := Vector3(0.0, -0.025, -0.06)
 ## Where a wielded item's grip sits in the Hands frame.
 const WIELD_SOCKET := Vector3(0.17, -0.2, -0.42)
-## Where a two-handed item's near face sits in the Hands frame: centred, at
-## chest height, between the hands.
-const CARRY_SOCKET := Vector3(0.0, -0.3, -0.4)
+## Where a two-handed item's near face sits in the Hands frame: centred, low
+## enough to see past, between the hands.
+const CARRY_SOCKET := Vector3(0.0, -0.34, -0.4)
 
 const _MIRROR := Transform3D(Basis(Vector3(-1, 0, 0), Vector3(0, 1, 0), Vector3(0, 0, 1)), Vector3.ZERO)
 
