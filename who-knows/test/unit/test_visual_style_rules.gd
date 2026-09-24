@@ -31,6 +31,7 @@ const PAINTING_FILES := [
 	"res://src/ship/airlock/airlock_panel.gd",
 	"res://src/ship/airlock/airlock_room.gd",
 	"res://src/ship/airlock/airlock_show.gd",
+	"res://src/world/rock_mesh.gd",
 ]
 
 ## The reusable asset library and what it builds with. Ships are generated
