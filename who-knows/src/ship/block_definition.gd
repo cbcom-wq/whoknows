@@ -25,6 +25,12 @@ enum Occupancy {
 
 @export_group("Propulsion")
 @export var thrust_kn: float = 0.0     ## kN, acting along block-local -Z
+## Where the exhaust leaves the block, block-local, and the nozzle's radius
+## there. A block with a nozzle draws a flame from it along +Z, the opposite
+## way to its thrust, sized by how hard it fires (ThrusterFlame). Zero radius
+## means no flame: the RCS boxes have no nozzle to draw one from.
+@export var nozzle_position: Vector3 = Vector3.ZERO
+@export var nozzle_radius: float = 0.0     ## m
 
 @export_group("Habitation")
 ## Radius in metres over which Grav Plating confers gravity on walkable cells.

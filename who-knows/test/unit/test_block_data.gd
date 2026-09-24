@@ -88,3 +88,19 @@ func test_the_thruster_bell_glows_by_throttle():
 	assert_eq(bell.shader.resource_path, "res://data/materials/thruster_bell.gdshader")
 	assert_gt(bell.get_shader_parameter(&"full_energy"), bell.get_shader_parameter(&"idle_energy"),
 		"full throttle glows brighter than idle")
+
+## The flame leaves from the bell: a point inside the thruster's own mesh, at
+## the aft end. Read back at runtime, like the bell above.
+func test_the_main_thruster_has_a_nozzle_in_its_bell():
+	var def := _cat.get_def(&"thruster")
+	assert_almost_eq(def.nozzle_radius, 0.7, 0.0001)
+	assert_almost_eq(def.nozzle_position, Vector3(0, 0, 1.15), Vector3.ONE * 0.0001)
+	assert_true(def.mesh.get_aabb().has_point(def.nozzle_position), "inside the bell")
+	assert_gt(def.nozzle_position.z, ShipGrid.CELL_SIZE * 0.5, "aft of the block's own cell")
+
+func test_only_blocks_that_thrust_have_nozzles():
+	for id in _cat.ids():
+		var def := _cat.get_def(id)
+		if def.nozzle_radius > 0.0:
+			assert_true(def.thrust_kn > 0.0, "%s has a nozzle but no thrust" % id)
+	assert_eq(_cat.get_def(&"rcs").nozzle_radius, 0.0, "the RCS box has no bell to fire from")

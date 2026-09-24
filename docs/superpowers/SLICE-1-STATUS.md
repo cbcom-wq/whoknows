@@ -163,8 +163,14 @@ fraction of the budget on each side of each axis. `ExteriorBuilder.show_thrust()
 thruster the share along the way it pushes, eased (fast up, slower down), and writes it into the
 MultiMesh's custom data. `thruster_bell.gdshader` turns that into light: dim blue at idle, `#7FD4FF`
 at full throttle, white at boost, with a slight flicker while firing. Glow grows with the square of
-the throttle so the *visible* brightness follows thrust through the display's gamma. Bell length or a
-flame element is not done. `rcs` blocks are still plain boxes, with no bell to light.
+the throttle so the *visible* brightness follows thrust through the display's gamma.
+
+**Flame added 2026-09-24.** A block with a nozzle (`BlockDefinition.nozzle_position`,
+`nozzle_radius`) draws an exhaust flame, one MultiMesh per block type, fed the same custom data. It
+is a chunky low-poly cone with a white-hot core (`ThrusterFlame`), additive and unshaded
+(`thruster_flame.gdshader`). It grows with throttle: nothing at idle, about 3.7 m at full throttle
+and about 5.6 m at boost, widening quickly to the nozzle's size and then lengthening. `rcs` blocks
+have no nozzle, so still no glow or flame; their rotation thrust isn't reported by `throttle` either.
 
 **5. Hold-C free-look orbit.** Not implemented. Wanted: hold C to orbit the camera around the
 player without altering movement or heading, releasing to return. Applies on foot and probably

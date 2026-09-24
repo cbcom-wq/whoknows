@@ -18,16 +18,19 @@ const OWN_HULL_LAYER := 4
 const SPOOL_UP_RATE := 14.0
 const SPOOL_DOWN_RATE := 5.0
 
-## One block that thrusts: which MultiMesh instance draws it, the ship-local
-## direction it pushes the ship, and the throttle its bell is showing.
+## One block that thrusts: which MultiMesh instance draws it (and its flame,
+## at the same index, if it has a nozzle), the ship-local direction it pushes
+## the ship, and the throttle it is showing.
 class Thruster:
 	var multimesh: MultiMesh
+	var flames: MultiMesh   ## null when the block has no nozzle
 	var index: int
 	var direction: Vector3
 	var throttle: float = 0.0
 
-	func _init(mm: MultiMesh, i: int, dir: Vector3) -> void:
+	func _init(mm: MultiMesh, flame_mm: MultiMesh, i: int, dir: Vector3) -> void:
 		multimesh = mm
+		flames = flame_mm
 		index = i
 		direction = dir
 
@@ -37,7 +40,7 @@ var _grid: ShipGrid
 var _catalog: BlockCatalog
 var _collider_coords: Array[Vector3i] = []
 var _colliders: Array[CollisionShape3D] = []
-var _multimeshes: Dictionary = {}   # StringName -> MultiMeshInstance3D
+var _multimeshes: Dictionary = {}   # block id, or "<id>/flame" -> MultiMeshInstance3D
 var _thrusters: Array[Thruster] = []
 
 func bind(grid: ShipGrid, catalog: BlockCatalog) -> void:
@@ -60,20 +63,29 @@ func collider_coords() -> Array:
 func thrusters() -> Array[Thruster]:
 	return _thrusters.duplicate()
 
-## Lights every thruster by how hard it is firing. `throttle` is
+## Where a block's flame sits: at its nozzle, pointing out along the
+## block's +Z, scaled by the nozzle's radius (ThrusterFlame's mesh is in
+## nozzle radii).
+static func flame_transform(block: Transform3D, def: BlockDefinition) -> Transform3D:
+	var nozzle := Transform3D(Basis.from_scale(Vector3.ONE * def.nozzle_radius), def.nozzle_position)
+	return block * nozzle
+
+## Shows every thruster firing as hard as it is. `throttle` is
 ## FlightComputer.throttle -- a signed fraction of the budget along each
 ## ship-local axis -- so a thruster's share is the part of it along the way
-## that thruster pushes. Each glow eases toward its share rather than
-## snapping, and lands in its instance's custom data, where
-## thruster_bell.gdshader turns it into light.
+## that thruster pushes. Each eases toward its share rather than snapping, and
+## lands in its instances' custom data: thruster_bell.gdshader lights the bell
+## from it, and thruster_flame.gdshader sizes the flame.
 func show_thrust(throttle: Vector3, delta: float) -> void:
 	for thruster in _thrusters:
 		var target := maxf(throttle.dot(thruster.direction), 0.0)
 		var rate := SPOOL_UP_RATE if target > thruster.throttle else SPOOL_DOWN_RATE
 		thruster.throttle = lerpf(thruster.throttle, target, 1.0 - exp(-rate * delta))
-		thruster.multimesh.set_instance_custom_data(
-			thruster.index, Color(thruster.throttle, 0.0, 0.0, 0.0)
-		)
+		var size := ThrusterFlame.size_for(thruster.throttle)
+		var data := Color(thruster.throttle, size.x, size.y, 0.0)
+		thruster.multimesh.set_instance_custom_data(thruster.index, data)
+		if thruster.flames != null:
+			thruster.flames.set_instance_custom_data(thruster.index, data)
 
 func _clear() -> void:
 	# remove_child() then free() -- not queue_free(). remove_child() is
@@ -145,16 +157,39 @@ func _build_meshes() -> void:
 		mm.use_custom_data = def.thrust_kn > 0.0
 		mm.mesh = def.mesh
 		mm.instance_count = transforms.size()
+		var flames := _flame_multimesh(def, transforms)
 		for index in transforms.size():
 			mm.set_instance_transform(index, transforms[index])
 			if mm.use_custom_data:
 				mm.set_instance_custom_data(index, Color(0.0, 0.0, 0.0, 0.0))
 				# The same push ShipStats counts: block-local -Z.
 				var push: Vector3 = transforms[index].basis * Vector3(0, 0, -1)
-				_thrusters.append(Thruster.new(mm, index, push))
+				_thrusters.append(Thruster.new(mm, flames, index, push))
 
-		var mmi := MultiMeshInstance3D.new()
-		mmi.multimesh = mm
-		mmi.layers = OWN_HULL_LAYER
-		add_child(mmi)
-		_multimeshes[block_id] = mmi
+		_add_multimesh(block_id, mm)
+		if flames != null:
+			var flame_mmi := _add_multimesh(StringName(String(block_id) + "/flame"), flames)
+			flame_mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+func _add_multimesh(key: StringName, mm: MultiMesh) -> MultiMeshInstance3D:
+	var mmi := MultiMeshInstance3D.new()
+	mmi.multimesh = mm
+	mmi.layers = OWN_HULL_LAYER
+	add_child(mmi)
+	_multimeshes[key] = mmi
+	return mmi
+
+## One flame per block of a thrusting type with a nozzle, in the same order as
+## the blocks, so a thruster's flame shares its index. Null for any other type.
+func _flame_multimesh(def: BlockDefinition, transforms: Array) -> MultiMesh:
+	if def.thrust_kn <= 0.0 or def.nozzle_radius <= 0.0:
+		return null
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_custom_data = true
+	mm.mesh = ThrusterFlame.mesh()
+	mm.instance_count = transforms.size()
+	for index in transforms.size():
+		mm.set_instance_transform(index, flame_transform(transforms[index], def))
+		mm.set_instance_custom_data(index, Color(0.0, 0.0, 0.0, 0.0))
+	return mm

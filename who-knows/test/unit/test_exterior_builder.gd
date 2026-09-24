@@ -24,8 +24,17 @@ func before_each():
 	engine.display_name = "thruster"
 	engine.mass_t = 1.0
 	engine.thrust_kn = 100.0
+	engine.nozzle_position = Vector3(0, 0, 1.1)
+	engine.nozzle_radius = 0.5
 	engine.mesh = BoxMesh.new()
 	_cat.register(engine)
+	var puffer := BlockDefinition.new()   # thrusts, but has no nozzle
+	puffer.id = &"puffer"
+	puffer.display_name = "puffer"
+	puffer.mass_t = 1.0
+	puffer.thrust_kn = 50.0
+	puffer.mesh = BoxMesh.new()
+	_cat.register(puffer)
 
 	_grid = ShipGrid.new()
 	_body = RigidBody3D.new()
@@ -42,10 +51,13 @@ func _put(coord: Vector3i, id: StringName, orientation: int = 0) -> void:
 	_grid.set_block(coord, i)
 
 func _multimesh_of(id: StringName) -> MultiMesh:
-	var mesh := _cat.get_def(id).mesh
+	var mmi := _instance_drawing(_cat.get_def(id).mesh)
+	return mmi.multimesh if mmi != null else null
+
+func _instance_drawing(mesh: Mesh) -> MultiMeshInstance3D:
 	for child in _builder.get_children():
 		if child is MultiMeshInstance3D and child.multimesh.mesh == mesh:
-			return child.multimesh
+			return child
 	return null
 
 ## The throttle a thruster's bell shows. ExteriorBuilder writes the same
@@ -223,3 +235,49 @@ func test_rebuild_forgets_the_old_thrusters():
 	# The first build's MultiMesh is gone; this must only touch the new one.
 	_builder.show_thrust(Vector3(0, 0, -1), 1.0 / 60.0)
 	assert_between(_glow(0), 0.01, 0.99, "a fresh build starts dark and eases in")
+
+## Flames. The test thruster's nozzle is 0.5 m across at z = 1.1; the puffer
+## thrusts but has no nozzle.
+
+func test_a_thruster_with_a_nozzle_gets_a_flame():
+	_put(Vector3i(0, 0, 0), &"thruster")
+	_put(Vector3i(1, 0, 0), &"thruster")
+	_builder.rebuild()
+	var flames := _instance_drawing(ThrusterFlame.mesh())
+	assert_not_null(flames, "no flame MultiMesh")
+	assert_eq(flames.multimesh.instance_count, 2, "one flame per thruster")
+	assert_true(flames.multimesh.use_custom_data, "the flame's size travels per instance")
+	assert_eq(flames.layers, ExteriorBuilder.OWN_HULL_LAYER)
+	assert_eq(flames.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF,
+		"flames are light; they cast no shadow")
+	for thruster in _builder.thrusters():
+		assert_same(thruster.flames, flames.multimesh)
+
+func test_a_thruster_without_a_nozzle_gets_no_flame():
+	_put(Vector3i.ZERO, &"puffer")
+	_builder.rebuild()
+	assert_null(_instance_drawing(ThrusterFlame.mesh()))
+	assert_eq(_builder.thrusters().size(), 1, "it still thrusts")
+	assert_null(_builder.thrusters()[0].flames)
+	_builder.show_thrust(Vector3(0, 0, -1), 1.0 / 60.0)   # and showing that must not trip on it
+
+func test_a_flame_leaves_the_nozzle_opposite_to_the_push():
+	var def := _cat.get_def(&"thruster")
+	for orientation in [0, 4, 12, 16]:
+		var block := Transform3D(BlockOrientation.basis_for(orientation), Vector3(2, 4, 6))
+		var flame := ExteriorBuilder.flame_transform(block, def)
+		assert_almost_eq(flame.origin, block * def.nozzle_position, Vector3.ONE * 0.0001,
+			"the flame starts at the nozzle")
+		var push := block.basis * Vector3(0, 0, -1)
+		assert_almost_eq(flame.basis * Vector3(0, 0, 1), -push * def.nozzle_radius,
+			Vector3.ONE * 0.0001, "orientation %d: sized by the nozzle, pointing away from the push" % orientation)
+
+func test_rebuild_does_not_leave_stale_flames():
+	_put(Vector3i.ZERO, &"thruster")
+	_builder.rebuild()
+	_builder.rebuild()
+	var drawn := 0
+	for child in _builder.get_children():
+		if child is MultiMeshInstance3D:
+			drawn += 1
+	assert_eq(drawn, 2, "the thruster and its flame, once each")

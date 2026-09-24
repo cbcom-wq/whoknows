@@ -148,7 +148,7 @@ shuttle read and need real meshes; the other ten stay boxes and change nothing.
 | `hull` | 2 m cube, hard edges, slight bevel. Two surfaces: plate, and a recessed panel line. |
 | `hull_wedge` | 2 m cube with one face chamfered 45°. All 24 `BlockOrientation` rotations reuse this one mesh — that is what produces every chamfer on the ship. |
 | `canopy` | Wedge profile matching `hull_wedge` so the nose line is continuous, with the sloped face as dark glass. |
-| `thruster` | The nacelle pod: a rounded 2 m tube, emissive bell on the aft face, small emissive dome forward. Two surfaces so the bell gets its own emissive material. |
+| `thruster` | The nacelle pod: a rounded 2 m tube, emissive bell on the aft face, small emissive dome forward. Two surfaces so the bell gets its own emissive material. Its nozzle (0.7 m radius, just inside the bell's exit) is where the exhaust flame starts; the flame is drawn separately (`ThrusterFlame`), not part of this mesh. |
 | `airlock` | Hatch frame with a cyan emissive arch overhead — the aft doorway from the reference interior. Legible from across the cabin as "the way out", which pays off in Slice 3. |
 | `pilot_seat` | Seat plus a raked forward console with emissive readout panels. |
 
@@ -173,6 +173,7 @@ Flat-shaded, tight, emissive accents doing the storytelling — per slice spec �
 | Livery stripe | `#B5342A` | signal red; see §6 |
 | Pod body | `#C6C6C8` | cooler grey, reads as machinery not structure |
 | Engine bell | `#7FD4FF` emissive; glow follows that engine's throttle | Revised 2026-09-24 from a static energy 3.0: 0.15 idle, 1.0 at full throttle (exactly `#7FD4FF`), white at boost. `data/materials/thruster_bell.tres` |
+| Engine flame | `#7FD4FF` plume, `#E6FAFF` core; additive, unshaded | Added 2026-09-24: a cone that grows with throttle, from nothing at idle to about 3.7 m at full throttle and 5.6 m at boost. `data/materials/thruster_flame.tres` |
 | Running lights | `#7FD4FF` emissive, energy 0.8 | |
 | Canopy glass | `#141A22`, metallic, low roughness | fed by the `SubViewport` from inside |
 
