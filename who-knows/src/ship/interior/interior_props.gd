@@ -46,6 +46,16 @@ const DOOR_WIDTH := 1.0
 ## above -- and well over the 1.8 m avatar.
 const DOOR_HEIGHT := 2.1
 
+## Shelf boards: how many, where the lowest sits, and the pitch between them.
+const SHELF_LEVELS := 4
+const SHELF_BASE := 0.25
+const SHELF_PITCH := 0.47
+const SHELF_BOARD := 0.04
+const SHELF_DEPTH := 0.4
+
+## Half the width a stow spot keeps clear of decor, by stow class.
+const STOW_CLEARANCE := {&"small": 0.12, &"crate": 0.27, &"sidearm": 0.15}
+
 ## The rounded cockpit nose (spec §6), in a frame on the canopy plane at
 ## floor level: +x across the windshield, +y up, +z back into the room.
 const NOSE_DEPTH := 1.4
@@ -388,6 +398,13 @@ static func galley_counter(kit: InteriorKit, f: Transform3D, _variety: float, po
 		kit.box(SOLID, f * _at(Vector3(0, 1.65, 0.341)), Vector3(0.015, 0.36, 0.01), low)
 	kit.collider(f * _at(Vector3(0, 0.45, 0.32)), Vector3(1.9, 0.9, 0.64))
 
+## Two small things on the galley worktop, between the sink and the cooktop.
+static func galley_counter_spots() -> Array:
+	return [
+		[_at(Vector3(-0.08, 0.91, 0.36)), &"small"],
+		[_at(Vector3(0.12, 0.91, 0.36)), &"small"],
+	]
+
 ## A tall fridge, 0.8 m wide, with a handle and a status light.
 static func fridge(kit: InteriorKit, f: Transform3D, _variety: float) -> void:
 	var x := 0.0
@@ -423,19 +440,27 @@ static func towel_rail(kit: InteriorKit, f: Transform3D, variety: float) -> void
 	kit.bevel_box(SOLID, f * _at(Vector3(-0.1, 0.88, 0.09)), Vector3(0.5, 0.46, 0.03), 0.012, _c(towel))
 
 ## Three shelves `width` wide, stacked with crates of seeded sizes and colours.
+## The places in shelves_spots() stay clear for real items, and each post and
+## board is its own collider so the Interactor can reach between them.
 static func shelves(kit: InteriorKit, f: Transform3D, variety: float, width := 1.7) -> void:
 	var half := width * 0.5
 	for x in [-(half - 0.03), half - 0.03]:
-		kit.bevel_box(SOLID, f * _at(Vector3(x, 1.0, 0.2)), Vector3(0.05, 2.0, 0.4), 0.015, _c(InteriorPalette.WALL_LOW))
-	for level in 4:
-		var y := 0.25 + level * 0.47
-		kit.bevel_box(SOLID, f * _at(Vector3(0, y, 0.2)), Vector3(width - 0.06, 0.04, 0.4), 0.015,
+		kit.bevel_box(SOLID, f * _at(Vector3(x, 1.0, 0.2)), Vector3(0.05, 2.0, SHELF_DEPTH), 0.015,
+			_c(InteriorPalette.WALL_LOW))
+		kit.collider(f * _at(Vector3(x, 1.0, 0.2)), Vector3(0.05, 2.0, SHELF_DEPTH))
+	var spots := shelves_spots(width)
+	for level in SHELF_LEVELS:
+		var y := SHELF_BASE + level * SHELF_PITCH
+		kit.bevel_box(SOLID, f * _at(Vector3(0, y, 0.2)), Vector3(width - 0.06, SHELF_BOARD, SHELF_DEPTH), 0.015,
 			_c(InteriorPalette.TRIM))
+		kit.collider(f * _at(Vector3(0, y, 0.2)), Vector3(width - 0.06, SHELF_BOARD, SHELF_DEPTH))
+		var reserved := _reserved_on(spots, shelf_top(level))
 		var x := -half + 0.13
 		var k := 0
 		while true:
 			var h := fposmod(variety * 31.0 + level * 7.3 + k * 3.1, 1.0)
 			var w := 0.25 + 0.2 * h
+			x = _clear_of(reserved, x, w)
 			if x + w > half - 0.07:
 				break
 			var tall := 0.18 + 0.18 * fposmod(h * 5.7, 1.0)
@@ -443,25 +468,75 @@ static func shelves(kit: InteriorKit, f: Transform3D, variety: float, width := 1
 				Vector3(w - 0.03, tall, 0.3), 0.03, _c(InteriorPalette.CRATES[int(h * 5.0) % 5]))
 			x += w + 0.04
 			k += 1
-	kit.collider(f * _at(Vector3(0, 1.0, 0.2)), Vector3(width, 2.0, 0.4))
 
-## Five chunky rifles on a rack over a gunmetal cabinet, with coral warning
-## stripes.
+## The top surface of shelf board `level`.
+static func shelf_top(level: int) -> float:
+	return SHELF_BASE + level * SHELF_PITCH + SHELF_BOARD * 0.5
+
+## Where shelves hold loose items (hands-and-items spec §5.2): canisters on the
+## third board and, on a full-width unit, a crate on the lowest. Each spot is
+## [frame, stow class]; a frame's origin is where the item's base sits.
+static func shelves_spots(width: float) -> Array:
+	var half := width * 0.5
+	var out: Array = [[_at(Vector3(-half + 0.2, shelf_top(2), 0.2)), &"small"]]
+	if width >= 1.2:
+		out.append([_at(Vector3(-half + 0.45, shelf_top(2), 0.2)), &"small"])
+		out.append([_at(Vector3(half - 0.35, shelf_top(0), 0.2)), &"crate"])
+	return out
+
+## The x ranges a shelf board keeps clear for the spots on it.
+static func _reserved_on(spots: Array, top: float) -> Array[Vector2]:
+	var out: Array[Vector2] = []
+	for spot in spots:
+		var at: Vector3 = (spot[0] as Transform3D).origin
+		if absf(at.y - top) < 0.001:
+			var clear: float = STOW_CLEARANCE.get(spot[1], 0.15)
+			out.append(Vector2(at.x - clear, at.x + clear))
+	return out
+
+## Moves a decor crate starting at `x`, `w` wide, past any reserved range it
+## would overlap.
+static func _clear_of(reserved: Array[Vector2], x: float, w: float) -> float:
+	var moved := true
+	while moved:
+		moved = false
+		for r in reserved:
+			if x < r.y and x + w > r.x:
+				x = r.y + 0.04
+				moved = true
+	return x
+
+## Three chunky rifles on a rack over a gunmetal cabinet, with coral warning
+## stripes, and a pistol cradle either side (weapon_rack_spots()). The rifles
+## and cradles stand under 0.15 m proud, so only the cabinet is solid and the
+## pistols stay in reach of the Interactor.
 static func weapon_rack(kit: InteriorKit, f: Transform3D, _variety: float) -> void:
 	var gun := _c(InteriorPalette.GUNMETAL)
 	kit.bevel_box(SOLID, f * _at(Vector3(0, 0.2, 0.175)), Vector3(1.6, 0.4, 0.35), 0.04, gun)
 	kit.box(SOLID, f * _at(Vector3(0, 0.36, 0.352)), Vector3(1.6, 0.05, 0.01), _c(InteriorPalette.CORAL))
 	kit.bevel_box(SOLID, f * _at(Vector3(0, 1.15, 0.025)), Vector3(1.6, 1.1, 0.05), 0.02, _c(InteriorPalette.WALL_LOW))
 	kit.box(SOLID, f * _at(Vector3(0, 1.67, 0.052)), Vector3(1.6, 0.05, 0.01), _c(InteriorPalette.CORAL))
-	for i in 5:
-		var x := -0.6 + i * 0.3
+	for i in 3:
+		var x := -0.3 + i * 0.3
 		kit.bevel_box(SOLID, f * _at(Vector3(x, 0.75, 0.1)), Vector3(0.1, 0.22, 0.07), 0.02, _c(InteriorPalette.WOOD))
 		kit.bevel_box(SOLID, f * _at(Vector3(x, 1.13, 0.1)), Vector3(0.11, 0.55, 0.08), 0.02, gun)
 		kit.bevel_box(SOLID, f * _at(Vector3(x + 0.07, 1.05, 0.1)), Vector3(0.05, 0.16, 0.06), 0.012, gun)
 		kit.tube_between(SOLID, f * Vector3(x, 1.4, 0.1), f * Vector3(x, 1.6, 0.1), 0.018, gun)
 		kit.disc(GLOW, f * _at(Vector3(x, 1.27, 0.141)), 0.012, _lit(InteriorPalette.SKY, 1.5))
+	for spot in weapon_rack_spots():
+		var at: Vector3 = (spot[0] as Transform3D).origin
+		kit.bevel_box(SOLID, f * _at(Vector3(at.x, at.y - 0.02, 0.075)), Vector3(0.26, 0.04, 0.1), 0.012,
+			_c(InteriorPalette.TRIM))
+		kit.disc(GLOW, f * _at(Vector3(at.x, at.y - 0.12, 0.051)), 0.014, _lit(InteriorPalette.SKY, 1.5))
 	kit.disc(GLOW, f * _at(Vector3(0.7, 0.3, 0.352)), 0.025, _lit(InteriorPalette.AMBER, 1.6, 0.5))
-	kit.collider(f * _at(Vector3(0, 0.875, 0.175)), Vector3(1.6, 1.75, 0.35))
+	kit.collider(f * _at(Vector3(0, 0.2, 0.175)), Vector3(1.6, 0.4, 0.35))
+
+## The rack's two pistol cradles, muzzles pointing outward along the wall.
+static func weapon_rack_spots() -> Array:
+	return [
+		[Transform3D(Basis(Vector3.UP, PI * 0.5), Vector3(-0.6, 1.0, 0.085)), &"sidearm"],
+		[Transform3D(Basis(Vector3.UP, -PI * 0.5), Vector3(0.6, 1.0, 0.085)), &"sidearm"],
+	]
 
 ## A stack of three ammo crates with stripes and latches, 0.7 m wide.
 static func ammo_crates(kit: InteriorKit, f: Transform3D, _variety: float) -> void:

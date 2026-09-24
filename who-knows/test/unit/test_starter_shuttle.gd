@@ -39,3 +39,34 @@ func test_the_starter_shuttle_still_launches():
 	var issues := ShipValidator.validate(_grid, _cat)
 	assert_eq(issues.size(), 0, "zero validation issues")
 	assert_true(ShipValidator.can_launch(issues))
+
+func _built() -> InteriorBuilder:
+	var b := InteriorBuilder.new()
+	add_child_autofree(b)
+	b.bind(_grid, _cat)
+	b.rebuild()
+	return b
+
+func _stock(b: InteriorBuilder) -> Dictionary:
+	var out := {}
+	for p in b.stow_points():
+		if p.stock != &"":
+			out[p.stock] = out.get(p.stock, 0) + 1
+	return out
+
+func test_the_weapon_rack_is_stocked_with_two_pistols():
+	assert_eq(_stock(_built()).get(&"plasma_pistol", 0), 2)
+
+func test_the_galley_counter_has_two_mugs():
+	assert_eq(_stock(_built()).get(&"mug", 0), 2)
+
+func test_the_closet_has_canisters_and_a_crate():
+	var stock := _stock(_built())
+	assert_gt(stock.get(&"canister", 0), 0)
+	assert_eq(stock.get(&"crate", 0), 1)
+
+func test_every_stow_point_takes_what_it_is_stocked_with():
+	var items := ItemCatalog.load_from_dir()
+	for p in _built().stow_points():
+		if p.stock != &"":
+			assert_eq(items.get_def(p.stock).stow_class, p.accepts, "%s fits its own point" % p.stock)

@@ -131,7 +131,53 @@ func test_washstand_is_solid_and_the_towel_rail_is_not():
 
 func test_shelves_are_solid():
 	InteriorProps.shelves(_kit, Transform3D.IDENTITY, 0.6)
-	_built_with_colliders(1)
+	# Two posts and four boards, not one block: a single box would stop the
+	# Interactor's ray before it reached anything stowed on a shelf.
+	_built_with_colliders(6)
+
+## Is `p` inside any of this prop's colliders? Frames here are the identity,
+## so every collider is an axis-aligned box.
+func _inside_a_collider(p: Vector3) -> bool:
+	for c in _colliders():
+		var size := (c.shape as BoxShape3D).size
+		var local: Vector3 = c.transform.affine_inverse() * p
+		if absf(local.x) < size.x * 0.5 and absf(local.y) < size.y * 0.5 and absf(local.z) < size.z * 0.5:
+			return true
+	return false
+
+func _assert_spots_clear(spots: Array, classes: Array) -> void:
+	assert_eq(spots.map(func(s): return s[1]), classes)
+	for spot in spots:
+		var xf: Transform3D = spot[0]
+		assert_gt(xf.origin.z, 0.0, "a spot stands in front of the wall")
+		assert_false(_inside_a_collider(xf * Vector3(0, 0.05, 0)),
+			"a spot is clear of its prop's colliders, so the Interactor can reach what sits there")
+
+func test_the_weapon_rack_has_two_pistol_cradles():
+	InteriorProps.weapon_rack(_kit, Transform3D.IDENTITY, 0.3)
+	_assert_built()
+	_assert_spots_clear(InteriorProps.weapon_rack_spots(), [&"sidearm", &"sidearm"])
+
+func test_the_galley_counter_holds_two_small_things():
+	InteriorProps.galley_counter(_kit, Transform3D.IDENTITY, 0.3, false)
+	_assert_built()
+	_assert_spots_clear(InteriorProps.galley_counter_spots(), [&"small", &"small"])
+
+func test_full_shelves_hold_two_canisters_and_a_crate():
+	InteriorProps.shelves(_kit, Transform3D.IDENTITY, 0.6, 1.7)
+	_assert_built()
+	_assert_spots_clear(InteriorProps.shelves_spots(1.7), [&"small", &"small", &"crate"])
+
+func test_narrow_shelves_hold_one_canister():
+	InteriorProps.shelves(_kit, Transform3D.IDENTITY, 0.6, 0.85)
+	_assert_built()
+	_assert_spots_clear(InteriorProps.shelves_spots(0.85), [&"small"])
+
+func test_shelf_spots_sit_on_the_boards():
+	for spot in InteriorProps.shelves_spots(1.7):
+		var y: float = (spot[0] as Transform3D).origin.y
+		assert_true(is_equal_approx(y, InteriorProps.shelf_top(0)) or is_equal_approx(y, InteriorProps.shelf_top(2)),
+			"on a board top")
 
 func test_weapon_rack_and_ammo_are_solid():
 	InteriorProps.weapon_rack(_kit, Transform3D.IDENTITY, 0.3)

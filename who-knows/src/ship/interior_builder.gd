@@ -135,6 +135,16 @@ func fixture_positions() -> Array[Vector3]:
 		out.append(f.position)
 	return out
 
+## Every StowPoint the last rebuild() placed (hands-and-items spec §5).
+func stow_points() -> Array[StowPoint]:
+	var out: Array[StowPoint] = []
+	if not is_instance_valid(_physics_body):
+		return out
+	for node in _physics_body.find_children("*", "Node3D", true, false):
+		if node is StowPoint:
+			out.append(node)
+	return out
+
 func gravity_at(coord: Vector3i) -> float:
 	return _gravity.get(coord, 0.0)
 

@@ -109,6 +109,7 @@ static func _room_piece(kit: InteriorKit, f: Transform3D, face: Dictionary, vari
 		&"galley":
 			if feature:
 				InteriorProps.galley_counter(kit, f, variety, porthole)
+				_stow(kit, f, InteriorProps.galley_counter_spots(), {&"small": &"mug"})
 			else:
 				InteriorProps.fridge(kit, f, variety)
 		&"bathroom":
@@ -117,14 +118,29 @@ static func _room_piece(kit: InteriorKit, f: Transform3D, face: Dictionary, vari
 			else:
 				InteriorProps.towel_rail(kit, f, variety)
 		&"closet":
-			InteriorProps.shelves(kit, f, variety, 1.7 if feature else 0.85)
+			var width := 1.7 if feature else 0.85
+			InteriorProps.shelves(kit, f, variety, width)
+			_stow(kit, f, InteriorProps.shelves_spots(width), {&"small": &"canister", &"crate": &"crate"})
 		&"weapon_room":
 			if feature:
 				InteriorProps.weapon_rack(kit, f, variety)
+				_stow(kit, f, InteriorProps.weapon_rack_spots(), {&"sidearm": &"plasma_pistol"})
 			else:
 				InteriorProps.ammo_crates(kit, f, variety)
 	if porthole:
 		InteriorProps.porthole(kit, f)
+
+## A StowPoint at every spot a prop publishes, stocked by stow class
+## (hands-and-items spec §5.2). The prop decides where things can sit; this
+## decides what a ship starts with there.
+static func _stow(kit: InteriorKit, f: Transform3D, spots: Array, stock: Dictionary) -> void:
+	for spot in spots:
+		var point := StowPoint.new()
+		point.name = "StowPoint"
+		point.transform = f * (spot[0] as Transform3D)
+		point.accepts = spot[1]
+		point.stock = stock.get(spot[1], &"")
+		kit.root.add_child(point, true)
 
 ## A doorway's frame and its sliding door, on the wall's mid-plane.
 static func _doorway(kit: InteriorKit, f: Transform3D) -> void:
