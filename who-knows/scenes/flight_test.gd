@@ -248,7 +248,7 @@ func _place_avatar_on_deck() -> void:
 		cell = seat
 
 	var centre := ShipGrid.cell_center(cell)
-	var deck_surface := centre.y - ShipGrid.CELL_SIZE * 0.5 + InteriorBuilder.FLOOR_THICKNESS * 0.5
+	var deck_surface := InteriorBuilder.floor_y(cell)
 	$Ship/Interior/Avatar.position = Vector3(centre.x, deck_surface + 0.05, centre.z)
 
 	# The interactable seat is the same object the interior draws a seat mesh
@@ -256,7 +256,7 @@ func _place_avatar_on_deck() -> void:
 	# twice. Hardcoding it in the scene is what let the collider and the
 	# blueprint drift apart in the first place.
 	var seat_centre := ShipGrid.cell_center(seat)
-	var seat_floor := seat_centre.y - ShipGrid.CELL_SIZE * 0.5 + InteriorBuilder.FLOOR_THICKNESS * 0.5
+	var seat_floor := InteriorBuilder.floor_y(seat)
 	$Ship/Interior/PilotSeat.position = Vector3(seat_centre.x, seat_floor, seat_centre.z)
 
 ## Connects the HUD to this scene's ship.

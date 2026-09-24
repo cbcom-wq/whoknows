@@ -79,7 +79,9 @@ elsewhere; room types are grid data a generator can emit.
 - Interactive furniture or consoles. Screens animate from `TIME`; nothing reads ship state.
 - Player-chosen door placement (the existing `door` block could override later).
 - GI, reflection probes, SSAO, fog, interior shadows.
-- Ceiling height (1.9 m clear stays; SLICE-1-STATUS item 2 is separate).
+- Ceiling height (1.9 m clear stays; SLICE-1-STATUS item 2 is separate). *Revised after the
+  first playtest: interior storeys became 2.6 m (2.5 m clear) while grid cells stay 2 m. See
+  docs/design/visual-style.md §3.2.*
 - The shipyard's blueprint generator itself.
 
 ---
