@@ -12,6 +12,11 @@ extends Node3D
 @onready var _prompt: Label = $Prompt/Label
 @onready var _interactor: Interactor = $Ship/Interior/Avatar/Head/Interactor
 
+## The interior's own mood (spec §3.3): dim and warm, with bloom turning the
+## thin lit strips into light. It goes on the interior camera, not the world,
+## so the chase view and the canopy feed keep the WorldEnvironment's look.
+const INTERIOR_ENVIRONMENT: Environment = preload("res://data/environments/ship_interior.tres")
+
 ## BlockOrientation values used below. `_FORWARDS` order is
 ## [FORWARD, BACK, LEFT, RIGHT, UP, DOWN]; o = (forward_index << 2) | roll.
 ## Roll never matters here because every use is either the identity roll
@@ -30,6 +35,7 @@ func _ready() -> void:
 	_ship.set_grid(_starter_grid())
 	_place_avatar_on_deck()
 	_aim_canopy_view()
+	_set_interior_mood()
 	_wire_hud()
 	_wire_prompt()
 
@@ -56,6 +62,12 @@ func _aim_canopy_view() -> void:
 	material.set_shader_parameter(&"eye_world", eye.global_position)
 	material.set_shader_parameter(&"tan_half_fov_y", tan(deg_to_rad(cam.fov) * 0.5))
 	material.set_shader_parameter(&"aspect", float(view.size.x) / float(view.size.y))
+
+## The interior camera is also the seated camera -- CameraDirector moves it
+## between head and seat -- so one assignment covers walking and flying.
+func _set_interior_mood() -> void:
+	var cam: Camera3D = $Ship/Interior/Avatar/Head/Camera3D
+	cam.environment = INTERIOR_ENVIRONMENT
 
 ## Shows what the avatar is looking at. Interactor has emitted this since it
 ## was written, with nothing listening: the seat was an invisible collider

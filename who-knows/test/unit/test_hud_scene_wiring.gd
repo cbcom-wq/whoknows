@@ -144,3 +144,29 @@ func test_canopy_material_projects_the_view_from_the_pilots_eye():
 
 func test_the_cabin_has_one_rounded_nose():
 	assert_eq(_root.find_children("NoseShell*", "MeshInstance3D", true, false).size(), 1)
+
+func test_old_ceiling_fluorescents_are_gone():
+	for i in [1, 2, 3]:
+		assert_null(_root.get_node_or_null("Ship/Interior/CeilingLight%d" % i))
+
+## The interior's dim warm mood is on the interior camera alone, so the chase
+## view and the canopy feed keep the world's look.
+func test_interior_camera_carries_the_interior_mood():
+	var cam: Camera3D = _root.get_node("Ship/Interior/Avatar/Head/Camera3D")
+	var env := cam.environment
+	assert_not_null(env)
+	assert_eq(env.resource_path, "res://data/environments/ship_interior.tres")
+	assert_true(env.glow_enabled, "bloom is what turns the thin lit strips into light")
+	assert_false(env.ssao_enabled, "stylized and cheap: no SSAO")
+	assert_eq(env.tonemap_mode, Environment.TONE_MAPPER_FILMIC)
+	assert_eq(env.ambient_light_source, Environment.AMBIENT_SOURCE_COLOR)
+	assert_almost_eq(env.ambient_light_energy, 0.45, 0.001)
+
+func test_chase_camera_keeps_the_world_look():
+	var cam: Camera3D = _root.get_node("Ship/Exterior/ChaseCamera")
+	assert_null(cam.environment)
+
+func test_pilot_seat_is_upholstered_to_match():
+	var mesh: ArrayMesh = load("res://data/blocks/meshes/pilot_seat.tres")
+	var upholstery := mesh.surface_get_material(0) as StandardMaterial3D
+	assert_true(upholstery.albedo_color.is_equal_approx(InteriorPalette.SEAT))
