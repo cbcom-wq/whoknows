@@ -19,6 +19,8 @@ const PAINTING_FILES := [
 	"res://src/items/item_looks.gd",
 	"res://src/avatar/glove.gd",
 	"res://src/avatar/hands.gd",
+	"res://src/items/impact_flash.gd",
+	"res://src/items/plasma_bolt.gd",
 ]
 
 ## The reusable asset library and what it builds with. Ships are generated
