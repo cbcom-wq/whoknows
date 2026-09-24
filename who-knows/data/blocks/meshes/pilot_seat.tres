@@ -1,7 +1,7 @@
 [gd_resource type="ArrayMesh" load_steps=3 format=4]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_fo2s5"]
-albedo_color = Color(0.5411765, 0.18431373, 0.15294118, 1)
+albedo_color = Color(0.76862746, 0.63529414, 0.47843137, 1)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_oe0ms"]
 albedo_color = Color(0.49803922, 0.83137256, 1, 1)

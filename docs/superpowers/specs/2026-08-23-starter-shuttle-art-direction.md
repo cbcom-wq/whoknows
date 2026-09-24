@@ -68,6 +68,9 @@ Replaces `_starter_grid()` in Task 15 Step 5. Read the tables as plan views, bow
 
 ### 3.1 y = 0 — cabin
 
+> **Superseded for the cabin interior** by docs/superpowers/specs/2026-09-23-ship-interior-redesign-design.md §7.5 (2026-09-23): rows z = 0..2 are now
+> a centreline corridor with five room blocks either side. The hull and every other cell are unchanged.
+
 ```
  z \ x     −2        −1         0          1         2
   −4       ·       canopy    canopy     canopy       ·
@@ -173,21 +176,28 @@ Flat-shaded, tight, emissive accents doing the storytelling — per slice spec �
 
 ### 5.2 Interior
 
+> **Superseded** by docs/superpowers/specs/2026-09-23-ship-interior-redesign-design.md §3.1 and §7.4 (2026-09-23), which
+> `InteriorPalette` implements: a stylized, warm, dim palette. The original table is kept below for history.
+
 | Role | Colour |
 |---|---|
 | Deck plank | `#6E2822` warm red-brown |
 | Crash seating | `#8A2F27` |
 | Bulkhead | `#B4B9BF` light grey-blue |
 | Overhead arch (airlock) | `#3FC8FF` emissive, energy 2.0 |
-| Ceiling strip light | `#FFE8C8` emissive, energy 2.0 — already in the scene, keep |
+| Ceiling strip light | `#FFE8C8` emissive, energy 2.0 — retired by the interior redesign |
 | Console readout | `#7FD4FF`, warnings `#FFB03A` |
 
 ### 5.3 Reconciling with spec §11
 
-Spec §11 says interiors are "dim and pooled". **That applies to derelict and enemy interiors in
-Slice 3, not to the player's own ship.** The starter shuttle is bright, warm and lived-in — it is
-the one space in the game that should feel safe. Written down here so nobody later "corrects" it
-toward gloom.
+**Revised 2026-09-23 at the owner's direction** (docs/superpowers/specs/2026-09-23-ship-interior-redesign-design.md §1): the player's ship
+is stylized, warm and **dim** — chunky shapes in flat colour, lit by warm practicals, still the one
+space in the game that should feel safe. Derelict and enemy interiors must therefore differ from it
+by colour and wear — cold or failing light, damage — not only by being darker.
+
+The original text, for history: *Spec §11 says interiors are "dim and pooled". That applies to
+derelict and enemy interiors in Slice 3, not to the player's own ship. The starter shuttle is
+bright, warm and lived-in.*
 
 ---
 
@@ -224,7 +234,9 @@ rediscover them.
 4. **Task 14, InteriorBuilder** — a walkable cell whose face touches a `canopy` cell gets the
    canopy `SubViewport` material instead of a wall. This *generalises* the hand-built `Window`
    node that exists today rather than special-casing it, and is what makes the three bow windows
-   visible from the pilot seat.
+   visible from the pilot seat. *Since the interior redesign (2026-09-23), canopy faces keep only
+   their colliders; the visible canopy is the generated rounded nose, whose windows project the
+   canopy view by direction from the pilot's eye (docs/superpowers/specs/2026-09-23-ship-interior-redesign-design.md §6).*
 5. **Task 14, InteriorBuilder** — `_build_floors()` and `_build_walls()` currently emit
    `CollisionShape3D` only. They must also emit meshes on **render layer 2**. This is BLOCKER-A
    from Task 6b (interior had colliders and no visuals) and it will recur verbatim unless Task 14

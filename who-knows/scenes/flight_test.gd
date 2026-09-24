@@ -12,6 +12,11 @@ extends Node3D
 @onready var _prompt: Label = $Prompt/Label
 @onready var _interactor: Interactor = $Ship/Interior/Avatar/Head/Interactor
 
+## The interior's own mood (spec §3.3): dim and warm, with bloom turning the
+## thin lit strips into light. It goes on the interior camera, not the world,
+## so the chase view and the canopy feed keep the WorldEnvironment's look.
+const INTERIOR_ENVIRONMENT: Environment = preload("res://data/environments/ship_interior.tres")
+
 ## BlockOrientation values used below. `_FORWARDS` order is
 ## [FORWARD, BACK, LEFT, RIGHT, UP, DOWN]; o = (forward_index << 2) | roll.
 ## Roll never matters here because every use is either the identity roll
@@ -30,10 +35,12 @@ func _ready() -> void:
 	_ship.set_grid(_starter_grid())
 	_place_avatar_on_deck()
 	_aim_canopy_view()
+	_set_interior_mood()
 	_wire_hud()
 	_wire_prompt()
 
-## Puts the canopy camera where the pilot's head is.
+## Puts the canopy camera where the pilot's head is, and tells the nose's
+## windows where that is.
 ##
 ## Interior space and exterior space are both grid space, offset from each
 ## other, so the eye's interior-local position is exactly where that eye
@@ -41,11 +48,26 @@ func _ready() -> void:
 ## position in the scene keeps one source of truth: move the seat and the
 ## view through the glass moves with it.
 ##
-## The old hardcoded value put the camera five metres ahead of the nose,
-## which is why flying felt like watching the ship from outside it.
+## The windows sample the canopy view by direction from the eye
+## (canopy_window.gdshader), so the material needs the eye's world position
+## and the camera's projection -- set here, from the same camera and viewport.
 func _aim_canopy_view() -> void:
 	var eye: Node3D = $Ship/Interior/PilotSeat/Eye
 	$Ship/Exterior/CanopyRemote.position = _ship.interior.to_local(eye.global_position)
+	var material := _ship.interior_builder.canopy_material as ShaderMaterial
+	if material == null:
+		return
+	var cam: Camera3D = $Ship/Canopy/CanopyCam
+	var view: SubViewport = $Ship/Canopy
+	material.set_shader_parameter(&"eye_world", eye.global_position)
+	material.set_shader_parameter(&"tan_half_fov_y", tan(deg_to_rad(cam.fov) * 0.5))
+	material.set_shader_parameter(&"aspect", float(view.size.x) / float(view.size.y))
+
+## The interior camera is also the seated camera -- CameraDirector moves it
+## between head and seat -- so one assignment covers walking and flying.
+func _set_interior_mood() -> void:
+	var cam: Camera3D = $Ship/Interior/Avatar/Head/Camera3D
+	cam.environment = INTERIOR_ENVIRONMENT
 
 ## Shows what the avatar is looking at. Interactor has emitted this since it
 ## was written, with nothing listening: the seat was an invisible collider
@@ -77,9 +99,19 @@ func _starter_grid() -> ShipGrid:
 	_put(g, Vector3i(-1, 0, -2), &"deck")
 	_put(g, Vector3i(0, 0, -2), &"pilot_seat")
 	_put(g, Vector3i(1, 0, -2), &"deck")
-	for z in [-1, 0, 1, 2]:
-		for x in [-1, 0, 1]:
-			_put(g, Vector3i(x, 0, z), &"deck")
+	for x in [-1, 0, 1]:
+		_put(g, Vector3i(x, 0, -1), &"deck")
+	# Behind the bridge, a corridor down the centreline with rooms either side
+	# (interior redesign spec §7.5). Room blocks weigh and draw what deck
+	# does, so the flight balance measured below is unchanged.
+	for z in [0, 1, 2]:
+		_put(g, Vector3i(0, 0, z), &"deck")
+	_put(g, Vector3i(-1, 0, 0), &"bunk_room")
+	_put(g, Vector3i(-1, 0, 1), &"bunk_room")
+	_put(g, Vector3i(-1, 0, 2), &"bathroom")
+	_put(g, Vector3i(1, 0, 0), &"galley")
+	_put(g, Vector3i(1, 0, 1), &"weapon_room")
+	_put(g, Vector3i(1, 0, 2), &"closet")
 	_put(g, Vector3i(-2, 0, 3), &"hull")
 	_put(g, Vector3i(-1, 0, 3), &"bulkhead")
 	_put(g, Vector3i(0, 0, 3), &"airlock")
