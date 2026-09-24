@@ -242,6 +242,10 @@ Screens choose their mode from the seed, so no two neighbouring screens match.
 
 ## 6. Phase A: the cockpit nose
 
+> **Amended** by `docs/superpowers/specs/2026-09-23-cockpit-pod-design.md` (2026-09-24): a windshield with a helm behind it gets a wraparound cockpit
+> pod and shoulders instead of this nose; the nose remains for windshields without one. Its windows
+> are portal windows now (§6.2 note).
+
 ### 6.1 Shell
 
 For each canopy group, `InteriorDressing` builds a frame with its origin on the canopy plane at
@@ -284,6 +288,11 @@ on a curve line up into one view, and the cockpit velocity marker still register
 
 With no canopy material (every builder test), the dressing uses the same shader with no texture,
 so the windows render black and there is never a hole.
+
+> **Superseded** by portal windows (cockpit pod spec §3, 2026-09-24): `CanopyPortal` carries the
+> viewing camera's pose onto the hull and sizes the canopy view to the screen, and glass samples it
+> at `SCREEN_UV`. The `eye_world`, `tan_half_fov_y` and `aspect` uniforms,
+> `_aim_canopy_view()`, `CanopyRemote` and the fixed 1536 × 512 viewport are gone.
 
 The dash and shell sit beyond the canopy faces' colliders, which stay at the plane: the avatar
 stops at the dash like a railing.
@@ -443,6 +452,8 @@ GUT, `test/unit/`, output pristine. Scene edits are proven by runtime read-back 
 - **The pilot sees less.** The eye is about 3.5 m behind the front plane, so the centre window
   covers roughly ±9° horizontally and ±5° vertically. The chase camera (V) is unaffected.
   Moving the pilot seat forward a row is the real fix, a blueprint decision left for later.
+  **Resolved 2026-09-24** by the cockpit pod (`docs/superpowers/specs/2026-09-23-cockpit-pod-design.md`): the seat moved forward a row and sits in a
+  glazed pod with the eye 1.65 m behind the front glass.
 - **The canopy view is only correct from the eye.** Walking around, it shows slight parallax,
   the same class of cheat as before.
 - **Portholes show stars only**, from the interior sky sphere.

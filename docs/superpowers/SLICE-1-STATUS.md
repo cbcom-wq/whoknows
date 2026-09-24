@@ -1,8 +1,8 @@
 # Slice 1 — status and handoff
 
-**Last updated:** 2026-08-23
+**Last updated:** 2026-09-24
 **Branch history:** `design/slice-1` (Tasks 1–12, merged) → `feat/slice-1-builders` (Tasks 13–15)
-**Suite:** 88 tests, green, pristine output, zero orphans
+**Suite:** 299 tests, green
 
 Governing documents:
 
@@ -27,16 +27,19 @@ scenery any more.
 
 - Fly it, steer with the mouse, roll with Q/E, toggle flight assist with Z
 - Walk the interior, sit in the pilot seat with a continuous camera move, stand up mid-burn
-- A live cockpit canopy showing the real exterior through the bow windows
+- Portal windows: every window, portholes included, shows the true view outside from wherever
+  you stand or sit
 - A 700-instance debris field so motion is legible
 - A livery stripe painted by a vertex shader from genuinely ship-local height
-- 21 block types (five of them room blocks), six with real meshes, the rest placeholder boxes
-- A stylized, warm, dim interior generated from the grid: a rounded cockpit nose whose windows
-  project the live forward view, portholes, consoles, a bridge, a corridor, and five furnished
-  rooms behind sliding doors (docs/superpowers/specs/2026-09-23-ship-interior-redesign-design.md)
+- 21 block types (five of them room blocks), five with real meshes, the rest placeholder boxes
+- A stylized, warm, dim interior generated from the grid: portholes, consoles, a bridge, a
+  corridor, and five furnished rooms behind sliding doors
+  (docs/superpowers/specs/2026-09-23-ship-interior-redesign-design.md)
+- A wraparound cockpit pod jutting from the front of the bridge, glazed in front and on both
+  sides, with a captain's chair and helm console in it (docs/superpowers/specs/2026-09-23-cockpit-pod-design.md)
 
-Derived stats for the starter shuttle: 88,500 kg, torque imbalance 4.3% of budget, power 36.0
-gen / 25.2 draw MW, **zero validation issues**, `can_launch = true`.
+Derived stats for the starter shuttle: 92,300 kg, torque imbalance 3.2% of pitch budget, power
+36.0 gen / 30.8 draw MW, **zero validation issues**, `can_launch = true`.
 
 ---
 
@@ -119,6 +122,10 @@ also explains problem 6:
   Fixing it properly means `InteriorBuilder` instantiating `def.mesh` for MOUNT (and probably
   DECK) cells on render layer 2. That also removes the need for a hand-authored seat node
   entirely — the seat becomes what the grid says it is.
+
+**Addressed 2026-09-24:** the helm is a captain's chair prop drawn by the interior's dressing, in
+a cockpit pod, and the interactable `PilotSeat` is placed from the same fixture frame
+(docs/superpowers/specs/2026-09-23-cockpit-pod-design.md).
 
 **2. The ceiling is weirdly low.** By construction, and the art direction acknowledges it
 (§2: "a 2 m cell forces a 2 m cabin"). Clear headroom is `CELL_SIZE − FLOOR_THICKNESS` = 1.9 m for
