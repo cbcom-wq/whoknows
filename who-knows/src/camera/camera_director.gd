@@ -13,6 +13,10 @@ signal transition_finished
 ## `is_seated`, so the moment is defined in exactly one place.
 signal piloting_changed(piloting: bool)
 
+## Emitted when the view changes, and when a sit or stand camera move starts
+## (`moving` true) -- the hands and the reticle hide for the move.
+signal view_changed(view: View, moving: bool)
+
 enum View { COCKPIT, CHASE, FOOT_FIRST, FOOT_THIRD }
 
 const SIT_DURATION := 0.75
@@ -61,6 +65,7 @@ func stand() -> void:
 	_move_camera_to(_avatar.head.global_transform)
 
 func _move_camera_to(target: Transform3D) -> void:
+	view_changed.emit(view, true)
 	# Reparent the interior camera to the interior root so it can travel
 	# freely between the avatar's head and the seat without inheriting
 	# either one's motion mid-flight.
@@ -113,6 +118,7 @@ func _apply_view() -> void:
 		View.CHASE:
 			_interior_cam.current = false
 			_chase_cam.current = true
+	view_changed.emit(view, false)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("cycle_camera"):

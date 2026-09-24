@@ -11,6 +11,11 @@ extends Node3D
 @onready var _cockpit_marker: VelocityMarker = $Ship/Canopy/CanopyOverlay/CockpitMarker
 @onready var _prompt: Label = $Prompt/Label
 @onready var _interactor: Interactor = $Ship/Interior/Avatar/Head/Interactor
+@onready var _avatar: Avatar = $Ship/Interior/Avatar
+
+var _reticle: Reticle
+var _interact_prompt := ""
+var _grasp_prompt := ""
 
 ## The interior's own mood (spec §3.3): dim and warm, with bloom turning the
 ## thin lit strips into light. It goes on the interior camera, not the world,
@@ -38,6 +43,7 @@ func _ready() -> void:
 	_set_interior_mood()
 	_wire_hud()
 	_wire_prompt()
+	_wire_hands()
 
 ## Puts the canopy camera where the pilot's head is, and tells the nose's
 ## windows where that is.
@@ -72,16 +78,48 @@ func _set_interior_mood() -> void:
 ## Shows what the avatar is looking at. Interactor has emitted this since it
 ## was written, with nothing listening: the seat was an invisible collider
 ## that answered an unadvertised keypress, which is no way to find a chair.
+## While you hold something a drop would stow, the stow prompt wins.
 func _wire_prompt() -> void:
 	_prompt.text = ""
-	_interactor.prompt_changed.connect(func(text: String) -> void: _prompt.text = text)
+	_interactor.prompt_changed.connect(
+		func(text: String) -> void:
+			_interact_prompt = text
+			_show_prompt()
+	)
+	_avatar.grasp.prompt_changed.connect(
+		func(text: String) -> void:
+			_grasp_prompt = text
+			_show_prompt()
+	)
 	# The prompt belongs to the avatar, not the pilot. Sitting down hands the
 	# view to the seat, so anything the raycast still reports is stale.
 	_director.piloting_changed.connect(
 		func(piloting: bool) -> void:
 			if piloting:
-				_prompt.text = ""
+				_interact_prompt = ""
+				_grasp_prompt = ""
+				_show_prompt()
 	)
+
+func _show_prompt() -> void:
+	_prompt.text = _grasp_prompt if _grasp_prompt != "" else _interact_prompt
+
+## Hands and items (docs/superpowers/specs/2026-09-23-hands-and-items-design.md
+## §7, §8, §10): what you let go of lands aboard this ship, and the reticle
+## follows the view. Wired here so src/avatar and src/ui never learn about
+## CameraDirector or Ship.
+func _wire_hands() -> void:
+	_avatar.grasp.world_root = _ship.items
+	_reticle = Reticle.new()
+	_reticle.name = "Reticle"
+	$Prompt.add_child(_reticle)
+	_director.view_changed.connect(_on_view_changed)
+	_on_view_changed(_director.view, false)
+
+func _on_view_changed(view: CameraDirector.View, moving: bool) -> void:
+	var first_person := view == CameraDirector.View.FOOT_FIRST
+	_avatar.grasp.first_person = first_person
+	_reticle.visible = first_person and not moving
 
 func _starter_grid() -> ShipGrid:
 	var g := ShipGrid.new()
