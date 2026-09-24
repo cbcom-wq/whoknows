@@ -3,10 +3,10 @@
 **Date:** 2026-09-23
 **Status:** Design approved section by section on 2026-09-23; awaiting the owner's review of this
 written spec before an implementation plan
-**Depends on:** `main` at `a82dc3c` (grid-generated ship, inertia-scaled flight assist, piloting HUD);
+**Depends on:** `main` at `c64920d` (grid-generated ship, inertia-scaled flight assist, piloting HUD);
 for §10 only, the ship interior redesign (`docs/superpowers/specs/2026-09-23-ship-interior-redesign-design.md`,
-on the `interior-redesign` branch at the time of writing): its airlock `HATCH` variant, `SlidingDoor`,
-`InteriorProps` library and interior camera environment
+merged to `main` in `77c58a7`): its airlock `HATCH` variant, `SlidingDoor`, `InteriorProps` library
+and interior camera environment
 **Relates to:** slice spec §3 (interior/exterior split), §3.3 (bounded arenas), §7 (flight), roadmap
 Slice 6; piloting HUD spec §4.3, §5, §6, §10; starter shuttle art direction §4 (`airlock`)
 **Amends:** slice spec §2, §3.3, §12 and the roadmap appendix; piloting HUD spec §10 (see §16)
@@ -786,7 +786,7 @@ build times against §6.6's budgets. It captures screenshots for the owner:
 | **The ship jitters resting on a trimesh during TOUCHING** | It freezes once LANDED, so only the one-second touching phase is exposed. If that still jitters, evaluate Jolt, which is a single project setting. |
 | **The airlock swap is visible** | Same props, same frames, the dark beat, and the environment switch timed to the door. Judged in playtest. Fallback: a brief fade at the dark beat, still inside the cycle. |
 | **Thrust becomes positional** (slice spec §7.1 intends it; today `FlightComputer` applies thrust centrally) | The starter's vertical RCS are all at the nose, so a positional hover would pitch it over. Whoever makes thrust positional must re-balance the starter's vertical RCS first. |
-| **The interior redesign changes or lands late** | Only §10's cycle depends on it. Phases A–C (§20) do not; Phase D waits for `interior-redesign` to merge. |
+| **The interior redesign's pieces change under Phase D** | Only §10's cycle depends on them, and Phases A–C (§20) do not. They merged in `77c58a7`, and Phase D's plan tasks must read `InteriorLayout`, `SlidingDoor` and `InteriorProps` as they stand at that point rather than as this document describes them. |
 | **The gravity cap strands a heavier ship** | The lift margin is shown and the cap is one constant. Revisit when the shipyard lets ships grow. |
 | **Portholes show stars while landed in daylight** | A known trade-off inherited from redesign §10. A world-aware porthole sky is a follow-up. The cockpit windows show the real surface. |
 
@@ -842,7 +842,7 @@ Each phase ends playable, as in Slice 1:
   transfer and EVA wiring, triggered by `debug_step_out` (F10) while LANDED, standing in for the
   cycle; then sites, builders, markers, resolution, interactions, `WorldState` and the discovery
   log. *Walk on it and find things.*
-- **Phase D — the airlock cycle:** once `interior-redesign` has merged, the airlock zone, locked
+- **Phase D — the airlock cycle,** built on the merged interior redesign: the airlock zone, locked
   doors, the exterior alcove, `AirlockControl`, `AirlockCycle`, and Rule 6. `debug_step_out`
   stays as a debug shortcut. *Walk out of your own airlock onto it.*
 
