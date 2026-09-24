@@ -1,7 +1,8 @@
 extends GutTest
 
-## Grasp (hands-and-items spec §7), with real bodies stepped through physics
-## frames: taking, carrying, throwing, dropping and stowing.
+## Grasp (hands-and-items spec §7, as amended 2026-09-24), with real bodies
+## stepped through physics frames: taking into the hands, throwing, dropping
+## and stowing.
 
 class CountingUse extends ItemUse:
 	var count := 0
@@ -55,7 +56,7 @@ func _item(grip := ItemDefinition.Grip.CARRY, mass := 4.0, at := Vector3(0, 1.3,
 	d.id = &"thing"
 	d.display_name = "Thing"
 	d.mass_kg = mass
-	d.size = Vector3(0.2, 0.2, 0.2)
+	d.size = Vector3(0.2, 0.2, 0.3)
 	d.grip = grip
 	d.stow_class = &"small"
 	d.look = &"crate"
@@ -74,7 +75,7 @@ func _point_at(at: Vector3) -> StowPoint:
 	point.global_position = at
 	return point
 
-func test_takes_a_wielded_item_into_the_hand():
+func test_takes_a_one_handed_item_into_the_right_hand():
 	var item := _item(ItemDefinition.Grip.WIELD)
 	assert_true(_grasp.take(item))
 	assert_eq(_grasp.mode, Grasp.Mode.WIELDING)
@@ -82,12 +83,31 @@ func test_takes_a_wielded_item_into_the_hand():
 	assert_eq(item.state, Item.State.HELD)
 	assert_almost_eq(item.position, -item.definition.grip_point, Vector3.ONE * 0.0001)
 
-func test_carries_an_item_to_the_hold_point():
+func test_takes_a_two_handed_item_into_both_hands():
 	var item := _item()
 	assert_true(_grasp.take(item))
 	assert_eq(_grasp.mode, Grasp.Mode.CARRYING)
-	await wait_physics_frames(40)
-	assert_lt(item.global_position.distance_to(_grasp.hold_point()), 0.1)
+	assert_eq(item.get_parent(), _grasp.carry_socket, "attached, not floating on a physics hold")
+	assert_eq(item.state, Item.State.HELD)
+	assert_true(item.freeze)
+	assert_eq(item.collision_layer, 0)
+	assert_almost_eq(item.position, Vector3(0, 0, -0.15), Vector3.ONE * 0.0001, "its near face on the socket")
+	assert_true(item.basis.is_equal_approx(Basis.IDENTITY), "upright, facing the way you look")
+
+func test_a_carried_item_moves_and_turns_with_the_view():
+	var item := _item()
+	_grasp.take(item)
+	var before := item.global_position
+	_head.rotation.y = PI * 0.5
+	assert_almost_eq(item.global_basis.z, _head.global_basis.z, Vector3.ONE * 0.0001)
+	assert_ne(item.global_position, before)
+
+func test_taking_announces_where_the_item_came_from():
+	var item := _item(ItemDefinition.Grip.WIELD, 1.0, Vector3(0.4, 0.9, -1.2))
+	var from := item.global_transform
+	watch_signals(_grasp)
+	_grasp.take(item)
+	assert_signal_emitted_with_parameters(_grasp, "taken", [item, from])
 
 func test_hands_must_be_empty():
 	_grasp.take(_item())
@@ -112,14 +132,15 @@ func test_holding_ignores_the_holder():
 	assert_has(item.get_collision_exceptions(), _body)
 	assert_has(_body.get_collision_exceptions(), item)
 
-func test_drop_puts_a_wielded_item_back_in_the_world():
-	var item := _item(ItemDefinition.Grip.WIELD)
-	_grasp.take(item)
-	_grasp.drop()
-	assert_eq(item.get_parent(), _world)
-	assert_eq(item.state, Item.State.LOOSE)
-	assert_eq(item.collision_layer, Item.LAYER)
-	assert_eq(_grasp.mode, Grasp.Mode.EMPTY)
+func test_drop_puts_either_kind_back_in_the_world():
+	for grip in [ItemDefinition.Grip.WIELD, ItemDefinition.Grip.CARRY]:
+		var item := _item(grip)
+		_grasp.take(item)
+		_grasp.drop()
+		assert_eq(item.get_parent(), _world)
+		assert_eq(item.state, Item.State.LOOSE)
+		assert_eq(item.collision_layer, Item.LAYER)
+		assert_eq(_grasp.mode, Grasp.Mode.EMPTY)
 
 func test_the_exception_outlasts_the_drop_until_they_part():
 	var item := _item()
@@ -173,24 +194,19 @@ func test_third_person_refuses_use_and_throw():
 	assert_eq(_grasp.charge, -1.0)
 	assert_false(_grasp.use())
 
-func test_a_snagged_item_is_let_go():
-	var item := _item(ItemDefinition.Grip.CARRY, 30.0)
-	_grasp.take(item)
-	await wait_physics_frames(20)
-	_head.position = Vector3(0, 1.6, 6)
-	await wait_physics_frames(30)
-	assert_eq(_grasp.mode, Grasp.Mode.EMPTY)
-	assert_eq(item.state, Item.State.LOOSE)
-
-func test_dropping_near_a_fitting_point_stows():
-	var item := _item()
-	_grasp.take(item)
-	await wait_physics_frames(30)
-	var point := _point_at(item.global_position - Vector3(0, 0.1, 0))
-	_grasp.drop()
-	assert_eq(item.state, Item.State.STOWED)
-	assert_eq(point.item, item)
-	assert_does_not_have(item.get_collision_exceptions(), _body)
+func test_dropping_while_aiming_at_a_fitting_point_stows_either_kind():
+	_add_box(Vector3(0, 1.6, -1.55), Vector3(4, 4, 0.1))
+	await wait_physics_frames(2)
+	for grip in [ItemDefinition.Grip.WIELD, ItemDefinition.Grip.CARRY]:
+		var item := _item(grip)
+		_grasp.take(item)
+		var point := _point_at(Vector3(0, 1.5, -1.45))
+		_grasp.drop()
+		assert_eq(item.state, Item.State.STOWED)
+		assert_eq(point.item, item)
+		assert_does_not_have(item.get_collision_exceptions(), _body)
+		point.release()
+		point.free()
 
 func test_dropping_far_from_a_point_just_drops():
 	var item := _item()
@@ -199,12 +215,12 @@ func test_dropping_far_from_a_point_just_drops():
 	_grasp.drop()
 	assert_eq(item.state, Item.State.LOOSE)
 
-func test_a_stow_prompt_appears_in_range():
-	var item := _item()
-	_grasp.take(item)
-	await wait_physics_frames(30)
+func test_a_stow_prompt_appears_when_aiming_at_a_point():
+	_add_box(Vector3(0, 1.6, -1.55), Vector3(4, 4, 0.1))
+	_grasp.take(_item())
+	await wait_physics_frames(2)
 	watch_signals(_grasp)
-	_point_at(item.global_position - Vector3(0, 0.1, 0))
+	_point_at(Vector3(0, 1.5, -1.45))
 	await wait_physics_frames(2)
 	assert_signal_emitted_with_parameters(_grasp, "prompt_changed", [Grasp.STOW_PROMPT])
 
@@ -222,13 +238,14 @@ func test_disabling_keeps_a_wielded_item_but_will_not_use_it():
 	assert_eq(_grasp.mode, Grasp.Mode.WIELDING)
 	assert_false(_grasp.use())
 
-func test_a_wielded_item_is_released_clear_of_a_wall():
+func test_either_kind_is_released_clear_of_a_wall():
 	_add_box(Vector3(0, 1.6, -0.3), Vector3(2, 2, 0.05))
 	await wait_physics_frames(2)
-	var item := _item(ItemDefinition.Grip.WIELD, 1.0, Vector3(0, 1.3, 0.9))
-	_grasp.take(item)
-	_grasp.drop()
-	assert_gt(item.global_position.z, -0.3, "on the near side of the wall")
+	for grip in [ItemDefinition.Grip.WIELD, ItemDefinition.Grip.CARRY]:
+		var item := _item(grip, 1.0, Vector3(0, 1.3, 0.9))
+		_grasp.take(item)
+		_grasp.drop()
+		assert_gt(item.global_position.z, -0.3, "on the near side of the wall")
 
 func test_use_calls_the_items_use_and_announces_it():
 	var item := _item(ItemDefinition.Grip.WIELD)

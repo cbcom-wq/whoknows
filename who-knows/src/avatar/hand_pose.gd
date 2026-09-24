@@ -13,6 +13,9 @@ extends RefCounted
 const PALM := Vector3(0.0, -0.025, -0.06)
 ## Where a wielded item's grip sits in the Hands frame.
 const WIELD_SOCKET := Vector3(0.17, -0.2, -0.42)
+## Where a two-handed item's near face sits in the Hands frame: centred, low
+## enough to see past, between the hands.
+const CARRY_SOCKET := Vector3(0.0, -0.34, -0.4)
 
 const _MIRROR := Transform3D(Basis(Vector3(-1, 0, 0), Vector3(0, 1, 0), Vector3(0, 0, 1)), Vector3.ZERO)
 
@@ -57,13 +60,13 @@ static func reach() -> HandPose:
 		Transform3D(Basis.from_euler(Vector3(0.35, 0.1, -0.3)), Vector3(0.19, -0.17, -0.44)))
 
 ## Carrying something `width` wide and `depth` deep: gripping its sides near
-## the front, palms in, arms angled down out of the frame. Grasp holds the
-## item's centre at HOLD_OFFSET plus half its depth, so its front face is
-## always 0.45 m ahead.
+## the front, palms in, arms angled down out of the frame. The item's near face
+## sits on CARRY_SOCKET, centred on it, so the hands close on its sides.
 static func carry(width: float, depth: float) -> HandPose:
 	var x := clampf(width * 0.5 + 0.035, 0.1, 0.28)
 	return make([0.55, 0.55, 0.55, 0.55], 0.45, 0.25,
-		Transform3D(Basis.from_euler(Vector3(0.5, 0.2, -1.3)), Vector3(x, -0.27, -(0.45 + depth * 0.3))))
+		Transform3D(Basis.from_euler(Vector3(0.5, 0.2, -1.3)),
+			Vector3(x, CARRY_SOCKET.y, CARRY_SOCKET.z - depth * 0.3)))
 
 ## Wielding: closed round the grip, the index on the trigger if it has one.
 ## The wrist is placed so the palm lands on WIELD_SOCKET.

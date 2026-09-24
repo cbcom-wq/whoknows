@@ -2,14 +2,16 @@ class_name Hands
 extends Node3D
 
 ## The first-person hands (docs/superpowers/specs/
-## 2026-09-23-hands-and-items-design.md §8): two suit gloves under the camera,
-## posed from what Grasp holds, swaying with the look, bobbing with the walk,
-## drifting with the ship's shove, kicked by recoil and tucked away from any
-## wall close enough to swallow them. Visuals only: reads Grasp and the avatar
-## and never changes either.
+## 2026-09-23-hands-and-items-design.md §8, as amended 2026-09-24): two suit
+## gloves under the camera, posed from what Grasp holds, swaying with the look,
+## bobbing with the walk, drifting with the ship's shove, kicked by recoil and
+## tucked away from any wall close enough to swallow them. When something is
+## taken they swipe it in: the hand reaches toward where it sat and draws it
+## into the grip. Visuals only: Grasp decides what is held; Hands only moves
+## things while they are in its sockets.
 ##
-## A wielded item hangs in `wield_socket`, so it moves -- and hides -- with the
-## hands.
+## A one-handed item hangs in `wield_socket` and a two-handed one in
+## `carry_socket`, so either moves -- and hides -- with the hands.
 
 const POSE_RATE := 12.0
 const SWAY_GAIN := 0.6
@@ -28,11 +30,18 @@ const TUCK_DOWN := 0.1
 const RECOIL_BACK := 0.04
 const RECOIL_TILT := deg_to_rad(6.0)
 const RECOIL_TIME := 0.15
+## A grab: the hand reaches toward what was taken and draws it in.
+const GRAB_TIME := 0.3
+## Farthest the hands reach out of their rest place during a grab.
+const GRAB_REACH := 0.3
+## Share of the grab spent reaching out, open-handed, before closing.
+const GRAB_OPEN := 0.4
 ## interior_geometry | items.
 const RAY_MASK := 2 | 32
 
 var shown := true: set = set_shown
 var wield_socket: Node3D
+var carry_socket: Node3D
 var right: Glove
 var left: Glove
 ## 1 just after a shot, easing to 0.
@@ -47,6 +56,12 @@ var _pose_l: HandPose
 var _sway := Vector2.ZERO
 var _last_look := Vector2.ZERO
 var _bob_phase := 0.0
+var _grab_item: Item = null
+var _grab_from := Transform3D.IDENTITY
+var _grab_rest := Transform3D.IDENTITY
+var _grab_reach := Vector3.ZERO
+var _grab_both := false
+var _grab_t := 1.0
 
 func _init() -> void:
 	name = "Hands"
@@ -64,6 +79,10 @@ func _init() -> void:
 	wield_socket.name = "WieldSocket"
 	wield_socket.position = HandPose.WIELD_SOCKET
 	_right_mount.add_child(wield_socket)
+	carry_socket = Node3D.new()
+	carry_socket.name = "CarrySocket"
+	carry_socket.position = HandPose.CARRY_SOCKET
+	_root.add_child(carry_socket)
 	_pose_r = HandPose.relaxed()
 	_pose_l = _pose_r.mirrored()
 	right.apply(_pose_r)
@@ -73,7 +92,12 @@ func bind(grasp: Grasp, avatar: Avatar) -> void:
 	_grasp = grasp
 	_avatar = avatar
 	grasp.used.connect(func(_item: Item) -> void: recoil = 1.0)
+	grasp.taken.connect(_on_taken)
 	_last_look = _look()
+
+## Whether a grab swipe is under way.
+func grabbing() -> bool:
+	return _grab_item != null
 
 func set_shown(on: bool) -> void:
 	shown = on
@@ -95,6 +119,11 @@ func target_poses() -> Array[HandPose]:
 				if _reaching():
 					r = HandPose.reach()
 					l = r
+	# Early in a grab the grabbing hand is still open, reaching for it.
+	if grabbing() and _grab_t < GRAB_OPEN:
+		r = HandPose.reach()
+		if _grab_both:
+			l = r
 	return [r, l.mirrored()]
 
 ## 0 in open space, rising to 1 as a wall comes within reach of the eye.
@@ -116,8 +145,11 @@ func _process(delta: float) -> void:
 	_pose_l = HandPose.blend(_pose_l, targets[1], t)
 	right.apply(_pose_r)
 	left.apply(_pose_l)
+	if grabbing():
+		_grab_t = minf(_grab_t + delta / GRAB_TIME, 1.0)
 	_root.transform = _root_motion(delta)
 	_right_mount.transform = _mount_motion(delta)
+	_draw_in()
 
 func _root_motion(delta: float) -> Transform3D:
 	var look := _look()
@@ -126,12 +158,12 @@ func _root_motion(delta: float) -> Transform3D:
 	_sway = (_sway - turn * SWAY_GAIN).lerp(Vector2.ZERO, 1.0 - exp(-SWAY_RETURN * delta))
 	_sway = _sway.clamp(Vector2(-SWAY_MAX, -SWAY_MAX), Vector2(SWAY_MAX, SWAY_MAX))
 	var offset := _bob(delta) + _shove()
-	var carrying := _grasp != null and _grasp.mode == Grasp.Mode.CARRYING
-	if carrying:
+	if _grasp != null and _grasp.mode == Grasp.Mode.CARRYING:
 		offset.z += Grasp.WIND_BACK * maxf(_grasp.charge, 0.0)
-	else:
-		var tuck := tuck_amount()
-		offset += Vector3(0.0, -TUCK_DOWN * tuck, TUCK_BACK * tuck)
+	if _grab_both:
+		offset += _reach_offset()
+	var tuck := tuck_amount()
+	offset += Vector3(0.0, -TUCK_DOWN * tuck, TUCK_BACK * tuck)
 	return Transform3D(Basis.from_euler(Vector3(_sway.y, _sway.x, 0.0)), offset)
 
 ## Recoil and the wind-up act on the right hand only, pivoting about the grip
@@ -141,10 +173,50 @@ func _mount_motion(delta: float) -> Transform3D:
 	var back := RECOIL_BACK * recoil
 	if _grasp != null and _grasp.mode == Grasp.Mode.WIELDING:
 		back += Grasp.WIND_BACK * maxf(_grasp.charge, 0.0)
+	var reach := Vector3.ZERO if _grab_both else _reach_offset()
 	var pivot := HandPose.WIELD_SOCKET
-	return Transform3D(Basis.IDENTITY, pivot + Vector3(0.0, 0.0, back)) \
+	return Transform3D(Basis.IDENTITY, pivot + Vector3(0.0, 0.0, back) + reach) \
 		* Transform3D(Basis(Vector3.RIGHT, RECOIL_TILT * recoil), Vector3.ZERO) \
 		* Transform3D(Basis.IDENTITY, -pivot)
+
+## Starts a grab swipe for what Grasp just took from `from`.
+func _on_taken(item: Item, from: Transform3D) -> void:
+	_grab_item = item
+	_grab_from = from
+	_grab_rest = item.transform
+	_grab_t = 0.0
+	_grab_both = _grasp.mode == Grasp.Mode.CARRYING
+	var rest := HandPose.CARRY_SOCKET if _grab_both else HandPose.WIELD_SOCKET
+	var toward := _root.global_transform.affine_inverse() * from.origin - rest
+	_grab_reach = toward.limit_length(GRAB_REACH)
+	item.global_transform = from
+
+## How far the grabbing hand is out of its rest place: out toward the item and
+## back, over the swipe.
+func _reach_offset() -> Vector3:
+	if not grabbing():
+		return Vector3.ZERO
+	return _grab_reach * sin(PI * _grab_t)
+
+## Eases a grabbed item from where it sat into the hand, and lets go of the
+## swipe once it is home -- or at once if it has left the hands.
+func _draw_in() -> void:
+	if not grabbing():
+		return
+	if not is_instance_valid(_grab_item) or _grasp == null or _grasp.item != _grab_item:
+		_end_grab()
+		return
+	if _grab_t >= 1.0:
+		_grab_item.transform = _grab_rest
+		_end_grab()
+		return
+	var home := (_grab_item.get_parent() as Node3D).global_transform * _grab_rest
+	_grab_item.global_transform = _grab_from.interpolate_with(home, smoothstep(0.0, 1.0, _grab_t))
+
+func _end_grab() -> void:
+	_grab_item = null
+	_grab_both = false
+	_grab_t = 1.0
 
 func _look() -> Vector2:
 	if _avatar == null:

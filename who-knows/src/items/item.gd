@@ -16,6 +16,8 @@ extends RigidBody3D
 
 enum State { STOWED, LOOSE, HELD }
 
+## Every item joins this group, so anything looking for items can find them.
+const GROUP := &"item"
 ## What one person can lift.
 const LIFT_LIMIT_KG := 40.0
 ## project.godot 3d_physics/layer_6 "items", as a bit.
@@ -63,6 +65,7 @@ func setup(def: ItemDefinition, variety := 0.0) -> void:
 		use_node.name = "Use"
 		add_child(use_node)
 	add_to_group(&"interactable")
+	add_to_group(GROUP)
 
 func shape() -> BoxShape3D:
 	return _shape
@@ -83,21 +86,18 @@ func set_loose() -> void:
 	collision_mask = MASK
 	freeze = false
 
-## In someone's hands. A wielded item is frozen kinematic and leaves the
-## physics world, so it can never shove anything from inside a hand; a
-## carried one stays dynamic and solid.
-func set_held(wielded: bool) -> void:
+## In someone's hands: frozen and out of the physics world, so it can never
+## shove anything from inside a hand, and it goes wherever the hand goes.
+## Static rather than kinematic: the engine steps a kinematic body and writes
+## its position back a frame behind the hand's, so a held item lagged and
+## drifted off its grip.
+func set_held() -> void:
 	state = State.HELD
 	stow_point = null
-	if wielded:
-		freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
-		freeze = true
-		collision_layer = 0
-		collision_mask = 0
-	else:
-		collision_layer = LAYER
-		collision_mask = MASK
-		freeze = false
+	freeze_mode = RigidBody3D.FREEZE_MODE_STATIC
+	freeze = true
+	collision_layer = 0
+	collision_mask = 0
 
 func prompt_text() -> String:
 	if definition.mass_kg > LIFT_LIMIT_KG:

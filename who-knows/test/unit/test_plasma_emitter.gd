@@ -13,7 +13,7 @@ func before_each():
 	_pistol.setup(ItemCatalog.load_from_dir().get_def(&"plasma_pistol"))
 	_world.add_child(_pistol)
 	_pistol.global_position = Vector3(0.2, -0.2, -0.4)
-	_pistol.set_held(true)
+	_pistol.set_held()
 
 func _slab(z: float) -> void:
 	var slab := StaticBody3D.new()

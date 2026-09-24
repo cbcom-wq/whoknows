@@ -63,25 +63,21 @@ func test_stowed_is_frozen_static():
 	assert_eq(item.freeze_mode, RigidBody3D.FREEZE_MODE_STATIC)
 	assert_eq(item.collision_layer, 32, "you can still bump into it")
 
-func test_wielded_is_frozen_kinematic_and_leaves_the_physics_world():
-	var item := _item(_def(ItemDefinition.Grip.WIELD))
-	item.set_held(true)
-	assert_eq(item.state, Item.State.HELD)
-	assert_true(item.freeze)
-	assert_eq(item.freeze_mode, RigidBody3D.FREEZE_MODE_KINEMATIC)
-	assert_eq(item.collision_layer, 0)
-	assert_eq(item.collision_mask, 0)
-
-func test_carried_stays_dynamic_and_solid():
-	var item := _item()
-	item.set_held(false)
-	assert_eq(item.state, Item.State.HELD)
-	assert_false(item.freeze)
-	assert_eq(item.collision_layer, 32)
+func test_held_is_frozen_static_and_leaves_the_physics_world():
+	for grip in [ItemDefinition.Grip.WIELD, ItemDefinition.Grip.CARRY]:
+		var item := _item(_def(grip))
+		item.set_held()
+		assert_eq(item.state, Item.State.HELD)
+		assert_true(item.freeze)
+		# Static, not kinematic: the engine steps a kinematic body and writes
+		# its stale position back over the hand's, a frame behind.
+		assert_eq(item.freeze_mode, RigidBody3D.FREEZE_MODE_STATIC)
+		assert_eq(item.collision_layer, 0)
+		assert_eq(item.collision_mask, 0)
 
 func test_letting_go_restores_the_layers():
 	var item := _item(_def(ItemDefinition.Grip.WIELD))
-	item.set_held(true)
+	item.set_held()
 	item.set_loose()
 	assert_eq(item.collision_layer, 32)
 	assert_eq(item.collision_mask, 38)
@@ -102,7 +98,7 @@ func test_asks_the_actor_before_offering_itself():
 	actor.allowed = false
 	assert_false(item.can_interact(actor))
 	actor.allowed = true
-	item.set_held(false)
+	item.set_held()
 	assert_false(item.can_interact(actor), "never while held")
 
 func test_interacting_hands_it_to_the_actor():

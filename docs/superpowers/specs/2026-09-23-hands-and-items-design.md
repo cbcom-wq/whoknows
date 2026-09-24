@@ -11,6 +11,20 @@ Planetfall §4.2 (physics layers), §10.5 (the transfer), §18 (items hook)
 **Standing rules:** `docs/design/visual-style.md` governs every visual in this spec: the gloves,
 the items, the bolt and the flashes.
 
+> **Amended 2026-09-24, after the owner's first playtest.** Throwing and the plasma bolts played
+> well. Three things did not, and the owner chose the fixes:
+>
+> 1. **Held objects floated.** The physics hold for carried items kept them in front of the eye,
+>    at the orientation they were picked up in, never in the hands. **Everything you take now locks
+>    into the hands**: one-handed items (pistol, mug, and now the canister, held by its neck) in
+>    the right hand; crates in a socket between both hands. The physics hold, its lag and its snag
+>    rule are gone (§2, §4.4, §7.2, §7.3). A held crate no longer bumps walls; it pulls back with
+>    the hands instead (§8.4). Held items also freeze **static**, not kinematic: the engine steps
+>    a kinematic body and writes its position back a frame behind the hand's.
+> 2. **No grab.** Taking something now plays a **grab swipe** (§8.3).
+> 3. **Too precise an aim.** When the ray is not on anything usable, the item **nearest the line
+>    of sight** is offered (§7.2).
+
 ---
 
 ## 1. Why this document exists
@@ -41,7 +55,7 @@ Each was put to the owner as options with trade-offs.
 
 | Question | Decision | Why |
 |---|---|---|
-| How held objects behave | **Physics hold for carried objects, hand-snap for tools** | A carried crate stays a real rigid body pulled toward a hold point, so it collides with walls, heavy things lag and sag, and snags drop it. Tools track the aim exactly, in the hand, like the reference. Rigid snapping was rejected (held objects pass through bulkheads; weight does not read). Joint springs were rejected (jitter with mass ratios, hard to tune and test). |
+| How held objects behave | ~~Physics hold for carried objects, hand-snap for tools~~ **Amended 2026-09-24: everything locks into the hands** | First choice: a carried crate stayed a real rigid body pulled toward a hold point. Playtest: it floated in front of you instead of sitting in your hands. Now a crate is held between both hands, attached like the pistol; the owner accepted that it no longer bumps walls and tucks back with the hands instead. Joint springs stay rejected. |
 | What a plasma hit does | **Push and flash** | A real impulse on loose objects and a brief impact flash. Nothing takes damage; a `receive_hit` hook is left for Slice 2. Breakable objects now were rejected as scope that could clash with Slice 2's block-damage design. |
 | Plasma colour | **Warm coral-amber** | Keeps the style guide's "every light is `LIGHT_WARM`" without a rule change, and reads as *hot* against the cream cabin. |
 | Do loose objects feel the ship's motion | **Yes, exactly as the avatar does; secured objects stay put** | One felt-gravity field: plating gravity plus the hull's shove at the same `shove_scale`. A crate beside you on a burn slides as you are shoved. Items stowed on racks and shelves are clamped and ignore it. |
@@ -154,7 +168,7 @@ enum Grip { WIELD, CARRY }
 |---|---|---|---|---|---|---|
 | `plasma_pistol` | Plasma pistol | wield | 1.4 kg | 0.06 × 0.16 × 0.24 | `sidearm` | `PlasmaEmitter` |
 | `mug` | Mug | wield | 0.3 kg | 0.09 × 0.10 × 0.09 | `small` | — |
-| `canister` | Canister | carry | 4 kg | 0.16 × 0.34 × 0.16 | `small` | — |
+| `canister` | Canister | wield (by its neck; amended 2026-09-24) | 4 kg | 0.16 × 0.34 × 0.16 | `small` | — |
 | `crate` | Crate | carry | 12 kg | 0.45 × 0.35 × 0.35 | `crate` | — |
 
 Sizes are pinned in the plan by rendering the looks.
@@ -191,8 +205,7 @@ shader. The kit puts them on render layer 2, like every interior prop.
 |---|---|---|---|
 | `STOWED` | frozen (`FREEZE_MODE_STATIC`) at its stow point | no: it stays put | yes |
 | `LOOSE` | dynamic | yes | yes |
-| `HELD`, carry | dynamic, pulled toward the hold point by Grasp | yes: a burn tugs it aft | yes, except with its holder |
-| `HELD`, wield | frozen (`FREEZE_MODE_KINEMATIC`), parented to the right glove's grip | no | no: `collision_layer = 0` |
+| `HELD` | frozen (`FREEZE_MODE_STATIC`), parented to the right hand's `wield_socket` or, for a crate, the `carry_socket` between both hands (amended 2026-09-24) | no | no: `collision_layer = 0` |
 
 **The interactable contract.** `Item` joins group `interactable` and implements:
 
@@ -336,39 +349,37 @@ the mouse is captured. Re-capturing the mouse never fires the gun.
 - **Prompts.** The `Interactor` ray gains the items layer, excludes whatever the avatar holds, and
   hides the prompt of any interactable whose optional `can_interact(owner)` returns false. With full
   hands, items show no prompt.
+- **Forgiving aim** (amended 2026-09-24). When the ray is not on anything usable, the Interactor
+  offers the usable item nearest the line of sight: within 8° of it, widened by half the item's
+  largest dimension, within the 2.5 m reach, and in plain view (a ray from the eye reaches it).
+  Looking straight at something still wins.
 - **Taking a stowed item** calls `StowPoint.release()` first.
-- **Wielding.** The item is frozen kinematic, its `collision_layer` set to 0, and it is reparented
-  to `wield_socket` so that `grip_point` sits on the socket and item −z points along the view.
-- **Carrying uses a force-limited hold.** The hold point is head-local
-  `(0, −0.25, −(0.45 + size.z / 2))`. Each physics tick Grasp computes the velocity that would close
-  the gap in `HOLD_RESPONSE = 0.1 s`, plus the avatar's own velocity, and applies the impulse
-  toward it, capped at `HOLD_FORCE = 400 N × dt`. A 12 kg crate follows snappily; a 40 kg one
-  barely beats gravity and sags. Angular velocity is steered the same way, so the item keeps the
-  orientation it had relative to your heading when you picked it up.
+- **Everything goes into the hands** (amended 2026-09-24). The item freezes static, its layers go
+  to 0, and it is reparented: a one-handed item to `wield_socket`, so that `grip_point` sits on the
+  socket; a two-handed item to `carry_socket`, centred on it with its near face on it. Either way
+  item −z points along the view and it moves and turns exactly with the view.
+  `Grasp.taken(item, from)` reports where it came from, for the grab swipe.
 - **Holding ignores the holder:** collision exceptions both ways, item and avatar, while held.
-- **Snags drop things.** A carried item more than 0.8 m from its hold point for 0.3 s (caught on a
-  doorframe) is released where it is.
 
 ### 7.3 Releasing
 
-- **Drop:** a carried item is released where it is, with its current velocity. A wielded item is
-  released at the hand.
+- **Drop:** the item is released where it is in the hands, with the avatar's velocity.
 - **Throw:** speed = `lerp(3, 12, charge) × clamp(sqrt(5 kg / mass), 0.35, 1.0)` m/s along the aim,
   plus the avatar's velocity. The mug, pistol and canister leave at up to 12 m/s, the crate at
-  about 7.7, a 40 kg item at about 4.2. While winding up, the hold point and the throwing hand draw
-  back by `0.12 m × charge`.
-- **Wielded items leave from a point proven clear:** a ray from the eye to the hand. If it is
-  blocked (tucked against a wall), the item is released just short of the hit.
+  about 7.7, a 40 kg item at about 4.2. While winding up, the throwing hand, or both hands for a
+  crate, draw back by `0.12 m × charge`.
+- **Items leave from a point proven clear:** a ray from the eye to the item. If it is blocked
+  (tucked against a wall), the item is released short of the hit by 0.15 m plus half its largest
+  dimension.
 - **No pop on release.** The collision exception with the avatar stays until the item no longer
   overlaps the avatar's capsule, for at most 1 s, so a dropped item does not burst out of your legs.
 - Released items are reparented to `world_root` (unless stowed) and become `LOOSE`.
 
 ### 7.4 Stowing
 
-On `drop`, if a free `StowPoint` that fits the held item is within **0.5 m** of the reference
-point, the item is secured there instead of dropped. The reference point is the carried item's
-position; for a wielded item, it is where the eye ray hits within the Interactor's 2.5 m reach, so
-you aim at the cradle. While a stow would happen, Grasp's prompt reads *[G] Stow*. A throw never
+On `drop`, if a free `StowPoint` that fits the held item is within **0.5 m** of where the eye ray
+hits within the Interactor's 2.5 m reach, the item is secured there instead of dropped: you aim at
+the cradle, the shelf or the counter. While a stow would happen, Grasp's prompt reads *[G] Stow*. A throw never
 stows.
 
 ### 7.5 Walking into things
@@ -431,6 +442,13 @@ toward its target at rate 12/s (`t = 1 − exp(−12 × dt)`), so pose changes f
 | Grip | wielding an item with a use | closed round the grip, index on the trigger | relaxed |
 | Hold | wielding an item with no use | closed round it | relaxed |
 | Wind-up | charging a throw | draws back `0.12 m × charge` | carry: same; else relaxed |
+| Grab (amended 2026-09-24) | the first 40% of a grab swipe | reach, open | carry: same; else unchanged |
+
+**The grab swipe** (amended 2026-09-24). On `Grasp.taken`, the grabbing hand, or both for a crate,
+reaches out of its rest place toward where the item sat, at most 0.3 m, and back, over 0.3 s
+(`sin(π t)`), open for the first 40% and then closing. The item eases from where it sat into its
+socket over the same 0.3 s (`smoothstep`). If the item leaves the hands mid-swipe, the swipe lets
+go of it.
 
 In **Carry**, the hands' spacing follows the item's width, clamped to 0.2–0.5 m, so they sit at its
 sides.
