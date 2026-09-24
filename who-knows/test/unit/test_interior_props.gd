@@ -66,10 +66,29 @@ func test_porthole_builds_frame_and_glass():
 	assert_has(names, "DressingPortals", "glass showing the real view outside")
 	assert_has(names, "DressingGlass", "the glint")
 
-func test_hatch_brings_its_light():
-	InteriorProps.hatch(_kit, Transform3D.IDENTITY)
+## Airlock spec §3.3, §3.5: the airlock's pieces build in bare frames.
+func test_hatch_frame_builds_and_is_flush_enough_to_brush_past():
+	InteriorProps.hatch_frame(_kit, Transform3D.IDENTITY)
+	assert_gt(_kit.commit().size(), 0)
+	assert_eq(_colliders().size(), 0)
+
+func test_airlock_wall_builds_with_its_nozzles():
+	InteriorProps.airlock_wall(_kit, Transform3D.IDENTITY, 0.3)
 	_assert_built()
-	assert_eq(_lights(&"hatch").size(), 1)
+	assert_eq(_colliders().size(), 0)
+	var jets := InteriorProps.nozzle_frames(Transform3D.IDENTITY)
+	assert_eq(jets.size(), InteriorProps.NOZZLES_PER_WALL)
+	for j in jets:
+		var along := j.basis * Vector3.FORWARD
+		assert_gt(along.z, 0.0, "jets point into the room")
+		assert_gt(along.y, 0.0, "and upward")
+
+func test_airlock_ceiling_brings_its_light():
+	var light := InteriorProps.airlock_ceiling(_kit, InteriorKit.at(Vector3(0, InteriorProps.AIRLOCK_CLEAR, 0)))
+	_assert_built()
+	assert_not_null(light)
+	assert_eq(_lights(&"airlock").size(), 1)
+	assert_lt(light.position.y, InteriorProps.AIRLOCK_CLEAR, "the light hangs below the ceiling")
 
 func test_props_honour_a_rotated_frame():
 	var f := Transform3D(Basis(Vector3.UP, PI * 0.5), Vector3(5, 0, 5))

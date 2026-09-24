@@ -44,6 +44,11 @@ const _UNIT_UVS: Array[Vector2] = [Vector2(0, 1), Vector2(1, 1), Vector2(1, 0), 
 
 var root: Node3D
 var body: CollisionObject3D
+## Render layers for what this kit draws, and the cull mask of the lights it
+## makes. The interior's by default; the airlock's copy on the hull builds on
+## the own-hull layer (airlock spec §7.2).
+var layer := LAYER
+var light_mask := LAYER
 ## The PORTAL batch's material; null uses InteriorMaterials.portal_fallback().
 var portal_material: Material
 var _tools: Dictionary = {}   # Batch -> SurfaceTool
@@ -216,7 +221,7 @@ func light(pos: Vector3, color: Color, energy: float, range_m: float, role: Stri
 	l.light_color = color
 	l.light_energy = energy
 	l.omni_range = range_m
-	l.light_cull_mask = LAYER
+	l.light_cull_mask = light_mask
 	l.shadow_enabled = false
 	l.set_meta(&"role", role)
 	root.add_child(l)
@@ -244,7 +249,7 @@ func add_mesh(mesh: Mesh, material: Material, node_name: String) -> MeshInstance
 	mi.name = node_name
 	mi.mesh = mesh
 	mi.material_override = material
-	mi.layers = LAYER
+	mi.layers = layer
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(mi)
 	return mi

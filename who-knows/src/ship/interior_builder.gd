@@ -221,7 +221,9 @@ func _build_structure() -> void:
 			InteriorLayout.Kind.WALL:
 				if not face["owner"]:
 					continue   # the cell on the other side builds this partition
-				if face["porthole"]:
+				if face["variant"] == InteriorLayout.WallVariant.HATCH:
+					_add_opening(at, normal, InteriorProps.HATCH_HEIGHT)   # the airlock's outer hatch
+				elif face["porthole"]:
 					_walls.append(_add_collider(_physics_body, _wall_size(normal), at))
 					_add_porthole_wall(at, normal)
 				else:
@@ -275,6 +277,12 @@ func _add_porthole_wall(at: Vector3, normal: Vector3i) -> void:
 ## collider here: a SlidingDoor's leaves are only a picture, and an
 ## AirlockHatch brings its own.
 func _add_doorway(at: Vector3, normal: Vector3i, height: float) -> void:
+	_add_opening(at, normal, height)
+	_doorway_count += 1
+
+## Two jambs and a lintel round an opening DOOR_WIDTH wide and `height` high:
+## a doorway's, or the airlock's outer hatch's.
+func _add_opening(at: Vector3, normal: Vector3i, height: float) -> void:
 	var along := Vector3(absi(normal.z), 0, absi(normal.x))
 	var thick := Vector3(absi(normal.x), 0, absi(normal.z)) * FLOOR_THICKNESS
 	var material := InteriorMaterials.flat(InteriorPalette.WALL)
@@ -286,7 +294,6 @@ func _add_doorway(at: Vector3, normal: Vector3i, height: float) -> void:
 	var lintel := STOREY_HEIGHT - FLOOR_THICKNESS * 0.5 - height
 	_walls.append(_add_box(_physics_body, thick + along * InteriorProps.DOOR_WIDTH + Vector3.UP * lintel,
 		at + Vector3.UP * (STOREY_HEIGHT - lintel) * 0.5, material))
-	_doorway_count += 1
 
 ## Draws every MOUNT block that has a mesh: seats, consoles, ladders -- the
 ## fixtures a player sees and walks up to. Without this the pilot seat is an

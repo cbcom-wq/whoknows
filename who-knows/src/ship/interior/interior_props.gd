@@ -208,21 +208,86 @@ static func porthole(kit: InteriorKit, f: Transform3D) -> void:
 	kit.quad(GLASS, glint * Vector3(-0.08, -0.07, 0), glint * Vector3(0.08, -0.07, 0),
 		glint * Vector3(0.08, -0.055, 0), glint * Vector3(-0.08, -0.055, 0), facing, white)
 
-## The airlock's inner hatch: two bevelled leaves with a stripe, thick posts
-## and header, a lit strip under the header and a blinking amber indicator --
-## legible from across the cabin as the way out.
-static func hatch(kit: InteriorKit, f: Transform3D) -> void:
-	var leaf := DOOR_HEIGHT - 0.1
+## An airlock hatch's fixed frame (airlock spec §3.3), in a hatch frame:
+## origin at the opening's centre at floor level on the wall's mid-plane, +x
+## along the wall, +z into a room. It straddles the wall, the same from both
+## sides: chunky posts with hazard stripes, a header up into the ceiling, and a
+## threshold plate. The leaves, bolts and lights are AirlockHatch's. Flush
+## enough to brush past: no collider.
+static func hatch_frame(kit: InteriorKit, f: Transform3D) -> void:
+	var trim := _c(InteriorPalette.TRIM)
+	var half := DOOR_WIDTH * 0.5
 	for side in [-1.0, 1.0]:
-		kit.bevel_box(SOLID, f * _at(Vector3(side * 0.28, leaf * 0.5, 0.03)), Vector3(0.54, leaf, 0.06), 0.025,
-			_c(InteriorPalette.WALL_LOW))
-		kit.bevel_box(SOLID, f * _at(Vector3(side * 0.64, (DOOR_HEIGHT + 0.05) * 0.5, 0.06)),
-			Vector3(0.16, DOOR_HEIGHT + 0.05, 0.12), 0.04, _c(InteriorPalette.TRIM))
-	kit.bevel_box(SOLID, f * _at(Vector3(0, 1.0, 0.065)), Vector3(1.08, 0.08, 0.02), 0.008, _c(InteriorPalette.BELT))
-	kit.bevel_box(SOLID, f * _at(Vector3(0, DOOR_HEIGHT, 0.06)), Vector3(1.44, 0.14, 0.12), 0.04, _c(InteriorPalette.TRIM))
-	kit.box(GLOW, f * _at(Vector3(0, DOOR_HEIGHT - 0.08, 0.08)), Vector3(1.1, 0.02, 0.04), _lit(InteriorPalette.LIGHT_WARM, 2.0))
-	kit.disc(GLOW, f * _at(Vector3(0.85, 1.2, 0.011)), 0.04, _lit(InteriorPalette.AMBER, 1.6, 0.5))
-	kit.light(f * Vector3(0, DOOR_HEIGHT - 0.2, 0.4), InteriorPalette.LIGHT_WARM, 0.5, 2.5, &"hatch")
+		var x: float = side * (half + 0.08)
+		kit.bevel_box(SOLID, f * _at(Vector3(x, HATCH_HEIGHT * 0.5, 0)), Vector3(0.16, HATCH_HEIGHT, 0.3), 0.04, trim)
+		for face in [-1.0, 1.0]:
+			for y in [0.18, 0.34]:
+				kit.box(SOLID, f * _at(Vector3(x, y, face * 0.151)), Vector3(0.12, 0.07, 0.004),
+					_c(InteriorPalette.CORAL))
+	kit.bevel_box(SOLID, f * _at(Vector3(0, HATCH_HEIGHT + 0.06, 0)), Vector3(DOOR_WIDTH + 0.32, 0.12, 0.3), 0.04, trim)
+	kit.box(SOLID, f * _at(Vector3(0, 0.006, 0)), Vector3(DOOR_WIDTH + 0.32, 0.012, 0.3), _c(InteriorPalette.GUNMETAL))
+
+## Steam nozzles on each airlock side wall (airlock spec §3.5, §5.1).
+const NOZZLES_PER_WALL := 2
+const _NOZZLE_X: Array[float] = [-0.45, 0.45]
+const _NOZZLE_HEIGHT := 0.4
+## How steeply a nozzle's jet climbs from the horizontal.
+const _NOZZLE_TILT := deg_to_rad(30.0)
+
+## An airlock wall, in a wall frame (see the header), for the airlock's low
+## ceiling: a kick band, corner pilasters and two ribs, a band under the
+## ceiling, a coral grab rail, a vent grille and -- unless `nozzles` is false --
+## two steam nozzles low down, angled up into the room. All flush or thin: no
+## collider.
+static func airlock_wall(kit: InteriorKit, f: Transform3D, _variety: float, nozzles := true) -> void:
+	var trim := _c(InteriorPalette.TRIM)
+	var low := _c(InteriorPalette.WALL_LOW)
+	var gun := _c(InteriorPalette.GUNMETAL)
+	kit.bevel_box(SOLID, f * _at(Vector3(0, 0.07, 0.02)), Vector3(BAY, 0.14, 0.04), 0.015, low)
+	kit.bevel_box(SOLID, f * _at(Vector3(0, AIRLOCK_CLEAR - 0.04, 0.025)), Vector3(BAY, 0.08, 0.05), 0.015, trim)
+	for side in [-1.0, 1.0]:
+		var shrink := 0.0 if side > 0.0 else 0.002
+		kit.bevel_box(SOLID, f * _at(Vector3(side * BAY * 0.5, AIRLOCK_CLEAR * 0.5, 0.05)),
+			Vector3(0.18 - shrink, AIRLOCK_CLEAR, 0.1 - shrink), 0.035, trim)
+		kit.bevel_box(SOLID, f * _at(Vector3(side * 0.75, AIRLOCK_CLEAR * 0.5, 0.03)),
+			Vector3(0.1, AIRLOCK_CLEAR - 0.22, 0.06), 0.025, trim)
+		kit.bevel_box(SOLID, f * _at(Vector3(side * 0.55, 0.92, 0.06)), Vector3(0.04, 0.04, 0.12), 0.01, trim)
+	kit.tube_x(SOLID, f * _at(Vector3(0, 0.92, 0.12)), 0.022, 1.3, _c(InteriorPalette.CORAL))
+	kit.bevel_box(SOLID, f * _at(Vector3(0, 0.24, 0.012)), Vector3(0.44, 0.16, 0.024), 0.008,
+		_c(InteriorPalette.SCREEN_BACK))
+	for k in 4:
+		kit.box(SOLID, f * _at(Vector3(0, 0.186 + k * 0.036, 0.026)), Vector3(0.4, 0.014, 0.008), low)
+	if nozzles:
+		for jet in nozzle_frames(f):
+			var tip := jet.origin
+			var back := jet.origin - (jet.basis * Vector3.FORWARD) * 0.12
+			kit.tube_between(SOLID, back, tip, 0.028, gun)
+			kit.disc(GLOW, jet * _at(Vector3(0, 0, -0.001)) * Transform3D(Basis(Vector3.UP, PI), Vector3.ZERO),
+				0.018, _lit(InteriorPalette.STEAM, 0.6))
+		for x in _NOZZLE_X:
+			kit.bevel_box(SOLID, f * _at(Vector3(x, _NOZZLE_HEIGHT, 0.03)), Vector3(0.14, 0.14, 0.06), 0.02, gun)
+
+## Each steam nozzle's tip on an airlock wall in wall frame `f`, with -z along
+## its jet: into the room and up.
+static func nozzle_frames(f: Transform3D) -> Array[Transform3D]:
+	var out: Array[Transform3D] = []
+	var along := Vector3(0, sin(_NOZZLE_TILT), cos(_NOZZLE_TILT))
+	for x in _NOZZLE_X:
+		var tip := Vector3(x, _NOZZLE_HEIGHT, 0.06) + along * 0.12
+		out.append(f * Transform3D(Basis.looking_at(along, Vector3.UP), tip))
+	return out
+
+## The airlock's ceiling fittings in frame `f`: origin on the ceiling's
+## underside at the room's centre, -z toward the outer hatch. Two flush light
+## strips in trim, and the room's light, which the airlock recolours through
+## its cycle -- so it is returned.
+static func airlock_ceiling(kit: InteriorKit, f: Transform3D) -> OmniLight3D:
+	for side in [-1.0, 1.0]:
+		kit.bevel_box(SOLID, f * _at(Vector3(side * 0.45, -0.012, 0)), Vector3(0.2, 0.024, 1.3), 0.008,
+			_c(InteriorPalette.TRIM))
+		kit.box(GLOW, f * _at(Vector3(side * 0.45, -0.026, 0)), Vector3(0.12, 0.006, 1.2),
+			_lit(InteriorPalette.LIGHT_WARM, 1.8))
+	return kit.light(f * Vector3(0, -0.45, 0), InteriorPalette.LIGHT_WARM, 0.55, 3.0, &"airlock")
 
 ## The rounded cockpit nose over a windshield `width` wide, bulging forward
 ## (-z) from the canopy plane: a shell with window cut-outs (the material's

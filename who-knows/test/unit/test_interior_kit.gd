@@ -90,3 +90,13 @@ func test_portal_glass_falls_back_without_a_view():
 	_kit.box(InteriorKit.Batch.PORTAL, Transform3D.IDENTITY, Vector3.ONE, Color.WHITE)
 	assert_eq(_kit.commit()[0].material_override, InteriorMaterials.portal_fallback(),
 		"black glass, never a hole")
+
+## The alcove on the hull builds with the kit on another render layer (airlock
+## spec §7.2).
+func test_a_kit_can_build_on_another_layer():
+	_kit.layer = 4
+	_kit.light_mask = 5
+	_kit.box(InteriorKit.Batch.SOLID, Transform3D.IDENTITY, Vector3.ONE, Color.WHITE)
+	var l := _kit.light(Vector3.ZERO, Color.WHITE, 1.0, 2.0, &"test")
+	assert_eq(_kit.commit()[0].layers, 4)
+	assert_eq(l.light_cull_mask, 5)

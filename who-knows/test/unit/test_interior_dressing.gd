@@ -251,3 +251,46 @@ func test_a_fixture_without_a_pod_sits_at_its_cell_floor_centre():
 func test_the_dressing_draws_the_helm():
 	assert_true(InteriorDressing.draws_fixture(InteriorLayout.HELM_ID))
 	assert_false(InteriorDressing.draws_fixture(&"seat"))
+
+## Airlock spec §3: the airlock room, its two hatches and its panels.
+func _airlock_off_a_corridor() -> void:
+	_cat.register(_def(&"airlock", BlockDefinition.Occupancy.DECK))
+	_put(Vector3i(0, 0, 0), &"deck")
+	_put(Vector3i(0, 0, 1), &"airlock")   # aft face onto open space
+	_put(Vector3i(-1, 0, 1), &"hull")
+	_put(Vector3i(1, 0, 1), &"hull")
+
+func _rooms() -> Array:
+	return _builder.find_children("*", "Node3D", true, false).filter(func(n): return n is AirlockRoom)
+
+func test_an_airlock_gets_its_room_hatches_and_panels():
+	_airlock_off_a_corridor()
+	_builder.rebuild()
+	var rooms := _rooms()
+	assert_eq(rooms.size(), 1)
+	var room: AirlockRoom = rooms[0]
+	assert_eq(room.name, "Airlock_0_0_1")
+	assert_eq(room.coord, Vector3i(0, 0, 1))
+	assert_true(room.inner_hatch is AirlockHatch)
+	assert_true(room.outer_hatch is AirlockHatch)
+	assert_true(room.room_panel is AirlockPanel)
+	assert_true(room.corridor_panel is AirlockPanel)
+	assert_eq(room.nozzles.size(), 2 * InteriorProps.NOZZLES_PER_WALL, "two side walls of nozzles")
+	assert_eq(_doors().size(), 0, "a hatch, never a sliding door")
+
+func test_the_hatches_sit_on_their_walls_facing_into_the_room():
+	_airlock_off_a_corridor()
+	_builder.rebuild()
+	var room: AirlockRoom = _rooms()[0]
+	var fl := InteriorBuilder.floor_y(Vector3i(0, 0, 1))
+	assert_almost_eq(room.outer_hatch.global_position, Vector3(0, fl, 3.0), Vector3.ONE * 0.001, "on the aft face's mid-plane")
+	assert_almost_eq(room.outer_hatch.global_basis.z, Vector3(0, 0, -1), Vector3.ONE * 0.001, "+z faces into the room")
+	assert_almost_eq(room.inner_hatch.global_position, Vector3(0, fl, 1.0), Vector3.ONE * 0.001)
+	assert_almost_eq(room.inner_hatch.global_basis.z, Vector3(0, 0, 1), Vector3.ONE * 0.001)
+	assert_true(room.outer_frame.is_equal_approx(room.outer_hatch.transform))
+
+func test_the_airlock_takes_no_cabin_trim_or_ring_light():
+	_airlock_off_a_corridor()
+	_builder.rebuild()
+	assert_eq(_lights(&"airlock").size(), 1, "the airlock's own flush light")
+	assert_eq(_lights(&"ceiling").size(), 1, "only the corridor cell has a ring light")

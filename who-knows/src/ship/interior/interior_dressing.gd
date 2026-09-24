@@ -24,6 +24,8 @@ static func build(layout: InteriorLayout, body: StaticBody3D, canopy_material: M
 			_cockpit(kit, group)
 	for fixture in layout.fixtures():
 		_fixture(kit, layout, fixture)
+	for site in layout.airlocks():
+		_airlock_room(kit, layout, site)
 	kit.commit()
 	return root
 
@@ -132,6 +134,8 @@ static func _fixture(kit: InteriorKit, layout: InteriorLayout, fixture: Dictiona
 
 static func _dress(kit: InteriorKit, face: Dictionary) -> void:
 	var coord: Vector3i = face["coord"]
+	if face["zone"] == InteriorLayout.AIRLOCK_ZONE and face["kind"] != InteriorLayout.Kind.DOORWAY:
+		return   # _airlock_room dresses the airlock's walls and ceiling
 	match face["kind"]:
 		InteriorLayout.Kind.CEILING:
 			var centre := ShipGrid.cell_center(coord)
@@ -148,8 +152,6 @@ static func _dress(kit: InteriorKit, face: Dictionary) -> void:
 static func _wall_piece(kit: InteriorKit, f: Transform3D, face: Dictionary) -> void:
 	var variety := face_variety(face)
 	match face["variant"]:
-		InteriorLayout.WallVariant.HATCH:
-			InteriorProps.hatch(kit, f)
 		InteriorLayout.WallVariant.CONSOLE:
 			InteriorProps.console(kit, f, variety)
 		InteriorLayout.WallVariant.PORTHOLE:
@@ -213,6 +215,79 @@ static func _stow(kit: InteriorKit, f: Transform3D, spots: Array, stock: Diction
 		point.accepts = spot[1]
 		point.stock = stock.get(spot[1], &"")
 		kit.root.add_child(point, true)
+
+## One airlock's room (airlock spec §3): its walls and ceiling, a hatch frame
+## and an AirlockHatch at each end, the room panel on a side wall, the corridor
+## panel beside the inner hatch, and a portal pane just outside the outer
+## hatch's leaves. Everything the Airlock node drives is gathered on an
+## AirlockRoom.
+static func _airlock_room(kit: InteriorKit, layout: InteriorLayout, site: Dictionary) -> AirlockRoom:
+	var coord: Vector3i = site["coord"]
+	var hatch_n: Vector3i = site["hatch_normal"]
+	var door_n: Vector3i = site["door_normal"]
+	var room := AirlockRoom.new()
+	room.name = "Airlock_%d_%d_%d" % [coord.x, coord.y, coord.z]
+	room.coord = coord
+	room.hatch_normal = hatch_n
+	room.door_normal = door_n
+	kit.root.add_child(room)
+
+	var n := Vector3(hatch_n)
+	var origin := ShipGrid.cell_center(coord)
+	origin.y = floor_y(coord)
+	room.room_frame = Transform3D(Basis(Vector3.UP.cross(-n), Vector3.UP, -n), origin)
+	var mid := InteriorKit.at(Vector3(0, 0, -InteriorProps.WALL_THICKNESS * 0.5))
+	room.outer_frame = wall_frame(coord, hatch_n) * mid
+
+	var right := Vector3i(room.room_frame.basis.x.round())
+	var panel_wall := Vector3i.ZERO
+	for face in layout.faces():
+		if face["coord"] != coord or face["kind"] != InteriorLayout.Kind.WALL \
+				or face["variant"] != InteriorLayout.WallVariant.AIRLOCK:
+			continue
+		var normal: Vector3i = face["normal"]
+		var side := normal.x * hatch_n.x + normal.z * hatch_n.z == 0
+		InteriorProps.airlock_wall(kit, wall_frame(coord, normal), face_variety(face), side)
+		if side:
+			room.nozzles.append_array(InteriorProps.nozzle_frames(wall_frame(coord, normal)))
+		if panel_wall == Vector3i.ZERO or normal == right:
+			panel_wall = normal
+
+	InteriorProps.hatch_frame(kit, room.outer_frame)
+	room.outer_hatch = _hatch(kit, room.outer_frame, "Outer", true)
+	var w := InteriorProps.DOOR_WIDTH * 0.5
+	var pane := room.outer_frame
+	var pane_n := (pane.basis * Vector3.BACK).normalized()
+	kit.quad(InteriorKit.Batch.PORTAL, pane * Vector3(-w, 0, -0.08), pane * Vector3(w, 0, -0.08),
+		pane * Vector3(w, InteriorProps.HATCH_HEIGHT, -0.08), pane * Vector3(-w, InteriorProps.HATCH_HEIGHT, -0.08),
+		pane_n, InteriorKit.solid(InteriorPalette.GLASS))
+
+	if door_n != Vector3i.ZERO:
+		room.inner_frame = wall_frame(coord, door_n) * mid
+		InteriorProps.hatch_frame(kit, room.inner_frame)
+		room.inner_hatch = _hatch(kit, room.inner_frame, "Inner", false)
+		room.corridor_panel = _panel(kit, &"inner",
+			wall_frame(coord + door_n, -door_n) * InteriorKit.at(Vector3(0.8, 1.25, 0)))
+	if panel_wall != Vector3i.ZERO:
+		room.room_panel = _panel(kit, &"room", wall_frame(coord, panel_wall) * InteriorKit.at(Vector3(0, 1.25, 0)))
+
+	var ceiling := room.room_frame * InteriorKit.at(Vector3(0, InteriorProps.AIRLOCK_CLEAR, 0))
+	room.ceiling_light = InteriorProps.airlock_ceiling(kit, ceiling)
+	return room
+
+static func _hatch(kit: InteriorKit, f: Transform3D, hatch_name: String, portal: bool) -> AirlockHatch:
+	var hatch := AirlockHatch.new()
+	hatch.name = hatch_name + "Hatch"
+	hatch.setup(InteriorProps.DOOR_WIDTH, InteriorProps.HATCH_HEIGHT, kit.body, f, portal, kit.portal_material)
+	kit.root.add_child(hatch)
+	return hatch
+
+static func _panel(kit: InteriorKit, role: StringName, f: Transform3D) -> AirlockPanel:
+	var panel := AirlockPanel.new()
+	panel.setup(role, InteriorKit.LAYER)
+	panel.transform = f
+	kit.root.add_child(panel)
+	return panel
 
 ## A doorway's frame and its sliding door, on the wall's mid-plane.
 static func _doorway(kit: InteriorKit, f: Transform3D) -> void:

@@ -51,5 +51,10 @@ const SUIT_PAD := Color("4b4641")
 ## Plasma (hands-and-items spec §9): the bolt, the muzzle flash and the impact
 ## flash. Hot coral-amber, between CORAL and AMBER.
 const PLASMA := Color("ff9a52")
+## The airlock (docs/superpowers/specs/2026-09-24-airlock-design.md §5.2): a
+## soft signal green for hatch strips and panel buttons only -- "this side may
+## open" -- and the warm off-white of steam and fog.
+const SIGNAL_GO := Color("8fd6a0")
+const STEAM := Color("f2ece2")
 ## Crates, on shelves and as items: one of these, chosen by variety.
 const CRATES: Array[Color] = [AMBER, SKY, CORAL, OLIVE, TRIM]

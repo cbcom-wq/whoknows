@@ -404,3 +404,17 @@ func test_storey_offset_is_zero_on_the_ground_storey():
 	assert_eq(InteriorBuilder.storey_offset(0), 0.0)
 	assert_almost_eq(InteriorBuilder.storey_offset(2),
 		2.0 * (InteriorBuilder.STOREY_HEIGHT - ShipGrid.CELL_SIZE), 0.0001)
+
+## The outer hatch's wall is an opening too: jambs and a lintel, no whole wall.
+func test_the_outer_hatch_wall_is_an_opening():
+	_airlock_fixture()
+	_builder.rebuild()
+	var fl := InteriorBuilder.floor_y(Vector3i(0, 0, 1))
+	var lintels := _meshes_at(0.0, 3.0).filter(
+		func(m): return is_equal_approx((m.mesh as BoxMesh).size.x, InteriorProps.DOOR_WIDTH))
+	assert_eq(lintels.size(), 1, "a lintel over the outer hatch")
+	var bottom: float = lintels[0].position.y - (lintels[0].mesh as BoxMesh).size.y * 0.5
+	assert_almost_eq(bottom, fl + InteriorProps.HATCH_HEIGHT, 0.001)
+	var whole := _meshes_at(0.0, 3.0).filter(
+		func(m): return is_equal_approx((m.mesh as BoxMesh).size.x, ShipGrid.CELL_SIZE))
+	assert_eq(whole.size(), 0, "no whole wall across the hatch")
