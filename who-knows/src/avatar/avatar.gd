@@ -47,6 +47,8 @@ var suit_assist := true
 var hull: RigidBody3D
 ## True while the suit's thrusters are firing.
 var thrusting := false
+## Returns where home is -- the airlock you left -- for the suit's HUD.
+var beacon_source: Callable
 
 ## Local gravity, supplied by Grav Plating. Zero means the cell is unplated.
 var grav_strength: float = 9.8
@@ -87,6 +89,10 @@ func _ready() -> void:
 	camera.add_child(hands)
 	grasp.bind(self, head, hands.wield_socket, hands.carry_socket)
 	hands.bind(grasp, self)
+	var sounds := SuitSounds.new()
+	sounds.name = "SuitSounds"
+	add_child(sounds)
+	sounds.bind(self)
 
 ## The actor contract Item talks to.
 func take_item(item: Item) -> void:
@@ -216,6 +222,17 @@ func enter_plating(interior: Node3D, pose: Transform3D, pitch: float, start_velo
 		_eye_from = head.global_transform.affine_inverse() * eye_from
 	camera.position = _eye_from
 	mode_changed.emit(mode)
+
+## The suit's HUD (airlock spec §8.3): the same duck-typed contract a ship's
+## flight computer answers, so the HUD needs no idea what a suit is. Speed is
+## relative to your own ship, and the beacon is the way home.
+func build_telemetry() -> VehicleTelemetry:
+	var t := VehicleTelemetry.from_state(head.global_basis, global_position,
+		velocity - _hull_velocity_at(global_position), Vector3.ZERO, suit_assist, false, Suit.ASSIST_CAP)
+	if beacon_source.is_valid():
+		t.has_beacon = true
+		t.beacon = beacon_source.call()
+	return t
 
 ## Eases the view upright after floating in (enter_plating).
 func tick_righting(delta: float) -> void:

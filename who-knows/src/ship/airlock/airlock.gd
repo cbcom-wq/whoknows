@@ -154,6 +154,7 @@ func _watch_threshold() -> void:
 		var v := Threshold.carry_velocity_out(_hull_velocity_at(world.origin), hull.global_basis, avatar.velocity)
 		_restore_environment()   # the avatar keeps the cabin's own mood, not the haze copy
 		avatar.enter_suit(_ship.outside, world, v, hull)
+		avatar.beacon_source = beacon
 		crossed.emit(avatar, true)
 	elif avatar.hull == hull:
 		var local := alcove.outer_frame.affine_inverse() * (hull.global_transform.affine_inverse() * avatar.global_position)
@@ -168,6 +169,12 @@ func _watch_threshold() -> void:
 		var v := Threshold.carry_velocity_in(avatar.velocity, _hull_velocity_at(avatar.global_position), hull.global_basis)
 		avatar.enter_plating(interior, Transform3D(up["body"], feet), up["pitch"], v, up["righting"], view.origin)
 		crossed.emit(avatar, false)
+
+## The way home for someone outside: the middle of the outer hatch on the hull.
+func beacon() -> Vector3:
+	if not is_instance_valid(alcove):
+		return Vector3.ZERO
+	return alcove.outer_hatch.global_transform * Vector3(0, InteriorProps.HATCH_HEIGHT * 0.5, 0)
 
 ## Inside the opening, across and up, in a hatch frame.
 static func _in_opening(local: Vector3) -> bool:

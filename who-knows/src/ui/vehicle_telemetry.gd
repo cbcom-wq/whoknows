@@ -26,6 +26,10 @@ var local_angular_velocity: Vector3 = Vector3.ZERO
 var assist_enabled: bool = false
 var boost_active: bool = false
 var hull_origin: Vector3 = Vector3.ZERO
+## A point to steer home to, when the vehicle has one: a spacewalker's airlock
+## (airlock spec §8.3). Set after from_state(); the ship has none.
+var has_beacon: bool = false
+var beacon: Vector3 = Vector3.ZERO
 
 ## Takes plain values rather than a body on purpose: it is the seam that lets
 ## every derivation here be tested headless, with no nodes and no physics

@@ -288,9 +288,18 @@ func _wire_hud() -> void:
 	# this: the HUD's fade-in and the seat transition it is timed against.
 	_hud.fade_in = CameraDirector.SIT_DURATION
 	_director.piloting_changed.connect(_on_piloting_changed)
+	# On a spacewalk the suit is the vehicle the HUD reports (airlock spec
+	# §8.3): speed relative to the ship, and the way home.
+	_avatar.mode_changed.connect(_on_avatar_mode_changed)
 
 func _on_piloting_changed(piloting: bool) -> void:
 	_hud.set_active_vehicle(_ship.flight_computer if piloting else null)
+
+func _on_avatar_mode_changed(mode: Avatar.Mode) -> void:
+	if mode == Avatar.Mode.SUIT:
+		_hud.set_active_vehicle(_avatar)
+	elif not _director.is_seated:
+		_hud.set_active_vehicle(null)
 
 func _put(g: ShipGrid, coord: Vector3i, id: StringName, orientation: int = 0) -> void:
 	var i := BlockInstance.new()
