@@ -27,6 +27,12 @@ const TOP_SPEED := 300.0
 const DETAIL: Array[int] = [0, 1, 2]
 const APPLY_BUDGET_USEC := 2000
 const MAX_JOBS := 48
+## A cell's diagonal, in cell edges.
+const _DIAG := 1.7320508
+## The wanted set is redone whenever you have moved this much of a cell since
+## it was last worked out: so you never get more than that closer to a cell
+## before it is asked for.
+const REWANT_EVERY := 0.25
 const _NO_SLOT := Transform3D(Basis(Vector3.ZERO, Vector3.ZERO, Vector3.ZERO), Vector3.ZERO)
 
 @export var seed: int = 1337
@@ -36,6 +42,7 @@ var recipe: AsteroidRecipe
 var bubble: AsteroidBubble
 ## Cells finished after their rocks could already have been seen. Stays 0.
 var late_cells := 0
+var late_by_tier: Array[int] = [0, 0, 0]
 
 var _pictures: Node3D
 var _started := false
@@ -45,11 +52,21 @@ var _wanted: Array[Dictionary] = [{}, {}, {}]
 var _blocks: Array[Dictionary] = [{}, {}, {}]
 var _block_cells: Array[Dictionary] = [{}, {}, {}]
 var _dirty: Array[Dictionary] = [{}, {}, {}]
-var _queue: Array = []
-var _queued := {}
+## Per tier: cells to load, nearest first, and how far submission has got.
+var _queues: Array = [[], [], []]
+var _heads: Array[int] = [0, 0, 0]
 var _jobs := {}
 var _focus_cell: Array = [null, null, null]
+## Per tier: the focus from its cell's lowest corner, metres.
+var _inside: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO, Vector3.ZERO]
+## Per tier: the wanted-cell pass running on a worker, or null, and where
+## the focus was when the last one began.
+var _rewants: Array = [null, null, null]
+var _rewant_from: Array = [null, null, null]
 var _materials := {}
+## Per tier: every cell offset that could be within LOAD of a focus anywhere in
+## its cell, nearest first, with its distance. Built once, shared.
+static var _offsets: Array = []
 
 class _Cell:
 	var rocks: Array[AsteroidRock]
@@ -66,8 +83,8 @@ class _Block:
 	## What each MultiMesh was given, kept here too: without a renderer the
 	## engine hands no instance data back, and this is the same data.
 	var buffers: Array[PackedFloat32Array] = [PackedFloat32Array(), PackedFloat32Array(), PackedFloat32Array()]
-	## id -> Vector2i(shape, slot)
-	var slots := {}
+	## cell -> Vector3i: where its rocks start in each shape's buffer.
+	var starts := {}
 
 class _Job:
 	var tier: int
@@ -104,6 +121,46 @@ class _Job:
 					i2.append(rock.id())
 		packed = [p0, p1, p2]
 		ids = [i0, i1, i2]
+
+## The wanted-cell pass for one tier, on a worker: which cells are within
+## LOAD of the focus, which of them to load (nearest and ahead of you first),
+## and which loaded ones have gone past UNLOAD. Works on copies only.
+class _Rewant:
+	var tier: int
+	var fc: Vector3i
+	var inside: Vector3
+	var ahead: Vector3
+	## Snapshots: loaded cells, and cells already being made.
+	var loaded: Dictionary
+	var busy: Dictionary
+	var task := -1
+	var done := false
+	var wanted := {}
+	var queue: Array[Vector3i] = []
+	var unload: Array[Vector3i] = []
+
+	func run() -> void:
+		var size := float(AsteroidRecipe.CELL[tier])
+		var load_to: float = AsteroidStream.LOAD[tier]
+		# Nearer than this, a cell is within LOAD wherever the focus is in its cell.
+		var sure := load_to - AsteroidStream._DIAG * size
+		var fresh := []
+		for o: Array in AsteroidStream._offsets[tier]:
+			var d: Vector3i = o[1]
+			var rel := Vector3(d) * size
+			if o[0] > sure and AsteroidStream.box_distance(inside - rel, size) > load_to:
+				continue
+			var c := fc + d
+			wanted[c] = true
+			if not loaded.has(c) and not busy.has(c):
+				var centre := rel + Vector3.ONE * size * 0.5 - inside
+				fresh.append([centre.length() - 0.5 * maxf(0.0, centre.dot(ahead)), c])
+		fresh.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
+		for f in fresh:
+			queue.append(f[1])
+		for c: Vector3i in loaded:
+			if not wanted.has(c) and AsteroidStream.box_distance(inside - Vector3(c - fc) * size, size) > AsteroidStream.UNLOAD[tier]:
+				unload.append(c)
 
 func _ready() -> void:
 	_pictures = Node3D.new()
@@ -144,9 +201,13 @@ func update(_delta: float, all_now := false) -> void:
 		return
 	for tier in AsteroidRecipe.TIERS:
 		var fc := AsteroidRecipe.cell_of(tier, focus)
-		if all_now or _focus_cell[tier] == null or _focus_cell[tier] != fc:
+		_inside[tier] = focus.minus(AsteroidRecipe.cell_corner(tier, fc))
+		var moved := INF if _rewant_from[tier] == null else focus.minus(_rewant_from[tier]).length()
+		if all_now or _focus_cell[tier] != fc or moved > AsteroidRecipe.CELL[tier] * REWANT_EVERY:
 			_focus_cell[tier] = fc
-			_rewant(tier, focus)
+			_rewant_from[tier] = focus
+			_rewant(tier, all_now)
+		_take_rewant(tier)
 	_submit(all_now)
 	if all_now:
 		finish_jobs()
@@ -159,6 +220,10 @@ func finish_jobs() -> void:
 		if not job.done:
 			WorkerThreadPool.wait_for_task_completion(job.task)
 			job.done = true
+	for r: _Rewant in _rewants:
+		if r != null and not r.done:
+			WorkerThreadPool.wait_for_task_completion(r.task)
+			r.done = true
 
 func is_loaded(tier: int, cell: Vector3i) -> bool:
 	return _cells[tier].has(cell)
@@ -170,29 +235,33 @@ func loaded_rocks(tier: int, cell: Vector3i) -> Array[AsteroidRock]:
 func loaded_count(tier: int) -> int:
 	return _cells[tier].size()
 
-## The loaded rocks of `tier` in cells overlapping an engine-space box.
-func rocks_in(tier: int, box: AABB) -> Array[AsteroidRock]:
+## The loaded cells of `tier` overlapping an engine-space box.
+func cells_in(tier: int, box: AABB) -> Array[Vector3i]:
 	var lo := AsteroidRecipe.cell_of(tier, universe.to_universe(box.position))
 	var hi := AsteroidRecipe.cell_of(tier, universe.to_universe(box.end))
-	var out: Array[AsteroidRock] = []
+	var out: Array[Vector3i] = []
 	for x in range(lo.x, hi.x + 1):
 		for y in range(lo.y, hi.y + 1):
 			for z in range(lo.z, hi.z + 1):
-				var c: _Cell = _cells[tier].get(Vector3i(x, y, z))
-				if c != null:
-					out.append_array(c.rocks)
+				var c := Vector3i(x, y, z)
+				if _cells[tier].has(c):
+					out.append(c)
 	return out
+
+## A cell's lowest corner, in engine space.
+func cell_origin(tier: int, cell: Vector3i) -> Vector3:
+	return universe.to_engine(AsteroidRecipe.cell_corner(tier, cell))
 
 ## Where a rock sits, in engine space: rotation and position, no scale.
 func rock_pose(rock: AsteroidRock) -> Transform3D:
-	return Transform3D(rock.turn, universe.to_engine(AsteroidRecipe.cell_corner(rock.tier, rock.cell)) + rock.local)
+	return Transform3D(rock.turn, cell_origin(rock.tier, rock.cell) + rock.local)
 
 ## Where its picture is drawn, in engine space, scale included.
 func picture_transform(rock: AsteroidRock) -> Transform3D:
-	var block: _Block = _blocks[rock.tier].get(block_of(rock.cell))
-	if block == null or not block.slots.has(rock.id()):
+	var slot := _slot(rock.tier, rock.id())
+	if slot.x < 0:
 		return _NO_SLOT
-	var slot: Vector2i = block.slots[rock.id()]
+	var block: _Block = _blocks[rock.tier][block_of(rock.cell)]
 	return block.node.global_transform * unpack(block.buffers[slot.x], slot.y)
 
 ## Hides a rock's picture: a body stands in for it.
@@ -275,50 +344,101 @@ func _focus_point() -> UniversePoint:
 func _key(tier: int, cell: Vector3i) -> Vector4i:
 	return Vector4i(cell.x, cell.y, cell.z, tier)
 
-func _rewant(tier: int, focus: UniversePoint) -> void:
-	var size := float(AsteroidRecipe.CELL[tier])
-	var fc: Vector3i = _focus_cell[tier]
-	var inside := focus.minus(AsteroidRecipe.cell_corner(tier, fc))
-	var n := ceili(LOAD[tier] / size)
-	var wanted := {}
-	for x in range(-n, n + 1):
-		for y in range(-n, n + 1):
-			for z in range(-n, n + 1):
-				var d := Vector3i(x, y, z)
-				if box_distance(inside - Vector3(d) * size, size) <= LOAD[tier]:
-					wanted[fc + d] = true
-	_wanted[tier] = wanted
-	for c: Vector3i in _cells[tier].keys():
-		if not wanted.has(c) and box_distance(inside - Vector3(c - fc) * size, size) > UNLOAD[tier]:
-			_unload(tier, c)
-	var velocity := velocity_of(universe.focus)
-	var ahead := velocity.normalized() if velocity.length() > 1.0 else Vector3.ZERO
-	_queue = _queue.filter(func(q: Array) -> bool:
-		var keep: bool = q[1] != tier or wanted.has(q[2])
-		if not keep:
-			_queued.erase(_key(q[1], q[2]))
-		return keep)
-	for c: Vector3i in wanted:
-		var key := _key(tier, c)
-		if _cells[tier].has(c) or _jobs.has(key) or _queued.has(key):
-			continue
-		var centre := Vector3(c - fc) * size + Vector3.ONE * size * 0.5 - inside
-		_queue.append([centre.length() - 0.5 * maxf(0.0, centre.dot(ahead)), tier, c])
-		_queued[key] = true
-	_queue.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
+## Starts the wanted-cell pass for `tier` on a worker (at once, with `now`).
+## A pass already running is left to finish and then superseded.
+func _rewant(tier: int, now := false) -> void:
+	_offsets_for(tier)
+	var r := _Rewant.new()
+	r.tier = tier
+	r.fc = _focus_cell[tier]
+	r.inside = _inside[tier]
+	var v := velocity_of(universe.focus)
+	r.ahead = v.normalized() if v.length() > 1.0 else Vector3.ZERO
+	r.loaded = _cells[tier].duplicate()
+	var busy := {}
+	for key: Vector4i in _jobs:
+		if key.w == tier:
+			busy[Vector3i(key.x, key.y, key.z)] = true
+	r.busy = busy
+	var running: _Rewant = _rewants[tier]
+	if running != null and not running.done:
+		WorkerThreadPool.wait_for_task_completion(running.task)
+		running.done = true
+	if now:
+		r.run()
+		r.done = true
+	else:
+		r.task = WorkerThreadPool.add_task(r.run)
+	_rewants[tier] = r
 
+## Applies a finished wanted-cell pass.
+func _take_rewant(tier: int) -> void:
+	var r: _Rewant = _rewants[tier]
+	if r == null:
+		return
+	if not r.done:
+		if not WorkerThreadPool.is_task_completed(r.task):
+			return
+		WorkerThreadPool.wait_for_task_completion(r.task)
+		r.done = true
+	_rewants[tier] = null
+	_wanted[tier] = r.wanted
+	_queues[tier] = r.queue
+	_heads[tier] = 0
+	for c in r.unload:
+		if _cells[tier].has(c) and not r.wanted.has(c):
+			_unload(tier, c)
+
+static func _offsets_for(tier: int) -> Array:
+	if _offsets.is_empty():
+		for t in AsteroidRecipe.TIERS:
+			var size := float(AsteroidRecipe.CELL[t])
+			var n := ceili(LOAD[t] / size) + 1
+			var list := []
+			for x in range(-n, n + 1):
+				for y in range(-n, n + 1):
+					for z in range(-n, n + 1):
+						var d := Vector3i(x, y, z)
+						var far := Vector3(d).length() * size
+						if far - _DIAG * size <= LOAD[t]:
+							list.append([far, d])
+			list.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
+			_offsets.append(list)
+	return _offsets[tier]
+
+## Hands cells to workers: next, whichever tier's nearest waiting cell is
+## closest to coming into sight.
 func _submit(all_now: bool) -> void:
-	while not _queue.is_empty() and (all_now or _jobs.size() < MAX_JOBS):
-		var q: Array = _queue.pop_front()
-		var key := _key(q[1], q[2])
-		_queued.erase(key)
+	var v := velocity_of(universe.focus)
+	var ahead := v.normalized() if v.length() > 1.0 else Vector3.ZERO
+	while all_now or _jobs.size() < MAX_JOBS:
+		var best_tier := -1
+		var best := INF
+		for tier in AsteroidRecipe.TIERS:
+			var q: Array = _queues[tier]
+			while _heads[tier] < q.size() and (_cells[tier].has(q[_heads[tier]]) or _jobs.has(_key(tier, q[_heads[tier]]))):
+				_heads[tier] += 1
+			if _heads[tier] >= q.size():
+				continue
+			var size := float(AsteroidRecipe.CELL[tier])
+			var c: Vector3i = q[_heads[tier]]
+			var urgency := box_distance(_inside[tier] - Vector3(c - _focus_cell[tier]) * size, size) - FADE_END[tier]
+			var centre := Vector3(c - _focus_cell[tier]) * size + Vector3.ONE * size * 0.5 - _inside[tier]
+			urgency -= 0.5 * maxf(0.0, centre.dot(ahead))
+			if urgency < best:
+				best = urgency
+				best_tier = tier
+		if best_tier < 0:
+			return
+		var cell: Vector3i = _queues[best_tier][_heads[best_tier]]
+		_heads[best_tier] += 1
 		var job := _Job.new()
-		job.tier = q[1]
-		job.cell = q[2]
+		job.tier = best_tier
+		job.cell = cell
 		job.world_seed = seed
 		job.start = _start_point
 		job.task = WorkerThreadPool.add_task(job.run)
-		_jobs[key] = job
+		_jobs[_key(best_tier, cell)] = job
 
 func _collect(focus: UniversePoint, all_now: bool) -> void:
 	for key: Vector4i in _jobs.keys():
@@ -345,6 +465,7 @@ func _collect(focus: UniversePoint, all_now: bool) -> void:
 			var size := float(AsteroidRecipe.CELL[job.tier])
 			if box_distance(focus.minus(AsteroidRecipe.cell_corner(job.tier, job.cell)), size) < FADE_END[job.tier]:
 				late_cells += 1
+				late_by_tier[job.tier] += 1
 
 func _unload(tier: int, c: Vector3i) -> void:
 	_cells[tier].erase(c)
@@ -374,17 +495,15 @@ func _rebuild(tier: int, b: Vector3i) -> void:
 	var block: _Block = _blocks[tier].get(b)
 	var buffers: Array[PackedFloat32Array] = [PackedFloat32Array(), PackedFloat32Array(), PackedFloat32Array()]
 	var counts := [0, 0, 0]
-	var slots := {}
+	var starts := {}
 	for c: Vector3i in cells:
 		var cell: _Cell = _cells[tier][c]
+		starts[c] = Vector3i(counts[0], counts[1], counts[2])
 		for s in 3:
-			var ids: Array = cell.ids[s]
-			for k in ids.size():
-				slots[ids[k]] = Vector2i(s, counts[s] + k)
 			var buf := buffers[s]
 			buf.append_array(cell.packed[s])
 			buffers[s] = buf
-			counts[s] += ids.size()
+			counts[s] += (cell.ids[s] as Array).size()
 	if counts[0] + counts[1] + counts[2] == 0:
 		if block != null:
 			block.node.free()
@@ -424,19 +543,34 @@ func _rebuild(tier: int, b: Vector3i) -> void:
 		inst.multimesh.instance_count = counts[s]
 		inst.multimesh.buffer = buffers[s]
 	block.buffers = buffers
-	block.slots = slots
+	block.starts = starts
 	for c: Vector3i in cells:
 		for id: Vector4i in (_cells[tier][c] as _Cell).hidden:
 			_set_slot(tier, id, _NO_SLOT)
 
 func _set_slot(tier: int, id: Vector4i, t: Transform3D) -> void:
-	var block: _Block = _blocks[tier].get(block_of(Vector3i(id.x, id.y, id.z)))
-	if block == null or not block.slots.has(id):
+	var slot := _slot(tier, id)
+	if slot.x < 0:
 		return
-	var slot: Vector2i = block.slots[id]
+	var block: _Block = _blocks[tier][block_of(Vector3i(id.x, id.y, id.z))]
 	block.instances[slot.x].multimesh.set_instance_transform(slot.y, t)
 	var buf := block.buffers[slot.x]
-	var row := PackedFloat32Array(AsteroidStream.pack(PackedFloat32Array(), t, SpacePalette.UNTINTED))
+	var row := AsteroidStream.pack(PackedFloat32Array(), t, SpacePalette.UNTINTED)
 	for k in 12:
 		buf[slot.y * 16 + k] = row[k]
 	block.buffers[slot.x] = buf
+
+## Where a rock is in its block's buffers: (shape, slot), or (-1, -1) while
+## its cell is not drawn yet.
+func _slot(tier: int, id: Vector4i) -> Vector2i:
+	var at := Vector3i(id.x, id.y, id.z)
+	var block: _Block = _blocks[tier].get(block_of(at))
+	var cell: _Cell = _cells[tier].get(at)
+	if block == null or cell == null or not block.starts.has(at):
+		return Vector2i(-1, -1)
+	var start: Vector3i = block.starts[at]
+	for s in 3:
+		var k := (cell.ids[s] as Array).find(id)
+		if k >= 0:
+			return Vector2i(s, start[s] + k)
+	return Vector2i(-1, -1)

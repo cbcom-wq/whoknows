@@ -279,20 +279,33 @@ func _suit_physics(delta: float) -> void:
 ## along the contact, with a little bounce. A 1 m rock drifts off slowly; a
 ## giant stops you dead.
 func _bump_in_space(before: Vector3) -> void:
+	var hits := []
 	for i in get_slide_collision_count():
 		var hit := get_slide_collision(i)
-		var body := hit.get_collider() as AsteroidBody
-		if body == null:
+		hits.append([hit.get_collider(), hit.get_normal(), hit.get_position()])
+	velocity = bump(before, velocity, hits)
+
+## Your velocity after bumping the rocks in `hits` ([collider, normal,
+## point]), moving at `before` into them and `slid` after the slide. Sliding
+## along a rock can touch it twice in one step: that is still one bump.
+func bump(before: Vector3, slid: Vector3, hits: Array) -> Vector3:
+	var v := slid
+	var bumped := {}
+	for h in hits:
+		var body := h[0] as AsteroidBody
+		if body == null or bumped.has(body):
 			continue
-		var n := hit.get_normal()
-		var at := hit.get_position() - body.global_position
+		bumped[body] = true
+		var n: Vector3 = h[1]
+		var at: Vector3 = h[2] - body.global_position
 		var closing := -(before - (body.linear_velocity + body.angular_velocity.cross(at))).dot(n)
 		if closing <= 0.0:
 			continue
 		var m := SUIT_MASS * body.mass / (SUIT_MASS + body.mass)
 		var j := (1.0 + BUMP_BOUNCE) * m * closing
 		body.apply_impulse(-n * j, at)
-		velocity += n * (before.dot(n) + j / SUIT_MASS - velocity.dot(n))
+		v += n * (before.dot(n) + j / SUIT_MASS - v.dot(n))
+	return v
 
 ## Your own ship's velocity where `p` is, spin included.
 func _hull_velocity_at(p: Vector3) -> Vector3:

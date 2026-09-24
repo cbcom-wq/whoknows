@@ -64,3 +64,24 @@ func test_bumping_a_rock_on_a_spacewalk_shares_momentum():
 	var p_rock := body.mass * body.linear_velocity.z
 	assert_lt(body.linear_velocity.z, -0.05, "the rock drifts away")
 	assert_almost_eq(p_avatar + p_rock, Avatar.SUIT_MASS * -3.0, 40.0, "momentum is shared, not made")
+
+func test_touching_a_rock_twice_in_one_step_is_one_bump():
+	var outside: Node3D = _root.get_node("Outside")
+	var rock := AsteroidRock.new()
+	rock.cell = Vector3i(8, 8, 8)
+	rock.size = Vector3.ONE * 3.0
+	rock.mass = 21000.0
+	var body := AsteroidBody.new()
+	body.setup(rock, RockMesh.mesh(0, 0), StandardMaterial3D.new(), RockMesh.hull_points(0, 0))
+	outside.add_child(body)
+	body.global_position = Vector3(0, 0, -600)
+	var n := Vector3(0, 0, 1)
+	var at := body.global_position + Vector3(0, 0, 1.5)
+	# Let the physics server take its mass before anything touches it.
+	await wait_physics_frames(1)
+	var v := _avatar.bump(Vector3(0, 0, -2), Vector3.ZERO, [[body, n, at], [body, n, at]])
+	await wait_physics_frames(1)
+	var m := Avatar.SUIT_MASS * rock.mass / (Avatar.SUIT_MASS + rock.mass)
+	var j := (1.0 + Avatar.BUMP_BOUNCE) * m * 2.0
+	assert_almost_eq(body.linear_velocity.z * rock.mass, -j, j * 0.02, "one impulse, not two")
+	assert_almost_eq(v.z, -2.0 + j / Avatar.SUIT_MASS, 0.001, "you bounce off a little")

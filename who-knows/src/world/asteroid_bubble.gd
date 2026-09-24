@@ -89,12 +89,17 @@ func _near_paths() -> Dictionary:
 		for tier in AsteroidRecipe.TIERS:
 			var grow := reach + AsteroidRecipe.BOUND * AsteroidRecipe.D_MAX[tier] * AsteroidRecipe.STRETCH_MAX
 			var box := AABB(a, Vector3.ZERO).expand(b).grow(grow)
-			for rock in stream.rocks_in(tier, box):
-				var id := rock.id()
-				if out.has(id) or (not live.has(id) and stream.is_hidden(rock)):
-					continue
-				if segment_distance(stream.rock_pose(rock).origin, a, b) <= reach + rock.radius:
-					out[id] = rock
+			for cell in stream.cells_in(tier, box):
+				var corner := stream.cell_origin(tier, cell)
+				for rock in stream.loaded_rocks(tier, cell):
+					var at := corner + rock.local
+					if not box.has_point(at):
+						continue
+					var id := rock.id()
+					if out.has(id) or (not live.has(id) and stream.is_hidden(rock)):
+						continue
+					if segment_distance(at, a, b) <= reach + rock.radius:
+						out[id] = rock
 	return out
 
 func _promote(rock: AsteroidRock) -> void:

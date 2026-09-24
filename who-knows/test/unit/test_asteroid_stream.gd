@@ -121,3 +121,16 @@ func test_pictures_fade_by_tier_and_only_giants_cast_shadows():
 		var giant := String(inst.get_parent().name).begins_with("Block_2_")
 		assert_eq(inst.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_ON, giant)
 		assert_eq(inst.layers, 1)
+
+func test_travelling_never_asks_for_a_cell_too_late():
+	# Workers here finish at once, so a late cell can only come from asking
+	# for it too late: the wanted set must follow you closely, not a cell at
+	# a time.
+	var step := Vector3(0.3, -0.2, -1.0).normalized() * 40.0
+	for i in 160:
+		_focus.global_position += step
+		_universe.check()
+		_stream.update(0.0)
+		_stream.finish_jobs()
+		_stream.update(0.0)
+	assert_eq(_stream.late_by_tier, [0, 0, 0] as Array[int], "every cell was asked for before it could be seen")
