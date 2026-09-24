@@ -99,9 +99,19 @@ func _starter_grid() -> ShipGrid:
 	_put(g, Vector3i(-1, 0, -2), &"deck")
 	_put(g, Vector3i(0, 0, -2), &"pilot_seat")
 	_put(g, Vector3i(1, 0, -2), &"deck")
-	for z in [-1, 0, 1, 2]:
-		for x in [-1, 0, 1]:
-			_put(g, Vector3i(x, 0, z), &"deck")
+	for x in [-1, 0, 1]:
+		_put(g, Vector3i(x, 0, -1), &"deck")
+	# Behind the bridge, a corridor down the centreline with rooms either side
+	# (interior redesign spec §7.5). Room blocks weigh and draw what deck
+	# does, so the flight balance measured below is unchanged.
+	for z in [0, 1, 2]:
+		_put(g, Vector3i(0, 0, z), &"deck")
+	_put(g, Vector3i(-1, 0, 0), &"bunk_room")
+	_put(g, Vector3i(-1, 0, 1), &"bunk_room")
+	_put(g, Vector3i(-1, 0, 2), &"bathroom")
+	_put(g, Vector3i(1, 0, 0), &"galley")
+	_put(g, Vector3i(1, 0, 1), &"weapon_room")
+	_put(g, Vector3i(1, 0, 2), &"closet")
 	_put(g, Vector3i(-2, 0, 3), &"hull")
 	_put(g, Vector3i(-1, 0, 3), &"bulkhead")
 	_put(g, Vector3i(0, 0, 3), &"airlock")

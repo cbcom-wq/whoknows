@@ -16,7 +16,8 @@ extends RefCounted
 ## Rooms (spec §7.2): a face between two walkable cells of different rooms is
 ## a partition, with a record on each side and one owner. Each room gets
 ## exactly one doorway (kind DOORWAY on both records), and each room cell
-## picks one FEATURE wall for its main furniture; the rest are SECONDARY.
+## picks one FEATURE wall for its main furniture and at most one SECONDARY
+## wall beside it for a smaller piece; the rest keep their trim (PANEL).
 ##
 ## Pure: reads the grid, returns records, touches no nodes. The same grid
 ## always yields the same layout.
@@ -67,7 +68,7 @@ static func plan(grid: ShipGrid, catalog: BlockCatalog, walkable: Array) -> Inte
 				var partition := _record(coord, normal, Kind.WALL, zone)
 				partition["partition"] = true
 				partition["owner"] = coord < neighbour
-				partition["variant"] = WallVariant.SECONDARY if in_room else _common_variant(
+				partition["variant"] = WallVariant.PANEL if in_room else _common_variant(
 					grid, coord, normal, is_mount, by_the_helm, true)
 				layout._faces.append(partition)
 				continue
@@ -79,7 +80,7 @@ static func plan(grid: ShipGrid, catalog: BlockCatalog, walkable: Array) -> Inte
 			var face := _record(coord, normal, Kind.WALL, zone)
 			face["skin_flank"] = normal.x != 0 and _is_outer_skin(grid, coord, normal)
 			if in_room:
-				face["variant"] = WallVariant.SECONDARY
+				face["variant"] = WallVariant.PANEL
 			else:
 				var variant := _common_variant(grid, coord, normal, is_mount, by_the_helm, false)
 				face["variant"] = variant
@@ -122,6 +123,7 @@ static func _record(coord: Vector3i, normal: Vector3i, kind: Kind, zone: StringN
 	return {
 		"coord": coord, "normal": normal, "kind": kind, "variant": WallVariant.NONE,
 		"zone": zone, "porthole": false, "owner": true, "partition": false, "skin_flank": false,
+		"feature_normal": Vector3i.ZERO,
 	}
 
 ## Wall variants for bridge and common cells, in strict priority order. A
@@ -178,7 +180,7 @@ func _resolve_rooms() -> void:
 				face["porthole"] = false
 		_rooms.append({"zone": zone, "coords": cells, "doorway": doorway})
 		for cell in cells:
-			_choose_feature(cell, index)
+			_furnish_cell(cell, index)
 
 ## The connected cells of one room: horizontal neighbours with the same zone.
 func _flood_room(start: Vector3i, zone: StringName, seen: Dictionary) -> Array[Vector3i]:
@@ -232,29 +234,40 @@ static func _ranks_before(a: Array, b: Array) -> bool:
 			return float(a[i]) < float(b[i])
 	return false
 
-## A room cell's main furniture goes on an outer flank wall if it has one,
-## else any flank, else any wall -- never the doorway. A feature on the outer
-## skin also gets a porthole above the furniture.
-func _choose_feature(cell: Vector3i, index: Dictionary) -> void:
-	var feature: Dictionary = {}
-	var best_rank := 3
+## Furnishes one room cell's walls. The main piece (FEATURE) goes on an outer
+## flank wall if the cell has one, else any flank, else any wall -- never the
+## doorway; on the outer skin it also gets a porthole. A 2 m cell has room for
+## one more, smaller piece (SECONDARY): it goes on a wall at right angles to
+## the feature, and records the feature's normal so the dressing can push it
+## to the far end, clear of the feature's corner. Any other wall keeps its
+## trim (PANEL).
+func _furnish_cell(cell: Vector3i, index: Dictionary) -> void:
+	var walls: Array[Dictionary] = []
 	for normal in _HORIZONTAL:
 		var key := _key(cell, normal)
-		if not index.has(key):
-			continue
-		var face: Dictionary = _faces[index[key]]
-		if face["kind"] != Kind.WALL:
-			continue
+		if index.has(key) and _faces[index[key]]["kind"] == Kind.WALL:
+			walls.append(_faces[index[key]])
+	if walls.is_empty():
+		return
+	var feature: Dictionary = {}
+	var best_rank := 3
+	for face in walls:
+		var n: Vector3i = face["normal"]
 		var rank := 2
-		if normal.x != 0:
+		if n.x != 0:
 			rank = 1 if face["partition"] else 0
 		if rank < best_rank:
 			best_rank = rank
 			feature = face
-	if feature.is_empty():
-		return
 	feature["variant"] = WallVariant.FEATURE
 	feature["porthole"] = feature["skin_flank"]
+	var feature_normal: Vector3i = feature["normal"]
+	for face in walls:
+		var n: Vector3i = face["normal"]
+		if face != feature and n.x * feature_normal.x + n.z * feature_normal.z == 0:
+			face["variant"] = WallVariant.SECONDARY
+			face["feature_normal"] = feature_normal
+			return
 
 ## Outer skin: at most one solid cell stands between this face and vacuum,
 ## so a porthole here looks out rather than into machinery.

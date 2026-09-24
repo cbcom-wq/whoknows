@@ -91,10 +91,15 @@ static func _wall_piece(kit: InteriorKit, f: Transform3D, face: Dictionary) -> v
 		# PANEL: the trim is the whole wall.
 
 ## A room wall's furniture, by room: the feature wall gets the room's main
-## piece, the others its secondary one (spec §7.4).
+## piece, the secondary wall a smaller one (spec §7.4). Secondary pieces are
+## under a metre wide and pushed to the end of their wall away from the
+## feature wall, so the two never meet in the corner.
 static func _room_piece(kit: InteriorKit, f: Transform3D, face: Dictionary, variety: float) -> void:
 	var feature: bool = face["variant"] == InteriorLayout.WallVariant.FEATURE
 	var porthole: bool = face["porthole"]
+	if not feature:
+		var away := signf(f.basis.x.dot(-Vector3(face["feature_normal"])))
+		f = f * InteriorKit.at(Vector3(away * InteriorProps.BAY * 0.25, 0, 0))
 	match face["zone"]:
 		&"bunk_room":
 			if feature:
@@ -112,7 +117,7 @@ static func _room_piece(kit: InteriorKit, f: Transform3D, face: Dictionary, vari
 			else:
 				InteriorProps.towel_rail(kit, f, variety)
 		&"closet":
-			InteriorProps.shelves(kit, f, variety)
+			InteriorProps.shelves(kit, f, variety, 1.7 if feature else 0.85)
 		&"weapon_room":
 			if feature:
 				InteriorProps.weapon_rack(kit, f, variety)

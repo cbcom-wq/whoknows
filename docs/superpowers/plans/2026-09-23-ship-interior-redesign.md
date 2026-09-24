@@ -2907,6 +2907,14 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ### Task 10: InteriorLayout: rooms, partitions and doorways
 
+> **Revised during execution (Task 14 renders):** each room cell gets one FEATURE wall and **at
+> most one** SECONDARY wall, at right angles to the feature, carrying `feature_normal`. Other
+> walls are PANEL. The dressing shifts secondary pieces `BAY / 4` towards the far end, and the
+> secondary props (`fridge`, `tall_lockers`, `ammo_crates`, `shelves(..., 0.85)`) are under
+> 1 m wide. See the commits after Task 13 for the exact code; the task text below is the
+> original.
+
+
 **Files:**
 - Modify: `who-knows/src/ship/interior/interior_layout.gd`
 - Test: `who-knows/test/unit/test_interior_layout.gd`

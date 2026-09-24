@@ -170,3 +170,7 @@ func test_pilot_seat_is_upholstered_to_match():
 	var mesh: ArrayMesh = load("res://data/blocks/meshes/pilot_seat.tres")
 	var upholstery := mesh.surface_get_material(0) as StandardMaterial3D
 	assert_true(upholstery.albedo_color.is_equal_approx(InteriorPalette.SEAT))
+
+func test_the_cabin_has_a_sliding_door_for_every_room():
+	var doors := _root.find_children("*", "Node3D", true, false).filter(func(n): return n is SlidingDoor)
+	assert_eq(doors.size(), 5)

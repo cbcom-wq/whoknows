@@ -164,7 +164,7 @@ func test_the_same_grid_always_plans_the_same():
 	_put(Vector3i(2, 0, 0), &"hull")
 	assert_eq(_plan().faces(), _plan().faces())
 
-## The real starter shuttle, as flight_test.gd builds it (art direction §3.1).
+## The real starter shuttle, as flight_test.gd builds it (spec §7.5).
 func test_starter_shuttle_layout():
 	var bootstrap: Node = load("res://scenes/flight_test.gd").new()
 	var grid: ShipGrid = bootstrap._starter_grid()
@@ -172,10 +172,12 @@ func test_starter_shuttle_layout():
 	var catalog := BlockCatalog.load_from_dir("res://data/blocks")
 	var layout := InteriorLayout.plan(grid, catalog, DeckGraph.build(grid, catalog).walkable_coords())
 	assert_eq(_count(layout, InteriorLayout.WallVariant.CONSOLE), 4, "both walls of the two helm rows")
-	assert_eq(_count(layout, InteriorLayout.WallVariant.PORTHOLE), 4, "flanks at z = -1 and 0")
 	assert_eq(_count(layout, InteriorLayout.WallVariant.HATCH), 1)
-	assert_eq(_count(layout, InteriorLayout.WallVariant.LOCKERS)
-		+ _count(layout, InteriorLayout.WallVariant.DISPLAY), 8)
+	assert_eq(layout.rooms().size(), 5)
+	var doorways := layout.faces().filter(func(f): return f["kind"] == InteriorLayout.Kind.DOORWAY)
+	assert_eq(doorways.size(), 10, "five doorways, two sides each")
+	var portholes := layout.faces().filter(func(f): return f["porthole"])
+	assert_eq(portholes.size(), 4, "two on the bridge, one in the bunk room, one in the galley")
 	assert_eq(layout.canopy_groups().size(), 1)
 	assert_eq(layout.canopy_groups()[0]["coords"].size(), 3)
 
@@ -262,20 +264,39 @@ func test_a_feature_on_the_outer_skin_gets_a_porthole():
 	assert_eq(f["variant"], InteriorLayout.WallVariant.FEATURE)
 	assert_true(f["porthole"])
 
-func test_every_room_cell_has_one_feature_and_the_rest_secondary():
+## A 2 m room fits one main piece and one smaller one; more collide in the
+## corners. The rest of its walls keep just their trim.
+func test_every_room_cell_has_one_feature_and_at_most_one_secondary():
 	_put(Vector3i(0, 0, 0), &"deck")
 	_put(Vector3i(1, 0, 0), &"galley")
 	_put(Vector3i(1, 0, 1), &"closet")
 	var layout := _plan()
 	for coord in [Vector3i(1, 0, 0), Vector3i(1, 0, 1)]:
-		var features := 0
+		var tally := {}
 		for f in _walls_of(layout, coord):
 			if f["kind"] == InteriorLayout.Kind.WALL:
-				assert_true(f["variant"] == InteriorLayout.WallVariant.FEATURE
-					or f["variant"] == InteriorLayout.WallVariant.SECONDARY)
-				if f["variant"] == InteriorLayout.WallVariant.FEATURE:
-					features += 1
-		assert_eq(features, 1, "%s has one feature wall" % coord)
+				assert_has([InteriorLayout.WallVariant.FEATURE, InteriorLayout.WallVariant.SECONDARY,
+					InteriorLayout.WallVariant.PANEL], f["variant"])
+				tally[f["variant"]] = tally.get(f["variant"], 0) + 1
+		assert_eq(tally.get(InteriorLayout.WallVariant.FEATURE, 0), 1, "%s has one feature wall" % coord)
+		assert_lte(tally.get(InteriorLayout.WallVariant.SECONDARY, 0), 1, "%s has at most one secondary" % coord)
+
+func test_the_secondary_wall_is_beside_the_feature_and_knows_where_it_is():
+	_put(Vector3i(0, 0, 0), &"deck")
+	_put(Vector3i(1, 0, 0), &"galley")
+	_put(Vector3i(2, 0, 0), &"hull")
+	_put(Vector3i(1, 0, -1), &"hull")
+	_put(Vector3i(1, 0, 1), &"hull")
+	var layout := _plan()
+	var feature := _face(layout, Vector3i(1, 0, 0), Vector3i(1, 0, 0))
+	assert_eq(feature["variant"], InteriorLayout.WallVariant.FEATURE)
+	var secondaries := _walls_of(layout, Vector3i(1, 0, 0)).filter(
+		func(f): return f["variant"] == InteriorLayout.WallVariant.SECONDARY)
+	assert_eq(secondaries.size(), 1)
+	var n: Vector3i = secondaries[0]["normal"]
+	assert_eq(n.x, 0, "at right angles to the feature wall, not facing it")
+	assert_eq(secondaries[0]["feature_normal"], Vector3i(1, 0, 0),
+		"the dressing pushes the secondary piece away from the feature wall")
 
 func test_partitions_are_never_portholes_or_hatches():
 	_put(Vector3i(0, 0, 0), &"airlock")

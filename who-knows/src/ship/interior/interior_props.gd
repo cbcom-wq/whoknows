@@ -351,16 +351,16 @@ static func _bed(kit: InteriorKit, f: Transform3D, base: float, frame_h: float) 
 	kit.bevel_box(SOLID, f * _at(Vector3(0.62, deck + 0.19, 0.45)), Vector3(0.42, 0.1, 0.56), 0.04,
 		_c(InteriorPalette.TRIM))
 
-## Two tall locker doors with vents and indicators.
+## Two tall locker doors with vents and indicators, 0.82 m overall.
 static func tall_lockers(kit: InteriorKit, f: Transform3D, variety: float) -> void:
 	for side in [-1.0, 1.0]:
-		var x: float = side * 0.3
-		kit.bevel_box(SOLID, f * _at(Vector3(x, 0.8, 0.05)), Vector3(0.55, 1.55, 0.1), 0.03, _c(InteriorPalette.TRIM))
+		var x: float = side * 0.21
+		kit.bevel_box(SOLID, f * _at(Vector3(x, 0.8, 0.05)), Vector3(0.4, 1.55, 0.1), 0.03, _c(InteriorPalette.TRIM))
 		for k in 3:
-			kit.box(SOLID, f * _at(Vector3(x, 1.3 + k * 0.05, 0.101)), Vector3(0.3, 0.015, 0.01),
+			kit.box(SOLID, f * _at(Vector3(x, 1.3 + k * 0.05, 0.101)), Vector3(0.24, 0.015, 0.01),
 				_c(InteriorPalette.WALL_LOW))
 		var h := fposmod(variety * 7.0 + side, 1.0)
-		kit.disc(GLOW, f * _at(Vector3(x + 0.18, 0.95, 0.101)), 0.025,
+		kit.disc(GLOW, f * _at(Vector3(x + 0.12, 0.95, 0.101)), 0.025,
 			_lit(InteriorPalette.AMBER if h > 0.7 else InteriorPalette.LIGHT_WARM, 1.6))
 
 ## A galley counter with a sink, a tap and two glowing cooktop rings, and
@@ -382,9 +382,9 @@ static func galley_counter(kit: InteriorKit, f: Transform3D, _variety: float, po
 		kit.box(SOLID, f * _at(Vector3(0, 1.42, 0.341)), Vector3(0.015, 0.36, 0.01), low)
 	kit.collider(f * _at(Vector3(0, 0.45, 0.32)), Vector3(1.9, 0.9, 0.64))
 
-## A tall fridge to one side, with a handle and a status light.
-static func fridge(kit: InteriorKit, f: Transform3D, variety: float) -> void:
-	var x := 0.45 if variety < 0.5 else -0.45
+## A tall fridge, 0.8 m wide, with a handle and a status light.
+static func fridge(kit: InteriorKit, f: Transform3D, _variety: float) -> void:
+	var x := 0.0
 	kit.bevel_box(SOLID, f * _at(Vector3(x, 0.8, 0.3)), Vector3(0.8, 1.6, 0.6), 0.05, _c(InteriorPalette.TRIM))
 	kit.box(SOLID, f * _at(Vector3(x, 1.1, 0.601)), Vector3(0.76, 0.015, 0.01), _c(InteriorPalette.WALL_LOW))
 	kit.bevel_box(SOLID, f * _at(Vector3(x - 0.3, 1.3, 0.62)), Vector3(0.04, 0.35, 0.05), 0.015,
@@ -416,28 +416,30 @@ static func towel_rail(kit: InteriorKit, f: Transform3D, variety: float) -> void
 	var towel := InteriorPalette.CORAL if variety < 0.5 else InteriorPalette.SKY
 	kit.bevel_box(SOLID, f * _at(Vector3(-0.1, 0.88, 0.09)), Vector3(0.5, 0.46, 0.03), 0.012, _c(towel))
 
-## Three shelves stacked with crates of seeded sizes and colours.
-static func shelves(kit: InteriorKit, f: Transform3D, variety: float) -> void:
-	for x in [-0.82, 0.82]:
+## Three shelves `width` wide, stacked with crates of seeded sizes and colours.
+static func shelves(kit: InteriorKit, f: Transform3D, variety: float, width := 1.7) -> void:
+	var half := width * 0.5
+	for x in [-(half - 0.03), half - 0.03]:
 		kit.bevel_box(SOLID, f * _at(Vector3(x, 0.8, 0.2)), Vector3(0.05, 1.6, 0.4), 0.015, _c(InteriorPalette.WALL_LOW))
 	var crates: Array[Color] = [InteriorPalette.AMBER, InteriorPalette.SKY, InteriorPalette.CORAL,
 		InteriorPalette.OLIVE, InteriorPalette.TRIM]
 	for level in 3:
 		var y := 0.25 + level * 0.47
-		kit.bevel_box(SOLID, f * _at(Vector3(0, y, 0.2)), Vector3(1.64, 0.04, 0.4), 0.015, _c(InteriorPalette.TRIM))
-		var x := -0.72
+		kit.bevel_box(SOLID, f * _at(Vector3(0, y, 0.2)), Vector3(width - 0.06, 0.04, 0.4), 0.015,
+			_c(InteriorPalette.TRIM))
+		var x := -half + 0.13
 		var k := 0
 		while true:
 			var h := fposmod(variety * 31.0 + level * 7.3 + k * 3.1, 1.0)
 			var w := 0.25 + 0.2 * h
-			if x + w > 0.78:
+			if x + w > half - 0.07:
 				break
 			var tall := 0.18 + 0.18 * fposmod(h * 5.7, 1.0)
 			kit.bevel_box(SOLID, f * _at(Vector3(x + w * 0.5, y + 0.02 + tall * 0.5, 0.2)),
 				Vector3(w - 0.03, tall, 0.3), 0.03, _c(crates[int(h * 5.0) % 5]))
 			x += w + 0.04
 			k += 1
-	kit.collider(f * _at(Vector3(0, 0.8, 0.2)), Vector3(1.7, 1.6, 0.4))
+	kit.collider(f * _at(Vector3(0, 0.8, 0.2)), Vector3(width, 1.6, 0.4))
 
 ## Five chunky rifles on a rack over a gunmetal cabinet, with coral warning
 ## stripes.
@@ -457,9 +459,9 @@ static func weapon_rack(kit: InteriorKit, f: Transform3D, _variety: float) -> vo
 	kit.disc(GLOW, f * _at(Vector3(0.7, 0.3, 0.352)), 0.025, _lit(InteriorPalette.AMBER, 1.6, 0.5))
 	kit.collider(f * _at(Vector3(0, 0.8, 0.175)), Vector3(1.6, 1.6, 0.35))
 
-## Three stacked ammo crates with stripes and latches.
+## A stack of three ammo crates with stripes and latches, 0.7 m wide.
 static func ammo_crates(kit: InteriorKit, f: Transform3D, _variety: float) -> void:
-	var spots: Array[Vector3] = [Vector3(-0.45, 0.2, 0.25), Vector3(0.35, 0.2, 0.25), Vector3(-0.1, 0.6, 0.25)]
+	var spots: Array[Vector3] = [Vector3(0, 0.2, 0.25), Vector3(0, 0.6, 0.25), Vector3(0, 1.0, 0.25)]
 	for i in spots.size():
 		var p := spots[i]
 		kit.bevel_box(SOLID, f * _at(p), Vector3(0.7, 0.4, 0.5), 0.04, _c(InteriorPalette.OLIVE))
@@ -468,7 +470,7 @@ static func ammo_crates(kit: InteriorKit, f: Transform3D, _variety: float) -> vo
 		for side in [-0.25, 0.25]:
 			kit.bevel_box(SOLID, f * _at(p + Vector3(side, -0.05, 0.255)), Vector3(0.08, 0.06, 0.02), 0.008,
 				_c(InteriorPalette.TRIM))
-	kit.collider(f * _at(Vector3(0, 0.4, 0.25)), Vector3(1.6, 0.8, 0.5))
+	kit.collider(f * _at(Vector3(0, 0.6, 0.25)), Vector3(0.7, 1.2, 0.5))
 
 ## A doorway's frame, drawn once for both rooms: two chunky posts through the
 ## wall and a lit lintel. The frame's origin is on the owning side's inner

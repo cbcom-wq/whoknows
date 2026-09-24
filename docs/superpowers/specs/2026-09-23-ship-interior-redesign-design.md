@@ -313,9 +313,13 @@ later balance decision. The block count goes from 16 to 21.
   The two records become `kind = DOORWAY`.
 - **Room walls:** each room cell picks one **feature** wall for its main furniture. It never
   picks the doorway. It prefers an outer flank wall (neighbour not walkable), then any flank
-  wall, then any wall. The other walls are **secondary**. A feature
-  wall on the outer skin also gets `porthole = true`. Variants are `FEATURE` or `SECONDARY`, and
-  the dressing looks up the prop by the cell's zone.
+  wall, then any wall. A feature wall on the outer skin also gets `porthole = true`.
+- **One secondary wall:** a 2 m cell has room for one more, smaller piece. It goes on a wall at
+  right angles to the feature wall, and the record carries `feature_normal` so the dressing can
+  push the piece to the far end of its wall, clear of the feature's corner. Any other wall
+  keeps its trim (`PANEL`). The first render, which put a secondary piece on *every* other
+  wall, had fridges, crates and shelves colliding in the corners and squeezing the floor to
+  0.8 m.
 
 ### 7.3 Doorways and sliding doors
 
@@ -342,6 +346,8 @@ Room floors and furniture colours are added to `InteriorPalette`:
 | `weapon_room` | `#4E4A52` |
 
 Furniture colours: mattress `#6F9C9A`, gunmetal `#3A3D44`, olive `#8A9A5B`.
+
+Secondary props are under a metre wide.
 
 | Room | Feature prop | Secondary prop | Colliders |
 |---|---|---|---|
