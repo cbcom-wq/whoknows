@@ -28,7 +28,10 @@ scenery any more.
 - A live cockpit canopy showing the real exterior through the bow windows
 - A 700-instance debris field so motion is legible
 - A livery stripe painted by a vertex shader from genuinely ship-local height
-- 16 block types, six with real meshes, the rest placeholder boxes
+- 21 block types (five of them room blocks), six with real meshes, the rest placeholder boxes
+- A stylized, warm, dim interior generated from the grid: a rounded cockpit nose whose windows
+  project the live forward view, portholes, consoles, a bridge, a corridor, and five furnished
+  rooms behind sliding doors (docs/superpowers/specs/2026-09-23-ship-interior-redesign-design.md)
 
 Derived stats for the starter shuttle: 88,500 kg, torque imbalance 4.3% of budget, power 36.0
 gen / 25.2 draw MW, **zero validation issues**, `can_launch = true`.
@@ -156,6 +159,12 @@ render inside at all, so the cabin is bare structural surfaces. Beyond fixing th
 implemented but flat, there is no panel detail, no greebling, and the three ceiling practicals are
 the only lighting. Art direction §5.2 and §5.3 describe the intended read (bright, warm,
 lived-in), and it is not there yet.
+
+**Addressed 2026-09-23** by the interior redesign
+(docs/superpowers/specs/2026-09-23-ship-interior-redesign-design.md): MOUNT fixtures draw inside, a
+reusable stylized prop library dresses every wall, the canopy is a rounded nose with projected
+windows, and the cabin behind the bridge is a corridor with five rooms. The direction also changed:
+warm and **dim**, stylized rather than realistic.
 
 ### Deferred findings
 
