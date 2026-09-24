@@ -27,8 +27,15 @@ var room: AirlockRoom
 var alcove: Node
 ## The motion warning (AirlockCycle.motion_warning) as of the last step.
 var warning := {"level": 0, "text": ""}
+## The room's steam, haze and light (§5), rebuilt with each room.
+var show: AirlockShow
 
 var _ship: Ship
+## While the viewer's camera is in the room it wears a copy of its own
+## environment with the haze in it; the original is put back on leaving.
+var _hazed_camera: Camera3D
+var _saved_environment: Environment
+var _haze_environment: Environment
 
 func setup(ship: Ship, at: Vector3i) -> void:
 	_ship = ship
@@ -37,8 +44,12 @@ func setup(ship: Ship, at: Vector3i) -> void:
 
 ## Takes over a freshly built room (and, once the hull has one, its copy).
 func bind(new_room: AirlockRoom, new_alcove: Node = null) -> void:
+	_restore_environment()
 	room = new_room
 	alcove = new_alcove
+	show = AirlockShow.new()
+	room.add_child(show)
+	show.setup(room.room_frame, room.nozzles, room.ceiling_light, InteriorKit.LAYER)
 	for panel in panels():
 		panel.prompt_source = cycle.prompt.bind(panel.role)
 		if not panel.pressed.is_connected(_on_pressed):
@@ -65,6 +76,8 @@ func tick(delta: float) -> void:
 	var cues := cycle.step(delta, who["clear_inner"], who["clear_outer"], who["room_empty"])
 	_update_warning()
 	_apply()
+	show.apply(cycle, delta)
+	_update_haze()
 	for c in cues:
 		cue.emit(c, cycle.cue_side)
 
@@ -98,6 +111,30 @@ static func in_doorway(p: Vector3, hatch_frame: Transform3D) -> bool:
 	return absf(local.z) < DOORWAY_DEPTH \
 		and absf(local.x) < InteriorProps.DOOR_WIDTH * 0.5 + BODY_RADIUS \
 		and local.y > -0.5 and local.y < InteriorProps.HATCH_HEIGHT
+
+## Puts the haze on the camera looking out from inside the room, and takes it
+## off again when that camera leaves.
+func _update_haze() -> void:
+	var cam := get_viewport().get_camera_3d() if is_inside_tree() else null
+	var inside := cam != null and _ship != null and _ship.interior.is_ancestor_of(cam) \
+		and in_room(_ship.interior.to_local(cam.global_position), room.room_frame)
+	if not inside:
+		_restore_environment()
+		return
+	if cam != _hazed_camera:
+		_restore_environment()
+		if cam.environment == null:
+			return
+		_hazed_camera = cam
+		_saved_environment = cam.environment
+		_haze_environment = _saved_environment.duplicate()
+		cam.environment = _haze_environment
+	show.tint(_haze_environment)
+
+func _restore_environment() -> void:
+	if is_instance_valid(_hazed_camera) and _hazed_camera.environment == _haze_environment:
+		_hazed_camera.environment = _saved_environment
+	_hazed_camera = null
 
 func _on_pressed(role: StringName) -> void:
 	cycle.press(role)
