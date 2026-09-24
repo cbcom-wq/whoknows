@@ -17,6 +17,7 @@ const PAINTING_FILES := [
 	"res://src/ship/interior/sliding_door.gd",
 	"res://src/ship/interior_builder.gd",
 	"res://src/items/item_looks.gd",
+	"res://src/avatar/glove.gd",
 ]
 
 ## The reusable asset library and what it builds with. Ships are generated
@@ -27,6 +28,7 @@ const REUSABLE_FILES := [
 	"res://src/ship/interior/sliding_door.gd",
 	"res://src/items/item_looks.gd",
 	"res://src/items/item.gd",
+	"res://src/avatar/glove.gd",
 ]
 const GRID_SIDE := ["ShipGrid", "BlockCatalog", "DeckGraph", "InteriorLayout", "InteriorBuilder",
 	"InteriorDressing"]
