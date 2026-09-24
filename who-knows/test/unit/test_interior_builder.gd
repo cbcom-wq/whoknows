@@ -205,11 +205,12 @@ func test_porthole_wall_keeps_a_whole_collider_and_draws_four_boxes():
 	_put(Vector3i(0, 0, 0), &"deck")
 	_put(Vector3i(1, 0, 0), &"hull")   # flank, vacuum beyond: a porthole
 	_builder.rebuild()
-	var wall_at := Vector3(ShipGrid.CELL_SIZE * 0.5, 0, 0)
+	var wall_at := InteriorBuilder.interior_center(Vector3i.ZERO) + Vector3(ShipGrid.CELL_SIZE * 0.5, 0, 0)
 	var colliders := _structure_colliders().filter(func(c): return c.position.is_equal_approx(wall_at))
 	assert_eq(colliders.size(), 1)
 	assert_almost_eq((colliders[0].shape as BoxShape3D).size,
-		Vector3(InteriorBuilder.FLOOR_THICKNESS, ShipGrid.CELL_SIZE, ShipGrid.CELL_SIZE), Vector3.ONE * 0.001)
+		Vector3(InteriorBuilder.FLOOR_THICKNESS, InteriorBuilder.STOREY_HEIGHT, ShipGrid.CELL_SIZE),
+		Vector3.ONE * 0.001, "a whole wall, the full storey high")
 	var pieces := _structure_meshes().filter(
 		func(m): return absf(m.position.x - wall_at.x) < 0.001)
 	assert_eq(pieces.size(), 4, "four boxes round a square opening")
@@ -233,7 +234,7 @@ func test_canopy_face_has_a_collider_and_no_box():
 	_put(Vector3i(0, 0, 0), &"deck")
 	_put(Vector3i(1, 0, 0), &"canopy")
 	_builder.rebuild()
-	var plane := Vector3(ShipGrid.CELL_SIZE * 0.5, 0, 0)
+	var plane := InteriorBuilder.interior_center(Vector3i.ZERO) + Vector3(ShipGrid.CELL_SIZE * 0.5, 0, 0)
 	assert_eq(_structure_colliders().filter(func(c): return c.position.is_equal_approx(plane)).size(), 1)
 	assert_eq(_structure_meshes().filter(func(m): return m.position.is_equal_approx(plane)).size(), 0)
 
@@ -249,11 +250,13 @@ func test_a_partition_is_built_once():
 	_put(Vector3i(1, 0, 1), &"galley")
 	_builder.rebuild()
 	# The doorway takes the forward face (z = 0); the aft one is a plain partition.
-	var between := Vector3(ShipGrid.CELL_SIZE * 0.5, 0, ShipGrid.CELL_SIZE)
+	var between := InteriorBuilder.interior_center(Vector3i(0, 0, 1)) + Vector3(ShipGrid.CELL_SIZE * 0.5, 0, 0)
 	var here := _structure_colliders().filter(func(c): return c.position.is_equal_approx(between))
 	assert_eq(here.size(), 1, "one wall between the corridor and the galley, not two")
 
-func test_a_doorway_leaves_a_clear_opening_between_two_jambs():
+## A doorway is two jambs and a lintel round an opening DOOR_WIDTH wide and
+## DOOR_HEIGHT high. Nothing solid may stand in that opening.
+func test_a_doorway_leaves_a_clear_opening():
 	_register_rooms()
 	_put(Vector3i(0, 0, 0), &"deck")
 	_put(Vector3i(1, 0, 0), &"galley")
@@ -261,11 +264,14 @@ func test_a_doorway_leaves_a_clear_opening_between_two_jambs():
 	assert_eq(_builder.doorway_count(), 1)
 	var plane_x := ShipGrid.CELL_SIZE * 0.5
 	var at_plane := _structure_colliders().filter(func(c): return is_equal_approx(c.position.x, plane_x))
-	assert_eq(at_plane.size(), 2, "two jambs")
+	assert_eq(at_plane.size(), 3, "two jambs and a lintel")
+	var door_top := InteriorBuilder.floor_y(Vector3i.ZERO) + InteriorProps.DOOR_HEIGHT
 	for c in at_plane:
-		var half_width: float = (c.shape as BoxShape3D).size.z * 0.5
-		assert_gte(absf(c.position.z) - half_width, InteriorProps.DOOR_WIDTH * 0.5 - 0.001,
-			"nothing solid in the opening")
+		var half: Vector3 = (c.shape as BoxShape3D).size * 0.5
+		var beside: bool = absf(c.position.z) - half.z >= InteriorProps.DOOR_WIDTH * 0.5 - 0.001
+		var above: bool = c.position.y - half.y >= door_top - 0.001
+		assert_true(beside or above, "nothing solid in the opening")
+	assert_gte(InteriorProps.DOOR_HEIGHT, 2.0, "the 1.8 m avatar walks through upright")
 
 func test_room_floors_take_the_room_colour():
 	_register_rooms()
@@ -275,3 +281,23 @@ func test_room_floors_take_the_room_colour():
 	var floors := _structure_meshes().filter(func(m): return is_equal_approx(m.position.y, floor_y))
 	assert_eq((floors[0].material_override as StandardMaterial3D).albedo_color,
 		InteriorPalette.ROOM_FLOOR[&"bathroom"])
+
+## The interior is taller than a grid cell: grid cells stay 2 m, but a storey
+## gives 2.5 m of clear headroom so nobody's head is at the lights.
+func test_clear_headroom_is_the_storey_less_the_slabs():
+	_put(Vector3i.ZERO, &"deck")
+	_builder.rebuild()
+	var slabs := _structure_colliders().filter(func(c): return (c.shape as BoxShape3D).size.y < 0.5)
+	var ys := slabs.map(func(c): return c.position.y)
+	ys.sort()
+	var headroom: float = (ys[1] - InteriorBuilder.FLOOR_THICKNESS * 0.5) - (ys[0] + InteriorBuilder.FLOOR_THICKNESS * 0.5)
+	assert_almost_eq(headroom, InteriorBuilder.STOREY_HEIGHT - InteriorBuilder.FLOOR_THICKNESS, 0.001)
+	assert_gte(headroom, 2.4, "room over a 1.6 m eye line")
+
+## The floor stays where the hull puts it: only the ceiling rises. That keeps
+## the pilot's eye -- and so the canopy camera -- exactly where it was.
+func test_floor_is_anchored_to_the_grid():
+	assert_almost_eq(InteriorBuilder.floor_y(Vector3i.ZERO),
+		-ShipGrid.CELL_SIZE * 0.5 + InteriorBuilder.FLOOR_THICKNESS * 0.5, 0.0001)
+	assert_almost_eq(InteriorBuilder.floor_y(Vector3i(0, 1, 0)) - InteriorBuilder.floor_y(Vector3i.ZERO),
+		InteriorBuilder.STOREY_HEIGHT, 0.0001, "storeys stack at storey height")

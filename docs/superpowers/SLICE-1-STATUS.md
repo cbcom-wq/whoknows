@@ -127,6 +127,11 @@ allows this and `DeckGraph` already treats stacked decks as a second storey unle
 this needs thought), thin the slabs further, or shorten the avatar. A 4 m cabin over a 16 m hull
 would change the ship's proportions, so this is partly an art-direction decision.
 
+**Addressed 2026-09-23** with an option not listed above: interior storeys are now taller than the
+grid, 2.6 m for 2.5 m of clear headroom (`InteriorBuilder.STOREY_HEIGHT`), with the floor anchored
+where the hull puts it. Hull, blueprint and flight balance are unchanged. See
+docs/design/visual-style.md §3.2.
+
 **3. Flying feels sluggish.** *Root cause found — two compounding causes.*
 
 - **Peak yaw acceleration is 3.83 °/s².** Reaching even 30 °/s takes about eight seconds of full

@@ -34,7 +34,7 @@ static func wall_frame(coord: Vector3i, normal: Vector3i) -> Transform3D:
 
 ## The top of a walkable cell's deck slab.
 static func floor_y(coord: Vector3i) -> float:
-	return ShipGrid.cell_center(coord).y - (ShipGrid.CELL_SIZE - InteriorBuilder.FLOOR_THICKNESS) * 0.5
+	return InteriorBuilder.floor_y(coord)
 
 ## A face's stable 0..1 variety, for what its props show.
 static func face_variety(face: Dictionary) -> float:
@@ -131,6 +131,6 @@ static func _doorway(kit: InteriorKit, f: Transform3D) -> void:
 	InteriorProps.door_frame(kit, f)
 	var door := SlidingDoor.new()
 	door.name = "SlidingDoor"
-	door.setup(InteriorProps.DOOR_WIDTH, InteriorProps.HEADROOM)
+	door.setup(InteriorProps.DOOR_WIDTH, InteriorProps.DOOR_HEIGHT)
 	door.transform = f * InteriorKit.at(Vector3(0, 0, -InteriorProps.WALL_THICKNESS * 0.5))
 	kit.root.add_child(door)

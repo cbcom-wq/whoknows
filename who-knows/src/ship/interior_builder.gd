@@ -19,13 +19,35 @@ extends Node3D
 ## same ShipGrid, which is what makes the parity test honest.
 
 ## Deck and overhead slab thickness. Each slab eats half its thickness from
-## the cell, so clear headroom is CELL_SIZE - FLOOR_THICKNESS. At 0.2 that
-## was exactly 1.8 m for an exactly 1.8 m avatar -- zero margin, and the
-## player jammed into the overhead. 0.1 leaves 1.9 m clear.
+## the storey, so clear headroom is STOREY_HEIGHT - FLOOR_THICKNESS.
 const FLOOR_THICKNESS := 0.1
 const DEFAULT_GRAVITY := 9.8
 
+## The interior is taller than the grid (docs/design/visual-style.md §3.2).
+## Grid cells are 2 m cubes, and a 2 m storey left 1.9 m of headroom: the
+## ceiling lights were at the player's eyebrows. The interior is its own
+## space, never seen beside the hull, so its storeys can be taller than the
+## cells they are built from -- 2.6 m, for 2.5 m clear. The floor stays where
+## the grid puts it and only the ceiling rises, so everything at floor level
+## (the pilot's seat and eye, the airlock) maps one to one onto the hull.
+##
+## Place interior things through floor_y() and interior_center(), never
+## through ShipGrid.cell_center().y.
+const STOREY_HEIGHT := 2.6
+
 const _SLAB := Vector3(ShipGrid.CELL_SIZE, FLOOR_THICKNESS, ShipGrid.CELL_SIZE)
+
+## The top of a walkable cell's deck slab, in interior space. Anchored to the
+## grid: storey 0's floor is exactly where the hull's cabin floor is.
+static func floor_y(coord: Vector3i) -> float:
+	return coord.y * STOREY_HEIGHT - ShipGrid.CELL_SIZE * 0.5 + FLOOR_THICKNESS * 0.5
+
+## The centre of a cell's storey in interior space: grid x and z, with y
+## halfway between the middles of its deck and overhead slabs.
+static func interior_center(coord: Vector3i) -> Vector3:
+	var centre := ShipGrid.cell_center(coord)
+	centre.y = floor_y(coord) - FLOOR_THICKNESS * 0.5 + STOREY_HEIGHT * 0.5
+	return centre
 
 ## Names the parent under which this builder creates and owns its own
 ## StaticBody3D each rebuild() -- NOT a body to attach colliders to.
@@ -148,11 +170,12 @@ func _body() -> Node:
 	return get_node(body_path) if not body_path.is_empty() else self
 
 func _build_structure() -> void:
-	var half := ShipGrid.CELL_SIZE * 0.5
 	for face in _layout.faces():
 		var coord: Vector3i = face["coord"]
 		var normal: Vector3i = face["normal"]
-		var at := ShipGrid.cell_center(coord) + Vector3(normal) * half
+		# Walls sit half a cell out; slabs sit half a storey up or down.
+		var at := interior_center(coord) + Vector3(normal) * Vector3(
+			ShipGrid.CELL_SIZE * 0.5, STOREY_HEIGHT * 0.5, ShipGrid.CELL_SIZE * 0.5)
 		match face["kind"]:
 			InteriorLayout.Kind.FLOOR:
 				_add_box(_physics_body, _SLAB, at, InteriorMaterials.flat(_floor_colour(face["zone"])))
@@ -181,7 +204,7 @@ static func _floor_colour(zone: StringName) -> Color:
 static func _wall_size(normal: Vector3i) -> Vector3:
 	return Vector3(
 		FLOOR_THICKNESS if normal.x != 0 else ShipGrid.CELL_SIZE,
-		ShipGrid.CELL_SIZE,
+		STOREY_HEIGHT,
 		FLOOR_THICKNESS if normal.z != 0 else ShipGrid.CELL_SIZE
 	)
 
@@ -192,32 +215,36 @@ func _add_porthole_wall(at: Vector3, normal: Vector3i) -> void:
 	var material := InteriorMaterials.flat(InteriorPalette.WALL)
 	var along := Vector3(absi(normal.z), 0, absi(normal.x))
 	var thick := Vector3(absi(normal.x), 0, absi(normal.z)) * FLOOR_THICKNESS
-	var half := ShipGrid.CELL_SIZE * 0.5
 	var s := InteriorProps.PORTHOLE_OPENING
-	var hole_y := InteriorProps.PORTHOLE_HEIGHT - (ShipGrid.CELL_SIZE - FLOOR_THICKNESS) * 0.5
-	var side_w := half - s
+	var side_w := ShipGrid.CELL_SIZE * 0.5 - s
+	var v_half := STOREY_HEIGHT * 0.5
+	# The hole's centre, measured from the wall box's centre.
+	var hole_y := InteriorProps.PORTHOLE_HEIGHT - (STOREY_HEIGHT - FLOOR_THICKNESS) * 0.5
 	for side in [-1.0, 1.0]:
-		_add_visual(_physics_body, thick + along * side_w + Vector3.UP * ShipGrid.CELL_SIZE,
+		_add_visual(_physics_body, thick + along * side_w + Vector3.UP * STOREY_HEIGHT,
 			at + along * side * (s + side_w * 0.5), material)
-	var below := hole_y - s + half
+	var below := hole_y - s + v_half
 	_add_visual(_physics_body, thick + along * 2.0 * s + Vector3.UP * below,
-		at + Vector3.UP * (below * 0.5 - half), material)
-	var above := half - (hole_y + s)
+		at + Vector3.UP * (below * 0.5 - v_half), material)
+	var above := v_half - (hole_y + s)
 	_add_visual(_physics_body, thick + along * 2.0 * s + Vector3.UP * above,
-		at + Vector3.UP * (half - above * 0.5), material)
+		at + Vector3.UP * (v_half - above * 0.5), material)
 
-## A doorway: two jambs, each a collider and a box, either side of an opening
-## InteriorProps.DOOR_WIDTH wide and the full cell high. The opening itself
-## never has a collider -- the SlidingDoor's leaves are only a picture.
+## A doorway: two jambs and a lintel, each a collider and a box, round an
+## opening InteriorProps.DOOR_WIDTH wide and DOOR_HEIGHT high. The opening
+## itself never has a collider -- the SlidingDoor's leaves are only a picture.
 func _add_doorway(at: Vector3, normal: Vector3i) -> void:
 	var along := Vector3(absi(normal.z), 0, absi(normal.x))
 	var thick := Vector3(absi(normal.x), 0, absi(normal.z)) * FLOOR_THICKNESS
-	var jamb := (ShipGrid.CELL_SIZE - InteriorProps.DOOR_WIDTH) * 0.5
-	var size := thick + along * jamb + Vector3.UP * ShipGrid.CELL_SIZE
 	var material := InteriorMaterials.flat(InteriorPalette.WALL)
+	var jamb := (ShipGrid.CELL_SIZE - InteriorProps.DOOR_WIDTH) * 0.5
 	for side in [-1.0, 1.0]:
-		_walls.append(_add_box(_physics_body, size,
+		_walls.append(_add_box(_physics_body, thick + along * jamb + Vector3.UP * STOREY_HEIGHT,
 			at + along * side * (InteriorProps.DOOR_WIDTH + jamb) * 0.5, material))
+	# The wall box runs slab-middle to slab-middle; the opening starts on the deck.
+	var lintel := STOREY_HEIGHT - FLOOR_THICKNESS * 0.5 - InteriorProps.DOOR_HEIGHT
+	_walls.append(_add_box(_physics_body, thick + along * InteriorProps.DOOR_WIDTH + Vector3.UP * lintel,
+		at + Vector3.UP * (STOREY_HEIGHT - lintel) * 0.5, material))
 	_doorway_count += 1
 
 ## Draws every MOUNT block that has a mesh: seats, consoles, ladders -- the
@@ -233,9 +260,11 @@ func _build_fixtures() -> void:
 			continue
 		var fixture := MeshInstance3D.new()
 		fixture.mesh = def.mesh
-		fixture.transform = Transform3D(
-			BlockOrientation.basis_for(inst.orientation), ShipGrid.cell_center(coord)
-		)
+		# Fixture meshes are modelled on a 2 m cell with the deck 0.95 m below
+		# their origin; keep that deck on the (taller) storey's floor.
+		var origin := ShipGrid.cell_center(coord)
+		origin.y = floor_y(coord) + (ShipGrid.CELL_SIZE - FLOOR_THICKNESS) * 0.5
+		fixture.transform = Transform3D(BlockOrientation.basis_for(inst.orientation), origin)
 		fixture.layers = 2   # interior render layer, same as the walls
 		_physics_body.add_child(fixture)
 		_fixtures.append(fixture)

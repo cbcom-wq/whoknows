@@ -85,7 +85,8 @@ can meet, and the owner's approval. A test pins the list (§5).
 ### 2.6 Performance budget
 
 The interior must hold **at least 120 fps at 1280 × 720 on the reference GPU (GTX 960)** with the
-canopy view rendering. When measured on 2026-09-23 it ran at 160–196 fps. Measure after any change
+canopy view rendering. With the 2.5 m storeys and five furnished rooms it measured 149–184 fps
+(2026-09-23). Measure after any change
 that adds lights, pieces or post-processing.
 
 ---
@@ -98,7 +99,7 @@ Ships are generated from player blueprints, so every asset is placed by generato
   and nothing else. It must not reference `ShipGrid`, `InteriorLayout`, `InteriorBuilder` or
   `InteriorDressing`; a test enforces this (§5). **The frame:** origin on the wall's inner surface
   at floor level, centred along the wall; +x along the wall, +y up, +z into the room. Props are
-  designed for a 2 m bay and 1.9 m of headroom.
+  designed for a 2 m bay and 2.5 m of headroom (§3.2).
 - **Placement lives in one place.** `InteriorLayout` decides what every face is.
   `InteriorDressing` maps each face to a prop. Neither draws anything itself.
 - **Rooms are grid data:** a room is a room block, so a blueprint generator can emit one. Walls
@@ -119,7 +120,26 @@ A room cell is 2 m square, and crowding it is the easiest mistake to make:
   keep their trim.
 - Leave a clear aisle at least 1.0 m wide from the doorway into the room: the avatar is 0.7 m wide.
 - A feature wall on the outer skin gets a porthole above the furniture, so that piece must stay
-  below 0.85 m there (a low bunk, a counter with no cupboards above).
+  below 1.0 m there (a low bunk, a counter with no cupboards above).
+
+### 3.2 Interior storeys are taller than the grid
+
+Grid cells are 2 m cubes, but **an interior storey is 2.6 m tall, with 2.5 m of clear
+headroom** (`InteriorBuilder.STOREY_HEIGHT`). The first build used the 2 m cell as the storey,
+which left 1.9 m of headroom: the ceiling was 0.3 m above the eye, and the owner's head was
+"almost hitting the lights". The interior is its own space and is never seen beside the hull, so
+it can be bigger inside than out.
+
+- **The floor is anchored to the grid; only the ceiling rises.** Everything at floor level (the
+  pilot's seat and eye, the canopy camera, the airlock) maps one to one onto the hull. Storeys
+  stack at `STOREY_HEIGHT`.
+- **Place interior things with `InteriorBuilder.floor_y()` and `interior_center()`**, never with
+  `ShipGrid.cell_center().y`. Anything that crosses between interior and exterior space (the
+  airlock, boarding, stepping outside) maps through them too.
+- **Hang ceiling trim from `InteriorProps.HEADROOM`**, not from fixed heights, so it follows the
+  storey. Furniture and fittings sit at human heights: eye level is 1.6 m, portholes are centred at
+  1.45 m, wall screens at 1.45 m, and doors are 2.1 m (`DOOR_HEIGHT`) with a lintel above. Doors
+  are never full ceiling height.
 
 ---
 

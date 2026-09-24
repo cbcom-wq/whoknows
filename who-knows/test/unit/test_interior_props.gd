@@ -28,7 +28,7 @@ func _assert_built() -> void:
 
 func test_prop_dimensions_match_the_ship_grid():
 	assert_eq(InteriorProps.BAY, ShipGrid.CELL_SIZE)
-	assert_almost_eq(InteriorProps.HEADROOM, ShipGrid.CELL_SIZE - InteriorBuilder.FLOOR_THICKNESS, 0.0001)
+	assert_almost_eq(InteriorProps.HEADROOM, InteriorBuilder.STOREY_HEIGHT - InteriorBuilder.FLOOR_THICKNESS, 0.0001)
 	assert_almost_eq(InteriorProps.WALL_THICKNESS, InteriorBuilder.FLOOR_THICKNESS, 0.0001)
 
 func test_porthole_frame_hides_the_square_opening():
@@ -107,7 +107,7 @@ func _built_with_colliders(expected: int) -> void:
 func test_bunks_are_solid():
 	InteriorProps.bunks(_kit, Transform3D.IDENTITY, 0.3, false)
 	_built_with_colliders(1)
-	assert_almost_eq((_colliders()[0].shape as BoxShape3D).size.y, 1.5, 0.001, "two tiers")
+	assert_almost_eq((_colliders()[0].shape as BoxShape3D).size.y, 1.7, 0.001, "two tiers")
 
 func test_a_low_bunk_leaves_room_for_a_porthole():
 	InteriorProps.bunks(_kit, Transform3D.IDENTITY, 0.3, true)
@@ -146,3 +146,12 @@ func test_door_frame_is_lit_and_leaves_the_opening_clear():
 func test_every_room_has_a_floor_colour():
 	for id in InteriorLayout.ROOM_IDS:
 		assert_true(InteriorPalette.ROOM_FLOOR.has(id), "%s has a floor colour" % id)
+
+## Standing eyes are at 1.6 m: portholes are for looking out of.
+func test_portholes_sit_at_eye_level():
+	assert_between(InteriorProps.PORTHOLE_HEIGHT, 1.35, 1.6)
+	assert_lt(InteriorProps.PORTHOLE_HEIGHT + InteriorProps.PORTHOLE_FRAME_RADIUS, InteriorProps.HEADROOM - 0.3,
+		"clear of the light shelf")
+
+func test_doors_are_door_height_not_ceiling_height():
+	assert_between(InteriorProps.DOOR_HEIGHT, 2.0, InteriorProps.HEADROOM - 0.2)
