@@ -203,6 +203,15 @@ func test_the_reticle_shows_on_foot():
 	assert_true(reticle is Reticle)
 	assert_true(reticle.visible)
 
+## It draws its dot at the centre of its own rect, so that rect must be the
+## whole screen. Anchored full-rect with its zero size kept, it sat in the top
+## left corner, one dot on the corner pixel: visible, and useless.
+func test_the_reticle_is_centred_on_the_screen():
+	var reticle: Control = _root.get_node("Prompt/Reticle")
+	var screen := reticle.get_viewport_rect()
+	assert_almost_eq(reticle.get_global_rect().size, screen.size, Vector2.ONE)
+	assert_almost_eq(reticle.get_global_rect().get_center(), screen.get_center(), Vector2.ONE)
+
 func test_third_person_hides_the_reticle_and_refuses_use():
 	var director: CameraDirector = _root.get_node("Ship/CameraDirector")
 	var avatar: Avatar = _root.get_node("Ship/Interior/Avatar")
