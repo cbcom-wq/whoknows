@@ -31,8 +31,9 @@ const COLLISION_MASK := 2 | 32
 ## Every avatar is in this group, so the things it walks through -- an
 ## airlock's doorways -- can find it.
 const GROUP := &"avatar"
-## exterior_hull | items: on a spacewalk you bump along your own hull.
-const SUIT_MASK := 1 | 32
+## exterior_hull | items | asteroids: on a spacewalk you bump along your own
+## hull, and into rocks (asteroids spec §7.6).
+const SUIT_MASK := 1 | 32 | AsteroidBody.LAYER
 ## How long the view takes to right itself after floating in tilted.
 const RIGHTING_TIME := 0.4
 
@@ -175,6 +176,8 @@ func enter_suit(outside: Node3D, pose: Transform3D, start_velocity: Vector3, shi
 	_interior_environment = camera.environment
 	_move_to(outside)
 	add_to_group(Universe.EXTERIOR_SPACE)
+	add_to_group(AsteroidStream.SPACE_ANCHOR)
+	set_meta(AsteroidStream.ANCHOR_RADIUS, 1.0)
 	global_transform = pose
 	mode = Mode.SUIT
 	hull = ship_hull
@@ -201,6 +204,7 @@ func enter_plating(interior: Node3D, pose: Transform3D, pitch: float, start_velo
 	_camera_home = camera.position
 	_move_to(interior)
 	remove_from_group(Universe.EXTERIOR_SPACE)
+	remove_from_group(AsteroidStream.SPACE_ANCHOR)
 	global_transform = pose
 	mode = Mode.PLATING
 	hull = null

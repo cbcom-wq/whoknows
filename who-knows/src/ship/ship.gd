@@ -53,9 +53,13 @@ func _ready() -> void:
 	exterior.angular_damp = 0.0
 	exterior.can_sleep = false
 	exterior.collision_layer = 1   # exterior_hull
-	exterior.collision_mask = 1    # detects only other hulls
+	exterior.collision_mask = 1 | AsteroidBody.LAYER   # other hulls, and rocks
+	# At boost the hull moves 5 m a tick: without this it passes through rubble.
+	exterior.continuous_cd = true
 	# Outside, so the floating origin moves it (asteroids spec §4.2).
 	exterior.add_to_group(Universe.EXTERIOR_SPACE)
+	# It touches rocks (asteroids spec §7.1).
+	exterior.add_to_group(AsteroidStream.SPACE_ANCHOR)
 	interior.global_position = interior_slot_origin()
 	outside = get_node_or_null(outside_path) as Node3D if not outside_path.is_empty() else null
 	if outside == null:
@@ -138,6 +142,14 @@ func _rebuild_everything() -> void:
 	stats = ShipStats.compute(grid, catalog)
 	_apply_stats()
 	stats_changed.emit(stats)
+	_set_anchor_radius()
+
+## How far the hull reaches from its origin, for the asteroid bubble.
+func _set_anchor_radius() -> void:
+	var reach := 0.0
+	for c: Vector3i in grid.coords():
+		reach = maxf(reach, ShipGrid.cell_center(c).length())
+	exterior.set_meta(AsteroidStream.ANCHOR_RADIUS, reach + ShipGrid.CELL_SIZE * 0.87)
 
 ## Hands each rebuilt airlock room to its Airlock, making one for a new
 ## airlock and dropping those whose cell is gone. An Airlock keeps its cycle,
