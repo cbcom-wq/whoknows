@@ -319,9 +319,11 @@ later balance decision. The block count goes from 16 to 21.
 
 ### 7.3 Doorways and sliding doors
 
-- **Structure:** the owning record builds two jamb colliders and boxes, each 0.4 m wide, leaving
-  a 1.2 m opening the full 1.9 m high (the avatar is 1.8 m). The opening never has a collider.
-- **`SlidingDoor`:** chunky frame posts and header, two bevelled leaves that slide 0.6 m apart
+- **Structure:** the owning record builds two jamb colliders and boxes, each 0.5 m wide, leaving
+  a 1.0 m opening the full 1.9 m high (the avatar is 1.8 m tall and 0.7 m wide). The opening
+  never has a collider. At 1.0 m, each 0.5 m leaf fits entirely inside its jamb when open; a
+  1.2 m opening would leave 0.2 m of leaf showing in the doorway.
+- **`SlidingDoor`:** chunky frame posts and header, two bevelled leaves that slide 0.5 m apart
   into the wall over 0.25 s, and an `Area3D` trigger (1.2 × 1.9 × 2.4 m, `collision_mask = 4`,
   the avatar's layer)
   that opens on enter and closes when the last body leaves. The leaves are visual only.
