@@ -69,6 +69,9 @@ static func _dress(kit: InteriorKit, face: Dictionary) -> void:
 			var f := wall_frame(coord, face["normal"])
 			InteriorProps.wall_trim(kit, f)
 			_wall_piece(kit, f, face)
+		InteriorLayout.Kind.DOORWAY:
+			if face["owner"]:
+				_doorway(kit, wall_frame(coord, face["normal"]))
 
 static func _wall_piece(kit: InteriorKit, f: Transform3D, face: Dictionary) -> void:
 	var variety := face_variety(face)
@@ -83,4 +86,46 @@ static func _wall_piece(kit: InteriorKit, f: Transform3D, face: Dictionary) -> v
 			InteriorProps.lockers(kit, f, variety)
 		InteriorLayout.WallVariant.DISPLAY:
 			InteriorProps.display(kit, f, variety)
+		InteriorLayout.WallVariant.FEATURE, InteriorLayout.WallVariant.SECONDARY:
+			_room_piece(kit, f, face, variety)
 		# PANEL: the trim is the whole wall.
+
+## A room wall's furniture, by room: the feature wall gets the room's main
+## piece, the others its secondary one (spec §7.4).
+static func _room_piece(kit: InteriorKit, f: Transform3D, face: Dictionary, variety: float) -> void:
+	var feature: bool = face["variant"] == InteriorLayout.WallVariant.FEATURE
+	var porthole: bool = face["porthole"]
+	match face["zone"]:
+		&"bunk_room":
+			if feature:
+				InteriorProps.bunks(kit, f, variety, porthole)
+			else:
+				InteriorProps.tall_lockers(kit, f, variety)
+		&"galley":
+			if feature:
+				InteriorProps.galley_counter(kit, f, variety, porthole)
+			else:
+				InteriorProps.fridge(kit, f, variety)
+		&"bathroom":
+			if feature:
+				InteriorProps.washstand(kit, f, variety)
+			else:
+				InteriorProps.towel_rail(kit, f, variety)
+		&"closet":
+			InteriorProps.shelves(kit, f, variety)
+		&"weapon_room":
+			if feature:
+				InteriorProps.weapon_rack(kit, f, variety)
+			else:
+				InteriorProps.ammo_crates(kit, f, variety)
+	if porthole:
+		InteriorProps.porthole(kit, f)
+
+## A doorway's frame and its sliding door, on the wall's mid-plane.
+static func _doorway(kit: InteriorKit, f: Transform3D) -> void:
+	InteriorProps.door_frame(kit, f)
+	var door := SlidingDoor.new()
+	door.name = "SlidingDoor"
+	door.setup(InteriorProps.DOOR_WIDTH, InteriorProps.HEADROOM)
+	door.transform = f * InteriorKit.at(Vector3(0, 0, -InteriorProps.WALL_THICKNESS * 0.5))
+	kit.root.add_child(door)

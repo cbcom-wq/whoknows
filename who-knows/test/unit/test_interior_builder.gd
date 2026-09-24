@@ -236,3 +236,42 @@ func test_canopy_face_has_a_collider_and_no_box():
 	var plane := Vector3(ShipGrid.CELL_SIZE * 0.5, 0, 0)
 	assert_eq(_structure_colliders().filter(func(c): return c.position.is_equal_approx(plane)).size(), 1)
 	assert_eq(_structure_meshes().filter(func(m): return m.position.is_equal_approx(plane)).size(), 0)
+
+func _register_rooms() -> void:
+	for id in InteriorLayout.ROOM_IDS:
+		_cat.register(_def(id, BlockDefinition.Occupancy.DECK))
+
+func test_a_partition_is_built_once():
+	_register_rooms()
+	_put(Vector3i(0, 0, 0), &"deck")
+	_put(Vector3i(0, 0, 1), &"deck")
+	_put(Vector3i(1, 0, 0), &"galley")
+	_put(Vector3i(1, 0, 1), &"galley")
+	_builder.rebuild()
+	# The doorway takes the forward face (z = 0); the aft one is a plain partition.
+	var between := Vector3(ShipGrid.CELL_SIZE * 0.5, 0, ShipGrid.CELL_SIZE)
+	var here := _structure_colliders().filter(func(c): return c.position.is_equal_approx(between))
+	assert_eq(here.size(), 1, "one wall between the corridor and the galley, not two")
+
+func test_a_doorway_leaves_a_clear_opening_between_two_jambs():
+	_register_rooms()
+	_put(Vector3i(0, 0, 0), &"deck")
+	_put(Vector3i(1, 0, 0), &"galley")
+	_builder.rebuild()
+	assert_eq(_builder.doorway_count(), 1)
+	var plane_x := ShipGrid.CELL_SIZE * 0.5
+	var at_plane := _structure_colliders().filter(func(c): return is_equal_approx(c.position.x, plane_x))
+	assert_eq(at_plane.size(), 2, "two jambs")
+	for c in at_plane:
+		var half_width: float = (c.shape as BoxShape3D).size.z * 0.5
+		assert_gte(absf(c.position.z) - half_width, InteriorProps.DOOR_WIDTH * 0.5 - 0.001,
+			"nothing solid in the opening")
+
+func test_room_floors_take_the_room_colour():
+	_register_rooms()
+	_put(Vector3i(0, 0, 0), &"bathroom")
+	_builder.rebuild()
+	var floor_y := -ShipGrid.CELL_SIZE * 0.5
+	var floors := _structure_meshes().filter(func(m): return is_equal_approx(m.position.y, floor_y))
+	assert_eq((floors[0].material_override as StandardMaterial3D).albedo_color,
+		InteriorPalette.ROOM_FLOOR[&"bathroom"])

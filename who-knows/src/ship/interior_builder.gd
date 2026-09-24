@@ -52,6 +52,7 @@ var _layout: InteriorLayout
 var _walkable: Array[Vector3i] = []
 var _walls: Array[CollisionShape3D] = []
 var _canopy_faces: Array[CollisionShape3D] = []
+var _doorway_count := 0
 var _fixtures: Array[MeshInstance3D] = []
 var _gravity: Dictionary = {}   # Vector3i -> float
 
@@ -100,6 +101,9 @@ func wall_count() -> int:
 func canopy_face_count() -> int:
 	return _canopy_faces.size()
 
+func doorway_count() -> int:
+	return _doorway_count
+
 func fixture_count() -> int:
 	return _fixtures.size()
 
@@ -135,6 +139,7 @@ func _clear() -> void:
 	_layout = null
 	_walls.clear()
 	_canopy_faces.clear()
+	_doorway_count = 0
 	_fixtures.clear()
 	_walkable.clear()
 	_gravity.clear()
@@ -154,16 +159,23 @@ func _build_structure() -> void:
 			InteriorLayout.Kind.CEILING:
 				_add_box(_physics_body, _SLAB, at, InteriorMaterials.flat(InteriorPalette.CEILING))
 			InteriorLayout.Kind.WALL:
+				if not face["owner"]:
+					continue   # the cell on the other side builds this partition
 				if face["porthole"]:
 					_walls.append(_add_collider(_physics_body, _wall_size(normal), at))
 					_add_porthole_wall(at, normal)
 				else:
 					_walls.append(_add_box(_physics_body, _wall_size(normal), at,
 						InteriorMaterials.flat(InteriorPalette.WALL)))
+			InteriorLayout.Kind.DOORWAY:
+				if face["owner"]:
+					_add_doorway(at, normal)
 			InteriorLayout.Kind.CANOPY:
 				_canopy_faces.append(_add_collider(_physics_body, _wall_size(normal), at))
 
 static func _floor_colour(zone: StringName) -> Color:
+	if InteriorPalette.ROOM_FLOOR.has(zone):
+		return InteriorPalette.ROOM_FLOOR[zone]
 	return InteriorPalette.FLOOR_BRIDGE if zone == InteriorLayout.ZONE_BRIDGE else InteriorPalette.FLOOR
 
 static func _wall_size(normal: Vector3i) -> Vector3:
@@ -193,6 +205,20 @@ func _add_porthole_wall(at: Vector3, normal: Vector3i) -> void:
 	var above := half - (hole_y + s)
 	_add_visual(_physics_body, thick + along * 2.0 * s + Vector3.UP * above,
 		at + Vector3.UP * (half - above * 0.5), material)
+
+## A doorway: two jambs, each a collider and a box, either side of an opening
+## InteriorProps.DOOR_WIDTH wide and the full cell high. The opening itself
+## never has a collider -- the SlidingDoor's leaves are only a picture.
+func _add_doorway(at: Vector3, normal: Vector3i) -> void:
+	var along := Vector3(absi(normal.z), 0, absi(normal.x))
+	var thick := Vector3(absi(normal.x), 0, absi(normal.z)) * FLOOR_THICKNESS
+	var jamb := (ShipGrid.CELL_SIZE - InteriorProps.DOOR_WIDTH) * 0.5
+	var size := thick + along * jamb + Vector3.UP * ShipGrid.CELL_SIZE
+	var material := InteriorMaterials.flat(InteriorPalette.WALL)
+	for side in [-1.0, 1.0]:
+		_walls.append(_add_box(_physics_body, size,
+			at + along * side * (InteriorProps.DOOR_WIDTH + jamb) * 0.5, material))
+	_doorway_count += 1
 
 ## Draws every MOUNT block that has a mesh: seats, consoles, ladders -- the
 ## fixtures a player sees and walks up to. Without this the pilot seat is an

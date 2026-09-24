@@ -140,3 +140,44 @@ func test_nose_spans_its_windshield_and_sits_beyond_it():
 	var box := shell.mesh.get_aabb()
 	assert_almost_eq(box.size.x, 6.0, 0.01)
 	assert_lt(box.end.z, -0.99, "the whole shell is forward of the canopy plane (z = -1)")
+
+func _doors() -> Array:
+	return _builder.find_children("*", "Node3D", true, false).filter(func(n): return n is SlidingDoor)
+
+func _register_rooms() -> void:
+	for id in InteriorLayout.ROOM_IDS:
+		_cat.register(_def(id, BlockDefinition.Occupancy.DECK))
+
+func test_every_doorway_gets_one_sliding_door():
+	_register_rooms()
+	for z in [0, 1, 2]:
+		_put(Vector3i(0, 0, z), &"deck")
+	_put(Vector3i(-1, 0, 0), &"bunk_room")
+	_put(Vector3i(-1, 0, 1), &"bunk_room")
+	_put(Vector3i(1, 0, 0), &"galley")
+	_put(Vector3i(1, 0, 2), &"closet")
+	_builder.rebuild()
+	assert_eq(_doors().size(), _builder.layout().rooms().size())
+	assert_eq(_doors().size(), 3)
+
+func test_room_furniture_is_solid_where_it_should_be():
+	_register_rooms()
+	_put(Vector3i(0, 0, 0), &"deck")
+	_put(Vector3i(1, 0, 0), &"galley")
+	_put(Vector3i(2, 0, 0), &"hull")
+	_builder.rebuild()
+	assert_gt(_dressing_colliders().size(), 0, "a counter or a fridge you cannot walk through")
+
+func test_rooms_survive_churn():
+	_register_rooms()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var ids := [&"hull", &"deck", &"seat", &"canopy", &"airlock"] + Array(InteriorLayout.ROOM_IDS)
+	for step in 300:
+		var coord := Vector3i(rng.randi_range(-3, 3), 0, rng.randi_range(-5, 5))
+		if rng.randf() < 0.75:
+			_put(coord, ids[rng.randi_range(0, ids.size() - 1)])
+		else:
+			_grid.clear_block(coord)
+	_builder.rebuild()
+	assert_eq(_doors().size(), _builder.doorway_count(), "a door for every doorway, however tangled")
