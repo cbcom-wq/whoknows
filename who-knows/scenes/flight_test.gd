@@ -119,6 +119,7 @@ func _wire_hands() -> void:
 func _on_view_changed(view: CameraDirector.View, moving: bool) -> void:
 	var first_person := view == CameraDirector.View.FOOT_FIRST
 	_avatar.grasp.first_person = first_person
+	_avatar.hands.shown = first_person and not moving
 	_reticle.visible = first_person and not moving
 
 func _starter_grid() -> ShipGrid:

@@ -212,3 +212,16 @@ func test_a_stow_prompt_wins_over_the_interact_prompt():
 	assert_eq(label.text, Grasp.STOW_PROMPT)
 	avatar.grasp.prompt_changed.emit("")
 	assert_eq(label.text, "[F] Take the controls")
+
+func test_third_person_hides_the_hands():
+	var director: CameraDirector = _root.get_node("Ship/CameraDirector")
+	var avatar: Avatar = _root.get_node("Ship/Interior/Avatar")
+	assert_true(avatar.hands.shown)
+	director.cycle_view()
+	assert_false(avatar.hands.shown)
+
+func test_sitting_down_hides_the_hands():
+	var director: CameraDirector = _root.get_node("Ship/CameraDirector")
+	var avatar: Avatar = _root.get_node("Ship/Interior/Avatar")
+	director.sit(_root.get_node("Ship/Interior/PilotSeat"))
+	assert_false(avatar.hands.shown)

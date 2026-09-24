@@ -31,6 +31,8 @@ var external_accel: Vector3 = Vector3.ZERO
 
 ## What is in your hands.
 var grasp: Grasp
+## The gloves you see them with.
+var hands: Hands
 ## The ray that finds interactables, when the scene gives the head one.
 var interactor: Interactor
 
@@ -49,7 +51,10 @@ func _ready() -> void:
 	grasp = Grasp.new()
 	grasp.name = "Grasp"
 	add_child(grasp)
-	grasp.bind(self, head)
+	hands = Hands.new()
+	camera.add_child(hands)
+	grasp.bind(self, head, hands.wield_socket)
+	hands.bind(grasp, self)
 
 ## The actor contract Item talks to.
 func take_item(item: Item) -> void:
