@@ -21,6 +21,7 @@ const MASK := 2 | 32
 const ASSIST_ANGLE := deg_to_rad(8.0)
 
 var _current: Node = null
+var _text := ""
 var _ignored: CollisionObject3D = null
 
 func _ready() -> void:
@@ -37,9 +38,13 @@ func _physics_process(_delta: float) -> void:
 	var hit := _usable(get_collider() if is_colliding() else null)
 	if hit == null:
 		hit = _item_near_the_line_of_sight()
-	if hit != _current:
+	# A prompt can change while you look at the same thing -- an airlock panel's
+	# Depressurize becomes Reverse mid-cycle -- so it is read every frame.
+	var text := "" if hit == null else "[F] %s" % hit.prompt_text()
+	if hit != _current or text != _text:
 		_current = hit
-		prompt_changed.emit("" if _current == null else "[F] %s" % _current.prompt_text())
+		_text = text
+		prompt_changed.emit(text)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("interact") and _current != null:

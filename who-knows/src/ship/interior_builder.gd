@@ -160,6 +160,15 @@ func fixture_positions() -> Array[Vector3]:
 	return out
 
 ## Every StowPoint the last rebuild() placed (hands-and-items spec §5).
+## Every airlock room the last rebuild dressed (airlock spec §3).
+func airlock_rooms() -> Array[AirlockRoom]:
+	var out: Array[AirlockRoom] = []
+	if is_instance_valid(_physics_body):
+		for node in _physics_body.find_children("*", "Node3D", true, false):
+			if node is AirlockRoom:
+				out.append(node)
+	return out
+
 func stow_points() -> Array[StowPoint]:
 	var out: Array[StowPoint] = []
 	if not is_instance_valid(_physics_body):

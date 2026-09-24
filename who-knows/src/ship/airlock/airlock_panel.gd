@@ -81,6 +81,10 @@ func setup(panel_role: StringName, layer_bits: int, render_layer := InteriorKit.
 func prompt_text() -> String:
 	return prompt_source.call() if prompt_source.is_valid() else ""
 
+## Offered only while pressing it would do something.
+func can_interact(_actor: Node) -> bool:
+	return prompt_text() != ""
+
 func interact(_actor: Node) -> void:
 	pressed.emit(role)
 

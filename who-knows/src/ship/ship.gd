@@ -27,8 +27,12 @@ var item_catalog: ItemCatalog
 ## Every item aboard that is not in someone's hand (hands-and-items spec
 ## §4.4). A sibling of the builders, so an interior rebuild never touches it.
 var items: Node3D
+## Every airlock that can cycle, by cell (airlock spec §4.5). Each outlives the
+## rebuilds that replace the room it drives.
+var airlocks: Dictionary = {}   # Vector3i -> Airlock
 
 var _stocked := false
+var _airlocks_root: Node
 
 @onready var exterior: RigidBody3D = $Exterior
 @onready var interior: Node3D = $Interior
@@ -51,6 +55,9 @@ func _ready() -> void:
 	items = Node3D.new()
 	items.name = "Items"
 	interior.add_child(items)
+	_airlocks_root = Node.new()
+	_airlocks_root.name = "Airlocks"
+	add_child(_airlocks_root)
 
 func _process(_delta: float) -> void:
 	# hull_livery.gdshader paints its stripe from ship-local height, but
@@ -91,6 +98,7 @@ func _rebuild_everything() -> void:
 	var stowed := _stowed_items()
 	exterior_builder.rebuild()
 	interior_builder.rebuild()
+	_bind_airlocks()
 	_reseat(stowed)
 	if not _stocked:
 		_stock()
@@ -98,6 +106,29 @@ func _rebuild_everything() -> void:
 	stats = ShipStats.compute(grid, catalog)
 	_apply_stats()
 	stats_changed.emit(stats)
+
+## Hands each rebuilt airlock room to its Airlock, making one for a new
+## airlock and dropping those whose cell is gone. An Airlock keeps its cycle,
+## so a rebuild never resets a pressure or moves a hatch.
+func _bind_airlocks() -> void:
+	if _airlocks_root == null:
+		return
+	var seen := {}
+	for room in interior_builder.airlock_rooms():
+		seen[room.coord] = true
+		var airlock: Airlock = airlocks.get(room.coord)
+		if airlock == null:
+			airlock = Airlock.new()
+			airlock.setup(self, room.coord)
+			_airlocks_root.add_child(airlock)
+			airlocks[room.coord] = airlock
+		airlock.bind(room)
+	for at in airlocks.keys():
+		if not seen.has(at):
+			var gone: Airlock = airlocks[at]
+			airlocks.erase(at)
+			_airlocks_root.remove_child(gone)
+			gone.free()
 
 ## Every stowed item and where its stow point was, before a rebuild frees the
 ## points.

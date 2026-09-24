@@ -22,6 +22,9 @@ const CROUCH_HEIGHT := 1.0
 const PUSH_FORCE := 150.0
 ## interior_geometry | items (project.godot 3d_physics layers 2 and 6).
 const COLLISION_MASK := 2 | 32
+## Every avatar is in this group, so the things it walks through -- an
+## airlock's doorways -- can find it.
+const GROUP := &"avatar"
 
 ## Local gravity, supplied by Grav Plating. Zero means the cell is unplated.
 var grav_strength: float = 9.8
@@ -46,6 +49,7 @@ var _pitch: float = 0.0
 
 func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	add_to_group(GROUP)
 	collision_mask = COLLISION_MASK
 	interactor = get_node_or_null("Head/Interactor") as Interactor
 	grasp = Grasp.new()
