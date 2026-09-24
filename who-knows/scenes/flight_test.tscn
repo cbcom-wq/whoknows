@@ -7,7 +7,6 @@
 [ext_resource type="Script" path="res://src/avatar/pilot_seat.gd" id="5_pilot_seat"]
 [ext_resource type="Script" path="res://src/camera/camera_director.gd" id="6_camera_director"]
 [ext_resource type="Script" path="res://src/camera/motion_coupling.gd" id="7_motion_coupling"]
-[ext_resource type="Script" path="res://src/world/debris_field.gd" id="8_debris_field"]
 [ext_resource type="Script" path="res://src/ship/exterior_builder.gd" id="9_exterior_builder"]
 [ext_resource type="Script" path="res://src/ship/interior_builder.gd" id="10_interior_builder"]
 [ext_resource type="Script" path="res://scenes/flight_test.gd" id="11_flight_test"]
@@ -20,6 +19,7 @@
 [ext_resource type="Script" path="res://src/ship/canopy_portal.gd" id="18_canopy_portal"]
 [ext_resource type="Script" path="res://src/ui/airlock_marker.gd" id="19_airlock_marker"]
 [ext_resource type="Script" path="res://src/world/universe.gd" id="20_universe"]
+[ext_resource type="Script" path="res://src/world/asteroid_stream.gd" id="21_asteroid_stream"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_flighttest"]
 sky_top_color = Color(0.02, 0.02, 0.05, 1)
@@ -63,8 +63,8 @@ light_cull_mask = 5
 [node name="Universe" type="Node" parent="."]
 script = ExtResource("20_universe")
 
-[node name="DebrisField" type="MultiMeshInstance3D" parent="."]
-script = ExtResource("8_debris_field")
+[node name="AsteroidStream" type="Node3D" parent="."]
+script = ExtResource("21_asteroid_stream")
 
 [node name="Ship" type="Node3D" parent="."]
 script = ExtResource("1_ship")

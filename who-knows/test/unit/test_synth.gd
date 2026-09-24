@@ -6,6 +6,7 @@ extends GutTest
 const LENGTHS := {
 	&"hatch_motor": 0.9, &"bolt_clunk": 0.3, &"seal_thump": 0.35, &"hiss_out": 2.8, &"steam_in": 2.8,
 	&"panel_beep": 0.15, &"warning_chime": 0.5, &"ship_hum": 2.0, &"breath": 4.0, &"thruster_puff": 1.0,
+	&"hull_thump": 0.6,
 }
 
 func test_every_sound_builds_at_its_length():

@@ -40,6 +40,9 @@ var _airlocks_root: Node
 ## The ship's air handling (airlock spec §6): heard everywhere aboard,
 ## through the Ship bus, so it drains away with the air in the airlock.
 var _hum: AudioStreamPlayer
+## A rock striking the hull, heard aboard (asteroids spec §7.5).
+var _thump: AudioStreamPlayer
+var _last_hull_velocity := Vector3.ZERO
 
 @onready var exterior: RigidBody3D = $Exterior
 @onready var interior: Node3D = $Interior
@@ -81,6 +84,13 @@ func _ready() -> void:
 	_hum.bus = AudioBuses.SHIP
 	_hum.volume_db = -16.0
 	add_child(_hum)
+	_thump = AudioStreamPlayer.new()
+	_thump.name = "Thump"
+	_thump.bus = AudioBuses.SHIP
+	add_child(_thump)
+	exterior.contact_monitor = true
+	exterior.max_contacts_reported = 8
+	exterior.body_entered.connect(_on_hull_struck)
 
 func _process(_delta: float) -> void:
 	# hull_livery.gdshader paints its stripe from ship-local height, but
@@ -96,8 +106,7 @@ func _process(_delta: float) -> void:
 
 ## The hum plays while the listener is aboard, and stops outside.
 func _update_hum() -> void:
-	var cam := get_viewport().get_camera_3d()
-	var aboard := cam != null and interior.is_ancestor_of(cam)
+	var aboard := _aboard()
 	if aboard and not _hum.playing:
 		var s := Synth.sound(&"ship_hum")
 		if s != null:
@@ -105,6 +114,33 @@ func _update_hum() -> void:
 			_hum.play()
 	elif not aboard and _hum.playing:
 		_hum.stop()
+
+func _physics_process(_delta: float) -> void:
+	_last_hull_velocity = exterior.linear_velocity
+
+func _on_hull_struck(body: Node) -> void:
+	if body is AsteroidBody:
+		hull_struck((exterior.linear_velocity - _last_hull_velocity).length())
+
+## A strike you feel aboard (asteroids spec §7.5): a thump, louder the harder
+## the hull was knocked (`knock`: its change of speed, m/s). Outside is silent.
+func hull_struck(knock: float) -> void:
+	if not _aboard():
+		return
+	var s := Synth.sound(&"hull_thump")
+	if s == null:
+		return
+	_thump.stream = s
+	_thump.volume_db = thump_db(knock)
+	_thump.play()
+
+static func thump_db(knock: float) -> float:
+	return lerpf(-30.0, -2.0, clampf(knock / 8.0, 0.0, 1.0))
+
+## True while the camera you see through is aboard.
+func _aboard() -> bool:
+	var cam := get_viewport().get_camera_3d()
+	return cam != null and interior.is_ancestor_of(cam)
 
 func interior_slot_origin() -> Vector3:
 	# Interior space sits well clear of the combat arena so the walkable

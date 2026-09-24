@@ -34,6 +34,9 @@ const GROUP := &"avatar"
 ## exterior_hull | items | asteroids: on a spacewalk you bump along your own
 ## hull, and into rocks (asteroids spec §7.6).
 const SUIT_MASK := 1 | 32 | AsteroidBody.LAYER
+## You and your suit, kilograms, for bumping into things in space.
+const SUIT_MASS := 120.0
+const BUMP_BOUNCE := 0.2
 ## How long the view takes to right itself after floating in tilted.
 const RIGHTING_TIME := 0.4
 
@@ -268,7 +271,28 @@ func _suit_physics(delta: float) -> void:
 		var eye := head.global_position
 		global_basis = Basis(-head.global_basis.z, -roll * Suit.ROLL_RATE * delta) * global_basis
 		global_position += eye - head.global_position
+	var before := velocity
 	move_and_slide()
+	_bump_in_space(before)
+
+## Two bodies in space (asteroids spec §7.6): bumping a rock shares momentum
+## along the contact, with a little bounce. A 1 m rock drifts off slowly; a
+## giant stops you dead.
+func _bump_in_space(before: Vector3) -> void:
+	for i in get_slide_collision_count():
+		var hit := get_slide_collision(i)
+		var body := hit.get_collider() as AsteroidBody
+		if body == null:
+			continue
+		var n := hit.get_normal()
+		var at := hit.get_position() - body.global_position
+		var closing := -(before - (body.linear_velocity + body.angular_velocity.cross(at))).dot(n)
+		if closing <= 0.0:
+			continue
+		var m := SUIT_MASS * body.mass / (SUIT_MASS + body.mass)
+		var j := (1.0 + BUMP_BOUNCE) * m * closing
+		body.apply_impulse(-n * j, at)
+		velocity += n * (before.dot(n) + j / SUIT_MASS - velocity.dot(n))
 
 ## Your own ship's velocity where `p` is, spin included.
 func _hull_velocity_at(p: Vector3) -> Vector3:

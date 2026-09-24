@@ -14,7 +14,7 @@ extends RefCounted
 const MIX_RATE := 22050
 const NAMES: Array[StringName] = [
 	&"hatch_motor", &"bolt_clunk", &"seal_thump", &"hiss_out", &"steam_in",
-	&"panel_beep", &"warning_chime", &"ship_hum", &"breath", &"thruster_puff",
+	&"panel_beep", &"warning_chime", &"ship_hum", &"breath", &"thruster_puff", &"hull_thump",
 ]
 ## Sounds that play as seamless loops.
 const LOOPED: Array[StringName] = [&"ship_hum", &"breath", &"thruster_puff"]
@@ -62,6 +62,8 @@ static func build(sound_name: StringName) -> AudioStreamWAV:
 			x = _bolt_clunk()
 		&"seal_thump":
 			x = _seal_thump()
+		&"hull_thump":
+			x = _hull_thump()
 		&"hiss_out":
 			x = _hiss_out()
 		&"steam_in":
@@ -122,6 +124,20 @@ static func _seal_thump() -> PackedFloat32Array:
 		phase += TAU * lerpf(55.0, 40.0, minf(t / 0.2, 1.0)) / MIX_RATE
 		x[i] = sin(phase) * exp(-t / 0.1) + rumble[i] * exp(-t / 0.05) * 2.0
 	return _gain(x, 0.75)
+
+## The hull struck: a deep, heavy thump through the structure, with a short
+## metallic ring (asteroids spec §7.5).
+static func _hull_thump() -> PackedFloat32Array:
+	var n := _len(0.6)
+	var rumble := _lowpass(_noise(n, 27), 250.0)
+	var x := PackedFloat32Array()
+	x.resize(n)
+	var phase := 0.0
+	for i in n:
+		var t := float(i) / MIX_RATE
+		phase += TAU * lerpf(48.0, 30.0, minf(t / 0.35, 1.0)) / MIX_RATE
+		x[i] = sin(phase) * exp(-t / 0.18) + rumble[i] * exp(-t / 0.07) * 2.2 			+ sin(TAU * 173.0 * t) * exp(-t / 0.12) * 0.12
+	return _gain(x, 0.8)
 
 ## Air going: a hiss whose brightness and loudness fall away with the pressure.
 static func _hiss_out() -> PackedFloat32Array:

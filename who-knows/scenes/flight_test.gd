@@ -13,6 +13,7 @@ extends Node3D
 @onready var _interactor: Interactor = $Ship/Interior/Avatar/Head/Interactor
 @onready var _avatar: Avatar = $Ship/Interior/Avatar
 @onready var _universe: Universe = $Universe
+@onready var _stream: AsteroidStream = $AsteroidStream
 
 var _reticle: Reticle
 var _interact_prompt := ""
@@ -105,6 +106,11 @@ func _on_view_changed(view: CameraDirector.View, moving: bool) -> void:
 ## know about Universe. F3 shows where you are in the universe.
 func _wire_universe() -> void:
 	_universe.set_focus(_ship.exterior)
+	# The flight starts at a field's edge (asteroids spec §5.6): the universe's
+	# origin goes there, and the rocks around it load before the first frame.
+	var start := AsteroidRecipe.new(_stream.seed).find_start()
+	_universe.origin = start
+	_stream.start(_universe, start)
 	_avatar.mode_changed.connect(
 		func(mode: Avatar.Mode) -> void:
 			_universe.set_focus(_avatar if mode == Avatar.Mode.SUIT else _ship.exterior)
@@ -124,8 +130,11 @@ func _process(_delta: float) -> void:
 	if not _universe_readout.visible or _universe.focus == null:
 		return
 	var u := _universe.to_universe(_universe.focus.global_position)
-	_universe_readout.text = "universe %.3f, %.3f, %.3f km   origin shifts %d" % [
-		(u.x + u.fx) / 1000.0, (u.y + u.fy) / 1000.0, (u.z + u.fz) / 1000.0, _universe.shifts]
+	_universe_readout.text = "universe %.3f, %.3f, %.3f km   origin shifts %d
+rock cells %d / %d / %d   bodies %d   late cells %d" % [
+		(u.x + u.fx) / 1000.0, (u.y + u.fy) / 1000.0, (u.z + u.fz) / 1000.0, _universe.shifts,
+		_stream.loaded_count(0), _stream.loaded_count(1), _stream.loaded_count(2), _stream.bubble.live.size(),
+		_stream.late_cells]
 
 func _starter_grid() -> ShipGrid:
 	var g := ShipGrid.new()
