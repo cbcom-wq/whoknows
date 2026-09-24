@@ -37,6 +37,10 @@ const PORTHOLE_RADIUS := 0.26
 const PORTHOLE_FRAME_RADIUS := 0.42
 const PORTHOLE_OPENING := 0.27
 
+## A doorway's clear width. Each sliding leaf is half of it, and slides into
+## a jamb of (BAY - DOOR_WIDTH) / 2 = 0.5 m, so an open door hides entirely.
+const DOOR_WIDTH := 1.0
+
 ## The rounded cockpit nose (spec §6), in a frame on the canopy plane at
 ## floor level: +x across the windshield, +y up, +z back into the room.
 const NOSE_DEPTH := 1.4
@@ -322,6 +326,161 @@ static func _dash(kit: InteriorKit, frame: Transform3D, width: float) -> void:
 			_c(InteriorPalette.TRIM))
 		kit.screen(frame * desk * _at(Vector3(0, 0, 0.031)), Vector2(minf(1.18, width * 0.22), 0.24),
 			_mode(k), 0.2 + 0.3 * k)
+
+## A bunk bed along the wall, two tiers with a reading strip under the top one;
+## or, where the wall has a porthole above, one low bunk under it.
+static func bunks(kit: InteriorKit, f: Transform3D, _variety: float, low_only: bool) -> void:
+	_bed(kit, f, 0.0, 0.4)
+	var top := 0.6
+	if not low_only:
+		for side in [-1.0, 1.0]:
+			kit.bevel_box(SOLID, f * _at(Vector3(side * 0.93, 0.62, 0.86)), Vector3(0.08, 1.24, 0.08), 0.02,
+				_c(InteriorPalette.WALL_LOW))
+		_bed(kit, f, 1.1, 0.14)
+		kit.box(GLOW, f * _at(Vector3(0, 1.095, 0.45)), Vector3(1.6, 0.01, 0.05), _lit(InteriorPalette.LIGHT_WARM, 1.2))
+		top = 1.5
+	kit.collider(f * _at(Vector3(0, top * 0.5, 0.45)), Vector3(1.9, top, 0.9))
+
+## One bed: a frame from `base` up `frame_h`, a mattress on it and a pillow.
+static func _bed(kit: InteriorKit, f: Transform3D, base: float, frame_h: float) -> void:
+	var deck := base + frame_h
+	kit.bevel_box(SOLID, f * _at(Vector3(0, base + frame_h * 0.5, 0.45)), Vector3(1.9, frame_h, 0.9), 0.04,
+		_c(InteriorPalette.WALL_LOW))
+	kit.bevel_box(SOLID, f * _at(Vector3(0, deck + 0.07, 0.45)), Vector3(1.8, 0.14, 0.8), 0.05,
+		_c(InteriorPalette.MATTRESS))
+	kit.bevel_box(SOLID, f * _at(Vector3(0.62, deck + 0.19, 0.45)), Vector3(0.42, 0.1, 0.56), 0.04,
+		_c(InteriorPalette.TRIM))
+
+## Two tall locker doors with vents and indicators.
+static func tall_lockers(kit: InteriorKit, f: Transform3D, variety: float) -> void:
+	for side in [-1.0, 1.0]:
+		var x: float = side * 0.3
+		kit.bevel_box(SOLID, f * _at(Vector3(x, 0.8, 0.05)), Vector3(0.55, 1.55, 0.1), 0.03, _c(InteriorPalette.TRIM))
+		for k in 3:
+			kit.box(SOLID, f * _at(Vector3(x, 1.3 + k * 0.05, 0.101)), Vector3(0.3, 0.015, 0.01),
+				_c(InteriorPalette.WALL_LOW))
+		var h := fposmod(variety * 7.0 + side, 1.0)
+		kit.disc(GLOW, f * _at(Vector3(x + 0.18, 0.95, 0.101)), 0.025,
+			_lit(InteriorPalette.AMBER if h > 0.7 else InteriorPalette.LIGHT_WARM, 1.6))
+
+## A galley counter with a sink, a tap and two glowing cooktop rings, and
+## cupboards above -- unless a porthole needs the wall.
+static func galley_counter(kit: InteriorKit, f: Transform3D, _variety: float, porthole: bool) -> void:
+	var trim := _c(InteriorPalette.TRIM)
+	var low := _c(InteriorPalette.WALL_LOW)
+	kit.bevel_box(SOLID, f * _at(Vector3(0, 0.43, 0.3)), Vector3(1.8, 0.86, 0.6), 0.04, trim)
+	kit.bevel_box(SOLID, f * _at(Vector3(0, 0.885, 0.32)), Vector3(1.9, 0.05, 0.64), 0.02, low)
+	for x in [-0.3, 0.3]:
+		kit.box(SOLID, f * _at(Vector3(x, 0.45, 0.602)), Vector3(0.015, 0.7, 0.01), low)
+	kit.box(SOLID, f * _at(Vector3(-0.45, 0.912, 0.3)), Vector3(0.5, 0.006, 0.36), _c(InteriorPalette.SCREEN_BACK))
+	kit.tube_between(SOLID, f * Vector3(-0.45, 0.91, 0.08), f * Vector3(-0.45, 1.08, 0.08), 0.02, trim)
+	var up := Basis(Vector3.RIGHT, -PI * 0.5)
+	for x in [0.35, 0.72]:
+		kit.annulus(GLOW, f * Transform3D(up, Vector3(x, 0.913, 0.3)), 0.08, 0.12, _lit(InteriorPalette.CORAL, 1.8))
+	if not porthole:
+		kit.bevel_box(SOLID, f * _at(Vector3(0, 1.42, 0.17)), Vector3(1.8, 0.4, 0.34), 0.04, trim)
+		kit.box(SOLID, f * _at(Vector3(0, 1.42, 0.341)), Vector3(0.015, 0.36, 0.01), low)
+	kit.collider(f * _at(Vector3(0, 0.45, 0.32)), Vector3(1.9, 0.9, 0.64))
+
+## A tall fridge to one side, with a handle and a status light.
+static func fridge(kit: InteriorKit, f: Transform3D, variety: float) -> void:
+	var x := 0.45 if variety < 0.5 else -0.45
+	kit.bevel_box(SOLID, f * _at(Vector3(x, 0.8, 0.3)), Vector3(0.8, 1.6, 0.6), 0.05, _c(InteriorPalette.TRIM))
+	kit.box(SOLID, f * _at(Vector3(x, 1.1, 0.601)), Vector3(0.76, 0.015, 0.01), _c(InteriorPalette.WALL_LOW))
+	kit.bevel_box(SOLID, f * _at(Vector3(x - 0.3, 1.3, 0.62)), Vector3(0.04, 0.35, 0.05), 0.015,
+		_c(InteriorPalette.WALL_LOW))
+	kit.disc(GLOW, f * _at(Vector3(x + 0.28, 1.45, 0.602)), 0.025, _lit(InteriorPalette.SKY, 1.6))
+	kit.collider(f * _at(Vector3(x, 0.8, 0.3)), Vector3(0.8, 1.6, 0.6))
+
+## A toilet and a sink under a mirror lit from above.
+static func washstand(kit: InteriorKit, f: Transform3D, _variety: float) -> void:
+	var trim := _c(InteriorPalette.TRIM)
+	kit.bevel_box(SOLID, f * _at(Vector3(-0.5, 0.2, 0.3)), Vector3(0.4, 0.4, 0.55), 0.06, trim)
+	kit.bevel_box(SOLID, f * _at(Vector3(-0.5, 0.43, 0.32)), Vector3(0.44, 0.06, 0.5), 0.025, trim)
+	kit.bevel_box(SOLID, f * _at(Vector3(-0.5, 0.62, 0.09)), Vector3(0.44, 0.38, 0.18), 0.04, trim)
+	kit.bevel_box(SOLID, f * _at(Vector3(0.45, 0.4, 0.2)), Vector3(0.14, 0.8, 0.14), 0.03, trim)
+	kit.bevel_box(SOLID, f * _at(Vector3(0.45, 0.85, 0.24)), Vector3(0.56, 0.14, 0.44), 0.05, trim)
+	kit.tube_between(SOLID, f * Vector3(0.45, 0.92, 0.05), f * Vector3(0.45, 1.02, 0.05), 0.02,
+		_c(InteriorPalette.WALL_LOW))
+	kit.bevel_box(SOLID, f * _at(Vector3(0.45, 1.3, 0.015)), Vector3(0.5, 0.55, 0.03), 0.015, trim)
+	kit.box(SOLID, f * _at(Vector3(0.45, 1.3, 0.032)), Vector3(0.42, 0.47, 0.004), _c(InteriorPalette.MIRROR))
+	kit.box(GLOW, f * _at(Vector3(0.45, 1.6, 0.03)), Vector3(0.44, 0.03, 0.03), _lit(InteriorPalette.LIGHT_WARM, 2.0))
+	kit.collider(f * _at(Vector3(0, 0.45, 0.3)), Vector3(1.5, 0.9, 0.6))
+
+## A towel on a rail.
+static func towel_rail(kit: InteriorKit, f: Transform3D, variety: float) -> void:
+	var trim := _c(InteriorPalette.TRIM)
+	for x in [-0.45, 0.45]:
+		kit.bevel_box(SOLID, f * _at(Vector3(x, 1.1, 0.035)), Vector3(0.05, 0.08, 0.07), 0.015, trim)
+	kit.tube_x(SOLID, f * _at(Vector3(0, 1.1, 0.07)), 0.02, 0.95, trim)
+	var towel := InteriorPalette.CORAL if variety < 0.5 else InteriorPalette.SKY
+	kit.bevel_box(SOLID, f * _at(Vector3(-0.1, 0.88, 0.09)), Vector3(0.5, 0.46, 0.03), 0.012, _c(towel))
+
+## Three shelves stacked with crates of seeded sizes and colours.
+static func shelves(kit: InteriorKit, f: Transform3D, variety: float) -> void:
+	for x in [-0.82, 0.82]:
+		kit.bevel_box(SOLID, f * _at(Vector3(x, 0.8, 0.2)), Vector3(0.05, 1.6, 0.4), 0.015, _c(InteriorPalette.WALL_LOW))
+	var crates: Array[Color] = [InteriorPalette.AMBER, InteriorPalette.SKY, InteriorPalette.CORAL,
+		InteriorPalette.OLIVE, InteriorPalette.TRIM]
+	for level in 3:
+		var y := 0.25 + level * 0.47
+		kit.bevel_box(SOLID, f * _at(Vector3(0, y, 0.2)), Vector3(1.64, 0.04, 0.4), 0.015, _c(InteriorPalette.TRIM))
+		var x := -0.72
+		var k := 0
+		while true:
+			var h := fposmod(variety * 31.0 + level * 7.3 + k * 3.1, 1.0)
+			var w := 0.25 + 0.2 * h
+			if x + w > 0.78:
+				break
+			var tall := 0.18 + 0.18 * fposmod(h * 5.7, 1.0)
+			kit.bevel_box(SOLID, f * _at(Vector3(x + w * 0.5, y + 0.02 + tall * 0.5, 0.2)),
+				Vector3(w - 0.03, tall, 0.3), 0.03, _c(crates[int(h * 5.0) % 5]))
+			x += w + 0.04
+			k += 1
+	kit.collider(f * _at(Vector3(0, 0.8, 0.2)), Vector3(1.7, 1.6, 0.4))
+
+## Five chunky rifles on a rack over a gunmetal cabinet, with coral warning
+## stripes.
+static func weapon_rack(kit: InteriorKit, f: Transform3D, _variety: float) -> void:
+	var gun := _c(InteriorPalette.GUNMETAL)
+	kit.bevel_box(SOLID, f * _at(Vector3(0, 0.2, 0.175)), Vector3(1.6, 0.4, 0.35), 0.04, gun)
+	kit.box(SOLID, f * _at(Vector3(0, 0.36, 0.352)), Vector3(1.6, 0.05, 0.01), _c(InteriorPalette.CORAL))
+	kit.bevel_box(SOLID, f * _at(Vector3(0, 1.0, 0.025)), Vector3(1.6, 1.1, 0.05), 0.02, _c(InteriorPalette.WALL_LOW))
+	kit.box(SOLID, f * _at(Vector3(0, 1.52, 0.052)), Vector3(1.6, 0.05, 0.01), _c(InteriorPalette.CORAL))
+	for i in 5:
+		var x := -0.6 + i * 0.3
+		kit.bevel_box(SOLID, f * _at(Vector3(x, 0.6, 0.1)), Vector3(0.1, 0.22, 0.07), 0.02, _c(InteriorPalette.WOOD))
+		kit.bevel_box(SOLID, f * _at(Vector3(x, 0.98, 0.1)), Vector3(0.11, 0.55, 0.08), 0.02, gun)
+		kit.bevel_box(SOLID, f * _at(Vector3(x + 0.07, 0.9, 0.1)), Vector3(0.05, 0.16, 0.06), 0.012, gun)
+		kit.tube_between(SOLID, f * Vector3(x, 1.25, 0.1), f * Vector3(x, 1.45, 0.1), 0.018, gun)
+		kit.disc(GLOW, f * _at(Vector3(x, 1.12, 0.141)), 0.012, _lit(InteriorPalette.SKY, 1.5))
+	kit.disc(GLOW, f * _at(Vector3(0.7, 0.3, 0.352)), 0.025, _lit(InteriorPalette.AMBER, 1.6, 0.5))
+	kit.collider(f * _at(Vector3(0, 0.8, 0.175)), Vector3(1.6, 1.6, 0.35))
+
+## Three stacked ammo crates with stripes and latches.
+static func ammo_crates(kit: InteriorKit, f: Transform3D, _variety: float) -> void:
+	var spots: Array[Vector3] = [Vector3(-0.45, 0.2, 0.25), Vector3(0.35, 0.2, 0.25), Vector3(-0.1, 0.6, 0.25)]
+	for i in spots.size():
+		var p := spots[i]
+		kit.bevel_box(SOLID, f * _at(p), Vector3(0.7, 0.4, 0.5), 0.04, _c(InteriorPalette.OLIVE))
+		kit.box(SOLID, f * _at(p + Vector3(0, 0.08, 0.251)), Vector3(0.66, 0.05, 0.01),
+			_c(InteriorPalette.AMBER if i % 2 == 0 else InteriorPalette.CORAL))
+		for side in [-0.25, 0.25]:
+			kit.bevel_box(SOLID, f * _at(p + Vector3(side, -0.05, 0.255)), Vector3(0.08, 0.06, 0.02), 0.008,
+				_c(InteriorPalette.TRIM))
+	kit.collider(f * _at(Vector3(0, 0.4, 0.25)), Vector3(1.6, 0.8, 0.5))
+
+## A doorway's frame, drawn once for both rooms: two chunky posts through the
+## wall and a lit lintel. The frame's origin is on the owning side's inner
+## surface, so the posts straddle the wall's mid-plane just behind it.
+static func door_frame(kit: InteriorKit, f: Transform3D) -> void:
+	var mid := -WALL_THICKNESS * 0.5
+	for side in [-1.0, 1.0]:
+		kit.bevel_box(SOLID, f * _at(Vector3(side * (DOOR_WIDTH * 0.5 + 0.07), HEADROOM * 0.5, mid)),
+			Vector3(0.14, HEADROOM, 0.24), 0.04, _c(InteriorPalette.TRIM))
+	kit.box(GLOW, f * _at(Vector3(0, HEADROOM - 0.012, mid)), Vector3(DOOR_WIDTH, 0.02, 0.12),
+		_lit(InteriorPalette.LIGHT_WARM, 2.0))
+	kit.light(f * Vector3(0, HEADROOM - 0.3, 0.3), InteriorPalette.LIGHT_WARM, 0.5, 2.5, &"door")
 
 static func _at(offset: Vector3) -> Transform3D:
 	return InteriorKit.at(offset)

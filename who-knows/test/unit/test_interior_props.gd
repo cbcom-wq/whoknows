@@ -99,3 +99,50 @@ func test_a_narrow_nose_still_builds():
 	var shell := InteriorProps.nose(_kit, Transform3D.IDENTITY, 2.0, null)
 	assert_not_null(shell)
 	assert_true(shell.material_override is ShaderMaterial, "null material falls back, never a hole")
+
+func _built_with_colliders(expected: int) -> void:
+	_assert_built()
+	assert_eq(_colliders().size(), expected)
+
+func test_bunks_are_solid():
+	InteriorProps.bunks(_kit, Transform3D.IDENTITY, 0.3, false)
+	_built_with_colliders(1)
+	assert_almost_eq((_colliders()[0].shape as BoxShape3D).size.y, 1.5, 0.001, "two tiers")
+
+func test_a_low_bunk_leaves_room_for_a_porthole():
+	InteriorProps.bunks(_kit, Transform3D.IDENTITY, 0.3, true)
+	_built_with_colliders(1)
+	var top := (_colliders()[0].shape as BoxShape3D).size.y
+	assert_lt(top, InteriorProps.PORTHOLE_HEIGHT - InteriorProps.PORTHOLE_FRAME_RADIUS)
+
+func test_tall_lockers_are_flat():
+	InteriorProps.tall_lockers(_kit, Transform3D.IDENTITY, 0.3)
+	_built_with_colliders(0)
+
+func test_galley_counter_and_fridge_are_solid():
+	InteriorProps.galley_counter(_kit, Transform3D.IDENTITY, 0.3, false)
+	InteriorProps.fridge(_kit, InteriorKit.at(Vector3(3, 0, 0)), 0.3)
+	_built_with_colliders(2)
+
+func test_washstand_is_solid_and_the_towel_rail_is_not():
+	InteriorProps.washstand(_kit, Transform3D.IDENTITY, 0.3)
+	InteriorProps.towel_rail(_kit, InteriorKit.at(Vector3(3, 0, 0)), 0.3)
+	_built_with_colliders(1)
+
+func test_shelves_are_solid():
+	InteriorProps.shelves(_kit, Transform3D.IDENTITY, 0.6)
+	_built_with_colliders(1)
+
+func test_weapon_rack_and_ammo_are_solid():
+	InteriorProps.weapon_rack(_kit, Transform3D.IDENTITY, 0.3)
+	InteriorProps.ammo_crates(_kit, InteriorKit.at(Vector3(3, 0, 0)), 0.3)
+	_built_with_colliders(2)
+
+func test_door_frame_is_lit_and_leaves_the_opening_clear():
+	InteriorProps.door_frame(_kit, Transform3D.IDENTITY)
+	_built_with_colliders(0)
+	assert_eq(_lights(&"door").size(), 1)
+
+func test_every_room_has_a_floor_colour():
+	for id in InteriorLayout.ROOM_IDS:
+		assert_true(InteriorPalette.ROOM_FLOOR.has(id), "%s has a floor colour" % id)

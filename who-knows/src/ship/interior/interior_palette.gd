@@ -28,3 +28,16 @@ const LAVENDER := Color("b9a6e0")
 const GLASS := Color(0.55, 0.75, 0.9, 0.22)
 ## Pilot seat upholstery (data/blocks/meshes/pilot_seat.tres, surface 0).
 const SEAT := Color("c4a27a")
+
+## Rooms (spec §7.4): each room's floor says what it is for at a glance.
+const ROOM_FLOOR := {
+	&"bunk_room": Color("5e7a7a"),
+	&"galley": Color("b7a58a"),
+	&"bathroom": Color("8fa9b8"),
+	&"closet": Color("6b6a66"),
+	&"weapon_room": Color("4e4a52"),
+}
+const MATTRESS := Color("6f9c9a")
+const GUNMETAL := Color("3a3d44")
+const OLIVE := Color("8a9a5b")
+const MIRROR := Color("5a7e96")

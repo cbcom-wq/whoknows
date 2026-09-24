@@ -3623,7 +3623,7 @@ static func _bed(kit: InteriorKit, f: Transform3D, base: float, frame_h: float) 
 ## Two tall locker doors with vents and indicators.
 static func tall_lockers(kit: InteriorKit, f: Transform3D, variety: float) -> void:
 	for side in [-1.0, 1.0]:
-		var x := side * 0.3
+		var x: float = side * 0.3
 		kit.bevel_box(SOLID, f * _at(Vector3(x, 0.8, 0.05)), Vector3(0.55, 1.55, 0.1), 0.03, _c(InteriorPalette.TRIM))
 		for k in 3:
 			kit.box(SOLID, f * _at(Vector3(x, 1.3 + k * 0.05, 0.101)), Vector3(0.3, 0.015, 0.01),
