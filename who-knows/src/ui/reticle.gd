@@ -10,7 +10,9 @@ const OUTLINE := 1.0
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	# Anchors *and* offsets: set_anchors_preset alone keeps the control's zero
+	# size, and the dot -- drawn at the rect's centre -- lands in the corner.
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED:
