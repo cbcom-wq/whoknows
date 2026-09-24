@@ -92,6 +92,7 @@ cycle_camera={"deadzone":0.2,"events":[{"device":-1,"keycode":86,"physical_keyco
 3d_physics/layer_1="exterior_hull"
 3d_physics/layer_2="interior_geometry"
 3d_physics/layer_3="avatar"
+3d_physics/layer_6="items"
 
 3d_render/layer_1="exterior"
 3d_render/layer_2="interior"

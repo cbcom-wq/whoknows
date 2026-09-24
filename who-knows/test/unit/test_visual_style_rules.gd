@@ -26,6 +26,7 @@ const REUSABLE_FILES := [
 	"res://src/ship/interior/interior_kit.gd",
 	"res://src/ship/interior/sliding_door.gd",
 	"res://src/items/item_looks.gd",
+	"res://src/items/item.gd",
 ]
 const GRID_SIDE := ["ShipGrid", "BlockCatalog", "DeckGraph", "InteriorLayout", "InteriorBuilder",
 	"InteriorDressing"]
