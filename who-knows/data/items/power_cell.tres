@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/items/item_definition.gd" id="1_def"]
+
+[resource]
+script = ExtResource("1_def")
+id = &"power_cell"
+display_name = "Power cell"
+mass_kg = 2.0
+size = Vector3(0.1, 0.18, 0.1)
+grip = 0
+stow_class = &"small"
+look = &"power_cell"
+grip_point = Vector3(0.05, 0.02, 0)

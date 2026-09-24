@@ -257,3 +257,19 @@ func test_use_calls_the_items_use_and_announces_it():
 	assert_true(_grasp.use())
 	assert_eq(use.count, 1)
 	assert_signal_emitted(_grasp, "used")
+
+func test_a_hold_angle_turns_the_item_in_the_hand_about_its_grip():
+	var item := _item(ItemDefinition.Grip.WIELD)
+	item.definition.hold_rotation = Vector3(55, 0, 0)
+	_grasp.take(item)
+	var hold := Basis.from_euler(Vector3(deg_to_rad(55.0), 0, 0))
+	assert_true(item.basis.is_equal_approx(hold))
+	assert_almost_eq(item.transform * item.definition.grip_point, Vector3.ZERO, Vector3.ONE * 0.0001,
+		"the grip still sits on the socket")
+
+func test_a_hold_angle_turns_a_carried_item_about_its_centre():
+	var item := _item()
+	item.definition.hold_rotation = Vector3(-35, 0, 0)
+	_grasp.take(item)
+	assert_true(item.basis.is_equal_approx(Basis.from_euler(Vector3(deg_to_rad(-35.0), 0, 0))))
+	assert_almost_eq(item.position, Vector3(0, 0, -item.definition.size.z * 0.5), Vector3.ONE * 0.0001)

@@ -101,11 +101,14 @@ func take(candidate: Item) -> bool:
 	candidate.set_held()
 	if candidate.definition.grip == ItemDefinition.Grip.WIELD:
 		candidate.reparent(wield_socket, false)
-		candidate.transform = Transform3D(Basis.IDENTITY, -candidate.definition.grip_point)
+		# Turned by its hold angle about its grip, which stays on the socket.
+		var hold := Basis.from_euler(candidate.definition.hold_rotation * (PI / 180.0))
+		candidate.transform = Transform3D(hold, -(hold * candidate.definition.grip_point))
 		mode = Mode.WIELDING
 	else:
 		candidate.reparent(carry_socket, false)
-		candidate.transform = Transform3D(Basis.IDENTITY, Vector3(0.0, 0.0, -candidate.definition.size.z * 0.5))
+		var tilt := Basis.from_euler(candidate.definition.hold_rotation * (PI / 180.0))
+		candidate.transform = Transform3D(tilt, Vector3(0.0, 0.0, -candidate.definition.size.z * 0.5))
 		mode = Mode.CARRYING
 	charge = -1.0
 	taken.emit(candidate, from)

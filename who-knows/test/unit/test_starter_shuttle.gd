@@ -70,3 +70,15 @@ func test_every_stow_point_takes_what_it_is_stocked_with():
 	for p in _built().stow_points():
 		if p.stock != &"":
 			assert_eq(items.get_def(p.stock).stow_class, p.accepts, "%s fits its own point" % p.stock)
+
+func test_the_ship_and_space_set_is_stocked_aboard():
+	var stock := _stock(_built())
+	for id in [&"toolbox", &"spare_helmet", &"power_cell", &"o2_tank", &"spanner", &"spare_module",
+			&"medkit", &"ration_tin", &"rock_sample", &"hand_lamp", &"flare", &"datapad"]:
+		assert_gt(stock.get(id, 0), 0, "%s is somewhere aboard" % id)
+
+func test_the_old_stock_is_where_it_was():
+	var stock := _stock(_built())
+	assert_eq(stock.get(&"plasma_pistol", 0), 2)
+	assert_eq(stock.get(&"mug", 0), 2)
+	assert_eq(stock.get(&"crate", 0), 1)

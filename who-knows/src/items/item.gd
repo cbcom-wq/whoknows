@@ -102,9 +102,13 @@ func set_held() -> void:
 func prompt_text() -> String:
 	if definition.mass_kg > LIFT_LIMIT_KG:
 		return "Too heavy"
+	var label := definition.display_name
+	var status := use_node.status() if use_node != null else ""
+	if status != "":
+		label = "%s (%s)" % [label, status]
 	if state == State.STOWED:
-		return "Take %s" % definition.display_name
-	return "Pick up %s" % definition.display_name
+		return "Take %s" % label
+	return "Pick up %s" % label
 
 func can_interact(actor: Node) -> bool:
 	if state == State.HELD:

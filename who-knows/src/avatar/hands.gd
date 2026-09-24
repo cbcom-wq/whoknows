@@ -91,7 +91,7 @@ func _init() -> void:
 func bind(grasp: Grasp, avatar: Avatar) -> void:
 	_grasp = grasp
 	_avatar = avatar
-	grasp.used.connect(func(_item: Item) -> void: recoil = 1.0)
+	grasp.used.connect(func(item: Item) -> void: recoil = item.use_node.recoil() if item.use_node != null else 0.0)
 	grasp.taken.connect(_on_taken)
 	_last_look = _look()
 

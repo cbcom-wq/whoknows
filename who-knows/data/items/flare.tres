@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/items/item_definition.gd" id="1_def"]
+[ext_resource type="Script" path="res://src/items/flare.gd" id="2_use"]
+
+[resource]
+script = ExtResource("1_def")
+id = &"flare"
+display_name = "Flare"
+mass_kg = 0.3
+size = Vector3(0.04, 0.04, 0.26)
+grip = 0
+stow_class = &"tool"
+look = &"flare"
+use = ExtResource("2_use")
+grip_point = Vector3(0, 0, 0.06)
+use_point = Vector3(0, 0, -0.12)
+hold_rotation = Vector3(60, 0, 0)
