@@ -74,3 +74,17 @@ func test_room_blocks_are_deck_with_a_purpose():
 		assert_eq(def.category, BlockDefinition.Category.INTERIOR)
 		assert_eq(def.mass_t, deck.mass_t, "%s weighs what deck weighs" % id)
 		assert_eq(def.power_draw, deck.power_draw, "%s draws what deck draws" % id)
+
+## Every thruster on a ship shares one MultiMesh and so one bell material; the
+## bell glows per engine only because that material reads each instance's
+## throttle (thruster_bell.gdshader). Read back at runtime: a hand-edited
+## .tres can load clean and still have lost the line (CLAUDE.md).
+func test_the_thruster_bell_glows_by_throttle():
+	var mesh := _cat.get_def(&"thruster").mesh
+	assert_eq(mesh.get_surface_count(), 2, "pod body, then bell")
+	assert_true(mesh.surface_get_material(0) is StandardMaterial3D, "the pod body is plain paint")
+	var bell := mesh.surface_get_material(1) as ShaderMaterial
+	assert_not_null(bell, "the bell must be the per-instance glow material")
+	assert_eq(bell.shader.resource_path, "res://data/materials/thruster_bell.gdshader")
+	assert_gt(bell.get_shader_parameter(&"full_energy"), bell.get_shader_parameter(&"idle_energy"),
+		"full throttle glows brighter than idle")

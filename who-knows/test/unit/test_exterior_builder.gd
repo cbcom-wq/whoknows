@@ -19,6 +19,13 @@ func before_each():
 		)
 		d.mesh = BoxMesh.new()
 		_cat.register(d)
+	var engine := BlockDefinition.new()
+	engine.id = &"thruster"
+	engine.display_name = "thruster"
+	engine.mass_t = 1.0
+	engine.thrust_kn = 100.0
+	engine.mesh = BoxMesh.new()
+	_cat.register(engine)
 
 	_grid = ShipGrid.new()
 	_body = RigidBody3D.new()
@@ -28,10 +35,24 @@ func before_each():
 	_builder.body_path = _builder.get_path_to(_body)
 	_builder.bind(_grid, _cat)
 
-func _put(coord: Vector3i, id: StringName) -> void:
+func _put(coord: Vector3i, id: StringName, orientation: int = 0) -> void:
 	var i := BlockInstance.new()
 	i.block_id = id
+	i.orientation = orientation
 	_grid.set_block(coord, i)
+
+func _multimesh_of(id: StringName) -> MultiMesh:
+	var mesh := _cat.get_def(id).mesh
+	for child in _builder.get_children():
+		if child is MultiMeshInstance3D and child.multimesh.mesh == mesh:
+			return child.multimesh
+	return null
+
+## The throttle a thruster's bell shows. ExteriorBuilder writes the same
+## value into the MultiMesh's custom data, but headless runs keep no instance
+## data, so tests read the builder's own record of it.
+func _glow(index: int) -> float:
+	return _builder.thrusters()[index].throttle
 
 func test_empty_grid_produces_no_colliders():
 	_builder.rebuild()
@@ -133,3 +154,72 @@ func test_hull_meshes_are_drawn_on_the_own_hull_layer():
 			drawn += 1
 			assert_eq(child.layers, ExteriorBuilder.OWN_HULL_LAYER)
 	assert_eq(drawn, 1, "one MultiMesh for the one block type")
+
+## Thruster glow. Orientation 0 pushes the ship along -Z (forward), 4 along
+## +Z (reverse), 12 along +X -- the same convention ShipStats counts thrust by.
+
+func test_only_thrusting_blocks_carry_custom_data():
+	_put(Vector3i(0, 0, 0), &"hull")
+	_put(Vector3i(1, 0, 0), &"thruster")
+	_builder.rebuild()
+	assert_true(_multimesh_of(&"thruster").use_custom_data)
+	assert_false(_multimesh_of(&"hull").use_custom_data)
+
+func test_thrusters_start_dark():
+	_put(Vector3i(0, 0, 0), &"thruster")
+	_builder.rebuild()
+	assert_eq(_glow(0), 0.0)
+
+func test_each_thruster_pushes_the_way_ship_stats_counts_it():
+	_put(Vector3i(0, 0, 0), &"thruster", 0)
+	_put(Vector3i(1, 0, 0), &"thruster", 4)
+	_put(Vector3i(2, 0, 0), &"thruster", 12)
+	_builder.rebuild()
+	var pushes: Array = []
+	for thruster in _builder.thrusters():
+		pushes.append(thruster.direction.round())
+	for expected in [Vector3(0, 0, -1), Vector3(0, 0, 1), Vector3(1, 0, 0)]:
+		assert_true(pushes.has(expected), "no thruster pushing %s in %s" % [expected, pushes])
+
+func test_a_thruster_glows_only_when_pushing_its_own_way():
+	_put(Vector3i(0, 0, 0), &"thruster", 0)
+	_put(Vector3i(1, 0, 0), &"thruster", 4)
+	_put(Vector3i(2, 0, 0), &"thruster", 12)
+	_builder.rebuild()
+	_builder.show_thrust(Vector3(0, 0, -0.5), 10.0)   # long enough to settle
+	for thruster in _builder.thrusters():
+		var forward := thruster.direction.is_equal_approx(Vector3(0, 0, -1))
+		assert_almost_eq(thruster.throttle, 0.5 if forward else 0.0, 0.001,
+			"thruster pushing %s" % thruster.direction)
+
+func test_boost_glows_past_full_throttle():
+	_put(Vector3i.ZERO, &"thruster")
+	_builder.rebuild()
+	_builder.show_thrust(Vector3(0, 0, -FlightComputer.BOOST_MULTIPLIER), 10.0)
+	assert_almost_eq(_glow(0), FlightComputer.BOOST_MULTIPLIER, 0.001)
+
+func test_glow_eases_in_rather_than_snapping():
+	_put(Vector3i.ZERO, &"thruster")
+	_builder.rebuild()
+	_builder.show_thrust(Vector3(0, 0, -1), 1.0 / 60.0)
+	assert_between(_glow(0), 0.01, 0.99)
+
+func test_glow_dies_away_slower_than_it_lights():
+	_put(Vector3i.ZERO, &"thruster")
+	_builder.rebuild()
+	var frame := 1.0 / 60.0
+	_builder.show_thrust(Vector3(0, 0, -1), frame)
+	var lit := _glow(0)
+	_builder.show_thrust(Vector3(0, 0, -1), 10.0)
+	_builder.show_thrust(Vector3.ZERO, frame)
+	var faded := 1.0 - _glow(0)
+	assert_lt(faded, lit, "one frame off loses less glow than one frame on gains")
+
+func test_rebuild_forgets_the_old_thrusters():
+	_put(Vector3i.ZERO, &"thruster")
+	_builder.rebuild()
+	_builder.show_thrust(Vector3(0, 0, -1), 10.0)
+	_builder.rebuild()
+	# The first build's MultiMesh is gone; this must only touch the new one.
+	_builder.show_thrust(Vector3(0, 0, -1), 1.0 / 60.0)
+	assert_between(_glow(0), 0.01, 0.99, "a fresh build starts dark and eases in")

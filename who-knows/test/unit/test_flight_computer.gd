@@ -64,3 +64,51 @@ func test_assist_off_does_not_damp():
 	assert_almost_eq(
 		_fc.attitude_torque(Vector3.ZERO, Vector3(1, 1, 1)), Vector3.ZERO, Vector3.ONE * 0.001
 	)
+
+## Translation and the throttle the engines report. The fixture keeps
+## FlightComputer's default budgets: forward 900 kN, reverse 300 kN, lateral
+## and vertical 250 kN each.
+
+func test_forward_and_reverse_draw_on_their_own_budgets():
+	assert_almost_eq(_fc.translation_force(Vector3(0, 0, -1), false),
+		Vector3(0, 0, -900_000.0), Vector3.ONE * 1.0)
+	assert_almost_eq(_fc.translation_force(Vector3(0, 0, 1), false),
+		Vector3(0, 0, 300_000.0), Vector3.ONE * 1.0)
+
+func test_boost_multiplies_the_translation_force():
+	assert_almost_eq(_fc.translation_force(Vector3(0.5, 0, -1), true),
+		Vector3(0.5 * 250_000.0, 0, -900_000.0) * FlightComputer.BOOST_MULTIPLIER,
+		Vector3.ONE * 1.0)
+
+func test_throttle_is_the_share_of_the_budget_on_the_side_pushed():
+	assert_almost_eq(_fc.throttle_for(Vector3(-125_000.0, 250_000.0, -450_000.0)),
+		Vector3(-0.5, 1.0, -0.5), Vector3.ONE * 0.0001)
+	assert_almost_eq(_fc.throttle_for(Vector3(0, 0, 150_000.0)),
+		Vector3(0, 0, 0.5), Vector3.ONE * 0.0001, "reverse reads against the reverse budget")
+
+func test_throttle_of_the_pilots_input_is_the_input():
+	# Whatever the budgets, full stick is full throttle, and boost goes past it.
+	var input := Vector3(0.25, -1.0, -0.75)
+	assert_almost_eq(_fc.throttle_for(_fc.translation_force(input, false)), input,
+		Vector3.ONE * 0.0001)
+	assert_almost_eq(_fc.throttle_for(_fc.translation_force(input, true)),
+		input * FlightComputer.BOOST_MULTIPLIER, Vector3.ONE * 0.0001)
+
+func test_a_side_with_no_engines_reads_zero_throttle():
+	_fc.thrust_budget[&"reverse"] = 0.0
+	assert_almost_eq(_fc.throttle_for(Vector3(0, 0, 50_000.0)), Vector3.ZERO,
+		Vector3.ONE * 0.0001)
+
+func test_each_physics_tick_publishes_the_throttle_it_applied():
+	_fc.set_pilot_input(Vector3(0, 0, -1), Vector3.ZERO, false)
+	_fc._physics_process(1.0 / 60.0)
+	assert_almost_eq(_fc.throttle, Vector3(0, 0, -1), Vector3.ONE * 0.0001)
+
+func test_the_throttle_includes_the_assists_drift_correction():
+	# Stick centred, but the hull is sliding to port: the assist fires the
+	# starboard-pushing engines to stop it, and the throttle says so.
+	_hull.linear_velocity = Vector3(-10.0, 0, 0)
+	_fc._physics_process(1.0 / 60.0)
+	assert_gt(_fc.throttle.x, 0.0, "drift correction pushes to starboard")
+	assert_almost_eq(_fc.throttle.x, FlightComputer.DRIFT_AUTHORITY, 0.0001,
+		"a hard slide spends all the authority the assist may use")

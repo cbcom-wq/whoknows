@@ -38,7 +38,9 @@ func _ready() -> void:
 	if catalog == null:
 		catalog = BlockCatalog.load_from_dir("res://data/blocks")
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	exterior_builder.show_thrust(flight_computer.throttle, delta)
+
 	# hull_livery.gdshader paints its stripe from ship-local height, but
 	# MultiMesh's MODEL_MATRIX is model-to-*world* -- it carries the hull
 	# RigidBody3D's own rotation along with each block's per-instance

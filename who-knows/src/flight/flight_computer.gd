@@ -33,6 +33,14 @@ var torque_budget: Vector3 = Vector3(4_000_000.0, 4_000_000.0, 2_500_000.0)
 ## a FlightComputer built without a Ship, as the tests do.
 var inertia: Vector3 = Vector3(2_000_000.0, 2_000_000.0, 1_000_000.0)
 
+## How hard the engines are pushing along each of the hull's own axes, as a
+## signed fraction of the budget on that side: -0.5 on z is half the forward
+## budget, +1 on x the whole lateral budget pushing to starboard, and boost
+## goes past 1. Set every physics tick from the force actually applied -- the
+## pilot's input and the assist's drift correction alike -- so whatever draws
+## the engines shows them doing what they are really doing.
+var throttle: Vector3 = Vector3.ZERO
+
 var _translate_input: Vector3 = Vector3.ZERO
 var _rotate_input: Vector3 = Vector3.ZERO
 var _boost: bool = false
@@ -56,28 +64,41 @@ func _physics_process(delta: float) -> void:
 
 func _apply_translation(delta: float) -> void:
 	var basis := _hull.global_transform.basis
-	var force := Vector3.ZERO
-
-	var longitudinal := _translate_input.z
-	if longitudinal < 0.0:
-		force += basis * Vector3(0, 0, -1) * absf(longitudinal) * thrust_budget[&"forward"]
-	elif longitudinal > 0.0:
-		force += basis * Vector3(0, 0, 1) * longitudinal * thrust_budget[&"reverse"]
-
-	force += basis * Vector3(_translate_input.x, 0, 0) * thrust_budget[&"lateral"]
-	force += basis * Vector3(0, _translate_input.y, 0) * thrust_budget[&"vertical"]
-
-	if _boost:
-		force *= BOOST_MULTIPLIER
-
+	var force := translation_force(_translate_input, _boost)
 	if assist_enabled:
 		force += _drift_correction(basis)
 
-	_hull.apply_central_force(force)
+	throttle = throttle_for(force)
+	_hull.apply_central_force(basis * force)
 
 	if assist_enabled and _hull.linear_velocity.length() > CRUISE_LIMIT_MPS:
 		_hull.linear_velocity = _hull.linear_velocity.normalized() * CRUISE_LIMIT_MPS
 
+## Force the pilot's translation input asks for, in newtons along the hull's
+## own axes. Forward and reverse are different engines, so each side of Z
+## draws on its own budget.
+func translation_force(translate_input: Vector3, boost: bool) -> Vector3:
+	var force := Vector3(
+		translate_input.x * thrust_budget[&"lateral"],
+		translate_input.y * thrust_budget[&"vertical"],
+		translate_input.z * thrust_budget[&"forward" if translate_input.z < 0.0 else &"reverse"]
+	)
+	return force * BOOST_MULTIPLIER if boost else force
+
+## `force`, in newtons along the hull's own axes, as `throttle` reports it: a
+## fraction of the budget on whichever side each component pushes toward.
+## A side with no engines reads zero, whatever the force.
+func throttle_for(force: Vector3) -> Vector3:
+	return Vector3(
+		_fraction_of(force.x, thrust_budget[&"lateral"]),
+		_fraction_of(force.y, thrust_budget[&"vertical"]),
+		_fraction_of(force.z, thrust_budget[&"forward" if force.z < 0.0 else &"reverse"])
+	)
+
+static func _fraction_of(force: float, budget: float) -> float:
+	return force / budget if budget > 0.0 else 0.0
+
+## In newtons along the hull's own axes, like translation_force().
 func _drift_correction(basis: Basis) -> Vector3:
 	# Cancel velocity components the pilot is not asking for.
 	var local_vel := basis.inverse() * _hull.linear_velocity
@@ -89,12 +110,11 @@ func _drift_correction(basis: Basis) -> Vector3:
 	var authority := Vector3(
 		thrust_budget[&"lateral"], thrust_budget[&"vertical"], thrust_budget[&"reverse"]
 	) * DRIFT_AUTHORITY
-	var correction := Vector3(
+	return Vector3(
 		clampf(-unwanted.x * _hull.mass, -authority.x, authority.x),
 		clampf(-unwanted.y * _hull.mass, -authority.y, authority.y),
 		clampf(-unwanted.z * _hull.mass, -authority.z, authority.z),
 	)
-	return basis * correction
 
 func _apply_rotation(_delta: float) -> void:
 	var basis := _hull.global_transform.basis

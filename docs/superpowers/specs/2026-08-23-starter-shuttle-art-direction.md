@@ -154,7 +154,9 @@ shuttle read and need real meshes; the other ten stay boxes and change nothing.
 
 **Constraint that shapes all of these:** `ExteriorBuilder` builds **one MultiMesh per block type**
 with `mm.mesh = def.mesh`. There is no per-instance material. Any multi-material block must be an
-`ArrayMesh` with one surface per material.
+`ArrayMesh` with one surface per material. Anything that differs per block goes in the MultiMesh's
+per-instance custom data, read by that surface's shader: each thruster's bell glows by its own
+throttle this way (`thruster_bell.gdshader`).
 
 ---
 
@@ -170,7 +172,7 @@ Flat-shaded, tight, emissive accents doing the storytelling — per slice spec �
 | Panel line / shadow | `#9E9A8E` | |
 | Livery stripe | `#B5342A` | signal red; see §6 |
 | Pod body | `#C6C6C8` | cooler grey, reads as machinery not structure |
-| Engine bell | `#7FD4FF` emissive, energy 3.0 | |
+| Engine bell | `#7FD4FF` emissive; glow follows that engine's throttle | Revised 2026-09-24 from a static energy 3.0: 0.15 idle, 1.0 at full throttle (exactly `#7FD4FF`), white at boost. `data/materials/thruster_bell.tres` |
 | Running lights | `#7FD4FF` emissive, energy 0.8 | |
 | Canopy glass | `#141A22`, metallic, low roughness | fed by the `SubViewport` from inside |
 

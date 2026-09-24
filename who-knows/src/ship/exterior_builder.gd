@@ -13,6 +13,24 @@ extends Node3D
 ## blocks instead of the space beyond them.
 const OWN_HULL_LAYER := 4
 
+## How fast a thruster's glow chases its throttle, in 1/s. Engines light
+## faster than they die away, so a tap on the stick reads as a flare.
+const SPOOL_UP_RATE := 14.0
+const SPOOL_DOWN_RATE := 5.0
+
+## One block that thrusts: which MultiMesh instance draws it, the ship-local
+## direction it pushes the ship, and the throttle its bell is showing.
+class Thruster:
+	var multimesh: MultiMesh
+	var index: int
+	var direction: Vector3
+	var throttle: float = 0.0
+
+	func _init(mm: MultiMesh, i: int, dir: Vector3) -> void:
+		multimesh = mm
+		index = i
+		direction = dir
+
 @export var body_path: NodePath
 
 var _grid: ShipGrid
@@ -20,6 +38,7 @@ var _catalog: BlockCatalog
 var _collider_coords: Array[Vector3i] = []
 var _colliders: Array[CollisionShape3D] = []
 var _multimeshes: Dictionary = {}   # StringName -> MultiMeshInstance3D
+var _thrusters: Array[Thruster] = []
 
 func bind(grid: ShipGrid, catalog: BlockCatalog) -> void:
 	_grid = grid
@@ -34,6 +53,27 @@ func rebuild() -> void:
 
 func collider_coords() -> Array:
 	return _collider_coords.duplicate()
+
+## Every thrusting block as show_thrust() drives it. The same state goes to
+## the MultiMesh, but a headless RenderingServer keeps no instance data, so
+## this is what tests read.
+func thrusters() -> Array[Thruster]:
+	return _thrusters.duplicate()
+
+## Lights every thruster by how hard it is firing. `throttle` is
+## FlightComputer.throttle -- a signed fraction of the budget along each
+## ship-local axis -- so a thruster's share is the part of it along the way
+## that thruster pushes. Each glow eases toward its share rather than
+## snapping, and lands in its instance's custom data, where
+## thruster_bell.gdshader turns it into light.
+func show_thrust(throttle: Vector3, delta: float) -> void:
+	for thruster in _thrusters:
+		var target := maxf(throttle.dot(thruster.direction), 0.0)
+		var rate := SPOOL_UP_RATE if target > thruster.throttle else SPOOL_DOWN_RATE
+		thruster.throttle = lerpf(thruster.throttle, target, 1.0 - exp(-rate * delta))
+		thruster.multimesh.set_instance_custom_data(
+			thruster.index, Color(thruster.throttle, 0.0, 0.0, 0.0)
+		)
 
 func _clear() -> void:
 	# remove_child() then free() -- not queue_free(). remove_child() is
@@ -62,6 +102,7 @@ func _clear() -> void:
 			remove_child(mmi)
 			mmi.free()
 	_multimeshes.clear()
+	_thrusters.clear()
 
 func _body() -> Node:
 	return get_node(body_path) if not body_path.is_empty() else get_parent()
@@ -94,13 +135,23 @@ func _build_meshes() -> void:
 		by_type[inst.block_id].append(xform)
 
 	for block_id in by_type.keys():
+		var def := _catalog.get_def(block_id)
 		var transforms: Array = by_type[block_id]
 		var mm := MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
-		mm.mesh = _catalog.get_def(block_id).mesh
+		# A block type's instances share one material, so how hard each
+		# thruster fires travels per instance. MultiMesh only takes this
+		# before its instance count is set.
+		mm.use_custom_data = def.thrust_kn > 0.0
+		mm.mesh = def.mesh
 		mm.instance_count = transforms.size()
 		for index in transforms.size():
 			mm.set_instance_transform(index, transforms[index])
+			if mm.use_custom_data:
+				mm.set_instance_custom_data(index, Color(0.0, 0.0, 0.0, 0.0))
+				# The same push ShipStats counts: block-local -Z.
+				var push: Vector3 = transforms[index].basis * Vector3(0, 0, -1)
+				_thrusters.append(Thruster.new(mm, index, push))
 
 		var mmi := MultiMeshInstance3D.new()
 		mmi.multimesh = mm

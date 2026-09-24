@@ -157,6 +157,15 @@ and ideally bell length or a flame element — with commanded thrust. Note the c
 one `MultiMesh` per block type with no per-instance material, so this needs either a shader
 uniform driven from `FlightComputer`, or per-instance custom data.
 
+**Addressed 2026-09-24** for brightness, with per-instance custom data. `FlightComputer.throttle`
+reports the force actually applied each tick (pilot input and the assist's drift correction) as a
+fraction of the budget on each side of each axis. `ExteriorBuilder.show_thrust()` gives each
+thruster the share along the way it pushes, eased (fast up, slower down), and writes it into the
+MultiMesh's custom data. `thruster_bell.gdshader` turns that into light: dim blue at idle, `#7FD4FF`
+at full throttle, white at boost, with a slight flicker while firing. Glow grows with the square of
+the throttle so the *visible* brightness follows thrust through the display's gamma. Bell length or a
+flame element is not done. `rcs` blocks are still plain boxes, with no bell to light.
+
 **5. Hold-C free-look orbit.** Not implemented. Wanted: hold C to orbit the camera around the
 player without altering movement or heading, releasing to return. Applies on foot and probably
 seated. `CameraDirector` already owns all view state and is the natural home.
