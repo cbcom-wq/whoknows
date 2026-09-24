@@ -25,7 +25,7 @@ func test_every_definition_is_complete():
 func test_the_starter_grips_match_the_spec():
 	assert_eq(_cat.get_def(&"plasma_pistol").grip, ItemDefinition.Grip.WIELD)
 	assert_eq(_cat.get_def(&"mug").grip, ItemDefinition.Grip.WIELD)
-	assert_eq(_cat.get_def(&"canister").grip, ItemDefinition.Grip.CARRY)
+	assert_eq(_cat.get_def(&"canister").grip, ItemDefinition.Grip.WIELD, "held like a bottle")
 	assert_eq(_cat.get_def(&"crate").grip, ItemDefinition.Grip.CARRY)
 
 func test_a_hand_built_catalog_needs_no_disk():

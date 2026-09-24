@@ -53,7 +53,7 @@ func _ready() -> void:
 	add_child(grasp)
 	hands = Hands.new()
 	camera.add_child(hands)
-	grasp.bind(self, head, hands.wield_socket)
+	grasp.bind(self, head, hands.wield_socket, hands.carry_socket)
 	hands.bind(grasp, self)
 
 ## The actor contract Item talks to.

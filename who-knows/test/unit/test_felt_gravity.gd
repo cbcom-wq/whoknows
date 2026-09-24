@@ -78,7 +78,7 @@ func test_a_held_item_that_leaves_is_not():
 	_field.set_felt(Vector3.ZERO)
 	var item := _item_at(Vector3(0, 1.3, 0))
 	await wait_physics_frames(3)
-	item.set_held(false)
+	item.set_held()
 	item.global_position = Vector3(10, 1.3, 0)
 	await wait_physics_frames(4)
 	assert_gt(item.global_position.x, 9.0)
