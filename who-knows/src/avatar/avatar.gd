@@ -31,8 +31,12 @@ const COLLISION_MASK := 2 | 32
 ## Every avatar is in this group, so the things it walks through -- an
 ## airlock's doorways -- can find it.
 const GROUP := &"avatar"
-## exterior_hull | items: on a spacewalk you bump along your own hull.
-const SUIT_MASK := 1 | 32
+## exterior_hull | items | asteroids: on a spacewalk you bump along your own
+## hull, and into rocks (asteroids spec §7.6).
+const SUIT_MASK := 1 | 32 | AsteroidBody.LAYER
+## You and your suit, kilograms, for bumping into things in space.
+const SUIT_MASS := 120.0
+const BUMP_BOUNCE := 0.2
 ## How long the view takes to right itself after floating in tilted.
 const RIGHTING_TIME := 0.4
 
@@ -175,6 +179,8 @@ func enter_suit(outside: Node3D, pose: Transform3D, start_velocity: Vector3, shi
 	_interior_environment = camera.environment
 	_move_to(outside)
 	add_to_group(Universe.EXTERIOR_SPACE)
+	add_to_group(AsteroidStream.SPACE_ANCHOR)
+	set_meta(AsteroidStream.ANCHOR_RADIUS, 1.0)
 	global_transform = pose
 	mode = Mode.SUIT
 	hull = ship_hull
@@ -201,6 +207,7 @@ func enter_plating(interior: Node3D, pose: Transform3D, pitch: float, start_velo
 	_camera_home = camera.position
 	_move_to(interior)
 	remove_from_group(Universe.EXTERIOR_SPACE)
+	remove_from_group(AsteroidStream.SPACE_ANCHOR)
 	global_transform = pose
 	mode = Mode.PLATING
 	hull = null
@@ -264,7 +271,41 @@ func _suit_physics(delta: float) -> void:
 		var eye := head.global_position
 		global_basis = Basis(-head.global_basis.z, -roll * Suit.ROLL_RATE * delta) * global_basis
 		global_position += eye - head.global_position
+	var before := velocity
 	move_and_slide()
+	_bump_in_space(before)
+
+## Two bodies in space (asteroids spec §7.6): bumping a rock shares momentum
+## along the contact, with a little bounce. A 1 m rock drifts off slowly; a
+## giant stops you dead.
+func _bump_in_space(before: Vector3) -> void:
+	var hits := []
+	for i in get_slide_collision_count():
+		var hit := get_slide_collision(i)
+		hits.append([hit.get_collider(), hit.get_normal(), hit.get_position()])
+	velocity = bump(before, velocity, hits)
+
+## Your velocity after bumping the rocks in `hits` ([collider, normal,
+## point]), moving at `before` into them and `slid` after the slide. Sliding
+## along a rock can touch it twice in one step: that is still one bump.
+func bump(before: Vector3, slid: Vector3, hits: Array) -> Vector3:
+	var v := slid
+	var bumped := {}
+	for h in hits:
+		var body := h[0] as AsteroidBody
+		if body == null or bumped.has(body):
+			continue
+		bumped[body] = true
+		var n: Vector3 = h[1]
+		var at: Vector3 = h[2] - body.global_position
+		var closing := -(before - (body.linear_velocity + body.angular_velocity.cross(at))).dot(n)
+		if closing <= 0.0:
+			continue
+		var m := SUIT_MASS * body.mass / (SUIT_MASS + body.mass)
+		var j := (1.0 + BUMP_BOUNCE) * m * closing
+		body.apply_impulse(-n * j, at)
+		v += n * (before.dot(n) + j / SUIT_MASS - v.dot(n))
+	return v
 
 ## Your own ship's velocity where `p` is, spin included.
 func _hull_velocity_at(p: Vector3) -> Vector3:

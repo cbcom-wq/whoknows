@@ -40,6 +40,9 @@ var _airlocks_root: Node
 ## The ship's air handling (airlock spec §6): heard everywhere aboard,
 ## through the Ship bus, so it drains away with the air in the airlock.
 var _hum: AudioStreamPlayer
+## A rock striking the hull, heard aboard (asteroids spec §7.5).
+var _thump: AudioStreamPlayer
+var _last_hull_velocity := Vector3.ZERO
 
 @onready var exterior: RigidBody3D = $Exterior
 @onready var interior: Node3D = $Interior
@@ -53,9 +56,13 @@ func _ready() -> void:
 	exterior.angular_damp = 0.0
 	exterior.can_sleep = false
 	exterior.collision_layer = 1   # exterior_hull
-	exterior.collision_mask = 1    # detects only other hulls
+	exterior.collision_mask = 1 | AsteroidBody.LAYER   # other hulls, and rocks
+	# At boost the hull moves 5 m a tick: without this it passes through rubble.
+	exterior.continuous_cd = true
 	# Outside, so the floating origin moves it (asteroids spec §4.2).
 	exterior.add_to_group(Universe.EXTERIOR_SPACE)
+	# It touches rocks (asteroids spec §7.1).
+	exterior.add_to_group(AsteroidStream.SPACE_ANCHOR)
 	interior.global_position = interior_slot_origin()
 	outside = get_node_or_null(outside_path) as Node3D if not outside_path.is_empty() else null
 	if outside == null:
@@ -77,6 +84,13 @@ func _ready() -> void:
 	_hum.bus = AudioBuses.SHIP
 	_hum.volume_db = -16.0
 	add_child(_hum)
+	_thump = AudioStreamPlayer.new()
+	_thump.name = "Thump"
+	_thump.bus = AudioBuses.SHIP
+	add_child(_thump)
+	exterior.contact_monitor = true
+	exterior.max_contacts_reported = 8
+	exterior.body_entered.connect(_on_hull_struck)
 
 func _process(_delta: float) -> void:
 	# hull_livery.gdshader paints its stripe from ship-local height, but
@@ -92,8 +106,7 @@ func _process(_delta: float) -> void:
 
 ## The hum plays while the listener is aboard, and stops outside.
 func _update_hum() -> void:
-	var cam := get_viewport().get_camera_3d()
-	var aboard := cam != null and interior.is_ancestor_of(cam)
+	var aboard := _aboard()
 	if aboard and not _hum.playing:
 		var s := Synth.sound(&"ship_hum")
 		if s != null:
@@ -101,6 +114,33 @@ func _update_hum() -> void:
 			_hum.play()
 	elif not aboard and _hum.playing:
 		_hum.stop()
+
+func _physics_process(_delta: float) -> void:
+	_last_hull_velocity = exterior.linear_velocity
+
+func _on_hull_struck(body: Node) -> void:
+	if body is AsteroidBody:
+		hull_struck((exterior.linear_velocity - _last_hull_velocity).length())
+
+## A strike you feel aboard (asteroids spec §7.5): a thump, louder the harder
+## the hull was knocked (`knock`: its change of speed, m/s). Outside is silent.
+func hull_struck(knock: float) -> void:
+	if not _aboard():
+		return
+	var s := Synth.sound(&"hull_thump")
+	if s == null:
+		return
+	_thump.stream = s
+	_thump.volume_db = thump_db(knock)
+	_thump.play()
+
+static func thump_db(knock: float) -> float:
+	return lerpf(-30.0, -2.0, clampf(knock / 8.0, 0.0, 1.0))
+
+## True while the camera you see through is aboard.
+func _aboard() -> bool:
+	var cam := get_viewport().get_camera_3d()
+	return cam != null and interior.is_ancestor_of(cam)
 
 func interior_slot_origin() -> Vector3:
 	# Interior space sits well clear of the combat arena so the walkable
@@ -138,6 +178,14 @@ func _rebuild_everything() -> void:
 	stats = ShipStats.compute(grid, catalog)
 	_apply_stats()
 	stats_changed.emit(stats)
+	_set_anchor_radius()
+
+## How far the hull reaches from its origin, for the asteroid bubble.
+func _set_anchor_radius() -> void:
+	var reach := 0.0
+	for c: Vector3i in grid.coords():
+		reach = maxf(reach, ShipGrid.cell_center(c).length())
+	exterior.set_meta(AsteroidStream.ANCHOR_RADIUS, reach + ShipGrid.CELL_SIZE * 0.87)
 
 ## Hands each rebuilt airlock room to its Airlock, making one for a new
 ## airlock and dropping those whose cell is gone. An Airlock keeps its cycle,
