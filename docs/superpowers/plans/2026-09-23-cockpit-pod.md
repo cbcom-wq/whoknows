@@ -79,7 +79,7 @@ Create `who-knows/_flip_winding.gd` (never commit it):
 extends SceneTree
 
 func _initialize() -> void:
-	for file in ["airlock.tres", "canopy.tres", "hull.tres", "hull_wedge.tres", "pilot_seat.tres"]:
+	for file: String in ["airlock.tres", "canopy.tres", "hull.tres", "hull_wedge.tres", "pilot_seat.tres"]:
 		var path := "res://data/blocks/meshes/" + file
 		var mesh: ArrayMesh = load(path)
 		var out := ArrayMesh.new()
