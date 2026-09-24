@@ -9,6 +9,8 @@ func before_each():
 		_cat.register(_def(id, BlockDefinition.Occupancy.SOLID))
 	for id in [&"deck", &"airlock"]:
 		_cat.register(_def(id, BlockDefinition.Occupancy.DECK))
+	for id in InteriorLayout.ROOM_IDS:
+		_cat.register(_def(id, BlockDefinition.Occupancy.DECK))
 	_cat.register(_def(&"seat", BlockDefinition.Occupancy.MOUNT))
 	_grid = ShipGrid.new()
 
@@ -176,3 +178,110 @@ func test_starter_shuttle_layout():
 		+ _count(layout, InteriorLayout.WallVariant.DISPLAY), 8)
 	assert_eq(layout.canopy_groups().size(), 1)
 	assert_eq(layout.canopy_groups()[0]["coords"].size(), 3)
+
+func _walls_of(layout: InteriorLayout, coord: Vector3i) -> Array:
+	var out := []
+	for f in layout.faces():
+		if f["coord"] == coord and (f["kind"] == InteriorLayout.Kind.WALL
+				or f["kind"] == InteriorLayout.Kind.DOORWAY):
+			out.append(f)
+	return out
+
+func test_room_cells_take_their_room_as_zone():
+	_put(Vector3i(0, 0, 0), &"galley")
+	var layout := _plan()
+	assert_eq(layout.zone_at(Vector3i(0, 0, 0)), &"galley")
+	assert_eq(_face(layout, Vector3i(0, 0, 0), Vector3i.DOWN)["zone"], &"galley")
+
+func test_a_partition_has_a_record_on_each_side_and_one_owner():
+	_put(Vector3i(0, 0, 0), &"deck")
+	_put(Vector3i(1, 0, 0), &"galley")
+	_put(Vector3i(0, 0, 1), &"deck")   # so the galley's doorway is not this face
+	var layout := _plan()
+	var here := _face(layout, Vector3i(0, 0, 0), Vector3i(1, 0, 0))
+	var there := _face(layout, Vector3i(1, 0, 0), Vector3i(-1, 0, 0))
+	assert_true(here["partition"] and there["partition"])
+	assert_ne(here["owner"], there["owner"], "exactly one side builds it")
+
+func test_no_wall_between_bridge_and_common():
+	_put(Vector3i(0, 0, 0), &"seat")
+	_put(Vector3i(0, 0, 1), &"deck")   # bridge
+	_put(Vector3i(0, 0, 2), &"deck")   # common
+	assert_true(_face(_plan(), Vector3i(0, 0, 1), Vector3i(0, 0, 1)).is_empty())
+
+func test_each_room_gets_exactly_one_doorway():
+	for z in [0, 1]:
+		_put(Vector3i(0, 0, z), &"deck")
+		_put(Vector3i(-1, 0, z), &"bunk_room")
+	_put(Vector3i(-1, 0, -1), &"deck")
+	var layout := _plan()
+	assert_eq(layout.rooms().size(), 1, "two bunk cells, one room")
+	var doorways := layout.faces().filter(func(f): return f["kind"] == InteriorLayout.Kind.DOORWAY)
+	assert_eq(doorways.size(), 2, "one doorway, seen from both sides")
+
+func test_doorway_prefers_a_flank_onto_common_space():
+	_put(Vector3i(1, 0, 0), &"galley")
+	_put(Vector3i(0, 0, 0), &"deck")    # corridor, across a flank
+	_put(Vector3i(1, 0, -1), &"deck")   # bridge side, across an end
+	var door: Dictionary = _plan().rooms()[0]["doorway"]
+	assert_eq(door["coord"], Vector3i(1, 0, 0))
+	assert_eq(door["normal"], Vector3i(-1, 0, 0))
+
+func test_doorway_ties_break_forward():
+	for z in [0, 1]:
+		_put(Vector3i(0, 0, z), &"deck")
+		_put(Vector3i(-1, 0, z), &"bunk_room")
+	var door: Dictionary = _plan().rooms()[0]["doorway"]
+	assert_eq(door["coord"], Vector3i(-1, 0, 0), "the forward of two equal faces")
+
+func test_a_room_with_no_common_neighbour_opens_onto_another_room():
+	_put(Vector3i(0, 0, 0), &"deck")
+	_put(Vector3i(1, 0, 0), &"galley")
+	_put(Vector3i(2, 0, 0), &"closet")   # only touches the galley
+	var layout := _plan()
+	for room in layout.rooms():
+		assert_false(room["doorway"].is_empty(), "%s has a way in" % room["zone"])
+
+func test_feature_wall_prefers_an_outer_flank():
+	_put(Vector3i(0, 0, 0), &"deck")
+	_put(Vector3i(0, 0, 1), &"deck")
+	_put(Vector3i(-1, 0, 0), &"bunk_room")
+	_put(Vector3i(-1, 0, 1), &"bunk_room")
+	_put(Vector3i(-2, 0, 0), &"hull")
+	_put(Vector3i(-2, 0, 1), &"hull")
+	var layout := _plan()
+	for coord in [Vector3i(-1, 0, 0), Vector3i(-1, 0, 1)]:
+		assert_eq(_face(layout, coord, Vector3i(-1, 0, 0))["variant"], InteriorLayout.WallVariant.FEATURE,
+			"the hull side, not the corridor side")
+
+func test_a_feature_on_the_outer_skin_gets_a_porthole():
+	_put(Vector3i(0, 0, 0), &"deck")
+	_put(Vector3i(1, 0, 0), &"galley")
+	_put(Vector3i(2, 0, 0), &"hull")   # vacuum beyond
+	var f := _face(_plan(), Vector3i(1, 0, 0), Vector3i(1, 0, 0))
+	assert_eq(f["variant"], InteriorLayout.WallVariant.FEATURE)
+	assert_true(f["porthole"])
+
+func test_every_room_cell_has_one_feature_and_the_rest_secondary():
+	_put(Vector3i(0, 0, 0), &"deck")
+	_put(Vector3i(1, 0, 0), &"galley")
+	_put(Vector3i(1, 0, 1), &"closet")
+	var layout := _plan()
+	for coord in [Vector3i(1, 0, 0), Vector3i(1, 0, 1)]:
+		var features := 0
+		for f in _walls_of(layout, coord):
+			if f["kind"] == InteriorLayout.Kind.WALL:
+				assert_true(f["variant"] == InteriorLayout.WallVariant.FEATURE
+					or f["variant"] == InteriorLayout.WallVariant.SECONDARY)
+				if f["variant"] == InteriorLayout.WallVariant.FEATURE:
+					features += 1
+		assert_eq(features, 1, "%s has one feature wall" % coord)
+
+func test_partitions_are_never_portholes_or_hatches():
+	_put(Vector3i(0, 0, 0), &"airlock")
+	_put(Vector3i(1, 0, 0), &"galley")
+	_put(Vector3i(0, 0, -1), &"deck")
+	for f in _plan().faces():
+		if f.get("partition", false):
+			assert_false(f["porthole"])
+			assert_ne(f["variant"], InteriorLayout.WallVariant.HATCH)

@@ -2932,8 +2932,12 @@ and append:
 
 ```gdscript
 func _walls_of(layout: InteriorLayout, coord: Vector3i) -> Array:
-	return layout.faces().filter(func(f): return f["coord"] == coord
-		and (f["kind"] == InteriorLayout.Kind.WALL or f["kind"] == InteriorLayout.Kind.DOORWAY))
+	var out := []
+	for f in layout.faces():
+		if f["coord"] == coord and (f["kind"] == InteriorLayout.Kind.WALL
+				or f["kind"] == InteriorLayout.Kind.DOORWAY):
+			out.append(f)
+	return out
 
 func test_room_cells_take_their_room_as_zone():
 	_put(Vector3i(0, 0, 0), &"galley")
