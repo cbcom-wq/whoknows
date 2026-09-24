@@ -185,6 +185,7 @@ func test_hatch_only_where_the_airlock_meets_vacuum():
 	_put(Vector3i(0, 0, 0), &"airlock")
 	_put(Vector3i(0, 0, -1), &"deck")
 	_put(Vector3i(1, 0, 0), &"hull")
+	_put(Vector3i(-1, 0, 0), &"hull")   # only the aft face opens onto vacuum
 	var layout := _plan()
 	assert_eq(_face(layout, Vector3i(0, 0, 0), Vector3i(0, 0, 1))["variant"],
 		InteriorLayout.WallVariant.HATCH)
