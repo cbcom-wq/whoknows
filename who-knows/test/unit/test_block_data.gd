@@ -5,13 +5,14 @@ var _cat: BlockCatalog
 func before_all():
 	_cat = BlockCatalog.load_from_dir("res://data/blocks")
 
-func test_all_sixteen_blocks_load():
-	assert_eq(_cat.ids().size(), 16, "art direction spec §7 adds canopy: 16 blocks")
+func test_all_twenty_one_blocks_load():
+	assert_eq(_cat.ids().size(), 21, "16, plus the five room blocks of the interior redesign")
 
 func test_required_ids_exist():
 	for id in [&"hull", &"hull_wedge", &"armour", &"core", &"reactor",
 			&"thruster", &"rcs", &"battery", &"grav_plating", &"deck",
-			&"bulkhead", &"door", &"pilot_seat", &"ladder", &"airlock", &"canopy"]:
+			&"bulkhead", &"door", &"pilot_seat", &"ladder", &"airlock", &"canopy",
+			&"bunk_room", &"galley", &"bathroom", &"closet", &"weapon_room"]:
 		assert_true(_cat.has(id), "missing block definition: %s" % id)
 
 func test_every_block_has_positive_mass_and_hp():
@@ -48,7 +49,8 @@ func test_walkable_blocks_are_exactly_the_interior_traversables():
 		if _cat.get_def(id).is_walkable():
 			walkable.append(id)
 	walkable.sort()
-	var expected := [&"airlock", &"deck", &"door", &"ladder", &"pilot_seat"]
+	var expected := [&"airlock", &"deck", &"door", &"ladder", &"pilot_seat",
+		&"bunk_room", &"galley", &"bathroom", &"closet", &"weapon_room"]
 	expected.sort()
 	assert_eq(walkable, expected)
 
@@ -60,3 +62,15 @@ func test_canopy_is_a_solid_structure_block_with_no_systems():
 	assert_eq(def.hp, 60)
 	assert_almost_eq(def.power_gen, 0.0, 0.001)
 	assert_almost_eq(def.power_draw, 0.0, 0.001)
+
+## Rooms are walkable floor that says what the room is for. They weigh and
+## draw exactly what deck does, so turning deck cells into rooms can never
+## move a ship's centre of mass or power budget (interior redesign spec §7.1).
+func test_room_blocks_are_deck_with_a_purpose():
+	var deck := _cat.get_def(&"deck")
+	for id in [&"bunk_room", &"galley", &"bathroom", &"closet", &"weapon_room"]:
+		var def := _cat.get_def(id)
+		assert_eq(def.occupancy, BlockDefinition.Occupancy.DECK, "%s is walkable floor" % id)
+		assert_eq(def.category, BlockDefinition.Category.INTERIOR)
+		assert_eq(def.mass_t, deck.mass_t, "%s weighs what deck weighs" % id)
+		assert_eq(def.power_draw, deck.power_draw, "%s draws what deck draws" % id)

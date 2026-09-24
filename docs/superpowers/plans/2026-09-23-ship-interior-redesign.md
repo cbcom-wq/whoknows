@@ -2827,6 +2827,13 @@ add the five room ids to the list in `test_required_ids_exist`:
 			&"bunk_room", &"galley", &"bathroom", &"closet", &"weapon_room"]:
 ```
 
+add the five room ids to the expected list in `test_walkable_blocks_are_exactly_the_interior_traversables` (rooms are deliberately walkable):
+
+```gdscript
+	var expected := [&"airlock", &"deck", &"door", &"ladder", &"pilot_seat",
+		&"bunk_room", &"galley", &"bathroom", &"closet", &"weapon_room"]
+```
+
 and append:
 
 ```gdscript

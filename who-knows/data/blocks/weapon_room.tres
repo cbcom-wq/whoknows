@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="BlockDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/ship/block_definition.gd" id="1_script"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_deck"]
+size = Vector3(2, 0.15, 2)
+
+[resource]
+script = ExtResource("1_script")
+id = &"weapon_room"
+display_name = "Weapon Room"
+category = 2
+occupancy = 1
+mass_t = 0.4
+hp = 60
+power_gen = 0.0
+power_draw = 0.1
+thrust_kn = 0.0
+grav_radius = 0.0
+mesh = SubResource("BoxMesh_deck")
