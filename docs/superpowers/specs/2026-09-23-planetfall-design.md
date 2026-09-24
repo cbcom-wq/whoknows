@@ -429,6 +429,12 @@ HUD spec §8.1). The node only gathers inputs and applies results.
 
 ## 10. The airlock cycle
 
+> **Superseded** by `docs/superpowers/specs/2026-09-24-airlock-design.md` (2026-09-24): two button-operated hatches, a steam cycle of 4.7 s, and the
+> handoff at the outer hatch's threshold instead of a dark beat. Built first with open space
+> outside. When a world is outside, §10.4's refusals (*NOT LANDED*, *UNEVEN GROUND*, *HATCH
+> BLOCKED*) become the room panel's, and §11's `FIELD` mode joins the avatar's `PLATING` and
+> `SUIT`. §10.5's transform maths stands, with the storey offset added.
+
 ### 10.1 Which face is the hatch
 
 The hatch is the airlock cell's **one wall face (±X or ±Z) onto empty space**, the same face the

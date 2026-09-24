@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-09-24
 **Branch history:** `design/slice-1` (Tasks 1–12, merged) → `feat/slice-1-builders` (Tasks 13–15)
-**Suite:** 299 tests, green
+**Suite:** 550 tests, green
 
 Governing documents:
 
@@ -37,6 +37,12 @@ scenery any more.
   (docs/superpowers/specs/2026-09-23-ship-interior-redesign-design.md)
 - A wraparound cockpit pod jutting from the front of the bridge, glazed in front and on both
   sides, with a captain's chair and helm console in it (docs/superpowers/specs/2026-09-23-cockpit-pod-design.md)
+- **An airlock you can use:**
+  - a room with two hatches;
+  - a 4.7 s cycle with steam, fog and warning light;
+  - the game's first sound, synthesized in code;
+  - a spacewalk on suit thrusters, stepping out through the outer hatch and floating back in,
+    with a marker home (docs/superpowers/specs/2026-09-24-airlock-design.md)
 
 Derived stats for the starter shuttle: 92,300 kg, torque imbalance 3.2% of pitch budget, power
 36.0 gen / 30.8 draw MW, **zero validation issues**, `can_launch = true`.

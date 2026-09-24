@@ -120,7 +120,7 @@ opens:
 |---|---|---|
 | `SEALING` | 0.7 s | Near leaves close (0.5 s), then its bolts drive home (0.2 s). Lights go amber. |
 | `CYCLING` | 2.8 s | Pressure runs 101 → 0 kPa going out (fast first, easing off) or 0 → 101 kPa coming in. The fog and steam run (§5). |
-| `OPENING` | 1.2 s | Far bolts retract (0.3 s) and its leaves part (0.9 s). Its strip turns coral going out, green coming in. |
+| `OPENING` | 1.2 s | Far bolts retract (0.3 s) and its leaves part (0.9 s). Its strip turns green: this side may open (§3.3). |
 
 That is 4.7 s from button to open hatch. Pressure follows `p = 101·(1 − u)²` going out and
 `p = 101·(1 − (1 − u)²)` coming in, with `u` the fraction of `CYCLING` done.
@@ -524,3 +524,37 @@ nothing about ships: they take a size, a frame and a body.
 | Particles cost too much on the GTX 960 | A few hundred chunky puffs for 4 s; measured; fewer puffs if needed. |
 | The hull moving into a floating avatar | The avatar's own collision recovery pushes it out; it cannot move the hull. |
 | Suit assist fights a ship turning fast | Assist has the same 2.5 m/s² as thrust; a ship spinning hard simply leaves you. The motion warning told you. |
+
+---
+
+## 15. As built (2026-09-24)
+
+Where the build settled details this design left open, or changed them:
+
+- **The inner door** is `AirlockSite.door_normal`: straight through, opposite the outer hatch,
+  when that cell is walkable; otherwise a side. Open deck is preferred to a room. The layout uses
+  this choice, so the hull's copy puts its inner hatch in the same place without reading the
+  layout.
+- **`HullPalette`** is `PANEL_LINE` and `RUNNING_LIGHT`. The hatch face is plated in the hull's
+  livery material, so the red stripe runs across its top like the rest of the stern.
+- **Coming back in**, you land 0.45 m inside the hatch, within 0.15 m of its centre, clear of the
+  frame. The view starts exactly where your eye was, position and rotation, and eases to your head
+  over 0.4 s.
+- **Steam:**
+  - 18 puffs per nozzle and a room fog of 48, with a near-camera fade;
+  - haze peaks at 0.5 going out and 0.7 coming in, at density 0.9, which hides about 60% of the
+    hatch 1.5 m away;
+  - the burst out on the hull is 36 flat-lit, unshaded puffs.
+- **Frame time** at 1280 × 720:
+  - 208 fps in the room at rest;
+  - 183 fps at the mist going out;
+  - 136 fps at the thickest steam coming in;
+  - 577 fps on a spacewalk.
+- **Real-scene probe,** with the ship drifting and turning:
+  - the view moves 0.1 mm at the crossing;
+  - you leave with exactly the hull's velocity where you cross;
+  - the suit holds station beside the ship;
+  - the outer hatch closes behind you, and the hull panel reopens it;
+  - you float back in tilted and land upright;
+  - you cycle back in.
+

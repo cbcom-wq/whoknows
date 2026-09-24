@@ -666,7 +666,9 @@ Adding palette entries is not a rule change. Every light in this spec is `LIGHT_
 - Audio (the project has none yet).
 - Hands while seated; a third-person body.
 - Zero-g rooms or zero-g movement.
-- Carrying items through the airlock; grabbing anything outside the ship.
+- Carrying items through the airlock; grabbing anything outside the ship. *Amended 2026-09-24 by
+  `docs/superpowers/specs/2026-09-24-airlock-design.md` §7.4: whatever is in your hands goes out and comes back with you, switching render layers;
+  outside your hands are idle (`Grasp.suspended`). Items in space are still out of scope.*
 - NPCs or droids using items.
 
 ---

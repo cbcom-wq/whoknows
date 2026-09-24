@@ -1,7 +1,8 @@
 # Who Knows — visual style guide
 
 **Status:** Living document. Owner-approved 2026-09-23, after the ship interior redesign; extended
-2026-09-24 for the cockpit pod and portal windows (owner-approved design, `docs/superpowers/specs/2026-09-23-cockpit-pod-design.md`).
+2026-09-24 for the cockpit pod and portal windows (owner-approved design, `docs/superpowers/specs/2026-09-23-cockpit-pod-design.md`),
+and for the airlock, its sound and the first spacewalk (owner-approved design, `docs/superpowers/specs/2026-09-24-airlock-design.md`).
 **Authority:** This is the standing rulebook for how the game looks, and interiors most of all.
 Feature specs apply these rules; they do not override them. **To change a rule, get the owner's
 approval first and update this document in the same change.** Code, a spec and this guide
@@ -84,6 +85,10 @@ shaders. `canopy_window.gdshader` is every window's glass (§2.7). **Reach for g
 colour first.** A fourth shader needs a reason no geometry
 can meet, and the owner's approval. A test pins the list (§5).
 
+The engine's own materials are not custom shaders and are fine: `StandardMaterial3D`, the
+built-in particle process material, `Label3D`'s text. The airlock's steam and its panels'
+readouts are built from them.
+
 ### 2.6 Performance budget
 
 The interior must hold **at least 120 fps at 1280 × 720 on the reference GPU (GTX 960)** with the
@@ -91,8 +96,18 @@ canopy view rendering. The canopy view renders the outside a second time, at ful
 the viewer is inside the ship. With portal windows, the cockpit pod and five furnished rooms it
 measured 148–218 fps (2026-09-24); the seat in the pod, mostly glass, is the cheapest view.
 Looking down the corridor with the hands in view it measured 143 fps, and 125–126 fps with eight
-plasma bolts in flight, each carrying its own warm light (2026-09-24). Measure after any change
-that adds lights, pieces, windows or post-processing.
+plasma bolts in flight, each carrying its own warm light (2026-09-24).
+
+Around the airlock (2026-09-24):
+- in the room at rest: 208 fps;
+- the thickest steam coming in, the worst case: 136 fps;
+- the mist going out: 183 fps;
+- on a spacewalk: 577 fps.
+
+**Transparent overdraw is the cost to watch.** Big puffs close to the camera stack up fast: the
+first tuning of the steam measured 86 fps before its puff counts and sizes came down.
+
+Measure after any change that adds lights, pieces, windows, particles or post-processing.
 
 ### 2.7 Windows show the real outside
 
@@ -111,6 +126,36 @@ sits.
 - In the chase view no window is on screen, and the canopy view stops rendering.
 - **The interior has no sky of its own.** Its private starfield sphere, which stars once moved past
   through transparent glass, was removed on 2026-09-24: behind portal glass it could never be seen.
+- **The airlock's open outer hatch is a window too.** While you stand in the airlock with it
+  open, the view out includes your own hull, so the engine pods beside the door are already
+  there before you step out (§3.4).
+
+### 2.8 Screens that show real numbers
+
+Screens are set dressing (§2.4) unless a spec designs one to show game state. The airlock's panels
+are the first to:
+- they show pressure, status and the motion warning in `Label3D` text, in `LIGHT_WARM` on the
+  screen black;
+- they have one big button lit `SIGNAL_GO`, `AMBER` or `CORAL`;
+- they use a few capitalised words, never paragraphs.
+
+A new live-data screen follows the same look, and comes with the spec that designs it.
+
+### 2.9 Sound
+
+Sound follows the look: **soft and warm, never harsh.**
+- **Every sound is synthesized in code** by `Synth` (`src/audio/synth.gd`) from noise, sines,
+  one-pole filters and envelopes with fixed seeds. There are no sound files. A new sound is a new
+  `Synth` builder.
+- **Two buses** (`AudioBuses`):
+  - **Ship**, for everything heard through air, with a low-pass filter;
+  - **Suit**, for what you hear inside your helmet.
+- **Air carries sound.** In the airlock the Ship bus closes down with the pressure, to 300 Hz and
+  −18 dB at vacuum.
+- **Space is silent:** on a spacewalk you hear only your breathing, your thrusters and the
+  warning chime.
+- Interior sounds are positional, heard by the current camera. On a spacewalk that camera is 5 km
+  from interior space, so the ship falls silent by itself.
 
 ---
 
@@ -199,6 +244,32 @@ The pilot has to be able to fly from inside, so the helm sits where the glass is
 
 ---
 
+### 3.4 The airlock
+
+Where the ship meets the outside (`docs/superpowers/specs/2026-09-24-airlock-design.md`):
+
+- **Its own room**, with one doorway like any room. The doorway is the **inner hatch**. The face
+  onto open space is the **outer hatch**. `AirlockSite` decides both, and the layout, the builders
+  and the validator all ask it.
+- **The ceiling is low on purpose**: 1.9 m clear, the hull cell's own height. The room has an
+  exact copy on the hull, and the hull cell is 2 m. Hatches are 1.0 × 1.85 m. Lights are flush
+  strips, not hanging rings.
+- **Hatches, not sliding doors:**
+  - heavy leaves with bolts, a window and a green, amber or coral light strip;
+  - solid whenever not fully open;
+  - moved only by a panel, and they close themselves behind you;
+  - never closed on anyone.
+- **The steam is chunky puffs**, like everything else:
+  - it is built-in particles with a near-camera fade;
+  - it is foggy, never a whiteout (a test holds it);
+  - puffs out on the hull are flat-lit vapor, not lit rocks.
+- **The copy on the hull** (`AirlockAlcove`) uses the same props in the same frames on the
+  own-hull layer. Its outside face is plated in the hull's livery, with `HullPalette`'s panel line
+  and the cyan running-light arch.
+- **Ship physics ends at the outer hatch's plane.** Crossing it moves you between interior space
+  and the world with the view held to a millimetre. Keep both copies of the room identical, or the
+  crossing shows.
+
 ## 4. Adding something new
 
 **A new prop:**
@@ -220,6 +291,9 @@ The pilot has to be able to fly from inside, so the helm sits where the glass is
 
 **A new window:** put its glass in the `PORTAL` batch (§2.7) and give the wall behind it a hole.
 Glass on its own is not a way out: keep the wall's collider whole.
+
+**Anything on the hull's outside:** colours from `HullPalette`, or the hull's livery material;
+the own-hull render layer; `InteriorKit` can build there (`layer`, `light_mask`).
 
 **A new room type:**
 
@@ -252,15 +326,18 @@ Glass on its own is not a way out: keep the wall's collider whole.
 
 `test/unit/test_visual_style_rules.gd` fails the build if:
 
-- a colour literal appears in interior, item or hand code other than `InteriorPalette`
-  (`InteriorKit` is exempt: it packs data into vertex colours);
+- a colour literal appears in interior, item, hand or airlock code other than the palettes
+  (`InteriorPalette`, and `HullPalette` for the hull's outside; `InteriorKit` is exempt: it packs
+  data into vertex colours);
 - `interior_props.gd`, `interior_kit.gd`, `sliding_door.gd`, `item_looks.gd`, `item.gd`,
-  `glove.gd` or `hands.gd` reference the grid, the layout, the builder or the dressing;
+  `glove.gd`, `hands.gd`, `airlock_hatch.gd`, `airlock_panel.gd` or `airlock_show.gd` reference
+  the grid, the layout, the builder or the dressing;
 - the set of interior shaders changes.
 
 Other interior tests pin the rest: render layer 2 and cull mask 2, no interior shadows, colliders
 on protruding props, one light per cell, the doorway clearance, window glass in the `PORTAL`
-batch, the pod's colliders, and the helm under the seated sightline.
+batch, the pod's colliders, the helm under the seated sightline, and the airlock's haze never
+whiting out the room.
 `test/unit/test_mesh_winding.gd` holds every baked block mesh to Godot's winding (clockwise seen
 from the front): a mesh wound the other way renders inside-out with no warning at all.
 
@@ -278,6 +355,8 @@ A green test suite proves the structure, not the look. For visual work:
   to the owner.
 - **Look out of the windows** from the seat and from standing: what they show must line up with
   the world outside.
+- **Cross the airlock's threshold both ways** and render just before and just after: the two
+  frames should match.
 - **Read scene and resource edits back at runtime** (CLAUDE.md: a clean load proves nothing for
   `.tscn`/`.tres`).
 - **Compile shaders on a real renderer.** Headless runs never compile them, so run once without
