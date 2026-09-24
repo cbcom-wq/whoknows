@@ -16,7 +16,7 @@ it moves every member of group `exterior_space` back by the same whole kilometre
 
 **Spec:** `docs/superpowers/specs/2026-09-24-asteroids-design.md` (§4 is this plan; §4.5 is its
 live check). This is plan 1 of 2. Plan 2 (recipe, streaming, the physics bubble, crash feel) is
-written after the owner has flown this, as the spec's build order requires.
+written once this plan's live check passes (the owner asked to continue autonomously).
 
 ## Global Constraints
 
