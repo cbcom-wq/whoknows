@@ -317,6 +317,14 @@ This is what §2's deferrals cost to un-defer.
 | A second vehicle type | Implement `build_telemetry()` on its controller. Nothing in `src/ui/` changes. |
 | Retrograde marker | One more element in `VelocityMarker`; `resolve` already handles the geometry. |
 
+> **Amended 2026-09-23 (Planetfall §13):** surface flight follows the same pattern as the weapons
+> row. The surface fields (altitude, vertical speed, lift margin, tilt, landing state) arrive through a
+> second plain-values step, `with_surface()`, so `from_state()` and its callers do not change. A
+> `SurfacePanel` joins the band between `AttitudePanel` and the right end, which stays reserved.
+> World markers add a second duck-typed source, `build_contacts()`, independent of vehicle arming
+> so they also show on foot. They and the toast line live under their own `WorldOverlay`
+> `CanvasLayer`, not under `HudRoot`.
+
 ---
 
 ## 11. Known interactions with the generated interior

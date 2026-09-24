@@ -43,6 +43,10 @@ The full game is eight or nine independent subsystems and cannot be responsibly 
 | 5 | Expedition — sector node graph, jumps, banking the haul, home station, shipyard | The roguelike frame |
 | 6 | Worlds — planets, footholds, conquest, faction pressure | "Conquer worlds" |
 
+> **Amended 2026-09-23:** `docs/superpowers/specs/2026-09-23-planetfall-design.md` (Planetfall)
+> pulls the first part of Slice 6 forward, ahead of Slices 2–5: small seeded worlds you can fly
+> to, land on, walk out onto and explore. Footholds, conquest and faction pressure stay in Slice 6.
+
 **This document specifies Slice 1 only.** Slices 2–6 appear as a roadmap appendix so the architecture leaves room for them.
 
 Slice 1 deliberately front-loads the scary part. A block editor is well-understood. A person walking around inside a rigid body that is accelerating and rotating through space is not. If that does not feel good, we need to know in week two, not month six.
@@ -91,6 +95,15 @@ Three things make the split invisible:
 - Interior and exterior must stay in lockstep. One `ShipGrid` mutation rebuilds the affected cell in both. This is the main thing that can rot, so mutation goes through a single choke-point API and is covered by a parity test.
 - **Combat arenas are bounded** (a few km). No floating origin and no double-precision build; single-precision floats stay accurate at that range. Long-range travel is handled by the sector map in Slice 5, not by actually flying there.
 - Switching between an interior camera and an exterior camera is a world switch, and therefore a hard cut. This is normal and expected for a view toggle. The one transition that must *not* cut is sitting down (§7.3), and it happens entirely within interior space.
+
+> **Amended 2026-09-23 (Planetfall §16):** there is still no floating origin and no
+> double-precision build, but the playable space now contains worlds you fly to, not only combat
+> arenas. Single precision stays accurate within about 10 km of the origin, which Planetfall's
+> small worlds respect. Several worlds spread wider than that will need a floating origin, which
+> belongs to the many-worlds spec. *Within* a system you fly; *between* systems, Slice 5's sector
+> map remains the jump layer. Planetfall §10 also adds a second transition that must not be seen:
+> leaving the ship through the airlock, which moves the avatar from interior space into exterior
+> space while it is shut inside a cycling airlock.
 
 ---
 
@@ -326,6 +339,9 @@ Sixteen blocks is a weekend of modelling, not a bottleneck.
 
 No weapons. No enemies. No droids or crew AI. No block destruction. No atmosphere or pressure simulation. No sector map, expeditions, or persistence beyond saved blueprints. No planets. No multiplayer.
 
+> **Amended 2026-09-23:** "No planets" remains true of Slice 1 itself. Planets arrive in
+> Planetfall (`docs/superpowers/specs/2026-09-23-planetfall-design.md`), a separate slice.
+
 The block mutation API supports destruction from day one — Slice 2 simply calls it — but nothing in Slice 1 shoots.
 
 ---
@@ -370,3 +386,8 @@ Build a ship from the catalogue with live stats and validation. Save it, load it
 **Slice 5 — Expedition.** Procedural sector node graph where unexplored nodes show rumours rather than facts. Jump, event, and encounter nodes. A persistent home station with shipyard, blueprint library, and prisoner drop-off. Losses in the field are permanent; the empire is not. This is also where unidentified salvage and droid-memory interrogation land, because this is the slice where information becomes scarce enough to be worth spending on.
 
 **Slice 6 — Worlds.** Planets as strategic locations, footholds established by conquest, faction pressure responding to what you have taken, and a win condition.
+
+> **Amended 2026-09-23:** the ground work for this slice — seeded worlds, landing, the airlock
+> step-out, on-foot exploration and discoverable sites — is specified in
+> `docs/superpowers/specs/2026-09-23-planetfall-design.md`, with hooks for claiming, encounters
+> and many worlds in its §18.
