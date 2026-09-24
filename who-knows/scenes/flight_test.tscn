@@ -1,4 +1,4 @@
-[gd_scene load_steps=28 format=3]
+[gd_scene load_steps=29 format=3]
 
 [ext_resource type="Script" path="res://src/ship/ship.gd" id="1_ship"]
 [ext_resource type="PackedScene" path="res://scenes/avatar.tscn" id="2_avatar"]
@@ -17,6 +17,7 @@
 [ext_resource type="Script" path="res://src/ui/panels/attitude_panel.gd" id="15_attitude_panel"]
 [ext_resource type="Script" path="res://src/ui/hud_band.gd" id="16_hud_band"]
 [ext_resource type="Shader" path="res://data/materials/interior/canopy_window.gdshader" id="17_canopy_window"]
+[ext_resource type="Script" path="res://src/ship/canopy_portal.gd" id="18_canopy_portal"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_flighttest"]
 sky_top_color = Color(0.02, 0.02, 0.05, 1)
@@ -101,13 +102,16 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5, 26)
 current = false
 cull_mask = 5
 
-[node name="CanopyRemote" type="RemoteTransform3D" parent="Ship/Exterior"]
-position = Vector3(0, 0.25, -4.2)
-remote_path = NodePath("../../Canopy/CanopyCam")
-
 [node name="FlightComputer" type="Node" parent="Ship"]
 script = ExtResource("3_flight_computer")
 hull_path = NodePath("../Exterior")
+
+[node name="CanopyPortal" type="Node" parent="Ship"]
+script = ExtResource("18_canopy_portal")
+viewport_path = NodePath("../Canopy")
+camera_path = NodePath("../Canopy/CanopyCam")
+hull_path = NodePath("../Exterior")
+interior_path = NodePath("../Interior")
 
 [node name="Canopy" type="SubViewport" parent="Ship"]
 size = Vector2i(1536, 512)

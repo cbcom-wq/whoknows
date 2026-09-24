@@ -43,3 +43,9 @@ func test_canopy_fallback_has_no_view_and_the_palette_colours():
 	assert_null(m.get_shader_parameter(&"canopy_view"), "windows render black, never a hole")
 	assert_eq(m.get_shader_parameter(&"shell_color"), InteriorPalette.WALL)
 	assert_eq(m.get_shader_parameter(&"frame_color"), InteriorPalette.TRIM)
+
+func test_portal_fallback_is_all_glass_with_no_view():
+	var m := InteriorMaterials.portal_fallback()
+	assert_eq(m.shader, InteriorMaterials.CANOPY_SHADER)
+	assert_true(m.get_shader_parameter(&"all_glass"))
+	assert_null(m.get_shader_parameter(&"canopy_view"))

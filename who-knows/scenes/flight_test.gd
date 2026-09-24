@@ -34,34 +34,9 @@ const O_RCS_DOWN := 20       ## DOWN: thrust along -Y
 func _ready() -> void:
 	_ship.set_grid(_starter_grid())
 	_place_avatar_on_deck()
-	_aim_canopy_view()
 	_set_interior_mood()
 	_wire_hud()
 	_wire_prompt()
-
-## Puts the canopy camera where the pilot's head is, and tells the nose's
-## windows where that is.
-##
-## Interior space and exterior space are both grid space, offset from each
-## other, so the eye's interior-local position is exactly where that eye
-## sits on the hull. Copying it here rather than authoring the camera's
-## position in the scene keeps one source of truth: move the seat and the
-## view through the glass moves with it.
-##
-## The windows sample the canopy view by direction from the eye
-## (canopy_window.gdshader), so the material needs the eye's world position
-## and the camera's projection -- set here, from the same camera and viewport.
-func _aim_canopy_view() -> void:
-	var eye: Node3D = $Ship/Interior/PilotSeat/Eye
-	$Ship/Exterior/CanopyRemote.position = _ship.interior.to_local(eye.global_position)
-	var material := _ship.interior_builder.canopy_material as ShaderMaterial
-	if material == null:
-		return
-	var cam: Camera3D = $Ship/Canopy/CanopyCam
-	var view: SubViewport = $Ship/Canopy
-	material.set_shader_parameter(&"eye_world", eye.global_position)
-	material.set_shader_parameter(&"tan_half_fov_y", tan(deg_to_rad(cam.fov) * 0.5))
-	material.set_shader_parameter(&"aspect", float(view.size.x) / float(view.size.y))
 
 ## The interior camera is also the seated camera -- CameraDirector moves it
 ## between head and seat -- so one assignment covers walking and flying.

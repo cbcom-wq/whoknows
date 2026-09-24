@@ -13,13 +13,23 @@ static func build(layout: InteriorLayout, body: StaticBody3D, canopy_material: M
 	var root := Node3D.new()
 	root.name = "Dressing"
 	body.add_child(root)
-	var kit := InteriorKit.new(root, body)
+	var kit := InteriorKit.new(root, body, portal_material(canopy_material))
 	for face in layout.faces():
 		_dress(kit, face)
 	for group in layout.canopy_groups():
 		_nose(kit, group, canopy_material)
 	kit.commit()
 	return root
+
+## The PORTAL batch's material: the scene's canopy material -- the window
+## shader fed by the canopy view -- made all window. Without one wired, black
+## glass.
+static func portal_material(canopy_material: Material) -> Material:
+	if canopy_material is ShaderMaterial:
+		var m: ShaderMaterial = canopy_material.duplicate()
+		m.set_shader_parameter(&"all_glass", true)
+		return m
+	return InteriorMaterials.portal_fallback()
 
 ## A wall's frame, as InteriorProps expects it: origin on the wall's inner
 ## surface at floor level, centred along the wall; +x along the wall, +y up,

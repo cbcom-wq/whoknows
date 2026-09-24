@@ -63,7 +63,8 @@ func test_porthole_builds_frame_and_glass():
 	InteriorProps.porthole(_kit, Transform3D.IDENTITY)
 	var names := _kit.commit().map(func(mi): return String(mi.name))
 	assert_has(names, "DressingSolid", "the frame")
-	assert_has(names, "DressingGlass", "the glass")
+	assert_has(names, "DressingPortals", "glass showing the real view outside")
+	assert_has(names, "DressingGlass", "the glint")
 
 func test_hatch_brings_its_light():
 	InteriorProps.hatch(_kit, Transform3D.IDENTITY)

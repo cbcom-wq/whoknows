@@ -20,6 +20,7 @@ extends RefCounted
 const SOLID := InteriorKit.Batch.SOLID
 const GLOW := InteriorKit.Batch.GLOW
 const GLASS := InteriorKit.Batch.GLASS
+const PORTAL := InteriorKit.Batch.PORTAL
 
 ## The wall length a prop is designed to fill.
 const BAY := 2.0
@@ -140,15 +141,17 @@ static func display(kit: InteriorKit, f: Transform3D, variety: float) -> void:
 	kit.screen(f * _at(Vector3(0, 1.45, 0.071)), Vector2(1.36, 0.41),
 		_mode(0 if variety < 0.5 else 2), variety)
 
-## A porthole's frame and glass. The wall behind it must leave a square hole
-## PORTHOLE_OPENING across at PORTHOLE_HEIGHT (InteriorBuilder does).
+## A porthole's frame and glass. The glass is a portal (it shows the real view
+## outside); the cartoon glint stays on top. The wall behind it must leave a
+## square hole PORTHOLE_OPENING across at PORTHOLE_HEIGHT (InteriorBuilder
+## does).
 static func porthole(kit: InteriorKit, f: Transform3D) -> void:
 	var at := f * _at(Vector3(0, PORTHOLE_HEIGHT, 0))
 	kit.ring(SOLID, at, PORTHOLE_RADIUS, PORTHOLE_FRAME_RADIUS, -WALL_THICKNESS, 0.09, _c(InteriorPalette.TRIM))
 	kit.annulus(GLOW, at * _at(Vector3(0, 0, 0.092)), PORTHOLE_RADIUS, PORTHOLE_RADIUS + 0.015,
 		_lit(InteriorPalette.LIGHT_WARM, 1.0))
 	var facing := (at.basis * Vector3.BACK).normalized()
-	kit.disc(GLASS, at * _at(Vector3(0, 0, -WALL_THICKNESS * 0.5)), PORTHOLE_RADIUS, InteriorPalette.GLASS)
+	kit.disc(PORTAL, at * _at(Vector3(0, 0, -WALL_THICKNESS * 0.5)), PORTHOLE_RADIUS, InteriorPalette.GLASS)
 	# A cartoon glint: two parallel streaks across the glass.
 	var glint := at * Transform3D(Basis(Vector3.BACK, deg_to_rad(45.0)), Vector3(-0.04, 0.04, -0.045))
 	var white := InteriorPalette.GLINT

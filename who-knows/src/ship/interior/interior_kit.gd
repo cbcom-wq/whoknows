@@ -16,9 +16,12 @@ extends RefCounted
 ## colliders from its own structure.
 const GROUP := &"interior_dressing"
 
-## One merged mesh per batch, each with its own material.
-enum Batch { SOLID, GLOW, SCREEN, GLASS }
-const BATCH_NAMES := ["DressingSolid", "DressingGlow", "DressingScreens", "DressingGlass"]
+## One merged mesh per batch, each with its own material. PORTAL is window
+## glass that shows the real view outside; its material is supplied by
+## whoever owns that view (InteriorDressing.portal_material).
+enum Batch { SOLID, GLOW, SCREEN, GLASS, PORTAL }
+const BATCH_NAMES := ["DressingSolid", "DressingGlow", "DressingScreens", "DressingGlass",
+	"DressingPortals"]
 
 ## screen.gdshader's modes, carried in vertex colour red as mode / 4.
 enum Screen { BARS, WAVE, DOTS }
@@ -41,11 +44,15 @@ const _UNIT_UVS: Array[Vector2] = [Vector2(0, 1), Vector2(1, 1), Vector2(1, 0), 
 
 var root: Node3D
 var body: CollisionObject3D
+## The PORTAL batch's material; null uses InteriorMaterials.portal_fallback().
+var portal_material: Material
 var _tools: Dictionary = {}   # Batch -> SurfaceTool
 
-func _init(root_node: Node3D, collision_body: CollisionObject3D = null) -> void:
+func _init(root_node: Node3D, collision_body: CollisionObject3D = null,
+		portal: Material = null) -> void:
 	root = root_node
 	body = collision_body
+	portal_material = portal
 
 ## A translation-only frame, for placing a piece inside a prop's frame.
 static func at(offset: Vector3) -> Transform3D:
@@ -245,7 +252,8 @@ func add_mesh(mesh: Mesh, material: Material, node_name: String) -> MeshInstance
 ## Commits every batch as one merged mesh with its material.
 func commit() -> Array[MeshInstance3D]:
 	var materials: Array[Material] = [InteriorMaterials.props(), InteriorMaterials.glow(),
-		InteriorMaterials.screen(), InteriorMaterials.glass()]
+		InteriorMaterials.screen(), InteriorMaterials.glass(),
+		portal_material if portal_material != null else InteriorMaterials.portal_fallback()]
 	var out: Array[MeshInstance3D] = []
 	for batch: int in _tools:
 		var st: SurfaceTool = _tools[batch]

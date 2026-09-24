@@ -91,7 +91,8 @@ func test_meshes_are_merged_by_material():
 	_builder.rebuild()
 	var batches := _dressing().get_children().filter(
 		func(n): return n is MeshInstance3D and String(n.name).begins_with("Dressing"))
-	assert_between(batches.size(), 1, 4, "one merged mesh per material, not one per piece")
+	assert_between(batches.size(), 1, InteriorKit.BATCH_NAMES.size(),
+		"one merged mesh per material, not one per piece")
 
 func test_dressing_stays_on_the_interior_layer_under_churn():
 	var rng := RandomNumberGenerator.new()
