@@ -46,6 +46,10 @@ The full game is eight or nine independent subsystems and cannot be responsibly 
 > **Amended 2026-09-23:** `docs/superpowers/specs/2026-09-23-planetfall-design.md` (Planetfall)
 > pulls the first part of Slice 6 forward, ahead of Slices 2–5: small seeded worlds you can fly
 > to, land on, walk out onto and explore. Footholds, conquest and faction pressure stay in Slice 6.
+>
+> **Amended 2026-09-23:** `docs/superpowers/specs/2026-09-23-hands-and-items-design.md` pulls a
+> sliver of Slice 3 forward: visible hands, items you pick up, carry, throw and stow, and a first
+> handheld weapon, a plasma pistol whose bolts push loose objects. Damage stays in Slice 2.
 
 **This document specifies Slice 1 only.** Slices 2–6 appear as a roadmap appendix so the architecture leaves room for them.
 
