@@ -15,6 +15,9 @@ const SOLID := InteriorKit.Batch.SOLID
 const _ALONG_Z := Basis(Vector3(0, 0, -1), Vector3(0, 1, 0), Vector3(1, 0, 0))
 
 const PALM_SIZE := Vector3(0.1, 0.035, 0.1)
+## From the cuff back toward the eye. Shorter, and a pose with the hands held
+## forward shows the sleeve's end as a stump.
+const SLEEVE_LENGTH := 0.36
 ## Finger positions across the knuckles, index first, for the right hand.
 const FINGER_X: Array[float] = [-0.036, -0.012, 0.012, 0.036]
 const FINGER_LENGTHS := [[0.046, 0.038], [0.05, 0.04], [0.046, 0.038], [0.036, 0.03]]
@@ -58,12 +61,13 @@ func _build() -> void:
 	var hand := InteriorKit.new(self)
 	hand.bevel_box(SOLID, InteriorKit.at(Vector3(0, 0, -0.05)), PALM_SIZE, 0.012, suit)
 	hand.bevel_box(SOLID, InteriorKit.at(Vector3(0, 0.02, -0.055)), Vector3(0.082, 0.012, 0.07), 0.005, pad)
-	# The cuff, a terracotta band, and a short sleeve running back toward the
-	# eye, closed at both ends so you never see into it.
+	# The cuff, a terracotta band, and a sleeve running back toward the eye,
+	# long enough to leave the frame in every pose, and closed at both ends so
+	# you never see into it.
 	hand.tube_x(SOLID, Transform3D(_ALONG_Z, Vector3(0, 0, 0.03)), 0.058, 0.06, suit)
 	hand.tube_x(SOLID, Transform3D(_ALONG_Z, Vector3(0, 0, 0.045)), 0.06, 0.022, InteriorKit.solid(InteriorPalette.BELT))
-	hand.tube_x(SOLID, Transform3D(_ALONG_Z, Vector3(0, 0, 0.13)), 0.052, 0.14, suit)
-	hand.disc(SOLID, Transform3D(Basis.IDENTITY, Vector3(0, 0, 0.2)), 0.052, pad)
+	hand.tube_x(SOLID, Transform3D(_ALONG_Z, Vector3(0, 0, 0.24)), 0.052, SLEEVE_LENGTH, suit)
+	hand.disc(SOLID, Transform3D(Basis.IDENTITY, Vector3(0, 0, 0.06 + SLEEVE_LENGTH)), 0.052, pad)
 	hand.disc(SOLID, Transform3D(Basis(Vector3.UP, PI), Vector3(0, 0, 0.0)), 0.058, suit)
 	hand.commit()
 	for i in 4:

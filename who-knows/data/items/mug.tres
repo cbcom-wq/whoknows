@@ -11,4 +11,4 @@ size = Vector3(0.09, 0.1, 0.09)
 grip = 0
 stow_class = &"small"
 look = &"mug"
-grip_point = Vector3(0, 0, 0.04)
+grip_point = Vector3(0.04, 0, 0)
