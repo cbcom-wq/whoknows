@@ -52,6 +52,10 @@ var item: Item = null
 ## 0..1 while winding up a throw, -1 otherwise.
 var charge := -1.0
 var enabled := true
+## On a spacewalk (airlock spec §7.4): hold on to whatever you have, but take,
+## drop, throw, stow and use nothing. Unlike set_enabled(false), which lets a
+## carried crate go, this keeps it.
+var suspended := false
 ## Use and throw need the reticle, so they work only in first person.
 var first_person := true
 var wield_socket: Node3D
@@ -79,8 +83,11 @@ func set_enabled(on: bool) -> void:
 			_release()
 			changed.emit()
 
+func _active() -> bool:
+	return enabled and not suspended
+
 func can_take(candidate: Item) -> bool:
-	return enabled and mode == Mode.EMPTY and candidate != null and candidate.state != Item.State.HELD
+	return _active() and mode == Mode.EMPTY and candidate != null and candidate.state != Item.State.HELD
 
 func take(candidate: Item) -> bool:
 	if not can_take(candidate) or candidate.definition.mass_kg > Item.LIFT_LIMIT_KG:
@@ -106,7 +113,7 @@ func take(candidate: Item) -> bool:
 	return true
 
 func use() -> bool:
-	if not enabled or not first_person or mode != Mode.WIELDING:
+	if not _active() or not first_person or mode != Mode.WIELDING:
 		return false
 	if not item.use(aim(), world_root, _body):
 		return false
@@ -118,7 +125,7 @@ func aim() -> Transform3D:
 	return _head.global_transform
 
 func begin_throw() -> void:
-	if enabled and first_person and mode != Mode.EMPTY:
+	if _active() and first_person and mode != Mode.EMPTY:
 		charge = 0.0
 		changed.emit()
 
@@ -180,7 +187,7 @@ func stow_target() -> StowPoint:
 	return best
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not enabled or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+	if not _active() or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		return
 	if event.is_action_pressed(&"use"):
 		use()
@@ -271,7 +278,7 @@ func _ignore(it: Item, on: bool) -> void:
 		_body.remove_collision_exception_with(it)
 
 func _update_prompt() -> void:
-	var text := STOW_PROMPT if enabled and stow_target() != null else ""
+	var text := STOW_PROMPT if _active() and stow_target() != null else ""
 	if text != _prompt:
 		_prompt = text
 		prompt_changed.emit(text)

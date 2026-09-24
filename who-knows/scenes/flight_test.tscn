@@ -63,6 +63,7 @@ script = ExtResource("8_debris_field")
 
 [node name="Ship" type="Node3D" parent="."]
 script = ExtResource("1_ship")
+outside_path = NodePath("../Outside")
 
 [node name="Exterior" type="RigidBody3D" parent="Ship"]
 mass = 42000.0
@@ -148,6 +149,8 @@ script = ExtResource("7_motion_coupling")
 hull_path = NodePath("../Exterior")
 avatar_path = NodePath("../Interior/Avatar")
 interior_builder_path = NodePath("../Interior/InteriorBuilder")
+
+[node name="Outside" type="Node3D" parent="."]
 
 [node name="Prompt" type="CanvasLayer" parent="."]
 

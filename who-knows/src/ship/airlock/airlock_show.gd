@@ -38,7 +38,7 @@ const HAZE_FALL := 0.9
 const OPEN_ENERGY := 0.4
 const OPEN_COOL := 0.3
 ## The alcove's one-shot burst out of the hatch onto vacuum.
-const BURST_PUFFS := 60
+const BURST_PUFFS := 36
 const BURST_LIFETIME := 1.4
 
 var haze := 0.0
@@ -64,9 +64,10 @@ func setup(room_frame: Transform3D, nozzles: Array[Transform3D], light: OmniLigh
 	_light = light
 	if light != null:
 		_base_energy = light.light_energy
-	var puff := _puff_mesh()
+	var puff := _puff_mesh(false)
 	if burst_only:
-		_burst = _emitter("Burst", puff, layer, BURST_PUFFS, BURST_LIFETIME, _burst_process())
+		# Vapor in sunlight, not rocks: flat and pale, fading as it spreads.
+		_burst = _emitter("Burst", _puff_mesh(true), layer, BURST_PUFFS, BURST_LIFETIME, _burst_process())
 		_burst.one_shot = true
 		_burst.explosiveness = 0.85
 		_burst.transform = room_frame * Transform3D(Basis.IDENTITY,
@@ -138,7 +139,7 @@ func tint(into: Environment) -> void:
 	into.fog_density = haze * HAZE_DENSITY
 	into.fog_sky_affect = 0.0
 
-static func _puff_mesh() -> SphereMesh:
+static func _puff_mesh(flat: bool) -> SphereMesh:
 	var mesh := SphereMesh.new()
 	mesh.radius = 0.5
 	mesh.height = 1.0
@@ -149,6 +150,8 @@ static func _puff_mesh() -> SphereMesh:
 	material.vertex_color_use_as_albedo = true
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.roughness = 1.0
+	if flat:
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.cull_mode = BaseMaterial3D.CULL_BACK
 	material.shadow_to_opacity = false
 	material.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_ALPHA
@@ -242,6 +245,6 @@ func _burst_process() -> ParticleProcessMaterial:
 	m.gravity = Vector3.ZERO
 	m.scale_min = 0.25
 	m.scale_max = 0.45
-	m.scale_curve = _grow(0.8, 3.0)
-	m.color_ramp = _fade(0.6)
+	m.scale_curve = _grow(0.8, 2.2)
+	m.color_ramp = _fade(0.35)
 	return m

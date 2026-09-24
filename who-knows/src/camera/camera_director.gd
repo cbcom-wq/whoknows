@@ -46,7 +46,7 @@ func _ready() -> void:
 	_apply_view()
 
 func sit(seat: PilotSeat) -> void:
-	if is_seated or _tween != null:
+	if is_seated or _tween != null or _avatar.mode == Avatar.Mode.SUIT:
 		return
 	_seat = seat
 	is_seated = true

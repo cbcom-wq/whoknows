@@ -51,6 +51,10 @@ static func floor_y(coord: Vector3i) -> float:
 static func storey_offset(y: int) -> float:
 	return y * (STOREY_HEIGHT - ShipGrid.CELL_SIZE)
 
+## Which storey an interior-local height is on.
+static func storey_at(y: float) -> int:
+	return floori((y + ShipGrid.CELL_SIZE * 0.5) / STOREY_HEIGHT)
+
 ## The underside of a walkable cell's ceiling slab. The airlock's is low, at
 ## the top of its grid cell, so its copy on the hull can match it exactly
 ## (airlock spec §3.2); every other cell has the full storey.

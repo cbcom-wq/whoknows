@@ -240,3 +240,25 @@ func test_sitting_down_hides_the_hands():
 	var avatar: Avatar = _root.get_node("Ship/Interior/Avatar")
 	director.sit(_root.get_node("Ship/Interior/PilotSeat"))
 	assert_false(avatar.hands.shown)
+
+## Airlock spec §7.4: a spacewalker lives under the scene's Outside root.
+func test_the_outside_root_survived_the_parse():
+	var outside := _root.get_node_or_null("Outside")
+	assert_true(outside is Node3D, "Outside is there")
+	var ship: Ship = _root.get_node("Ship")
+	assert_same(ship.outside, outside, "and the ship knows it")
+
+## Airlock spec §7.3: while you stand in the open airlock, the view out of it
+## shows your own ship too.
+func test_the_canopy_view_can_include_the_own_hull():
+	var portal: CanopyPortal = _root.get_node("Ship/CanopyPortal")
+	var cam: Camera3D = _root.get_node("Ship/Canopy/CanopyCam")
+	var viewer: Camera3D = _root.get_node("Ship/Interior/Avatar/Head/Camera3D")
+	portal.include_hull = false
+	portal.sync(viewer)
+	assert_eq(cam.cull_mask & ExteriorBuilder.OWN_HULL_LAYER, 0)
+	portal.include_hull = true
+	portal.sync(viewer)
+	assert_ne(cam.cull_mask & ExteriorBuilder.OWN_HULL_LAYER, 0)
+	assert_ne(cam.cull_mask & 1, 0, "and still the world")
+

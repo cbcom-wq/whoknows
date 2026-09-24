@@ -19,8 +19,12 @@ const RESEAT_TOLERANCE := 0.05
 const HULL_LIVERY_MATERIAL: ShaderMaterial = preload("res://data/materials/hull_livery.tres")
 
 @export var interior_slot: int = 0
+## Where a spacewalker goes (airlock spec §7.4): the scene's root for things in
+## the real world that are not the ship.
+@export var outside_path: NodePath
 
 var grid: ShipGrid
+var outside: Node3D
 var stats: ShipStats
 var catalog: BlockCatalog
 var item_catalog: ItemCatalog
@@ -51,6 +55,9 @@ func _ready() -> void:
 	exterior.collision_layer = 1   # exterior_hull
 	exterior.collision_mask = 1    # detects only other hulls
 	interior.global_position = interior_slot_origin()
+	outside = get_node_or_null(outside_path) as Node3D if not outside_path.is_empty() else null
+	if outside == null:
+		outside = get_parent() as Node3D
 	if catalog == null:
 		catalog = BlockCatalog.load_from_dir("res://data/blocks")
 	if item_catalog == null:

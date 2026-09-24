@@ -17,6 +17,12 @@ extends Node
 @export var hull_path: NodePath
 @export var interior_path: NodePath
 
+## While you stand in an open airlock, the view out of it includes your own
+## hull (airlock spec §7.3) -- the engine pods beside the door are there before
+## you cross. Its Airlock sets this.
+var include_hull := false
+var _base_mask := -1
+
 @onready var _viewport: SubViewport = get_node(viewport_path)
 @onready var _camera: Camera3D = get_node(camera_path)
 @onready var _hull: Node3D = get_node(hull_path)
@@ -40,5 +46,11 @@ func sync(viewer: Camera3D) -> void:
 		_viewport.size = screen
 	_camera.fov = viewer.fov
 	_camera.near = viewer.near
-	_camera.global_transform = _hull.global_transform * _interior.global_transform.affine_inverse() \
-		* viewer.global_transform
+	if _base_mask < 0:
+		_base_mask = _camera.cull_mask
+	_camera.cull_mask = _base_mask | (ExteriorBuilder.OWN_HULL_LAYER if include_hull else 0)
+	# Interior storeys are taller than the grid: take the viewer's storey
+	# offset off, so upper-deck windows line up too.
+	var local := _interior.global_transform.affine_inverse() * viewer.global_transform
+	local.origin.y -= InteriorBuilder.storey_offset(InteriorBuilder.storey_at(local.origin.y))
+	_camera.global_transform = _hull.global_transform * local

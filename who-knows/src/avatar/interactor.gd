@@ -17,6 +17,8 @@ signal prompt_changed(text: String)
 ## interior_geometry | items (project.godot 3d_physics layers 2 and 6).
 ## RayCast3D defaults to mask 1 (exterior_hull) and would find nothing here.
 const MASK := 2 | 32
+## On a spacewalk: exterior_props (layer 5), where the hull panel is.
+const SUIT_MASK := 16
 ## How far from the line of sight an item can be and still be offered.
 const ASSIST_ANGLE := deg_to_rad(8.0)
 
@@ -28,6 +30,10 @@ func _ready() -> void:
 	target_position = Vector3(0, 0, -2.5)
 	collide_with_areas = true
 	collision_mask = MASK
+
+## Switches what the ray can find: MASK aboard, SUIT_MASK outside.
+func set_mask(bits: int) -> void:
+	collision_mask = bits
 
 ## What the ray is on and could use right now, or null.
 func current() -> Node:
@@ -90,7 +96,7 @@ func _in_plain_view(eye: Vector3, item: Item) -> bool:
 	var exclude: Array[RID] = []
 	if is_instance_valid(_ignored):
 		exclude.append(_ignored.get_rid())
-	var query := PhysicsRayQueryParameters3D.create(eye, item.global_position, MASK, exclude)
+	var query := PhysicsRayQueryParameters3D.create(eye, item.global_position, collision_mask, exclude)
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	return hit.is_empty() or hit["collider"] == item
 

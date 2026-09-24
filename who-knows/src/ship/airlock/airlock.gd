@@ -14,17 +14,24 @@ extends Node
 
 ## A cue from the cycle (AirlockCycle.step), and which hatch it was about.
 signal cue(name: StringName, door: AirlockCycle.Door)
+## Someone crossed the outer hatch's threshold (§7): out onto a spacewalk, or
+## back aboard.
+signal crossed(avatar: Avatar, outward: bool)
 
 ## How close to a hatch's plane counts as standing in its doorway: the body's
 ## radius and a margin, so closing leaves never touch anyone.
 const DOORWAY_DEPTH := 0.45
 const BODY_RADIUS := 0.35
+## Where you land coming back in: this far into the room from the outer hatch,
+## and no further across than this, so your body clears the hatch frame.
+const ENTRY_DEPTH := 0.45
+const ENTRY_SIDEWAYS := 0.15
 
 var coord := Vector3i.ZERO
 var cycle := AirlockCycle.new()
 var room: AirlockRoom
-## The copy of the room on the hull (airlock spec §7.2), once built.
-var alcove: Node
+## The copy of the room on the hull (airlock spec §7.2).
+var alcove: AirlockAlcove
 ## The motion warning (AirlockCycle.motion_warning) as of the last step.
 var warning := {"level": 0, "text": ""}
 ## The room's steam, haze and light (§5), rebuilt with each room.
@@ -40,6 +47,8 @@ var _haze_environment: Environment
 var _players: Dictionary = {}   # StringName -> AudioStreamPlayer3D
 ## True while this airlock is setting how much air carries sound.
 var _owns_air := false
+## True while this airlock has the canopy view showing the own hull.
+var _owns_portal := false
 
 func setup(ship: Ship, at: Vector3i) -> void:
 	_ship = ship
@@ -47,7 +56,7 @@ func setup(ship: Ship, at: Vector3i) -> void:
 	name = "Airlock_%d_%d_%d" % [at.x, at.y, at.z]
 
 ## Takes over a freshly built room (and, once the hull has one, its copy).
-func bind(new_room: AirlockRoom, new_alcove: Node = null) -> void:
+func bind(new_room: AirlockRoom, new_alcove: AirlockAlcove = null) -> void:
 	_restore_environment()
 	room = new_room
 	alcove = new_alcove
@@ -68,7 +77,7 @@ func panels() -> Array[AirlockPanel]:
 		for panel in [room.room_panel, room.corridor_panel]:
 			if panel != null:
 				out.append(panel)
-	if is_instance_valid(alcove) and "hull_panel" in alcove and alcove.hull_panel != null:
+	if is_instance_valid(alcove) and alcove.hull_panel != null:
 		out.append(alcove.hull_panel)
 	return out
 
@@ -77,6 +86,7 @@ func panels() -> Array[AirlockPanel]:
 func tick(delta: float) -> void:
 	if not is_instance_valid(room):
 		return
+	_watch_threshold()
 	var who := occupancy()
 	var cues := cycle.step(delta, who["clear_inner"], who["clear_outer"], who["room_empty"])
 	_update_warning()
@@ -84,6 +94,7 @@ func tick(delta: float) -> void:
 	show.apply(cycle, delta)
 	_update_haze()
 	_update_air()
+	_update_portal()
 	for c in cues:
 		cue.emit(c, cycle.cue_side)
 		_sound(c, cycle.cue_side)
@@ -96,18 +107,95 @@ func _physics_process(delta: float) -> void:
 	tick(delta)
 
 ## Where the avatar is, as the cycle needs it: {room_empty, clear_inner,
-## clear_outer}.
+## clear_outer}. Aboard it is looked for in the room; on a spacewalk, in the
+## room's copy on the hull -- so the outer hatch closes behind you once you
+## float clear, and never on you.
 func occupancy() -> Dictionary:
 	var who := {"room_empty": true, "clear_inner": true, "clear_outer": true}
 	var avatar := _avatar()
-	if avatar == null or _ship == null or avatar.get_parent() != _ship.interior:
+	if avatar == null or _ship == null:
 		return who
-	var p := avatar.position
-	who["room_empty"] = not in_room(p, room.room_frame)
-	who["clear_outer"] = not in_doorway(p, room.outer_frame)
-	if room.inner_hatch != null:
-		who["clear_inner"] = not in_doorway(p, room.inner_frame)
+	if avatar.mode == Avatar.Mode.PLATING and avatar.get_parent() == _ship.interior:
+		var points := _body_points(avatar, _ship.interior.global_transform.affine_inverse())
+		who["room_empty"] = not points.any(func(p): return in_room(p, room.room_frame))
+		who["clear_outer"] = not points.any(func(p): return in_doorway(p, room.outer_frame))
+		if room.inner_hatch != null:
+			who["clear_inner"] = not points.any(func(p): return in_doorway(p, room.inner_frame))
+	elif avatar.mode == Avatar.Mode.SUIT and is_instance_valid(alcove) and avatar.hull == _ship.exterior:
+		var points := _body_points(avatar, _ship.exterior.global_transform.affine_inverse())
+		who["room_empty"] = not points.any(func(p): return in_room(p, alcove.room_frame))
+		who["clear_outer"] = not points.any(func(p): return in_doorway(p, alcove.outer_frame))
 	return who
+
+## The avatar's feet, middle and head, in the frame `to_local` maps into: a
+## floating body can be any way up, so all three are checked.
+static func _body_points(avatar: Avatar, to_local: Transform3D) -> Array:
+	var up := avatar.global_basis.y
+	var feet := avatar.global_position
+	return [to_local * feet, to_local * (feet + up * Avatar.STAND_HEIGHT * 0.5),
+		to_local * (feet + up * (Avatar.STAND_HEIGHT - 0.1))]
+
+## Crossing the outer hatch's plane, either way, while it is fully open (§7):
+## out into the world onto a spacewalk, or back into the room aboard.
+func _watch_threshold() -> void:
+	var avatar := _avatar()
+	if avatar == null or _ship == null or not is_instance_valid(alcove) or cycle.outer_open < 1.0:
+		return
+	var hull := _ship.exterior
+	var interior := _ship.interior
+	var offset := InteriorBuilder.storey_offset(coord.y)
+	if avatar.mode == Avatar.Mode.PLATING:
+		if avatar.get_parent() != interior:
+			return
+		var local := room.outer_frame.affine_inverse() * avatar.position
+		if not _in_opening(local) or not Threshold.crossed_out(local.z):
+			return
+		var world := Threshold.to_world(interior.global_transform, hull.global_transform, avatar.global_transform, offset)
+		var v := Threshold.carry_velocity_out(_hull_velocity_at(world.origin), hull.global_basis, avatar.velocity)
+		_restore_environment()   # the avatar keeps the cabin's own mood, not the haze copy
+		avatar.enter_suit(_ship.outside, world, v, hull)
+		crossed.emit(avatar, true)
+	elif avatar.hull == hull:
+		var local := alcove.outer_frame.affine_inverse() * (hull.global_transform.affine_inverse() * avatar.global_position)
+		if not _in_opening(local) or not Threshold.crossed_in(local.z) or local.z > ShipGrid.CELL_SIZE:
+			return
+		var view := Threshold.to_interior(interior.global_transform, hull.global_transform, avatar.head.global_transform, offset)
+		var up := Threshold.upright(view.basis)
+		# Stand just inside the hatch, clear of its frame, where you came
+		# through; the view starts at your eye and eases to your head.
+		var stand := room.outer_frame * Vector3(clampf(local.x, -ENTRY_SIDEWAYS, ENTRY_SIDEWAYS), 0.0, ENTRY_DEPTH)
+		var feet := interior.global_transform * stand
+		var v := Threshold.carry_velocity_in(avatar.velocity, _hull_velocity_at(avatar.global_position), hull.global_basis)
+		avatar.enter_plating(interior, Transform3D(up["body"], feet), up["pitch"], v, up["righting"], view.origin)
+		crossed.emit(avatar, false)
+
+## Inside the opening, across and up, in a hatch frame.
+static func _in_opening(local: Vector3) -> bool:
+	return absf(local.x) < InteriorProps.DOOR_WIDTH * 0.5 and local.y > -0.5 \
+		and local.y < InteriorProps.HATCH_HEIGHT + 0.5
+
+func _hull_velocity_at(p: Vector3) -> Vector3:
+	var hull := _ship.exterior
+	var com := hull.global_transform * (hull.center_of_mass
+		if hull.center_of_mass_mode == RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM else Vector3.ZERO)
+	return Threshold.point_velocity(hull.linear_velocity, hull.angular_velocity, com, p)
+
+## While the viewer stands in the room with the outer hatch open, the canopy
+## view includes the own hull (§7.3); the inner hatch is shut then, so no other
+## window can be seen from here.
+func _update_portal() -> void:
+	var portal := _ship.get_node_or_null("CanopyPortal") as CanopyPortal if _ship != null else null
+	if portal == null:
+		return
+	var cam := get_viewport().get_camera_3d() if is_inside_tree() else null
+	var inside := cam != null and _ship.interior.is_ancestor_of(cam) \
+		and in_room(_ship.interior.to_local(cam.global_position), room.room_frame)
+	if inside and cycle.outer_open > 0.0:
+		portal.include_hull = true
+		_owns_portal = true
+	elif _owns_portal:
+		portal.include_hull = false
+		_owns_portal = false
 
 ## True if `p` (in the room's parent frame) is inside the airlock's cell.
 static func in_room(p: Vector3, room_frame: Transform3D) -> bool:
@@ -260,7 +348,7 @@ func _outer_hatches() -> Array[AirlockHatch]:
 	var out: Array[AirlockHatch] = []
 	if room.outer_hatch != null:
 		out.append(room.outer_hatch)
-	if is_instance_valid(alcove) and "outer_hatch" in alcove and alcove.outer_hatch != null:
+	if is_instance_valid(alcove) and alcove.outer_hatch != null:
 		out.append(alcove.outer_hatch)
 	return out
 

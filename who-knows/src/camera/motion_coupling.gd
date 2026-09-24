@@ -42,10 +42,12 @@ func _physics_process(delta: float) -> void:
 
 	# A ship accelerating forward throws you backward. Negate.
 	var shove := -accel_local * shove_scale
-	_avatar.external_accel = shove
 	drive_felt_gravity(shove)
-
-	_apply_shake(accel_local, delta)
+	# A spacewalker is not aboard: the hull's motion is only the ship's
+	# (airlock spec §7.4).
+	if _avatar.mode == Avatar.Mode.PLATING:
+		_avatar.external_accel = shove
+		_apply_shake(accel_local, delta)
 
 func _apply_shake(accel_local: Vector3, delta: float) -> void:
 	_shake_phase += delta * shake_frequency
