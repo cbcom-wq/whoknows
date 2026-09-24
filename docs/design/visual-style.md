@@ -109,6 +109,8 @@ sits.
 - Windows show space, **never the ship's own hull**: the canopy camera leaves the hull's layer
   out.
 - In the chase view no window is on screen, and the canopy view stops rendering.
+- **The interior has no sky of its own.** Its private starfield sphere, which stars once moved past
+  through transparent glass, was removed on 2026-09-24: behind portal glass it could never be seen.
 
 ---
 

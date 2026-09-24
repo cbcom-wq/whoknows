@@ -15,7 +15,6 @@ extends Node
 
 @export var hull_path: NodePath
 @export var avatar_path: NodePath
-@export var interior_sky_path: NodePath
 ## The InteriorBuilder whose FeltGravity loose items feel (hands-and-items
 ## spec §6). Optional: with none, only the avatar is shoved.
 @export var interior_builder_path: NodePath
@@ -25,7 +24,6 @@ var _shake_phase: float = 0.0
 
 @onready var _hull: RigidBody3D = get_node(hull_path)
 @onready var _avatar: Avatar = get_node(avatar_path)
-@onready var _sky: Node3D = get_node(interior_sky_path)
 @onready var _builder: InteriorBuilder = (
 	get_node_or_null(interior_builder_path) if not interior_builder_path.is_empty() else null)
 
@@ -48,7 +46,6 @@ func _physics_process(delta: float) -> void:
 	drive_felt_gravity(shove)
 
 	_apply_shake(accel_local, delta)
-	_sync_sky()
 
 func _apply_shake(accel_local: Vector3, delta: float) -> void:
 	_shake_phase += delta * shake_frequency
@@ -58,12 +55,6 @@ func _apply_shake(accel_local: Vector3, delta: float) -> void:
 		return
 	# Deliberately cheap: a single axis wobble reads as engine rumble.
 	_avatar.head.position.x = sin(_shake_phase) * magnitude * 0.01
-
-func _sync_sky() -> void:
-	# The interior's starfield inherits the hull's orientation, so rolling
-	# the ship rolls the stars past the windows even though the room is
-	# bolted to the floor of the universe.
-	_sky.global_basis = _hull.global_transform.basis
 
 ## Sets the interior's felt gravity to exactly what the avatar integrates
 ## (Avatar._physics_process): plating gravity plus the shove, so you and a

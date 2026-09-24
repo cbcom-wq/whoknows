@@ -1,4 +1,4 @@
-[gd_scene load_steps=29 format=3]
+[gd_scene load_steps=25 format=3]
 
 [ext_resource type="Script" path="res://src/ship/ship.gd" id="1_ship"]
 [ext_resource type="PackedScene" path="res://scenes/avatar.tscn" id="2_avatar"]
@@ -34,32 +34,6 @@ sky_material = SubResource("ProceduralSkyMaterial_flighttest")
 [sub_resource type="Environment" id="Environment_flighttest"]
 background_mode = 2
 sky = SubResource("Sky_flighttest")
-
-[sub_resource type="Gradient" id="Gradient_starfield"]
-offsets = PackedFloat32Array(0, 0.04, 0.12)
-colors = PackedColorArray(1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1)
-
-[sub_resource type="FastNoiseLite" id="FastNoiseLite_starfield"]
-noise_type = 2
-seed = 1337
-frequency = 0.35
-
-[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_starfield"]
-width = 1024
-generate_mipmaps = false
-noise = SubResource("FastNoiseLite_starfield")
-color_ramp = SubResource("Gradient_starfield")
-seamless = true
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_sky"]
-shading_mode = 0
-albedo_texture = SubResource("NoiseTexture2D_starfield")
-
-[sub_resource type="SphereMesh" id="SphereMesh_sky"]
-material = SubResource("StandardMaterial3D_sky")
-flip_faces = true
-radius = 500.0
-height = 1000.0
 
 [sub_resource type="ViewportTexture" id="ViewportTexture_canopy"]
 resource_local_to_scene = true
@@ -142,12 +116,6 @@ camera_path = NodePath("../../CanopyCam")
 script = ExtResource("10_interior_builder")
 canopy_material = SubResource("ShaderMaterial_canopy")
 
-[node name="SkyPivot" type="Node3D" parent="Ship/Interior"]
-
-[node name="SkySphere" type="MeshInstance3D" parent="Ship/Interior/SkyPivot"]
-layers = 2
-mesh = SubResource("SphereMesh_sky")
-
 [node name="PilotSeat" type="StaticBody3D" parent="Ship/Interior"]
 position = Vector3(0, -0.95, -4)
 collision_layer = 2
@@ -179,7 +147,6 @@ chase_camera_path = NodePath("../Exterior/ChaseCamera")
 script = ExtResource("7_motion_coupling")
 hull_path = NodePath("../Exterior")
 avatar_path = NodePath("../Interior/Avatar")
-interior_sky_path = NodePath("../Interior/SkyPivot")
 interior_builder_path = NodePath("../Interior/InteriorBuilder")
 
 [node name="Prompt" type="CanvasLayer" parent="."]
