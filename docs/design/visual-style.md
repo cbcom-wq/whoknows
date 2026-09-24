@@ -89,8 +89,10 @@ can meet, and the owner's approval. A test pins the list (§5).
 The interior must hold **at least 120 fps at 1280 × 720 on the reference GPU (GTX 960)** with the
 canopy view rendering. The canopy view renders the outside a second time, at full screen, whenever
 the viewer is inside the ship. With portal windows, the cockpit pod and five furnished rooms it
-measured 148–218 fps (2026-09-24); the seat in the pod, mostly glass, is the cheapest view. Measure
-after any change that adds lights, pieces, windows or post-processing.
+measured 148–218 fps (2026-09-24); the seat in the pod, mostly glass, is the cheapest view.
+Looking down the corridor with the hands in view it measured 143 fps, and 125–126 fps with eight
+plasma bolts in flight, each carrying its own warm light (2026-09-24). Measure after any change
+that adds lights, pieces, windows or post-processing.
 
 ### 2.7 Windows show the real outside
 
@@ -135,6 +137,11 @@ Ships are generated from player blueprints, so every asset is placed by generato
 - **Conventions:** interior visuals are on render layer 2; interior lights use
   `light_cull_mask = 2`; anything more than 0.15 m proud of a wall gets a box collider through
   `InteriorKit.collider` (group `interior_dressing`).
+- **Items follow the same rules.** Loose items are `RigidBody3D`s on physics layer 6 (`items`);
+  their looks come from `ItemLooks`, which, like the props, builds from a kit and never sees the
+  grid. A prop that holds items publishes its spots in its own frame and keeps them clear of its
+  colliders, so the Interactor can reach what sits there; `InteriorDressing` places the stow
+  points (docs/superpowers/specs/2026-09-23-hands-and-items-design.md §5).
 
 ### 3.1 Furnishing a 2 m room
 
@@ -220,6 +227,15 @@ Glass on its own is not a way out: keep the wall's collider whole.
 3. Give it a feature prop and a compact secondary prop, and a branch in
    `InteriorDressing._room_piece`.
 
+**A new item** (docs/superpowers/specs/2026-09-23-hands-and-items-design.md):
+
+1. Add a `.tres` in `data/items/` with its mass, size, grip, stow class and look.
+2. Add a builder to `ItemLooks` that draws inside the item's box from kit primitives, with colours
+   from `InteriorPalette`, and add its id to `ItemLooks.LOOKS`.
+3. If it does something when used, give it a `use` script extending `ItemUse`.
+4. If a prop should hold it, publish a spot from that prop and stock it in `InteriorDressing`.
+5. Render it in the hand and on its stow point (§6) before calling it done.
+
 **A different kind of interior** (a derelict, an enemy ship, a station):
 
 - Keep the kit, the props and the rules. **Change colour and wear, not the style.**
@@ -234,10 +250,10 @@ Glass on its own is not a way out: keep the wall's collider whole.
 
 `test/unit/test_visual_style_rules.gd` fails the build if:
 
-- a colour literal appears in interior code other than `InteriorPalette` (`InteriorKit` is exempt:
-  it packs data into vertex colours);
-- `interior_props.gd`, `interior_kit.gd` or `sliding_door.gd` reference the grid, the layout, the
-  builder or the dressing;
+- a colour literal appears in interior, item or hand code other than `InteriorPalette`
+  (`InteriorKit` is exempt: it packs data into vertex colours);
+- `interior_props.gd`, `interior_kit.gd`, `sliding_door.gd`, `item_looks.gd`, `item.gd`,
+  `glove.gd` or `hands.gd` reference the grid, the layout, the builder or the dressing;
 - the set of interior shaders changes.
 
 Other interior tests pin the rest: render layer 2 and cull mask 2, no interior shadows, colliders

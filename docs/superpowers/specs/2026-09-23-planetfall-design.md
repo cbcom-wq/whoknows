@@ -145,6 +145,10 @@ layer 1 (`exterior`).
 | **4** | **`terrain`** | terrain collision chunks | hulls; the avatar on EVA |
 | **5** | **`exterior_props`** | site colliders; the exterior airlock control | the avatar on EVA; the EVA interactor |
 
+> **Amended 2026-09-23 (hands and items):** layer 6 is `items`, loose and carried items
+> (`docs/superpowers/specs/2026-09-23-hands-and-items-design.md` §3.2). The avatar on EVA must
+> keep colliding with it: its EVA mask is layers 1, 4, 5 and 6.
+
 ---
 
 ## 5. The world recipe
@@ -513,6 +517,10 @@ Velocity is zeroed (movement is disabled throughout `CYCLING`). On transfer out:
   the camera rides the avatar's head, and the chase camera is not offered on foot, as now.
 
 Transfer back reverses every item.
+
+> **Amended 2026-09-23 (hands and items):** a wielded item travels with the avatar because it
+> hangs in the hands. A carried item must be moved with the same transform maths, and items switch
+> from render layer 2 to layer 1 outside (`docs/superpowers/specs/2026-09-23-hands-and-items-design.md` §15).
 
 ---
 

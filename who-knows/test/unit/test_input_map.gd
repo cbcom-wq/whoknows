@@ -10,6 +10,7 @@ const REQUIRED_ACTIONS := [
 	&"sprint", &"crouch", &"interact",
 	&"roll_left", &"roll_right", &"boost",
 	&"toggle_assist", &"cycle_camera",
+	&"use", &"throw", &"drop",
 ]
 
 func test_every_gameplay_action_is_registered():
@@ -52,3 +53,13 @@ func test_movement_keys_are_bound_to_the_expected_physical_keys():
 				found = true
 				break
 		assert_true(found, "action '%s' is not bound to its expected key" % action)
+
+## Hands and items (hands-and-items spec §7.1): use and throw on the mouse
+## buttons, drop on G.
+func test_hand_actions_are_bound_to_the_mouse_and_g():
+	var use_ev: InputEventMouseButton = InputMap.action_get_events(&"use")[0]
+	assert_eq(use_ev.button_index, MOUSE_BUTTON_LEFT)
+	var throw_ev: InputEventMouseButton = InputMap.action_get_events(&"throw")[0]
+	assert_eq(throw_ev.button_index, MOUSE_BUTTON_RIGHT)
+	var drop_ev: InputEventKey = InputMap.action_get_events(&"drop")[0]
+	assert_eq(drop_ev.physical_keycode, KEY_G)

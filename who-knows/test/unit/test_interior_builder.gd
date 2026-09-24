@@ -30,10 +30,11 @@ func _put(coord: Vector3i, id: StringName) -> void:
 	i.block_id = id
 	_grid.set_block(coord, i)
 
-## Structure colliders only: the dressing's props carry their own.
+## Structure colliders only: the dressing's props carry their own, and the
+## felt-gravity field's boxes are not structure.
 func _structure_colliders() -> Array:
 	return _builder.find_children("*", "CollisionShape3D", true, false).filter(
-		func(c): return not c.is_in_group(InteriorKit.GROUP))
+		func(c): return not c.is_in_group(InteriorKit.GROUP) and not (c.get_parent() is FeltGravity))
 
 func _structure_meshes() -> Array:
 	var body: StaticBody3D = _builder.find_children("*", "StaticBody3D", true, false)[0]
@@ -301,6 +302,37 @@ func test_floor_is_anchored_to_the_grid():
 		-ShipGrid.CELL_SIZE * 0.5 + InteriorBuilder.FLOOR_THICKNESS * 0.5, 0.0001)
 	assert_almost_eq(InteriorBuilder.floor_y(Vector3i(0, 1, 0)) - InteriorBuilder.floor_y(Vector3i.ZERO),
 		InteriorBuilder.STOREY_HEIGHT, 0.0001, "storeys stack at storey height")
+
+func test_the_felt_gravity_covers_every_walkable_cell_at_storey_height():
+	_put(Vector3i.ZERO, &"deck")
+	_put(Vector3i(1, 0, 0), &"deck")
+	_builder.rebuild()
+	var field := _builder.felt_gravity
+	assert_not_null(field)
+	assert_eq(field.cell_count(), 2)
+	var centres := []
+	for shape in field.get_children().filter(func(n): return n is CollisionShape3D):
+		assert_eq((shape.shape as BoxShape3D).size,
+			Vector3(ShipGrid.CELL_SIZE, InteriorBuilder.STOREY_HEIGHT, ShipGrid.CELL_SIZE))
+		centres.append(shape.position)
+	assert_has(centres, InteriorBuilder.interior_center(Vector3i.ZERO))
+	assert_has(centres, InteriorBuilder.interior_center(Vector3i(1, 0, 0)))
+
+func test_the_felt_gravity_survives_rebuilds():
+	_put(Vector3i.ZERO, &"deck")
+	_builder.rebuild()
+	var field := _builder.felt_gravity
+	_builder.rebuild()
+	_builder.rebuild()
+	assert_same(_builder.felt_gravity, field)
+	assert_eq(field.cell_count(), 1)
+	assert_eq(_builder.get_children().filter(func(n): return n is FeltGravity).size(), 1)
+
+func test_the_felt_gravity_starts_at_plating_gravity():
+	_put(Vector3i.ZERO, &"deck")
+	_builder.rebuild()
+	assert_almost_eq(_builder.felt_gravity.felt, Vector3.DOWN * InteriorBuilder.DEFAULT_GRAVITY,
+		Vector3.ONE * 0.0001)
 
 ## Cockpit pod spec §4: the pod's mouth is open -- the pod prop brings its own
 ## colliders -- while the canopy faces beside it still stop the avatar.

@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/items/item_definition.gd" id="1_def"]
+[ext_resource type="Script" path="res://src/items/plasma_emitter.gd" id="2_use"]
+
+[resource]
+script = ExtResource("1_def")
+id = &"plasma_pistol"
+display_name = "Plasma pistol"
+mass_kg = 1.4
+size = Vector3(0.06, 0.16, 0.24)
+grip = 0
+stow_class = &"sidearm"
+look = &"plasma_pistol"
+use = ExtResource("2_use")
+grip_point = Vector3(0, -0.03, 0.07)
+use_point = Vector3(0, 0.045, -0.125)

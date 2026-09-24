@@ -88,12 +88,18 @@ var _gravity: Dictionary = {}   # Vector3i -> float
 # assignment instead of one per box.
 var _physics_body: StaticBody3D
 
+## The interior's felt gravity (hands-and-items spec §6). It persists across
+## rebuilds, so MotionCoupling can hold on to it; each rebuild only replaces
+## its boxes, one per walkable cell.
+var felt_gravity: FeltGravity
+
 func bind(grid: ShipGrid, catalog: BlockCatalog) -> void:
 	_grid = grid
 	_catalog = catalog
 
 func rebuild() -> void:
 	_clear()
+	_ensure_felt_gravity()
 	if _grid == null or _catalog == null:
 		return
 	var graph := DeckGraph.build(_grid, _catalog)
@@ -110,6 +116,7 @@ func rebuild() -> void:
 	_build_fixtures()
 	InteriorDressing.build(_layout, _physics_body, canopy_material)
 	_compute_gravity()
+	_fill_felt_gravity()
 
 func walkable_coords() -> Array:
 	return _walkable.duplicate()
@@ -137,6 +144,16 @@ func fixture_positions() -> Array[Vector3]:
 		out.append(f.position)
 	return out
 
+## Every StowPoint the last rebuild() placed (hands-and-items spec §5).
+func stow_points() -> Array[StowPoint]:
+	var out: Array[StowPoint] = []
+	if not is_instance_valid(_physics_body):
+		return out
+	for node in _physics_body.find_children("*", "Node3D", true, false):
+		if node is StowPoint:
+			out.append(node)
+	return out
+
 func gravity_at(coord: Vector3i) -> float:
 	return _gravity.get(coord, 0.0)
 
@@ -160,6 +177,8 @@ func _clear() -> void:
 			parent.remove_child(_physics_body)
 		_physics_body.free()
 	_physics_body = null
+	if felt_gravity != null:
+		felt_gravity.set_cells([], Vector3.ZERO)
 	_layout = null
 	_walls.clear()
 	_canopy_faces.clear()
@@ -316,3 +335,17 @@ func _compute_gravity() -> void:
 				g = DEFAULT_GRAVITY
 				break
 		_gravity[coord] = g
+
+func _ensure_felt_gravity() -> void:
+	if felt_gravity != null:
+		return
+	felt_gravity = FeltGravity.new()
+	felt_gravity.name = "FeltGravity"
+	add_child(felt_gravity)
+	felt_gravity.set_felt(Vector3.DOWN * DEFAULT_GRAVITY)
+
+func _fill_felt_gravity() -> void:
+	var centres: Array[Vector3] = []
+	for coord in _walkable:
+		centres.append(interior_center(coord))
+	felt_gravity.set_cells(centres, Vector3(ShipGrid.CELL_SIZE, STOREY_HEIGHT, ShipGrid.CELL_SIZE))

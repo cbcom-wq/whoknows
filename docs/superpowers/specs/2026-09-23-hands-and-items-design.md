@@ -477,7 +477,8 @@ These offsets stack on the pose, on the hands' root:
 - **No tunnelling:** each physics tick it casts a ray from its current position to its next
   (`PhysicsRayQueryParameters3D`, mask 34, excluding the shooter and the pistol). It cannot pass
   through a 0.1 m wall at any speed or tick phase.
-- **Look:** a stretched glowing capsule about 0.06 × 0.06 × 0.4 m along its travel, in `PLASMA`
+- **Look:** a stretched glowing capsule 0.09 × 0.09 × 0.5 m along its travel (rendered at
+  0.06 × 0.4 m first, it was a hairline by four metres), in `PLASMA`
   (§11) on the glow batch, built once and shared by every bolt. Bloom does the rest.
 - **Light:** an `OmniLight3D` in `LIGHT_WARM`, energy 0.4, range 2.5 m, no shadows,
   `light_cull_mask = 2`, so walls light up as it passes.

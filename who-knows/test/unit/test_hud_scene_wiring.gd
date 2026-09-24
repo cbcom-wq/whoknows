@@ -189,3 +189,54 @@ func test_the_seated_eye_is_the_chairs():
 func test_the_cabin_has_a_sliding_door_for_every_room():
 	var doors := _root.find_children("*", "Node3D", true, false).filter(func(n): return n is SlidingDoor)
 	assert_eq(doors.size(), 5)
+
+## Hands and items (docs/superpowers/specs/2026-09-23-hands-and-items-design.md
+## §7, §10): what you let go of lands aboard, and the reticle follows the view.
+func test_released_items_go_back_aboard_the_ship():
+	var avatar: Avatar = _root.get_node("Ship/Interior/Avatar")
+	var ship: Ship = _root.get_node("Ship")
+	assert_eq(avatar.grasp.world_root, ship.items)
+
+func test_the_reticle_shows_on_foot():
+	var reticle := _root.get_node_or_null("Prompt/Reticle")
+	assert_not_null(reticle)
+	assert_true(reticle is Reticle)
+	assert_true(reticle.visible)
+
+func test_third_person_hides_the_reticle_and_refuses_use():
+	var director: CameraDirector = _root.get_node("Ship/CameraDirector")
+	var avatar: Avatar = _root.get_node("Ship/Interior/Avatar")
+	director.cycle_view()
+	assert_false(_root.get_node("Prompt/Reticle").visible)
+	assert_false(avatar.grasp.first_person)
+	director.cycle_view()
+	assert_true(_root.get_node("Prompt/Reticle").visible)
+	assert_true(avatar.grasp.first_person)
+
+func test_sitting_down_hides_the_reticle_at_once():
+	var director: CameraDirector = _root.get_node("Ship/CameraDirector")
+	director.sit(_root.get_node("Ship/Interior/PilotSeat"))
+	assert_false(_root.get_node("Prompt/Reticle").visible)
+
+func test_a_stow_prompt_wins_over_the_interact_prompt():
+	var interactor: Interactor = _root.get_node("Ship/Interior/Avatar/Head/Interactor")
+	var avatar: Avatar = _root.get_node("Ship/Interior/Avatar")
+	var label: Label = _root.get_node("Prompt/Label")
+	interactor.prompt_changed.emit("[F] Take the controls")
+	avatar.grasp.prompt_changed.emit(Grasp.STOW_PROMPT)
+	assert_eq(label.text, Grasp.STOW_PROMPT)
+	avatar.grasp.prompt_changed.emit("")
+	assert_eq(label.text, "[F] Take the controls")
+
+func test_third_person_hides_the_hands():
+	var director: CameraDirector = _root.get_node("Ship/CameraDirector")
+	var avatar: Avatar = _root.get_node("Ship/Interior/Avatar")
+	assert_true(avatar.hands.shown)
+	director.cycle_view()
+	assert_false(avatar.hands.shown)
+
+func test_sitting_down_hides_the_hands():
+	var director: CameraDirector = _root.get_node("Ship/CameraDirector")
+	var avatar: Avatar = _root.get_node("Ship/Interior/Avatar")
+	director.sit(_root.get_node("Ship/Interior/PilotSeat"))
+	assert_false(avatar.hands.shown)
