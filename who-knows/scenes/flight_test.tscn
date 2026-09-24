@@ -176,6 +176,7 @@ script = ExtResource("7_motion_coupling")
 hull_path = NodePath("../Exterior")
 avatar_path = NodePath("../Interior/Avatar")
 interior_sky_path = NodePath("../Interior/SkyPivot")
+interior_builder_path = NodePath("../Interior/InteriorBuilder")
 
 [node name="Prompt" type="CanvasLayer" parent="."]
 
