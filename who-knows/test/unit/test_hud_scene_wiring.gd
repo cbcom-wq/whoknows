@@ -144,8 +144,11 @@ func test_windows_show_the_canopy_view():
 	assert_eq(mat.shader, InteriorMaterials.CANOPY_SHADER)
 	assert_true(mat.get_shader_parameter(&"canopy_view") is ViewportTexture, "fed by the canopy SubViewport")
 
-func test_the_cabin_has_one_rounded_nose():
-	assert_eq(_root.find_children("NoseShell*", "MeshInstance3D", true, false).size(), 1)
+## Cockpit pod spec §4: the starter shuttle's helm looks out through a pod,
+## so its windshield gets the pod and shoulders instead of a rounded nose.
+func test_the_bridge_has_a_cockpit_pod_and_no_nose():
+	assert_eq(_root.find_children("CockpitPod", "Node3D", true, false).size(), 1)
+	assert_eq(_root.find_children("NoseShell*", "MeshInstance3D", true, false).size(), 0)
 
 func test_old_ceiling_fluorescents_are_gone():
 	for i in [1, 2, 3]:
@@ -168,10 +171,20 @@ func test_chase_camera_keeps_the_world_look():
 	var cam: Camera3D = _root.get_node("Ship/Exterior/ChaseCamera")
 	assert_null(cam.environment)
 
-func test_pilot_seat_is_upholstered_to_match():
-	var mesh: ArrayMesh = load("res://data/blocks/meshes/pilot_seat.tres")
-	var upholstery := mesh.surface_get_material(0) as StandardMaterial3D
-	assert_true(upholstery.albedo_color.is_equal_approx(InteriorPalette.SEAT))
+## The interactable seat and the captain's chair the dressing draws come from
+## the same frame, so the picture and the thing you sit in cannot drift apart.
+func test_pilot_seat_sits_at_the_chairs_frame():
+	var builder: InteriorBuilder = _root.get_node("Ship/Interior/InteriorBuilder")
+	var seat: Node3D = _root.get_node("Ship/Interior/PilotSeat")
+	var frame := InteriorDressing.fixture_frame(builder.layout(), Vector3i(0, 0, -3))
+	assert_true(seat.transform.is_equal_approx(frame), "PilotSeat at the chair's fixture frame")
+	var canopy_plane := ShipGrid.cell_center(Vector3i(0, 0, -3)).z - ShipGrid.CELL_SIZE * 0.5
+	assert_almost_eq(seat.position.z, canopy_plane - InteriorProps.POD_SEAT_DEPTH, 0.001, "out in the pod")
+
+func test_the_seated_eye_is_the_chairs():
+	var eye: Node3D = _root.get_node("Ship/Interior/PilotSeat/Eye")
+	assert_almost_eq(eye.position, InteriorProps.SEATED_EYE, Vector3.ONE * 0.001,
+		"the headrest is built just behind this eye")
 
 func test_the_cabin_has_a_sliding_door_for_every_room():
 	var doors := _root.find_children("*", "Node3D", true, false).filter(func(n): return n is SlidingDoor)

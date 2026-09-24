@@ -177,15 +177,17 @@ func test_starter_shuttle_layout():
 	bootstrap.free()
 	var catalog := BlockCatalog.load_from_dir("res://data/blocks")
 	var layout := InteriorLayout.plan(grid, catalog, DeckGraph.build(grid, catalog).walkable_coords())
-	assert_eq(_count(layout, InteriorLayout.WallVariant.CONSOLE), 4, "both walls of the two helm rows")
+	assert_eq(_count(layout, InteriorLayout.WallVariant.CONSOLE), 2, "both walls of the helm's row")
 	assert_eq(_count(layout, InteriorLayout.WallVariant.HATCH), 1)
 	assert_eq(layout.rooms().size(), 5)
 	var doorways := layout.faces().filter(func(f): return f["kind"] == InteriorLayout.Kind.DOORWAY)
 	assert_eq(doorways.size(), 10, "five doorways, two sides each")
 	var portholes := layout.faces().filter(func(f): return f["porthole"])
-	assert_eq(portholes.size(), 4, "two on the bridge, one in the bunk room, one in the galley")
+	assert_eq(portholes.size(), 6, "four on the bridge, one in the bunk room, one in the galley")
 	assert_eq(layout.canopy_groups().size(), 1)
 	assert_eq(layout.canopy_groups()[0]["coords"].size(), 3)
+	assert_eq(layout.pods().size(), 1, "the helm looks out through the middle of the windshield")
+	assert_eq(layout.pods()[0]["coord"], Vector3i(0, 0, -3))
 
 func _walls_of(layout: InteriorLayout, coord: Vector3i) -> Array:
 	var out := []

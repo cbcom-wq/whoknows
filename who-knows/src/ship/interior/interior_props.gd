@@ -393,6 +393,10 @@ static func cockpit_pod(kit: InteriorKit, f: Transform3D) -> void:
 		var p1 := _pod_point((i + 1) % POD_OUTLINE.size())
 		kit.tri(SOLID, f * (centre + lift), f * (p0 + lift), f * (p1 + lift), up, floor_colour)
 		kit.tri(SOLID, f * (centre + roof), f * (p0 + roof), f * (p1 + roof), -up, ceiling)
+	# An apron back over the room's deck, so no crack shows where the two floors meet.
+	var apron := Vector3(0, 0, 0.1)
+	kit.quad(SOLID, f * (_pod_point(0) + lift), f * (_pod_point(last) + lift),
+		f * (_pod_point(last) + lift + apron), f * (_pod_point(0) + lift + apron), up, floor_colour)
 	for i in last:
 		var p0 := _pod_point(i)
 		var p1 := _pod_point(i + 1)
