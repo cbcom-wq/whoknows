@@ -107,7 +107,8 @@ func take(candidate: Item) -> bool:
 		mode = Mode.WIELDING
 	else:
 		candidate.reparent(carry_socket, false)
-		candidate.transform = Transform3D(Basis.IDENTITY, Vector3(0.0, 0.0, -candidate.definition.size.z * 0.5))
+		var tilt := Basis.from_euler(candidate.definition.hold_rotation * (PI / 180.0))
+		candidate.transform = Transform3D(tilt, Vector3(0.0, 0.0, -candidate.definition.size.z * 0.5))
 		mode = Mode.CARRYING
 	charge = -1.0
 	taken.emit(candidate, from)

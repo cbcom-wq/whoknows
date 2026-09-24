@@ -59,7 +59,7 @@ func test_a_flare_burns_out():
 	var use: Flare = flare.use_node
 	_use(flare)
 	use.burn_left = 0.02
-	await wait_seconds(0.1)
+	simulate(flare, 1, 0.05)
 	assert_eq(use.burn, Flare.Burn.SPENT)
 	assert_false(use.find_children("*", "OmniLight3D", true, false)[0].visible)
 	assert_eq(flare.prompt_text(), "Pick up Flare (spent)")

@@ -12,3 +12,4 @@ grip = 0
 stow_class = &"tool"
 look = &"medkit"
 grip_point = Vector3(0, 0.1, 0)
+hold_rotation = Vector3(60, 0, 0)

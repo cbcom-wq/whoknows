@@ -12,10 +12,10 @@ extends ItemUse
 enum Burn { UNLIT, BURNING, SPENT }
 
 const BURN_TIME := 60.0
-const ENERGY := 0.9
+const ENERGY := 1.3
 ## How far the flicker swings the light either side of ENERGY, as a fraction.
 const FLICKER := 0.2
-const RANGE := 5.0
+const RANGE := 6.0
 ## The exterior and interior render layers: it lights wherever it is.
 const CULL_MASK := 1 | 2
 
@@ -41,10 +41,10 @@ func _ready() -> void:
 	_flame.name = "Flame"
 	add_child(_flame)
 	var kit := InteriorKit.new(_flame)
-	kit.bevel_box(InteriorKit.Batch.GLOW, InteriorKit.at(at), Vector3(0.03, 0.03, 0.04), 0.01,
+	kit.bevel_box(InteriorKit.Batch.GLOW, InteriorKit.at(at + Vector3(0, 0, -0.01)), Vector3(0.05, 0.05, 0.07), 0.018,
 		InteriorKit.lit(InteriorPalette.PLASMA, InteriorMaterials.GLOW_ENERGY))
-	kit.bevel_box(InteriorKit.Batch.GLOW, InteriorKit.at(at + Vector3(0, 0, -0.015)), Vector3(0.018, 0.018, 0.025),
-		0.006, InteriorKit.lit(InteriorPalette.LIGHT_WARM, InteriorMaterials.GLOW_ENERGY))
+	kit.bevel_box(InteriorKit.Batch.GLOW, InteriorKit.at(at + Vector3(0, 0, -0.03)), Vector3(0.028, 0.028, 0.04),
+		0.01, InteriorKit.lit(InteriorPalette.LIGHT_WARM, InteriorMaterials.GLOW_ENERGY))
 	kit.commit()
 	_show()
 

@@ -11,3 +11,4 @@ size = Vector3(0.34, 0.34, 0.36)
 grip = 1
 stow_class = &"crate"
 look = &"spare_helmet"
+hold_rotation = Vector3(-35, 0, 0)

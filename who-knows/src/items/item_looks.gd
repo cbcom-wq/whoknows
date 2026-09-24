@@ -204,8 +204,8 @@ static func spare_module(kit: InteriorKit, size: Vector3) -> void:
 	kit.disc(GLOW, k * Transform3D(up, Vector3(-0.07, -0.0045, -0.045)), 0.006, _lit(InteriorPalette.AMBER, 1.8))
 	kit.disc(GLOW, k * Transform3D(up, Vector3(0.07, -0.0045, -0.04)), 0.006, _lit(InteriorPalette.SKY, 1.8))
 
-## A medkit: a trim case with a coral band -- not a cross; that emblem is
-## protected -- a gunmetal handle on top and a lit indicator. Designed at 0.3
+## A medkit: a trim case with a coral band and lid -- not a cross; that emblem
+## is protected -- a gunmetal handle on top and a lit indicator. Designed at 0.3
 ## x 0.22 x 0.12.
 static func medkit(kit: InteriorKit, size: Vector3) -> void:
 	var k := _scale(size, Vector3(0.3, 0.22, 0.12))
@@ -213,6 +213,9 @@ static func medkit(kit: InteriorKit, size: Vector3) -> void:
 	kit.bevel_box(SOLID, k * _at(Vector3(0, -0.025, 0)), Vector3(0.3, 0.17, 0.12), 0.025, _c(InteriorPalette.TRIM))
 	kit.box(SOLID, k * _at(Vector3(0, -0.025, 0)), Vector3(0.302, 0.035, 0.122), _c(InteriorPalette.CORAL))
 	kit.box(SOLID, k * _at(Vector3(0, 0.03, 0)), Vector3(0.302, 0.006, 0.122), gun)
+	# A coral lid, so a medkit reads as one from above too, and in the hand
+	# either side of the fist.
+	kit.box(SOLID, k * _at(Vector3(0, 0.061, 0)), Vector3(0.25, 0.004, 0.09), _c(InteriorPalette.CORAL))
 	for x in [-0.06, 0.06]:
 		kit.bevel_box(SOLID, k * _at(Vector3(x, 0.075, 0)), Vector3(0.02, 0.03, 0.024), 0.005, gun)
 	kit.bevel_box(SOLID, k * _at(Vector3(0, 0.099, 0)), Vector3(0.14, 0.018, 0.024), 0.005, gun)
@@ -230,23 +233,22 @@ static func ration_tin(kit: InteriorKit, size: Vector3) -> void:
 	kit.disc(SOLID, k * Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), Vector3(0, 0.05, 0)), 0.036, gun)
 	kit.disc(SOLID, k * Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0, -0.05, 0)), 0.036, gun)
 
-## A rock sample from the debris outside: three chunky lumps, and two faintly
-## glowing lavender crystals nobody has identified yet. Designed at 0.16 x 0.12
-## x 0.14.
+## A rock sample from the debris outside: three chunky grey lumps, and a
+## cluster of short, faintly glowing lavender crystals nobody has identified
+## yet. Designed at 0.16 x 0.12 x 0.14.
 static func rock_sample(kit: InteriorKit, size: Vector3) -> void:
 	var k := _scale(size, Vector3(0.16, 0.12, 0.14))
-	var low := _c(InteriorPalette.WALL_LOW)
+	var gun := _c(InteriorPalette.GUNMETAL)
 	kit.bevel_box(SOLID, k * Transform3D(Basis.from_euler(Vector3(0.15, 0.4, 0.1)), Vector3(0, -0.01, 0)),
-		Vector3(0.1, 0.07, 0.085), 0.02, low)
+		Vector3(0.1, 0.07, 0.085), 0.02, gun)
 	kit.bevel_box(SOLID, k * Transform3D(Basis.from_euler(Vector3(0.5, -0.3, 0.4)), Vector3(0.03, 0.015, -0.01)),
-		Vector3(0.065, 0.045, 0.055), 0.015, _c(InteriorPalette.GUNMETAL))
+		Vector3(0.065, 0.045, 0.055), 0.015, _c(InteriorPalette.WALL_LOW))
 	kit.bevel_box(SOLID, k * Transform3D(Basis.from_euler(Vector3(-0.3, 0.8, 0.2)), Vector3(-0.035, 0.0, 0.025)),
-		Vector3(0.05, 0.04, 0.05), 0.012, low)
+		Vector3(0.05, 0.04, 0.05), 0.012, gun)
 	var crystal := _lit(InteriorPalette.LAVENDER, 2.0)
-	kit.bevel_box(GLOW, k * Transform3D(Basis.from_euler(Vector3(0.3, 0, 0.25)), Vector3(-0.02, 0.028, -0.01)),
-		Vector3(0.014, 0.04, 0.014), 0.004, crystal)
-	kit.bevel_box(GLOW, k * Transform3D(Basis.from_euler(Vector3(-0.2, 0, -0.3)), Vector3(0.012, 0.03, 0.02)),
-		Vector3(0.012, 0.03, 0.012), 0.004, crystal)
+	for c in [[Vector3(-0.012, 0.02, 0.012), Vector3(0.5, 0.2, 0.6)], [Vector3(0.004, 0.024, 0.02), Vector3(-0.3, 0.9, -0.5)],
+			[Vector3(-0.022, 0.016, 0.028), Vector3(0.2, -0.6, 1.1)], [Vector3(0.012, 0.018, 0.03), Vector3(0.9, 0.3, -0.2)]]:
+		kit.bevel_box(GLOW, k * Transform3D(Basis.from_euler(c[1]), c[0]), Vector3(0.018, 0.024, 0.018), 0.005, crystal)
 
 ## A hand lamp pointing along -z: a gunmetal body, a trim head with a dark lens
 ## (HandLamp lights it), a terracotta grip band and a coral switch. Designed at

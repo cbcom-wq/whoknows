@@ -6,9 +6,9 @@ extends ItemUse
 ## as it was when dropped, stowed or thrown, and it lights the outside as well
 ## as the cabin, so a lamp carried out onto a spacewalk is still a lamp.
 
-const ENERGY := 1.2
-const RANGE := 9.0
-const ANGLE := 24.0
+const ENERGY := 2.6
+const RANGE := 10.0
+const ANGLE := 22.0
 ## The exterior and interior render layers: it lights wherever you take it.
 const CULL_MASK := 1 | 2
 
