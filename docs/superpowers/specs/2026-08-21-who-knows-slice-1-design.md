@@ -109,6 +109,12 @@ Three things make the split invisible:
 > leaving the ship through the airlock, which moves the avatar from interior space into exterior
 > space while it is shut inside a cycling airlock.
 
+> **Amended 2026-09-24 (asteroids spec §4):** there is now a **floating origin**. When the focus
+> (the hull, or you on a spacewalk) strays 2 km from the engine origin, everything in exterior
+> space moves back by the same whole kilometres in one physics tick; `Universe` keeps the true
+> position in 64-bit. The interior never moves. Anything outside joins `&"exterior_space"` or
+> listens to `Universe.shifted`.
+
 ---
 
 ## 4. Data model

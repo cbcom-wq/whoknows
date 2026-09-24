@@ -18,6 +18,17 @@ guide records why each was rejected.
   Green tests prove structure, not looks.
 - **Changing a rule needs the owner's approval**, and the guide, code and tests change together.
 
+## Exterior space has a floating origin
+
+The outside world is re-centred on you every 2 km (`src/world/universe.gd`,
+`docs/superpowers/specs/2026-09-24-asteroids-design.md` §4). **Anything you put outside the ship
+must either join group `Universe.EXTERIOR_SPACE` (a node whose parent never moves; it is moved
+itself, never through a parent) or listen to `Universe.shifted(delta)` and subtract `delta` from
+any engine position it remembers.** World-space particles outside join `Universe.HOLDS_SHIFT`.
+The interior never moves and is never a member. `test_floating_origin_scene.gd` fails if a body
+or mesh outside the interior is not covered. Positions that must survive a shift (seeds, homes,
+saved places) are `UniversePoint`s, never engine `Vector3`s.
+
 ## Godot `.tscn`/`.tres`: no `#` comments inside `[node]`, `[sub_resource]`, or `[resource]` blocks
 
 **Never put a `#` comment line adjacent to a property assignment or to a `[node]`/`[sub_resource]`/
