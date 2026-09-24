@@ -270,6 +270,21 @@ Where the ship meets the outside (`docs/superpowers/specs/2026-09-24-airlock-des
   and the world with the view held to a millimetre. Keep both copies of the room identical, or the
   crossing shows.
 
+### 3.5 Rocks in space
+
+The asteroids outside (`docs/superpowers/specs/2026-09-24-asteroids-design.md` §8), approved by
+the owner with that spec on 2026-09-24:
+
+- **Chunky and faceted, like everything else.** `RockMesh` cuts a sphere with a handful of seeded
+  planes: big flat facets, flat-shaded, no texture. Two shapes per size tier (a rounded boulder, a
+  longer shard) and a veined one; detail rises with size, never past 320 triangles.
+- **Colour from `SpacePalette` only:** dusty, warm greys and browns (ash, umber, slate, rust,
+  sand), one per rock, and the lavender crystal of a veined rock, the rock sample's own colour.
+  No glow.
+- **Lit by the sun,** on render layer 1, like the hull.
+- **They fade in with distance,** by the built-in distance dither of `StandardMaterial3D`, never
+  a new shader: at the far edge of its fade a tier's largest rock is only a few pixels across.
+
 ## 4. Adding something new
 
 **A new prop:**
@@ -326,9 +341,9 @@ the own-hull render layer; `InteriorKit` can build there (`layer`, `light_mask`)
 
 `test/unit/test_visual_style_rules.gd` fails the build if:
 
-- a colour literal appears in interior, item, hand or airlock code other than the palettes
-  (`InteriorPalette`, and `HullPalette` for the hull's outside; `InteriorKit` is exempt: it packs
-  data into vertex colours);
+- a colour literal appears in interior, item, hand, airlock or asteroid code other than the
+  palettes (`InteriorPalette`, `HullPalette` for the hull's outside, `SpacePalette` for rocks;
+  `InteriorKit` is exempt: it packs data into vertex colours);
 - `interior_props.gd`, `interior_kit.gd`, `sliding_door.gd`, `item_looks.gd`, `item.gd`,
   `glove.gd`, `hands.gd`, `airlock_hatch.gd`, `airlock_panel.gd` or `airlock_show.gd` reference
   the grid, the layout, the builder or the dressing;

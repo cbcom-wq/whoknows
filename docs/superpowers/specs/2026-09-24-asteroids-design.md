@@ -523,3 +523,48 @@ Following the style guide's "chunky low-poly shapes in flat colour":
     shift frame 16.7 ms (one vsync).
   - A spacewalk beside the ship at 300 m/s across 2 shifts: 0.1 mm drift from the ship, 0.1 mm
     change in distance to the airlock beacon.
+
+---
+
+## 16. As built (plan 2: the asteroids, 2026-09-24)
+
+Deviations from the design above, each found by testing or the live check:
+
+- **Density** thresholds are set from the noise's own spread: `DENSITY_LOW` 0.50 (its median) and
+  `DENSITY_HIGH` 0.67 (its 90th percentile). Over 3,600 mid cells: 47% empty, 13% core.
+- **Counts** are 40 rubble and 16 mid-size rocks per cell at most (the design said 24 and 12):
+  at 24 the nearest rubble was about 70 m apart, and the field read as specks.
+- **The start** is inside a field (density 0.55 to 0.85), not at its edge, with 80 m cleared
+  rather than 150 m, so rocks are near and far from the first frame.
+- **Mass** is capped at 10^8 kg for the physics solver (`AsteroidBody.MASS_CAP`); anything that
+  heavy is a wall to anything that can hit it.
+- **The wanted set** is redone every quarter cell of travel, not on crossing into a new cell:
+  between crossings you can close up to a cell's diagonal on a cell before it is asked for, which
+  is more than the head start. It runs on a worker thread, nearest and ahead of you first; the
+  main thread only swaps the result in. The "generation counter" is this: a result is dropped if
+  its cell is no longer wanted.
+- **The stream keeps a copy of each block's buffer.** Without a renderer the engine hands no
+  MultiMesh instance data back, and the tests run headless. The live check compared the copy with
+  the real renderer's data over 1,948 instances: identical.
+- **A new body is placed before it enters the tree.** Placed after, it stood at its holder's
+  origin, usually right where you are, until transforms flushed, and could knock you for a tick.
+- **A spacewalk bump counts once per rock per step** (`Avatar.bump`): sliding along a rock can
+  touch it twice in one step, and pushed it twice.
+- **The thump's loudness** comes from the hull's own change of speed: what you feel.
+
+**Live check (§11.2),** windowed, real scene:
+
+| Check | Result |
+|---|---|
+| 20 km at 300 m/s through a field core | 0 late cells; 3,995 frames, mean 16.7 ms; one frame over 33 ms (the first after switching to the chase camera, an engine cost of a new view, not streaming); up to 30 bodies at once |
+| Streaming cost at boost (timing probe) | worst update 7.6 ms, worst bubble tick 2.3 ms, no frame over 30 ms |
+| Ram a 1.9 m rubble rock (5 t) at 60 m/s | hull 60 → 56 m/s; the rock flung ahead at 62 m/s |
+| Ram a 20 m rock (6,459 t) | the hull bounces back at about 11 m/s; the rock 0.6 m/s |
+| Ram a 46 m giant (75,657 t) | the hull bounces back at about 9 m/s; the giant 0.04 m/s |
+| Aboard, each crash | shove capped at 12 m/s², a head jolt of 5 cm, and the thump |
+| Spacewalk bump into a 1.4 m rock (2.1 t) at 2 m/s | momentum shared exactly: you rebound (a 2.1 m/s change), the rock drifts off at 0.12 m/s, 254 kg·m/s each |
+| Floating origin across the flight | 10 shifts, nothing out of place |
+
+The unit suite grew from 599 to 646 tests and from about 30 s to about 65 s: every test that
+loads the flight scene now streams its asteroids.
+

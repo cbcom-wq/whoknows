@@ -70,6 +70,12 @@ Each was put to the owner as options with trade-offs.
 
 ---
 
+> **Amended 2026-09-24 (asteroids spec §12):** the outside now has a floating origin and streamed
+> asteroids. Physics layer 7 is `asteroids` (§4.2). Terrain anchors and space anchors are the same
+> bodies: this spec uses `&"space_anchor"` rather than a group of its own (§6.4). Worlds are placed
+> by `UniversePoint` and join `&"exterior_space"`; the debris field is gone, and density near a
+> world is `AsteroidRecipe.density_at()`'s to decide (§14, §16).
+
 ## 4. Architecture
 
 The world follows the same shape as the ship: one source of truth, read by independent builders.

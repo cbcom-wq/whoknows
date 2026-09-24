@@ -301,6 +301,10 @@ block's mesh and full-cell box collider:
 | `MotionCoupling` | shoves you | leaves you alone |
 | HUD | as now | the suit's band and the airlock marker (§8.3) |
 
+> **Amended 2026-09-24 (asteroids spec §12):** on a spacewalk your collision mask adds the
+> asteroids (1 | 32 | 64), and you join `&"exterior_space"` and `&"space_anchor"` and become the
+> floating origin's focus. Bumping a rock shares momentum (asteroids spec §7.6).
+
 **What's in your hands comes with you** and comes back. A wielded item hangs from the hands and
 a carried one moves with them; both switch render layers. Outside, your hands are **idle**: no
 taking, dropping, throwing or using until you are back aboard (Grasp's new `suspended`, which,
