@@ -145,7 +145,7 @@ func _bind_airlocks() -> void:
 			airlock.setup(self, room.coord)
 			_airlocks_root.add_child(airlock)
 			airlocks[room.coord] = airlock
-		airlock.bind(room)
+		airlock.bind(room, exterior_builder.alcoves().get(room.coord))
 	for at in airlocks.keys():
 		if not seen.has(at):
 			var gone: Airlock = airlocks[at]

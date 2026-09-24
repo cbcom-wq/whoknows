@@ -6,7 +6,8 @@ extends GutTest
 
 const SHADER_DIR := "res://data/materials/interior/"
 
-## Interior code that paints: every colour must come from InteriorPalette.
+## Code that paints: every colour must come from a palette -- InteriorPalette
+## inside, HullPalette for the hull's outside (the airlock's hatch face).
 ## InteriorKit is exempt -- it packs data (screen modes, glow energy) into
 ## vertex colours rather than choosing colours.
 const PAINTING_FILES := [
@@ -21,6 +22,12 @@ const PAINTING_FILES := [
 	"res://src/avatar/hands.gd",
 	"res://src/items/impact_flash.gd",
 	"res://src/items/plasma_bolt.gd",
+	"res://src/ship/airlock/airlock.gd",
+	"res://src/ship/airlock/airlock_alcove.gd",
+	"res://src/ship/airlock/airlock_hatch.gd",
+	"res://src/ship/airlock/airlock_panel.gd",
+	"res://src/ship/airlock/airlock_room.gd",
+	"res://src/ship/airlock/airlock_show.gd",
 ]
 
 ## The reusable asset library and what it builds with. Ships are generated
@@ -33,6 +40,9 @@ const REUSABLE_FILES := [
 	"res://src/items/item.gd",
 	"res://src/avatar/glove.gd",
 	"res://src/avatar/hands.gd",
+	"res://src/ship/airlock/airlock_hatch.gd",
+	"res://src/ship/airlock/airlock_panel.gd",
+	"res://src/ship/airlock/airlock_show.gd",
 ]
 const GRID_SIDE := ["ShipGrid", "BlockCatalog", "DeckGraph", "InteriorLayout", "InteriorBuilder",
 	"InteriorDressing"]

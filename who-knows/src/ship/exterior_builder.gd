@@ -20,6 +20,7 @@ var _catalog: BlockCatalog
 var _collider_coords: Array[Vector3i] = []
 var _colliders: Array[CollisionShape3D] = []
 var _multimeshes: Dictionary = {}   # StringName -> MultiMeshInstance3D
+var _alcoves: Dictionary = {}   # Vector3i -> AirlockAlcove
 
 func bind(grid: ShipGrid, catalog: BlockCatalog) -> void:
 	_grid = grid
@@ -34,6 +35,11 @@ func rebuild() -> void:
 
 func collider_coords() -> Array:
 	return _collider_coords.duplicate()
+
+## Each airlock that can cycle is an open alcove here -- the hull's copy of
+## its room (airlock spec §7.2) -- by cell.
+func alcoves() -> Dictionary:
+	return _alcoves.duplicate()
 
 func _clear() -> void:
 	# remove_child() then free() -- not queue_free(). remove_child() is
@@ -62,6 +68,19 @@ func _clear() -> void:
 			remove_child(mmi)
 			mmi.free()
 	_multimeshes.clear()
+	for alcove: AirlockAlcove in _alcoves.values():
+		if not is_instance_valid(alcove):
+			continue
+		for collider in alcove.colliders:
+			if is_instance_valid(collider):
+				collider.get_parent().remove_child(collider)
+				collider.free()
+		remove_child(alcove)
+		alcove.free()
+	_alcoves.clear()
+
+func _is_alcove(coord: Vector3i) -> bool:
+	return AirlockSite.hatch_normal(_grid, coord) != Vector3i.ZERO
 
 func _body() -> Node:
 	return get_node(body_path) if not body_path.is_empty() else get_parent()
@@ -69,6 +88,12 @@ func _body() -> Node:
 func _build_colliders() -> void:
 	var body := _body()
 	for coord in _grid.coords():
+		if _is_alcove(coord):
+			# Hollow, not gone: the alcove's floor, walls and hatches are this
+			# cell's collision now.
+			_alcoves[coord] = AirlockAlcove.build(self, body, _grid, _catalog, coord)
+			_collider_coords.append(coord)
+			continue
 		var shape := BoxShape3D.new()
 		shape.size = Vector3.ONE * ShipGrid.CELL_SIZE
 		var node := CollisionShape3D.new()
@@ -84,7 +109,7 @@ func _build_meshes() -> void:
 	for coord in _grid.coords():
 		var inst := _grid.get_block(coord)
 		var def := _catalog.get_def(inst.block_id)
-		if def == null or def.mesh == null:
+		if def == null or def.mesh == null or _is_alcove(coord):
 			continue
 		var xform := Transform3D(
 			BlockOrientation.basis_for(inst.orientation), ShipGrid.cell_center(coord)

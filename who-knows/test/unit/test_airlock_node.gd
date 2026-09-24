@@ -34,7 +34,8 @@ func test_the_starter_has_one_airlock_driving_its_room():
 	assert_eq(_ship.airlocks.size(), 1)
 	assert_not_null(_airlock)
 	assert_eq(_airlock.room.name, "Airlock_0_0_3")
-	assert_eq(_airlock.panels().size(), 2, "room and corridor panels; the hull's comes with the alcove")
+	assert_eq(_airlock.panels().size(), 3, "the room, corridor and hull panels")
+	assert_not_null(_airlock.alcove, "and its copy on the hull")
 
 func test_the_panels_prompt_from_the_cycle():
 	assert_eq(_airlock.room.corridor_panel.prompt_text(), "Open hatch")

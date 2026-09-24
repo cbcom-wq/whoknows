@@ -87,6 +87,10 @@ func tick(delta: float) -> void:
 	for c in cues:
 		cue.emit(c, cycle.cue_side)
 		_sound(c, cycle.cue_side)
+		# Whatever fog is left puffs out into space as the outer hatch parts.
+		if c == &"leaves_opening" and cycle.cue_side == AirlockCycle.Door.OUTER and show.haze > 0.05 \
+				and is_instance_valid(alcove):
+			alcove.show.burst_out()
 
 func _physics_process(delta: float) -> void:
 	tick(delta)

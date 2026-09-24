@@ -62,6 +62,7 @@ var _fixtures: Array[Dictionary] = []
 var _pods: Array[Dictionary] = []
 var _airlocks: Array[Dictionary] = []
 var _hatches: Dictionary = {}   # Vector3i -> outer hatch normal, for airlock-zone cells
+var _doors: Dictionary = {}     # Vector3i -> inner hatch normal (AirlockSite.door_normal)
 
 static func plan(grid: ShipGrid, catalog: BlockCatalog, walkable: Array) -> InteriorLayout:
 	var layout := InteriorLayout.new()
@@ -74,6 +75,7 @@ static func plan(grid: ShipGrid, catalog: BlockCatalog, walkable: Array) -> Inte
 		layout._zones[coord] = _zone(grid, catalog, coord)
 		if layout._zones[coord] == AIRLOCK_ZONE:
 			layout._hatches[coord] = AirlockSite.hatch_normal(grid, coord)
+			layout._doors[coord] = AirlockSite.door_normal(grid, catalog, coord)
 	var groups := {}   # plane key -> {normal, coords}
 	for coord: Vector3i in layout._walkable:
 		var zone: StringName = layout._zones[coord]
@@ -238,7 +240,7 @@ func _resolve_rooms() -> void:
 		if not _is_room(zone) or seen.has(coord):
 			continue
 		var cells := _flood_room(coord, zone, seen)
-		var doorway := _choose_doorway(cells, index, zone)
+		var doorway := _airlock_doorway(cells, index) if zone == AIRLOCK_ZONE else _choose_doorway(cells, index, zone)
 		if not doorway.is_empty():
 			var c: Vector3i = doorway["coord"]
 			var n: Vector3i = doorway["normal"]
@@ -308,6 +310,16 @@ func _choose_doorway(cells: Array[Vector3i], index: Dictionary, zone: StringName
 				best = {"coord": cell, "normal": normal}
 				best_score = score
 	return best
+
+## An airlock's doorway is AirlockSite's choice, so the hull's copy of the room
+## puts its inner hatch in the same place: the first of its cells with one.
+func _airlock_doorway(cells: Array[Vector3i], index: Dictionary) -> Dictionary:
+	for cell in cells:
+		var door: Vector3i = _doors.get(cell, Vector3i.ZERO)
+		var key := _key(cell, door)
+		if door != Vector3i.ZERO and index.has(key) and _faces[index[key]]["kind"] == Kind.WALL:
+			return {"coord": cell, "normal": door}
+	return {}
 
 static func _ranks_before(a: Array, b: Array) -> bool:
 	for i in a.size():

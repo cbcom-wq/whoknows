@@ -25,3 +25,33 @@ static func hatch_normal(grid: ShipGrid, coord: Vector3i) -> Vector3i:
 			found = normal
 			count += 1
 	return found if count == 1 else Vector3i.ZERO
+
+## The inner hatch's normal: the face the airlock opens onto from inside the
+## ship, or Vector3i.ZERO if it has nowhere walkable to open onto. Straight
+## through, opposite the outer hatch, when that cell is walkable; otherwise a
+## side, in a fixed order. Open deck beats a room -- an airlock should not open
+## into someone's bunk -- and another airlock never counts. The interior layout
+## and the hull's copy of the room both ask here, so they always agree.
+static func door_normal(grid: ShipGrid, catalog: BlockCatalog, coord: Vector3i) -> Vector3i:
+	var hatch := hatch_normal(grid, coord)
+	if hatch == Vector3i.ZERO:
+		return Vector3i.ZERO
+	var candidates: Array[Vector3i] = [-hatch]
+	for normal in _HORIZONTAL:
+		if normal != hatch and normal != -hatch:
+			candidates.append(normal)
+	var best := Vector3i.ZERO
+	var best_rank := 99
+	for normal in candidates:
+		var inst := grid.get_block(coord + normal)
+		if inst == null or inst.block_id == AIRLOCK_ID:
+			continue
+		var def := catalog.get_def(inst.block_id)
+		if def == null or (def.occupancy != BlockDefinition.Occupancy.DECK
+				and def.occupancy != BlockDefinition.Occupancy.MOUNT):
+			continue
+		var rank := (2 if InteriorLayout.ROOM_IDS.has(inst.block_id) else 0) + (0 if normal == -hatch else 1)
+		if rank < best_rank:
+			best_rank = rank
+			best = normal
+	return best

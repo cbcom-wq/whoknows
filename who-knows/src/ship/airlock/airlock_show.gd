@@ -70,7 +70,7 @@ func setup(room_frame: Transform3D, nozzles: Array[Transform3D], light: OmniLigh
 		_burst.one_shot = true
 		_burst.explosiveness = 0.85
 		_burst.transform = room_frame * Transform3D(Basis.IDENTITY,
-			Vector3(0, InteriorProps.HATCH_HEIGHT * 0.5, -ShipGrid.CELL_SIZE * 0.5))
+			Vector3(0, InteriorProps.HATCH_HEIGHT * 0.5, -InteriorProps.BAY * 0.5))
 		return
 	for i in nozzles.size():
 		var jet := _emitter("Jet%d" % i, puff, layer, JET_PUFFS, JET_LIFETIME, _jet_process())

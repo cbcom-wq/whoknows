@@ -7,13 +7,13 @@ var _builder: ExteriorBuilder
 
 func before_each():
 	_cat = BlockCatalog.new()
-	for id in [&"hull", &"deck", &"seat"]:
+	for id in [&"hull", &"deck", &"seat", &"airlock"]:
 		var d := BlockDefinition.new()
 		d.id = id
 		d.display_name = String(id)
 		d.mass_t = 1.0
 		d.occupancy = (
-			BlockDefinition.Occupancy.DECK if id == &"deck"
+			BlockDefinition.Occupancy.DECK if id == &"deck" or id == &"airlock"
 			else BlockDefinition.Occupancy.MOUNT if id == &"seat"
 			else BlockDefinition.Occupancy.SOLID
 		)
@@ -133,3 +133,76 @@ func test_hull_meshes_are_drawn_on_the_own_hull_layer():
 			drawn += 1
 			assert_eq(child.layers, ExteriorBuilder.OWN_HULL_LAYER)
 	assert_eq(drawn, 1, "one MultiMesh for the one block type")
+
+## Airlock spec §7.2: an airlock that can cycle is an open alcove on the hull,
+## a copy of the room inside, instead of a solid block.
+func _airlock_off_a_deck() -> void:
+	_put(Vector3i(0, 0, 0), &"airlock")   # aft (+z) onto open space
+	_put(Vector3i(0, 0, -1), &"deck")
+	_put(Vector3i(1, 0, 0), &"hull")
+	_put(Vector3i(-1, 0, 0), &"hull")
+
+func _box_at(cell: Vector3i) -> Array:
+	var out := []
+	for c in _body.get_children():
+		if c is CollisionShape3D and c.shape is BoxShape3D and c.position.is_equal_approx(ShipGrid.cell_center(cell)) 				and (c.shape as BoxShape3D).size.is_equal_approx(Vector3.ONE * ShipGrid.CELL_SIZE):
+			out.append(c)
+	return out
+
+func _shapes() -> int:
+	return _body.get_children().filter(func(c): return c is CollisionShape3D).size()
+
+func test_an_airlock_is_an_open_alcove():
+	_airlock_off_a_deck()
+	_builder.rebuild()
+	assert_eq(_box_at(Vector3i.ZERO).size(), 0, "no solid block where the airlock is")
+	assert_true(_builder.alcoves().has(Vector3i.ZERO))
+	var alcove: AirlockAlcove = _builder.alcoves()[Vector3i.ZERO]
+	assert_gt(alcove.colliders.size(), 4, "a floor, a ceiling, walls and the hatch's jambs")
+	for c in alcove.colliders:
+		assert_eq(c.get_parent(), _body, "on the hull body")
+	assert_true(_builder.collider_coords().has(Vector3i.ZERO), "the cell still has collision: parity holds")
+	var airlock_drawn := false
+	for child in _builder.get_children():
+		if child is MultiMeshInstance3D and child.multimesh.mesh == _cat.get_def(&"airlock").mesh:
+			airlock_drawn = true
+	assert_false(airlock_drawn, "the block's own mesh is not drawn over the alcove")
+
+func test_an_inert_airlock_stays_a_solid_block():
+	_put(Vector3i(0, 0, 0), &"airlock")   # open on three sides: inert
+	_put(Vector3i(0, 0, -1), &"deck")
+	_builder.rebuild()
+	assert_eq(_box_at(Vector3i.ZERO).size(), 1)
+	assert_true(_builder.alcoves().is_empty())
+
+func test_the_alcove_has_the_outer_hatch_and_the_hull_panel():
+	_airlock_off_a_deck()
+	_builder.rebuild()
+	var alcove: AirlockAlcove = _builder.alcoves()[Vector3i.ZERO]
+	assert_true(alcove.outer_hatch is AirlockHatch)
+	assert_true(alcove.hull_panel is AirlockPanel)
+	assert_eq(alcove.hull_panel.role, &"outer")
+	assert_eq(alcove.hull_panel.collision_layer, 16, "exterior_props: what a spacewalker's interactor finds")
+	assert_almost_eq(alcove.outer_hatch.position, Vector3(0, -0.95, 1.0), Vector3.ONE * 0.001, "on the hatch face")
+
+func test_the_alcove_draws_on_the_own_hull_layer():
+	_airlock_off_a_deck()
+	_builder.rebuild()
+	var alcove: AirlockAlcove = _builder.alcoves()[Vector3i.ZERO]
+	var drawn := alcove.find_children("*", "GeometryInstance3D", true, false)
+	assert_gt(drawn.size(), 0)
+	for g in drawn:
+		assert_eq(g.layers, ExteriorBuilder.OWN_HULL_LAYER, "%s" % g.name)
+
+func test_rebuilds_leave_one_alcove():
+	_airlock_off_a_deck()
+	_builder.rebuild()
+	var once := _shapes()
+	var alcove: AirlockAlcove = _builder.alcoves()[Vector3i.ZERO]
+	assert_not_null(alcove.inner_hatch, "the inner hatch, shown shut")
+	assert_true(alcove.colliders.has(alcove.inner_hatch.collider))
+	assert_true(alcove.colliders.has(alcove.outer_hatch.collider))
+	_builder.rebuild()
+	_builder.rebuild()
+	assert_eq(_builder.find_children("*", "Node3D", true, false).filter(func(n): return n is AirlockAlcove).size(), 1)
+	assert_eq(_shapes(), once, "stale alcove colliders are freed")
