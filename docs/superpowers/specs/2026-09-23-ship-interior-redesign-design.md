@@ -1,414 +1,441 @@
 # Ship interior redesign — design
 
-**Date:** 2026-09-23
+**Date:** 2026-09-23 (rewritten the same day after two rounds of prototyping)
 **Status:** Approved design, ready for an implementation plan
 **Depends on:** Tasks 13–15 (grid-generated interior), commit `71643cd` (fixtures drawn, canopy
 camera at the pilot's eye)
-**Supersedes:** starter shuttle art direction §5.2 (interior palette) and §5.3 (bright, warm,
-lived-in); refines §7 item 4 (canopy faces)
+**Supersedes:** starter shuttle art direction §3.1 (cabin blueprint, Phase B), §5.2 (interior
+palette); refines §5.3 and §7 item 4
 **Addresses:** SLICE-1-STATUS "Reported by playtest" item 6 — the interior is plain and boring
 
 ---
 
 ## 1. Why this document exists
 
-The cabin is a box. Flat beige walls, a red-brown floor, a flat ceiling, three warm fluorescent
-strips, and one 6 m × 2 m flat windshield. Nothing in it says *spacecraft*.
+The cabin is a box: flat beige walls, a red-brown floor, three warm fluorescent strips, one flat
+6 m windshield, and nothing in it that says *spacecraft*.
 
-The owner's direction, verbatim in intent: **it needs to look like a spaceship — moody, darkish,
-blue accents, electronics and control panels, a few small windows, and a more rounded front.**
+The owner's direction settled over three iterations, each prototyped and rendered:
 
-This reverses art direction §5.3, which said the player's ship is "bright, warm and lived-in" and
-asked that nobody correct it toward gloom. The owner has now asked for exactly that. §5.2 and §5.3
-are rewritten as part of this work (§9) so the two documents do not disagree.
+1. "Moody, darkish, blue accents, electronics and control panels, a few small windows, a more
+   rounded front." Prototyped; superseded.
+2. A photo of a 1980s-television starship bridge as design inspiration: warm beige and cream,
+   rounded forms, soft indirect light, glowing console bases, a curved wooden rail, black-glass
+   readouts. Prototyped realistic; superseded on realism.
+3. **Final: stylized, not realistic** — "fun and real enough", *Astroneer* vibes but a little more
+   serious. Chunky bevelled shapes, flat colours, the reference photo's palette and shapes, and
+   **dim, warm** lighting. Prototyped and approved.
+
+Then the owner widened the scope: the ship should not be one open room. **A big open bridge at
+the front; behind it a corridor with a bunk room, closet, weapon room, galley and bathroom; the
+airlock at the very back.**
 
 ### 1.1 Decisions already made
 
-- **Windows:** a rounded cockpit front with a few small windows replacing the flat windshield,
-  **plus** small portholes along the cabin's outer walls.
-- **Approach:** a **generated dressing kit** driven by the ship grid — not hand-dressing of the
-  starter shuttle, and not a pre-baked mesh kit. The project's architecture is that nothing about
-  the craft is hand-authored scenery; a player-built ship in the shipyard must get the same
-  treatment for free.
-- **"Rounded front" is interior-only.** The exterior hull, its canopy wedge mesh and the
-  blueprint are unchanged.
+- **Stylized over realistic**, for design effort and rendering cost (target GPU: GTX 960).
+- **Dim, warm lighting** (chosen against a bright variant, side by side).
+- **Front windows plus side portholes.** A rounded cockpit front with three small windows
+  replaces the flat windshield; portholes sit in outer walls.
+- **Generated, not hand-dressed.** Everything is derived from the ship grid.
+- **Rooms are room blocks.** Rooms are made by placing room floor blocks; thin walls rise where
+  different rooms meet and each room gets one doorway, automatically.
+- **Sliding doors** that open as the player approaches.
+- **The rounded front is interior-only.** The exterior hull and its canopy wedge are unchanged.
+- **We borrow the reference's design language, not its ship:** no insignia, no registry, and no
+  imitation of its specific display system (art direction §1.1 already says this).
+
+### 1.2 Product context that shapes the architecture
+
+In the planned shipyard the player does not place ships block by block: they build a **ship
+blueprint**, and the ship is generated from that blueprint plus game constraints. So every piece
+built here will be placed by generators, not just by the starter shuttle. **Assets must be
+reusable**: props are standalone builders that know nothing about the grid; placement rules live
+elsewhere; room types are grid data a generator can emit.
 
 ---
 
 ## 2. Scope
 
-**In:**
+**Phase A — the style kit**, applied to today's open cabin:
 
-- A dark, blue-accented interior palette and material set (§3).
-- Structural dressing on every walkable cell: ribs, coves, floor strips, conduits, ceiling light
-  panels (§4.1).
-- Wall variants chosen by grid context: console, porthole, electronics rack, panel, hatch (§4.2).
-- A rounded cockpit nose with three small windows and a dashboard, replacing the flat canopy
-  panes (§5).
-- Generated interior lighting and a dedicated interior camera environment (§6).
-- Recolouring the pilot seat to match.
+- Palette, materials and lighting (§3).
+- A reusable mesh toolkit and prop library (§4).
+- Structural dressing and common-area wall pieces: consoles, lockers, displays, portholes, the
+  airlock hatch (§5).
+- The rounded cockpit nose with projected windows, a curved dash and a wooden rail (§6).
+- Seat recolour, interior camera environment, removal of the old ceiling fluorescents.
+
+**Phase B — rooms:**
+
+- Five room blocks, partitions, one doorway per room, sliding doors (§7).
+- Room furniture (§7.4).
+- The starter shuttle's new cabin layout (§7.5).
 
 **Out, deliberately:**
 
-- Exterior changes of any kind.
-- Blueprint changes (the seat stays at `(0, 0, −2)`; see §10 for the trade-off this leaves).
-- Interactive consoles. Screens animate from `TIME` only; nothing reads ship state.
-- Global illumination (SDFGI/VoxelGI), reflection probes, volumetric fog. The target GPU is a
-  GTX 960 and the interior is regenerated at runtime.
-- Ceiling height. Headroom stays 1.9 m (SLICE-1-STATUS item 2 is a separate decision).
-- A new block type. Everything here is derived from existing blocks.
+- Exterior changes of any kind; hull size is unchanged.
+- Interactive furniture or consoles. Screens animate from `TIME`; nothing reads ship state.
+- Player-chosen door placement (the existing `door` block could override later).
+- GI, reflection probes, SSAO, fog, interior shadows.
+- Ceiling height (1.9 m clear stays; SLICE-1-STATUS item 2 is separate).
+- The shipyard's blueprint generator itself.
 
 ---
 
-## 3. Palette and materials
+## 3. The look
 
 ### 3.1 `InteriorPalette`
 
-New `src/ship/interior_palette.gd`, `class_name InteriorPalette extends RefCounted`, constants
-only — the same pattern as `HudPalette`. Every interior colour resolves here.
+`src/ship/interior/interior_palette.gd`, constants only (the `HudPalette` pattern). Every interior
+colour resolves here.
 
 | Constant | Colour | Role |
 |---|---|---|
-| `PANEL` | `#2A3038` | wall panels, dominant surface |
-| `PANEL_DARK` | `#1B1F25` | seams, ribs, rack bodies |
-| `TRIM` | `#3A424C` | kick plates, frames, console bodies |
-| `CEILING` | `#171A1F` | overhead |
-| `FLOOR` | `#1C1F24` | deck plates |
-| `ACCENT` | `#3FA9FF` | emissive strips, hatch arch |
-| `SCREEN` | `#7FD4FF` | console readouts (matches `HudPalette.READOUT`) |
-| `WARN` | `#FFB03A` | sparse status lights (matches `HudPalette.WARNING`) |
-| `ALERT` | `#FF4A3D` | sparse status lights |
-| `LIGHT_COOL` | `#9DBBFF` | ceiling panels and their lights |
-| `GLASS` | `#0E1A26`, alpha 0.35 | porthole glass tint |
-| `SEAT` | `#23272E` | pilot seat upholstery |
+| `WALL` | `#D8C7A8` | walls, nose shell |
+| `WALL_LOW` | `#9C7B63` | kick bands, door leaves, dash face |
+| `TRIM` | `#EDE3D0` | pilasters, frames, console bodies, light shelf |
+| `BELT` | `#B0714E` | the terracotta stripe along every wall |
+| `CEILING` | `#CBBBA0` | overhead |
+| `FLOOR` | `#56607A` | common deck |
+| `FLOOR_BRIDGE` | `#8A5A66` | the command area's floor |
+| `SCREEN_BACK` | `#1A1C23` | screen glass and bezels |
+| `WOOD` | `#9A5E3A` | the dash rail |
+| `LIGHT_WARM` | `#FFD9A8` | every light and lit strip |
+| `AMBER` / `SKY` / `CORAL` / `LAVENDER` | `#FFB45A` / `#8CC8F0` / `#F07C5A` / `#B9A6E0` | readouts, buttons, indicators |
+| `GLASS` | `(0.55, 0.75, 0.90, 0.22)` | porthole glass |
+| `SEAT` | `#C4A27A` | pilot seat upholstery |
 
-### 3.2 Shaders
+Phase B adds room floor colours and furniture colours (§7.4).
 
-All under `data/materials/interior/`. Materials are built in code from these shaders with
-parameters from `InteriorPalette`, so `.tres` files stay minimal (CLAUDE.md comment hazard).
+### 3.2 Materials
 
-- **`panel.gdshaderinc`** — shared surface function. Procedural panel seams on a 1 m grid,
-  rivets at seam intersections, low-frequency grime and roughness variation, all from
-  **world-space position** with a triplanar pick by normal, so any box at any position tiles
-  correctly without UVs. Parameters: base colour, seam colour, metallic (0.3), roughness (0.55).
-- **`panel.gdshader`** — floors, ceilings, walls, trim. Includes `panel.gdshaderinc`. Adds one
-  **instance uniform** `porthole` (`vec4`: centre in local space xyz, radius w; w ≤ 0 means none)
-  and discards fragments inside that cylinder along the wall normal. This is how a porthole wall
-  gets a real see-through hole while its `BoxMesh` and its collider stay whole.
-- **`screen.gdshader`** — unshaded emissive readouts, animated from `TIME`: a mode uniform picks
-  bar graph, waveform, or text-like block rows; scanline and slight flicker. A second mode set
-  (`leds`) draws a grid of blinking status LEDs for racks, mostly `SCREEN`, a few `WARN`/`ALERT`.
-- **`canopy_window.gdshader`** — the nose shell. Includes `panel.gdshaderinc` for the shell
-  body; inside the window mask it shows the projected canopy view (§5.2); a thin `ACCENT` rim
-  glows around each window.
-- **Emissive strip** and **glass** are plain `StandardMaterial3D`s built in code (`ACCENT`
-  emission energy 2.5; `GLASS` transparent, roughness 0.05, metallic 0.2).
+`src/ship/interior/interior_materials.gd` builds and caches every material.
 
----
+- **Structure and props use `StandardMaterial3D`** with flat colour, roughness 0.85. Props share
+  one material with `vertex_color_use_as_albedo` and a faint rim (0.15), since each prop's colour
+  rides on its vertices. Structure surfaces have no rim: on a ceiling seen at a glancing angle it
+  blows the whole overhead out (found in the prototype).
+- **Three custom shaders, and only three**, in `data/materials/interior/`:
+  - `glow.gdshader`: unshaded; vertex colour pre-scaled by energy; alpha below 1 blinks.
+  - `screen.gdshader`: unshaded animated readouts, three chunky modes (bars, wave, dots).
+  - `canopy_window.gdshader`: the nose shell, flat-coloured, with the projected canopy view in
+    rounded window cut-outs (§6.2).
+- **Glass:** transparent `StandardMaterial3D` with vertex colours, so the tint and a cartoon
+  glint share a batch.
 
-## 4. The dressing kit
+### 3.3 Lighting and environment
 
-### 4.1 Structural dressing — every walkable cell
-
-Heights below are **floor-relative** (floor surface = 0, ceiling underside = 1.9 m).
-
-- **Ribs.** Each wall face emits a half-rib at both vertical edges: 0.06 m wide, 0.06 m proud,
-  full height, `PANEL_DARK`. Two adjacent faces' halves meet as one 0.12 m rib at every cell
-  boundary.
-- **Ceiling ribs.** Across every shared edge between two walkable cells: 0.08 m wide, 0.04 m
-  deep. Kept shallow because headroom is 1.9 m for a 1.8 m avatar.
-- **Coves.** Along the top of each wall face: a 45° chamfer panel 0.22 m wide, meeting the wall
-  at 1.74 m and the ceiling 0.16 m in. An `ACCENT` emissive line (0.025 m) runs along its lower
-  edge.
-- **Conduit.** One pipe, radius 0.045 m, along each cove's lower edge, `TRIM`.
-- **Kick plate and floor strip.** A 0.12 m × 0.03 m `TRIM` kick plate at each wall base, with a
-  0.02 m `ACCENT` emissive strip along its top.
-- **Ceiling panel.** One per walkable cell, 0.9 × 0.5 m, 0.01 m below the ceiling, `LIGHT_COOL`
-  emissive at energy 0.6, with a `PANEL_DARK` bezel.
-
-### 4.2 Wall variants
-
-Every wall face (not canopy) gets exactly one variant, decided by `InteriorLayout` (§7.1).
-
-| Variant | What it is | Collider |
-|---|---|---|
-| `HATCH` | Door slab 1.1 × 1.75 m, 0.04 m proud, seamed; 0.12 m `TRIM` frame; an `ACCENT` arch strip across the frame head (energy 2.0); one `WARN` indicator beside the door. | none (≤ 0.1 m proud) |
-| `CONSOLE` | Base cabinet 1.4 wide × 0.75 tall × 0.35 deep (`TRIM`); a sloped screen face rising from 0.75 m at 0.35 m out to 1.1 m at the wall (`screen`, bar/waveform/text mode varying per face); a button row of small emissive boxes, mostly `SCREEN`, one `WARN`; a wall display 0.8 × 0.4 m at 1.2–1.6 m, 0.04 m proud (`screen`). | box 1.4 × 1.1 × 0.4 |
-| `PORTHOLE` | The wall's `porthole` instance uniform cuts a hole of radius 0.28 m centred at 1.4 m. A frame ring (outer radius 0.38, inner 0.28, 0.14 deep, 0.07 proud, `TRIM`), with a thin `ACCENT` ring on its inner lip. Glass disc at the wall's outer plane (`GLASS`). Beyond it is the interior `SkySphere`, which `MotionCoupling` already rotates with the hull. | none — the wall's box collider stays whole |
-| `RACK` | Cabinet 1.2 wide × 1.5 tall (0.15–1.65 m) × 0.25 deep, `PANEL_DARK`; front split into modules — two `leds` screen strips, a vent slat block, a small `screen` readout. | box 1.2 × 1.5 × 0.25 |
-| `PANEL` | Plain wall plus one junction box greeble (0.3 × 0.4 × 0.08 m). | none |
-
-The kit's pieces are built from primitive meshes via `SurfaceTool.append_from()` and merged into
-**one `ArrayMesh` per material** per rebuild, so the draw-call count does not grow with ship size
-beyond a handful of merged meshes.
+- One warm `OmniLight3D` per walkable cell under its round ceiling light (energy 0.35, range
+  3.5). Small warm lights at consoles (0.35), hatches and doors (0.5), and one cockpit key light
+  (0.5). All `light_cull_mask = 2`, **no shadows**.
+- `data/environments/ship_interior.tres`, set on the interior camera only: black background,
+  ambient `#4A423A` at 0.45, filmic tonemap, glow on (intensity 0.5, bloom 0.03, HDR threshold
+  1.1), **no SSAO**.
+- The chase camera and the canopy `SubViewport` keep the `WorldEnvironment`, so the exterior look
+  does not change.
 
 ---
 
-## 5. The cockpit nose
-
-### 5.1 Shell geometry
-
-`InteriorLayout` groups canopy faces by plane (§7.1). For each group, `InteriorDressing` builds
-one **nose shell** that bulges *forward*, into the canopy cells, from the plane those faces share.
-Canopy cells are solid, so the space is free; the exterior is a separate space, so the interior
-shell does not need to fit inside the exterior wedge.
-
-Parametrised over `u ∈ [0, 1]` across the group and `v ∈ [0, 1]` floor to ceiling, for a group of
-width `W` centred at `x_c` on plane `z_p`, with nose depth `D = 1.4 m`:
+## 4. Architecture
 
 ```
-θ    = π · u
-d(v) = D                                     for v ≤ v0
-     = D · sqrt(1 − ((v − v0) / (1 − v0))²)   for v > v0      (v0 = 0.45)
-x    = x_c − (W / 2) · cos θ
-z    = z_p − d(v) · sin θ
-y    = floor + 1.9 · v
+ShipGrid ──► InteriorLayout.plan() ──► records ─┬─► InteriorBuilder   structure: colliders, walls, floors
+                (what every face is)            │
+                                                └─► InteriorDressing  maps records to props
+                                                         │
+                                                         ▼
+                                   InteriorProps (reusable library) ──► InteriorKit (mesh toolkit)
 ```
 
-That is a vertical lower half and a curved-back upper half: plan view a half-ellipse, and the
-roof of the alcove sweeping down onto the ceiling edge. At `θ = 0` and `θ = π` the depth is zero,
-so it meets the side walls flush. Tessellated at 48 × 20.
+| Unit | File (`src/ship/interior/` unless noted) | Responsibility | Knows about |
+|---|---|---|---|
+| `InteriorPalette` | `interior_palette.gd` | colours | nothing |
+| `InteriorMaterials` | `interior_materials.gd` | builds and caches materials | palette, shaders |
+| `InteriorKit` | `interior_kit.gd` | accumulates geometry into one merged mesh per material; bevel boxes, tubes, rings, discs, screens; creates lights and colliders | materials |
+| `InteriorProps` | `interior_props.gd` | **the reusable asset library**: every piece, built in a local frame from `(kit, frame, seed)` | kit, palette — **never** the grid, layout or builder |
+| `InteriorLayout` | `interior_layout.gd` | decides what every face is | grid, catalog |
+| `InteriorDressing` | `interior_dressing.gd` | turns layout records into frames and calls props | layout, props, kit |
+| `SlidingDoor` | `sliding_door.gd` | a door that opens for the avatar (Phase B) | nothing ship-specific |
+| `InteriorBuilder` | `src/ship/interior_builder.gd` (existing) | structure: colliders and wall, floor and ceiling boxes; calls the dressing | layout, materials, dressing |
 
-The formula is written for a group facing −Z (a forward windshield, which is all this ship has).
-Other facings rotate the same local shell by the group's face normal.
+**The frame convention every prop uses:** origin on the wall's inner surface at floor level,
+centred along the wall; +x along the wall, +y up, +z out into the room. Sizes and heights are
+metres in that frame. A prop never looks outside its frame, so any generator that can produce a
+frame can place it.
 
-### 5.2 Windows
-
-Three windows, as rounded rectangles in `(u, floor-relative height)`, corner radius 0.08 m:
-
-| Window | u | Height |
-|---|---|---|
-| Centre | 0.5 ± 0.13 | 0.95–1.70 m |
-| Port / starboard | 0.5 ∓ 0.27, ± 0.08 | 1.00–1.60 m |
-
-These are constants in `InteriorDressing` and are expected to be tuned from screenshots.
-
-The shell's material is `InteriorBuilder.canopy_material` — the scene supplies it as a
-`ShaderMaterial` on `canopy_window.gdshader` carrying the `ViewportTexture`. Inside a window,
-for each fragment the shader:
-
-1. takes the fragment's world position and subtracts the uniform `eye_world` — the pilot's eye;
-2. treats that as a view-space direction for the canopy camera (the interior is axis-aligned with
-   the hull and the canopy camera looks down −Z, so no rotation is needed);
-3. projects it with `tan_half_fov_y` and `aspect` to a UV and samples the viewport there; outside
-   `[0, 1]` it shows black.
-
-Because every window samples by direction from the eye, windows of any shape, anywhere on a
-curved surface, line up into one continuous view, and the cockpit velocity marker (drawn inside
-the SubViewport) still registers against what is visible. The old per-pane UV split is deleted.
-
-The viewport stays 1536 × 512 (3 : 1) with `fov = 40`. The side windows' far edges sit about 33°
-off-axis from the eye, inside the camera's ±47.5° horizontal cover.
-
-`flight_test.gd::_aim_canopy_view()` already computes the eye; it additionally sets `eye_world`,
-`tan_half_fov_y` and `aspect` on the canopy material from `CanopyCam` and the viewport size.
-
-If `canopy_material` is null (every builder test), the dressing builds the shell with a default
-`canopy_window.gdshader` material and no texture: the windows render black, never a hole.
-
-### 5.3 Dashboard and collision
-
-A dashboard follows the shell arc, inset 0.1 m, 0.5 m deep, top at 0.9 m, with a sloped `screen`
-strip. The canopy faces' existing box colliders stay exactly where they are, at the plane, so the
-avatar stops at the front of the dash like a railing. The dash and the shell are beyond that plane
-and need no colliders.
+**Why a kit and a separate library:** the kit is plumbing (batching, primitives) and the library
+is content. A future generator, such as the shipyard, a derelict or a station, reuses both
+without touching layout code. It also keeps each file small enough to hold in one reading.
 
 ---
 
-## 6. Lighting and environment
+## 5. Phase A: structure and common-area pieces
 
-### 6.1 Generated lights
-
-`InteriorDressing` creates every interior light; `flight_test.tscn` loses `CeilingLight1`–`3`,
-their `Strip` meshes, and the `BoxMesh_light_strip` / `StandardMaterial3D_light_strip`
-sub-resources.
-
-| Light | Where | Colour | Energy | Range | Shadow |
-|---|---|---|---|---|---|
-| Cell light | every walkable cell's ceiling panel | `LIGHT_COOL` | 0.5 | 3.2 | no |
-| Screen spill | every `CONSOLE`, 0.4 m out from the screen | `SCREEN` | 0.6 | 1.8 | no |
-| Hatch light | every `HATCH`, above the arch | `ACCENT` | 1.2 | 3.0 | no |
-| Cockpit key | one per nose shell, above the dash | `SCREEN` | 0.8 | 3.0 | **yes** |
-
-All `OmniLight3D`, all `light_cull_mask = 2`. The starter shuttle lands at 26 lights (20 cells, 4 consoles, 1 hatch, 1 key), one
-shadowed; Forward+ clustered lighting handles that without shadows.
-
-### 6.2 Interior environment
-
-New `data/environments/ship_interior.tres` (`Environment`), assigned by `flight_test.gd` to the
-interior camera (`Ship/Interior/Avatar/Head/Camera3D`, which is also the seated camera). The chase
-camera and the canopy `SubViewport` keep the `WorldEnvironment`, so the exterior look does not
-change.
-
-- Background: custom colour, black (the interior `SkySphere` covers it).
-- Ambient: colour `#0B1320`, energy 0.4.
-- Tonemap: filmic, exposure 1.0.
-- Glow: on, intensity 0.8, bloom 0.05, HDR threshold 1.0 — this is what turns thin emissive strips
-  into light.
-- SSAO: on, radius 1.0, intensity 2.0 — contact darkening in corners and under consoles.
-
----
-
-## 7. Architecture
-
-### 7.1 `InteriorLayout` — new, pure
-
-`src/ship/interior_layout.gd`, `class_name InteriorLayout extends RefCounted`.
+### 5.1 `InteriorLayout` records
 
 ```gdscript
 static func plan(grid: ShipGrid, catalog: BlockCatalog, walkable: Array) -> InteriorLayout
-func faces() -> Array[Dictionary]          # {coord, normal: Vector3i, kind, variant}
-func canopy_groups() -> Array[Dictionary]  # {normal, plane, coords: Array[Vector3i]}
+func faces() -> Array[Dictionary]
+func canopy_groups() -> Array[Dictionary]   # {normal: Vector3i, coords: Array}
+func walkable_coords() -> Array[Vector3i]
+static func face_hash(coord: Vector3i, normal: Vector3i) -> int
 ```
 
-`kind` is `FLOOR`, `CEILING`, `WALL` or `CANOPY`. `variant` is set for `WALL` only. Wall variants
-are resolved in strict priority order:
+A face record is `{coord, normal, kind, variant, zone, porthole, owner}`:
 
-1. **`HATCH`** — the cell is an `airlock` and the neighbour across this face is empty (vacuum).
-2. **`CONSOLE`** — the cell is face-adjacent to a MOUNT cell (the pilot seat), or the cell has a
-   `CANOPY` face (it is in the cockpit row).
-3. **`PORTHOLE`** — the face is a **flank** (normal ±X: port or starboard — ships carry
-   portholes on their sides, not on end bulkheads) **and outer skin**: the neighbour is empty, or
-   the neighbour is solid and the cell beyond it (`coord + 2 · normal`) is empty.
-4. **`RACK` or `PANEL`** — alternating by a stable integer hash of `(coord, normal)`.
+- `kind`: `FLOOR`, `CEILING`, `WALL` or `CANOPY` (Phase B adds `DOORWAY`).
+- `zone` of the cell: `&"bridge"` if the cell is common and either has a canopy neighbour or is,
+  or is next to, a MOUNT cell; else `&"common"`. Phase B adds room ids.
+- `porthole`: whether the builder cuts a porthole in this wall.
+- `owner`: whether this record builds the structure. It is always true in Phase A; Phase B
+  partitions have two records and one owner.
 
-Walkable-to-walkable faces are open and produce no record, exactly as today. The layout never
-references `InteriorBuilder` or `InteriorDressing`; both read it.
+Common-area wall variants, in strict priority order:
 
-On the starter shuttle this yields: `CONSOLE` on both side walls of the z = −3 and z = −2 rows (4);
-`PORTHOLE` on both side walls at z = −1 and z = 0 (4 — the engine pods sit outboard of z = +1
-and +2, so those walls are not skin); one `HATCH` on the airlock's aft face; `RACK`/`PANEL` on
-the rest (the aft bulkhead faces are skin but not flanks, so they get no porthole).
+1. **`HATCH`**: an `airlock` cell's face onto vacuum.
+2. **`PANEL`** (or `PORTHOLE` if outer-skin flank): any wall of a MOUNT cell, because its
+   fixture stands there and nothing that protrudes may go in.
+3. **`CONSOLE`**: the cell is next to a MOUNT cell, or has a canopy face.
+4. **`PORTHOLE`**: a flank face (normal ±X) on the outer skin. The neighbour is empty, or solid
+   with empty beyond it.
+5. **`LOCKERS`** or **`DISPLAY`**, alternating by `face_hash`.
 
-### 7.2 `InteriorBuilder` — changed
+On today's shuttle this gives 4 consoles, 4 portholes, 1 hatch, and lockers or displays on the
+remaining 8 walls.
 
-- `rebuild()` computes the `InteriorLayout` once and builds from its records instead of from its
-  own neighbour loop.
-- Floors, ceilings and walls keep their `_add_box()` collider + `BoxMesh` pair, with the §3
-  `panel.gdshader` materials in place of the flat `StandardMaterial3D`s. A `PORTHOLE` wall's mesh
-  instance gets its `porthole` instance uniform set; its collider is unchanged.
-- **Canopy faces keep their colliders and lose their visible boxes.** The nose shell is the
-  canopy surface now.
-- `_build_canopy_panes()`, `_sorted_unique()`, `_pane_mat()`, `canopy_pane_uvs()` and
-  `_canopy_panes` are deleted.
-- After fixtures, `rebuild()` calls `InteriorDressing.build(layout, …)`, which parents all of its
-  output under one `Dressing` `Node3D` inside the owned `StaticBody3D`. Consequently one rebuild
-  still owns one body, and `_clear()`'s existing `remove_child()` + `free()` removes the dressing
-  with everything else.
-- New read-only accessor `layout() -> InteriorLayout` for tests and the dressing.
+### 5.2 Structure (`InteriorBuilder`)
 
-### 7.3 `InteriorDressing` — new
+- Collision is unchanged: one box collider per floor, ceiling and wall face.
+- Visible boxes use `InteriorMaterials` flat colours: floor by zone, ceiling, wall.
+- **Porthole walls:** the collider stays whole. The visible wall is four boxes around a
+  0.54 m square opening centred at 1.28 m above the floor. The porthole prop's thick ring
+  (radius 0.26 to 0.42) covers the square's corners, and its bore hides the gap round the glass.
+  No shader trick needed.
+- **Canopy faces:** a collider and no visible box. The nose shell is the canopy now. The old
+  per-pane UV split (`canopy_pane_uvs()` and friends) is deleted.
+- `rebuild()` ends by calling `InteriorDressing.build(layout, body, canopy_material)`. All
+  dressing lives under one `Dressing` node inside the single owned body, so the existing
+  `remove_child()` + `free()` clears it with everything else.
 
-`src/ship/interior_dressing.gd`, `class_name InteriorDressing extends RefCounted`, one entry
-point:
+### 5.3 The prop library, Phase A
 
-```gdscript
-static func build(layout: InteriorLayout, grid: ShipGrid, body: StaticBody3D,
-		canopy_material: Material) -> Node3D
+All sizes in the §4 frame. Every piece is built from bevelled boxes (chamfered edges,
+flat-shaded) unless noted. Colliders go on anything more than 0.15 m proud.
+
+| Prop | Summary | Collider |
+|---|---|---|
+| `wall_trim` | Pilasters (0.18 × 1.9 × 0.1) on both cell edges, one a hair smaller so the neighbours' never z-fight. Kick band, terracotta belt at 0.95 m, light shelf at 1.66 m with a warm strip above it, 45° cove to the ceiling. | — |
+| `ceiling_light` | A round light: a ring frame (radius 0.30 to 0.42) and a glowing disc, plus the cell's light. | — |
+| `console` | Glowing plinth, bevelled body 1.4 × 0.62 × 0.38, 45° sloped top with a screen, four chunky buttons (one blinks), a framed wall screen above, a small light. | 1.4 × 1.1 × 0.4 |
+| `lockers` | Six raised bevelled doors in a 2 × 3 grid on a dark backing, each with a round indicator. | — |
+| `display` | A framed screen at 1.3 m on a ledge at 1.0 m. | — |
+| `porthole` | A thick ring (0.26 to 0.42, 0.09 proud), a faint warm inner rim, tinted glass with a two-streak glint. | — (wall stays whole) |
+| `hatch` | Two bevelled door leaves with a belt stripe, thick posts and header, a lit strip under the header, a blinking amber indicator, a light. | — |
+
+Screens choose their mode from the seed, so no two neighbouring screens match.
+
+---
+
+## 6. Phase A: the cockpit nose
+
+### 6.1 Shell
+
+For each canopy group, `InteriorDressing` builds a frame with its origin on the canopy plane at
+floor level, +z back into the room, and asks the `nose` prop for a shell of the group's width.
+The shell bulges forward into the canopy cells:
+
+```
+θ = π·u,   d(v) = D                                  (v ≤ 0.45)
+                = D·sqrt(1 − ((v − 0.45)/0.55)²)     (v > 0.45),   D = 1.4 m
+x = −(W/2)·cos θ,   y = 1.9·v,   z = −d(v)·sin θ
 ```
 
-It returns the `Dressing` node it created, holding:
+It is tessellated 48 × 20 with smooth normals. The shell's UV is (arc length across from the
+centre line, height), both in metres, and the windows are defined in that space.
 
-- one `MeshInstance3D` per material with the merged `ArrayMesh` (layers = 2);
-- the `OmniLight3D`s of §6.1;
-- `CollisionShape3D` boxes for `CONSOLE` and `RACK` pieces, added to `body` (not to `Dressing`,
-  because shapes must be direct children of the body to register).
+Around the shell:
+- **Ribs:** four chunky ribs (0.1 wide, 0.05 proud) follow the curve between and beside the
+  windows, from the dash to the ceiling.
+- **Brow line:** a warm line along the curve at 1.8 m.
+- **Dash:** its front edge is a shallower curve (depth 0.55) that sweeps round the cockpit.
+  Walnut rail on top (radius 0.055), `WALL_LOW` face, glowing plinth underneath, flat top out to
+  the shell, and three angled screen desks.
+- **Alcove floor:** `FLOOR_BRIDGE`.
+- **Key light.**
 
-Tests count pieces by querying that node tree (`find_children` by type), so `Dressing` is a
-plain `Node3D` with no script.
+### 6.2 Windows
 
-### 7.4 Scene and resource edits
+Three rounded rectangles in (across, height) metres, corner radius 0.14 and frame 0.09:
+- centre: (0, 1.325) with half-size (0.9, 0.375);
+- port and starboard: (∓1.95, 1.3) with half-size (0.5, 0.3).
 
-- `flight_test.tscn`: delete the three ceiling lights and their sub-resources; replace
-  `StandardMaterial3D_canopy` with a `ShaderMaterial` on `canopy_window.gdshader` whose
-  `canopy_view` parameter is the existing `ViewportTexture_canopy` (`resource_local_to_scene`
-  kept).
-- `flight_test.gd`: `_aim_canopy_view()` also sets the three canopy shader uniforms; a new step
-  assigns `ship_interior.tres` to the interior camera.
-- `data/blocks/meshes/pilot_seat.tres`: the upholstery material's `albedo_color` becomes
-  `InteriorPalette.SEAT`. The cyan readout material is unchanged.
+These are constants on the prop, pushed to the shader as uniforms.
 
-No `#` comments in any `.tscn` or `.tres`. Every scene edit is proven by reading the value back at
-runtime, per CLAUDE.md.
+Inside a window, `canopy_window.gdshader` takes the fragment's world position minus `eye_world`
+(the pilot's eye) as a view-space direction for the canopy camera. The interior is axis-aligned
+with the hull and the camera looks down −Z. It projects that direction with `tan_half_fov_y` and
+`aspect`, and samples the `SubViewport` there, showing black outside it. So windows of any shape
+on a curve line up into one view, and the cockpit velocity marker still registers.
+`flight_test.gd::_aim_canopy_view()` sets the three uniforms. The viewport stays 1536 × 512.
+
+With no canopy material (every builder test), the dressing uses the same shader with no texture,
+so the windows render black and there is never a hole.
+
+The dash and shell sit beyond the canopy faces' colliders, which stay at the plane: the avatar
+stops at the dash like a railing.
+
+---
+
+## 7. Phase B: rooms
+
+### 7.1 Room blocks
+
+Five new blocks in `data/blocks/`: `bunk_room`, `galley`, `bathroom`, `closet`, `weapon_room`.
+Each is `DECK` occupancy and `INTERIOR` category, with a floor-slab mesh like `deck`.
+**Mass 0.4 t and power draw 0.1 MW, identical to `deck`**, so swapping deck cells for room cells
+cannot move the starter shuttle's tuned centre of mass or power budget. Real fit-out mass is a
+later balance decision. The block count goes from 16 to 21.
+
+### 7.2 Layout rules for rooms
+
+- **Zone:** a room block's cell has its block id as its zone. Any other walkable cell is
+  `bridge` or `common` as in §5.1.
+- **Partitions:** a face between two walkable cells of different zones is a wall. It gets a
+  record on each side, each dressed for its own zone, and the record whose coord sorts lower is
+  the `owner`. Bridge and common count as the same zone, so no wall goes up between them.
+- **Doorways:** each room, meaning a connected set of cells with the same room zone, gets exactly
+  one. The candidates are its partition faces onto common or bridge cells, or onto any other room
+  if it has none. They are ranked by:
+  1. flank faces first (±X, because corridors run fore to aft);
+  2. then distance from the face centre to the room's centroid;
+  3. then lowest `(z, x)`.
+
+  The two records become `kind = DOORWAY`.
+- **Room walls:** each room cell picks one **feature** wall for its main furniture. It never
+  picks the doorway. It prefers an outer flank wall (neighbour not walkable), then any flank
+  wall, then any wall. The other walls are **secondary**. A feature
+  wall on the outer skin also gets `porthole = true`. Variants are `FEATURE` or `SECONDARY`, and
+  the dressing looks up the prop by the cell's zone.
+
+### 7.3 Doorways and sliding doors
+
+- **Structure:** the owning record builds two jamb colliders and boxes, each 0.4 m wide, leaving
+  a 1.2 m opening the full 1.9 m high (the avatar is 1.8 m). The opening never has a collider.
+- **`SlidingDoor`:** chunky frame posts and header, two bevelled leaves that slide 0.6 m apart
+  into the wall over 0.25 s, and an `Area3D` trigger (1.2 × 1.9 × 2.4 m, `collision_mask = 4`,
+  the avatar's layer)
+  that opens on enter and closes when the last body leaves. The leaves are visual only.
+  `SlidingDoor` knows nothing about ships, so a station can use it as it is.
+
+### 7.4 Room furniture (props)
+
+Room floors and furniture colours are added to `InteriorPalette`:
+
+| Room | Floor |
+|---|---|
+| `bunk_room` | `#5E7A7A` |
+| `galley` | `#B7A58A` |
+| `bathroom` | `#8FA9B8` |
+| `closet` | `#6B6A66` |
+| `weapon_room` | `#4E4A52` |
+
+Furniture colours: mattress `#6F9C9A`, gunmetal `#3A3D44`, olive `#8A9A5B`.
+
+| Room | Feature prop | Secondary prop | Colliders |
+|---|---|---|---|
+| Bunk room | `bunks`: two tiers (0.45 m and 1.25 m) of bed frame, mattress and pillow; a single low bunk when the wall has a porthole | `lockers` (tall pair) | bunk 1.9 × h × 0.9 |
+| Galley | `galley_counter`: 0.9 m counter with sink and cooktop (a glowing ring); cupboards above unless there's a porthole | `fridge` (tall, handle, indicator) | counter, fridge |
+| Bathroom | `washstand`: toilet, sink, lit mirror | `towel_rail` panel | toilet and sink block |
+| Closet | `shelves`: three levels with seeded coloured crates | `shelves` | shelves 0.4 deep |
+| Weapon room | `weapon_rack`: chunky rifle silhouettes in slots, coral warning stripe | `ammo_crates` | rack, crates |
+
+### 7.5 Starter shuttle layout
+
+```
+ z \ x     −1           0            +1
+  −4     canopy      canopy        canopy
+  −3      deck        deck          deck        ┐
+  −2      deck     pilot_seat       deck        │ bridge
+  −1      deck        deck          deck        ┘
+   0    bunk_room     deck         galley
+  +1    bunk_room     deck       weapon_room
+  +2    bathroom      deck          closet
+  +3    bulkhead     airlock       bulkhead
+```
+
+Everything outside the cabin (equipment deck, pods, RCS) is unchanged. Validation must stay at
+zero issues, and `ShipStats` numbers must not move (§7.1).
 
 ---
 
 ## 8. Testing
 
-### 8.1 `test_interior_layout.gd` — new
+GUT, `test/unit/`, output pristine. Scene edits are proven by runtime read-back (CLAUDE.md).
 
-- A porthole is placed only on an outer-skin flank face; a wall whose solid neighbour has
-  another solid cell beyond it gets no porthole, and neither does a ±Z face that is skin.
-- A wall next to a MOUNT cell is a `CONSOLE`, even when it is also outer skin (priority).
-- `HATCH` appears only on an airlock face whose neighbour is empty.
-- Every wall face has exactly one variant; canopy faces have none.
-- Canopy faces are grouped by plane: three in a row form one group.
-- The same grid planned twice yields identical records.
-- On the real starter shuttle (`load("res://scenes/flight_test.gd").new()._starter_grid()`, the
-  node freed afterwards): 4 portholes, 1 hatch, 4 consoles, one canopy group of 3.
-
-### 8.2 `test_interior_dressing.gd` — new
-
-- Fuzz: 300 random mutations (same seed style as the parity test), rebuild, no crash, every
-  dressing visual on layer 2, every light's cull mask is 2.
-- Repeated rebuilds leave exactly one `Dressing` node and no stale `OmniLight3D`s.
-- Every `CONSOLE` and `RACK` contributes one collider on the interior body.
-- A nose shell exists if and only if there is a canopy group; with a null `canopy_material` its
-  material is still a `ShaderMaterial` (never a hole).
-
-### 8.3 `test_interior_builder.gd` — changed
-
-- Delete `test_canopy_panes_split_the_view_between_them` and
-  `test_a_lone_canopy_pane_shows_the_whole_view`.
-- `test_rebuild_does_not_leave_stale_nodes_in_the_tree` counts structure meshes as the body's
-  direct `MeshInstance3D` children, and separately asserts exactly one `Dressing` child.
-- New: a porthole wall still has a full-size box collider.
-- New: a canopy face has a collider and no structure mesh at that position.
-
-### 8.4 `test_hud_scene_wiring.gd` — changed, runtime read-back
-
-- The canopy material is a `ShaderMaterial` whose `canopy_view` is a `ViewportTexture`, and whose
-  `eye_world` equals the seat `Eye`'s global position.
-- `Ship/Interior/CeilingLight1` no longer exists.
-- The interior camera's `environment` is `ship_interior.tres`, with glow enabled.
-- The pilot seat mesh's upholstery surface albedo is `InteriorPalette.SEAT`.
-- `test_canopy_viewport_matches_the_windshield_shape` keeps asserting 3 : 1.
-
-### 8.5 Verifying it for real
-
-A throwaway probe script (scratch, never committed) loads the real `flight_test.tscn` with
-rendering on and saves screenshots from four fixed viewpoints — aft looking forward, pilot's eye,
-forward looking aft, corner — before and after. Those go to the owner. The same probe logs an
-average frame time over 120 frames inside the cabin at 1280 × 720; if the GTX 960 cannot hold
-60 fps, SSAO is the first thing to drop, then the cockpit key light's shadow.
-
-The whole GUT suite stays green.
+- **`test_interior_layout.gd`:**
+  - Variant priorities, and skin and flank detection.
+  - The zone rules, including `bridge` for the command area.
+  - Determinism.
+  - Canopy grouping.
+  - Phase B: partitions have two records and one owner; each room gets exactly one doorway;
+    doorway ranking; feature and porthole selection.
+  - The real starter shuttle's counts in each phase.
+- **`test_interior_kit.gd`:**
+  - A bevelled box has 26 faces and closed winding (every triangle's normal agrees with its
+    face).
+  - Batches merge into one mesh per material.
+  - Lights and colliders follow the layer and group conventions.
+- **`test_interior_props.gd`:** every prop builds in an identity frame without error, adds
+  geometry, and its colliders sit inside the frame's forward half-space. This is the
+  reusability guard: props must work with no grid.
+- **`test_interior_dressing.gd`:**
+  - A fuzzed grid never crashes; all visuals are on layer 2 and all lights use cull mask 2.
+  - Exactly one `Dressing` after repeated rebuilds, with no stale lights.
+  - One cell light per walkable cell.
+  - A nose exists exactly when there is a canopy group, and is never a hole.
+  - Protruding props get colliders.
+- **`test_interior_builder.gd`:**
+  - The pane UV tests are deleted.
+  - Structure counts exclude dressing colliders.
+  - A porthole wall keeps a whole collider and draws four boxes.
+  - A canopy face has a collider and no box.
+  - Phase B: a partition is built once, and a doorway leaves an opening with no collider.
+- **`test_sliding_door.gd`:** it opens on enter, stays open while any body is inside, and closes
+  after the last one leaves.
+- **`test_hud_scene_wiring.gd`, runtime read-back:**
+  - The canopy material, its projection uniforms, and that there is one nose.
+  - The old ceiling lights are gone.
+  - The interior camera's environment; the chase camera has none.
+  - The seat colour.
+  - Phase B: the starter ship has 5 rooms and 5 sliding doors.
+- **Stats guard:** `ShipStats` for the Phase B starter grid equals the Phase A one.
+- **Verifying it for real:** a throwaway probe renders the real `flight_test.tscn` from fixed
+  viewpoints: aft looking forward, the pilot's eye, a side wall, looking aft, and in Phase B
+  inside each room. It also logs average frame time over 120 frames at 1280 × 720 on the
+  GTX 960. Screenshots go to the owner.
 
 ---
 
 ## 9. Amendments to other documents
 
-- **Starter shuttle art direction §5.2** — replaced by §3.1 of this document.
-- **§5.3** — replaced with: *Revised 2026-09-23 at the owner's direction: the player's ship is
-  moody and dark with blue accents. §11's "dim and pooled" treatment for derelict and enemy
-  interiors now needs to differentiate by colour and wear (e.g. failing amber/red lighting,
-  damage) rather than by brightness alone.*
-- **§7 item 4** — annotated: canopy faces keep their colliders; the visible canopy is now the
-  generated nose shell (this document §5).
-- **SLICE-1-STATUS** — playtest item 6 marked addressed, pointing here.
+- **Art direction §5.2** is replaced by §3.1 here. **§5.3:** the player's ship is warm and dim,
+  stylized. Derelict and enemy interiors must differ by colour and wear, such as failing or
+  cold light and damage, not only by brightness. **§7 item 4:** canopy faces keep colliders; the
+  visible canopy is the generated nose. **§3.1:** the cabin blueprint is replaced by §7.5 here.
+- **SLICE-1-STATUS:** item 6 is marked addressed and points here.
 
 ---
 
 ## 10. Known trade-offs and follow-ups
 
-- **The pilot sees less.** The eye sits about 3.5 m behind the front plane and 4.9 m from the
-  nose apex, so the centre window covers roughly ±9° horizontally and ±5° vertically. The chase
-  camera (V) is unaffected. The honest fix is moving the pilot seat forward one row in the
-  blueprint, which is out of scope here and should be decided with the SLICE-1-STATUS ceiling
-  question.
-- **The canopy view is correct only from the eye.** Walking around, the projected view shows
-  slight parallax error. That is the same class of cheat the flat panes had, and less visible.
-- **Portholes show stars only**, not debris or the hull — the interior sky sphere is all that
-  exists behind them. A side-camera feed is not worth its cost for small portholes.
-- **Consoles and racks protrude into cells**, so a player-built one-cell corridor gets a little
-  narrower. Every protruding piece has a collider, so it is honest about it.
+- **The pilot sees less.** The eye is about 3.5 m behind the front plane, so the centre window
+  covers roughly ±9° horizontally and ±5° vertically. The chase camera (V) is unaffected.
+  Moving the pilot seat forward a row is the real fix, a blueprint decision left for later.
+- **The canopy view is only correct from the eye.** Walking around, it shows slight parallax,
+  the same class of cheat as before.
+- **Portholes show stars only**, from the interior sky sphere.
+- **Rooms are compact:** 2 m wide off a 2 m corridor. That suits the chunky style. A bigger
+  starter ship is a blueprint and flight-balance decision.
+- **Room fit-out weighs nothing yet** (§7.1).
+- **Doorway placement is automatic.** A player-placed `door` block override is a natural
+  shipyard follow-up.
