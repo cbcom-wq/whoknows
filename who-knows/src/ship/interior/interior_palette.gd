@@ -26,6 +26,8 @@ const CORAL := Color("f07c5a")
 const LAVENDER := Color("b9a6e0")
 ## Porthole glass, used raw (not linearised) with its alpha.
 const GLASS := Color(0.55, 0.75, 0.9, 0.22)
+## The cartoon glint streaked across porthole glass, raw with its alpha.
+const GLINT := Color(1, 1, 1, 0.35)
 ## Pilot seat upholstery (data/blocks/meshes/pilot_seat.tres, surface 0).
 const SEAT := Color("c4a27a")
 
