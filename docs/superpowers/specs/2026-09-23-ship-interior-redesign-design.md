@@ -7,6 +7,8 @@ camera at the pilot's eye)
 **Supersedes:** starter shuttle art direction §3.1 (cabin blueprint, Phase B), §5.2 (interior
 palette); refines §5.3 and §7 item 4
 **Addresses:** SLICE-1-STATUS "Reported by playtest" item 6 — the interior is plain and boring
+**Standing rules:** the look chosen here is now kept in `docs/design/visual-style.md`, which
+governs all future visual work. This spec records how that look was reached and first built.
 
 ---
 

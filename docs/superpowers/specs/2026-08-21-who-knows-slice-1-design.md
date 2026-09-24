@@ -333,6 +333,8 @@ Sixteen blocks is a weekend of modelling, not a bottleneck.
 
 > **Amended 2026-08-23:** the starter craft's concrete realisation of this direction — silhouette, blueprint, block meshes, palette, and the livery-stripe shader — is specified in `docs/superpowers/specs/2026-08-23-starter-shuttle-art-direction.md`. Note in particular its §5.3: "dim and pooled" describes derelict and enemy interiors, not the player's own ship, which is bright and lived-in.
 
+> **Amended 2026-09-23:** the game's standing visual style is `docs/design/visual-style.md`: stylized, warm and dim, chunky flat-coloured shapes lit by warm practicals. It refines this section. Flat shading, a tight palette and emissive accents carrying the story all still hold. It supersedes the "bright" player interior above. Derelict and enemy interiors must differ from the player's ship by colour and wear (cold or failing light, damage), not only by brightness.
+
 ---
 
 ## 12. Non-goals for Slice 1

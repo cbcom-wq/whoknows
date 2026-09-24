@@ -177,7 +177,8 @@ Flat-shaded, tight, emissive accents doing the storytelling — per slice spec �
 ### 5.2 Interior
 
 > **Superseded** by docs/superpowers/specs/2026-09-23-ship-interior-redesign-design.md §3.1 and §7.4 (2026-09-23), which
-> `InteriorPalette` implements: a stylized, warm, dim palette. The original table is kept below for history.
+> `InteriorPalette` implements: a stylized, warm, dim palette. The standing rules are in
+> `docs/design/visual-style.md`. The original table is kept below for history.
 
 | Role | Colour |
 |---|---|

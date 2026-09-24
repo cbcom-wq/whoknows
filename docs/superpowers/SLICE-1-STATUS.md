@@ -7,7 +7,9 @@
 Governing documents:
 
 - `docs/superpowers/specs/2026-08-21-who-knows-slice-1-design.md` — the slice spec
+- `docs/design/visual-style.md` — **the standing visual style guide**: binding on all visual work
 - `docs/superpowers/specs/2026-08-23-starter-shuttle-art-direction.md` — the ship's visual design
+  (its interior palette and mood are superseded by the style guide)
 - `docs/superpowers/plans/2026-08-21-who-knows-slice-1.md` — the 20-task implementation plan
 - `.superpowers/sdd/2026-08-21-who-knows-slice-1/progress.md` — the execution ledger, including
   every deferred finding with its reasoning

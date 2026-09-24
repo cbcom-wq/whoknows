@@ -2,6 +2,22 @@
 
 Repo-wide conventions and gotchas for Claude Code / agents working in this project.
 
+## Visual style: `docs/design/visual-style.md` is binding
+
+**Read it before any visual work**: interiors, props, rooms, lighting, materials, shaders,
+palettes, screens. The look is **stylized, warm and dim**: chunky bevelled low-poly shapes in flat
+colour, lit by warm practical lights, "fun and real enough" (think *Astroneer*, a little more
+serious). It was chosen by the owner on 2026-09-23 after three prototyped directions. Do not drift
+back toward realism, procedural surface detail, dark blue sci-fi or bright lighting; §7 of the
+guide records why each was rejected.
+
+- **Colours come only from `InteriorPalette`.** Props build from `(kit, frame, variety)` and never
+  see the grid. The interior shader budget is three. `test_visual_style_rules.gd` enforces all
+  three rules. If it fails, fix the code, not the test.
+- **Verify visual work by rendering the real scene** at eye height (1.6 m) and showing the owner.
+  Green tests prove structure, not looks.
+- **Changing a rule needs the owner's approval**, and the guide, code and tests change together.
+
 ## Godot `.tscn`/`.tres`: no `#` comments inside `[node]`, `[sub_resource]`, or `[resource]` blocks
 
 **Never put a `#` comment line adjacent to a property assignment or to a `[node]`/`[sub_resource]`/
