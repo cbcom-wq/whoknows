@@ -301,3 +301,19 @@ func test_floor_is_anchored_to_the_grid():
 		-ShipGrid.CELL_SIZE * 0.5 + InteriorBuilder.FLOOR_THICKNESS * 0.5, 0.0001)
 	assert_almost_eq(InteriorBuilder.floor_y(Vector3i(0, 1, 0)) - InteriorBuilder.floor_y(Vector3i.ZERO),
 		InteriorBuilder.STOREY_HEIGHT, 0.0001, "storeys stack at storey height")
+
+## Cockpit pod spec §4: the pod's mouth is open -- the pod prop brings its own
+## colliders -- while the canopy faces beside it still stop the avatar.
+func test_a_pod_face_has_no_collider():
+	_cat.register(_def(&"canopy", BlockDefinition.Occupancy.SOLID))
+	_cat.register(_def(InteriorLayout.HELM_ID, BlockDefinition.Occupancy.MOUNT))
+	for x in [0, 1]:
+		_put(Vector3i(x, 0, -1), &"canopy")
+	_put(Vector3i(0, 0, 0), InteriorLayout.HELM_ID)   # orientation 0 faces -z, into the glass
+	_put(Vector3i(1, 0, 0), &"deck")
+	_builder.rebuild()
+	var ahead := Vector3(0, 0, -ShipGrid.CELL_SIZE * 0.5)
+	var pod := InteriorBuilder.interior_center(Vector3i(0, 0, 0)) + ahead
+	var beside := InteriorBuilder.interior_center(Vector3i(1, 0, 0)) + ahead
+	assert_eq(_structure_colliders().filter(func(c): return c.position.is_equal_approx(pod)).size(), 0)
+	assert_eq(_structure_colliders().filter(func(c): return c.position.is_equal_approx(beside)).size(), 1)

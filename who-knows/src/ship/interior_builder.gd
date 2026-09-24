@@ -11,7 +11,9 @@ extends Node3D
 ## A walkable cell whose face touches a `canopy` cell keeps a collider there
 ## but no box: the visible canopy is the rounded nose InteriorDressing builds
 ## over the whole windshield (spec §6), so the avatar stops at the plane like
-## a railing while the pilot looks out through the nose's windows.
+## a railing while the pilot looks out through the nose's windows. A pod face
+## (cockpit pod spec §4) has no collider either: the pod's mouth is open, and
+## the pod prop brings its own walls.
 ##
 ## The output never moves. That is the whole architecture.
 ##
@@ -194,7 +196,8 @@ func _build_structure() -> void:
 				if face["owner"]:
 					_add_doorway(at, normal)
 			InteriorLayout.Kind.CANOPY:
-				_canopy_faces.append(_add_collider(_physics_body, _wall_size(normal), at))
+				if not face["pod"]:
+					_canopy_faces.append(_add_collider(_physics_body, _wall_size(normal), at))
 
 static func _floor_colour(zone: StringName) -> Color:
 	if InteriorPalette.ROOM_FLOOR.has(zone):
