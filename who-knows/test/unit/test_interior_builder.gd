@@ -30,6 +30,15 @@ func _put(coord: Vector3i, id: StringName) -> void:
 	i.block_id = id
 	_grid.set_block(coord, i)
 
+## Structure colliders only: the dressing's props carry their own.
+func _structure_colliders() -> Array:
+	return _builder.find_children("*", "CollisionShape3D", true, false).filter(
+		func(c): return not c.is_in_group(InteriorKit.GROUP))
+
+func _structure_meshes() -> Array:
+	var body: StaticBody3D = _builder.find_children("*", "StaticBody3D", true, false)[0]
+	return body.get_children().filter(func(n): return n is MeshInstance3D)
+
 func test_solid_only_ship_has_no_interior():
 	_put(Vector3i.ZERO, &"hull")
 	_builder.rebuild()
@@ -128,7 +137,7 @@ func test_walkable_cell_facing_canopy_gets_canopy_surface_not_wall():
 	assert_eq(_builder.wall_count(), 3, "the canopy face replaces a wall, not adds to one")
 	assert_eq(_builder.canopy_face_count(), 1)
 
-	var colliders := _builder.find_children("*", "CollisionShape3D", true, false)
+	var colliders := _structure_colliders()
 	assert_eq(colliders.size(), 6,
 		"canopy is real glass, not a hole -- it still needs a collider")
 
@@ -139,6 +148,7 @@ func test_walkable_cell_facing_canopy_gets_canopy_surface_not_wall():
 func test_rebuild_does_not_leave_stale_nodes_in_the_tree():
 	_put(Vector3i.ZERO, &"deck")
 	_builder.rebuild()
+	var meshes_once := _structure_meshes().size()
 	_builder.rebuild()
 	_builder.rebuild()
 
@@ -148,13 +158,11 @@ func test_rebuild_does_not_leave_stale_nodes_in_the_tree():
 		assert_eq(body.collision_layer, 2, "interior_geometry convention: collision_layer = 2")
 		assert_eq(body.collision_mask, 0, "interior_geometry convention: collision_mask = 0")
 
-	var colliders := _builder.find_children("*", "CollisionShape3D", true, false)
-	assert_eq(colliders.size(), 6,
+	assert_eq(_structure_colliders().size(), 6,
 		"stale colliders must be fully detached, not merely queued (2 floor/ceiling + 4 walls)")
 
-	var meshes := _builder.find_children("*", "MeshInstance3D", true, false)
-	assert_eq(meshes.size(), 6,
-		"stale mesh instances must be fully detached, not merely queued")
+	var meshes := _structure_meshes()
+	assert_eq(meshes.size(), meshes_once, "stale mesh instances must be fully detached, not merely queued")
 	for mesh in meshes:
 		assert_eq(mesh.layers, 2, "interior visuals render on layer 2, or the exterior sun washes them out")
 
@@ -217,3 +225,30 @@ func test_a_lone_canopy_pane_shows_the_whole_view():
 	var pane: Dictionary = _builder.canopy_pane_uvs()[0]
 	assert_almost_eq(pane["scale"], Vector2.ONE, Vector2.ONE * 0.001)
 	assert_almost_eq(pane["offset"], Vector2.ZERO, Vector2.ONE * 0.001)
+
+## A porthole is glass, not a way out: the picture has a hole, the collider
+## does not.
+func test_porthole_wall_keeps_a_whole_collider_and_draws_four_boxes():
+	_put(Vector3i(0, 0, 0), &"deck")
+	_put(Vector3i(1, 0, 0), &"hull")   # flank, vacuum beyond: a porthole
+	_builder.rebuild()
+	var wall_at := Vector3(ShipGrid.CELL_SIZE * 0.5, 0, 0)
+	var colliders := _structure_colliders().filter(func(c): return c.position.is_equal_approx(wall_at))
+	assert_eq(colliders.size(), 1)
+	assert_almost_eq((colliders[0].shape as BoxShape3D).size,
+		Vector3(InteriorBuilder.FLOOR_THICKNESS, ShipGrid.CELL_SIZE, ShipGrid.CELL_SIZE), Vector3.ONE * 0.001)
+	var pieces := _structure_meshes().filter(
+		func(m): return absf(m.position.x - wall_at.x) < 0.001)
+	assert_eq(pieces.size(), 4, "four boxes round a square opening")
+
+func test_floor_takes_its_zone_colour():
+	_put(Vector3i(0, 0, 0), &"seat")
+	_put(Vector3i(0, 0, 2), &"deck")
+	_put(Vector3i(0, 0, 1), &"deck")
+	_builder.rebuild()
+	var floor_y := -ShipGrid.CELL_SIZE * 0.5
+	for m in _structure_meshes():
+		if not is_equal_approx(m.position.y, floor_y):
+			continue
+		var expected := InteriorPalette.FLOOR if is_equal_approx(m.position.z, 4.0) else InteriorPalette.FLOOR_BRIDGE
+		assert_eq((m.material_override as StandardMaterial3D).albedo_color, expected)
