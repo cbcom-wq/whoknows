@@ -110,3 +110,19 @@ func test_empty_grid_reports_missing_core_and_seat():
 	var issues := ShipValidator.validate(_grid, _cat)
 	assert_true(_codes(issues).has(&"SINGLE_CORE"))
 	assert_true(_codes(issues).has(&"HAS_PILOT_SEAT"))
+
+func test_an_airlock_with_one_face_onto_space_is_fine():
+	_build_valid_ship()
+	_cat.register(_def(&"airlock", BlockDefinition.Occupancy.DECK))
+	_put(Vector3i(1, 0, 1), &"airlock")   # open aft; the deck at -z, hull either side
+	_put(Vector3i(0, 0, 1), &"hull")
+	_put(Vector3i(2, 0, 1), &"hull")
+	assert_false(_codes(ShipValidator.validate(_grid, _cat)).has(&"AIRLOCK_HATCH"))
+
+func test_an_airlock_with_no_single_face_onto_space_is_a_warning():
+	_build_valid_ship()
+	_cat.register(_def(&"airlock", BlockDefinition.Occupancy.DECK))
+	_put(Vector3i(1, 0, 1), &"airlock")   # open aft and on both sides
+	var issues := ShipValidator.validate(_grid, _cat)
+	assert_true(_codes(issues).has(&"AIRLOCK_HATCH"))
+	assert_true(ShipValidator.can_launch(issues), "a warning, not an error")

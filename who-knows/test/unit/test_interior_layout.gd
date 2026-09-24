@@ -181,13 +181,18 @@ func test_starter_shuttle_layout():
 	assert_eq(_count(layout, InteriorLayout.WallVariant.HATCH), 1)
 	assert_eq(layout.rooms().size(), 5)
 	var doorways := layout.faces().filter(func(f): return f["kind"] == InteriorLayout.Kind.DOORWAY)
-	assert_eq(doorways.size(), 10, "five doorways, two sides each")
+	assert_eq(doorways.size(), 12, "five room doorways and the airlock's hatch, two sides each")
 	var portholes := layout.faces().filter(func(f): return f["porthole"])
 	assert_eq(portholes.size(), 6, "four on the bridge, one in the bunk room, one in the galley")
 	assert_eq(layout.canopy_groups().size(), 1)
 	assert_eq(layout.canopy_groups()[0]["coords"].size(), 3)
 	assert_eq(layout.pods().size(), 1, "the helm looks out through the middle of the windshield")
 	assert_eq(layout.pods()[0]["coord"], Vector3i(0, 0, -3))
+	var airlocks := layout.airlocks()
+	assert_eq(airlocks.size(), 1)
+	assert_eq(airlocks[0]["coord"], Vector3i(0, 0, 3))
+	assert_eq(airlocks[0]["hatch_normal"], Vector3i(0, 0, 1), "the hatch faces aft")
+	assert_eq(airlocks[0]["door_normal"], Vector3i(0, 0, -1), "the inner hatch opens onto the corridor")
 
 func _walls_of(layout: InteriorLayout, coord: Vector3i) -> Array:
 	var out := []
@@ -373,3 +378,72 @@ func test_canopy_groups_record_their_pods():
 			assert_eq(pods, [Vector3i(0, 0, 0)])
 		else:
 			assert_true(pods.is_empty(), "a windshield with no helm behind it keeps its nose")
+
+## Airlock spec §3.1: an airlock with one face onto open space is a room of
+## its own, walled off with a hatch doorway.
+func _airlock_off_a_corridor() -> void:
+	_put(Vector3i(0, 0, 0), &"deck")
+	_put(Vector3i(0, 0, 1), &"airlock")   # its aft face (+z) is onto open space
+	_put(Vector3i(-1, 0, 1), &"hull")
+	_put(Vector3i(1, 0, 1), &"hull")
+
+func test_an_airlock_is_a_room_with_a_hatch_doorway():
+	_airlock_off_a_corridor()
+	var layout := _plan()
+	assert_eq(layout.zone_at(Vector3i(0, 0, 1)), InteriorLayout.AIRLOCK_ZONE)
+	var inner := _face(layout, Vector3i(0, 0, 1), Vector3i(0, 0, -1))
+	assert_eq(inner["kind"], InteriorLayout.Kind.DOORWAY)
+	assert_true(inner["hatch"])
+	var corridor_side := _face(layout, Vector3i(0, 0, 0), Vector3i(0, 0, 1))
+	assert_eq(corridor_side["kind"], InteriorLayout.Kind.DOORWAY)
+	assert_true(corridor_side["hatch"], "both records know the doorway is a hatch")
+
+func test_airlock_walls_are_the_hatch_and_airlock_walls():
+	_airlock_off_a_corridor()
+	var layout := _plan()
+	var hatch := _face(layout, Vector3i(0, 0, 1), Vector3i(0, 0, 1))
+	assert_eq(hatch["variant"], InteriorLayout.WallVariant.HATCH)
+	assert_false(hatch["porthole"])
+	for n in [Vector3i(1, 0, 0), Vector3i(-1, 0, 0)]:
+		assert_eq(_face(layout, Vector3i(0, 0, 1), n)["variant"], InteriorLayout.WallVariant.AIRLOCK)
+
+func test_an_airlock_takes_no_room_furniture():
+	_airlock_off_a_corridor()
+	for f in _plan().faces():
+		if f["coord"] == Vector3i(0, 0, 1):
+			assert_ne(f["variant"], InteriorLayout.WallVariant.FEATURE)
+			assert_ne(f["variant"], InteriorLayout.WallVariant.SECONDARY)
+			assert_ne(f["variant"], InteriorLayout.WallVariant.LOCKERS)
+
+func test_airlocks_lists_each_with_its_hatch_and_door():
+	_airlock_off_a_corridor()
+	var airlocks := _plan().airlocks()
+	assert_eq(airlocks.size(), 1)
+	assert_eq(airlocks[0]["coord"], Vector3i(0, 0, 1))
+	assert_eq(airlocks[0]["hatch_normal"], Vector3i(0, 0, 1))
+	assert_eq(airlocks[0]["door_normal"], Vector3i(0, 0, -1))
+
+func test_an_airlock_open_on_several_sides_is_inert():
+	_put(Vector3i(0, 0, 0), &"deck")
+	_put(Vector3i(0, 0, 1), &"airlock")   # open to +x, -x and +z
+	var layout := _plan()
+	assert_eq(layout.zone_at(Vector3i(0, 0, 1)), InteriorLayout.ZONE_COMMON)
+	assert_true(layout.airlocks().is_empty())
+	assert_eq(_count(layout, InteriorLayout.WallVariant.HATCH), 0, "an inert airlock has no hatch")
+
+## A room's sliding door must never open straight into the airlock, round its
+## inner hatch.
+func test_no_other_room_opens_into_the_airlock():
+	_put(Vector3i(0, 0, 0), &"bunk_room")
+	_put(Vector3i(0, 0, 1), &"airlock")
+	for x in [-1, 1]:
+		_put(Vector3i(x, 0, 0), &"hull")
+		_put(Vector3i(x, 0, 1), &"hull")
+	_put(Vector3i(0, 0, -1), &"hull")
+	var layout := _plan()
+	var shared := _face(layout, Vector3i(0, 0, 1), Vector3i(0, 0, -1))
+	assert_eq(shared["kind"], InteriorLayout.Kind.DOORWAY)
+	assert_true(shared["hatch"], "the shared face is the airlock's hatch, not the bunk room's door")
+	for room in layout.rooms():
+		if room["zone"] == &"bunk_room":
+			assert_true(room["doorway"].is_empty(), "the bunk room gets no door of its own into the airlock")

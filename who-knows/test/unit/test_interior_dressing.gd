@@ -182,7 +182,11 @@ func test_rooms_survive_churn():
 		else:
 			_grid.clear_block(coord)
 	_builder.rebuild()
-	assert_eq(_doors().size(), _builder.doorway_count(), "a door for every doorway, however tangled")
+	var sliding := 0
+	for f in _builder.layout().faces():
+		if f["kind"] == InteriorLayout.Kind.DOORWAY and f["owner"] and not f["hatch"]:
+			sliding += 1
+	assert_eq(_doors().size(), sliding, "a sliding door for every doorway but an airlock's, however tangled")
 
 ## A helm at (0, 0, 0) facing -z, into a three-wide windshield.
 func _helm_behind_a_windshield() -> void:

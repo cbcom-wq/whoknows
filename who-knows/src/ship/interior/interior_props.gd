@@ -47,6 +47,14 @@ const DOOR_WIDTH := 1.0
 ## above -- and well over the 1.8 m avatar.
 const DOOR_HEIGHT := 2.1
 
+## The airlock's clear height (airlock spec §3.2): its ceiling is where the
+## hull cell's is, so its copy on the hull matches it exactly. Lower than the
+## cabin's HEADROOM on purpose.
+const AIRLOCK_CLEAR := 1.9
+## An airlock hatch's clear opening height: DOOR_WIDTH wide, and still 5 cm
+## over the 1.8 m avatar.
+const HATCH_HEIGHT := 1.85
+
 ## Shelf boards: how many, where the lowest sits, and the pitch between them.
 const SHELF_LEVELS := 4
 const SHELF_BASE := 0.25

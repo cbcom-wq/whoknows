@@ -142,7 +142,7 @@ static func _dress(kit: InteriorKit, face: Dictionary) -> void:
 			InteriorProps.wall_trim(kit, f)
 			_wall_piece(kit, f, face)
 		InteriorLayout.Kind.DOORWAY:
-			if face["owner"]:
+			if face["owner"] and not face["hatch"]:
 				_doorway(kit, wall_frame(coord, face["normal"]))
 
 static func _wall_piece(kit: InteriorKit, f: Transform3D, face: Dictionary) -> void:

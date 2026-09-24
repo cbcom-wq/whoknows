@@ -362,3 +362,45 @@ func test_the_helm_is_not_drawn_from_its_block_mesh():
 	_builder.rebuild()
 	assert_eq(_builder.fixture_count(), 1, "only the other mount")
 	assert_almost_eq(_builder.fixture_positions()[0].x, ShipGrid.cell_center(Vector3i(1, 0, 0)).x, 0.001)
+
+func _airlock_fixture() -> void:
+	_cat.register(_def(&"airlock", BlockDefinition.Occupancy.DECK))
+	_put(Vector3i(0, 0, 0), &"deck")
+	_put(Vector3i(0, 0, 1), &"airlock")   # aft face onto open space
+	_put(Vector3i(-1, 0, 1), &"hull")
+	_put(Vector3i(1, 0, 1), &"hull")
+
+func _meshes_at(x: float, z: float) -> Array:
+	return _structure_meshes().filter(
+		func(m): return absf(m.position.x - x) < 0.001 and absf(m.position.z - z) < 0.001)
+
+## Airlock spec §3.2: the airlock's ceiling is where the hull cell's is, so its
+## copy on the hull can match it exactly.
+func test_the_airlock_ceiling_is_the_hull_cells():
+	_airlock_fixture()
+	_builder.rebuild()
+	var fl := InteriorBuilder.floor_y(Vector3i(0, 0, 1))
+	var slabs := _meshes_at(0.0, 2.0).filter(func(m): return m.position.y > fl)
+	assert_eq(slabs.size(), 1, "one ceiling slab over the airlock")
+	var underside: float = slabs[0].position.y - (slabs[0].mesh as BoxMesh).size.y * 0.5
+	assert_almost_eq(underside, fl + InteriorProps.AIRLOCK_CLEAR, 0.001)
+	assert_almost_eq(InteriorBuilder.ceiling_y(Vector3i(0, 0, 1), InteriorLayout.AIRLOCK_ZONE), underside, 0.001)
+	var deck_slabs := _meshes_at(0.0, 0.0).filter(func(m): return m.position.y > fl)
+	var deck_underside: float = deck_slabs[0].position.y - (deck_slabs[0].mesh as BoxMesh).size.y * 0.5
+	assert_almost_eq(deck_underside, fl + InteriorProps.HEADROOM, 0.001, "the corridor keeps its full height")
+
+func test_a_hatch_doorway_is_hatch_high():
+	_airlock_fixture()
+	_builder.rebuild()
+	var fl := InteriorBuilder.floor_y(Vector3i(0, 0, 1))
+	var lintels := _meshes_at(0.0, 1.0).filter(
+		func(m): return is_equal_approx((m.mesh as BoxMesh).size.x, InteriorProps.DOOR_WIDTH))
+	assert_eq(lintels.size(), 1)
+	var bottom: float = lintels[0].position.y - (lintels[0].mesh as BoxMesh).size.y * 0.5
+	assert_almost_eq(bottom, fl + InteriorProps.HATCH_HEIGHT, 0.001)
+	assert_eq(_builder.doorway_count(), 1)
+
+func test_storey_offset_is_zero_on_the_ground_storey():
+	assert_eq(InteriorBuilder.storey_offset(0), 0.0)
+	assert_almost_eq(InteriorBuilder.storey_offset(2),
+		2.0 * (InteriorBuilder.STOREY_HEIGHT - ShipGrid.CELL_SIZE), 0.0001)

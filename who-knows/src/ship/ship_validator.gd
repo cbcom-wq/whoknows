@@ -1,9 +1,11 @@
 class_name ShipValidator
 extends RefCounted
 
-## The five build rules from spec §6.1. Rules 1-4 are errors and block
-## launch; rule 5 is a warning because a power deficit becomes the
-## brownout mechanic rather than an invalid ship.
+## The build rules from spec §6.1. Rules 1-4 are errors and block launch;
+## rule 5 is a warning because a power deficit becomes the brownout mechanic
+## rather than an invalid ship. Rule 6 (airlock spec §3.1) is a warning too: an
+## airlock without exactly one face onto open space still flies, it just never
+## cycles.
 
 enum Severity { ERROR, WARNING }
 
@@ -35,6 +37,7 @@ static func validate(grid: ShipGrid, catalog: BlockCatalog) -> Array:
 	if seats.size() >= 1:
 		_check_mounts_reachable(grid, catalog, seats[0], issues)
 	_check_power_margin(grid, catalog, issues)
+	_check_airlocks(grid, issues)
 	return issues
 
 static func can_launch(issues: Array) -> bool:
@@ -118,3 +121,12 @@ static func _check_power_margin(grid: ShipGrid, catalog: BlockCatalog,
 			Severity.WARNING, &"POWER_MARGIN",
 			"Power draw %.1f MW exceeds generation %.1f MW." % [draw, gen]
 		))
+
+static func _check_airlocks(grid: ShipGrid, issues: Array) -> void:
+	for coord in _find_all(grid, AirlockSite.AIRLOCK_ID):
+		if AirlockSite.hatch_normal(grid, coord) == Vector3i.ZERO:
+			issues.append(Issue.new(
+				Severity.WARNING, &"AIRLOCK_HATCH",
+				"Airlock at %s needs exactly one side onto open space to cycle." % coord,
+				coord
+			))

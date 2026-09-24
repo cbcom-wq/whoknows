@@ -266,3 +266,10 @@ func test_the_helm_stays_under_the_seated_sightline():
 	var eye := InteriorProps.SEATED_EYE
 	var t := (eye.z - helm_front) / (eye.z - front_glass)
 	assert_lt(helm_top, lerpf(eye.y, InteriorProps.POD_SILL, t))
+
+## Airlock spec §3.2: the airlock matches the hull's 2 m cell, and its hatches
+## still pass the 1.8 m avatar.
+func test_the_airlock_fits_the_hull_cell_and_the_avatar():
+	assert_almost_eq(InteriorProps.AIRLOCK_CLEAR, ShipGrid.CELL_SIZE - InteriorBuilder.FLOOR_THICKNESS, 0.0001)
+	assert_lt(InteriorProps.HATCH_HEIGHT, InteriorProps.AIRLOCK_CLEAR)
+	assert_gt(InteriorProps.HATCH_HEIGHT, Avatar.STAND_HEIGHT)

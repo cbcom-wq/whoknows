@@ -44,6 +44,21 @@ const _SLAB := Vector3(ShipGrid.CELL_SIZE, FLOOR_THICKNESS, ShipGrid.CELL_SIZE)
 static func floor_y(coord: Vector3i) -> float:
 	return coord.y * STOREY_HEIGHT - ShipGrid.CELL_SIZE * 0.5 + FLOOR_THICKNESS * 0.5
 
+## How far storey `y`'s floor sits above where the hull's grid puts it: zero
+## on storey 0, and STOREY_HEIGHT - CELL_SIZE more for each storey up. Anything
+## that crosses between interior and hull space (the airlock's threshold, the
+## windows' view) subtracts it going out and adds it coming in.
+static func storey_offset(y: int) -> float:
+	return y * (STOREY_HEIGHT - ShipGrid.CELL_SIZE)
+
+## The underside of a walkable cell's ceiling slab. The airlock's is low, at
+## the top of its grid cell, so its copy on the hull can match it exactly
+## (airlock spec §3.2); every other cell has the full storey.
+static func ceiling_y(coord: Vector3i, zone: StringName) -> float:
+	if zone == InteriorLayout.AIRLOCK_ZONE:
+		return floor_y(coord) + InteriorProps.AIRLOCK_CLEAR
+	return floor_y(coord) + STOREY_HEIGHT - FLOOR_THICKNESS
+
 ## The centre of a cell's storey in interior space: grid x and z, with y
 ## halfway between the middles of its deck and overhead slabs.
 static func interior_center(coord: Vector3i) -> Vector3:
@@ -201,6 +216,7 @@ func _build_structure() -> void:
 			InteriorLayout.Kind.FLOOR:
 				_add_box(_physics_body, _SLAB, at, InteriorMaterials.flat(_floor_colour(face["zone"])))
 			InteriorLayout.Kind.CEILING:
+				at.y = ceiling_y(coord, face["zone"]) + FLOOR_THICKNESS * 0.5
 				_add_box(_physics_body, _SLAB, at, InteriorMaterials.flat(InteriorPalette.CEILING))
 			InteriorLayout.Kind.WALL:
 				if not face["owner"]:
@@ -213,7 +229,8 @@ func _build_structure() -> void:
 						InteriorMaterials.flat(InteriorPalette.WALL)))
 			InteriorLayout.Kind.DOORWAY:
 				if face["owner"]:
-					_add_doorway(at, normal)
+					_add_doorway(at, normal,
+						InteriorProps.HATCH_HEIGHT if face["hatch"] else InteriorProps.DOOR_HEIGHT)
 			InteriorLayout.Kind.CANOPY:
 				if not face["pod"]:
 					_canopy_faces.append(_add_collider(_physics_body, _wall_size(normal), at))
@@ -253,9 +270,11 @@ func _add_porthole_wall(at: Vector3, normal: Vector3i) -> void:
 		at + Vector3.UP * (v_half - above * 0.5), material)
 
 ## A doorway: two jambs and a lintel, each a collider and a box, round an
-## opening InteriorProps.DOOR_WIDTH wide and DOOR_HEIGHT high. The opening
-## itself never has a collider -- the SlidingDoor's leaves are only a picture.
-func _add_doorway(at: Vector3, normal: Vector3i) -> void:
+## opening InteriorProps.DOOR_WIDTH wide and `height` high -- DOOR_HEIGHT, or
+## HATCH_HEIGHT for an airlock's inner hatch. The opening itself never has a
+## collider here: a SlidingDoor's leaves are only a picture, and an
+## AirlockHatch brings its own.
+func _add_doorway(at: Vector3, normal: Vector3i, height: float) -> void:
 	var along := Vector3(absi(normal.z), 0, absi(normal.x))
 	var thick := Vector3(absi(normal.x), 0, absi(normal.z)) * FLOOR_THICKNESS
 	var material := InteriorMaterials.flat(InteriorPalette.WALL)
@@ -264,7 +283,7 @@ func _add_doorway(at: Vector3, normal: Vector3i) -> void:
 		_walls.append(_add_box(_physics_body, thick + along * jamb + Vector3.UP * STOREY_HEIGHT,
 			at + along * side * (InteriorProps.DOOR_WIDTH + jamb) * 0.5, material))
 	# The wall box runs slab-middle to slab-middle; the opening starts on the deck.
-	var lintel := STOREY_HEIGHT - FLOOR_THICKNESS * 0.5 - InteriorProps.DOOR_HEIGHT
+	var lintel := STOREY_HEIGHT - FLOOR_THICKNESS * 0.5 - height
 	_walls.append(_add_box(_physics_body, thick + along * InteriorProps.DOOR_WIDTH + Vector3.UP * lintel,
 		at + Vector3.UP * (STOREY_HEIGHT - lintel) * 0.5, material))
 	_doorway_count += 1

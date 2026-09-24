@@ -19,6 +19,12 @@ extends RefCounted
 ## picks one FEATURE wall for its main furniture and at most one SECONDARY
 ## wall beside it for a smaller piece; the rest keep their trim (PANEL).
 ##
+## The airlock (docs/superpowers/specs/2026-09-24-airlock-design.md §3.1): an
+## airlock cell with one face onto open space (AirlockSite) is a room of its
+## own, AIRLOCK_ZONE, with one doorway like any room -- its inner hatch -- and
+## the face onto space as its outer hatch. It takes no furniture, and no other
+## room may open into it.
+##
 ## Fixtures and pods (docs/superpowers/specs/2026-09-23-cockpit-pod-design.md
 ## §4-§5): every MOUNT cell is a fixture, with the way it faces. The canopy
 ## face straight ahead of a helm is a pod (`pod` true on its record): the
@@ -28,7 +34,7 @@ extends RefCounted
 ## always yields the same layout.
 
 enum Kind { FLOOR, CEILING, WALL, CANOPY, DOORWAY }
-enum WallVariant { NONE, HATCH, CONSOLE, PORTHOLE, LOCKERS, DISPLAY, PANEL, FEATURE, SECONDARY }
+enum WallVariant { NONE, HATCH, CONSOLE, PORTHOLE, LOCKERS, DISPLAY, PANEL, FEATURE, SECONDARY, AIRLOCK }
 
 ## Walkable blocks that make a room (spec §7.1). Any other walkable cell is
 ## bridge or common space.
@@ -36,6 +42,9 @@ const ROOM_IDS: Array[StringName] = [&"bunk_room", &"galley", &"bathroom", &"clo
 
 const ZONE_BRIDGE := &"bridge"
 const ZONE_COMMON := &"common"
+## An airlock that can cycle. A room, but not one of ROOM_IDS: it has no
+## block of its own and takes no furniture.
+const AIRLOCK_ZONE := &"airlock"
 const CANOPY_ID := &"canopy"
 const AIRLOCK_ID := &"airlock"
 ## The fixture the ship is flown from. A canopy face ahead of it becomes a pod.
@@ -51,6 +60,8 @@ var _zones: Dictionary = {}   # Vector3i -> StringName
 var _rooms: Array[Dictionary] = []
 var _fixtures: Array[Dictionary] = []
 var _pods: Array[Dictionary] = []
+var _airlocks: Array[Dictionary] = []
+var _hatches: Dictionary = {}   # Vector3i -> outer hatch normal, for airlock-zone cells
 
 static func plan(grid: ShipGrid, catalog: BlockCatalog, walkable: Array) -> InteriorLayout:
 	var layout := InteriorLayout.new()
@@ -61,10 +72,13 @@ static func plan(grid: ShipGrid, catalog: BlockCatalog, walkable: Array) -> Inte
 	# Zones first: a partition needs to know both sides.
 	for coord: Vector3i in layout._walkable:
 		layout._zones[coord] = _zone(grid, catalog, coord)
+		if layout._zones[coord] == AIRLOCK_ZONE:
+			layout._hatches[coord] = AirlockSite.hatch_normal(grid, coord)
 	var groups := {}   # plane key -> {normal, coords}
 	for coord: Vector3i in layout._walkable:
 		var zone: StringName = layout._zones[coord]
-		var in_room := ROOM_IDS.has(zone)
+		var in_room := _is_room(zone)
+		var room_wall := WallVariant.AIRLOCK if zone == AIRLOCK_ZONE else WallVariant.PANEL
 		var is_mount := _is_mount(grid, catalog, coord)
 		var by_the_helm := _has_mount_neighbour(grid, catalog, coord) or _has_canopy_neighbour(grid, coord)
 		layout._faces.append(_record(coord, Vector3i.DOWN, Kind.FLOOR, zone))
@@ -77,7 +91,7 @@ static func plan(grid: ShipGrid, catalog: BlockCatalog, walkable: Array) -> Inte
 				var partition := _record(coord, normal, Kind.WALL, zone)
 				partition["partition"] = true
 				partition["owner"] = coord < neighbour
-				partition["variant"] = WallVariant.PANEL if in_room else _common_variant(
+				partition["variant"] = room_wall if in_room else _common_variant(
 					grid, coord, normal, is_mount, by_the_helm, true)
 				layout._faces.append(partition)
 				continue
@@ -88,8 +102,10 @@ static func plan(grid: ShipGrid, catalog: BlockCatalog, walkable: Array) -> Inte
 				continue
 			var face := _record(coord, normal, Kind.WALL, zone)
 			face["skin_flank"] = normal.x != 0 and _is_outer_skin(grid, coord, normal)
-			if in_room:
-				face["variant"] = WallVariant.PANEL
+			if zone == AIRLOCK_ZONE:
+				face["variant"] = WallVariant.HATCH if normal == layout._hatches[coord] else room_wall
+			elif in_room:
+				face["variant"] = room_wall
 			else:
 				var variant := _common_variant(grid, coord, normal, is_mount, by_the_helm, false)
 				face["variant"] = variant
@@ -132,8 +148,15 @@ func walkable_coords() -> Array[Vector3i]:
 
 ## Every room: {zone, coords, doorway}, where doorway is {coord, normal} of
 ## the face chosen as its way in, or {} for a room with no neighbour at all.
+## Airlocks are listed by airlocks(), not here.
 func rooms() -> Array[Dictionary]:
 	return _rooms.duplicate()
+
+## Every airlock that can cycle: {coord, hatch_normal, door_normal}.
+## door_normal is the inner hatch's (its doorway), or Vector3i.ZERO for an
+## airlock with nowhere inside to open onto.
+func airlocks() -> Array[Dictionary]:
+	return _airlocks.duplicate()
 
 ## A walkable cell's zone: its room id, or ZONE_BRIDGE / ZONE_COMMON.
 func zone_at(coord: Vector3i) -> StringName:
@@ -150,15 +173,13 @@ static func _record(coord: Vector3i, normal: Vector3i, kind: Kind, zone: StringN
 	return {
 		"coord": coord, "normal": normal, "kind": kind, "variant": WallVariant.NONE,
 		"zone": zone, "porthole": false, "owner": true, "partition": false, "skin_flank": false,
-		"feature_normal": Vector3i.ZERO, "pod": false,
+		"feature_normal": Vector3i.ZERO, "pod": false, "hatch": false,
 	}
 
 ## Wall variants for bridge and common cells, in strict priority order. A
 ## partition is inside the ship, so it can be neither a hatch nor a porthole.
 static func _common_variant(grid: ShipGrid, coord: Vector3i, normal: Vector3i,
 		is_mount: bool, by_the_helm: bool, partition: bool) -> WallVariant:
-	if not partition and _id_at(grid, coord) == AIRLOCK_ID and not grid.has_block(coord + normal):
-		return WallVariant.HATCH
 	var skin_flank := not partition and normal.x != 0 and _is_outer_skin(grid, coord, normal)
 	if is_mount:
 		# The cell's own fixture stands here; nothing that sticks out may too.
@@ -171,6 +192,8 @@ static func _common_variant(grid: ShipGrid, coord: Vector3i, normal: Vector3i,
 
 static func _zone(grid: ShipGrid, catalog: BlockCatalog, coord: Vector3i) -> StringName:
 	var id := _id_at(grid, coord)
+	if id == AIRLOCK_ID and AirlockSite.hatch_normal(grid, coord) != Vector3i.ZERO:
+		return AIRLOCK_ZONE
 	if ROOM_IDS.has(id):
 		return id
 	if _is_mount(grid, catalog, coord) or _has_mount_neighbour(grid, catalog, coord) \
@@ -180,7 +203,10 @@ static func _zone(grid: ShipGrid, catalog: BlockCatalog, coord: Vector3i) -> Str
 
 ## Bridge and common space are one open space; only rooms are walled off.
 static func _room_of(zone: StringName) -> StringName:
-	return zone if ROOM_IDS.has(zone) else &""
+	return zone if _is_room(zone) else &""
+
+static func _is_room(zone: StringName) -> bool:
+	return ROOM_IDS.has(zone) or zone == AIRLOCK_ZONE
 
 static func _key(coord: Vector3i, normal: Vector3i) -> String:
 	return "%s|%s" % [coord, normal]
@@ -209,10 +235,10 @@ func _resolve_rooms() -> void:
 	var seen := {}
 	for coord in _walkable:
 		var zone: StringName = _zones[coord]
-		if not ROOM_IDS.has(zone) or seen.has(coord):
+		if not _is_room(zone) or seen.has(coord):
 			continue
 		var cells := _flood_room(coord, zone, seen)
-		var doorway := _choose_doorway(cells, index)
+		var doorway := _choose_doorway(cells, index, zone)
 		if not doorway.is_empty():
 			var c: Vector3i = doorway["coord"]
 			var n: Vector3i = doorway["normal"]
@@ -221,6 +247,14 @@ func _resolve_rooms() -> void:
 				face["kind"] = Kind.DOORWAY
 				face["variant"] = WallVariant.NONE
 				face["porthole"] = false
+				face["hatch"] = zone == AIRLOCK_ZONE
+		if zone == AIRLOCK_ZONE:
+			for cell in cells:
+				var door := Vector3i.ZERO
+				if not doorway.is_empty() and doorway["coord"] == cell:
+					door = doorway["normal"]
+				_airlocks.append({"coord": cell, "hatch_normal": _hatches[cell], "door_normal": door})
+			continue   # an airlock takes no furniture
 		_rooms.append({"zone": zone, "coords": cells, "doorway": doorway})
 		for cell in cells:
 			_furnish_cell(cell, index)
@@ -244,7 +278,9 @@ func _flood_room(start: Vector3i, zone: StringName, seen: Dictionary) -> Array[V
 ## The one partition face a room opens through, ranked by: onto bridge or
 ## common space before onto another room; a flank (corridors run fore-aft)
 ## before an end; nearest the room's centroid; then forward-most, then port-most.
-func _choose_doorway(cells: Array[Vector3i], index: Dictionary) -> Dictionary:
+## Only the airlock itself may open onto the airlock: a door straight into it
+## would bypass its hatch.
+func _choose_doorway(cells: Array[Vector3i], index: Dictionary, zone: StringName) -> Dictionary:
 	var centroid := Vector3.ZERO
 	for cell in cells:
 		centroid += Vector3(cell)
@@ -259,8 +295,10 @@ func _choose_doorway(cells: Array[Vector3i], index: Dictionary) -> Dictionary:
 			var face: Dictionary = _faces[index[key]]
 			if face["kind"] != Kind.WALL or not face["partition"]:
 				continue
+			if zone != AIRLOCK_ZONE and _zones[cell + normal] == AIRLOCK_ZONE:
+				continue
 			var score := [
-				1 if ROOM_IDS.has(_zones[cell + normal]) else 0,
+				1 if _is_room(_zones[cell + normal]) else 0,
 				0 if normal.x != 0 else 1,
 				(Vector3(cell) + Vector3(normal) * 0.5).distance_to(centroid),
 				cell.z,
