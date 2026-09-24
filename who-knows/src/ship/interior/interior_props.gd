@@ -63,7 +63,13 @@ const SHELF_BOARD := 0.04
 const SHELF_DEPTH := 0.4
 
 ## Half the width a stow spot keeps clear of decor, by stow class.
-const STOW_CLEARANCE := {&"small": 0.12, &"crate": 0.27, &"sidearm": 0.15}
+const STOW_CLEARANCE := {&"small": 0.12, &"crate": 0.27, &"sidearm": 0.15, &"tool": 0.14}
+
+## The top of the lower bunk's mattress. The lower bunk is solid only to here,
+## so the Interactor can reach what lies on it (bunks_spots()).
+const BUNK_MATTRESS_TOP := 0.54
+## The top of the medkit bracket beside the washstand's mirror.
+const WASHSTAND_BRACKET := 1.15
 
 ## The rounded cockpit nose (spec §6), in a frame on the canopy plane at
 ## floor level: +x across the windshield, +y up, +z back into the room.
@@ -629,7 +635,12 @@ static func bunks(kit: InteriorKit, f: Transform3D, _variety: float, low_only: b
 		_bed(kit, f, 1.3, 0.14)
 		kit.box(GLOW, f * _at(Vector3(0, 1.295, 0.45)), Vector3(1.6, 0.01, 0.05), _lit(InteriorPalette.LIGHT_WARM, 1.2))
 		top = 1.7
-	kit.collider(f * _at(Vector3(0, top * 0.5, 0.45)), Vector3(1.9, top, 0.9))
+		kit.collider(f * _at(Vector3(0, (1.3 + top) * 0.5, 0.45)), Vector3(1.9, top - 1.3, 0.9))
+	kit.collider(f * _at(Vector3(0, BUNK_MATTRESS_TOP * 0.5, 0.45)), Vector3(1.9, BUNK_MATTRESS_TOP, 0.9))
+
+## Something lying on the lower bunk's mattress, clear of the pillow.
+static func bunks_spots() -> Array:
+	return [[Transform3D(Basis(Vector3.UP, 0.3), Vector3(-0.35, BUNK_MATTRESS_TOP, 0.45)), &"tool"]]
 
 ## One bed: a frame from `base` up `frame_h`, a mattress on it and a pillow.
 static func _bed(kit: InteriorKit, f: Transform3D, base: float, frame_h: float) -> void:
@@ -702,7 +713,15 @@ static func washstand(kit: InteriorKit, f: Transform3D, _variety: float) -> void
 	kit.bevel_box(SOLID, f * _at(Vector3(0.45, 1.45, 0.015)), Vector3(0.5, 0.55, 0.03), 0.015, trim)
 	kit.box(SOLID, f * _at(Vector3(0.45, 1.45, 0.032)), Vector3(0.42, 0.47, 0.004), _c(InteriorPalette.MIRROR))
 	kit.box(GLOW, f * _at(Vector3(0.45, 1.75, 0.03)), Vector3(0.44, 0.03, 0.03), _lit(InteriorPalette.LIGHT_WARM, 2.0))
+	# A bracket over the toilet, beside the mirror, for a medkit
+	# (washstand_spots()). Under 0.15 m proud, so it needs no collider.
+	kit.bevel_box(SOLID, f * _at(Vector3(-0.5, WASHSTAND_BRACKET - 0.015, 0.075)), Vector3(0.36, 0.03, 0.13), 0.01,
+		trim)
 	kit.collider(f * _at(Vector3(0, 0.45, 0.3)), Vector3(1.5, 0.9, 0.6))
+
+## The medkit bracket beside the mirror.
+static func washstand_spots() -> Array:
+	return [[_at(Vector3(-0.5, WASHSTAND_BRACKET, 0.08)), &"tool"]]
 
 ## A towel on a rail.
 static func towel_rail(kit: InteriorKit, f: Transform3D, variety: float) -> void:
@@ -756,6 +775,15 @@ static func shelves_spots(width: float) -> Array:
 	if width >= 1.2:
 		out.append([_at(Vector3(-half + 0.45, shelf_top(2), 0.2)), &"small"])
 		out.append([_at(Vector3(half - 0.35, shelf_top(0), 0.2)), &"crate"])
+		out.append([_at(Vector3(-half + 0.35, shelf_top(0), 0.2)), &"crate"])
+		for x in [-half + 0.25, -half + 0.5, -half + 0.75]:
+			out.append([_at(Vector3(x, shelf_top(1), 0.2)), &"small"])
+		for x in [-0.05, half - 0.6, half - 0.3]:
+			out.append([_at(Vector3(x, shelf_top(2), 0.2)), &"tool"])
+	else:
+		for x in [-half + 0.2, -half + 0.5]:
+			out.append([_at(Vector3(x, shelf_top(1), 0.2)), &"small"])
+		out.append([_at(Vector3(0.0, shelf_top(0), 0.2)), &"crate"])
 	return out
 
 ## The x ranges a shelf board keeps clear for the spots on it.
@@ -824,6 +852,13 @@ static func ammo_crates(kit: InteriorKit, f: Transform3D, _variety: float) -> vo
 			kit.bevel_box(SOLID, f * _at(p + Vector3(side, -0.05, 0.255)), Vector3(0.08, 0.06, 0.02), 0.008,
 				_c(InteriorPalette.TRIM))
 	kit.collider(f * _at(Vector3(0, 0.6, 0.25)), Vector3(0.7, 1.2, 0.5))
+
+## Two flat things lying along the top of the crate stack.
+static func ammo_crates_spots() -> Array:
+	return [
+		[Transform3D(Basis(Vector3.UP, PI * 0.5), Vector3(-0.15, 1.2, 0.25)), &"tool"],
+		[Transform3D(Basis(Vector3.UP, PI * 0.5), Vector3(0.15, 1.2, 0.25)), &"tool"],
+	]
 
 ## A doorway's frame, drawn once for both rooms: two chunky posts through the
 ## wall, a header across the top and a lit strip under it. The frame's origin is on the owning side's inner

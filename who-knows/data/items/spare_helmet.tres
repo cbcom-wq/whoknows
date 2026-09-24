@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/items/item_definition.gd" id="1_def"]
+
+[resource]
+script = ExtResource("1_def")
+id = &"spare_helmet"
+display_name = "Spare helmet"
+mass_kg = 2.5
+size = Vector3(0.34, 0.34, 0.36)
+grip = 1
+stow_class = &"crate"
+look = &"spare_helmet"

@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/items/item_definition.gd" id="1_def"]
+
+[resource]
+script = ExtResource("1_def")
+id = &"ration_tin"
+display_name = "Ration tin"
+mass_kg = 0.4
+size = Vector3(0.08, 0.1, 0.08)
+grip = 0
+stow_class = &"small"
+look = &"ration_tin"
+grip_point = Vector3(0.036, 0, 0)

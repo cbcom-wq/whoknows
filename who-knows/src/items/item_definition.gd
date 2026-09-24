@@ -29,3 +29,7 @@ enum Grip {
 @export var grip_point: Vector3 = Vector3.ZERO
 ## The item-local point a use comes out of: the pistol's muzzle.
 @export var use_point: Vector3 = Vector3.ZERO
+## WIELD: how the item is turned in the hand, in degrees about x, y and z,
+## pivoting on its grip point. The datapad is tilted toward you; zero holds an
+## item as it lies.
+@export var hold_rotation: Vector3 = Vector3.ZERO

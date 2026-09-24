@@ -164,6 +164,19 @@ static func _wall_piece(kit: InteriorKit, f: Transform3D, face: Dictionary) -> v
 			_room_piece(kit, f, face, variety)
 		# PANEL: the trim is the whole wall.
 
+## What a ship starts with on its closet shelves, by stow class, spot by spot
+## (hands-and-items spec §5.2, as amended 2026-09-24): the full-width unit, and
+## the narrow one on the side wall.
+const CLOSET_STOCK := {
+	&"small": [&"canister", &"canister", &"power_cell", &"power_cell", &"rock_sample"],
+	&"crate": [&"crate", &"toolbox"],
+	&"tool": [&"spanner", &"spare_module", &"hand_lamp"],
+}
+const CLOSET_SIDE_STOCK := {
+	&"small": [&"canister", &"o2_tank", &"ration_tin"],
+	&"crate": [&"spare_helmet"],
+}
+
 ## A room wall's furniture, by room: the feature wall gets the room's main
 ## piece, the secondary wall a smaller one (spec §7.4). Secondary pieces are
 ## under a metre wide and pushed to the end of their wall away from the
@@ -178,6 +191,7 @@ static func _room_piece(kit: InteriorKit, f: Transform3D, face: Dictionary, vari
 		&"bunk_room":
 			if feature:
 				InteriorProps.bunks(kit, f, variety, porthole)
+				_stow(kit, f, InteriorProps.bunks_spots(), {&"tool": &"datapad"})
 			else:
 				InteriorProps.tall_lockers(kit, f, variety)
 		&"galley":
@@ -189,32 +203,46 @@ static func _room_piece(kit: InteriorKit, f: Transform3D, face: Dictionary, vari
 		&"bathroom":
 			if feature:
 				InteriorProps.washstand(kit, f, variety)
+				_stow(kit, f, InteriorProps.washstand_spots(), {&"tool": &"medkit"})
 			else:
 				InteriorProps.towel_rail(kit, f, variety)
 		&"closet":
 			var width := 1.7 if feature else 0.85
 			InteriorProps.shelves(kit, f, variety, width)
-			_stow(kit, f, InteriorProps.shelves_spots(width), {&"small": &"canister", &"crate": &"crate"})
+			_stow(kit, f, InteriorProps.shelves_spots(width), CLOSET_STOCK if feature else CLOSET_SIDE_STOCK)
 		&"weapon_room":
 			if feature:
 				InteriorProps.weapon_rack(kit, f, variety)
 				_stow(kit, f, InteriorProps.weapon_rack_spots(), {&"sidearm": &"plasma_pistol"})
 			else:
 				InteriorProps.ammo_crates(kit, f, variety)
+				_stow(kit, f, InteriorProps.ammo_crates_spots(), {&"tool": &"flare"})
 	if porthole:
 		InteriorProps.porthole(kit, f)
 
 ## A StowPoint at every spot a prop publishes, stocked by stow class
 ## (hands-and-items spec §5.2). The prop decides where things can sit; this
 ## decides what a ship starts with there.
+## A class given a list hands its spots the list's ids in turn.
 static func _stow(kit: InteriorKit, f: Transform3D, spots: Array, stock: Dictionary) -> void:
+	var taken := {}
 	for spot in spots:
 		var point := StowPoint.new()
 		point.name = "StowPoint"
 		point.transform = f * (spot[0] as Transform3D)
 		point.accepts = spot[1]
-		point.stock = stock.get(spot[1], &"")
+		point.stock = _next_stock(stock.get(spot[1], &""), taken, spot[1])
 		kit.root.add_child(point, true)
+
+static func _next_stock(ids: Variant, taken: Dictionary, stow_class: StringName) -> StringName:
+	if not (ids is Array):
+		return ids
+	var list: Array = ids
+	if list.is_empty():
+		return &""
+	var n: int = taken.get(stow_class, 0)
+	taken[stow_class] = n + 1
+	return list[n % list.size()]
 
 ## One airlock's room (airlock spec §3): its walls and ceiling, a hatch frame
 ## and an AirlockHatch at each end, the room panel on a side wall, the corridor

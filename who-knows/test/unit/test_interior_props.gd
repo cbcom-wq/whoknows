@@ -126,8 +126,12 @@ func _built_with_colliders(expected: int) -> void:
 
 func test_bunks_are_solid():
 	InteriorProps.bunks(_kit, Transform3D.IDENTITY, 0.3, false)
-	_built_with_colliders(1)
-	assert_almost_eq((_colliders()[0].shape as BoxShape3D).size.y, 1.7, 0.001, "two tiers")
+	# Two blocks, not one: the lower bunk is solid only to its mattress, so the
+	# Interactor can reach what lies on it, and the upper bunk has its own.
+	_built_with_colliders(2)
+	var tops := _colliders().map(func(c): return c.position.y + (c.shape as BoxShape3D).size.y * 0.5)
+	assert_almost_eq(tops.min(), InteriorProps.BUNK_MATTRESS_TOP, 0.001, "the lower bunk")
+	assert_almost_eq(tops.max(), 1.7, 0.001, "two tiers")
 
 func test_a_low_bunk_leaves_room_for_a_porthole():
 	InteriorProps.bunks(_kit, Transform3D.IDENTITY, 0.3, true)
@@ -183,21 +187,32 @@ func test_the_galley_counter_holds_two_small_things():
 	_assert_built()
 	_assert_spots_clear(InteriorProps.galley_counter_spots(), [&"small", &"small"])
 
-func test_full_shelves_hold_two_canisters_and_a_crate():
+func test_full_shelves_hold_small_things_tools_and_two_crates():
 	InteriorProps.shelves(_kit, Transform3D.IDENTITY, 0.6, 1.7)
 	_assert_built()
-	_assert_spots_clear(InteriorProps.shelves_spots(1.7), [&"small", &"small", &"crate"])
+	_assert_spots_clear(InteriorProps.shelves_spots(1.7),
+		[&"small", &"small", &"crate", &"crate", &"small", &"small", &"small", &"tool", &"tool", &"tool"])
 
-func test_narrow_shelves_hold_one_canister():
+func test_narrow_shelves_hold_small_things_and_a_crate():
 	InteriorProps.shelves(_kit, Transform3D.IDENTITY, 0.6, 0.85)
 	_assert_built()
-	_assert_spots_clear(InteriorProps.shelves_spots(0.85), [&"small"])
+	_assert_spots_clear(InteriorProps.shelves_spots(0.85), [&"small", &"small", &"small", &"crate"])
+
+func test_shelf_spots_do_not_overlap():
+	for width in [1.7, 0.85]:
+		var spots := InteriorProps.shelves_spots(width)
+		for i in spots.size():
+			for j in range(i + 1, spots.size()):
+				var a: Vector3 = (spots[i][0] as Transform3D).origin
+				var b: Vector3 = (spots[j][0] as Transform3D).origin
+				if absf(a.y - b.y) < 0.01:
+					assert_gt(absf(a.x - b.x), 0.2, "spots %d and %d on a %s m shelf are apart" % [i, j, width])
 
 func test_shelf_spots_sit_on_the_boards():
 	for spot in InteriorProps.shelves_spots(1.7):
 		var y: float = (spot[0] as Transform3D).origin.y
-		assert_true(is_equal_approx(y, InteriorProps.shelf_top(0)) or is_equal_approx(y, InteriorProps.shelf_top(2)),
-			"on a board top")
+		assert_true(is_equal_approx(y, InteriorProps.shelf_top(0)) or is_equal_approx(y, InteriorProps.shelf_top(1))
+			or is_equal_approx(y, InteriorProps.shelf_top(2)), "on a board top")
 
 func test_weapon_rack_and_ammo_are_solid():
 	InteriorProps.weapon_rack(_kit, Transform3D.IDENTITY, 0.3)
@@ -292,3 +307,28 @@ func test_the_airlock_fits_the_hull_cell_and_the_avatar():
 	assert_almost_eq(InteriorProps.AIRLOCK_CLEAR, ShipGrid.CELL_SIZE - InteriorBuilder.FLOOR_THICKNESS, 0.0001)
 	assert_lt(InteriorProps.HATCH_HEIGHT, InteriorProps.AIRLOCK_CLEAR)
 	assert_gt(InteriorProps.HATCH_HEIGHT, Avatar.STAND_HEIGHT)
+
+func test_the_ammo_stack_holds_two_flares_on_top():
+	InteriorProps.ammo_crates(_kit, Transform3D.IDENTITY, 0.3)
+	_assert_built()
+	_assert_spots_clear(InteriorProps.ammo_crates_spots(), [&"tool", &"tool"])
+
+func test_the_washstand_has_a_bracket_for_a_medkit():
+	InteriorProps.washstand(_kit, Transform3D.IDENTITY, 0.3)
+	_built_with_colliders(1)
+	_assert_spots_clear(InteriorProps.washstand_spots(), [&"tool"])
+
+func test_something_can_lie_on_the_lower_bunk():
+	for low_only in [true, false]:
+		var body := StaticBody3D.new()
+		add_child_autofree(body)
+		var root := Node3D.new()
+		body.add_child(root)
+		_body = body
+		_root = root
+		_kit = InteriorKit.new(root, body)
+		InteriorProps.bunks(_kit, Transform3D.IDENTITY, 0.3, low_only)
+		_assert_built()
+		_assert_spots_clear(InteriorProps.bunks_spots(), [&"tool"])
+		assert_almost_eq((InteriorProps.bunks_spots()[0][0] as Transform3D).origin.y,
+			InteriorProps.BUNK_MATTRESS_TOP, 0.001, "on the mattress")

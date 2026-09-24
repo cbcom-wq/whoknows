@@ -17,6 +17,9 @@ const RAY_MASK := 2 | 32
 var _cooldown := 0.0
 var _bolts: Array[PlasmaBolt] = []
 
+func recoil() -> float:
+	return 1.0
+
 func use(item: Item, aim: Transform3D, world: Node3D, holder: CollisionObject3D) -> bool:
 	if _cooldown > 0.0 or world == null:
 		return false

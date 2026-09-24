@@ -42,3 +42,41 @@ func test_the_pistol_fires_plasma():
 	assert_not_null(def.use, "the use survived the .tres parse")
 	var use = autofree(def.use.new())
 	assert_true(use is PlasmaEmitter)
+
+## The ship and space set (hands-and-items spec §4.2, as amended 2026-09-24):
+## each id, how it is held, and where it can be stowed.
+const SHIP_AND_SPACE := {
+	&"toolbox": [ItemDefinition.Grip.CARRY, &"crate"],
+	&"spare_helmet": [ItemDefinition.Grip.CARRY, &"crate"],
+	&"power_cell": [ItemDefinition.Grip.WIELD, &"small"],
+	&"o2_tank": [ItemDefinition.Grip.WIELD, &"small"],
+	&"spanner": [ItemDefinition.Grip.WIELD, &"tool"],
+	&"spare_module": [ItemDefinition.Grip.WIELD, &"tool"],
+	&"medkit": [ItemDefinition.Grip.WIELD, &"tool"],
+	&"ration_tin": [ItemDefinition.Grip.WIELD, &"small"],
+	&"rock_sample": [ItemDefinition.Grip.WIELD, &"small"],
+	&"hand_lamp": [ItemDefinition.Grip.WIELD, &"tool"],
+	&"flare": [ItemDefinition.Grip.WIELD, &"tool"],
+	&"datapad": [ItemDefinition.Grip.WIELD, &"tool"],
+}
+
+func test_the_ship_and_space_set_is_on_disk():
+	for id in SHIP_AND_SPACE:
+		assert_true(_cat.has(id), "data/items has %s" % id)
+		if not _cat.has(id):
+			continue
+		var def := _cat.get_def(id)
+		assert_eq(def.grip, SHIP_AND_SPACE[id][0], "%s is held as designed" % id)
+		assert_eq(def.stow_class, SHIP_AND_SPACE[id][1], "%s stows where it fits" % id)
+		assert_lte(def.mass_kg, Item.LIFT_LIMIT_KG)
+
+func test_the_lamp_flare_and_datapad_do_something():
+	var uses := {&"hand_lamp": "HandLamp", &"flare": "Flare", &"datapad": "Datapad"}
+	for id in uses:
+		var def := _cat.get_def(id)
+		assert_not_null(def.use, "%s has a use that survived the .tres parse" % id)
+		var use = autofree(def.use.new())
+		assert_eq(use.get_script().get_global_name(), StringName(uses[id]))
+
+func test_the_datapad_is_held_tilted_toward_you():
+	assert_gt(_cat.get_def(&"datapad").hold_rotation.x, 0.0)

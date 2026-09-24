@@ -4,6 +4,10 @@ extends GutTest
 ## alone -- no grid, no ship -- in three states, talking to whoever takes it
 ## only through take_item and can_take_item.
 
+class Lit extends ItemUse:
+	func status() -> String:
+		return "burning"
+
 class Actor extends Node:
 	var taken: Item = null
 	var allowed := true
@@ -111,3 +115,19 @@ func test_an_item_with_no_use_does_nothing_when_used():
 	var item := _item()
 	assert_null(item.use_node)
 	assert_false(item.use(Transform3D.IDENTITY, null, null))
+
+func test_a_use_can_add_a_status_to_the_prompt():
+	var item := _item()
+	var lit := Lit.new()
+	item.use_node = lit
+	item.add_child(lit)
+	item.set_loose()
+	assert_eq(item.prompt_text(), "Pick up Canister (burning)")
+	item.set_stowed(null)
+	assert_eq(item.prompt_text(), "Take Canister (burning)")
+
+func test_a_use_sits_on_the_item():
+	var d := _def()
+	d.use = load("res://src/items/item_use.gd")
+	var item := _item(d)
+	assert_true(item.use_node is Node3D, "so what it makes -- lights, screens -- moves with the item")

@@ -88,7 +88,7 @@ func test_tuck_retracts_in_front_of_a_wall_and_not_in_open_space():
 	assert_gt(_avatar.hands.tuck_amount(), 0.5)
 
 func test_a_shot_kicks_the_right_hand_back():
-	var item := _item(ItemDefinition.Grip.WIELD)
+	var item := _item(ItemDefinition.Grip.WIELD, load("res://src/items/plasma_emitter.gd"))
 	_avatar.take_item(item)
 	await _after_the_swipe()
 	_avatar.grasp.used.emit(item)
@@ -130,3 +130,10 @@ func test_dropping_mid_swipe_leaves_the_item_alone():
 	await wait_process_frames(3)
 	assert_false(_avatar.hands.grabbing())
 	assert_almost_eq(item.global_position, dropped_at, Vector3.ONE * 0.05, "the swipe let go of it")
+
+func test_using_something_that_does_not_kick_leaves_the_hand_still():
+	var item := _item(ItemDefinition.Grip.WIELD, load("res://src/items/item_use.gd"))
+	_avatar.take_item(item)
+	await _after_the_swipe()
+	_avatar.grasp.used.emit(item)
+	assert_eq(_avatar.hands.recoil, 0.0)
