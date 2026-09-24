@@ -19,7 +19,7 @@ const NEST := 5
 const CELL: Array[int] = [200, 1000, 5000]
 const D_MIN: Array[float] = [1.0, 5.0, 40.0]
 const D_MAX: Array[float] = [5.0, 40.0, 300.0]
-const MOST: Array[int] = [24, 12, 3]
+const MOST: Array[int] = [40, 16, 3]
 ## Giants live only where density is over this: the cores of fields.
 const GIANT_DENSITY := 0.7
 const STRETCH_MIN := 0.75
@@ -31,8 +31,12 @@ const VEINED_CHANCE := 0.1
 ## Kilograms per cubic metre of diameter: rock at about 2,000 kg/m3 in a rough
 ## sphere, less voids.
 const MASS_PER_M3 := 840.0
-## Nothing within this of the start, in any tier.
-const START_CLEAR := 150.0
+## How full of rock the start is: inside a field, short of its core.
+const START_DENSITY_MIN := 0.55
+const START_DENSITY_MAX := 0.85
+## Nothing within this of the start, in any tier: room for the ship, and
+## rocks close enough to see from the first frame.
+const START_CLEAR := 80.0
 ## Density noise, in universe kilometres: fields about 15 km across.
 const NOISE_FREQUENCY := 0.05
 ## Density is the noise shaped: nothing below LOW, a full core above HIGH.
@@ -197,12 +201,13 @@ static func mix(x: int) -> int:
 	return x
 
 ## Where a flight starts (§5.6): the first whole kilometre along +z from the
-## universe's origin that sits at a field's edge.
+## universe's origin that sits inside a field, short of its core -- rocks all
+## around from the first frame, and space to fly.
 func find_start() -> UniversePoint:
 	for k in 4000:
 		var u := UniversePoint.at(0, 0, k * 1000)
 		var d := density_at(u)
-		if d >= 0.3 and d <= 0.6:
+		if d >= START_DENSITY_MIN and d <= START_DENSITY_MAX:
 			return u
-	push_warning("AsteroidRecipe: no field edge found; starting at the universe's origin")
+	push_warning("AsteroidRecipe: no field found; starting at the universe's origin")
 	return UniversePoint.at(0, 0, 0)

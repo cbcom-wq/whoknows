@@ -157,3 +157,14 @@ func test_segment_distance():
 	assert_almost_eq(AsteroidBubble.segment_distance(Vector3(5, 3, 0), Vector3.ZERO, Vector3(10, 0, 0)), 3.0, 0.0001)
 	assert_almost_eq(AsteroidBubble.segment_distance(Vector3(-4, 3, 0), Vector3.ZERO, Vector3(10, 0, 0)), 5.0, 0.0001)
 	assert_almost_eq(AsteroidBubble.segment_distance(Vector3(1, 1, 0), Vector3.ZERO, Vector3.ZERO), sqrt(2.0), 0.0001)
+
+func test_a_new_body_is_where_its_rock_is_to_the_physics_server_at_once():
+	# Placed after entering the tree, a body would sit at its holder's origin
+	# -- usually right where you are -- until transforms next flush.
+	var rock := _beside_a_rock(10.0)
+	_arm()
+	_stream.bubble.step(DT)
+	var body: AsteroidBody = _stream.bubble.live[rock.id()]
+	var server: Transform3D = PhysicsServer3D.body_get_state(body.get_rid(), PhysicsServer3D.BODY_STATE_TRANSFORM)
+	assert_almost_eq(server.origin, _stream.rock_pose(rock).origin, Vector3.ONE * 0.001)
+	assert_true(PhysicsServer3D.body_get_state(body.get_rid(), PhysicsServer3D.BODY_STATE_SLEEPING), "and asleep there")

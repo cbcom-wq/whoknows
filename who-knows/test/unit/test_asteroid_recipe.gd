@@ -112,10 +112,10 @@ func test_giants_live_only_in_cores():
 		if not _recipe.cell_rocks(T.GIANT, c).is_empty():
 			assert_gt(_recipe.cell_density(T.GIANT, c), AsteroidRecipe.GIANT_DENSITY)
 
-func test_the_start_is_at_a_fields_edge_and_clear():
+func test_the_start_is_inside_a_field_and_clear():
 	var start := _recipe.find_start()
 	var d := _recipe.density_at(start)
-	assert_between(d, 0.3, 0.6)
+	assert_between(d, AsteroidRecipe.START_DENSITY_MIN, AsteroidRecipe.START_DENSITY_MAX)
 	var r := AsteroidRecipe.new(SEED, start)
 	for tier in AsteroidRecipe.TIERS:
 		var home := AsteroidRecipe.cell_of(tier, start)

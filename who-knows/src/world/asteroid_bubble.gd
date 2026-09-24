@@ -107,8 +107,11 @@ func _promote(rock: AsteroidRock) -> void:
 	var detail: int = AsteroidStream.DETAIL[rock.tier]
 	body.setup(rock, RockMesh.mesh(rock.shape, detail), stream.rock_material(rock.tier, rock.colour),
 		RockMesh.hull_points(rock.shape, detail))
+	# Placed before it enters the tree: placed after, it would stand at the
+	# holder's origin -- usually right where you are -- until transforms next
+	# flush. The holder never moves, so its frame is engine space.
+	body.transform = stream.rock_pose(rock)
 	holder.add_child(body)
-	body.global_transform = stream.rock_pose(rock)
 	body.sleeping = true
 	stream.hide_rock(rock)
 	live[rock.id()] = body
