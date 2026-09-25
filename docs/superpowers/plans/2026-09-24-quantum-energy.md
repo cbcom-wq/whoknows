@@ -2,34 +2,42 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **Gate:** do not start until the owner has approved the spec. The owner decided rows 4, 5, 6, 7
-> and 12 on 2026-09-25. Rows 1–3 and 8–11 are **open questions** (spec §2.1), and this plan builds
-> them as recommended. If the owner answers one differently, amend the spec first, then this plan.
-> The spec's table says which task each question touches.
+> **Gate:** do not start until the owner has approved the spec as a whole. Every row of its §2 is
+> decided (spec §2.1): rows 4–7 and 12 first, then the open questions, answered on 2026-09-25. If
+> the owner changes anything at review, amend the spec first, then this plan.
 
 **Goal:** Make quantum energy (QE) the ship's power source and the universe's currency:
 - a quantum core at the centre of the bridge, and the quantum machine beside it;
 - converting objects to QE and making them back;
+- low power when the store runs low, and a pilot light when it is empty;
 - a suit cell charged at the machine;
-- salvage drifting in space, and a hose on the airlock to gather it.
+- salvage behind the stern and at every asteroid group, found with a HUD marker and gathered with
+  a hose on the airlock.
 
 **Architecture:**
 - **The store** is a pure `QuantumStore` owned by one `QuantumPlant` node per ship. It lives across
   rebuilds, as the airlocks do.
-- **The core is lit while the store holds any QE.** Ordinary flight spends nothing; boost, making
-  and the suit do.
+- **Ordinary flight spends nothing.** Boost, making and the suit do. Below 10% of capacity the ship
+  is in low power: half authority, no boost, no making, emergency light. Below 25 QE a pilot light
+  refills the store.
 - **The core and the machine are fixture blocks,** drawn by the dressing like the helm. They do not
   change the bridge's zones or wall variants. The dressing hands a `QuantumCore` and a
   `QuantumMachine` to the plant.
 - **The machine** is a pure `MachineCycle`. Its bay is a `StowPoint`, so Grasp's stow-on-drop feeds
   it.
-- **The hose** is an EVA-tool item on a reel on the airlock's hull face. It swallows salvage items
-  that now drift in the world.
+- **Salvage** belongs to one `SalvageField` under `Outside`. Its clouds come from the seed: a near
+  cloud behind the stern, and one round every asteroid group's big rock. A pure `SalvageLedger`
+  remembers what was taken, and a pure `SalvageSense` turns a cloud into a ping, a region or
+  nothing for the HUD's `SalvageMarker`.
+- **The hose** is an EVA-tool item on a reel on the airlock's hull face. It swallows salvage.
+- **Everything outside follows the floating origin** (CLAUDE.md): free salvage and the hose line
+  are `Universe.EXTERIOR_SPACE` members; the nozzle always lives under something that is.
 
 **Tech Stack:** Godot 4.5.1 (Forward+), GDScript, GUT 9.5.
 
-**Spec:** `docs/superpowers/specs/2026-09-24-quantum-energy-design.md`. Read it, and
-`docs/design/visual-style.md`, first.
+**Spec:** `docs/superpowers/specs/2026-09-24-quantum-energy-design.md`. Read it,
+`docs/design/visual-style.md`, and the floating-origin section of
+`docs/superpowers/specs/2026-09-24-asteroids-design.md` (§4) first.
 
 ## Global Constraints
 
@@ -40,25 +48,37 @@
   - interior render layer 2 with light cull mask 2;
   - no shadows;
   - every light `LIGHT_WARM`.
+- **The floating origin binds** (CLAUDE.md, asteroids spec §4):
+  - everything outside the ship joins `Universe.EXTERIOR_SPACE` itself, under a parent that never
+    moves, or lives under a member; never both;
+  - world-space particles outside join `Universe.HOLDS_SHIFT`;
+  - positions that must survive a shift (cloud centres) are `UniversePoint`s;
+  - `test_floating_origin_scene.gd` must stay green with salvage loaded and the hose out.
 - **CLAUDE.md:** no `#` comments in `.tscn`/`.tres`. Prove every scene and resource edit by reading
   the property back at runtime.
 - **Workflow:**
   - branch `quantum-energy`;
   - run the import pass after adding a `class_name` (`--headless --path who-knows --import`), and
     commit Godot's `.uid` files;
-  - tests: `who-knows\run_tests.ps1 [-gselect=<file>]`. The baseline is 550 passing.
+  - tests: `who-knows\run_tests.ps1 [-gselect=<file>]`. Record the baseline on the branch before
+    Task 1: 646 or more since the asteroids.
 - **Power and the store:**
-  - the quantum core generates 36 MW, only while lit;
+  - the quantum core generates 36 MW at full power and 18 MW in low power;
   - capacity 400 per `quantum_cell`: 1,200 on the starter;
   - it starts at half capacity on the first load only;
-  - reserve 100 (boost and making stop there; a suit charge goes down to 1; drains go to 0);
-  - lit at ≥ 1;
+  - **no reserve:** every spend is all or nothing and may take the store to 0;
+  - **the low-power line** is 10% of capacity, rounded up (120 on the starter); low power below it,
+    full power at it;
+  - **in low power:** thrust and torque × `LOW_POWER_AUTHORITY` (0.5); boost and making refused;
+    converting, the suit charge, the airlocks and gravity unaffected;
+  - **the pilot light:** below 25 QE, +1 QE every 5 s, up to 25 and never above;
   - whole QE; continuous costs accrue fractions;
   - a credit that would overflow is refused.
 - **Costs:**
-  - boost 5 QE/s, with translation input only;
+  - boost 5 QE/s, with translation input only; it cuts out when the store crosses the line;
   - make costs 2 × value; convert gives 1 × value;
-  - a suit charge moves QE one for one.
+  - a make that would cross the line warns (*→ LOW POWER*, `AMBER`) and still makes;
+  - a suit charge moves QE one for one, down to 0.
 - **The machine:**
   - convert 1.2 s, of which the bead is the last 0.6 s;
   - make 1.5 s;
@@ -81,18 +101,29 @@
   - the tether pulls 1 m/s².
 - **The core:**
   - a 1.2 m footprint, and a 1.1 m square collider the full height;
-  - rings at 0.25 rev/s, ×3 while boosting;
-  - pulse 0.5 Hz, or 2 Hz while boosting;
-  - ten gauge bars, the lowest being the reserve.
-- **Dark:** cell lights at 30% and glow `energy` at 35%. Relighting takes 3 s, then lights return
-  at 0.1 s per cell of walking distance from the core.
+  - rings at 0.25 rev/s, ×3 while boosting, 0.05 rev/s in low power;
+  - pulse 0.5 Hz, 2 Hz while boosting, 0.2 Hz in low power;
+  - ten gauge bars, the lowest being the low-power line: amber when it is all that is left, and
+    lit amber at half brightness at 0.
+- **Low power's look:** dropping takes 1 s, to cell lights at 30% and glow `energy` at 35%. Power
+  restored takes 3 s, then lights return at 0.1 s per cell of walking distance from the core. A
+  crossing mid-sequence reverses from where it has got to.
 - **Salvage:**
-  - a near cloud of 12 items, 12–40 m aft of the stern;
-  - six far clouds of 10–16 items, 300–1,200 m out, half of them with a shard;
-  - drift ≤ 0.2 m/s and tumble ≤ 20°/s;
-  - weights: rock 4, scrap 3, ice 3, wire 2, module 1.
+  - the near cloud: 12 items, 12–40 m aft of the stern;
+  - a cloud per asteroid group, keyed by the big rock's giant cell: centre 40–120 m off the big
+    rock's surface, 10–16 items within 25 m of it, every item clear of every rock, one shard in
+    about half the groups;
+  - items spawn within 3 km of their cloud's centre and are freed beyond 4 km;
+  - items tumble ≤ 20°/s and do not drift;
+  - weights: rock 4, scrap 3, ice 3, wire 2, module 1;
+  - a glint: 0.15 s every 2–4 s, seeded, visible to 50 m and gone by 60 m, in `LIGHT_WARM`.
+- **Finding salvage** (`SalvageSense`):
+  - a ping at 2–10 km: ±10°, a new seeded error every 4 s, the distance to the nearest kilometre;
+  - a region within 2 km: a 75 m radius sphere, its centre within 50 m of the cloud's;
+  - nothing inside the region;
+  - the nearest three clouds with something left.
 - **Layers** (spec §14.2):
-  - items outside: layer 32, mask `1 | 4 | 32`, render layer 1;
+  - items outside: layer 32, mask `1 | 4 | 32 | 64`, render layer 1;
   - the spacewalking Interactor: mask `16 | 32`;
   - the reel and the docked nozzle: the own-hull render layer (`ExteriorBuilder.OWN_HULL_LAYER`).
 - **Values** are in spec §4.2. They are the only source; tests read them from the `.tres` files.
@@ -185,7 +216,9 @@ Until Task 3, the two fixture cells show only their placeholder boxes.
 **Tests:**
 - the starter's zones and wall variants equal the recorded ones, with the one exception;
 - the quantum fixtures are in `layout.fixtures()`;
-- the spawn is at (0, 0, −1), clear of the core's footprint.
+- the spawn is at (0, 0, −1), clear of the core's footprint;
+- standing up from the pilot seat still finds its first stand spot. The chair stands out in the
+  canopy pod, 3.7 m ahead of the core.
 
 **Commit:** `feat: the quantum fixtures leave the bridge's floor, consoles and portholes as they were`
 
@@ -218,8 +251,8 @@ Until Task 3, the two fixture cells show only their placeholder boxes.
   - `QUANTUM_CORE_FOOTPRINT := 1.2`, `QUANTUM_MACHINE_WIDTH := 1.5`.
 - **`QuantumCore` (`Node3D`, grid-blind):**
   - `setup(frame: Transform3D, layer: int)`;
-  - `set_fill(fraction: float, reserve_fraction: float)`;
-  - `set_state(&"lit" | &"boost" | &"dark" | &"relight")`;
+  - `set_fill(fraction: float, line_fraction: float)`;
+  - `set_state(&"full" | &"boost" | &"low_power" | &"restoring")`;
   - `flash()`;
   - `crown() -> Vector3`;
   - `lit_bars() -> int` (for tests).
@@ -260,8 +293,9 @@ Until Task 3, the two fixture cells show only their placeholder boxes.
 - the core's collider is 1.1 m square, centred in its frame;
 - `QuantumCore`:
   - `set_fill(0.5, 0.1)` lights 5 bars;
-  - `set_fill(0.08, 0.1)` lights only the reserve bar, amber;
-  - `dark` lights none, and the heart is unlit;
+  - `set_fill(0.08, 0.1)` lights only the lowest bar, amber;
+  - `set_fill(0.0, 0.1)` still lights the lowest bar, amber at half brightness;
+  - `low_power` slows the rings and pulse to their low-power rates;
 - the dressing on the starter:
   - one `QuantumCore` and one `QuantumMachine`, with every reference set;
   - the core's cell has no round ceiling light and exactly one cell light;
@@ -274,20 +308,23 @@ Until Task 3, the two fixture cells show only their placeholder boxes.
 - **Render at 1.6 m**, and send the renders to the owner:
   - the bridge from the corridor, with the core at its centre;
   - the bridge from the machine, and from beside the helm looking aft at the core;
-  - the core at 50%, at the reserve and dark (driven by hand);
+  - the core at 50%, at the line and in low power (driven by hand);
   - the machine;
   - the seated view, which should be unchanged.
 - **This is where the core's size on the bridge is judged.** If it crowds the bridge, shrink the
   plinth before going on.
-- **Pin** `QUANTUM` and `QUANTUM_DEEP` from these renders.
-- **Render the warm-gold alternative** for `QUANTUM` beside the violet (spec §2, row 11).
+- **The owner chooses QE's colour here** (spec §2, row 11):
+  - render `QUANTUM` as violet and as a warm gold, side by side, on the real bridge;
+  - render each beside a veined asteroid, whose crystal is `SpacePalette.CRYSTAL`
+    (`InteriorPalette.LAVENDER`), so the owner sees whether the veins read as quantum ore;
+  - pin `QUANTUM` and `QUANTUM_DEEP` to the owner's choice.
 - **Measure frame time** on the bridge, looking through the core's glass at the canopy.
 
 **Commit:** `feat: the quantum core and machine, drawn in the house style`
 
 ---
 
-### Task 4: The store, the plant, lit and boost
+### Task 4: The store, the plant, boost and low power's rules
 
 **Files:**
 - Create: `src/quantum/quantum_store.gd`, `src/quantum/quantum_values.gd`,
@@ -299,56 +336,65 @@ Until Task 3, the two fixture cells show only their placeholder boxes.
 
 **Interfaces produced:**
 - **`QuantumStore` (`RefCounted`):**
-  - `amount: int`, `capacity: int`, `const RESERVE := 100`;
-  - signals `changed(amount, capacity)` and `lit_changed(lit)`;
-  - `is_lit()`, `room()`;
-  - `can_spend(n, floor := RESERVE)` and `spend(n, purpose, floor := RESERVE) -> bool`, all or
-    nothing, where `floor` is how far down the spend may go;
-  - `spend_continuous(cost: float, purpose, floor := RESERVE) -> bool`, which accrues fractions per
-    purpose;
+  - `amount: int`, `capacity: int`;
+  - `const LOW_POWER_FRACTION := 0.1`, `const PILOT_CAP := 25`, `const PILOT_PERIOD := 5.0`;
+  - signals `changed(amount, capacity)` and `low_power_changed(low: bool)`;
+  - `line() -> int` (`ceil(capacity × 0.1)`), `is_low_power() -> bool`, `room() -> int`;
+  - `can_spend(n) -> bool` and `spend(n, purpose) -> bool`, all or nothing, down to 0;
+  - `spend_continuous(cost: float, purpose) -> bool`, which accrues fractions per purpose;
   - `credit(n, source) -> bool`, refusing an overflow;
   - `drain(n, source) -> int`, down to 0;
+  - `tick(delta)`: the pilot light, crediting from `&"pilot"` while below `PILOT_CAP`;
   - `set_capacity(c)`, which clamps.
-- **`QuantumValues`:** `BOOST_COST := 5.0`, `MAKE_MARKUP := 2`, `SUIT_FLOOR := 1`,
+- **`QuantumValues`:** `BOOST_COST := 5.0`, `MAKE_MARKUP := 2`, `LOW_POWER_AUTHORITY := 0.5`,
   `static func make_cost(def: ItemDefinition) -> int` (reads `quantum_value`, 0 until Task 5).
 - **`QuantumPlant` (`Node`, `Ship/Quantum`):**
   - `store: QuantumStore`;
   - `bind(cores: Array[QuantumCore], machines: Array[QuantumMachine], stats: ShipStats)`: sets the
     capacity, starts the store at half on the first bind only, and drives each core from the store;
+  - `_physics_process` ticks the store's pilot light;
   - `cores` and `machines`;
-  - signals `lit_changed(lit)` and `credited(amount, source)`.
+  - signals `low_power_changed(low)` and `credited(amount, source)`.
 - **`FlightComputer`:**
-  - `var quantum: QuantumStore`, where null means free boost and always lit, as in every existing
+  - `var quantum: QuantumStore`, where null means free boost and full power, as in every existing
     test;
-  - dark means zero force and zero torque;
-  - boost is spent per tick while boosting with translation input, and denied at the reserve;
+  - in low power, every force and torque is scaled by `LOW_POWER_AUTHORITY`;
+  - boost is spent per tick while boosting with translation input; it is refused in low power and
+    cuts out on the tick the store crosses the line;
   - `boost_refused: bool` goes to telemetry.
-- **`VehicleTelemetry`:** `has_energy`, `energy`, `energy_capacity`, `energy_reserve`,
+- **`VehicleTelemetry`:** `has_energy`, `energy`, `energy_capacity`, `energy_line`,
   `energy_label`, `energy_state`, `tool_text`, `boost_refused`.
 - **`EnergyPanel` (`HudElement`):**
-  - *QE 600*, with a bar and a reserve notch;
+  - *QE 600*, with a bar and a notch at the line;
   - *BOOST −5/S* while boosting;
-  - *BOOST · RESERVE* when refused;
-  - *CORE DARK* in `WARNING`.
+  - *LOW POWER* in `WARNING`, and *BOOST · LOW POWER* when boost is refused.
 
 **What to do:**
 - `Ship._ready` creates `Quantum`. `_rebuild_everything` calls `quantum.bind(...)` after the
   airlocks, and hands the store to the flight computer.
-- The core's state follows the store and boost: `lit`, `boost` or `dark`.
+- The core's state follows the store and boost: `full`, `boost` or `low_power`. Until Task 11 the
+  change is instant: no light dimming and no power-restored show.
 - **The `.tscn` edit:** add the panel node with no comments. Read it back at runtime in
   `test_hud_scene_wiring.gd`.
 
 **Tests:**
-- every store rule in spec §15.1;
+- every store rule in spec §15.1: the line, rounding up; all or nothing; spends to 0; the pilot
+  light's rate, cap and silence above 25; overflow refused; clamping; whole-QE debits;
 - the plant: the half start happens once, and survives a rebuild and a capacity change;
-- flight: dark means no force or torque; boost spends 5/s and stops at the reserve; a null store
-  changes nothing;
+- flight:
+  - low power halves force and torque, and full power leaves them as today;
+  - boost spends 5/s, cuts out as the store crosses the line, and is refused below it;
+  - a null store changes nothing;
 - the telemetry fields and the panel's text for each state.
 
-**Verify:** a probe sits, boosts for 20 s, and sees the store fall by 100 (±1) and the gauge follow.
-Render the band.
+**Verify:** a probe sits and boosts from 600:
+- the store falls by 5/s (±1 per second) and the gauge follows;
+- boost cuts out as the store crosses 120, and the HUD reads *LOW POWER*;
+- the ship's forward acceleration halves (7.75 m/s², against 15.5).
 
-**Commit:** `feat: a quantum store lights the core, and boost spends it`
+Render the band at full power and in low power.
+
+**Commit:** `feat: a quantum store powers the core; boost spends it, and a low store limps`
 
 *Phase A is playable here.*
 
@@ -382,10 +428,10 @@ with no comments, and read them back in the test.
 
 **Files:**
 - Create: `src/quantum/machine_cycle.gd`, `src/quantum/quantum_show.gd`
-- Modify: `quantum_bay.gd` (the real rules), `quantum_plant.gd`, `synth.gd` (`core_hum`,
-  `convert`, `materialize`)
+- Modify: `quantum_bay.gd` (the real rules), `quantum_plant.gd`, `item.gd` (the `consumed`
+  signal), `synth.gd` (`core_hum`, `convert`, `materialize`)
 - Tests: new `test_machine_cycle.gd`, `test_quantum_bay.gd`; `test_quantum_plant.gd`,
-  `test_synth.gd`
+  `test_item.gd`, `test_synth.gd`
 
 **Interfaces produced:**
 - **`MachineCycle` (`RefCounted`):**
@@ -399,6 +445,8 @@ with no comments, and read them back in the test.
     `button_colour() -> StringName`.
 - **`QuantumBay`:** `fits(item)` applies the value, size and mass rules. `hold_turn(delta)` turns
   its item at 10°/s, and the plant calls it.
+- **`Item.consumed` signal:** emitted once by whatever converts or swallows the item, just before
+  it is freed. Nothing aboard listens yet; `SalvageField` will (Task 8).
 - **`QuantumShow` (grid-blind):**
   - `setup(bay_frame, conduit_path, layer)`;
   - `sparkle(on)`;
@@ -410,23 +458,28 @@ with no comments, and read them back in the test.
   - it wires each machine's panel and arrows to `press`;
   - it applies the cues: credit on `&"credited"`; debit on `&"make_start"`; on
     `&"materialized"` it spawns the made item into `Ship.items` and secures it in the bay;
-  - a converted item is removed with `remove_child()` then `free()` (SLICE-1-STATUS lessons);
+  - a converted item emits `consumed`, then is removed with `remove_child()` then `free()`
+    (SLICE-1-STATUS lessons);
   - it plays the sounds.
 
 **What to do:**
-- The screen lines, prompts and colours follow spec §7.1–7.2.
+- The screen lines, prompts and colours follow spec §7.1–7.2:
+  - making is refused with *NOT ENOUGH QE* and with *MAKE · LOW POWER*;
+  - a make that would cross the line shows *→ LOW POWER* with an `AMBER` button, and still makes.
 - The core's hum plays positionally at the core on the Ship bus, quieter than the ship's hum.
 - Keep cycles across rebuilds by the machine's cell. The bay's item re-seats by the existing `_reseat`.
 
 **Tests:**
 - the cycle, both ways, with timings and cues in order;
 - the credit lands at `&"credited"`;
-- the refusals;
+- the refusals: store full, not enough QE, low power;
+- the low-power warning, and that pressing through it still makes;
+- converting works in low power;
 - ◀ and ▶ wrap and are sorted;
 - the bay: fits and refuses by value, size and mass;
 - the plant, with real items:
-  - dropping a mug into the bay and converting it makes the store +3, and the mug is freed with no
-    orphans;
+  - dropping a mug into the bay and converting it makes the store +3; the mug emits `consumed`
+    once and is freed with no orphans;
   - a make makes the store −6, with a stowed mug in the bay;
   - a rebuild mid-convert keeps the stage.
 
@@ -466,8 +519,8 @@ with no comments, and read them back in the test.
 - **`ChargeDock`:**
   - an interactable with the prompt *Charge suit (+n QE)* or *Suit charged*;
   - `interact` starts a charge;
-  - the plant moves up to 50 QE/s from the store (floor 1) into the actor's `suit_cell` while the
-    actor is within 1.2 m;
+  - the plant moves up to 50 QE/s from the store (down to 0, in low power too) into the actor's
+    `suit_cell` while the actor is within 1.2 m;
   - `set_readout(percent)`.
 - **`Airlock`:** the room panel's depressurize is refused while the occupant's cell is under
   `GO_OUT_MIN`, with the status *CHARGE SUIT* and the prompt *Charge suit first*.
@@ -479,8 +532,10 @@ with no comments, and read them back in the test.
 - full thrust for 1 s costs 2.5;
 - holding station beside a drifting ship costs under 0.1/s;
 - dry turns thrust off and heads home;
-- the plate charges at 50/s, stops at 100 and at the store's floor of 1, and stops when you walk
+- the plate charges at 50/s, stops at 100 and when the store reaches 0, and stops when you walk
   away;
+- the plate charges in low power;
+- after a charge empties the store, the pilot light brings it back to 25;
 - the airlock refuses depressurizing below 10 and allows it at 10 or more.
 
 **Verify:**
@@ -494,41 +549,60 @@ with no comments, and read them back in the test.
 
 ---
 
-### Task 8: Items in space and the salvage field
+### Task 8: Items in space, the near cloud and the ledger
 
 **Files:**
-- Create: `src/world/salvage_field.gd`; `data/items/rock_chunk.tres`, `ice_chunk.tres`,
-  `scrap_plate.tres`, `wire_coil.tres`, `broken_module.tres`, `quantum_shard.tres`
-- Modify: `item.gd` (`set_space`), `item_looks.gd` (six looks), `interior_palette.gd` (`ICE`,
-  `COPPER`), `flight_test.gd` (the salvage field under `Outside`, created in code)
+- Create: `src/world/salvage_field.gd`, `src/world/salvage_ledger.gd`;
+  `data/items/rock_chunk.tres`, `ice_chunk.tres`, `scrap_plate.tres`, `wire_coil.tres`,
+  `broken_module.tres`, `quantum_shard.tres`
+- Modify: `item.gd` (`set_space`), `item_looks.gd` (six looks, and the glint),
+  `interior_palette.gd` (`ICE`, `COPPER`), `flight_test.gd` (the salvage field under `Outside`,
+  created in code), `test_floating_origin_scene.gd`
 - Tests: `test_item.gd`, `test_item_looks.gd`, `test_item_catalog.gd`, new
-  `test_salvage_field.gd`
+  `test_salvage_field.gd`, `test_salvage_ledger.gd`
 
 **Interfaces produced:**
 - `Item.set_space(outside: bool)`: rebuilds the look's kit on render layer 1 (light mask 1) or 2,
-  and sets the mask to `1 | 4 | 32` or `2 | 4 | 32`.
-- **`SalvageField` (`Node3D`):**
-  - `@export var seed`;
-  - `build(catalog: ItemCatalog, stern: Transform3D)`: the near cloud is placed aft of the given
-    stern transform;
-  - `clouds() -> Array[Dictionary]`: `{centre, items}`.
+  and sets the mask to `1 | 4 | 32 | 64` or `2 | 4 | 32`. It does **not** touch floating-origin
+  groups: whoever parents the item decides (spec §10.1).
+- **`SalvageLedger` (`RefCounted`):** `take(cloud_id, index)`, `is_taken(cloud_id, index) -> bool`,
+  `remaining(cloud_id, count) -> int`.
+- **`SalvageField` (`Node3D`, under `Outside`, at the identity, never moved, not a member):**
+  - `setup(universe: Universe, catalog: ItemCatalog, world_seed: int)`;
+  - `add_near_cloud(stern: Transform3D)`: fixes the near cloud's centre as a `UniversePoint`, aft
+    of the given stern transform;
+  - `ledger: SalvageLedger`;
+  - `cloud_items(cloud_id) -> Array[Dictionary]`: `{index, kind, pose, tumble}`, from the seed and
+    the id alone;
+  - `_physics_process` loads a cloud's items within 3 km of its centre and frees them beyond 4 km;
+  - each spawned item is `set_space(true)`, joins `Universe.EXTERIOR_SPACE`, and is watched for
+    `consumed`, which records it in the ledger. It leaves the group before it is freed.
 
 **What to do:**
-- Six looks from kit primitives (spec §10.3). The shard's crystal goes on the glow batch.
-- The field spawns `Item`s with `set_space(true)`, a random slow drift and tumble, and sleeping
-  allowed.
+- Six looks from kit primitives (spec §10.5). The shard's crystal goes on the glow batch.
+- **The glint** is a child of each salvage look: an unshaded billboard quad in
+  `InteriorPalette.LIGHT_WARM` on render layer 1, flashing for 0.15 s every 2–4 s from a seeded
+  phase, with its visibility range fading it out between 50 and 60 m.
+- Items tumble in place from their seeded spin and do not drift (spec §10.2).
+- The flight scene creates the field after the stream starts and adds the near cloud behind the
+  starter's stern.
 
 **Tests:**
-- `set_space` both ways (layers, masks, the kit's layer);
-- the looks build in bare boxes;
-- the field is deterministic: counts, near-cloud distances, far-cloud distances, shards in half of
-  the far clouds;
+- `set_space` both ways: layers, masks, the kit's layer, and no group change;
+- the looks and the glint build in bare boxes;
+- the near cloud is deterministic: 12 items, 12–40 m aft of the stern;
+- the ledger: a taken item is left out when the cloud reloads; `remaining` counts down;
+- swallowing is simulated by emitting `consumed`: the ledger records it once;
+- loading and freeing: beyond 4 km the items are freed with no orphans; within 3 km they are back,
+  minus what was taken;
+- **the floating origin:** with the near cloud loaded, `test_everything_outside_is_covered` passes,
+  and a shift moves the salvage with the hull;
 - the item catalogue has 22 entries.
 
-**Verify:** render the near cloud from the open outer hatch and from a spacewalk. Measure frame time
-on a spacewalk in the near cloud.
+**Verify:** render the near cloud from the open outer hatch and from a spacewalk, with glints.
+Measure frame time on a spacewalk in the near cloud.
 
-**Commit:** `feat: salvage drifting in space`
+**Commit:** `feat: salvage drifting behind the stern, remembered once taken`
 
 ---
 
@@ -545,49 +619,59 @@ on a spacewalk in the near cloud.
   - items and palettes: `item_use.gd` (`hold`), `item_looks.gd` (the nozzle's look),
     `hull_palette.gd` (`HOSE`);
   - `synth.gd` (`hose_draw`, `hose_gulp`), `flight_test.gd` (the toast);
-  - `test_visual_style_rules.gd`.
-- Tests: new `test_tether.gd`, `test_hose_nozzle.gd`, `test_hose_reel.gd`; `test_grasp.gd`,
-  `test_interactor.gd`, `test_airlock_node.gd`
+  - `test_visual_style_rules.gd`, `test_floating_origin_scene.gd`.
+- Tests: new `test_tether.gd`, `test_hose_nozzle.gd`, `test_hose_reel.gd`, `test_hose_line.gd`;
+  `test_grasp.gd`, `test_interactor.gd`, `test_airlock_node.gd`
 
 **Interfaces produced:**
 - **`ItemUse.hold(active: bool)`:** a quiet default. Grasp calls it on the `use` press and release,
   after `use()`.
 - **`Grasp`:** while `suspended`, an item whose definition has `eva_tool` may be taken, used, held
-  and let go. Everything else stays blocked.
+  and let go. Everything else stays blocked, and shows no *Take* prompt.
 - **`HoseReel` extends `StowPoint`:** `accepts = &"hose"`, `anchor() -> Vector3` and `sink:
   Callable` (`func(item: Item) -> bool`, which credits the store). It winds a released nozzle home
-  over 1 s, then secures it.
+  over 1 s, under itself, then secures it.
 - **`HoseNozzle` extends `ItemUse`:**
   - `hold(true)` starts suction each physics frame: a sphere query on layer 32, the cone filter,
     the force-limited pull, the damped drift, the speed cap, and swallowing at 0.35 m through
-    `reel.sink`;
+    `reel.sink`, after which the swallowed item emits `consumed` and is freed;
   - `status()`: *drawing*, *too big* or *store full*;
   - `swallowed(id, value)` signal, for the toast.
-- **`HoseLine`:** `setup(reel_anchor, nozzle, segments := 40, length := 30.0)`; verlet in
-  `_physics_process`; drawn as a `MultiMesh` of bevelled segments on layer 1.
-- **`Tether.constrain(pos, vel, anchor, length, delta) -> Vector3`:** pure.
+- **`HoseLine` (`Node3D`, under `Outside`, a member of `Universe.EXTERIOR_SPACE`):**
+  `setup(reel, nozzle, segments := 40, length := 30.0)`; verlet in `_physics_process`, with the
+  rope points kept in its own frame, and the reel's anchor and the nozzle's tail read afresh each
+  tick; drawn as a `MultiMesh` of bevelled segments on layer 1.
+- **`Tether.constrain(pos, vel, anchor, length, delta) -> Vector3`:** pure. The avatar passes the
+  reel's anchor read that tick.
 - **`QuantumToast` (`HudElement`):** *+n QE · NAME*, rising and fading over 1.2 s.
 - **`AirlockAlcove`:** the reel prop on the jamb opposite the hull panel, and a `HoseReel` stocked
-  with `hose_nozzle` on the first build.
+  with `hose_nozzle` on the first build. The nozzle is `set_space(true)` and never a member: it
+  lives under the reel, or in your hands (spec §10.1, §11.1).
 
 **What to do:**
 - `Airlock.bind` sets `reel.sink` to `QuantumPlant.credit_item`.
 - **Crossing in:** at the threshold, the avatar's held EVA tool is let go before `enter_plating`.
 - **Suit dry:** the nozzle is let go.
 - The HUD's `tool_text` is *HOSE 12 M* while held.
+- Suction works in low power.
+- Any world-space particles at the mouth join `Universe.HOLDS_SHIFT`.
 
 **Tests:**
 - the tether: slack, and taut;
 - the nozzle, in a headless world with real items:
   - an item in the cone is pulled and one outside it is not;
   - the pull is force-limited for 40 kg;
-  - a swallow calls the sink once and frees the item;
+  - a swallow calls the sink once, emits `consumed` once, and frees the item;
   - a refused sink stops suction;
   - too big is not pulled;
 - the reel: a release reels home in 1 s;
+- the line: a shift moves its node, and its points stay where they were relative to the reel;
 - Grasp: an EVA tool passes `suspended` and a mug does not;
 - the airlock: crossing in lets go of the nozzle;
-- the reel is present on the alcove, on the own-hull layer.
+- the reel is present on the alcove, on the own-hull layer;
+- **the floating origin:** with the hose out on a spacewalk, `test_everything_outside_is_covered`
+  passes, the nozzle is not a member, and a spacewalk across a shift keeps the hose, the tether
+  and the salvage where they were relative to you.
 
 **Verify:**
 - the hose probe (spec §15.2): take the nozzle, drift into the near cloud, swallow three kinds, see
@@ -601,51 +685,130 @@ on a spacewalk in the near cloud.
 
 ---
 
-### Task 10: Dark and relight
+### Task 10: Salvage at the groups, and finding it
 
 **Files:**
-- Modify: `ship.gd`, `quantum_plant.gd`, `quantum_core.gd`, `synth.gd` (`core_down`,
-  `core_up`)
-- Tests: `test_quantum_plant.gd`, a new `test_ship_dark.gd`
+- Create: `src/world/salvage_sense.gd`, `src/ui/salvage_marker.gd`
+- Modify: `salvage_field.gd` (group clouds, `known_clouds`, readings), `flight_test.gd` (the
+  marker, created in code and bound to the field)
+- Tests: `test_salvage_field.gd`, new `test_salvage_sense.gd`, `test_salvage_marker.gd`;
+  `test_floating_origin_scene.gd`
 
 **Interfaces produced:**
-- `Ship` listens to `QuantumPlant.lit_changed`:
-  - **dark:** every interior light with role `&"cell"` goes to 30% of its energy, and
-    `InteriorMaterials.glow()`'s `energy` to 35% of 2.4;
-  - **relight:** the sequence in spec §8.3, with lights ordered by `DeckGraph` walking distance
-    from the core's cell.
-- The airlocks, the machine and its charge plate ignore dark.
+- **`SalvageField`:**
+  - `group_cloud(giant_cell: Vector3i) -> Dictionary`: `{id, centre: UniversePoint, big_rock}`, or
+    `{}` for a region with no big rock. It reads its own `AsteroidRecipe` made with the stream's
+    seed (`cell_rocks(Tier.GIANT, cell)`);
+  - `cloud_items` for a group cloud: 10–16 items within 25 m of the centre, each kept clear of
+    every rock by the recipe's bounding-sphere test, against the rubble and mid-size cells it
+    overlaps and the big rock. That test is today's private `AsteroidRecipe._touches`: make it a
+    public static (`touches`) rather than calling a private method from outside. One shard in
+    about half the groups;
+  - `known_clouds(focus: UniversePoint, range_m := 10000.0) -> Array[Dictionary]`: the near cloud
+    and every group cloud in the giant cells within range, with `remaining`, spawning nothing.
+    It is cached and refreshed when the focus crosses into a new giant cell;
+  - `readings(focus: UniversePoint, time: float) -> Array[Dictionary]`: `SalvageSense`'s reading
+    for the nearest three clouds with something left.
+- **`SalvageSense` (pure, static):**
+  - `const PING_FAR := 10000.0`, `REGION_NEAR := 2000.0`, `PING_ERROR_DEG := 10.0`,
+    `PING_PERIOD := 4.0`, `REGION_RADIUS := 75.0`, `REGION_OFFSET := 50.0`;
+  - `read(focus: UniversePoint, cloud_centre: UniversePoint, cloud_id, world_seed, time) ->
+    Dictionary`: `{mode: &"ping" | &"region" | &"none", direction, km, centre, radius, metres}`;
+  - `region_centre(cloud_centre, cloud_id, world_seed) -> UniversePoint`.
+- **`SalvageMarker` (`HudElement`):** `bind(field: SalvageField)`. Each frame it asks the field for
+  readings at the focus and draws each: a ping as a soft chevron with *SALVAGE ~4 KM*, fading
+  between refreshes; a region as a ring round the projected sphere with *SALVAGE 640 M*; nothing
+  inside the region. Off-screen and behind-you readings pin to the edge through
+  `VelocityMarker.resolve`, as `AirlockMarker` does. It shows while seated or on a spacewalk.
+
+**What to do:**
+- A group cloud's centre lies in a seeded direction from the big rock's centre, 40–120 m off its
+  surface (its bounding radius from `AsteroidRock.radius`).
+- Loading and freeing work for group clouds exactly as for the near cloud (Task 8).
+- Cloud ids are stable and hashable: `&"near"`, or the giant cell as a string key.
 
 **Tests:**
-- draining to 0 turns flight off and dims the lights and glow;
-- a credit starts the relight, which restores every light's energy exactly after 3 s plus the
-  cell delay;
-- a rebuild while dark stays dark.
+- the same seed gives the same group cloud; counts; distance from the surface;
+- **no item overlaps a rock**, over 200 groups;
+- shards in 40–60% of 200 groups;
+- `known_clouds` spawns no nodes and lists the start's own group;
+- `SalvageSense`:
+  - a ping beyond 2 km: its direction within 10° of the truth, the error changing every 4 s and
+    staying the same within a period, `km` rounded;
+  - a region within 2 km: radius 75 m, its centre within 50 m of the cloud's, and every item of
+    the cloud inside it;
+  - nothing inside the region;
+- `readings` gives at most three, the nearest, and skips emptied clouds;
+- the marker draws a ping, a region and nothing, and pins to the edge;
+- **the floating origin:** with a group's cloud loaded, everything outside is covered, and a
+  shift leaves the readings unchanged.
 
 **Verify:**
-- the dark probe: set the store to 0, render the bridge and the corridor, convert an item,
-  and render the relight at 0.5, 1.5 and 3 s;
-- the ship flies again afterwards.
+- the salvage probe (spec §15.2): from the start, the first group's region shows; fly to it and the
+  marker fades inside; find the cloud by eye and its glints; swallow two items; fly away past 4 km
+  and back and see those two still gone; fly on to the next group, following its ping, across a
+  floating-origin shift;
+- render the HUD with a ping and a region, and a group's cloud at 50 m, glinting;
+- measure frame time seated at a group's cloud, with the swarm in view.
 
-**Commit:** `feat: an empty store darkens the ship, and a relit core brings it back`
+**Commit:** `feat: salvage round every asteroid group, found by a ping and then a region`
 
 *Phase E is playable here.*
 
 ---
 
-### Task 11: Docs and the final check
+### Task 11: Low power's look, and power restored
+
+**Files:**
+- Modify: `ship.gd`, `quantum_plant.gd`, `quantum_core.gd`, `synth.gd` (`core_down`,
+  `core_up`)
+- Tests: `test_quantum_plant.gd`, a new `test_ship_low_power.gd`
+
+**Interfaces produced:**
+- `Ship` listens to `QuantumPlant.low_power_changed`:
+  - **dropping into low power, over 1 s:** every interior light with role `&"cell"` goes to 30% of
+    its energy, and `InteriorMaterials.glow()`'s `energy` to 35% of 2.4; `core_down` plays;
+  - **power restored:** the sequence in spec §8.3, with lights ordered by `DeckGraph` walking
+    distance from the core's cell, and `core_up` at the end;
+  - a crossing mid-sequence reverses from where it has got to.
+- The core's states `low_power` and `restoring` (spec §6.2), and its hum lower and quieter in low
+  power.
+- The airlocks, the machine and its charge plate ignore low power, apart from the shared glow
+  dimming.
+
+**Tests:**
+- crossing the line down dims every cell light to 30% and the glow to 35% after 1 s;
+- crossing back up restores every light's energy exactly after 3 s plus the cell delay;
+- a crossing back mid-sequence reverses without a jump;
+- a rebuild in low power stays in low power, with the lights dimmed.
+
+**Verify:**
+- the low-power probe (spec §15.2): boost until the line, see the lights drop, fly at half
+  authority, convert until the line and render the power-restored sequence at 0.5, 1.5 and 3 s;
+- render the bridge and the corridor in low power;
+- empty the store with a suit charge, and see the pilot light bring it to 25.
+
+**Commit:** `feat: a low store dims the ship, and restored power comes back cell by cell`
+
+*Phase F is playable here.*
+
+---
+
+### Task 12: Docs and the final check
 
 - **Style guide** (spec §16):
   - §3.5, the core and the machine on the bridge;
   - §2.8, the machine's screen;
   - §2.9, hearing the tool in your hands;
-  - the palette entries;
-  - items outside;
+  - the palette entries, including the choice made at Task 3;
+  - items outside, and their glint;
+  - low power's emergency light, and power restored;
   - the frame-time figures.
 - **The other amendments:**
   - slice spec §5, §6.1 and the roadmap;
   - hands-and-items §15 and §16;
   - airlock §7.4, §12 and §13;
+  - asteroids §4.4 and §13;
   - Planetfall §18;
   - interior redesign §7.5, the starter's bridge;
   - **`SLICE-1-STATUS`:** a "what works" entry, and the new flight figures replacing the old ones.
@@ -653,7 +816,8 @@ on a spacewalk in the near cloud.
   - the full suite;
   - every probe;
   - every render in spec §15.2, sent to the owner;
-  - frame time on the bridge at rest and mid-convert, and on a spacewalk with the hose drawing;
+  - frame time on the bridge at rest and mid-convert, on a spacewalk with the hose drawing, and at
+    a group's cloud;
   - the definition of done (spec §20), walked end to end.
 
-**Commit:** `docs: record quantum energy, the core, the machine and the hose`
+**Commit:** `docs: record quantum energy, the core, the machine, salvage and the hose`
