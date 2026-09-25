@@ -3,9 +3,8 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 > **Gate:** do not start until the owner has approved the spec's §2. If the owner changed a row,
-> amend the spec first, then this plan. Three rows change the most (spec §2.1):
+> amend the spec first, then this plan. Two rows change the most (spec §2.1):
 > - **retiring the reactors** changes Task 1;
-> - **lengthening the starter** changes Tasks 1 and 2 (the §5.5 fallback replaces them);
 > - **patterns** changes Tasks 5 and 6.
 
 **Goal:** Make quantum energy (QE) the ship's power source and the universe's currency:
@@ -19,7 +18,7 @@
   rebuilds, as the airlocks do.
 - **The engine is lit while the store holds any QE.** Ordinary flight spends nothing; boost, making
   and the suit do.
-- **The engine room** is a room block. The layout deals it a machine, an engine, a dock and conduits.
+- **The engine room** is a room block. The layout deals it a machine, an engine and conduits.
   The dressing builds them as grid-blind props and hands a `QuantumRoom` to the plant.
 - **The machine** is a pure `MachineCycle`. Its bay is a `StowPoint`, so Grasp's stow-on-drop feeds
   it.
@@ -48,7 +47,8 @@
     commit Godot's `.uid` files;
   - tests: `who-knows\run_tests.ps1 [-gselect=<file>]`. The baseline is 550 passing.
 - **The store:**
-  - capacity 100 per `quantum_room` cell and 400 per `quantum_cell`: 1,500 on the starter;
+  - capacity 400 per `quantum_cell`: 1,200 on the starter;
+  - each quantum cell generates 12 MW, only while the engine is lit;
   - it starts at half capacity on the first load only;
   - reserve 100 (boost and making stop there; a suit charge goes down to 1; drains go to 0);
   - lit at ≥ 1;
@@ -63,7 +63,7 @@
   - make 1.5 s;
   - the bay takes an item with a value, largest side ≤ 0.55 m and mass ≤ 40 kg; items in it turn at
     10°/s.
-- **The dock:** 50 QE/s, reach 1.2 m.
+- **The charge plate:** 50 QE/s, reach 1.2 m.
 - **The suit:**
   - capacity 100, empty at the start;
   - 1 QE per m/s of Δv;
@@ -98,108 +98,116 @@
 
 ---
 
-### Task 1: The new blocks and the lengthened starter
+### Task 1: The new blocks and the moved rooms
 
 **Files:**
 - Create: `data/blocks/quantum_room.tres`, `data/blocks/quantum_cell.tres`
 - Delete: `data/blocks/reactor.tres`, `data/blocks/battery.tres`
-- Modify: `block_definition.gd`, `ship_stats.gd`, `ship_validator.gd`,
-  `scenes/flight_test.gd` (`_starter_grid()` and its recorded-numbers comment)
+- Modify: `block_definition.gd`, `ship_stats.gd`, `scenes/flight_test.gd` (`_starter_grid()` and
+  its power note)
 - Tests: `test_block_data.gd`, `test_block_catalog.gd`, `test_ship_stats.gd`,
-  `test_ship_validator.gd`, `test_starter_shuttle.gd`, the parity test
+  `test_starter_shuttle.gd`, the parity test
 
 **Interfaces produced:**
 - `BlockDefinition.quantum_capacity: int` (export group "Quantum").
 - `ShipStats.quantum_capacity: int`, summed like power.
-- `ShipValidator` Rule 7: an error with code `&"QUANTUM_ROOM"` when a ship has no `quantum_room`, or
-  when a connected set of `quantum_room` cells has fewer than two.
 
 **What to do:**
 - **The blocks** (spec §5.1):
-  - `quantum_room`: Interior, DECK, 0.4 t, hp 60, `power_gen` 12, `power_draw` 0.1, capacity 100,
-    with the deck's slab mesh;
-  - `quantum_cell`: Systems, SOLID, 5 t, hp 250, capacity 400, with a box mesh like the reactor's.
+  - `quantum_room`: Interior, DECK, 0.4 t, hp 60, `power_draw` 0.1, with the deck's slab mesh;
+  - `quantum_cell`: Systems, SOLID, 5 t, hp 250, `power_gen` 12, capacity 400, with a box mesh like
+    the reactor's.
 - **The starter** (spec §5.3):
-  - add the z = +3 cabin row;
-  - move the airlock row, the pods, the stern bank and the stern wedges back one;
-  - add the y = 1, z = +3 roof;
-  - make the reactors quantum cells.
-- **Replace the recorded-numbers comment** in `_starter_grid()` with the measured figures. Keep its
-  reasoning on pitch balance, which still holds.
-- **Existing validator fixtures** gain a two-cell quantum room, so each test still isolates its own
-  rule.
+  - the bunk room moves to (−1, 0, −1) and (−1, 0, 0);
+  - the bathroom moves to (−1, 0, +1);
+  - `quantum_room` goes at (−1, 0, +2);
+  - the reactors become quantum cells.
+- **The power note** in `_starter_grid()` now says quantum cells, not reactors. The recorded flight
+  figures stay as they are.
 
 **Tests:**
 - the new blocks' fields;
 - `reactor` and `battery` are no longer in the catalogue;
 - the capacity sum;
-- Rule 7: none; one cell; two cells; two rooms of one cell each;
-- the starter pinned: 94 blocks, 100,500 kg, centre of mass (0, 1.264, 1.236), imbalance.x
-  95,522 N·m, torque budget (3,617,910, 2,308,955, 2,184,080), 36.0 generated / 31.1 drawn MW,
-  capacity 1,500, zero issues.
+- **the starter is unchanged in flight:** 84 blocks, 92,300 kg, centre of mass (0, 1.268, 0.325),
+  imbalance.x 101,408 N·m, torque budget (3,162,514, 2,081,257, 2,183,099), 36.0 generated / 30.8
+  drawn MW, zero issues;
+- the starter's capacity is 1,200;
+- re-pin the starter's stock counts, which follow their rooms.
 
-If Godot's numbers differ from the spec's by more than rounding, stop and report: the spec's were
-computed outside the engine.
+If Godot's numbers differ from these by more than rounding, stop and report.
 
-**Verify:**
-- fly the starter from the seat and the chase camera; assist reaches 60°/s pitch and roll within a
-  second;
-- render the chase view for the owner;
-- walk the probe from the airlock out: it still steps out between the pods.
+**Verify:** walk the cabin and render it:
+- the bridge from the helm and from the corridor, with the bunk room in its back corner;
+- inside the bunk room, with its two windows;
+- the bathroom.
 
-Until Task 2 the new row is open common deck, and the airlock opens onto it.
+Until Task 2 the engine-room cell is open common deck.
 
-**Commit:** `feat: the starter grows an engine-room row and trades reactors for quantum cells`
+**Commit:** `feat: quantum cells replace the reactors, and the port rooms move forward a row`
 
 ---
 
-### Task 2: The engine room's layout
+### Task 2: The engine room's layout, and Rule 7
 
 **Files:**
-- Modify: `interior_layout.gd`, `interior_palette.gd` (the `ROOM_FLOOR` entry)
-- Tests: `test_interior_layout.gd`, `test_interior_builder.gd`, `test_starter_shuttle.gd`
+- Modify: `interior_layout.gd`, `interior_palette.gd` (the `ROOM_FLOOR` entry),
+  `ship_validator.gd`
+- Tests: `test_interior_layout.gd`, `test_interior_builder.gd`, `test_ship_validator.gd`,
+  `test_starter_shuttle.gd`
 
 **Interfaces produced:**
 - `InteriorLayout.ROOM_IDS` gains `&"quantum_room"`, and `QUANTUM_ROOM_ID := &"quantum_room"`.
-- Wall records in a quantum room carry `"piece": StringName`: `&"machine"`, `&"engine"`, `&"dock"`
-  or `&"conduits"`.
-- `InteriorLayout.quantum_rooms() -> Array[Dictionary]`: `{zone, coords, doorway, key: Vector3i}`,
-  where `key` is the room's lowest cell.
+- Wall records in a quantum room carry `"piece": StringName`: `&"machine"`, `&"engine"` or
+  `&"conduits"`.
+- `InteriorLayout.quantum_rooms() -> Array[Dictionary]`: `{zone, coords, doorway, key: Vector3i,
+  seated: bool}`. `key` is the room's lowest cell. `seated` is true when both a machine and an engine
+  were dealt.
+- **`ShipValidator` Rule 7:** an error with code `&"QUANTUM_ROOM"` in two cases:
+  - no quantum room has `seated` true (it asks `InteriorLayout.plan`, as Rule 6 asks `AirlockSite`);
+  - the ship has no `quantum_cell`.
 
 **What to do:**
 - **In `_resolve_rooms`, resolve every airlock-zone room first,** then the rest. An airlock's inner
-  hatch then claims its wall before a neighbouring room furnishes that wall.
+  hatch then claims its wall before a neighbouring room furnishes it.
 - **After furnishing a quantum room's cells, deal pieces** (spec §6.1):
   1. rank the cells by distance from the doorway's face centre, then by lowest `(z, x)`;
-  2. deal the feature walls `machine`, `engine`, then `conduits`;
-  3. the machine cell's secondary wall gets `dock`; any other secondary gets `conduits`.
+  2. the first feature wall gets `machine`;
+  3. the first secondary wall gets `engine`, or the next feature wall if there is no secondary;
+  4. any other feature or secondary wall gets `conduits`.
 - **Floor colour:** a deep violet-grey. Pin it at render in Task 3.
+- **Existing validator fixtures** gain a quantum room and a quantum cell, so each test still isolates
+  its own rule.
 
 **Tests:**
 - the zone;
 - the airlock first: a room beside an airlock whose inner hatch opens into it has that wall as a
-  doorway, with no feature there;
-- dealing in a two-cell room and a three-cell room;
+  doorway, with no piece there;
+- dealing in a one-cell, a two-cell and a three-cell room, including a room with no secondary wall;
 - **the starter:**
-  - the doorway is (0, 0, 3)'s −Z wall;
-  - the inner hatch is (0, 0, 3)'s +Z wall;
-  - `machine` is on (−1, 0, 3)'s −X wall and `engine` on (1, 0, 3)'s +X wall;
-  - the `dock` is on one of (−1, 0, 3)'s ±Z walls;
-  - (0, 0, 3) has no walls;
+  - the engine room's doorway is (−1, 0, +2)'s +X wall, onto the corridor;
+  - `machine` is on its −X wall and `engine` on its +Z wall;
+  - its −Z wall keeps its trim;
+  - the bunk room's and bathroom's doorways are on their +X walls;
   - five sliding doors become six;
-- the builder: the new row's partitions are built once.
+  - the airlock's inner hatch still opens onto the corridor at (0, 0, +2);
+- Rule 7: no room; a seated room; a room that cannot seat both; no quantum cell;
+- the starter still has zero issues.
 
 **Commit:** `feat: the engine room is a room, with its pieces dealt by the layout`
 
 ---
 
-### Task 3: The engine, the machine, the dock and the conduits
+### Task 3: The engine, the machine and the conduits
 
 **Files:**
-- Create: `src/quantum/quantum_core.gd`, `src/quantum/quantum_room.gd`,
-  `src/quantum/quantum_bay.gd` (a stub whose `fits` accepts anything with a value; its rules come in
-  Task 6), `src/quantum/charge_dock.gd` (the body and plate only),
-  `src/ship/interior/readout_panel.gd`
+- Create:
+  - `src/quantum/quantum_core.gd`, `src/quantum/quantum_room.gd`;
+  - `src/quantum/quantum_bay.gd`, a stub whose `fits` accepts anything with a value (its rules come
+    in Task 6);
+  - `src/quantum/charge_dock.gd`, the charge plate's interactable (its body only; charging comes in
+    Task 7);
+  - `src/ship/interior/readout_panel.gd`.
 - Modify: `interior_props.gd`, `interior_dressing.gd`, `interior_builder.gd`, `interior_palette.gd`,
   `airlock_panel.gd` (now extends `ReadoutPanel`), `test_visual_style_rules.gd`
 - Tests: `test_interior_props.gd`, `test_interior_dressing.gd`, new `test_quantum_core.gd`,
@@ -207,13 +215,13 @@ Until Task 2 the new row is open common deck, and the airlock opens onto it.
 
 **Interfaces produced:**
 - **`InteriorProps`:**
-  - `quantum_engine(kit, f, variety)`;
+  - `quantum_engine(kit, f, variety)`: the pillar, 0.7 m wide and 0.5 m deep;
   - `quantum_machine(kit, f, variety)`, with `quantum_machine_bay() -> Transform3D`,
-    `quantum_machine_screen()`, `quantum_machine_buttons() -> Array[Transform3D]` (◀, big, ▶) and
-    `quantum_machine_conduit() -> PackedVector3Array` (the bead's path in the prop's frame);
-  - `charge_dock(kit, f, variety)` and `charge_dock_plate() -> Transform3D`;
+    `quantum_machine_screen()`, `quantum_machine_buttons() -> Array[Transform3D]` (◀, big, ▶),
+    `quantum_machine_plate()` and `quantum_machine_conduit() -> PackedVector3Array` (the bead's path
+    in the prop's frame);
   - `conduits(kit, f, variety)`;
-  - `QUANTUM_ENGINE_WIDTH := 1.6`, `QUANTUM_MACHINE_WIDTH := 1.5`.
+  - `QUANTUM_ENGINE_WIDTH := 0.7`, `QUANTUM_ENGINE_DEPTH := 0.5`, `QUANTUM_MACHINE_WIDTH := 1.5`.
 - **`QuantumCore` (`Node3D`, grid-blind):**
   - `setup(frame: Transform3D, layer: int)`;
   - `set_fill(fraction: float, reserve_fraction: float)`;
@@ -225,15 +233,16 @@ Until Task 2 the new row is open common deck, and the airlock opens onto it.
   `pressed` signal and `set_readout(lines, button_colour)`. Its size is a parameter, so the arrows
   can be small buttons with no screen.
 - **`QuantumRoom` (`Node3D`):** `key`, `cells`, `core`, `bay: QuantumBay`, `panel: ReadoutPanel`,
-  `prev_button`, `next_button`, `dock: ChargeDock`, `conduit_path: PackedVector3Array` (in interior
+  `prev_button`, `next_button`, `plate: ChargeDock`, `conduit_path: PackedVector3Array` (in interior
   space), `machine_frame`, `engine_frame`.
 - `InteriorBuilder.quantum_rooms() -> Array[QuantumRoom]`.
 - **`InteriorPalette`:** `QUANTUM`, `QUANTUM_DEEP`, the `ROOM_FLOOR` value.
 
 **What to do:**
-- **Build the props** from kit primitives to spec §6.2–6.5:
+- **Build the props** from kit primitives to spec §6.2–6.4:
   - colliders on anything more than 0.15 m proud;
   - the machine's colliders built round the bay recess;
+  - the engine's uprights following `InteriorProps.HEADROOM`;
   - one small `LIGHT_WARM` light at the engine;
   - the core on the glow batch in its own small kit, so it can turn and scale.
 - **`InteriorDressing._room_piece`** gains a `&"quantum_room"` branch keyed on `face["piece"]`. It
@@ -249,23 +258,24 @@ Until Task 2 the new row is open common deck, and the airlock opens onto it.
 **Tests:**
 - each prop in a bare frame, with pinned collider counts;
 - the bay spot is clear of the machine's colliders;
+- the engine stays within 0.5 m of its wall, so the doorway aisle stays 1.0 m;
 - `QuantumCore`:
   - `set_fill(0.5, 0.1)` lights 5 bars;
   - `set_fill(0.08, 0.1)` lights only the reserve bar, amber;
   - `dark` lights none, and the core is unlit;
-- the dressing on the starter: one `QuantumRoom` with every reference set; one more sliding door;
-  the airlock's corridor panel on (0, 0, 3)'s side of the hatch.
+- the dressing on the starter: one `QuantumRoom` with every reference set.
 
 **Verify:**
 - **Render at 1.6 m**, and send the renders to the owner:
-  - the engine room from the corridor door;
+  - the engine room from its doorway;
   - the engine at 50%, at the reserve and dark (driven by hand);
-  - the machine;
-  - the dock.
+  - the machine.
+- **This is where the one-cell room is judged.** If it renders too cramped, stop and put the two-row
+  shift (spec §5.5) to the owner before going on.
 - **Pin** `QUANTUM`, `QUANTUM_DEEP` and the floor from these renders.
 - **Render the warm-gold alternative** for `QUANTUM` beside the violet (spec §2, row 11).
 
-**Commit:** `feat: the quantum engine, machine and charge dock, drawn in the house style`
+**Commit:** `feat: the quantum engine and machine, drawn in the house style`
 
 ---
 
@@ -308,7 +318,7 @@ Until Task 2 the new row is open common deck, and the airlock opens onto it.
 - **`VehicleTelemetry`:** `has_energy`, `energy`, `energy_capacity`, `energy_reserve`,
   `energy_label`, `energy_state`, `tool_text`, `boost_refused`.
 - **`EnergyPanel` (`HudElement`):**
-  - *QE 750*, with a bar and a reserve notch;
+  - *QE 600*, with a bar and a reserve notch;
   - *BOOST −5/S* while boosting;
   - *BOOST · RESERVE* when refused;
   - *ENGINE DARK* in `WARNING`.
@@ -429,7 +439,7 @@ with no comments, and read them back in the test.
 
 ---
 
-### Task 7: The suit cell and the dock
+### Task 7: The suit cell and the charge plate
 
 **Files:**
 - Create: `src/quantum/suit_cell.gd`
@@ -466,14 +476,14 @@ with no comments, and read them back in the test.
 - full thrust for 1 s costs 2.5;
 - holding station beside a drifting ship costs under 0.1/s;
 - dry turns thrust off and heads home;
-- the dock charges at 50/s, stops at 100 and at the store's floor of 1, and stops when you walk
+- the plate charges at 50/s, stops at 100 and at the store's floor of 1, and stops when you walk
   away;
 - the airlock refuses depressurizing below 10 and allows it at 10 or more.
 
 **Verify:**
 - the suit probe (spec §15.2): refused empty, charge, cycle out, thrust until dry, be brought to the
   hatch, come in;
-- render the dock charging and the suit HUD low.
+- render the plate charging and the suit HUD low.
 
 **Commit:** `feat: the suit runs on quantum energy, charged at the machine`
 
@@ -601,7 +611,7 @@ on a spacewalk in the near cloud.
     `InteriorMaterials.glow()`'s `energy` to 35% of 2.4;
   - **relight:** the sequence in spec §8.3, with lights ordered by `DeckGraph` walking distance
     from the engine room.
-- The airlocks, the machine and the dock ignore dark.
+- The airlocks, the machine and its charge plate ignore dark.
 
 **Tests:**
 - draining to 0 turns flight off and dims the lights and glow;
@@ -624,7 +634,7 @@ on a spacewalk in the near cloud.
 
 - **Style guide** (spec §16):
   - §3.5, the engine room;
-  - §2.8, the machine's and the dock's screens;
+  - §2.8, the machine's screen;
   - §2.9, hearing the tool in your hands;
   - the palette entries;
   - items outside;
@@ -634,7 +644,8 @@ on a spacewalk in the near cloud.
   - hands-and-items §15 and §16;
   - airlock §7.4, §12 and §13;
   - Planetfall §18;
-  - **`SLICE-1-STATUS`:** a "what works" entry, and the new starter numbers replacing the old ones.
+  - interior redesign §7.5, the starter's cabin layout;
+  - **`SLICE-1-STATUS`:** a "what works" entry, with the moved rooms.
 - **Final checks:**
   - the full suite;
   - every probe;

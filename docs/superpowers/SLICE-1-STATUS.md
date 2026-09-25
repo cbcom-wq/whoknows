@@ -72,7 +72,8 @@ source and the universe's currency:
 - a suit cell;
 - salvage in space, gathered with a hose on the airlock.
 
-It proposes retiring `reactor` and `battery` and lengthening the starter by one row.
+It proposes retiring `reactor` and `battery`. The ship keeps its size: the port rooms move
+forward a row, and the engine room takes the freed cell beside the airlock.
 Spec `docs/superpowers/specs/2026-09-24-quantum-energy-design.md`, plan
 `docs/superpowers/plans/2026-09-24-quantum-energy.md`. Nothing is built.
 

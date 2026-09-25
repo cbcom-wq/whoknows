@@ -2,8 +2,12 @@
 
 **Date:** 2026-09-24
 **Status:** Proposed design, awaiting the owner's review. It was written from the owner's brief
-of 2026-09-24. Every row of §2 is a recommendation until the owner approves or changes it. No code
-has changed.
+of 2026-09-24. Every row of §2 is a recommendation until the owner approves or changes it, except
+row 5, which the owner decided. No code has changed.
+**Revised 2026-09-25** after the owner's first read: the ship keeps its size. The first draft
+lengthened the starter by a row for a three-cell engine room. The owner pointed out that the bridge
+has room to spare, so one side's rooms shift forward instead, and the engine room is one cell
+(§5.3).
 **Depends on:** `main` at `c79402f` (the airlock and first spacewalk; the ship-and-space items)
 **Governed by:** `docs/design/visual-style.md`
 **Plan:** `docs/superpowers/plans/2026-09-24-quantum-energy.md`
@@ -52,13 +56,14 @@ What exists today:
 
 ### 1.1 The pitch
 
-You walk aft down the corridor and the door slides open on the engine room. To your left, behind
-glass, a violet core turns inside three slow rings. A column of lit bars beside it says the store is
-half full. To your right is the machine. Drop a mug into its bay: it hangs there in the field,
-turning, and the screen reads *CONVERT · MUG · +3 QE*. Press the button and the mug is gone. A bead
-of light runs along the pipe to the engine, and a bar lights.
+You walk aft down the corridor. The last door on the right, beside the airlock's hatch, slides
+open on the engine room. The machine faces you. At your left shoulder stands the engine: a pillar
+of glass where a violet core turns inside three slow rings. A column of lit bars on its face says
+the store is half full. Drop a mug into the machine's bay: it hangs there in the field, turning,
+and the screen reads *CONVERT · MUG · +3 QE*. Press the button and the mug is gone. A bead of
+light runs along the pipe to the engine, and a bar lights.
 
-Put your palm on the charge plate and your suit fills. Cycle out through the airlock, take the hose
+Put your palm on the machine's charge plate and your suit fills. Cycle out through the airlock, take the hose
 nozzle from its reel beside the hatch, and float out into the junk drifting behind your ship. Hold
 the trigger: a lump of ice tumbles toward you and vanishes into the nozzle with a thunk. *+12 QE ·
 NEW PATTERN.* Back aboard, sit down and boost: the core spins faster and the store ticks down.
@@ -68,7 +73,8 @@ NEW PATTERN.* Back aboard, sit down and boost: the core spins faster and the sto
 - **A value** in QE for every object.
 - **A store** of QE on every ship. The engine is lit while the store holds any. Ordinary flight
   spends none; extras spend it.
-- **An engine room** between the corridor and the airlock, with the engine and the machine.
+- **An engine room** at the aft end of the corridor, beside the airlock, with the engine and the
+  machine.
 - **The machine:** convert objects to QE, make objects from QE, charge your suit.
 - **A suit cell** your thrusters draw on.
 - **Things in space** and **a hose** to gather them with.
@@ -84,22 +90,24 @@ Each row is a recommendation for the owner to approve or change.
 | 1 | What ordinary flight costs | **Nothing, but the engine must be lit.** The ship flies, turns, holds gravity and runs its lights at full power while the store holds at least 1 QE. | The owner's own suggestion. Flying about never becomes a fuel chore. The existing power model (MW, Rule 5) keeps its meaning. An empty store becomes an event, a crippled or derelict ship, not a routine. | An idle trickle (kept as a tuning knob, default 0). Power that falls with the store, which makes handling depend on wealth. |
 | 2 | What spends ship QE now | **Boost** (5 QE/s), **making objects** and **charging the suit**. Jumps, weapons and shields are hooks (§8.4). | Boost already exists and is free; it is the obvious first extra. | — |
 | 3 | Running dry | **A reserve line at 100 QE that only the suit may cross.** Boost and making stop at the line. Charging the suit may take the store down to 1 QE. Nothing you do takes the last one. | You can never strand your own ship, and you can always go out and gather. Only outside forces empty a store: Slice 2's hits, capture, or a derelict found empty. | No reserve: boost until dark, then salvage your way back. But the hose needs a charged suit, so this can lock the game. |
-| 4 | Where the power comes from | **The quantum engine replaces the reactors.** Power comes only from engine-room cells. `reactor` and `battery` retire, and a new `quantum_cell` block stores QE. | One source of power, the one the fiction names. The starter's three reactors become three quantum cells in the same cells with the same mass, so the equipment deck's balance does not move. | Keep reactors as backup generation. Then QE does not really power the ship. |
-| 5 | The engine room in the starter | **Lengthen the cabin by one row, for a three-cell engine room between the corridor and the airlock.** | Every room the owner chose stays. The room sits on the way out: charge your suit on the way to the airlock, feed the machine on the way back. Measured: pitch balance improves (2.6% of pitch authority, from 3.2%). Forward acceleration drops 8%; yaw spins up 15% slower (§5.4). | Replace the closet: keeps the hull, loses the closet and crams the room into 2 m (§5.5). Or take the bridge's back corners, which breaks up the open bridge. |
+| 4 | Where the power comes from | **The quantum engine replaces the reactors.** `reactor` and `battery` retire. A new `quantum_cell` block holds QE and delivers the ship's power, but only while the engine is lit. | One source of power, the one the fiction names: the engine lights the cells. The starter's three reactors become three quantum cells in the same cells, with the same mass and the same 12 MW each, so nothing about the ship's balance or power moves. | Keep reactors as backup generation. Then QE does not really power the ship. |
+| 5 | The engine room in the starter | **Decided by the owner, 2026-09-25: the ship keeps its size.** The port rooms (bunk room and bathroom) shift forward a row into the bridge's back corner. The engine room takes the freed cell at the aft end of the corridor, beside the airlock. | Every room the owner chose stays. The room sits on the way out: charge your suit on the way to the airlock, feed the machine on the way back. Deck and room blocks weigh the same, so every flight figure is unchanged (§5.4). Port, not starboard: starboard's weapon rack would land under a porthole (§5.3). | Lengthen the ship by a row (the first draft; the owner declined it). Shift two rows for a two-cell engine room, at the cost of a second bridge cell (§5.5). |
 | 6 | What the machine can make | **Only what it has read.** Converting a kind for the first time records its pattern. The machine starts knowing everything the ship was stocked with. | The theme (slice spec §1.1): a new kind of thing is worth more than its QE. Exploring unlocks things to make. | Anything in the item catalogue. |
 | 7 | Make versus convert | **Making costs twice what converting gives.** | Nothing can print QE, and keeping a useful object is always cheaper than remaking it. | At par: objects become cash, and nothing is worth keeping. |
 | 8 | The hose | **A nozzle on a 30 m line from a reel beside the outer hatch.** On a spacewalk you take it, aim, and hold the trigger. Loose things within 8 m fly in and are converted into the ship's store. | "A hose connected to the airlock … to suck in objects outside." Hands-on and physical, and it gives a spacewalk a job. | A fixed hose aimed from the open outer hatch. A ship-mounted vacuum worked from the cockpit. |
 | 9 | Things to gather | **Salvage: loose items drifting in space**, in a cloud behind the starter's stern and six more farther out. | The hose needs something outside. | Make the debris field's rocks swallowable. They are 5–40 m, so they would need a cutter first. |
-| 10 | The suit | **A 100 QE suit cell,** empty at the start and charged at the machine's dock. Thrust costs 1 QE per m/s. The airlock won't depressurize for an empty suit. A suit that runs dry outside brings you home on its emergency cell. | "The user must power up the suit at the quantum machine." Nothing can strand you, and there is no death to fall back on yet. | Drift until rescued. That needs death or rescue, neither of which exists. |
+| 10 | The suit | **A 100 QE suit cell,** empty at the start and charged at the machine's plate. Thrust costs 1 QE per m/s. The airlock won't depressurize for an empty suit. A suit that runs dry outside brings you home on its emergency cell. | "The user must power up the suit at the quantum machine." Nothing can strand you, and there is no death to fall back on yet. | Drift until rescued. That needs death or rescue, neither of which exists. |
 | 11 | The colour of QE | **A soft violet, `QUANTUM`:** the one cool colour in a warm ship. Every light stays `LIGHT_WARM`; bloom carries the violet. | It reads as other and precious, with no style-rule change. | A warm gold: safer, but less distinct. |
 
 ### 2.1 The three that change the most
 
 - **Retiring the reactors (row 4).** A block the slice spec lists goes away, and every power number
   now depends on the engine being lit.
-- **Lengthening the starter (row 5).** It changes the ship's silhouette: 2 m longer, 94 blocks. It
-  also re-derives recorded flight figures.
 - **Patterns (row 6).** It decides whether the machine is a vending machine or a discovery.
+- **The make markup (row 7).** It sets how much a thing in the hand is worth over its QE.
+
+The starter's layout (row 5) is settled. It moves three rooms and changes none of the ship's
+figures.
 
 ---
 
@@ -113,7 +121,7 @@ The owner's "present but not deducted" works because a ship needs two numbers, n
 |---|---|---|
 | What it is | How much the engine can deliver at once | How much is in the store |
 | Unit | MW, as today | QE, whole numbers |
-| Comes from | The engine room's cells, while the engine is lit | Converting objects, at the machine or with the hose |
+| Comes from | The quantum cells, while the engine is lit | Converting objects, at the machine or with the hose |
 | Goes to | Everything that runs: thrust, RCS, gravity, lights, airlocks | The extras: boost, making things, the suit; later jumps, shields and weapons |
 | Running short | Brownout (Rule 5, a later mechanic) | The engine goes dark |
 
@@ -122,9 +130,9 @@ The owner's "present but not deducted" works because a ship needs two numbers, n
 
 ### 3.2 The store
 
-- **Capacity** is the sum of every block's `quantum_capacity`: 100 per engine-room cell and 400 per
-  quantum cell. The starter holds 1,500.
-- **It starts half full** (750) on the ship's first load, as stocking happens once. Rebuilds keep
+- **Capacity** is the sum of every block's `quantum_capacity`: 400 per quantum cell. The starter
+  holds 1,200.
+- **It starts half full** (600) on the ship's first load, as stocking happens once. Rebuilds keep
   the amount, clamped to any new capacity.
 - **Whole numbers.** Continuous costs (boost, the suit) accrue fractions and are debited in whole
   QE as they add up.
@@ -197,7 +205,7 @@ A test holds every item to having one.
 
 Everything the starter carries converts to about 935 QE. The biggest single sources are the two
 power cells (150 each) and the two pistols (120 each). That is more than the store has room for
-(1,500 − 750), so emptying the ship teaches *STORE FULL*.
+(1,200 − 600), so emptying the ship teaches *STORE FULL*.
 
 ### 4.3 Patterns
 
@@ -224,22 +232,25 @@ later: an unidentified block's value stays unknown until the machine reads it.
 
 | Block | Category | Occupancy | Mass | Power | QE capacity |
 |---|---|---|---|---|---|
-| **`quantum_room`** (new) | Interior | DECK | 0.4 t | generates 12 MW while lit; draws 0.1 MW | 100 |
-| **`quantum_cell`** (new) | Systems | SOLID | 5 t | — | 400 |
+| **`quantum_room`** (new) | Interior | DECK | 0.4 t | draws 0.1 MW | — |
+| **`quantum_cell`** (new) | Systems | SOLID | 5 t | generates 12 MW while lit | 400 |
 | `reactor` | *retired* | | | | |
 | `battery` | *retired* (it has no function today and the starter has none) | | | | |
 
 - The block count stays 21.
 - `BlockDefinition` gains `quantum_capacity: int`, in a "Quantum" export group.
 - `ShipStats` gains `quantum_capacity`. `power_gen` now means the power the ship has while lit.
-- `quantum_room` is a room block (style guide §4). It carries power because this spec makes that
-  balance decision; its mass is deck's.
+- `quantum_room` is a room block with deck's mass and power, as the style guide's §4 asks.
+- `quantum_cell` is the reactor with a store added: the same mass, hp and generation.
 
 ### 5.2 Validation
 
-- **Rule 7 (error, `QUANTUM_ROOM`):** a ship has at least one quantum room, and every quantum room
-  has at least two cells. Two cells always give two walls for furniture, one for the machine and
-  one for the engine (§6.1). Without an engine the ship has no power at all, which is as fatal as
+- **Rule 7 (error, `QUANTUM_ROOM`):** a ship needs two things:
+  - a quantum room that seats both a machine and an engine;
+  - at least one quantum cell.
+
+  The validator asks `InteriorLayout` whether the room seats both pieces (§6.1), as Rule 6 asks
+  `AirlockSite`. Without an engine or a cell, a ship has no power at all, which is as fatal as
   having no pilot seat.
 - Rule 5 (power margin, a warning) is unchanged.
 
@@ -250,56 +261,61 @@ later: an unidentified block's value stays unknown until the machine reads it.
   −4       canopy        canopy          canopy
   −3        deck       pilot_seat         deck         ┐
   −2        deck          deck            deck         │ bridge
-  −1        deck          deck            deck         ┘
+  −1      bunk_room       deck            deck         ┘  ← the bunk room moves up a row
    0      bunk_room       deck           galley
-  +1      bunk_room       deck         weapon_room
-  +2      bathroom        deck           closet
-  +3   quantum_room   quantum_room   quantum_room      ← new: the engine room
-  +4      bulkhead       airlock         bulkhead
+  +1      bathroom        deck         weapon_room
+  +2    quantum_room      deck           closet        ← new: the engine room
+  +3      bulkhead       airlock         bulkhead
 ```
 
-- **A new cabin row at z = +3:** hull at x = ±2 and the engine room across x = −1…+1.
-- **Everything aft moves back a row:**
-  - the airlock and its bulkheads to z = +4;
-  - the engine pods to z = +2…+4;
-  - the stern thruster bank and stern wedges to y = 1, z = +4.
-- **The equipment deck gains a hull roof row** at y = 1, z = +3.
+- **The port rooms shift forward a row:** the bunk room to z = −1…0, the bathroom to z = +1.
+- **The engine room takes the freed cell** at (−1, 0, +2): the corridor's aft end, beside the
+  airlock.
 - **The three reactors become quantum cells** in the same cells.
+- **Nothing else moves:** the hull, the equipment deck, the pods and the airlock.
 
-The airlock still opens aft between the pods and under the stern bank (airlock spec §9). Its inner
-hatch now opens into the engine room's middle cell rather than onto the corridor.
+The bridge keeps eight of its nine cells. Its front row, with the helm and the cockpit pod, is
+untouched.
+
+**Why port, not starboard.** A room whose feature wall is on the outer skin gets a porthole above
+its furniture (style guide §3.1). Forward of the engine pods, at z = −1 and 0, the outer walls are
+outer skin.
+- **Shifting starboard** would put the weapon room at (1, 0, 0). Its 1.7 m rack would meet a
+  porthole, and the rack has no low variant.
+- **Shifting port** puts the bunk room there instead. Bunks already build a single low bunk under a
+  porthole, so both bunk cells gain a window. The room goes from three berths (a double bunk and a
+  single) to two singles.
+- **The bathroom and the engine room** sit beside the pods, so neither gets a porthole.
+
+The stock follows its rooms. The plan re-pins the starter's stock counts.
 
 ### 5.4 Measured
 
-These figures were computed with `ShipStats`'s own arithmetic outside the engine. The same
-computation reproduces today's recorded figures exactly. The plan re-measures them in Godot.
+Deck, room and engine-room blocks all weigh 0.4 t, and a quantum cell weighs what a reactor does.
+Moving rooms inside the cabin therefore changes none of the ship's figures. These were computed with
+`ShipStats`'s own arithmetic outside the engine, which reproduces today's recorded figures exactly.
+The plan confirms them in Godot.
 
-| | Today | Lengthened |
+| | Today | With the engine room |
 |---|---|---|
-| Blocks | 84 | 94 |
-| Mass | 92,300 kg | 100,500 kg |
-| Centre of mass | (0, 1.268, 0.325) | (0, 1.264, 1.236) |
-| Inertia (million kg·m²) | 1.82, 2.65, 1.06 | 2.57, 3.46, 1.15 |
-| Pitch imbalance under full burn | 101,408 N·m: **3.2%** of pitch authority | 95,522 N·m: **2.6%** |
-| Torque budget (N·m) | 3,162,514 / 2,081,257 / 2,183,099 | 3,617,910 / 2,308,955 / 2,184,080 |
-| Peak turn acceleration, pitch / yaw / roll | 99.6 / 45.0 / 117.6 °/s² | 80.8 / 38.2 / 108.6 °/s² |
-| Forward acceleration | 16.3 m/s² | 14.9 m/s² |
-| Power, lit | 36.0 generated / 30.8 drawn MW | 36.0 / 31.1 MW |
-| QE capacity | — | 1,500 |
+| Blocks | 84 | 84 |
+| Mass | 92,300 kg | 92,300 kg |
+| Centre of mass | (0, 1.268, 0.325) | the same |
+| Pitch imbalance under full burn | 101,408 N·m: 3.2% of pitch authority | the same |
+| Torque budget (N·m) | 3,162,514 / 2,081,257 / 2,183,099 | the same |
+| Power | 36.0 generated / 30.8 drawn MW | 36.0 generated while lit / 30.8 drawn |
+| QE capacity | — | 1,200 |
 
-The ship stays balanced: the new row's weight sits almost exactly at the old centre-of-mass height.
-Pitch and roll still reach their assisted rates within about a second. Yaw now takes about 1.2 s to
-reach 45°/s, where it took about one. No thruster, RCS unit or flight constant needs to change.
+The ship handles exactly as it does today.
 
-### 5.5 The fallback, if the owner keeps the hull
+### 5.5 Alternatives considered
 
-A one-cell engine room could replace the closet at (1, 0, 2), next to the corridor's aft end.
-- The machine would stand on the feature wall, with the dock as the secondary piece.
-- The engine would hang from the ceiling as a compact core.
-- Rule 7 would then accept one cell.
-
-It is cramped (style guide §3.1). It loses the closet and its stock, and it needs a second engine
-design. **Not recommended.**
+- **Lengthen the ship by a row.** This was the first draft: a three-cell engine room between the
+  corridor and the airlock, with the ship 2 m longer. It measured well (pitch balance 2.6% of pitch
+  authority, and 8% less forward acceleration). The owner declined it on 2026-09-25.
+- **Shift two rows,** for a two-cell engine room at (−1, 0, +1…+2), where the engine and the machine
+  would each get a wall of their own. It costs the bridge a second cell and brings the bunk room up
+  beside the helm row. Worth it only if the one-cell room renders too cramped (§19).
 
 ---
 
@@ -310,40 +326,47 @@ design. **Not recommended.**
 - **`quantum_room` joins `InteriorLayout.ROOM_IDS`:** walls where it meets another zone, one
   doorway, a sliding door, as for any room.
 - **Airlocks resolve before rooms,** so an airlock whose inner hatch opens into a room claims that
-  wall before the room furnishes it.
-- **The layout deals the pieces.** It records a `piece` on each furnished wall.
+  wall before the room furnishes it. The starter's does not, but a player's ship may.
+- **The layout deals the pieces.** It records a `piece` on each furnished wall:
   1. Rank the room's cells by distance from the room's doorway, then by lowest `(z, x)`.
-  2. Deal the cells' feature walls in that order: `machine` first, `engine` second, `conduits` to
-     any more.
-  3. The machine cell's secondary wall gets `dock`; any other secondary wall gets `conduits`.
-- **In the starter:**
-  - the doorway is the middle cell's forward wall, onto the corridor;
-  - the airlock's inner hatch is the middle cell's aft wall;
-  - the middle cell has no walls, so it is a clear walk from the corridor to the airlock;
-  - the machine takes the port wall (x = −1), on your **right** as you walk aft into the room;
-  - the engine takes the starboard wall, on your left;
-  - the dock is on one of the machine cell's end walls.
+  2. The first feature wall gets the `machine`.
+  3. The first secondary wall gets the `engine`. With no secondary wall, the engine takes the next
+     feature wall.
+  4. Any other feature or secondary wall gets `conduits`.
+
+  A room that cannot seat both a machine and an engine fails Rule 7.
+- **In the starter,** the room is one cell at (−1, 0, +2):
+  - the doorway is its starboard wall, onto the corridor's last cell, beside the airlock's inner
+    hatch;
+  - the machine is on the port wall, facing you as you come in;
+  - the engine is on the aft wall, against the bulkhead, at the door end: at your left shoulder as
+    you enter;
+  - the forward wall, onto the bathroom, keeps its trim.
+- **Clearance:** the engine is 0.5 m deep, so the aisle from the door stays 1.0 m wide (style guide
+  §3.1).
 - **Floor:** `ROOM_FLOOR[&"quantum_room"]`, a deep violet-grey pinned by rendering.
 
 ### 6.2 The engine
 
+A pillar, so that it fits a secondary wall (under 1 m wide, style guide §3.1).
 `InteriorProps.quantum_engine(kit, f, variety)` builds the fixed parts. A `QuantumCore` node, like
 `AirlockHatch`, owns the moving parts and knows nothing about ships.
 
 **Fixed:**
-- a plinth 1.6 × 0.25 × 0.7 m with a glowing base;
-- two chunky bevelled uprights to 2.2 m;
-- a glass housing: a faceted tube 0.9 m across and 1.1 m tall, from 0.6 m up;
-- a crown, and two conduits rising into the ceiling.
+- a plinth 0.7 × 0.2 × 0.5 m with a glowing base;
+- two slim bevelled uprights from floor to ceiling, following `HEADROOM`;
+- a glass tube 0.42 m across, from 0.45 m to 2.05 m up;
+- a crown at the ceiling with a conduit rising into it.
 
-Collider: 1.6 × 2.2 × 0.75 m.
+Collider: 0.7 m wide, the full height, 0.5 m deep.
 
 **Moving (`QuantumCore`):**
-- **The core:** a faceted ball, 0.3 m in radius, in `QUANTUM` on the glow batch. It turns and
-  breathes (scale ±4% at the pulse rate).
-- **Three rings** in `TRIM` with a `QUANTUM` inner edge, each turning on its own axis.
-- **The gauge:** ten chunky bars up the right-hand upright. The lit bars show how full the store
-  is. The lowest bar is the reserve, and it turns `AMBER` when it is all that is left.
+- **The core:** a faceted ball, 0.14 m in radius, at 1.25 m, in `QUANTUM` on the glow batch. It
+  turns and breathes (scale ±4% at the pulse rate).
+- **Three rings** round it, 0.17–0.2 m in radius, in `TRIM` with a `QUANTUM` inner edge, each turning
+  on its own axis.
+- **The gauge:** ten chunky bars up the front of the right-hand upright. The lit bars show how full
+  the store is. The lowest bar is the reserve, and it turns `AMBER` when it is all that is left.
 - **`flash()`:** a short brightening when QE arrives.
 
 **States:**
@@ -361,38 +384,37 @@ Collider: 1.6 × 2.2 × 0.75 m.
 
 `InteriorProps.quantum_machine(kit, f, variety)`:
 - **The cabinet:** 1.5 m wide, 2.0 m tall, 0.6 m deep. `TRIM` body, `WALL_LOW` base, glowing plinth.
-- **The bay,** 0.9–1.5 m up:
+- **The bay,** 0.9–1.5 m up, left of centre:
   - a 0.6 m square recess with a lit `QUANTUM` ring round its mouth and a glowing disc for a floor;
   - an item in it floats at the centre, turning slowly (10°/s);
   - the cabinet's colliders are built round the recess, so the Interactor can reach what sits
     there (style guide §3).
 - **The screen** above the bay: live data (§7, style guide §2.8).
-- **Three buttons** beside the bay: ◀, the big button, ▶.
-- **A conduit** from the cabinet's top along the ceiling to the engine. The bead runs along it
-  (§7.5).
+- **Three buttons** in a column right of the bay: ◀, the big button, ▶.
+- **The charge plate** at the cabinet's right-hand end: a round hand plate 0.22 m across at 1.2 m, in
+  a bevelled ring, lit `QUANTUM` when ready. A separate dock would need a wall of its own, and a
+  one-cell room has none to spare.
+- **A conduit** from the cabinet's top along the ceiling to the engine's crown. The bead runs along
+  it (§7.5).
 - **It publishes frames** in its own frame: `quantum_machine_bay()`, `quantum_machine_screen()`,
-  `quantum_machine_buttons()` and `quantum_machine_conduit()`.
+  `quantum_machine_buttons()`, `quantum_machine_plate()` and `quantum_machine_conduit()`.
 
-### 6.4 The charge dock
-
-A secondary piece, under 1 m wide, from `InteriorProps.charge_dock(kit, f, variety)`:
-- a 0.7 m wall unit;
-- a round hand plate 0.22 m across at 1.2 m, in a bevelled ring, lit `QUANTUM` when ready;
-- a small screen above it.
-
-It publishes the plate's frame.
-
-### 6.5 Conduits
+### 6.4 Conduits
 
 `InteriorProps.conduits(kit, f, variety)`: vertical pipes with collars in `TRIM` and `WALL_LOW`,
-for walls with nothing else to hold.
+for walls with nothing else to hold. The starter has none.
 
-### 6.6 How it is built
+### 6.5 How it is built
 
 - The props stay grid-blind (style guide §3).
 - `InteriorDressing` builds one `QuantumRoom` node per quantum room, as it builds `AirlockRoom`. It
-  holds the core, a `QuantumBay` at the bay frame, the panel, the two arrow buttons, the
-  `ChargeDock`, the conduit path, and the room's key cell (its lowest cell).
+  holds:
+  - the core;
+  - a `QuantumBay` at the bay frame;
+  - the panel and the two arrow buttons;
+  - a `ChargeDock` (the plate's interactable) at the plate frame;
+  - the conduit path;
+  - the room's key cell (its lowest cell).
 - `InteriorBuilder.quantum_rooms()` returns them, as `airlock_rooms()` does.
 
 ---
@@ -405,7 +427,7 @@ for walls with nothing else to hold.
    (hands-and-items spec §7.4). `QuantumBay` extends `StowPoint` and accepts any item that has a
    value, fits (largest side ≤ 0.55 m) and is under the 40 kg lift limit. A crate or a toolbox fits.
 2. **The screen reads** *CONVERT · CRATE*, then *+30 QE* (with *· NEW PATTERN* for an unknown
-   kind), then *STORE 750 QE*.
+   kind), then *STORE 600 QE*.
 3. **The big button reads** *Convert Crate (+30 QE)*. Pressing it takes 1.2 s:
    - the item glows and shrinks to a point;
    - a bead of light runs along the conduit to the engine;
@@ -416,7 +438,7 @@ Until you convert it, the item is simply stowed. Its own prompt (*Take Crate*) t
 
 ### 7.2 Making
 
-- **With the bay empty,** the screen reads *MAKE · MUG*, *COST 6 QE*, *STORE 750 QE*. ◀ and ▶ step
+- **With the bay empty,** the screen reads *MAKE · MUG*, *COST 6 QE*, *STORE 600 QE*. ◀ and ▶ step
   through the known patterns, sorted by cost.
 - **Pressing the big button** debits the cost at once. Over 1.5 s a violet point in the bay swells
   into the item, which floats there, stowed. Take it.
@@ -426,7 +448,7 @@ Until you convert it, the item is simply stowed. Its own prompt (*Take Crate*) t
 
 - F at the plate: *Charge suit (+86 QE)*.
 - The suit charges at 50 QE/s, up to 100, while you stay within 1.2 m of the plate.
-- While charging: the plate glows, the dock's screen counts up (*SUIT 64%*) and a tone rises. A
+- While charging: the plate glows, the machine's screen counts up (*SUIT 64%*) and a tone rises. A
   chime sounds when the suit is full.
 - Charging may take the store down to 1 QE (§3.2).
 
@@ -484,7 +506,7 @@ While the engine is lit, `FlightComputer` flies exactly as today and spends no Q
 
 **Still working in the dark,** on their own cells in the fiction:
 - the airlocks, so you are never locked out;
-- the machine and the dock, so you can relight;
+- the machine and its charge plate, so you can relight;
 - gravity.
 
 **Relighting** (the store rises from 0) takes 3 s:
@@ -626,7 +648,7 @@ except the scrap plate (CARRY).
   `&"dark"`) and `tool_text`. Each vehicle fills them through the same duck-typed
   `build_telemetry()`.
 - **`EnergyPanel`**, a `HudElement` in the band:
-  - seated, it shows the ship's store: *QE 750*, with a bar, the reserve notch and *BOOST −5/S*
+  - seated, it shows the ship's store: *QE 600*, with a bar, the reserve notch and *BOOST −5/S*
     while boosting;
   - on a spacewalk, it shows the suit (*SUIT 64%*) and, with the hose in hand, *HOSE 12 M* (the line
     paid out);
@@ -647,7 +669,7 @@ Every sound is a new `Synth` builder (style guide §2.9):
 | `engine_hum` | two soft detuned sines, beating slowly; its pitch lifts while boosting | looped, positional at the engine, Ship bus |
 | `convert` | a rising shimmer: filtered noise swept up, a sine glide, a soft pop | the bay |
 | `materialize` | the same, falling, ending in a soft thump | the bay |
-| `charge` | a rising tone, looped while charging; a small chime at full | the dock |
+| `charge` | a rising tone, looped while charging; a small chime at full | the charge plate |
 | `engine_down`, `engine_up` | spool down, spool up | the engine |
 | `hose_draw` | low filtered noise, looped while suction runs | Suit bus |
 | `hose_gulp` | a short soft thunk | Suit bus |
@@ -665,7 +687,7 @@ Every sound is a new `Synth` builder (style guide §2.9):
  FlightComputer ◄── lit, boost ─┤                                   ▼
                                 ▼                   ┌────────── MachineCycle (pure) ◄── panel buttons
  Avatar/SuitCell ◄── charge ── QuantumPlant ────────┤
-   (spends Δv)        (dock)   owns: QuantumStore   └────────── QuantumCore (gauge, states)
+   (spends Δv)       (plate)   owns: QuantumStore   └────────── QuantumCore (gauge, states)
                                PatternLibrary
                                 ▲       │ lit / dark
  HoseNozzle ── swallow ─────────┘       └────► Ship: emergency light, relight sequence
@@ -730,7 +752,7 @@ data/items/rock_chunk, ice_chunk, scrap_plate, wire_coil, broken_module, quantum
 - **The interior:**
   - `interior_layout.gd`: `ROOM_IDS`, airlocks first, dealing pieces;
   - `interior_dressing.gd`: the room's pieces and `QuantumRoom`;
-  - `interior_props.gd`: four props and their frames;
+  - `interior_props.gd`: three props and their frames;
   - `interior_builder.gd`: `quantum_rooms()`;
   - `interior_palette.gd`, `hull_palette.gd`: the new colours.
 - **The airlock:**
@@ -751,7 +773,7 @@ No new physics or render layers.
 |---|---|---|---|
 | An item aboard | 6 (32) | 2 \| 4 \| 32, as now | 2 |
 | An item outside | 6 (32) | 1 \| 4 \| 32 | 1 |
-| The machine's buttons, the dock plate | 2 (`interior_geometry`), like the airlock panels | — | 2 |
+| The machine's buttons and charge plate | 2 (`interior_geometry`), like the airlock panels | — | 2 |
 | The reel and the docked nozzle | on the hull | — | own hull (4), like the alcove |
 | The hose line, a nozzle in hand | — | — | 1 |
 | The Interactor on a spacewalk | — | 16 \| 32 | — |
@@ -797,19 +819,23 @@ Values are pinned by rendering. Adding palette entries is not a rule change.
 - **Blocks and stats:**
   - `quantum_capacity` sums;
   - `reactor` and `battery` are gone;
-  - **the starter's numbers pinned as measured in §5.4.**
-- **Validator:** Rule 7 fixtures (none; one cell; two cells). Existing fixtures gain a quantum room
+  - **the starter's flight numbers are unchanged** (§5.4), and its capacity is 1,200.
+- **Validator:** Rule 7 fixtures (no room; a room that seats both pieces; one that cannot; no
+  quantum cell). Existing fixtures gain a quantum room
   so their own rules stay isolated.
 - **Layout:**
   - the quantum-room zone, and airlocks resolved first;
-  - piece dealing: machine, engine, dock, conduits;
-  - the starter's doorway, inner hatch, and machine and engine sides;
-  - the middle cell's clear walk.
-- **Props:** the four props build in bare frames; pinned collider counts; the bay is clear of the
+  - piece dealing: the machine on a feature wall, the engine on a secondary wall (or the next
+    feature wall), conduits on the rest;
+  - the starter: the moved bunk room and bathroom, the engine room's doorway onto the corridor,
+    the machine on its port wall and the engine on its aft wall;
+  - the aisle from the door stays 1.0 m clear.
+- **Props:** the three props build in bare frames; pinned collider counts; the bay is clear of the
   machine's colliders.
 - **`QuantumCore`:** the gauge lights the right number of bars for a fill; the reserve bar turns
   amber; the states.
-- **Dressing:** one `QuantumRoom` in the starter with a core, a bay, a panel, two arrows and a dock.
+- **Dressing:** one `QuantumRoom` in the starter with a core, a bay, a panel, two arrows and a
+  charge plate.
 - **`QuantumPlant`:**
   - it binds across rebuilds without resetting;
   - the store starts at half, once;
@@ -864,11 +890,11 @@ Values are pinned by rendering. Adding palette entries is not a rule change.
   - the engine lit, at the reserve and dark;
   - the machine loaded and empty;
   - a convert and a make, mid-show;
-  - the dock charging;
+  - the plate charging;
   - the reel on the hull;
   - a spacewalk with the hose drawing in junk;
   - the HUD seated and on a spacewalk;
-  - the lengthened ship from the chase camera.
+  - the bridge with the bunk room in its back corner, and the bunk room's two windows.
 - **Frame time** at 1280 × 720, against the 120 fps budget:
   - the engine room at rest;
   - mid-convert;
@@ -895,6 +921,8 @@ Applied with the code they describe:
   - **§6.1:** Rule 7.
   - **Roadmap:** Slice 2's shields and weapons spend QE, and crippled means a dark engine. Slice 5's
     jumps and the shipyard cost QE.
+- **Interior redesign §7.5:** the starter's cabin layout becomes §5.3's. The bunk room gains its two
+  windows.
 - **Hands and items:**
   - **§15:** items in space now exist, as salvage.
   - **§16:** hands outside take EVA tools; carrying salvage aboard stays out of scope.
@@ -905,7 +933,7 @@ Applied with the code they describe:
   derelict to relight.
 - **Visual style guide:**
   - a §3.5 for the engine room: the pieces, the dealing rule, the engine as a gauge;
-  - §2.8: the machine's and the dock's screens join the live-data screens;
+  - §2.8: the machine's screen joins the live-data screens;
   - §2.9: you hear the tool in your hands through the suit;
   - the new palette entries;
   - items outside, on layer 1 and lit by the sun;
@@ -927,7 +955,7 @@ Applied with the code they describe:
 - **Hands outside:** carrying salvage aboard; a cutter for things too big to swallow.
 - **Life support:** a slow suit drain, once there is something to lose.
 - **An idle trickle** on the ship's store, if QE never feels scarce (§2, row 1).
-- **Returning a suit's charge** to the store at the dock.
+- **Returning a suit's charge** to the store at the machine's plate.
 - **Persistence:** the store, the library and the suit cell save with the ship when saving exists.
 
 ---
@@ -949,7 +977,8 @@ Applied with the code they describe:
 
 | Risk | Mitigation |
 |---|---|
-| Lengthening the ship upsets flight feel | Measured in §5.4: balance improves and handling moves 8–15%. Re-measured in Godot and flown before anything else is built on it. The fallback exists (§5.5). |
+| The one-cell engine room feels cramped | Rendered first, in Task 3, before anything is built on it. If it is, shift two rows for a two-cell room (§5.5). |
+| The bridge feels smaller with the bunk room in its corner | It keeps eight of its nine cells and its whole front row. Render it from the helm and from the corridor. |
 | QE never feels scarce, or always does | All numbers are constants in `QuantumValues`, tuned at playtest: boost cost, make markup, suit cost, values, salvage counts. |
 | A hose line passing through the hull looks wrong | It is mostly slack behind you. If renders show clipping, push segments out of the hull with sphere casts. |
 | Suction feels floaty or twitchy | The force limit, drift damping and speed cap are all knobs; tune them in the probe. |
@@ -964,7 +993,7 @@ Applied with the code they describe:
 Each phase ends playable:
 
 - **Phase A: the store and the room.**
-  - blocks, stats, Rule 7, the lengthened starter;
+  - blocks, stats, Rule 7, the moved rooms;
   - the engine room's layout, props and `QuantumCore` gauge;
   - `QuantumStore`, `QuantumPlant`, lit and boost;
   - the HUD's ship gauge.
@@ -972,7 +1001,7 @@ Each phase ends playable:
   *Walk into the engine room; boost and watch the gauge fall.*
 - **Phase B: the machine.** Values, patterns, the bay, `MachineCycle`, the panel, convert and make,
   the show and sounds. *Convert a mug; make one back.*
-- **Phase C: the suit.** `SuitCell`, the dock, thrust costs, the dry return, the airlock's
+- **Phase C: the suit.** `SuitCell`, the charge plate, thrust costs, the dry return, the airlock's
   refusal, the suit's HUD. *Charge up, go out, run dry, be brought home.*
 - **Phase D: salvage and the hose.** Items outside, `SalvageField`, the reel, nozzle, line,
   suction, tether and toasts. *Vacuum the junk behind the stern and watch the store climb.*
@@ -985,7 +1014,7 @@ Then the final renders, frame times and the amendments (§16).
 1. You launch `flight_test`, walk aft into the engine room and find the core turning and the gauge
    half full.
 2. You convert a mug and make one back.
-3. You charge your suit at the dock, cycle out, take the hose and vacuum the near cloud.
+3. You charge your suit at the machine, cycle out, take the hose and vacuum the near cloud.
 4. You come back in with more QE than you spent.
 5. You sit down, boost, and watch the store fall to the reserve and stop.
 6. The GUT suite is green with pristine output, every render in §15.2 has gone to the owner, and
