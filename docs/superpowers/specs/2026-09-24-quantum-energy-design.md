@@ -115,8 +115,25 @@ decided.
 
 ### 2.1 Decided and open
 
-The owner has decided rows 4, 5, 6, 7 and 12. The other rows stand as recommended until the owner
-says otherwise. Of those, row 3 (the reserve) and row 10 (the suit) shape play the most.
+**Decided by the owner, 2026-09-25:**
+- row 4: the core is the reactor;
+- row 5: the core and the machine stand on the bridge;
+- row 6: the machine makes anything;
+- row 7: making costs twice what converting gives;
+- row 12: the core weighs 5 t.
+
+**Open questions.** These rows stand as recommended until the owner answers them, and the plan
+builds them as recommended. Rows 3 and 10 shape play the most.
+
+| # | Open question | Recommended | What changes if the answer differs |
+|---|---|---|---|
+| 1 | Does ordinary flight cost QE? | No. The core only has to be lit. | `FlightComputer` and `QuantumStore` (Task 4). An idle trickle is one constant. |
+| 2 | What spends ship QE now? | Boost (5 QE/s), making objects and charging the suit | Boost's cost (Task 4); the machine and the plate (Tasks 6 and 7) |
+| 3 | Is there a reserve? | Yes, 100 QE. Boost and making stop there; only a suit charge may go below it. | `QuantumStore`'s floors (Task 4) |
+| 8 | What is the hose? | A hand-held nozzle on a 30 m line from a reel beside the outer hatch, used on a spacewalk | Task 9 |
+| 9 | What does the hose gather? | Salvage drifting in space: a near cloud behind the stern and six far clouds | Task 8 |
+| 10 | How does the suit work? | A 100 QE cell, empty at the start. 1 QE per m/s of thrust. The airlock refuses an empty suit. A suit that runs dry brings you home. | Task 7 |
+| 11 | What colour is QE? | A soft violet, chosen from renders beside a warm gold | The palette (Task 3) |
 
 ---
 

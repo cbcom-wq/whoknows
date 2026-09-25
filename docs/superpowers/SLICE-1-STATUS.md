@@ -72,7 +72,16 @@ the ship's power source and the universe's currency:
 - a suit cell;
 - salvage in space, gathered with a hose on the airlock.
 
-It proposes retiring `reactor` and `battery`. The ship keeps its size and no room moves.
+It retires `reactor` and `battery`. The ship keeps its size and no room moves.
+
+**Decided by the owner, 2026-09-25:**
+- the core is the reactor, weighs 5 t and stands at the bridge's centre;
+- the machine stands on the bridge and makes anything;
+- making costs twice what converting gives.
+
+**Seven questions stay open** (spec §2.1): flight cost, what spends QE, the reserve, the hose,
+salvage, the suit and QE's colour.
+
 Spec `docs/superpowers/specs/2026-09-24-quantum-energy-design.md`, plan
 `docs/superpowers/plans/2026-09-24-quantum-energy.md`. Nothing is built.
 

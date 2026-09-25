@@ -2,9 +2,10 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **Gate:** do not start until the owner has approved the spec's §2. The owner decided rows 4, 5,
-> 6, 7 and 12 on 2026-09-25; the rest are recommendations. If the owner changes a row, amend the
-> spec first, then this plan.
+> **Gate:** do not start until the owner has approved the spec. The owner decided rows 4, 5, 6, 7
+> and 12 on 2026-09-25. Rows 1–3 and 8–11 are **open questions** (spec §2.1), and this plan builds
+> them as recommended. If the owner answers one differently, amend the spec first, then this plan.
+> The spec's table says which task each question touches.
 
 **Goal:** Make quantum energy (QE) the ship's power source and the universe's currency:
 - a quantum core at the centre of the bridge, and the quantum machine beside it;
