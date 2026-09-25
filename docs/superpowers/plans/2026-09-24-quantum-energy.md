@@ -5,6 +5,12 @@
 > **Gate:** do not start until the owner has approved the spec as a whole. Every row of its §2 is
 > decided (spec §2.1): rows 4–7 and 12 first, then the open questions, answered on 2026-09-25. If
 > the owner changes anything at review, amend the spec first, then this plan.
+>
+> **Two later changes to build on:**
+> - **The flight controls** merged into `main` (`1b9ed02`) after this plan was revised. Task 4's
+>   notes say what that means for boost, low power and the telemetry.
+> - **The bridge computer spec** (`docs/superpowers/specs/2026-09-25-bridge-computer-design.md`,
+>   built after this plan) amended Task 10: salvage reaches the HUD through `ShipSensors`.
 
 **Goal:** Make quantum energy (QE) the ship's power source and the universe's currency:
 - a quantum core at the centre of the bridge, and the quantum machine beside it;
@@ -370,6 +376,14 @@ Until Task 3, the two fixture cells show only their placeholder boxes.
   - *LOW POWER* in `WARNING`, and *BOOST · LOW POWER* when boost is refused.
 
 **What to do:**
+- **Build on the flight controls** (merged at `1b9ed02`):
+  - boost is the `boost` argument of `FlightComputer.translation_force`, and it multiplies only the
+    pilot's input force, not the assist's drift or the speed lock's push. So "boost with
+    translation input" is exactly when `boost` is set and the input is non-zero;
+  - low power scales the thrust budget passed to `translation_force`, and the torque budget used by
+    `attitude_torque` and `heading_rate`, so the heading hold and the speed lock limp too;
+  - seated, the HUD's telemetry comes from `PilotControls.build_telemetry()`, which wraps
+    `FlightComputer.build_telemetry()`: add the energy fields in `FlightComputer`'s.
 - `Ship._ready` creates `Quantum`. `_rebuild_everything` calls `quantum.bind(...)` after the
   airlocks, and hands the store to the flight computer.
 - The core's state follows the store and boost: `full`, `boost` or `low_power`. Until Task 11 the
@@ -688,11 +702,13 @@ Measure frame time on a spacewalk in the near cloud.
 ### Task 10: Salvage at the groups, and finding it
 
 **Files:**
-- Create: `src/world/salvage_sense.gd`, `src/ui/salvage_marker.gd`
-- Modify: `salvage_field.gd` (group clouds, `known_clouds`, readings), `flight_test.gd` (the
-  marker, created in code and bound to the field)
-- Tests: `test_salvage_field.gd`, new `test_salvage_sense.gd`, `test_salvage_marker.gd`;
-  `test_floating_origin_scene.gd`
+- Create: `src/world/salvage_sense.gd`, `src/ui/salvage_marker.gd`, `src/sensors/contact.gd`,
+  `src/sensors/ship_sensors.gd`
+- Modify: `salvage_field.gd` (group clouds, `known_clouds`, contacts), `ship.gd` (creates
+  `Ship/Sensors`), `flight_test.gd` (registers the field with the ship's sensors; the marker,
+  created in code and bound to the sensors)
+- Tests: `test_salvage_field.gd`, new `test_salvage_sense.gd`, `test_ship_sensors.gd`,
+  `test_salvage_marker.gd`; `test_floating_origin_scene.gd`
 
 **Interfaces produced:**
 - **`SalvageField`:**
@@ -707,16 +723,25 @@ Measure frame time on a spacewalk in the near cloud.
   - `known_clouds(focus: UniversePoint, range_m := 10000.0) -> Array[Dictionary]`: the near cloud
     and every group cloud in the giant cells within range, with `remaining`, spawning nothing.
     It is cached and refreshed when the focus crosses into a new giant cell;
-  - `readings(focus: UniversePoint, time: float) -> Array[Dictionary]`: `SalvageSense`'s reading
-    for the nearest three clouds with something left.
+  - **a sensor source** (bridge computer spec §4.2): `contacts(focus: UniversePoint, range_m,
+    time) -> Array[Contact]`, one per cloud with something left, carrying its `SalvageSense`
+    reading as a ping or a region (a region stays a region while you are inside it); and
+    `contact(id, focus, time) -> Contact`, or null once the cloud is emptied.
 - **`SalvageSense` (pure, static):**
   - `const PING_FAR := 10000.0`, `REGION_NEAR := 2000.0`, `PING_ERROR_DEG := 10.0`,
     `PING_PERIOD := 4.0`, `REGION_RADIUS := 75.0`, `REGION_OFFSET := 50.0`;
   - `read(focus: UniversePoint, cloud_centre: UniversePoint, cloud_id, world_seed, time) ->
     Dictionary`: `{mode: &"ping" | &"region" | &"none", direction, km, centre, radius, metres}`;
   - `region_centre(cloud_centre, cloud_id, world_seed) -> UniversePoint`.
-- **`SalvageMarker` (`HudElement`):** `bind(field: SalvageField)`. Each frame it asks the field for
-  readings at the focus and draws each: a ping as a soft chevron with *SALVAGE ~4 KM*, fading
+- **`Contact` (`RefCounted`, pure):** `id`, `kind`, `label`, `point: UniversePoint`, `precision`
+  (`&"exact"`, `&"ping"` or `&"region"`), `radius`, `km` (bridge computer spec §4.1). Ids are
+  `&"salvage:near"` and `&"salvage:<cell>"`.
+- **`ShipSensors` (`Node`, `Ship/Sensors`, created in code, lives across rebuilds):**
+  `add_source(source)`; `contacts(range_m) -> Array[Contact]`, every source's contacts within
+  range, nearest first, cached and refreshed at 4 Hz from the universe's focus. The course comes
+  with the bridge computer; leave it out here.
+- **`SalvageMarker` (`HudElement`):** `bind(sensors: ShipSensors)`. Each frame it takes the
+  nearest three salvage contacts and draws each: a ping as a soft chevron with *SALVAGE ~4 KM*, fading
   between refreshes; a region as a ring round the projected sphere with *SALVAGE 640 M*; nothing
   inside the region. Off-screen and behind-you readings pin to the edge through
   `VelocityMarker.resolve`, as `AirlockMarker` does. It shows while seated or on a spacewalk.
@@ -725,7 +750,10 @@ Measure frame time on a spacewalk in the near cloud.
 - A group cloud's centre lies in a seeded direction from the big rock's centre, 40–120 m off its
   surface (its bounding radius from `AsteroidRock.radius`).
 - Loading and freeing work for group clouds exactly as for the near cloud (Task 8).
-- Cloud ids are stable and hashable: `&"near"`, or the giant cell as a string key.
+- Cloud ids are stable and hashable: `&"near"`, or the giant cell as a string key. Contact ids
+  prefix them with `salvage:`.
+- The ship knows nothing about salvage: the flight scene calls
+  `ship.sensors.add_source(salvage_field)`.
 
 **Tests:**
 - the same seed gives the same group cloud; counts; distance from the surface;
@@ -738,10 +766,13 @@ Measure frame time on a spacewalk in the near cloud.
   - a region within 2 km: radius 75 m, its centre within 50 m of the cloud's, and every item of
     the cloud inside it;
   - nothing inside the region;
-- `readings` gives at most three, the nearest, and skips emptied clouds;
+- `contacts` skips emptied clouds; `contact(id)` finds a cloud beyond range, and returns null once
+  it is emptied;
+- `ShipSensors` merges two sources nearest first and refreshes at 4 Hz;
+- the marker draws at most three, the nearest;
 - the marker draws a ping, a region and nothing, and pins to the edge;
 - **the floating origin:** with a group's cloud loaded, everything outside is covered, and a
-  shift leaves the readings unchanged.
+  shift leaves the contacts unchanged.
 
 **Verify:**
 - the salvage probe (spec §15.2): from the start, the first group's region shows; fly to it and the
