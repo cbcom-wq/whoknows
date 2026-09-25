@@ -9,11 +9,13 @@ extends Node3D
 @onready var _hud: HudRoot = $HudRoot
 @onready var _director: CameraDirector = $Ship/CameraDirector
 @onready var _cockpit_marker: VelocityMarker = $Ship/Canopy/CanopyOverlay/CockpitMarker
+@onready var _heading_cockpit: HeadingMarker = $Ship/Canopy/CanopyOverlay/HeadingCockpitMarker
 @onready var _prompt: Label = $Prompt/Label
 @onready var _interactor: Interactor = $Ship/Interior/Avatar/Head/Interactor
 @onready var _avatar: Avatar = $Ship/Interior/Avatar
 @onready var _universe: Universe = $Universe
 @onready var _stream: AsteroidStream = $AsteroidStream
+@onready var _pilot: PilotControls = $Ship/PilotControls
 
 var _reticle: Reticle
 var _interact_prompt := ""
@@ -328,6 +330,7 @@ func _wire_hud() -> void:
 	# The cockpit marker lives in the ship's SubViewport, so it cannot be
 	# discovered as one of HudRoot's descendants.
 	_hud.register_element(_cockpit_marker)
+	_hud.register_element(_heading_cockpit)
 	# The bootstrap is the one place that legitimately knows both halves of
 	# this: the HUD's fade-in and the seat transition it is timed against.
 	_hud.fade_in = CameraDirector.SIT_DURATION
@@ -336,8 +339,10 @@ func _wire_hud() -> void:
 	# §8.3): speed relative to the ship, and the way home.
 	_avatar.mode_changed.connect(_on_avatar_mode_changed)
 
+## The pilot's controls report the flight computer's telemetry plus the stick
+## and the pointer (flight controls spec §7).
 func _on_piloting_changed(piloting: bool) -> void:
-	_hud.set_active_vehicle(_ship.flight_computer if piloting else null)
+	_hud.set_active_vehicle(_pilot if piloting else null)
 
 func _on_avatar_mode_changed(mode: Avatar.Mode) -> void:
 	if mode == Avatar.Mode.SUIT:

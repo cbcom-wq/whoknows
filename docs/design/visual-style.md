@@ -316,6 +316,11 @@ Glass on its own is not a way out: keep the wall's collider whole.
 **Anything on the hull's outside:** colours from `HullPalette`, or the hull's livery material;
 the own-hull render layer; `InteriorKit` can build there (`layer`, `light_mask`).
 
+**Thruster puffs** (`RcsShow`, flight controls spec §6): the same chunky, flat-lit puff as the
+airlock's burst (`Puffs`), world-space and holding the origin's shift, on render layer 1 so
+windows show them. Sized to read from 20 m (0.7–1.0 m, growing to about twice that). No new
+shader.
+
 **A new room type:**
 
 1. Add a room block `.tres` with the same mass and power as `deck`, unless a balance decision says

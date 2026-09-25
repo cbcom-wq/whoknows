@@ -51,3 +51,14 @@ func test_flags_and_limit_pass_through():
 	assert_true(t.boost_active, "boost on")
 	assert_almost_eq(t.cruise_limit, 99.0, 0.001, "limit carried, never hardcoded downstream")
 	assert_eq(t.hull_origin, Vector3(1.0, 2.0, 3.0), "origin carried for projection")
+
+## Flight controls spec §5.5, §7: anything that holds nothing reports nothing.
+func test_holds_and_the_stick_start_off():
+	var t := VehicleTelemetry.from_state(Basis.IDENTITY, Vector3.ZERO, Vector3.ZERO, Vector3.ZERO,
+		true, false, 120.0)
+	assert_false(t.heading_hold)
+	assert_false(t.speed_locked)
+	assert_eq(t.locked_speed, 0.0)
+	assert_false(t.pointing)
+	assert_eq(t.stick, Vector2.ZERO)
+	assert_eq(t.pointer, Vector2.ZERO)
