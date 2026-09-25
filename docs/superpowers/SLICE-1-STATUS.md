@@ -65,15 +65,14 @@ Until these exist the player cannot build anything; they fly the one blueprint d
 
 Slice 1's Definition of Done (spec §14) is therefore **not met**.
 
-**Designed, awaiting the owner's review: quantum energy** (2026-09-24). It adds the ship's power
-source and the universe's currency:
-- an engine room with an engine and a machine;
+**Designed, awaiting the owner's review: quantum energy** (2026-09-24, revised 2026-09-25). It adds
+the ship's power source and the universe's currency:
+- a quantum core at the centre of the bridge, and the quantum machine beside it;
 - converting objects to QE and making them back;
 - a suit cell;
 - salvage in space, gathered with a hose on the airlock.
 
-It proposes retiring `reactor` and `battery`. The ship keeps its size: the port rooms move
-forward a row, and the engine room takes the freed cell beside the airlock.
+It proposes retiring `reactor` and `battery`. The ship keeps its size and no room moves.
 Spec `docs/superpowers/specs/2026-09-24-quantum-energy-design.md`, plan
 `docs/superpowers/plans/2026-09-24-quantum-energy.md`. Nothing is built.
 
