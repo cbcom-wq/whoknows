@@ -2,10 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **Gate:** do not start until the owner has approved the spec's §2. If the owner changed a row,
-> amend the spec first, then this plan. The rows that change the most (spec §2.1):
-> - **retiring the reactors** and **the core's weight** change Task 1;
-> - **patterns** changes Tasks 5 and 6.
+> **Gate:** do not start until the owner has approved the spec's §2. The owner decided rows 4, 5,
+> 6, 7 and 12 on 2026-09-25; the rest are recommendations. If the owner changes a row, amend the
+> spec first, then this plan.
 
 **Goal:** Make quantum energy (QE) the ship's power source and the universe's currency:
 - a quantum core at the centre of the bridge, and the quantum machine beside it;
@@ -354,20 +353,16 @@ Render the band.
 
 ---
 
-### Task 5: Values and patterns
+### Task 5: Values
 
 **Files:**
-- Create: `src/quantum/pattern_library.gd`
-- Modify: `item_definition.gd`, all 16 `data/items/*.tres`, `quantum_plant.gd`, `ship.gd`
-  (learning the stocked kinds)
-- Tests: `test_item_catalog.gd`, new `test_quantum_values.gd`, `test_pattern_library.gd`
+- Modify: `item_definition.gd`, all 16 `data/items/*.tres`, `quantum_values.gd`
+- Tests: `test_item_catalog.gd`, new `test_quantum_values.gd`
 
 **Interfaces produced:**
 - `ItemDefinition.quantum_value: int` and `ItemDefinition.eva_tool: bool`.
-- **`PatternLibrary`:** `knows(id)`, `learn(id) -> bool` (true when new), `known() -> Array`
-  sorted by make cost (given a catalogue).
-- `QuantumPlant.patterns`.
-- `QuantumPlant.learn_stocked(ids)`, called by `Ship._stock()` with each id it stocks.
+- `QuantumValues.makeable(catalog: ItemCatalog) -> Array[ItemDefinition]`: every item with a value,
+  EVA tools left out, sorted by make cost.
 
 **What to do:** set every value from spec §4.2. Edit the `.tres` files as plain property lines,
 with no comments, and read them back in the test.
@@ -376,10 +371,9 @@ with no comments, and read them back in the test.
 - every item has a value > 0 unless it is an EVA tool;
 - the values match the spec's table;
 - make cost is 2 × value;
-- the starter knows exactly the sixteen stocked kinds after its first load;
-- `learn` reports new once.
+- `makeable` lists every item with a value, no EVA tools, cheapest first.
 
-**Commit:** `feat: everything has a quantum value, and the machine knows what the ship carried`
+**Commit:** `feat: everything has a quantum value`
 
 ---
 
@@ -398,7 +392,7 @@ with no comments, and read them back in the test.
     `MAKE_TIME := 1.5`;
   - `selected: int`;
   - `press(button: StringName)`;
-  - `step(delta, bay_item_id, bay_value, store: QuantumStore, patterns) -> Array[StringName]`,
+  - `step(delta, bay_item_id, bay_value, store: QuantumStore, makeable: Array) -> Array[StringName]`,
     returning the spec §7.4 cues;
   - `prompt(button) -> String`, `screen() -> PackedStringArray` (three lines) and
     `button_colour() -> StringName`.
@@ -413,7 +407,7 @@ with no comments, and read them back in the test.
 - **`QuantumPlant`:**
   - `cycles: Dictionary` (the machine's cell → `MachineCycle`);
   - it wires each machine's panel and arrows to `press`;
-  - it applies the cues: credit and learn on `&"credited"`; debit on `&"make_start"`; on
+  - it applies the cues: credit on `&"credited"`; debit on `&"make_start"`; on
     `&"materialized"` it spawns the made item into `Ship.items` and secures it in the bay;
   - a converted item is removed with `remove_child()` then `free()` (SLICE-1-STATUS lessons);
   - it plays the sounds.
@@ -567,11 +561,11 @@ on a spacewalk in the near cloud.
     the force-limited pull, the damped drift, the speed cap, and swallowing at 0.35 m through
     `reel.sink`;
   - `status()`: *drawing*, *too big* or *store full*;
-  - `swallowed(id, value, new_pattern)` signal, for the toast.
+  - `swallowed(id, value)` signal, for the toast.
 - **`HoseLine`:** `setup(reel_anchor, nozzle, segments := 40, length := 30.0)`; verlet in
   `_physics_process`; drawn as a `MultiMesh` of bevelled segments on layer 1.
 - **`Tether.constrain(pos, vel, anchor, length, delta) -> Vector3`:** pure.
-- **`QuantumToast` (`HudElement`):** *+n QE* and *NEW PATTERN · NAME*, rising and fading over 1.2 s.
+- **`QuantumToast` (`HudElement`):** *+n QE · NAME*, rising and fading over 1.2 s.
 - **`AirlockAlcove`:** the reel prop on the jamb opposite the hull panel, and a `HoseReel` stocked
   with `hose_nozzle` on the first build.
 

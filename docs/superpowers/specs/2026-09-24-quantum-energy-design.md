@@ -4,10 +4,13 @@
 **Status:** Proposed design, awaiting the owner's review. It was written from the owner's brief
 of 2026-09-24. Every row of §2 is a recommendation until the owner approves or changes it, except
 where the owner has already decided. No code has changed.
-**Revised 2026-09-25,** twice, by the owner's direction:
+**Revised 2026-09-25** by the owner's direction:
 - **The ship keeps its size.** The first draft lengthened it by a row for an engine room.
 - **There is no new room.** The quantum machine stands on the bridge. The engine is a **quantum
   core** at the centre of the bridge. No room moves.
+- **Decided:**
+  - the core is the ship's reactor and weighs 5 t;
+  - the machine makes anything, and making costs twice what converting gives (rows 4, 6, 7 and 12).
 
 **Depends on:** `main` at `c79402f` (the airlock and first spacewalk; the ship-and-space items)
 **Governed by:** `docs/design/visual-style.md`
@@ -74,7 +77,7 @@ lights. Put your palm on the machine's charge plate and your suit fills.
 
 Walk aft to the airlock, cycle out, take the hose nozzle from its reel beside the hatch, and float
 out into the junk drifting behind your ship. Hold the trigger: a lump of ice tumbles toward you and
-vanishes into the nozzle with a thunk. *+12 QE · NEW PATTERN.* Back aboard, you step round the core
+vanishes into the nozzle with a thunk. *+12 QE.* Back aboard, you step round the core
 into the captain's chair and boost. Behind you the core spins faster and the store ticks down.
 
 ### 1.2 What this adds
@@ -100,24 +103,20 @@ decided.
 | 1 | What ordinary flight costs | **Nothing, but the core must be lit.** The ship flies, turns, holds gravity and runs its lights at full power while the store holds at least 1 QE. | The owner's own suggestion. Flying about never becomes a fuel chore. The existing power model (MW, Rule 5) keeps its meaning. An empty store becomes an event, a crippled or derelict ship, not a routine. | An idle trickle (kept as a tuning knob, default 0). Power that falls with the store, which makes handling depend on wealth. |
 | 2 | What spends ship QE now | **Boost** (5 QE/s), **making objects** and **charging the suit**. Jumps, weapons and shields are hooks (§8.4). | Boost already exists and is free; it is the obvious first extra. | — |
 | 3 | Running dry | **A reserve line at 100 QE that only the suit may cross.** Boost and making stop at the line. Charging the suit may take the store down to 1 QE. Nothing you do takes the last one. | You can never strand your own ship, and you can always go out and gather. Only outside forces empty a store: Slice 2's hits, capture, or a derelict found empty. | No reserve: boost until dark, then salvage your way back. But the hose needs a charged suit, so this can lock the game. |
-| 4 | Where the power comes from | **The quantum core.** It generates the ship's power (36 MW on the starter), but only while it is lit. `reactor` and `battery` retire. The three reactors become **quantum cells** in the same places: storage for QE, with the reactors' weight. | One engine, the one the fiction names, at the heart of the bridge. The cells keep the equipment deck's weight where it was. | Keep reactors as backup generation. Then QE does not really power the ship. |
+| 4 | Where the power comes from | **Decided by the owner, 2026-09-25: the core is the reactor.** It generates the ship's power (36 MW on the starter), but only while it is lit. `reactor` and `battery` retire. The three reactors' cells become **quantum cells**: storage for QE, with the reactors' weight. | One engine, the one the fiction names, at the heart of the bridge. The cells keep the equipment deck's weight where it was. Made plain hull instead, they would leave the ship 5.2% nose-down under a full burn, worse than today. | Keep reactors as backup generation. Then QE does not really power the ship. Let the core hold the store, with the old reactor cells made hull: 12 t lighter, but badly balanced. |
 | 5 | Where the core and the machine stand | **Decided by the owner, 2026-09-25:** both on the bridge, the core at its centre. There is no new room, and no room moves. **Recommended for the rest:** the machine against the bridge's back wall on the starboard side, facing forward. Both are **fixture blocks,** like the helm. | Fixtures are grid data, so any blueprint can place them. The back wall is the one bridge wall with neither a porthole nor a console: the machine replaces a set of lockers or a display. You pass both on your way to the helm. | The machine on a flank wall, facing the core, which covers a porthole. An engine room: the earlier drafts, superseded (§5.5). |
-| 6 | What the machine can make | **Only what it has read.** Converting a kind for the first time records its pattern. The machine starts knowing everything the ship was stocked with. | The theme (slice spec §1.1): a new kind of thing is worth more than its QE. Exploring unlocks things to make. | Anything in the item catalogue. |
-| 7 | Make versus convert | **Making costs twice what converting gives.** | Nothing can print QE, and keeping a useful object is always cheaper than remaking it. | At par: objects become cash, and nothing is worth keeping. |
+| 6 | What the machine can make | **Decided by the owner, 2026-09-25: anything.** Every item kind with a value, EVA tools aside. More advanced things simply cost more, because they are worth more (§4.3). | The machine is a maker, not a collection. | Only kinds it has converted (the first draft's patterns). |
+| 7 | Make versus convert | **Decided by the owner, 2026-09-25: making costs twice what converting gives.** Converting returns half of what making took. | Nothing can print QE, and keeping a useful object is always cheaper than remaking it. | At par: objects become cash, and nothing is worth keeping. |
 | 8 | The hose | **A nozzle on a 30 m line from a reel beside the outer hatch.** On a spacewalk you take it, aim, and hold the trigger. Loose things within 8 m fly in and are converted into the ship's store. | "A hose connected to the airlock … to suck in objects outside." Hands-on and physical, and it gives a spacewalk a job. | A fixed hose aimed from the open outer hatch. A ship-mounted vacuum worked from the cockpit. |
 | 9 | Things to gather | **Salvage: loose items drifting in space**, in a cloud behind the starter's stern and six more farther out. | The hose needs something outside. | Make the debris field's rocks swallowable. They are 5–40 m, so they would need a cutter first. |
 | 10 | The suit | **A 100 QE suit cell,** empty at the start and charged at the machine's plate. Thrust costs 1 QE per m/s. The airlock won't depressurize for an empty suit. A suit that runs dry outside brings you home on its emergency cell. | "The user must power up the suit at the quantum machine." Nothing can strand you, and there is no death to fall back on yet. | Drift until rescued. That needs death or rescue, neither of which exists. |
 | 11 | The colour of QE | **A soft violet, `QUANTUM`:** the one cool colour in a warm ship. Every light stays `LIGHT_WARM`; bloom carries the violet. | It reads as other and precious, with no style-rule change. | A warm gold: safer, but less distinct. |
-| 12 | What the core weighs | **5 t,** a reactor's weight. | The heart of the ship should weigh like one. At cabin level it brings the ship's pitch imbalance under full burn almost to zero (§5.4). It costs 5% of forward acceleration. | The weight of a deck plate (0.4 t), which leaves every flight figure exactly as it is today. |
+| 12 | What the core weighs | **Decided by the owner, 2026-09-25: 5 t,** a reactor's weight. | The heart of the ship should weigh like one. At cabin level it brings the ship's pitch imbalance under full burn almost to zero (§5.4). It costs 5% of forward acceleration. | The weight of a deck plate (0.4 t), which leaves every flight figure exactly as it is today. |
 
-### 2.1 The decisions that change the most
+### 2.1 Decided and open
 
-- **Retiring the reactors (row 4).** A block the slice spec lists goes away, and every power number
-  now depends on the core being lit.
-- **The core's weight (row 12).** It changes the recorded flight figures, for the better on
-  balance.
-- **Patterns (row 6).** It decides whether the machine is a vending machine or a discovery.
-- **The make markup (row 7).** It sets how much a thing in the hand is worth over its QE.
+The owner has decided rows 4, 5, 6, 7 and 12. The other rows stand as recommended until the owner
+says otherwise. Of those, row 3 (the reserve) and row 10 (the suit) shape play the most.
 
 ---
 
@@ -217,22 +216,23 @@ Everything the starter carries converts to about 935 QE. The biggest single sour
 power cells (150 each) and the two pistols (120 each). That is more than the store has room for
 (1,200 − 600), so emptying the ship teaches *STORE FULL*.
 
-### 4.3 Patterns
+### 4.3 What the machine makes
 
-- Each ship keeps a `PatternLibrary`: the item kinds its machine knows.
-- It starts with every kind the ship was stocked with on its first load, which is all sixteen on
-  the starter.
-- Converting a kind it does not know, at the machine or with the hose, adds it. The machine's screen
-  or the HUD says *NEW PATTERN*.
-- **The machine makes only kinds it knows.** EVA tools (the hose nozzle) are never made or
-  converted.
+- **Anything with a value:** every item kind in the catalogue, salvage included. EVA tools (the hose
+  nozzle) are never made or converted.
+- **More advanced things cost more,** because they are worth more: a mug costs 6 QE to make, a
+  plasma pistol 240, a quantum shard 500.
+- **A new kind joins the list by existing.** Add an item `.tres` with a value, and the machine can
+  make it.
 
-### 4.4 Who knows
+### 4.4 Where values show
 
-An item's prompt never shows its value. Values show in two places: the machine's screen while the
-item is in the bay, and the HUD when the hose swallows it. Knowing what something is worth is
-information, and the machine is how you get it. The slice's unidentified salvage (§1.1) plugs in
-later: an unidentified block's value stays unknown until the machine reads it.
+An item's prompt never shows its value. Values show in two places:
+- at the machine: as a make cost in its list, or as a value when the item is in its bay;
+- on the HUD, when the hose swallows something.
+
+The slice's unidentified salvage (§1.1) plugs in later. An unidentified thing's value stays unknown
+until the machine reads it, and it cannot be made until it is identified.
 
 ---
 
@@ -423,8 +423,7 @@ Collider: a box 1.1 m square, the full height.
 1. **Drop an item into the bay:** aim at the bay and press G. Grasp's stow on drop already does this
    (hands-and-items spec §7.4). `QuantumBay` extends `StowPoint` and accepts any item that has a
    value, fits (largest side ≤ 0.55 m) and is under the 40 kg lift limit. A crate or a toolbox fits.
-2. **The screen reads** *CONVERT · CRATE*, then *+30 QE* (with *· NEW PATTERN* for an unknown
-   kind), then *STORE 600 QE*.
+2. **The screen reads** *CONVERT · CRATE*, then *+30 QE*, then *STORE 600 QE*.
 3. **The big button reads** *Convert Crate (+30 QE)*. Pressing it takes 1.2 s:
    - the item glows and shrinks to a point;
    - a bead of light runs along the conduit to the core;
@@ -436,7 +435,7 @@ Until you convert it, the item is simply stowed. Its own prompt (*Take Crate*) t
 ### 7.2 Making
 
 - **With the bay empty,** the screen reads *MAKE · MUG*, *COST 6 QE*, *STORE 600 QE*. ◀ and ▶ step
-  through the known patterns, sorted by cost.
+  through everything it can make, sorted by cost.
 - **Pressing the big button** debits the cost at once. Over 1.5 s a violet point in the bay swells
   into the item, which floats there, stowed. Take it.
 - **Refused** with *RESERVE HELD* if the cost would take the store below the reserve.
@@ -630,8 +629,8 @@ except the scrap plate (CARRY).
   - at no more than 5 m/s.
 - **Within 0.35 m of the mouth, an item is swallowed:**
   1. it freezes and shrinks into the mouth over 0.25 s;
-  2. the ship's store is credited and the pattern learned;
-  3. the HUD shows *+12 QE*, with *NEW PATTERN · ICE CHUNK* if the kind was unknown.
+  2. the ship's store is credited;
+  3. the HUD shows *+12 QE · ICE CHUNK*.
 - **Refusals:** a thing too big (over 0.6 m or 40 kg) is not pulled, and the prompt reads *Too big*.
   With the store full, suction stops and the prompt reads *Store full*.
 - **The show:** the mouth glows `QUANTUM` while drawing, and each swallow gulps.
@@ -652,8 +651,8 @@ except the scrap plate (CARRY).
     paid out);
   - it uses `HudPalette`: the readout colour normally, `WARNING` at the reserve, when low and when
     dark.
-- **`QuantumToast`**, a `HudElement` near the reticle, created in code as the reticle is: *+12 QE*
-  and *NEW PATTERN · …*, rising and fading over 1.2 s.
+- **`QuantumToast`**, a `HudElement` near the reticle, created in code as the reticle is:
+  *+12 QE · ICE CHUNK*, rising and fading over 1.2 s.
 - **Aboard on foot the HUD stays dark,** as now. The core's gauge and the machine's screen are the
   instruments there.
 
@@ -690,7 +689,6 @@ bridge stays calm.
                                 ▼                   ┌────────── MachineCycle (pure) ◄── panel buttons
  Avatar/SuitCell ◄── charge ── QuantumPlant ────────┤
    (spends Δv)       (plate)   owns: QuantumStore   └────────── QuantumCore (gauge, states)
-                               PatternLibrary
                                 ▲       │ lit / dark
  HoseNozzle ── swallow ─────────┘       └────► Ship: emergency light, relight sequence
    (EVA tool, on HoseLine from HoseReel on AirlockAlcove)
@@ -711,11 +709,10 @@ bridge stays calm.
 src/quantum/
   quantum_store.gd     QuantumStore: amount, capacity, reserve, spend/credit/drain, lit (pure)
   quantum_values.gd    QuantumValues: constants, make cost, fits-the-bay (pure)
-  pattern_library.gd   PatternLibrary: known kinds (pure)
   machine_cycle.gd     MachineCycle: the machine's state, cues, prompts, screen (pure)
   suit_cell.gd         SuitCell: charge, Δv cost, warnings, dry (pure)
   tether.gd            Tether: the hose's pull at full length (pure)
-  quantum_plant.gd     QuantumPlant: one per ship; owns the store and library; binds the fixtures
+  quantum_plant.gd     QuantumPlant: one per ship; owns the store; binds the fixtures
   quantum_core.gd      QuantumCore: the core's moving parts and gauge
   quantum_machine.gd   QuantumMachine: what the dressing built for one machine (references)
   quantum_bay.gd       QuantumBay extends StowPoint: accepts anything that fits
@@ -808,12 +805,11 @@ Values are pinned by rendering. Adding palette entries is not a rule change.
   - continuous costs debit whole QE at the right times.
 - **`test_quantum_values.gd`:** make cost is twice the value; what fits the bay; every item `.tres`
   has a value, and only EVA tools have 0.
-- **`test_pattern_library.gd`:** it starts with the stocked kinds; it learns once; it reports new.
 - **`test_machine_cycle.gd`:**
   - convert and make, with their timings and cues in order;
   - the credit lands on `&"credited"`, not before;
-  - the refusals: store full, reserve held, nothing known;
-  - ◀ and ▶ wrap, sorted by cost;
+  - the refusals: store full, reserve held;
+  - ◀ and ▶ step through every item with a value, EVA tools left out, sorted by cost, and wrap;
   - prompts, screen lines and button colours for each state.
 - **`test_suit_cell.gd`:** the Δv cost; warnings at 25 and 10; dry at 0; charging to capacity.
 - **`test_suit.gd`** (extended): `home_step` heads for the hold point at 1.5 m/s and holds there.
@@ -841,7 +837,7 @@ Values are pinned by rendering. Adding palette entries is not a rule change.
 - **`QuantumPlant`:**
   - it binds across rebuilds without resetting;
   - the store starts at half, once;
-  - dropping into the bay and converting credits the store and learns the pattern;
+  - dropping into the bay and converting credits the store;
   - making puts an item in the bay;
   - charging moves QE into the suit.
 - **`FlightComputer`:** dark means no force or torque; boost spends and stops at the reserve; a null
@@ -964,7 +960,7 @@ Applied with the code they describe:
 - **Life support:** a slow suit drain, once there is something to lose.
 - **An idle trickle** on the ship's store, if QE never feels scarce (§2, row 1).
 - **Returning a suit's charge** to the store at the machine's plate.
-- **Persistence:** the store, the library and the suit cell save with the ship when saving exists.
+- **Persistence:** the store and the suit cell save with the ship when saving exists.
 - **Two bells:** the core is heavy equipment at cabin level, a step toward the two-bell
   silhouette (§5.4).
 
@@ -1010,7 +1006,7 @@ Each phase ends playable:
   - the HUD's ship gauge.
 
   *Walk onto the bridge and round the core; boost and watch the gauge fall.*
-- **Phase B: the machine.** Values, patterns, the bay, `MachineCycle`, the panel, convert and make,
+- **Phase B: the machine.** Values, the bay, `MachineCycle`, the panel, convert and make,
   the show and sounds. *Convert a mug; make one back.*
 - **Phase C: the suit.** `SuitCell`, the charge plate, thrust costs, the dry return, the airlock's
   refusal, the suit's HUD. *Charge up, go out, run dry, be brought home.*
