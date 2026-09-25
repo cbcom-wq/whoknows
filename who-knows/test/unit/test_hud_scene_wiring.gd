@@ -304,3 +304,6 @@ func test_the_cockpit_heading_marker_is_fed_by_the_hud():
 	var hud: HudRoot = _root.get_node("HudRoot")
 	assert_true(hud._registered.has(
 		_root.get_node("Ship/Canopy/CanopyOverlay/HeadingCockpitMarker")))
+
+func test_the_controls_card_is_on_the_screen():
+	assert_true(_root.get_node_or_null("HudRoot/Screen/ControlsCard") is ControlsCard)

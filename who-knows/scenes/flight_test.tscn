@@ -1,4 +1,4 @@
-[gd_scene load_steps=30 format=3]
+[gd_scene load_steps=31 format=3]
 
 [ext_resource type="Script" path="res://src/ship/ship.gd" id="1_ship"]
 [ext_resource type="PackedScene" path="res://scenes/avatar.tscn" id="2_avatar"]
@@ -23,6 +23,7 @@
 [ext_resource type="Script" path="res://src/flight/pilot_controls.gd" id="22_pilot_controls"]
 [ext_resource type="Script" path="res://src/ui/stick_cursor.gd" id="23_stick_cursor"]
 [ext_resource type="Script" path="res://src/ui/heading_marker.gd" id="24_heading_marker"]
+[ext_resource type="Script" path="res://src/ui/controls_card.gd" id="25_controls_card"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_flighttest"]
 sky_top_color = Color(0.02, 0.02, 0.05, 1)
@@ -257,3 +258,15 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
 script = ExtResource("23_stick_cursor")
+
+[node name="ControlsCard" type="Control" parent="HudRoot/Screen"]
+anchors_preset = 4
+anchor_top = 0.5
+anchor_bottom = 0.5
+offset_left = 24.0
+offset_top = -130.0
+offset_right = 344.0
+offset_bottom = 130.0
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("25_controls_card")
