@@ -100,3 +100,10 @@ func test_the_hull_and_a_spacewalker_touch_rocks():
 	assert_eq(_avatar.collision_mask, 1 | 32 | 64)
 	_back_in()
 	assert_false(_avatar.is_in_group(AsteroidStream.SPACE_ANCHOR))
+
+func test_the_cameras_outside_see_as_far_as_rocks_are_drawn():
+	# Godot's default is 4 km: past that, no big rock was ever drawn.
+	var far := AsteroidStream.FADE_END[AsteroidRecipe.Tier.GIANT]
+	for path in ["Ship/Exterior/ChaseCamera", "Ship/Canopy/CanopyCam"]:
+		assert_gte((_root.get_node(path) as Camera3D).far, far, path)
+	assert_gte(_avatar.camera.far, far, "on a spacewalk")

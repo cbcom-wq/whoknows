@@ -82,9 +82,12 @@ func test_hiding_and_showing_a_rock():
 func test_cells_unload_past_unload_and_stay_between():
 	var tier := T.RUBBLE
 	var home := _focus_cell(tier)
-	# Move so home (the 200 m cell whose corner is the start) is between LOAD
-	# and UNLOAD away: it stays loaded.
-	_focus.global_position += Vector3(AsteroidStream.LOAD[tier] + 300.0, 0, 0)
+	# Move so home (the cell you start in) is halfway between LOAD and UNLOAD
+	# away, along x and level with it: it stays loaded.
+	var inside := _universe.to_universe(_focus.global_position).minus(AsteroidRecipe.cell_corner(tier, home))
+	var size := float(AsteroidRecipe.CELL[tier])
+	var between := (AsteroidStream.LOAD[tier] + AsteroidStream.UNLOAD[tier]) * 0.5
+	_focus.global_position += Vector3(size - inside.x + between, 0, 0)
 	_stream.update(0.0, true)
 	assert_true(_stream.is_loaded(tier, home), "hysteresis: no flicker at the edge")
 	_focus.global_position += Vector3(AsteroidStream.UNLOAD[tier] + 400.0, 0, 0)
