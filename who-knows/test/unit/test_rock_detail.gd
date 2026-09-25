@@ -122,3 +122,63 @@ func test_facets_are_shades_of_the_rocks_own_colour():
 		assert_true(allowed.has(c), "%s is a shade of the palette" % c)
 		shades[c] = true
 	assert_gt(shades.size(), 1, "neighbouring facets differ")
+
+func test_its_collision_faces_the_outside_everywhere():
+	# Physics meets a face from the side the renderer draws: (b - a) x (c - a)
+	# points in, for the surface and for every boulder.
+	var detail := RockDetail.build(_big(1), 1337)
+	var f := detail.faces
+	var surface := detail.positions.size()
+	var bad := 0
+	for t in range(0, surface, 3):
+		if (f[t + 1] - f[t]).cross(f[t + 2] - f[t]).dot(f[t] + f[t + 1] + f[t + 2]) > 0.0:
+			bad += 1
+	for i in detail.boulders.size():
+		var centre: Vector3 = (detail.boulders[i][0] as Transform3D).origin
+		for k in 20:
+			var t := surface + (i * 20 + k) * 3
+			var mid := (f[t] + f[t + 1] + f[t + 2]) / 3.0
+			if (f[t + 1] - f[t]).cross(f[t + 2] - f[t]).dot(mid - centre) > 0.0:
+				bad += 1
+	assert_eq(bad, 0, "every face turns its front outward")
+
+func test_a_flat_face_is_one_shade():
+	# Shading by plane, not by triangle: triangles on the same cut face share a
+	# colour, so faces read as big flat pieces, never as noise.
+	var detail := RockDetail.build(_big(), 1337)
+	var dirs: PackedVector3Array = RockMesh.sphere(RockDetail.DETAIL)[0]
+	var tris: PackedInt32Array = RockMesh.sphere(RockDetail.DETAIL)[1]
+	var by_face := {}
+	var mixed := 0
+	for t in range(0, tris.size(), 3):
+		var d := (dirs[tris[t]] + dirs[tris[t + 1]] + dirs[tris[t + 2]]).normalized()
+		var face := detail.governing(d)
+		if face < 0:
+			continue
+		var colour := detail.colours[t]
+		if by_face.has(face) and by_face[face] != colour:
+			mixed += 1
+		by_face[face] = colour
+	assert_gt(by_face.size(), 10, "many faces")
+	assert_eq(mixed, 0)
+
+func test_crater_floors_are_darker_than_their_rims():
+	var detail := RockDetail.build(_big(), 1337)
+	assert_eq(detail.shade_of(RockDetail.CRATER_FLOOR), 0)
+	assert_eq(detail.shade_of(RockDetail.CRATER_RIM), SpacePalette.SHADES.size() - 1)
+
+func test_pebbles_lie_on_the_ground_and_are_not_solid():
+	var rock := _big(1)
+	var detail := RockDetail.build(rock, 1337)
+	var rock_across := pow(rock.size.x * rock.size.y * rock.size.z, 1.0 / 3.0)
+	# About one per 100 square metres of surface.
+	assert_between(detail.pebbles.size(), roundi(PI * rock_across * rock_across / RockDetail.PEBBLE_AREA * 0.8),
+		RockDetail.PEBBLES_MOST)
+	for b in detail.pebbles:
+		var t: Transform3D = b[0]
+		var across: float = b[3]
+		var height := t.origin.length() - detail.surface_point(b[4]).length()
+		assert_between(height, -0.15 * across, 0.5 * across)
+		assert_lte(t.origin.length() + AsteroidRecipe.BOUND * across * AsteroidRecipe.STRETCH_MAX, rock.radius)
+		assert_eq(b[2], SpacePalette.scree(rock.colour), "scree, darker than the ground")
+	assert_eq(detail.faces.size(), detail.positions.size() + detail.boulders.size() * 60, "only boulders are solid")

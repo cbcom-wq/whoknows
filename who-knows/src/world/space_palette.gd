@@ -21,7 +21,15 @@ const UNTINTED := Color(1, 1, 1)
 ## planes read apart in flat light (asteroids spec §18).
 const SHADES: Array[float] = [0.88, 1.0, 1.1]
 
+## Loose stones lying on a big rock, darker than the ground they lie on:
+## scree, which shows against it in flat light.
+const SCREE := 0.68
+
 ## `colour` in facet shade `k`.
 static func shade(colour: Color, k: int) -> Color:
 	var s := SHADES[k]
 	return Color(colour.r * s, colour.g * s, colour.b * s, colour.a)
+
+## `colour` as scree.
+static func scree(colour: Color) -> Color:
+	return Color(colour.r * SCREE, colour.g * SCREE, colour.b * SCREE, colour.a)

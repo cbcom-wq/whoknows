@@ -89,7 +89,7 @@ func _near() -> Dictionary:
 
 func _put(rock: AsteroidRock, data: RockDetail) -> void:
 	var detail := AsteroidDetail.new()
-	detail.setup(rock, data, stream.rock_material(AsteroidRecipe.Tier.GIANT, SpacePalette.UNTINTED))
+	detail.setup(rock, data, stream.rock_material(AsteroidRecipe.Tier.GIANT, SpacePalette.UNTINTED), stream.pebble_material())
 	# Placed before it enters the tree, so the physics server has it where it
 	# is from the start (the holder never moves: its frame is engine space).
 	detail.transform = stream.rock_pose(rock)

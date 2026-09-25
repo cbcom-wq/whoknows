@@ -51,6 +51,20 @@ static func cut_radius(shape: int, d: Vector3) -> float:
 			r = minf(r, p.w / along)
 	return r
 
+## Which of the shape's cut planes the surface lies on along `d`, or -1
+## where it is the uncut sphere.
+static func cut_index(shape: int, d: Vector3) -> int:
+	var r := 1.0
+	var index := -1
+	var planes := _cuts(shape)
+	for i in planes.size():
+		var p := planes[i]
+		var along := d.x * p.x + d.y * p.y + d.z * p.z
+		if along > 0.05 and p.w / along < r:
+			r = p.w / along
+			index = i
+	return index
+
 ## The stretch baked into a shape.
 static func stretch_of(shape: int) -> Vector3:
 	return _RECIPES[shape][4]

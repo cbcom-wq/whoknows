@@ -11,8 +11,9 @@ var rock: AsteroidRock
 var data: RockDetail
 
 ## Becomes `p_rock` in detail, from `p_data` built on a worker. `material`
-## takes its colours from the vertices (and the boulders' instance colours).
-func setup(p_rock: AsteroidRock, p_data: RockDetail, material: Material) -> void:
+## takes its colours from the vertices (and the boulders' instance colours);
+## `pebbles` is the same, fading out close in.
+func setup(p_rock: AsteroidRock, p_data: RockDetail, material: Material, pebbles: Material) -> void:
 	rock = p_rock
 	data = p_data
 	var id := rock.id()
@@ -33,27 +34,31 @@ func setup(p_rock: AsteroidRock, p_data: RockDetail, material: Material) -> void
 	look.material_override = material
 	look.layers = 1
 	add_child(look)
-	for shape in [RockMesh.Shape.BOULDER, RockMesh.Shape.SHARD]:
-		var mine := data.boulders.filter(func(b: Array) -> bool: return b[1] == shape)
-		if mine.is_empty():
-			continue
-		var mm := MultiMesh.new()
-		mm.transform_format = MultiMesh.TRANSFORM_3D
-		mm.use_colors = true
-		mm.mesh = RockMesh.mesh(shape, 1)
-		mm.instance_count = mine.size()
-		for i in mine.size():
-			mm.set_instance_transform(i, mine[i][0])
-			mm.set_instance_color(i, mine[i][2])
-		var boulders := MultiMeshInstance3D.new()
-		boulders.name = "Boulders%d" % shape
-		boulders.multimesh = mm
-		boulders.material_override = material
-		boulders.layers = 1
-		add_child(boulders)
+	_stones("Boulders", data.boulder_buffers, 1, material)
+	_stones("Pebbles", data.pebble_buffers, 0, pebbles)
 	var hull := ConcavePolygonShape3D.new()
 	hull.set_faces(data.faces)
 	var solid := CollisionShape3D.new()
 	solid.name = "Solid"
 	solid.shape = hull
 	add_child(solid)
+
+## One MultiMesh per shape, from buffers packed on the worker: per shape,
+## [count, buffer]. One assignment each, so putting a rock in never stalls.
+## Every stone casts a shadow: from above in flat light, a stone's shadow is
+## what shows it.
+func _stones(label: String, buffers: Dictionary, detail: int, material: Material) -> void:
+	for shape: int in buffers:
+		var entry: Array = buffers[shape]
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.use_colors = true
+		mm.mesh = RockMesh.mesh(shape, detail)
+		mm.instance_count = entry[0]
+		mm.buffer = entry[1]
+		var inst := MultiMeshInstance3D.new()
+		inst.name = "%s%d" % [label, shape]
+		inst.multimesh = mm
+		inst.material_override = material
+		inst.layers = 1
+		add_child(inst)

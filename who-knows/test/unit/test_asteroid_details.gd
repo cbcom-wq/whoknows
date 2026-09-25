@@ -126,3 +126,50 @@ func test_big_rocks_never_become_pushable_bodies():
 			giants += 1
 	assert_eq(giants, 0, "headed straight at it, it stays fixed")
 	assert_false(_stream.bubble.live.has(rock.id()))
+
+func test_a_spacewalker_cannot_pass_into_it():
+	# Rays hit both sides of a face by default; bodies meet only its front. So:
+	# a ray that sees only fronts must meet the surface from outside, and a
+	# capsule floating in along the surface's normal must stop at it.
+	var detail: AsteroidDetail = _stream.details.live.get(_ahead().id())
+	await wait_physics_frames(2)
+	var local := detail.data.surface_point(Vector3(0.2, 0.9, 0.3).normalized())
+	var at := detail.global_transform * local
+	var out := (detail.global_basis * local).normalized()
+	var query := PhysicsRayQueryParameters3D.create(at + out * 40.0, at - out * 5.0, AsteroidBody.LAYER)
+	query.hit_back_faces = false
+	var hit := _world.get_world_3d().direct_space_state.intersect_ray(query)
+	assert_false(hit.is_empty(), "from outside, the surface's fronts face you")
+	if hit.is_empty():
+		return
+	var ground: Vector3 = hit.position
+	var normal: Vector3 = hit.normal
+	var walker := CharacterBody3D.new()
+	var capsule := CollisionShape3D.new()
+	capsule.shape = CapsuleShape3D.new()
+	walker.add_child(capsule)
+	walker.collision_layer = 0
+	walker.collision_mask = AsteroidBody.LAYER
+	walker.motion_mode = CharacterBody3D.MOTION_MODE_FLOATING
+	walker.transform = Transform3D(Basis.looking_at(normal.cross(Vector3.RIGHT).normalized(), normal), ground + normal * 3.0)
+	_world.add_child(walker)
+	await wait_physics_frames(1)
+	var deepest := INF
+	for i in 180:
+		walker.velocity = -normal * 2.0
+		walker.move_and_slide()
+		await wait_physics_frames(1)
+		# The capsule's lowest point, above the ground along its normal.
+		deepest = minf(deepest, (walker.global_position - ground).dot(normal) - 1.0)
+	assert_gt(deepest, -0.1, "it stops at the surface (lowest point %.2f m)" % deepest)
+	walker.free()
+
+func test_pebbles_show_only_close_in():
+	var detail: AsteroidDetail = _stream.details.live.get(_ahead().id())
+	var pebbles := detail.find_children("Pebbles*", "MultiMeshInstance3D", true, false)
+	assert_gt(pebbles.size(), 0)
+	for inst: MultiMeshInstance3D in pebbles:
+		var m := inst.material_override as StandardMaterial3D
+		assert_eq(m.distance_fade_mode, BaseMaterial3D.DISTANCE_FADE_PIXEL_DITHER)
+		assert_eq(m.distance_fade_min_distance, AsteroidStream.PEBBLE_FADE_END, "gone from afar")
+
