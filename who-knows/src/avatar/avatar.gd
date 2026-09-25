@@ -105,6 +105,29 @@ func take_item(item: Item) -> void:
 func can_take_item(item: Item) -> bool:
 	return grasp.can_take(item)
 
+## Whether you fit standing at `pose` (feet at its origin, upright): nothing
+## in your body's way, and a floor underfoot.
+func can_stand_at(pose: Transform3D) -> bool:
+	var space := get_world_3d().direct_space_state
+	var up := pose.basis.y.normalized()
+	var body := PhysicsShapeQueryParameters3D.new()
+	body.shape = _collider.shape
+	# Lifted a touch, so the floor you would stand on isn't in the way.
+	body.transform = pose.translated(up * 0.02) * _collider.transform
+	body.collision_mask = COLLISION_MASK
+	body.exclude = [get_rid()]
+	if not space.intersect_shape(body, 1).is_empty():
+		return false
+	var ray := PhysicsRayQueryParameters3D.create(pose.origin + up * 0.3, pose.origin - up * 0.3,
+		COLLISION_MASK, [get_rid()])
+	return not space.intersect_ray(ray).is_empty()
+
+## Stands you at `pose` (upright), turned its way, at rest.
+func place(pose: Transform3D) -> void:
+	global_transform = pose
+	_yaw = rotation.y
+	velocity = Vector3.ZERO
+
 func set_control_enabled(enabled: bool) -> void:
 	_control_enabled = enabled
 	grasp.set_enabled(enabled)

@@ -60,8 +60,9 @@ func stand() -> void:
 	is_seated = false
 	piloting_changed.emit(false)
 	_flight.clear_pilot_input()
-	# Put the avatar beside the seat, then fly the camera back to its head.
-	_avatar.global_position = _seat.global_position + _seat.global_basis * Vector3(0.9, 0, 0)
+	# Get up out of the chair to somewhere the avatar fits, then fly the camera
+	# back to its head.
+	_avatar.place(_seat.stand_spot(_avatar))
 	_move_camera_to(_avatar.head.global_transform)
 
 func _move_camera_to(target: Transform3D) -> void:

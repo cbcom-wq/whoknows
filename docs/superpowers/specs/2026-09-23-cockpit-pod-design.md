@@ -118,6 +118,15 @@ Three problems, one of them hidden:
   puts the eye 1.65 m behind the front glass with side glass on both flanks. Anywhere else, it's
   at the cell's floor centre. `flight_test.gd` places the `PilotSeat` node from the same frame, so
   the picture and the interactable can't drift apart.
+- **Standing up (amended 2026-09-24):** there must always be room to get out of the chair and walk
+  away. Getting up puts you at the first of `PilotSeat.STAND_SPOTS` where your body fits on a
+  floor (`Avatar.can_stand_at`): a step straight back out of the chair, 1.3 m behind its origin
+  and clear of the backrest, then back to either side, beside it, and a longer step back. You face
+  the way the chair does. If none of those is clear, you stand where you sat down from, which is
+  always somewhere you fit. The first version put you 0.9 m to the chair's right. In the pod that
+  spot is inside the side wall and the seat's box, which left you wedged between the chair and the
+  glass. `test_pilot_seat.gd` holds the starter ship to the step straight back, and requires that
+  you can walk away from it.
 - **Fixtures in general:** `InteriorLayout.fixtures()` lists every MOUNT cell `{coord, id,
   orientation}`. The dressing draws the fixtures it has props for (`draws_fixture(id)`). The
   builder draws a block's own mesh only for the rest.
