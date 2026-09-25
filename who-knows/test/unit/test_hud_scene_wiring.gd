@@ -181,6 +181,15 @@ func test_pilot_seat_sits_at_the_chairs_frame():
 	var canopy_plane := ShipGrid.cell_center(Vector3i(0, 0, -3)).z - ShipGrid.CELL_SIZE * 0.5
 	assert_almost_eq(seat.position.z, canopy_plane - InteriorProps.POD_SEAT_DEPTH, 0.001, "out in the pod")
 
+## Quantum energy spec §5.3: the quantum core now stands where the avatar
+## used to spawn, one cell aft of the helm, so the spawn moved one cell
+## further aft, clear of the core's footprint.
+func test_the_avatar_spawns_clear_of_the_quantum_core():
+	var avatar: Node3D = _root.get_node("Ship/Interior/Avatar")
+	var expected := ShipGrid.cell_center(Vector3i(0, 0, -1))
+	assert_almost_eq(avatar.position.x, expected.x, 0.001)
+	assert_almost_eq(avatar.position.z, expected.z, 0.001, "one cell aft of the core, not inside it")
+
 func test_the_seated_eye_is_the_chairs():
 	var eye: Node3D = _root.get_node("Ship/Interior/PilotSeat/Eye")
 	assert_almost_eq(eye.position, InteriorProps.SEATED_EYE, Vector3.ONE * 0.001,

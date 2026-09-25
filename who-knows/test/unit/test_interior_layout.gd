@@ -194,6 +194,19 @@ func test_starter_shuttle_layout():
 	assert_eq(airlocks[0]["hatch_normal"], Vector3i(0, 0, 1), "the hatch faces aft")
 	assert_eq(airlocks[0]["door_normal"], Vector3i(0, 0, -1), "the inner hatch opens onto the corridor")
 
+## Quantum energy spec §6.1: the core and the machine are fixtures, like the
+## helm, even though InteriorLayout.QUIET_FIXTURES keeps them from spreading
+## bridge zone or consoles to their neighbours.
+func test_quantum_fixtures_are_in_the_starter_shuttles_fixtures():
+	var bootstrap: Node = load("res://scenes/flight_test.gd").new()
+	var grid: ShipGrid = bootstrap._starter_grid()
+	bootstrap.free()
+	var catalog := BlockCatalog.load_from_dir("res://data/blocks")
+	var layout := InteriorLayout.plan(grid, catalog, DeckGraph.build(grid, catalog).walkable_coords())
+	var ids: Array = layout.fixtures().map(func(f): return f["id"])
+	assert_true(ids.has(&"quantum_core"), "the core is a fixture")
+	assert_true(ids.has(&"quantum_machine"), "the machine is a fixture")
+
 func _walls_of(layout: InteriorLayout, coord: Vector3i) -> Array:
 	var out := []
 	for f in layout.faces():

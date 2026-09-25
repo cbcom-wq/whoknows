@@ -329,10 +329,20 @@ func _place_avatar_on_deck() -> void:
 	if not found:
 		return
 
-	# Stand one cell aft of the seat when that cell exists, else on the seat.
-	var cell := seat + Vector3i(0, 0, 1)
-	if not _ship.grid.has_block(cell):
-		cell = seat
+	# Stand in the first cell aft of the seat that is walkable and holds no
+	# fixture -- a MOUNT block, like the quantum core, still occupies its
+	# cell's floor even though the cell itself is walkable (quantum energy
+	# spec §5.3, §6.1). Falls back to the seat's own cell when the ship has
+	# nothing else clear aft of it.
+	var cell := seat
+	var probe := seat + Vector3i(0, 0, 1)
+	while _ship.grid.has_block(probe):
+		var inst := _ship.grid.get_block(probe)
+		var def := _ship.catalog.get_def(inst.block_id)
+		if def != null and def.is_walkable() and def.occupancy != BlockDefinition.Occupancy.MOUNT:
+			cell = probe
+			break
+		probe += Vector3i(0, 0, 1)
 
 	var centre := ShipGrid.cell_center(cell)
 	var deck_surface := InteriorBuilder.floor_y(cell)

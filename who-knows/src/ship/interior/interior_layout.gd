@@ -49,6 +49,13 @@ const CANOPY_ID := &"canopy"
 const AIRLOCK_ID := &"airlock"
 ## The fixture the ship is flown from. A canopy face ahead of it becomes a pod.
 const HELM_ID := &"pilot_seat"
+## Fixtures that stand IN the bridge without spreading it (quantum energy
+## spec §6.1): unlike the helm, a quiet fixture's neighbours do not become
+## bridge/console/porthole-blocking on its account, and _zone() does not
+## treat it as a reason to call a neighbouring cell bridge. The fixture's
+## own cell is still a MOUNT for its own walls, which go plain (PANEL), or
+## PORTHOLE on a skin flank -- nothing else stands where it does.
+const QUIET_FIXTURES: Array[StringName] = [&"quantum_core", &"quantum_machine"]
 const _HORIZONTAL: Array[Vector3i] = [
 	Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 0, 1), Vector3i(0, 0, -1),
 ]
@@ -374,9 +381,12 @@ static func _has_canopy_neighbour(grid: ShipGrid, coord: Vector3i) -> bool:
 			return true
 	return false
 
+## Whether `coord` has a neighbour that makes IT bridge/console (spec §6.1):
+## any ordinary MOUNT does, but a quiet fixture does not -- only its own
+## cell counts (_is_mount), never a neighbour's.
 static func _has_mount_neighbour(grid: ShipGrid, catalog: BlockCatalog, coord: Vector3i) -> bool:
 	for normal in _HORIZONTAL:
-		if _is_mount(grid, catalog, coord + normal):
+		if _is_loud_mount(grid, catalog, coord + normal):
 			return true
 	return false
 
@@ -386,6 +396,14 @@ static func _is_mount(grid: ShipGrid, catalog: BlockCatalog, coord: Vector3i) ->
 		return false
 	var def := catalog.get_def(inst.block_id)
 	return def != null and def.occupancy == BlockDefinition.Occupancy.MOUNT
+
+## A MOUNT that is not one of QUIET_FIXTURES: one whose presence spreads
+## bridge zone and consoles to its neighbours.
+static func _is_loud_mount(grid: ShipGrid, catalog: BlockCatalog, coord: Vector3i) -> bool:
+	var inst := grid.get_block(coord)
+	if inst != null and QUIET_FIXTURES.has(inst.block_id):
+		return false
+	return _is_mount(grid, catalog, coord)
 
 static func _id_at(grid: ShipGrid, coord: Vector3i) -> StringName:
 	var inst := grid.get_block(coord)
