@@ -11,6 +11,8 @@ const REQUIRED_ACTIONS := [
 	&"roll_left", &"roll_right", &"boost",
 	&"toggle_assist", &"cycle_camera",
 	&"use", &"throw", &"drop",
+	&"pitch_up", &"pitch_down", &"yaw_left", &"yaw_right",
+	&"point_mode", &"set_heading", &"speed_lock", &"toggle_controls",
 ]
 
 func test_every_gameplay_action_is_registered():
@@ -63,3 +65,26 @@ func test_hand_actions_are_bound_to_the_mouse_and_g():
 	assert_eq(throw_ev.button_index, MOUSE_BUTTON_RIGHT)
 	var drop_ev: InputEventKey = InputMap.action_get_events(&"drop")[0]
 	assert_eq(drop_ev.physical_keycode, KEY_G)
+
+## Flight controls spec §4: arrows turn, RMB points, LMB sets the heading, C
+## locks the speed, H shows the controls card.
+func test_flight_controls_are_bound_where_the_card_says():
+	var keys := {
+		&"pitch_up": KEY_UP, &"pitch_down": KEY_DOWN,
+		&"yaw_left": KEY_LEFT, &"yaw_right": KEY_RIGHT,
+		&"speed_lock": KEY_C, &"toggle_controls": KEY_H,
+	}
+	for action in keys:
+		var ev: InputEventKey = InputMap.action_get_events(action)[0]
+		assert_eq(ev.physical_keycode, keys[action], String(action))
+	var point: InputEventMouseButton = InputMap.action_get_events(&"point_mode")[0]
+	assert_eq(point.button_index, MOUSE_BUTTON_RIGHT)
+	var click: InputEventMouseButton = InputMap.action_get_events(&"set_heading")[0]
+	assert_eq(click.button_index, MOUSE_BUTTON_LEFT)
+
+## A stray block of dictionary-style duplicates once sat at the end of [input].
+## Its first line starts with "[", which opens a new section, so any action
+## written after it silently lost its bindings.
+func test_the_input_section_has_no_dictionary_style_bindings():
+	var text := FileAccess.get_file_as_string("res://project.godot")
+	assert_false(text.contains("\"type\":\"InputEventKey\""))
