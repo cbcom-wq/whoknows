@@ -22,8 +22,11 @@ anything is built. It was written from the owner's brief of 2026-09-24. No code 
   the first draft. Everything outside the ship follows the floating-origin rule (§10.1, §11.3,
   §14.2).
 
-**Depends on:** `main` at `225ca9d` (the airlock and first spacewalk, the floating origin and the
-asteroid groups)
+**Depends on:** `main` at `7609d0f` (the airlock and first spacewalk, the floating origin, the
+asteroid groups and the flight controls)
+**Amended 2026-09-25 by the bridge computer spec** (`2026-09-25-bridge-computer-design.md` §13):
+salvage reaches the HUD through the ship's sensors (`ShipSensors`, `Contact`), built here in
+Task 10, so the computer can share them (§10.4, §12, §14, §15).
 **Governed by:** `docs/design/visual-style.md`, and CLAUDE.md's floating-origin rule
 **Plan:** `docs/superpowers/plans/2026-09-24-quantum-energy.md`
 **Amends, once approved:**
@@ -691,10 +694,17 @@ is vague far off and becomes a region you search close by.
 - **Pings need no loaded items.** `SalvageField.known_clouds(focus, range)` lists every cloud
   within range from the recipe and the ledger alone: the near cloud, and each big rock's cloud in
   the giant cells round the focus. The list is refreshed when the focus crosses into a new giant
-  cell, not every frame. The bridge computer's map will read the same list (§17).
+  cell, not every frame.
+- **Through the ship's sensors.** `SalvageField` is a sensor source: `contacts(focus, range,
+  time)` gives one `Contact` per cloud with something left, carrying its `SalvageSense` reading
+  (a ping, or a region, including when you are inside it), and `contact(id, focus, time)` looks
+  one up by id. `ShipSensors` (`Ship/Sensors`) gathers the contacts of every source it is given.
+  The flight scene registers the field. The bridge computer's map reads the same contacts
+  (bridge computer spec §4).
 - **Seated and on a spacewalk.** `SalvageMarker` is a `HudElement` using the airlock marker's
   screen-edge logic (`VelocityMarker.resolve`), so a ping behind you pins to an edge the same way.
-  On foot aboard, the HUD stays dark as now.
+  It reads the salvage contacts from the ship's sensors, never from the field directly. On foot
+  aboard, the HUD stays dark as now.
 - **A glint:** every salvage item flashes a small warm glint for 0.15 s every 2–4 s, seeded, as if
   it caught the sun. It is an unshaded billboard quad in `InteriorPalette.LIGHT_WARM`, visible to
   about 50 m and fading out by 60 m. The quantum shard glows as well, on the glow batch.
@@ -795,7 +805,7 @@ except the scrap plate (CARRY).
   - it uses `HudPalette`: the readout colour normally, `WARNING` in low power and when the suit is
     low, critical or dry.
 - **`SalvageMarker`**, a `HudElement` (§10.4), created in code as the reticle is. The flight scene
-  binds it to the `SalvageField`, and it asks the field for readings each frame. It shows
+  binds it to the ship's sensors, and it draws their salvage contacts each frame. It shows
   whenever you are seated or on a spacewalk.
 - **`QuantumToast`**, a `HudElement` near the reticle, created in code as the reticle is:
   *+12 QE · ICE CHUNK*, rising and fading over 1.2 s.
@@ -840,12 +850,15 @@ bridge stays calm.
    │ (EVA tool, on HoseLine from HoseReel on AirlockAlcove)
    │ item.consumed
    ▼
- SalvageField ── owns: SalvageLedger ── known_clouds ──► SalvageSense (pure) ──► SalvageMarker
+ SalvageField ── owns: SalvageLedger ── SalvageSense (pure) ── contacts ──► ShipSensors ──► SalvageMarker
    (clouds from AsteroidRecipe's big rocks; items spawned within 3 km, members of EXTERIOR_SPACE)
 ```
 
 - **`QuantumPlant` is the only thing that knows a ship has QE.** It is a `Node` under `Ship`,
   created in code like `Airlocks`, and lives across rebuilds.
+- **`ShipSensors` is the only thing the HUD asks about what is out there.** It is a `Node` under
+  `Ship`, created in code, holding the sources the flight scene gives it. The ship knows nothing
+  about salvage.
 - **`SalvageField` is the only thing that knows where salvage is.** It is a `Node3D` under
   `Outside`, created in code by the flight scene. It keeps its own `AsteroidRecipe` made with the
   stream's seed (a recipe's cache is not shared), and reads the `Universe`.
@@ -882,6 +895,9 @@ src/world/
   salvage_field.gd     SalvageField: the clouds, loading and freeing their items, known_clouds
   salvage_ledger.gd    SalvageLedger: what has been taken (pure)
   salvage_sense.gd     SalvageSense: a cloud and your position to a ping, a region or nothing (pure)
+src/sensors/
+  contact.gd           Contact: one thing the ship knows about (pure)
+  ship_sensors.gd      ShipSensors: the sources, a 4 Hz contacts cache
 src/ui/energy_panel.gd, src/ui/quantum_toast.gd, src/ui/salvage_marker.gd
 data/blocks/quantum_core.tres, quantum_machine.tres, quantum_cell.tres
            (reactor.tres and battery.tres removed)
@@ -1029,6 +1045,8 @@ owner chooses knowingly.
     orphans;
   - `known_clouds` lists clouds within range without spawning anything.
 - **`SalvageLedger`:** a taken item stays out of a reloaded cloud; `remaining` counts down.
+- **`ShipSensors`:** merges its sources nearest first; the 4 Hz cache; `SalvageField`'s contacts
+  carry its readings, and a region contact stays while you are inside it.
 - **`SalvageSense`:**
   - a ping beyond 2 km, within ±10° of the true direction, a new error every 4 s, the distance to
     the nearest kilometre;
@@ -1048,7 +1066,8 @@ owner chooses knowingly.
   - Grasp lets only EVA tools past `suspended`.
 - **Airlock:** the empty-suit refusal of the room panel.
 - **HUD:** the telemetry energy fields for ship and suit; `EnergyPanel`'s text and states;
-  `SalvageMarker` draws a ping, a region and nothing, and pins to the screen's edge.
+  `SalvageMarker` draws a ping, a region and nothing from the sensors' contacts, and pins to the
+  screen's edge.
 - **`Synth`:** the seven new sounds build, are deterministic and are not silent.
 - **`test_visual_style_rules.gd`** (extended):
   - the new painting files are held to palette colours;
@@ -1163,9 +1182,9 @@ Applied with the code they describe:
 ## 17. Hooks left open
 
 - **Spenders:** jumps, shields, turret weapons, repairs and shipyard costs (§8.4).
-- **The bridge computer and its map:** the owner wants one, as its own spec, next. It shows the
-  salvage pings and regions (`SalvageField.known_clouds`), the asteroid groups, and later stations,
-  worlds and derelicts. It stands in the bridge's free port back corner, (−1, 0, −1).
+- **The bridge computer and its map:** designed in
+  `docs/superpowers/specs/2026-09-25-bridge-computer-design.md`, built after this. A holo table at
+  (−1, 0, −1) shows the ship's sensor contacts and sets a course the HUD follows.
 - **Crippling and capture:** a drained store leaves a ship limping; whether damage can put a core
   out is Slice 2's. A captured ship's store is yours.
 - **Derelicts:** a ship found in low power with an almost empty store; take it by feeding its
@@ -1199,7 +1218,7 @@ Applied with the code they describe:
 - Brownout (power margin as a live mechanic).
 - A dark core. The ship always flies (§8.3).
 - Gravity failing in low power (gravity stays on).
-- The bridge computer and its map (its own spec, next).
+- The bridge computer and its map (its own spec, built after this).
 - Reeling yourself in along the hose.
 - Saving and loading.
 

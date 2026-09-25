@@ -85,8 +85,14 @@ It retires `reactor` and `battery`. The ship keeps its size and no room moves.
 
 The spec is also brought up to date with the floating origin and the asteroids.
 
-**Next, its own spec:** a bridge computer with a map, which the owner wants for finding salvage
-and more.
+**Designed, awaiting the owner's review: the bridge computer** (2026-09-25), built after quantum
+energy. A holo table at (−1, 0, −1) on the bridge:
+- a map of the ship's sensor contacts, turned with the ship, at 2, 10 and 30 km;
+- a course to a big rock or salvage, which the HUD follows;
+- a status page with the ship in miniature.
+
+Spec `docs/superpowers/specs/2026-09-25-bridge-computer-design.md`. It amends quantum energy's
+Task 10 to build the ship's sensors. Its plan is not written yet.
 
 Spec `docs/superpowers/specs/2026-09-24-quantum-energy-design.md`, plan
 `docs/superpowers/plans/2026-09-24-quantum-energy.md`. Nothing is built.
