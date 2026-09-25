@@ -9,6 +9,7 @@ extends Node3D
 @onready var _hud: HudRoot = $HudRoot
 @onready var _director: CameraDirector = $Ship/CameraDirector
 @onready var _cockpit_marker: VelocityMarker = $Ship/Canopy/CanopyOverlay/CockpitMarker
+@onready var _heading_cockpit: HeadingMarker = $Ship/Canopy/CanopyOverlay/HeadingCockpitMarker
 @onready var _prompt: Label = $Prompt/Label
 @onready var _interactor: Interactor = $Ship/Interior/Avatar/Head/Interactor
 @onready var _avatar: Avatar = $Ship/Interior/Avatar
@@ -329,6 +330,7 @@ func _wire_hud() -> void:
 	# The cockpit marker lives in the ship's SubViewport, so it cannot be
 	# discovered as one of HudRoot's descendants.
 	_hud.register_element(_cockpit_marker)
+	_hud.register_element(_heading_cockpit)
 	# The bootstrap is the one place that legitimately knows both halves of
 	# this: the HUD's fade-in and the seat transition it is timed against.
 	_hud.fade_in = CameraDirector.SIT_DURATION

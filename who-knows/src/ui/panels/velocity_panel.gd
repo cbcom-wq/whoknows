@@ -1,7 +1,8 @@
 class_name VelocityPanel
 extends HudElement
 
-## Speed against the cruise ceiling, plus the two flight-mode flags.
+## Speed against the cruise ceiling, the two flight-mode flags, and what the
+## flight computer is holding.
 ##
 ## Children are built in code rather than authored in the scene. That keeps
 ## flight_test.tscn small -- see CLAUDE.md on the text-scene parser defect --
@@ -18,6 +19,7 @@ var units_label: Label
 var bar_track: ColorRect
 var bar_fill: ColorRect
 var mode_label: Label
+var hold_label: Label
 
 func _ready() -> void:
 	custom_minimum_size = Vector2(320.0, 56.0)
@@ -61,6 +63,13 @@ func _ready() -> void:
 	mode_label.position = Vector2(170.0, 38.0)
 	add_child(mode_label)
 
+	hold_label = Label.new()
+	hold_label.text = ""
+	hold_label.add_theme_font_size_override("font_size", 11)
+	hold_label.add_theme_color_override("font_color", HudPalette.READOUT)
+	hold_label.position = Vector2(170.0, 20.0)
+	add_child(hold_label)
+
 func render(telemetry: VehicleTelemetry) -> void:
 	if telemetry == null:
 		return
@@ -84,3 +93,11 @@ func render(telemetry: VehicleTelemetry) -> void:
 		"ON" if telemetry.assist_enabled else "OFF",
 		"ON" if telemetry.boost_active else "OFF",
 	]
+
+	# What the flight computer is holding (flight controls spec §8).
+	var holds := PackedStringArray()
+	if telemetry.speed_locked:
+		holds.append("LOCK %d M/S" % roundi(telemetry.locked_speed))
+	if telemetry.heading_hold:
+		holds.append("HDG HOLD")
+	hold_label.text = "   ".join(holds)

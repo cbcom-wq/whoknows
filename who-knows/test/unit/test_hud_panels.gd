@@ -138,3 +138,19 @@ func test_attitude_panel_rects_ignore_the_mouse():
 		assert_eq(pip.mouse_filter, Control.MOUSE_FILTER_IGNORE, "pip ignores the mouse")
 		var track: ColorRect = pip.get_parent()
 		assert_eq(track.mouse_filter, Control.MOUSE_FILTER_IGNORE, "track ignores the mouse")
+
+## Flight controls spec §8: the speed lock and the heading hold.
+func test_velocity_panel_shows_a_speed_lock_and_a_heading_hold():
+	var p := _velocity_panel()
+	var t := _telemetry(45.0, 120.0, true, false)
+	t.speed_locked = true
+	t.locked_speed = 45.2
+	t.heading_hold = true
+	p.render(t)
+	assert_string_contains(p.hold_label.text, "LOCK 45")
+	assert_string_contains(p.hold_label.text, "HDG HOLD")
+
+func test_velocity_panel_shows_no_holds_when_there_are_none():
+	var p := _velocity_panel()
+	p.render(_telemetry(45.0, 120.0, true, false))
+	assert_eq(p.hold_label.text, "")

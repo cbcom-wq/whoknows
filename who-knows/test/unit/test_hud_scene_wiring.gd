@@ -286,3 +286,21 @@ func test_sitting_down_hands_the_hud_to_the_pilot():
 	var hud: HudRoot = _root.get_node("HudRoot")
 	director.sit(_root.get_node("Ship/Interior/PilotSeat"))
 	assert_same(hud._source, _root.get_node("Ship/PilotControls"))
+
+## Flight controls spec §8: the stick cursor and the heading markers, read back.
+func test_the_stick_cursor_is_on_the_screen():
+	assert_true(_root.get_node_or_null("HudRoot/Screen/StickCursor") is StickCursor)
+
+func test_heading_markers_survived_the_parse():
+	for path in ["HudRoot/Screen/HeadingChaseMarker", "Ship/Canopy/CanopyOverlay/HeadingCockpitMarker"]:
+		var marker: HeadingMarker = _root.get_node_or_null(path)
+		assert_not_null(marker, path)
+		assert_ne(marker.camera_path, NodePath(""), "%s camera_path was not dropped" % path)
+		assert_true(marker.get_node_or_null(marker.camera_path) is Camera3D,
+			"%s camera_path resolves" % path)
+
+func test_the_cockpit_heading_marker_is_fed_by_the_hud():
+	# It lives in the canopy SubViewport, so HudRoot cannot find it by walking.
+	var hud: HudRoot = _root.get_node("HudRoot")
+	assert_true(hud._registered.has(
+		_root.get_node("Ship/Canopy/CanopyOverlay/HeadingCockpitMarker")))
