@@ -15,6 +15,7 @@ const MIX_RATE := 22050
 const NAMES: Array[StringName] = [
 	&"hatch_motor", &"bolt_clunk", &"seal_thump", &"hiss_out", &"steam_in",
 	&"panel_beep", &"warning_chime", &"ship_hum", &"breath", &"thruster_puff", &"hull_thump",
+	&"rcs_puff",
 ]
 ## Sounds that play as seamless loops.
 const LOOPED: Array[StringName] = [&"ship_hum", &"breath", &"thruster_puff"]
@@ -78,6 +79,8 @@ static func build(sound_name: StringName) -> AudioStreamWAV:
 			x = _breath()
 		&"thruster_puff":
 			x = _thruster()
+		&"rcs_puff":
+			x = _rcs_puff()
 		_:
 			push_error("Synth: no sound called %s" % sound_name)
 			return null
@@ -215,6 +218,16 @@ static func _thruster() -> PackedFloat32Array:
 		var t := float(i) / MIX_RATE
 		x[i] *= 1.0 + 0.2 * sin(TAU * 7.0 * t)
 	return _gain(_loopable(x, n), 0.55)
+
+## An RCS thruster firing, heard aboard (flight controls spec §6.3): a short,
+## soft hiss with a rounded tail -- warm, never a crack.
+static func _rcs_puff() -> PackedFloat32Array:
+	var n := _len(0.25)
+	var x := _lowpass(_highpass(_noise(n, 28), 300.0), 3000.0)
+	for i in n:
+		var t := float(i) / MIX_RATE
+		x[i] *= minf(t / 0.012, 1.0) * exp(-t / 0.07)
+	return _gain(x, 0.6)
 
 # --- building blocks ----------------------------------------------------------
 

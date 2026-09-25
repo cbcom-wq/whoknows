@@ -10,9 +10,7 @@ extends Node3D
 ## Built from engine particles and a plain material: no new shader. Knows
 ## nothing about ships; it takes frames and a render layer.
 
-## Puffs: a chunky low-poly sphere, lit, fading through a colour ramp.
-const PUFF_SEGMENTS := 8
-const PUFF_RINGS := 4
+## Puffs are Puffs' chunky spheres, lit, fading through a colour ramp.
 const JET_PUFFS := 18
 const JET_LIFETIME := 1.9
 const JET_SPEED := 3.4
@@ -26,10 +24,6 @@ const FOG_LIFETIME := 2.4
 const HAZE_DENSITY := 0.9
 const HAZE_PEAK_OUT := 0.5
 const HAZE_PEAK_IN := 0.7
-## Puffs closer to the camera than this fade away, so one drifting through
-## your head never fills the screen.
-const FADE_NEAR := 0.25
-const FADE_FAR := 0.9
 ## How fast the haze follows its target, per second, up and down: it gathers
 ## quickly and lingers a little as it clears.
 const HAZE_RISE := 2.2
@@ -64,10 +58,10 @@ func setup(room_frame: Transform3D, nozzles: Array[Transform3D], light: OmniLigh
 	_light = light
 	if light != null:
 		_base_energy = light.light_energy
-	var puff := _puff_mesh(false)
+	var puff := Puffs.mesh(false)
 	if burst_only:
 		# Vapor in sunlight, not rocks: flat and pale, fading as it spreads.
-		_burst = _emitter("Burst", _puff_mesh(true), layer, BURST_PUFFS, BURST_LIFETIME, _burst_process())
+		_burst = _emitter("Burst", Puffs.mesh(true), layer, BURST_PUFFS, BURST_LIFETIME, _burst_process())
 		_burst.one_shot = true
 		_burst.explosiveness = 0.85
 		# Its puffs are in world space, which a floating-origin shift cannot
@@ -142,27 +136,6 @@ func tint(into: Environment) -> void:
 	into.fog_density = haze * HAZE_DENSITY
 	into.fog_sky_affect = 0.0
 
-static func _puff_mesh(flat: bool) -> SphereMesh:
-	var mesh := SphereMesh.new()
-	mesh.radius = 0.5
-	mesh.height = 1.0
-	mesh.radial_segments = PUFF_SEGMENTS
-	mesh.rings = PUFF_RINGS
-	var material := StandardMaterial3D.new()
-	material.albedo_color = InteriorPalette.STEAM
-	material.vertex_color_use_as_albedo = true
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.roughness = 1.0
-	if flat:
-		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.cull_mode = BaseMaterial3D.CULL_BACK
-	material.shadow_to_opacity = false
-	material.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_ALPHA
-	material.distance_fade_min_distance = FADE_NEAR
-	material.distance_fade_max_distance = FADE_FAR
-	mesh.material = material
-	return mesh
-
 func _emitter(emitter_name: String, puff: Mesh, layer: int, amount: int, lifetime: float,
 		process: ParticleProcessMaterial) -> GPUParticles3D:
 	var p := GPUParticles3D.new()
@@ -179,28 +152,6 @@ func _emitter(emitter_name: String, puff: Mesh, layer: int, amount: int, lifetim
 	add_child(p)
 	return p
 
-## Fades in, holds, fades out: steam in the palette's off-white.
-static func _fade(peak: float) -> GradientTexture1D:
-	var clear := InteriorPalette.STEAM
-	clear.a = 0.0
-	var thick := InteriorPalette.STEAM
-	thick.a = peak
-	var g := Gradient.new()
-	g.offsets = PackedFloat32Array([0.0, 0.15, 0.6, 1.0])
-	g.colors = PackedColorArray([clear, thick, thick, clear])
-	var tex := GradientTexture1D.new()
-	tex.gradient = g
-	return tex
-
-static func _grow(from: float, to: float) -> CurveTexture:
-	var c := Curve.new()
-	c.max_value = maxf(from, to)
-	c.add_point(Vector2(0.0, from))
-	c.add_point(Vector2(1.0, to))
-	var tex := CurveTexture.new()
-	tex.curve = c
-	return tex
-
 static func _jet_process() -> ParticleProcessMaterial:
 	var m := ParticleProcessMaterial.new()
 	m.direction = Vector3(0, 0, -1)
@@ -212,8 +163,8 @@ static func _jet_process() -> ParticleProcessMaterial:
 	m.gravity = Vector3.ZERO
 	m.scale_min = 0.12
 	m.scale_max = 0.18
-	m.scale_curve = _grow(1.0, 4.5)
-	m.color_ramp = _fade(0.8)
+	m.scale_curve = Puffs.grow(1.0, 4.5)
+	m.color_ramp = Puffs.fade(0.8)
 	m.angle_min = 0.0
 	m.angle_max = 360.0
 	return m
@@ -231,8 +182,8 @@ func _fog_process_material() -> ParticleProcessMaterial:
 	m.damping_max = 0.5
 	m.scale_min = 0.25
 	m.scale_max = 0.45
-	m.scale_curve = _grow(0.6, 1.3)
-	m.color_ramp = _fade(0.35)
+	m.scale_curve = Puffs.grow(0.6, 1.3)
+	m.color_ramp = Puffs.fade(0.35)
 	m.angle_min = 0.0
 	m.angle_max = 360.0
 	return m
@@ -248,6 +199,6 @@ func _burst_process() -> ParticleProcessMaterial:
 	m.gravity = Vector3.ZERO
 	m.scale_min = 0.25
 	m.scale_max = 0.45
-	m.scale_curve = _grow(0.8, 2.2)
-	m.color_ramp = _fade(0.35)
+	m.scale_curve = Puffs.grow(0.8, 2.2)
+	m.color_ramp = Puffs.fade(0.35)
 	return m
