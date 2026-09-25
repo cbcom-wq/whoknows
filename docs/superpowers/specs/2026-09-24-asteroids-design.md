@@ -616,3 +616,50 @@ spacewalk bump shares momentum exactly (246 kg·m/s each way).
 **Cost.** A rubble cell's recipe takes about 0.6 ms (it looks for big rocks round it); the flight
 scene's first load takes about 0.8 s, against 0.6 s before. The unit suite takes about 97 s.
 
+---
+
+## 18. Amended 2026-09-24: big rocks up close
+
+The owner, after flying the groups: "Can we add more surface intrigue to the asteroids to show more
+shape and realism? Right now if you get up on it it is just a large flat surface with very little
+depth or distance perception." They chose big rocks fixed in place with their exact surface as
+collision, and approved the style-guide change (visual style guide §3.5).
+
+**Why it was flat.** A 320-triangle big rock of 400 m has faces tens of metres across, and the sun's
+shadows stopped at Godot's default of 100 m, so up close there was one plane and nothing on it.
+
+**In detail within 4 km** of an anchor (the hull, or you on a spacewalk), back to a picture past
+4.5 km (`AsteroidDetails`). `RockDetail` builds it on a worker from the rock's own seed:
+
+- the same cut sphere sampled at 5,120 triangles, cut again by 28 finer planes into ledges and
+  shelves (each taking up to a tenth off the surface);
+- 5–10 craters, a tenth to a quarter of the rock across, bowls with raised rims;
+- 40–120 boulders (2–15 m for a 400 m rock, scaled with it), a third sunk into the surface, solid;
+- scree: a pebble per 100 m² of surface (up to 8,000), 0.5–2.5 m, drawn only, fading out between
+  250 and 400 m;
+- shading by face, not by triangle: every triangle on one plane shares one of three shades of the
+  rock's colour; crater floors dark, rims light; scree darker still (`SpacePalette.SCREE`).
+
+Everything stays inside the rock's bounding radius, so nothing in its swarm overlaps it. The
+stones' MultiMesh buffers are packed on the worker, so putting a rock in never stalls a frame.
+
+**Fixed, solid as drawn.** In detail, a big rock is a `StaticBody3D` whose collision is its exact
+surface and its boulders (a `ConcavePolygonShape3D`, wound so the physics meets each face from
+outside, as the renderer does). The bubble no longer makes big rocks into bodies. Rubble and moons
+stay pushable.
+
+**Shadows reach 2 km** (`AsteroidStream.SHADOW_REACH`), so crater walls, ledges and stones throw
+shadows as you come in.
+
+**Live check,** windowed, real scene, a 321 m rock with 9 craters and 70 boulders:
+
+| Check | Result |
+|---|---|
+| Frames parked at 700 m, and low over the surface | mean 17 ms |
+| 20 km at boost across groups, up to 4 rocks in detail | 0 late cells; mean 16.7 ms, worst 16.7 ms |
+| The swap at 4 km | image change 0.0003, the same as an ordinary frame's (max 0.0007): unseen |
+| A spacewalker floating into the surface at 2 m/s | stops at it (0.00 m); the rock does not move |
+
+The flight scene's first load (the start's big rock is in detail before the first frame) takes
+about 0.9 s; the unit suite about 124 s.
+

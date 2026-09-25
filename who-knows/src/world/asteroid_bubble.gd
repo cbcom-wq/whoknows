@@ -87,6 +87,9 @@ func _near_paths() -> Dictionary:
 		var b := a + AsteroidStream.velocity_of(anchor) * LOOKAHEAD
 		var reach := PAD + float(anchor.get_meta(AsteroidStream.ANCHOR_RADIUS, 1.0))
 		for tier in AsteroidRecipe.TIERS:
+			# Big rocks are fixed; up close AsteroidDetails makes them solid.
+			if tier == AsteroidRecipe.Tier.GIANT:
+				continue
 			var grow := reach + AsteroidRecipe.BOUND * AsteroidRecipe.D_MAX[tier] * AsteroidRecipe.STRETCH_MAX
 			var box := AABB(a, Vector3.ZERO).expand(b).grow(grow)
 			for cell in stream.cells_in(tier, box):

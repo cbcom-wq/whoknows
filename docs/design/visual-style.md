@@ -277,7 +277,13 @@ the owner with that spec on 2026-09-24:
 
 - **Chunky and faceted, like everything else.** `RockMesh` cuts a sphere with a handful of seeded
   planes: big flat facets, flat-shaded, no texture. Two shapes per size tier (a rounded boulder, a
-  longer shard) and a veined one; detail rises with size, never past 320 triangles.
+  longer shard) and a veined one; detail rises with size, never past 320 triangles -- except:
+- **A big rock up close** (within 4 km; amended 2026-09-24 with the owner's approval, asteroids
+  spec §18) is drawn in detail, and the detail is all shape: about 5,000 triangles, cut again into
+  ledges and shelves, craters with rims, boulders and scree lying on it. Each face is shaded
+  whole, one of `SpacePalette.SHADES` -- crater floors dark, rims light, scree darker than the
+  ground -- never per triangle, so faces read as big flat pieces and never as noise. Still no
+  texture, normal map or noise. Scree fades out beyond 400 m so it never speckles from afar.
 - **Colour from `SpacePalette` only:** dusty, warm greys and browns (ash, umber, slate, rust,
   sand), one per rock, and the lavender crystal of a veined rock, the rock sample's own colour.
   No glow.

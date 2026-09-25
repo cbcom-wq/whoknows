@@ -23,6 +23,13 @@ const LOAD: Array[float] = [900.0, 5000.0, 30000.0]
 const UNLOAD: Array[float] = [1100.0, 5500.0, 35000.0]
 ## How far a camera outside must see: past the farthest fade.
 const VIEW_FAR := 30000.0
+## Pebbles on a big rock show only near, so from afar they never read as
+## specks: whole within PEBBLE_FADE_START, gone past PEBBLE_FADE_END.
+const PEBBLE_FADE_START := 250.0
+const PEBBLE_FADE_END := 400.0
+## How far the sun's shadows reach: far enough that craters, ledges and
+## boulders on a big rock throw shadows as you come in (§18).
+const SHADOW_REACH := 2000.0
 ## Boost: every tier loads at least a second ahead of it.
 const TOP_SPEED := 300.0
 ## Icosphere subdivisions per tier.
@@ -42,6 +49,8 @@ const _NO_SLOT := Transform3D(Basis(Vector3.ZERO, Vector3.ZERO, Vector3.ZERO), V
 var universe: Universe
 var recipe: AsteroidRecipe
 var bubble: AsteroidBubble
+## Big rocks within reach, in detail (§18).
+var details: AsteroidDetails
 ## Cells finished after their rocks could already have been seen. Stays 0.
 var late_cells := 0
 var late_by_tier: Array[int] = [0, 0, 0]
@@ -172,6 +181,12 @@ func _ready() -> void:
 	bodies.name = "Bodies"
 	add_child(bodies)
 	bubble = AsteroidBubble.new(self, bodies)
+	var near := Node3D.new()
+	near.name = "Details"
+	add_child(near)
+	details = AsteroidDetails.new(self, near)
+	# Everything the detail builders read on workers, built here first.
+	RockMesh.warm()
 
 ## Starts streaming around `u`'s focus, keeping `start_point`'s bubble clear
 ## (or none). Everything wanted now is loaded and drawn before this returns.
@@ -181,15 +196,22 @@ func start(u: Universe, start_point: UniversePoint = null) -> void:
 	recipe = AsteroidRecipe.new(seed, start_point)
 	_started = true
 	update(0.0, true)
+	# The big rock you start by is in detail before the first frame.
+	details.step()
+	details.finish()
+	details.step()
 
 func _exit_tree() -> void:
 	finish_jobs()
+	if details != null:
+		details.finish()
 	if bubble != null:
 		bubble.clear()
 
 func _process(delta: float) -> void:
 	if _started:
 		update(delta)
+		details.step()
 
 func _physics_process(delta: float) -> void:
 	if _started:
@@ -300,6 +322,15 @@ func rock_material(tier: int, colour: Color) -> StandardMaterial3D:
 		m.distance_fade_max_distance = FADE_START[tier]
 		_materials[key] = m
 	return _materials[key]
+
+## The pebbles' material: a rock material, fading out close in.
+func pebble_material() -> StandardMaterial3D:
+	if not _materials.has("pebbles"):
+		var m := rock_material(AsteroidRecipe.Tier.GIANT, SpacePalette.UNTINTED).duplicate() as StandardMaterial3D
+		m.distance_fade_min_distance = PEBBLE_FADE_END
+		m.distance_fade_max_distance = PEBBLE_FADE_START
+		_materials["pebbles"] = m
+	return _materials["pebbles"]
 
 ## Appends one instance to a MultiMesh buffer: the transform's rows, then the
 ## colour.
