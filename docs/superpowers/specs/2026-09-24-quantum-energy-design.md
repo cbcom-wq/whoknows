@@ -701,10 +701,16 @@ is vague far off and becomes a region you search close by.
   one up by id. `ShipSensors` (`Ship/Sensors`) gathers the contacts of every source it is given.
   The flight scene registers the field. The bridge computer's map reads the same contacts
   (bridge computer spec §4).
-- **Seated and on a spacewalk.** `SalvageMarker` is a `HudElement` using the airlock marker's
-  screen-edge logic (`VelocityMarker.resolve`), so a ping behind you pins to an edge the same way.
-  It reads the salvage contacts from the ship's sensors, never from the field directly. On foot
-  aboard, the HUD stays dark as now.
+- **Seated and on a spacewalk.** `SalvageMarker` is a `WorldMarker`: a `HudElement` using the
+  airlock marker's screen-edge logic (`VelocityMarker.resolve`), so a ping behind you pins to an
+  edge the same way. It reads the salvage contacts from the ship's sensors, never from the field
+  directly. On foot aboard, the HUD stays dark as now.
+- **Mounted per view** (bridge computer spec §8). Seated in the cockpit, the main camera is in
+  interior space, so a mark projected through it points nowhere. Like `VelocityMarker` and
+  `HeadingMarker`, `SalvageMarker` is mounted three times: in the canopy overlay with `CanopyCam`,
+  on the HUD screen with `ChaseCamera`, each shown while its camera is current; and on the HUD
+  screen with no camera of its own, shown only on a spacewalk (`has_beacon`), through the
+  viewport's camera, which is then outside.
 - **A glint:** every salvage item flashes a small warm glint for 0.15 s every 2–4 s, seeded, as if
   it caught the sun. It is an unshaded billboard quad in `InteriorPalette.LIGHT_WARM`, visible to
   about 50 m and fading out by 60 m. The quantum shard glows as well, on the glow batch.
@@ -898,7 +904,8 @@ src/world/
 src/sensors/
   contact.gd           Contact: one thing the ship knows about (pure)
   ship_sensors.gd      ShipSensors: the sources, a 4 Hz contacts cache
-src/ui/energy_panel.gd, src/ui/quantum_toast.gd, src/ui/salvage_marker.gd
+src/ui/energy_panel.gd, src/ui/quantum_toast.gd, src/ui/world_marker.gd,
+src/ui/salvage_marker.gd
 data/blocks/quantum_core.tres, quantum_machine.tres, quantum_cell.tres
            (reactor.tres and battery.tres removed)
 data/items/rock_chunk, ice_chunk, scrap_plate, wire_coil, broken_module, quantum_shard,

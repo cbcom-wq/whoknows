@@ -702,8 +702,8 @@ Measure frame time on a spacewalk in the near cloud.
 ### Task 10: Salvage at the groups, and finding it
 
 **Files:**
-- Create: `src/world/salvage_sense.gd`, `src/ui/salvage_marker.gd`, `src/sensors/contact.gd`,
-  `src/sensors/ship_sensors.gd`
+- Create: `src/world/salvage_sense.gd`, `src/ui/world_marker.gd`, `src/ui/salvage_marker.gd`,
+  `src/sensors/contact.gd`, `src/sensors/ship_sensors.gd`
 - Modify: `salvage_field.gd` (group clouds, `known_clouds`, contacts), `ship.gd` (creates
   `Ship/Sensors`), `flight_test.gd` (registers the field with the ship's sensors; the marker,
   created in code and bound to the sensors)
@@ -739,8 +739,20 @@ Measure frame time on a spacewalk in the near cloud.
 - **`ShipSensors` (`Node`, `Ship/Sensors`, created in code, lives across rebuilds):**
   `add_source(source)`; `contacts(range_m) -> Array[Contact]`, every source's contacts within
   range, nearest first, cached and refreshed at 4 Hz from the universe's focus. The course comes
-  with the bridge computer; leave it out here.
-- **`SalvageMarker` (`HudElement`):** `bind(sensors: ShipSensors)`. Each frame it takes the
+  with the bridge computer; leave it out here. The bridge computer plan builds on these names:
+  - `universe: Universe`, set by the flight scene;
+  - `time: float`, the time it last passed its sources;
+  - `refresh(time: float)`, which re-reads every source (its `_process` calls it at 4 Hz, and
+    tests call it directly);
+  - `focus_point() -> UniversePoint`, the universe's focus as a universe point;
+  - the sources kept in `_sources`.
+- **`WorldMarker` (`HudElement`):** the base of every HUD mark on a place in the world (bridge
+  computer spec §8). `@export var camera_path: NodePath`; `view_camera(telemetry) -> Camera3D`
+  returns the camera to project with this frame, or null to draw nothing:
+  - with a `camera_path`, that camera, while it is `current`;
+  - with none, the viewport's camera, only while `telemetry.has_beacon` (a spacewalk);
+  - null whenever `telemetry` is null.
+- **`SalvageMarker` (`WorldMarker`):** `bind(sensors: ShipSensors)`. Each frame it takes the
   nearest three salvage contacts and draws each: a ping as a soft chevron with *SALVAGE ~4 KM*, fading
   between refreshes; a region as a ring round the projected sphere with *SALVAGE 640 M*; nothing
   inside the region. Off-screen and behind-you readings pin to the edge through
@@ -754,6 +766,11 @@ Measure frame time on a spacewalk in the near cloud.
   prefix them with `salvage:`.
 - The ship knows nothing about salvage: the flight scene calls
   `ship.sensors.add_source(salvage_field)`.
+- **Mount `SalvageMarker` three times,** in code in `flight_test.gd`, each bound to the ship's
+  sensors: under `Ship/Canopy/CanopyOverlay` with `camera_path` to `CanopyCam`, registered with
+  `HudRoot.register_element` as the heading marker is; under `HudRoot/Screen` with `camera_path` to
+  `Ship/Exterior/ChaseCamera`; and under `HudRoot/Screen` with no camera, for a spacewalk. Set
+  `camera_path` before adding each to the tree.
 
 **Tests:**
 - the same seed gives the same group cloud; counts; distance from the surface;
@@ -770,6 +787,8 @@ Measure frame time on a spacewalk in the near cloud.
   it is emptied;
 - `ShipSensors` merges two sources nearest first and refreshes at 4 Hz;
 - the marker draws at most three, the nearest;
+- `WorldMarker.view_camera`: its camera only while current; with no camera, the viewport's only
+  on a spacewalk; nothing with null telemetry;
 - the marker draws a ping, a region and nothing, and pins to the edge;
 - **the floating origin:** with a group's cloud loaded, everything outside is covered, and a
   shift leaves the contacts unchanged.

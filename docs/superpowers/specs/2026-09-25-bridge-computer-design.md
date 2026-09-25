@@ -15,7 +15,7 @@ energy. It uses:
 It also builds on `main` at `7609d0f`: the floating origin, the asteroid groups and the flight
 controls.
 **Governed by:** `docs/design/visual-style.md`, and CLAUDE.md's floating-origin rule
-**Plan:** to be written, `docs/superpowers/plans/2026-09-25-bridge-computer.md`
+**Plan:** `docs/superpowers/plans/2026-09-25-bridge-computer.md`
 **Amends, once approved:**
 - quantum energy §10.4, §12, §14, §15 and §17, and its plan's Task 10 (§13 here);
 - the slice spec's §5 (the catalogue);
@@ -151,9 +151,11 @@ power (quantum spec §8.3).
 ### 3.4 The rim
 
 - **The screen** shows a title line and up to three lines, in `LIGHT_WARM` on the screen black, the
-  airlock panels' look (style guide §2.8).
-- **The buttons are `ReadoutPanel`s** (quantum spec §14.1): the big button with the screen, the other
-  four small, with no screen, like the machine's arrows.
+  airlock panels' look (style guide §2.8). It is the table's own `Label3D` on a black-glass slab, so
+  the table does not depend on how a `ReadoutPanel` lays out its screen.
+- **The five buttons are small `ReadoutPanel`s with no screen** (quantum spec §14.1), like the
+  machine's arrows, in a row beneath the screen. Each is lit `SIGNAL_GO` when it does something;
+  the big button is `AMBER` when it would clear the course.
 - **A button a page does not use is dark,** and its prompt is empty. The Interactor passes over it.
 - **Prompts:** *Next page*, *Range 10 km*, *Previous target*, *Next target*, *Set course* or *Clear
   course*.
@@ -263,7 +265,7 @@ and does the scaling and pinning.
 | Range | Big rocks | Salvage |
 |---|---|---|
 | **2 km** | To scale, as faceted glowing balls: a 600 m rock is 15 cm across; never smaller than 1 cm | Regions, as soft spheres 75 m in radius (1.9 cm) |
-| **10 km** | Dots sized by diameter, 0.8–2 cm | Pings, as dots at the pinged direction and distance, bright on each refresh and fading over the 4 s; regions where you are close enough |
+| **10 km** | Dots sized by diameter, 0.8–2 cm | Pings, as dots at the pinged direction and distance, full size on each refresh and shrinking to 40% over the 4 s (by scale: the glow material is shared, so one pip cannot fade on its own); regions where you are close enough |
 | **30 km** | Small uniform dots, 0.6 cm. There are a few hundred, which reads as the shape of the fields round you | None: beyond the salvage sensor's 10 km |
 
 - **Colours** (pinned at the renders): rocks `SKY`, salvage `QUANTUM`, your ship `LIGHT_WARM`, the
@@ -287,8 +289,8 @@ and does the scaling and pinning.
 
 ### 6.1 On the HUD
 
-- **`CourseMarker`** is a `HudElement` in `AMBER`, created in code as the reticle is. It shows while
-  you are seated or on a spacewalk, as the salvage marker does.
+- **`CourseMarker`** is a `WorldMarker` (§8) in `HudPalette.COURSE`, an amber, created in code. It
+  shows while you are seated or on a spacewalk, as the salvage marker does.
 - **It follows its contact's current reading:**
   - a big rock: a diamond on its centre, with *COURSE 3.2 KM*;
   - a salvage ping: an amber chevron in the ping's direction, with *COURSE ~4 KM*, refreshing as the
@@ -319,9 +321,10 @@ The HUD marker fades out over 0.5 s.
   type. The miniature is one `MultiMeshInstance3D` per block type **sharing those same `MultiMesh`
   resources**, not copies, under one scaled node in the holo:
   - on the interior render layer (2);
-  - with one material override: an unshaded `StandardMaterial3D` in `LIGHT_WARM` (pinned at the
-    renders), with a little emission for bloom. It is opaque, to keep clear of transparent
-    overdraw. It is an engine material, not a new shader (style guide §2.5).
+  - with one material override, `InteriorMaterials.holo()`: an unshaded `StandardMaterial3D` in
+    `LIGHT_WARM` (pinned at the renders). The glow shader would draw the hull's uncoloured meshes
+    white. It is opaque, to keep clear of transparent overdraw. It is an engine material, not a new
+    shader (style guide §2.5).
 - **Sized** so the hull's longest side is 0.8 m, and centred in the volume.
 - **It turns** slowly, at 10°/s, about its vertical.
 - **It follows rebuilds:** the ship rebinds the table after each rebuild, and the miniature takes the
@@ -341,7 +344,15 @@ The HUD marker fades out over 0.5 s.
 
 ## 8. HUD
 
-- **`CourseMarker`** (§6.1).
+- **`WorldMarker`** (built in quantum Task 10, §13): the base of every HUD mark on a place in the
+  world. Seated in the cockpit, the main camera is in interior space, so a mark projected through it
+  would point nowhere. Like `VelocityMarker` and `HeadingMarker`, each world mark is mounted per
+  view:
+  - in the canopy overlay, projected with `CanopyCam`, shown while that camera is current;
+  - on the HUD screen, projected with `ChaseCamera`, shown while that camera is current;
+  - on the HUD screen with no camera of its own, for a spacewalk: projected with the viewport's
+    camera, shown only while the telemetry is the suit's (`has_beacon`).
+- **`CourseMarker`** (§6.1), mounted three times.
 - **`SalvageMarker`** reads salvage contacts from the ship's sensors (§13), not from the salvage
   field, and skips the course's cloud.
 - **On foot aboard, the HUD stays dark,** as now. The table is the instrument there.
@@ -358,7 +369,7 @@ Every sound is a new `Synth` builder (style guide §2.9), heard through the Ship
 | `page` | a short soft blip | the table, on PAGE and RANGE |
 | `course_set` | two rising soft notes | the table |
 | `course_clear` | the same two notes, falling | the table |
-| `course_arrived` | a single soft chime | the Ship bus seated, the Suit bus on a spacewalk |
+| `course_arrived` | a single soft chime | played by the flight scene when the sensors report an arrival: on the Suit bus on a spacewalk, else the Ship bus |
 
 The buttons' own press sound is `ReadoutPanel`'s, as on the airlock and the machine.
 
@@ -401,6 +412,7 @@ src/sensors/
   contact.gd           Contact (pure)                                   (quantum Task 10)
   ship_sensors.gd      ShipSensors: sources, the cache, the course     (quantum Task 10; the course here)
   rock_contacts.gd     RockContacts: big rocks within 30 km (pure)
+  contact_text.gd      ContactText: "3.2 KM", "~4 KM", "640 M", "HERE" (pure)
 src/ship/computer/
   ship_computer.gd     ShipComputer: one table's parts, pages, page and range
   computer_page.gd     ComputerPage and ComputerContext
@@ -412,6 +424,11 @@ data/blocks/computer.tres
 ```
 
 **Modified:**
+- `interior_kit.gd`: `mesh(batch)`, one batch as a mesh with no node, for the holo's MultiMeshes;
+- `interior_materials.gd`: `holo()`, the miniature's material;
+- `readout_panel.gd`: `last_actor`, who pressed it, so the status page knows whose suit to show;
+- `hud_palette.gd`: `COURSE`;
+- `ship_sensors.gd`: the course, and arrival;
 - `interior_props.gd`: `holo_table` and its frames;
 - `interior_dressing.gd`: the fixture, and a `ShipComputer` for each;
 - `interior_layout.gd`: `QUIET_FIXTURES` gains `computer`;
@@ -427,8 +444,10 @@ data/blocks/computer.tres
 
 - **No new layers.** The table, its buttons and the holo are interior: render layer 2. The buttons
   are on physics layer 2 (`interior_geometry`), like the airlock panels.
-- **No new palette entries.** Rocks `SKY`, salvage `QUANTUM`, you and the miniature `LIGHT_WARM`,
-  selection and course `AMBER`, all pinned at the renders.
+- **One new palette entry: `HudPalette.COURSE`,** an amber, because HUD colours come only from
+  `HudPalette`. In the holo: rocks `SKY`, salvage `QUANTUM`, you and the miniature `LIGHT_WARM`,
+  selection and course `AMBER`, all pinned at the renders. Adding palette entries is not a rule
+  change.
 - **The shader set stays at three.**
 
 ---
@@ -518,6 +537,9 @@ Made in this spec's change, so quantum energy is built with them:
   course), and `SalvageField` becomes their first source through `contacts()` and `contact()`. The
   flight scene registers it. `SalvageMarker` reads the salvage contacts from the ship's sensors, the
   nearest three, and never asks the field directly. `known_clouds` stays as the field's own list.
+- **Also Task 10:** `WorldMarker` (§8 here), and `SalvageMarker` built on it and mounted three
+  times. As first written, the salvage marker projected through the viewport's camera, which is in
+  interior space whenever you sit in the cockpit.
 - **§12:** `SalvageMarker` binds to the ship's sensors.
 - **§14:** the sensors join the architecture and the files.
 - **§15:** tests for `ShipSensors` merging and caching, and the marker reading through it.

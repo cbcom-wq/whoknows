@@ -91,8 +91,10 @@ energy. A holo table at (−1, 0, −1) on the bridge:
 - a course to a big rock or salvage, which the HUD follows;
 - a status page with the ship in miniature.
 
-Spec `docs/superpowers/specs/2026-09-25-bridge-computer-design.md`. It amends quantum energy's
-Task 10 to build the ship's sensors. Its plan is not written yet.
+Spec `docs/superpowers/specs/2026-09-25-bridge-computer-design.md`, plan
+`docs/superpowers/plans/2026-09-25-bridge-computer.md` (seven tasks, after quantum energy). It
+amends quantum energy's Task 10 to build the ship's sensors and a `WorldMarker` base, mounted per
+view, which fixes a salvage marker that would have pointed nowhere from the cockpit.
 
 Spec `docs/superpowers/specs/2026-09-24-quantum-energy-design.md`, plan
 `docs/superpowers/plans/2026-09-24-quantum-energy.md`. Nothing is built.
