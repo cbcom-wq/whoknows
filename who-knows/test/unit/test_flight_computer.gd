@@ -146,3 +146,102 @@ func test_the_commanded_push_is_kept_in_hull_axes():
 	_fc.set_pilot_input(Vector3(1.0, 0.0, 0.0), Vector3.ZERO, false)
 	_fc._physics_process(1.0 / 60.0)
 	assert_almost_eq(_fc.commanded_force_local.x, _fc.thrust_budget[&"lateral"], 1.0)
+
+## Heading hold (flight controls spec §5.2).
+
+func test_a_target_above_asks_for_nose_up():
+	var rate := FlightComputer.heading_rate(Vector3(0.0, 0.5, -1.0), BUDGET, INERTIA)
+	assert_gt(rate.x, 0.0)
+	assert_almost_eq(rate.y, 0.0, 0.0001)
+	assert_eq(rate.z, 0.0, "roll stays with the pilot")
+
+func test_a_target_to_the_left_asks_for_yaw_left():
+	var rate := FlightComputer.heading_rate(Vector3(-0.5, 0.0, -1.0), BUDGET, INERTIA)
+	assert_gt(rate.y, 0.0)
+	assert_almost_eq(rate.x, 0.0, 0.0001)
+
+func test_below_and_right_are_the_other_ways():
+	assert_lt(FlightComputer.heading_rate(Vector3(0.0, -0.5, -1.0), BUDGET, INERTIA).x, 0.0)
+	assert_lt(FlightComputer.heading_rate(Vector3(0.5, 0.0, -1.0), BUDGET, INERTIA).y, 0.0)
+
+func test_on_target_asks_for_nothing():
+	assert_eq(FlightComputer.heading_rate(Vector3.FORWARD, BUDGET, INERTIA), Vector3.ZERO)
+
+func test_a_far_target_is_capped_at_the_turn_rate():
+	var rate := FlightComputer.heading_rate(Vector3.LEFT, BUDGET, INERTIA)
+	assert_almost_eq(rate.length(), FlightComputer.ASSIST_TURN_RATE, 0.0001)
+
+func test_dead_astern_pitches_round():
+	var rate := FlightComputer.heading_rate(Vector3.BACK, BUDGET, INERTIA)
+	assert_gt(absf(rate.x), 0.0)
+	assert_almost_eq(rate.y, 0.0, 0.0001)
+
+## Swings the shuttle's nose onto a target the way the hull would: the hold's
+## rate through attitude_torque, integrated at 60 Hz. Returns [seconds until
+## within 0.5 deg, worst error after that in degrees].
+func _swing(degrees: float) -> Array:
+	var target := Basis(Vector3(0.3, 1.0, 0.1).normalized(), deg_to_rad(degrees)) * Vector3.FORWARD
+	var basis := Basis.IDENTITY
+	var spin := Vector3.ZERO
+	var dt := 1.0 / 60.0
+	var reached_at := -1.0
+	var worst := 0.0
+	for i in 60 * 8:
+		var rate := FlightComputer.heading_rate(basis.inverse() * target, BUDGET, INERTIA)
+		var torque := _fc.attitude_torque(
+			Vector3(rate.x, rate.y, 0.0) / FlightComputer.ASSIST_TURN_RATE, spin)
+		spin += torque / INERTIA * dt
+		if not spin.is_zero_approx():
+			basis = (basis * Basis(spin.normalized(), spin.length() * dt)).orthonormalized()
+		var error := rad_to_deg((basis * Vector3.FORWARD).angle_to(target))
+		if reached_at < 0.0 and error < 0.5:
+			reached_at = i * dt
+		if reached_at >= 0.0:
+			worst = maxf(worst, error)
+	return [reached_at, worst]
+
+func test_the_hold_swings_on_without_overshooting():
+	# Simulated before this was written: HOLD_GAIN 3 overshot a 120 deg swing
+	# by 2.0 deg; 2 overshoots by at most 1.2 deg and settles in under 4 s.
+	for degrees in [30.0, 90.0, 170.0]:
+		var result := _swing(degrees)
+		assert_between(result[0], 0.0, 5.0, "%d deg reached within 5 s" % degrees)
+		assert_lt(result[1], 2.0, "%d deg never overshoots by 2 deg" % degrees)
+
+func test_a_heading_needs_assist():
+	_fc.assist_enabled = false
+	_fc.set_heading(Vector3.LEFT)
+	assert_false(_fc.heading_hold)
+
+func test_turning_assist_off_drops_the_heading():
+	_fc.set_heading(Vector3.LEFT)
+	assert_true(_fc.heading_hold)
+	_fc.assist_enabled = false
+	assert_false(_fc.heading_hold)
+
+func test_clearing_the_heading_hands_the_ship_back():
+	_fc.set_heading(Vector3.LEFT)
+	_fc.clear_heading()
+	assert_false(_fc.heading_hold)
+
+func test_holding_a_heading_to_the_left_yaws_left():
+	_fc.set_heading(Vector3.LEFT)
+	_fc._physics_process(1.0 / 60.0)
+	assert_gt(_fc.commanded_torque_local.y, 0.0)
+	assert_almost_eq(_fc.commanded_torque_local.x, 0.0, 1.0)
+
+func test_roll_stays_with_the_pilot_during_a_hold():
+	_fc.set_heading(Vector3.LEFT)
+	_fc.set_pilot_input(Vector3.ZERO, Vector3(0.0, 0.0, 1.0), false)
+	_fc._physics_process(1.0 / 60.0)
+	assert_gt(_fc.commanded_torque_local.z, 0.0)
+
+func test_the_telemetry_carries_the_hold_and_the_lock():
+	_fc.set_heading(Vector3.LEFT)
+	_hull.linear_velocity = Vector3(0.0, 0.0, -30.0)
+	_fc.toggle_speed_lock()
+	var t := _fc.build_telemetry()
+	assert_true(t.heading_hold)
+	assert_almost_eq(t.heading, Vector3.LEFT, Vector3.ONE * 0.0001)
+	assert_true(t.speed_locked)
+	assert_almost_eq(t.locked_speed, 30.0, 0.001)

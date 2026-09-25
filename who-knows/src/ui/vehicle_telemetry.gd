@@ -30,6 +30,22 @@ var hull_origin: Vector3 = Vector3.ZERO
 ## (airlock spec §8.3). Set after from_state(); the ship has none.
 var has_beacon: bool = false
 var beacon: Vector3 = Vector3.ZERO
+## What the flight computer is holding (flight controls spec §5.5). Set after
+## from_state(); off for anything that holds nothing, like the suit.
+var heading_hold: bool = false
+## World direction, unit length.
+var heading: Vector3 = Vector3.FORWARD
+var speed_locked: bool = false
+var locked_speed: float = 0.0
+## The pilot's hands (spec §7), set by PilotControls. The virtual stick's
+## offset from the centre of view, and the point-mode pointer's, both in
+## fractions of the viewport's height, +y down; the stick's full-deflection
+## radius and dead zone in the same units.
+var stick: Vector2 = Vector2.ZERO
+var stick_radius: float = 0.0
+var stick_deadzone: float = 0.0
+var pointing: bool = false
+var pointer: Vector2 = Vector2.ZERO
 
 ## Takes plain values rather than a body on purpose: it is the seam that lets
 ## every derivation here be tested headless, with no nodes and no physics

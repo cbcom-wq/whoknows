@@ -19,6 +19,13 @@ const ASSIST_TURN_RATE := deg_to_rad(60.0)
 ## How hard the assist chases the rate it was asked for, in 1/s. Doubles as
 ## the damping rate when the stick is centred and the target rate is zero.
 const RATE_GAIN := 4.0
+## Heading hold (spec §5.2): the share of the weaker turning axis's angular
+## acceleration it plans to brake with, leaving the rate loop some spare.
+const HOLD_BRAKE_SHARE := 0.6
+## Heading hold's turn rate per radian of error near the target, 1/s. It keeps
+## the braking curve from chattering at the end. Simulated on the shuttle, 3
+## overshot a 120 deg swing by 2.0 deg; 2 overshoots by at most 1.2 deg.
+const HOLD_GAIN := 2.0
 
 @export var hull_path: NodePath
 
@@ -28,6 +35,7 @@ var assist_enabled: bool = true:
 		assist_enabled = on
 		if not on:
 			speed_locked = false
+			heading_hold = false
 
 ## The speed lock (spec §5.3): a forward speed, m/s, that assist holds while W
 ## and S are released. Signed, so a backward drift locks backward.
@@ -36,6 +44,13 @@ var locked_speed := 0.0
 ## This tick's push, after boost and assist, in the hull's own axes, newtons.
 ## RcsShow reads it to show which thrusters are doing it.
 var commanded_force_local := Vector3.ZERO
+## Heading hold (spec §5.2): the world direction the nose is swung onto and
+## held on. A direction, not a position, so the floating origin never moves it.
+var heading_hold := false
+var heading := Vector3.FORWARD
+## This tick's twist, after clamping, in the hull's own axes, newton-metres.
+## RcsShow reads it.
+var commanded_torque_local := Vector3.ZERO
 
 ## Newtons available along each axis. Overwritten from ShipStats in Task 15.
 var thrust_budget: Dictionary = {
@@ -79,6 +94,17 @@ func toggle_speed_lock() -> void:
 ## Speed out of the nose, m/s: negative when drifting backward.
 func forward_speed() -> float:
 	return -(_hull.global_transform.basis.inverse() * _hull.linear_velocity).z
+
+## Swings the nose onto `direction` (world) and holds it there. Needs assist.
+func set_heading(direction: Vector3) -> void:
+	if not assist_enabled or direction.is_zero_approx():
+		return
+	heading = direction.normalized()
+	heading_hold = true
+
+## Hands pitch and yaw back to the pilot.
+func clear_heading() -> void:
+	heading_hold = false
 
 func _physics_process(delta: float) -> void:
 	_apply_translation(delta)
@@ -137,7 +163,13 @@ static func translation_force(local_velocity: Vector3, input: Vector3, mass: flo
 func _apply_rotation(_delta: float) -> void:
 	var basis := _hull.global_transform.basis
 	var local_spin := basis.inverse() * _hull.angular_velocity
-	_hull.apply_torque(basis * attitude_torque(_rotate_input, local_spin))
+	var rotate := _rotate_input
+	if heading_hold:
+		# The hold flies pitch and yaw as a stick would; roll stays the pilot's.
+		var rate := heading_rate(basis.inverse() * heading, torque_budget, inertia)
+		rotate = Vector3(rate.x / ASSIST_TURN_RATE, rate.y / ASSIST_TURN_RATE, _rotate_input.z)
+	commanded_torque_local = attitude_torque(rotate, local_spin)
+	_hull.apply_torque(basis * commanded_torque_local)
 
 ## Torque about the hull's own axes, in newton-metres.
 ##
@@ -166,12 +198,34 @@ func attitude_torque(rotate_input: Vector3, local_angular_velocity: Vector3) -> 
 		clampf(wanted.z, -torque_budget.z, torque_budget.z)
 	)
 
+## The (pitch, yaw) turn rate, rad/s, that swings the nose (-Z) onto
+## `target_local`, a direction in the hull's own axes (spec §5.2). Pure.
+##
+## The turn is about (-Z) x target, which never has a roll part, by the angle
+## between them. The rate is the fastest the RCS can still brake from in time
+## -- sqrt(2 * share * alpha * angle), alpha being the weaker of pitch and
+## yaw's torque over inertia -- capped at the ordinary turn rate, and linear
+## near the end so it settles instead of chattering. Dead astern, it pitches.
+static func heading_rate(target_local: Vector3, budget: Vector3, moment: Vector3) -> Vector3:
+	var target := target_local.normalized()
+	var angle := Vector3.FORWARD.angle_to(target)
+	if angle < 0.0001:
+		return Vector3.ZERO
+	var axis := Vector3.FORWARD.cross(target)
+	if axis.length() < 0.0001:
+		axis = Vector3.RIGHT
+	axis = Vector3(axis.x, axis.y, 0.0).normalized()
+	var alpha := minf(budget.x / maxf(moment.x, 1.0), budget.y / maxf(moment.y, 1.0))
+	var rate := minf(ASSIST_TURN_RATE,
+		minf(sqrt(2.0 * HOLD_BRAKE_SHARE * alpha * angle), HOLD_GAIN * angle))
+	return axis * rate
+
 ## The vehicle-facing half of the HUD contract. Any node with this method is
 ## a telemetry source as far as HudRoot is concerned -- there is no interface
 ## type and no base class to inherit, which is what lets a future ground
 ## vehicle or turret station light the same HUD.
 func build_telemetry() -> VehicleTelemetry:
-	return VehicleTelemetry.from_state(
+	var t := VehicleTelemetry.from_state(
 		_hull.global_transform.basis,
 		_hull.global_position,
 		_hull.linear_velocity,
@@ -180,3 +234,8 @@ func build_telemetry() -> VehicleTelemetry:
 		_boost,
 		CRUISE_LIMIT_MPS
 	)
+	t.heading_hold = heading_hold
+	t.heading = heading
+	t.speed_locked = speed_locked
+	t.locked_speed = locked_speed
+	return t
