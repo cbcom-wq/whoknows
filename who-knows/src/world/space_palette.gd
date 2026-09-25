@@ -17,3 +17,11 @@ const ROCKS: Array[Color] = [ASH, UMBER, SLATE, RUST, SAND]
 const CRYSTAL := InteriorPalette.LAVENDER
 ## No tint: white, so a veined rock's own vertex colours show.
 const UNTINTED := Color(1, 1, 1)
+## A big rock up close shades each facet one of these, so neighbouring
+## planes read apart in flat light (asteroids spec §18).
+const SHADES: Array[float] = [0.88, 1.0, 1.1]
+
+## `colour` in facet shade `k`.
+static func shade(colour: Color, k: int) -> Color:
+	var s := SHADES[k]
+	return Color(colour.r * s, colour.g * s, colour.b * s, colour.a)

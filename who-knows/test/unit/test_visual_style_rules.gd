@@ -36,6 +36,9 @@ const PAINTING_FILES := [
 	"res://src/world/asteroid_stream.gd",
 	"res://src/world/asteroid_bubble.gd",
 	"res://src/world/asteroid_body.gd",
+	"res://src/world/rock_detail.gd",
+	"res://src/world/asteroid_detail.gd",
+	"res://src/world/asteroid_details.gd",
 ]
 
 ## The reusable asset library and what it builds with. Ships are generated

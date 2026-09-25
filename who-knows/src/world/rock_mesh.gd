@@ -31,6 +31,41 @@ const _VEIN_WIDTH := 0.16
 static var _spheres := {}
 static var _meshes := {}
 static var _points := {}
+static var _planes := {}
+
+## Builds everything worker threads read -- each shape's cut planes and the
+## icospheres RockDetail uses -- so after this they only ever read.
+static func warm() -> void:
+	for shape in [Shape.BOULDER, Shape.SHARD, Shape.VEINED]:
+		_cuts(shape)
+	for detail in [0, 1, 2, RockDetail.DETAIL]:
+		_icosphere(detail)
+
+## How far out the shape's surface is along unit direction `d`, as a fraction
+## of the uncut sphere's radius, before the baked stretch.
+static func cut_radius(shape: int, d: Vector3) -> float:
+	var r := 1.0
+	for p: Vector4 in _cuts(shape):
+		var along := d.x * p.x + d.y * p.y + d.z * p.z
+		if along > 0.05:
+			r = minf(r, p.w / along)
+	return r
+
+## The stretch baked into a shape.
+static func stretch_of(shape: int) -> Vector3:
+	return _RECIPES[shape][4]
+
+## True for a face of a veined rock, facing `d`, that is crystal.
+static func in_vein(d: Vector3) -> bool:
+	return absf(d.dot(_VEIN_AXIS.normalized())) < _VEIN_WIDTH and d.x > -0.3
+
+## Unit directions and triangles of an icosahedron subdivided `detail` times.
+static func sphere(detail: int) -> Array:
+	return _icosphere(detail)
+
+## The shape's vertices at `detail`, diameter one, in icosphere order.
+static func cut_vertices(shape: int, detail: int) -> PackedVector3Array:
+	return _vertices(shape, detail)
 
 ## The shared mesh for `shape` at `detail` subdivisions (0: 20 triangles, 1:
 ## 80, 2: 320). Vertex colours are white, so a rock's instance colour tints it
@@ -59,7 +94,6 @@ static func _build(shape: int, detail: int) -> ArrayMesh:
 	var dirs: PackedVector3Array = sphere[0]
 	var faces: PackedInt32Array = sphere[1]
 	var verts := _vertices(shape, detail)
-	var vein := _VEIN_AXIS.normalized()
 	var positions := PackedVector3Array()
 	var normals := PackedVector3Array()
 	var colours := PackedColorArray()
@@ -78,8 +112,7 @@ static func _build(shape: int, detail: int) -> ArrayMesh:
 		var colour := SpacePalette.UNTINTED
 		if shape == Shape.VEINED:
 			var d := (dirs[faces[t]] + dirs[faces[t + 1]] + dirs[faces[t + 2]]).normalized()
-			var in_vein := absf(d.dot(vein)) < _VEIN_WIDTH and d.x > -0.3
-			colour = SpacePalette.CRYSTAL if in_vein else SpacePalette.ASH
+			colour = SpacePalette.CRYSTAL if in_vein(d) else SpacePalette.ASH
 		positions.append_array(PackedVector3Array([a, b, c]))
 		normals.append_array(PackedVector3Array([n, n, n]))
 		colours.append_array(PackedColorArray([colour, colour, colour]))
@@ -94,6 +127,18 @@ static func _build(shape: int, detail: int) -> ArrayMesh:
 
 ## Every icosphere vertex, pulled in to the shape's cut planes.
 static func _vertices(shape: int, detail: int) -> PackedVector3Array:
+	var stretch := stretch_of(shape)
+	var out := PackedVector3Array()
+	var dirs: PackedVector3Array = _icosphere(detail)[0]
+	for d in dirs:
+		out.append(d * cut_radius(shape, d) * 0.5 * stretch)
+	return out
+
+## The shape's seeded cut planes: normal, and distance as a fraction of the
+## radius.
+static func _cuts(shape: int) -> Array[Vector4]:
+	if _planes.has(shape):
+		return _planes[shape]
 	var recipe: Array = _RECIPES[shape]
 	var rng := RandomNumberGenerator.new()
 	rng.seed = recipe[0]
@@ -104,17 +149,8 @@ static func _vertices(shape: int, detail: int) -> PackedVector3Array:
 			continue
 		n = n.normalized()
 		planes.append(Vector4(n.x, n.y, n.z, rng.randf_range(recipe[2], recipe[3])))
-	var stretch: Vector3 = recipe[4]
-	var out := PackedVector3Array()
-	var dirs: PackedVector3Array = _icosphere(detail)[0]
-	for d in dirs:
-		var r := 1.0
-		for p in planes:
-			var along := d.x * p.x + d.y * p.y + d.z * p.z
-			if along > 0.05:
-				r = minf(r, p.w / along)
-		out.append(d * r * 0.5 * stretch)
-	return out
+	_planes[shape] = planes
+	return planes
 
 ## Unit directions and triangles of an icosahedron subdivided `detail` times.
 static func _icosphere(detail: int) -> Array:
