@@ -182,7 +182,8 @@ the RCS.
   `ω = min(ASSIST_TURN_RATE, √(2 · HOLD_BRAKE_SHARE · α · θ), HOLD_GAIN · θ)`.
   - α is the smaller of pitch and yaw's `torque_budget / inertia`.
   - `HOLD_BRAKE_SHARE` (0.6) leaves the rate loop some authority spare.
-  - The linear term (`HOLD_GAIN`, 3 /s) keeps the √ from chattering at the end.
+  - The linear term (`HOLD_GAIN`, 2 /s) keeps the √ from chattering at the end. Simulated on
+    the shuttle, 3 /s overshot a 120° swing by 2.0°; 2 /s overshoots by at most 1.2°.
 - That rate goes into `attitude_torque` as the pitch and yaw command, exactly as a stick would.
   Roll stays with the pilot.
 - A pure static `heading_rate(target_local, budget, inertia) -> Vector3` does this sum, so it is
@@ -247,7 +248,10 @@ Each tick, a **firing amount** in 0..1 for every block, from the flight computer
 - **How well it helps:** the angle between `u` and `k`. A block within 45° fires fully, one past
   70° not at all, with a smoothstep between. A block that would push against the command never
   fires.
-- **Rotation firing** = how hard × how well it helps.
+- **Rotation firing** = how hard × how well it helps. Only blocks that push across the hull
+  (their `f` has an x or y part) count, exactly the ones `ShipStats` sums into the torque
+  budget. The retro pair sits off the centreline and would otherwise light up for yaw, but the
+  budget never counts it, so it only fires to brake.
 - **Translation firing** is the same test on the push. `F` is measured against `lateral`
   (x), `vertical` (y) and `reverse` (+z), and only the RCS share of it counts: a forward push
   (−z) is the main engines', and no `rcs` block fires for it.
