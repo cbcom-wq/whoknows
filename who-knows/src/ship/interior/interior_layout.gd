@@ -49,11 +49,11 @@ const CANOPY_ID := &"canopy"
 const AIRLOCK_ID := &"airlock"
 ## The fixture the ship is flown from. A canopy face ahead of it becomes a pod.
 const HELM_ID := &"pilot_seat"
-## Fixtures that stand IN the bridge without spreading it (quantum energy
-## spec §6.1): unlike the helm, a quiet fixture's neighbours do not become
-## bridge/console/porthole-blocking on its account, and _zone() does not
-## treat it as a reason to call a neighbouring cell bridge. The fixture's
-## own cell is still a MOUNT for its own walls, which go plain (PANEL), or
+## Fixtures that stand IN the bridge without reshaping it (quantum energy
+## spec §6.1): unlike the helm, a quiet fixture does not turn its own cell,
+## or any neighbour's, into bridge zone or a console -- a zone is a floor
+## colour, and the starter's floors stay exactly as they were. Its own cell
+## is still a MOUNT for its own WALLS only, which go plain (PANEL), or
 ## PORTHOLE on a skin flank -- nothing else stands where it does.
 const QUIET_FIXTURES: Array[StringName] = [&"quantum_core", &"quantum_machine"]
 const _HORIZONTAL: Array[Vector3i] = [
@@ -199,13 +199,19 @@ static func _common_variant(grid: ShipGrid, coord: Vector3i, normal: Vector3i,
 		return WallVariant.PORTHOLE
 	return WallVariant.LOCKERS if face_hash(coord, normal) % 2 == 0 else WallVariant.DISPLAY
 
+## A zone is a floor colour (spec §6.1): a quiet fixture zones its own cell
+## as if it were deck (`_is_loud_mount`, not `_is_mount`), so its floor stays
+## exactly what it was. Only its walls still use the unfiltered MOUNT rule
+## (`_common_variant`'s `is_mount` parameter, computed with `_is_mount` in
+## `plan()`), so the fixture still gets plain walls, or a porthole on a skin
+## flank, and nothing else stands where it does.
 static func _zone(grid: ShipGrid, catalog: BlockCatalog, coord: Vector3i) -> StringName:
 	var id := _id_at(grid, coord)
 	if id == AIRLOCK_ID and AirlockSite.hatch_normal(grid, coord) != Vector3i.ZERO:
 		return AIRLOCK_ZONE
 	if ROOM_IDS.has(id):
 		return id
-	if _is_mount(grid, catalog, coord) or _has_mount_neighbour(grid, catalog, coord) \
+	if _is_loud_mount(grid, catalog, coord) or _has_mount_neighbour(grid, catalog, coord) \
 			or _has_canopy_neighbour(grid, coord):
 		return ZONE_BRIDGE
 	return ZONE_COMMON

@@ -36,14 +36,14 @@ func test_rooms_do_not_move_the_flight_balance():
 	assert_almost_eq(rooms.power_draw, plain.power_draw, 0.0001)
 
 ## Quantum energy spec §6.1: the core and the machine are fixtures like the
-## helm, but InteriorLayout.QUIET_FIXTURES keeps them from spreading bridge
-## zone, consoles or portholes to their neighbours the way an ordinary MOUNT
-## does. Pins "today's bridge" by comparing against a copy with both swapped
-## for plain deck, cell by cell and face by face, rather than hand-copying a
-## table -- the only two things that differ are on the machine's own cell,
-## which (like the helm's) counts as a MOUNT for itself no matter how quiet
-## it is (spec §6.1, "a fixture's own cell keeps plain walls"): its zone is
-## bridge, not common, and its wall to the galley goes plain.
+## helm, but InteriorLayout.QUIET_FIXTURES keeps them from reshaping the
+## bridge -- a zone is a floor colour, and neither fixture repaints its own
+## cell's floor or any neighbour's, or turns a neighbour into a console.
+## Pins "today's bridge" by comparing against a copy with both swapped for
+## plain deck, cell by cell and face by face, rather than hand-copying a
+## table -- the only thing that differs is the machine's own wall to the
+## galley, which its (unfiltered) MOUNT rule always keeps plain, same as the
+## helm's own walls (spec §6.1, "a fixture's own cell keeps plain walls").
 func test_the_quantum_fixtures_do_not_reshape_the_bridge():
 	var quiet := ShipGrid.new()
 	for coord in _grid.coords():
@@ -54,10 +54,6 @@ func test_the_quantum_fixtures_do_not_reshape_the_bridge():
 	var today := InteriorLayout.plan(quiet, _cat, DeckGraph.build(quiet, _cat).walkable_coords())
 	var now := InteriorLayout.plan(_grid, _cat, DeckGraph.build(_grid, _cat).walkable_coords())
 	for coord in today.walkable_coords():
-		if coord == Vector3i(1, 0, -1):
-			assert_eq(now.zone_at(coord), InteriorLayout.ZONE_BRIDGE,
-				"the machine's own cell is bridge, like any fixture's")
-			continue
 		assert_eq(now.zone_at(coord), today.zone_at(coord), "zone at %s" % coord)
 	var today_by_key := {}
 	for f in today.faces():
