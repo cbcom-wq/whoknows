@@ -1,4 +1,4 @@
-[gd_scene load_steps=27 format=3]
+[gd_scene load_steps=28 format=3]
 
 [ext_resource type="Script" path="res://src/ship/ship.gd" id="1_ship"]
 [ext_resource type="PackedScene" path="res://scenes/avatar.tscn" id="2_avatar"]
@@ -20,6 +20,7 @@
 [ext_resource type="Script" path="res://src/ui/airlock_marker.gd" id="19_airlock_marker"]
 [ext_resource type="Script" path="res://src/world/universe.gd" id="20_universe"]
 [ext_resource type="Script" path="res://src/world/asteroid_stream.gd" id="21_asteroid_stream"]
+[ext_resource type="Script" path="res://src/flight/pilot_controls.gd" id="22_pilot_controls"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_flighttest"]
 sky_top_color = Color(0.02, 0.02, 0.05, 1)
@@ -154,6 +155,13 @@ script = ExtResource("7_motion_coupling")
 hull_path = NodePath("../Exterior")
 avatar_path = NodePath("../Interior/Avatar")
 interior_builder_path = NodePath("../Interior/InteriorBuilder")
+
+[node name="PilotControls" type="Node" parent="Ship"]
+script = ExtResource("22_pilot_controls")
+flight_computer_path = NodePath("../FlightComputer")
+camera_director_path = NodePath("../CameraDirector")
+hull_path = NodePath("../Exterior")
+interior_path = NodePath("../Interior")
 
 [node name="Outside" type="Node3D" parent="."]
 

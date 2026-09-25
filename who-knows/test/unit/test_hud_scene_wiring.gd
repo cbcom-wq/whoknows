@@ -271,3 +271,18 @@ func test_the_canopy_view_can_include_the_own_hull():
 	assert_ne(cam.cull_mask & ExteriorBuilder.OWN_HULL_LAYER, 0)
 	assert_ne(cam.cull_mask & 1, 0, "and still the world")
 
+
+## Flight controls spec §3, §7: the pilot's controls, read back at runtime.
+func test_pilot_controls_survived_the_parse():
+	var pilot: PilotControls = _root.get_node_or_null("Ship/PilotControls")
+	assert_not_null(pilot, "PilotControls present")
+	for path in [pilot.flight_computer_path, pilot.camera_director_path, pilot.hull_path,
+			pilot.interior_path]:
+		assert_ne(path, NodePath(""), "no export was dropped")
+		assert_not_null(pilot.get_node_or_null(path), "%s resolves" % path)
+
+func test_sitting_down_hands_the_hud_to_the_pilot():
+	var director: CameraDirector = _root.get_node("Ship/CameraDirector")
+	var hud: HudRoot = _root.get_node("HudRoot")
+	director.sit(_root.get_node("Ship/Interior/PilotSeat"))
+	assert_same(hud._source, _root.get_node("Ship/PilotControls"))

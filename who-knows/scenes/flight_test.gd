@@ -14,6 +14,7 @@ extends Node3D
 @onready var _avatar: Avatar = $Ship/Interior/Avatar
 @onready var _universe: Universe = $Universe
 @onready var _stream: AsteroidStream = $AsteroidStream
+@onready var _pilot: PilotControls = $Ship/PilotControls
 
 var _reticle: Reticle
 var _interact_prompt := ""
@@ -336,8 +337,10 @@ func _wire_hud() -> void:
 	# §8.3): speed relative to the ship, and the way home.
 	_avatar.mode_changed.connect(_on_avatar_mode_changed)
 
+## The pilot's controls report the flight computer's telemetry plus the stick
+## and the pointer (flight controls spec §7).
 func _on_piloting_changed(piloting: bool) -> void:
-	_hud.set_active_vehicle(_ship.flight_computer if piloting else null)
+	_hud.set_active_vehicle(_pilot if piloting else null)
 
 func _on_avatar_mode_changed(mode: Avatar.Mode) -> void:
 	if mode == Avatar.Mode.SUIT:
