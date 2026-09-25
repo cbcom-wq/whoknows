@@ -34,6 +34,9 @@ var items: Node3D
 ## Every airlock that can cycle, by cell (airlock spec §4.5). Each outlives the
 ## rebuilds that replace the room it drives.
 var airlocks: Dictionary = {}   # Vector3i -> Airlock
+## The RCS thrusters you see and hear (flight controls spec §6). On the hull,
+## so the floating origin carries it.
+var rcs_show: RcsShow
 
 var _stocked := false
 var _airlocks_root: Node
@@ -77,6 +80,10 @@ func _ready() -> void:
 	_airlocks_root = Node.new()
 	_airlocks_root.name = "Airlocks"
 	add_child(_airlocks_root)
+	rcs_show = RcsShow.new()
+	rcs_show.name = "RcsShow"
+	exterior.add_child(rcs_show)
+	rcs_show.setup(flight_computer, interior)
 	AudioBuses.ensure()
 	Synth.warm_up()
 	_hum = AudioStreamPlayer.new()
@@ -177,6 +184,8 @@ func _rebuild_everything() -> void:
 		_stocked = true
 	stats = ShipStats.compute(grid, catalog)
 	_apply_stats()
+	if rcs_show != null:
+		rcs_show.rebuild(grid, catalog, stats.center_of_mass)
 	stats_changed.emit(stats)
 	_set_anchor_radius()
 

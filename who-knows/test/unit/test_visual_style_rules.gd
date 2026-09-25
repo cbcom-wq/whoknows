@@ -40,6 +40,7 @@ const PAINTING_FILES := [
 	"res://src/world/asteroid_detail.gd",
 	"res://src/world/asteroid_details.gd",
 	"res://src/world/puffs.gd",
+	"res://src/flight/rcs_show.gd",
 ]
 
 ## The reusable asset library and what it builds with. Ships are generated
