@@ -1,8 +1,9 @@
 # Flight controls — a stick you can hold, a heading you can click, thrusters you can see
 
 **Date:** 2026-09-25
-**Status:** Design approved section by section on 2026-09-24/25; this document awaits the owner's
-review before planning.
+**Status:** Design approved section by section on 2026-09-24/25; built on branch `flight-controls`
+on 2026-09-25 (plan: `docs/superpowers/plans/2026-09-25-flight-controls.md`). As built, and what
+the live check found, is recorded in §9.4. The owner has not yet flown it.
 **Depends on:** `main` at `f6171b0` (asteroid groups)
 **Governed by:** `docs/design/visual-style.md`
 **Amends:** slice spec §7.1 (the controls line); piloting HUD spec §7 (the velocity panel's
@@ -41,7 +42,7 @@ sounds.
 | How the mouse steers | **A virtual stick for flying by hand, and point-and-click for the computer** | The stick holds a steady turn without dragging. Clicking a point hands the turn to the flight computer. |
 | What a click does | **Face it and hold** | The computer swings the nose onto the direction and holds it. The throttle stays yours. Smallest and most predictable. An autopilot that flies you there is a later step. |
 | Speed | **Hold W to go, let go to brake, and a key to lock a speed** | Keeps the familiar model. The lock holds a speed until you unlock it. |
-| Drift | **Assist spends all the side thrust on drift** | After a turn, your travel swings onto the nose in seconds. |
+| Drift | **Assist spends all the side thrust on drift** | After a turn, your travel swings onto the nose as fast as the ship's side thrust allows. On the shuttle that is 5.4 m/s², so 100 m/s of sideways speed still takes about 18 s, down from about 30 (§9.4). |
 | How the puffs relate to the physics | **The puffs follow the flight computer (approach A)** | The physics is unchanged: one twist and one central push. Each RCS block puffs in proportion to how much it helps what was commanded. Per-thruster forces (B) and puff-by-axis (C) were rejected: B is a solver in the physics loop and can make lopsided blueprints unflyable; C puffs blocks that are not helping. |
 | Learning the keys | **A controls card on the HUD** | Open when you take the seat, H hides it. Built from the input map, so it never lists a stale key. |
 
@@ -284,8 +285,9 @@ trade (§2).
   and do not smear into a trail behind a fast ship. The emitters join `Universe.HOLDS_SHIFT`
   (CLAUDE.md, asteroids spec §4.3).
 - **Render layer 1**, not the own-hull layer. The canopy camera leaves the own-hull layer out,
-  so this is what lets **you see the nose thrusters puff through the canopy** from the seat. The
-  puffs are vapour outside the hull, not hull.
+  so this is what lets you see puffs through any window that has an RCS block in view. The puffs
+  are vapour outside the hull, not hull. On the starter shuttle every RCS block sits behind and
+  above the seat, so from the seat you hear them rather than see them (§9.4).
 - **The firing amount drives `amount_ratio`.** Below 0.05 the emitter stops.
 - **Budget:** at most 16 puffs alive per block. The shuttle has 8 `rcs` blocks, so no more than
   128 small puffs at once, all outside the ship. Transparent overdraw near the camera is the cost
@@ -414,6 +416,49 @@ Green tests prove structure, not feel. Before this is called done, fly the real 
    (style guide §2.6). Fewer or smaller puffs if not.
 8. Tune `STICK_RADIUS`, `STICK_DEADZONE`, the curve, `HOLD_BRAKE_SHARE` and `HOLD_GAIN` by
    flying, and record the final values here.
+
+### 9.4 As built (2026-09-25)
+
+Measured on the real renderer at 1280 × 720 by a scripted flight of the real scene (this machine,
+vsync off):
+
+| Check | Result |
+|---|---|
+| Arrow keys, steady yaw | 60.0°/s, the assist turn rate |
+| Stick held at 0.12 of the screen (asks 0.41), no mouse moving | 24.8°/s, steady |
+| Clicked heading | swung on and held, 0.00° off |
+| Heading hold, 120° swing | within 0.5° at 3.1 s, worst overshoot 1.21° (simulation said 1.2°) |
+| Speed lock at 100 m/s, then a 94° turn | travel not yet within 5° of the nose after 15 s, at 103 m/s |
+| Cockpit frame rate | 162 fps at rest; 172 fps with the RCS firing hard, worst frame 7.3 ms |
+| Chase frame rate, RCS firing | 568 fps, worst frame 4.4 ms |
+| RCS puff sounds | two players at −8 dB for a pitch aboard; silent in chase view |
+
+Final values:
+- `STICK_RADIUS`, `STICK_DEADZONE`, the curve, `HOLD_BRAKE_SHARE` and `HOLD_GAIN` are unchanged
+  from §4.1 and §5.2 until the owner flies them (§9.3 items 1 to 5 and 8).
+- Puffs are 0.7–1.0 m, growing from 0.6 to 2.2 times over their life. At the first size,
+  0.3–0.45 m, they read as threads from 20 m.
+- The point-mode hint sits on `HudPalette.BACKDROP`: bare, it landed on the cream canopy frame and
+  could not be read.
+
+What the check found:
+
+1. **§9.3 item 2 was wrong.** The shuttle's full side budget is 500 kN on 92.3 t, or 5.4 m/s², so
+   cancelling 100 m/s of sideways speed after a hard turn takes about 18 s. Before this work it
+   took about 30 s. That is the ship's physics; the controls cannot beat it. Faster alignment
+   needs more side thrust on the blueprint.
+2. **From the seat you cannot see the shuttle's puffs.** Every RCS block sits behind and above
+   the pilot's eye, out of the pod's view. The sound carries it aboard, and the chase view and
+   any outside view show it.
+3. **The shuttle's two nose yaw thrusters fire into their neighbours.** Each one's exhaust face,
+   at (±1, 1, −4), is flush against the pitch thruster at (±2, 1, −4). Their puffs start inside
+   that block and never show. The physics is unaffected. Moving them is a blueprint change
+   that would change the flight balance pinned in `flight_test.gd`, so it is left to the owner.
+   No validator rule catches a blocked exhaust yet.
+4. **`ControlsCard` keeps its open/hidden state in an instance variable, not a static.** A
+   `static var` on that script, which `flight_test.tscn` loads, made Godot 4.5.1 crash on exit
+   (0xC0000005) in every headless run of the scene. The card lives as long as the scene, so an
+   instance variable still remembers for the session.
 
 ---
 

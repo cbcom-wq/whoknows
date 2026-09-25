@@ -211,6 +211,10 @@ The bar reads amber above 90% of the ceiling. With assist off there is no cruise
 exceed the ceiling: the bar pins full and goes amber, which is honest and is exactly when the pilot
 should notice.
 
+Flight controls spec §8 adds a second line to the panel: `LOCK <speed> M/S` while the speed is
+locked and `HDG HOLD` while the flight computer holds a heading. The same spec adds the stick
+cursor, the heading marker (mounted twice, like the velocity marker) and the controls card.
+
 **AttitudePanel** — three centre-zero tracks for pitch, yaw and roll, scaled against a display
 maximum, plus a SETTLED indicator below a small threshold. This is what tells you whether
 `ROTATION_DAMPING` has actually finished settling the ship before you commit to a burn.

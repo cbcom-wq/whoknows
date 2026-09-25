@@ -233,7 +233,10 @@ Two modes on a toggle:
 - **Assist on (default)** — the flight computer counters drift, damps rotation, and holds a cruise ceiling. Forgiving and readable; the mode fights happen in.
 - **Assist off** — raw Newtonian. Kill the engines, spin 180°, and burn back the way you came while still travelling forward.
 
-Controls: `WASD` translate, mouse pitch/yaw, `Q`/`E` roll, `Shift`/`Ctrl` vertical, `Space` boost, `F` interact / leave seat, `Z` toggle assist, `V` cycle camera.
+Controls: `docs/superpowers/specs/2026-09-25-flight-controls-design.md` §4. `WASD` translate
+(let go to brake), `Shift`/`Ctrl` vertical, a virtual stick on the mouse and the arrow keys for
+pitch and yaw, `Q`/`E` roll, hold right mouse and click to set a heading, `C` speed lock,
+`Space` boost, `Z` assist, `F` leave seat, `V` camera, `H` controls card.
 
 ### 7.2 The four cameras
 
