@@ -63,6 +63,24 @@ func _run(scene: Node) -> void:
 		s.thrust_budget[&"reverse"] / 1000.0, s.thrust_budget[&"lateral"] / 1000.0,
 		s.thrust_budget[&"vertical"] / 1000.0])
 	print("torque  authority %s, imbalance under burn %s" % [s.torque_budget, s.torque_imbalance])
+	# The feel: assist is the same for every ship, so these decide how it flies.
+	var kg := maxf(s.total_mass_kg, 1.0)
+	var side: float = s.thrust_budget[&"lateral"] / kg
+	print("feel    turn accel rad/s2 pitch %.2f yaw %.2f roll %.2f" % [
+		s.torque_budget.x / maxf(s.inertia.x, 1.0), s.torque_budget.y / maxf(s.inertia.y, 1.0),
+		s.torque_budget.z / maxf(s.inertia.z, 1.0)])
+	print("feel    m/s2 side %.1f vert %.1f brake %.1f fwd %.1f; 100 m/s sideways gone in %.0f s" % [
+		side, s.thrust_budget[&"vertical"] / kg, s.thrust_budget[&"reverse"] / kg,
+		s.thrust_budget[&"forward"] / kg, 100.0 / maxf(side, 0.001)])
+	# An rcs block whose exhaust face touches another block puffs inside it.
+	var blocked := []
+	var rcs := RcsShow.gather(ship.grid, ship.catalog, s.center_of_mass)
+	for b in rcs:
+		var push: Vector3 = (b["force"] as Vector3).normalized().round()
+		if ship.grid.has_block(b["coord"] - Vector3i(push)):
+			blocked.append(b["coord"])
+	print("rcs     %d blocks%s" % [rcs.size(),
+		"" if blocked.is_empty() else ", exhaust BLOCKED at %s" % [blocked]])
 
 	var layout := ship.interior_builder.layout()
 	for room in layout.rooms():

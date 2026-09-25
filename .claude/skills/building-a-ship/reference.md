@@ -84,7 +84,27 @@ issues.
   - thrust 1500 forward, 500 reverse, 500 lateral and 1000 vertical kN;
   - authority (3.16, 2.08, 2.18) MN·m against an imbalance of (0.10, 0, 0) MN·m;
   - 36.0 MW made, 30.8 MW drawn.
-- **Handling:** measured under assist, 58°/s pitch and roll and 45°/s yaw.
+- **The starter's feel:**
+  - turn acceleration 1.74 / 0.79 / 2.05 rad/s² (pitch, yaw, roll);
+  - side 5.4, vertical 10.8, brake 5.4 and forward 16.3 m/s².
+- **Handling (flight controls, 2026-09-25):**
+  - arrow keys give a steady 60°/s;
+  - a clicked heading 120° away settles in 3.1 s, overshooting 1.2°;
+  - after a 94° turn at 100 m/s with the speed locked, travel was still not on the nose after
+    15 s.
+- **One quirk:** `lateral` and `vertical` sum every block's push along that axis **in both
+  directions**, unlike `torque_budget`. The starter's two nose lateral RCS (250 kN each, one per
+  side) count as 500 kN either way, and the flight computer spends that as a single central
+  force. Budgets, not individual thrusters, are what the physics uses.
+
+How `FlightComputer` spends the budgets (`src/flight/flight_computer.gd`):
+- **Turning:** `attitude_torque` chases a turn rate (`ASSIST_TURN_RATE`, 60°/s at full stick),
+  clamped to `torque_budget`.
+- **Heading hold:** `heading_rate` brakes on the weaker of pitch and yaw's `torque_budget /
+  inertia`.
+- **Translation:** `translation_force` cancels unwanted velocity with the **whole** `lateral` and
+  `vertical` budget (`DRIFT_AUTHORITY` = 1.0). Fore and aft, it catches up with `forward` (the main
+  engines) and slows with `reverse`, which also holds a speed lock.
 
 A test to pin a new ship. `_grid` comes from wherever the blueprint is built; see
 `test_starter_shuttle.gd` for how it gets `_starter_grid()`:
@@ -138,6 +158,30 @@ touches no nodes.
   - the avatar is a capsule of radius 0.35 m and height 1.8 m, with the eye at 1.6 m; a room
     needs an aisle ≥ 1.0 m.
 
+## Thrusters you see and hear (`RcsShow`, `src/flight/rcs_show.gd`)
+
+`Ship` builds one on the hull (`Ship/Exterior/RcsShow`) and rebuilds it with the stats, so any
+blueprint gets it for free.
+
+- **Which blocks:** every block with id `rcs` (`RcsShow.BLOCK_ID`). A new small-thruster block
+  type needs adding there. Main `thruster`s have no plume yet.
+- **Where it puffs:** the nozzle is the face opposite the push, `cell_center − f̂ × 1 m`. It is
+  one world-space `GPUParticles3D`:
+  - in `Universe.HOLDS_SHIFT`;
+  - on render layer 1, so windows show it;
+  - using the shared chunky `Puffs`, 0.7–1.0 m.
+
+  If the neighbouring cell on that face holds a block, the puffs start inside it and never show.
+- **Where it sounds:** one `AudioStreamPlayer3D` under `Ship/Interior` at
+  `cell_center + (0, storey_offset(y), 0)`, on the Ship bus. It is heard only while the camera is
+  aboard.
+- **How hard it fires:** each tick it takes the flight computer's commanded twist and push,
+  measured as shares of the budgets, and compares each block's own twist or push with them.
+  - Only blocks that push across the hull count for turning (as in `ShipStats`).
+  - Only aft pushes count for moving; forward is the main engines'.
+  - `firing_for` is pure, and `test_rcs_show.gd` pins which starter blocks light for each
+    command.
+
 ## Scene wiring (as in `flight_test.gd`)
 
 ```gdscript
@@ -152,6 +196,14 @@ $Ship/Interior/Avatar.position = Vector3(c.x, InteriorBuilder.floor_y(cell) + 0.
 A second ship in the same scene needs its own `interior_slot`. The exterior hull body is already
 in `Universe.EXTERIOR_SPACE` and `AsteroidStream.SPACE_ANCHOR`, because `Ship._ready` puts it
 there.
+
+A flyable ship also needs a `PilotControls` node under the ship, with the paths shown in
+`flight_test.tscn`. It listens to `CameraDirector.piloting_changed`. While you sit, the HUD's
+vehicle is that node, not the `FlightComputer`:
+
+```gdscript
+_hud.set_active_vehicle(_pilot if piloting else null)   # _pilot: $Ship/PilotControls
+```
 
 ## Commands
 
@@ -176,3 +228,5 @@ there.
 - `docs/superpowers/specs/2026-09-23-cockpit-pod-design.md`: the pod, the chair, standing up.
 - `docs/superpowers/specs/2026-09-24-airlock-design.md`: the airlock.
 - `docs/superpowers/specs/2026-09-24-asteroids-design.md` §4: the floating origin.
+- `docs/superpowers/specs/2026-09-25-flight-controls-design.md`: how the flight computer spends
+  the budgets, the RCS show, and (§9.4) what the starter's layout does to the feel.

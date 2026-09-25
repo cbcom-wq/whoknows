@@ -450,11 +450,17 @@ What the check found:
 2. **From the seat you cannot see the shuttle's puffs.** Every RCS block sits behind and above
    the pilot's eye, out of the pod's view. The sound carries it aboard, and the chase view and
    any outside view show it.
-3. **The shuttle's two nose yaw thrusters fire into their neighbours.** Each one's exhaust face,
-   at (±1, 1, −4), is flush against the pitch thruster at (±2, 1, −4). Their puffs start inside
-   that block and never show. The physics is unaffected. Moving them is a blueprint change
-   that would change the flight balance pinned in `flight_test.gd`, so it is left to the owner.
-   No validator rule catches a blocked exhaust yet.
+3. **Six of the shuttle's eight RCS blocks fire into a neighbour.** Found by the building-a-ship
+   probe, which flags an `rcs` block whose exhaust face (opposite its push) touches another
+   block. Only the pitch-down pair, which fires up into empty cells, shows fully:
+   - the yaw pair at (±1, 1, −4) fires into the pitch-down thrusters at (±2, 1, −4);
+   - the pitch-up pair at (±2, 1, −3) fires down into the hull wedges at (±2, 0, −3), and a
+     sliver shows under the hull;
+   - the retro pair at (±2, 1, −2) fires forward into the pitch-up thrusters.
+
+   Their puffs start inside those blocks. The physics is unaffected. Moving them is a blueprint
+   change that would change the flight balance pinned in `flight_test.gd`, so it is left to the
+   owner. No validator rule catches a blocked exhaust yet.
 4. **`ControlsCard` keeps its open/hidden state in an instance variable, not a static.** A
    `static var` on that script, which `flight_test.tscn` loads, made Godot 4.5.1 crash on exit
    (0xC0000005) in every headless run of the scene. The card lives as long as the scene, so an

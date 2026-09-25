@@ -19,6 +19,20 @@ guide records why each was rejected.
   Green tests prove structure, not looks.
 - **Changing a rule needs the owner's approval**, and the guide, code and tests change together.
 
+## Ship building: keep the `building-a-ship` skill current
+
+`.claude/skills/building-a-ship/` is how ships are built here; use it for any ship work. **When a
+ship-building design or implementation is finished, update the skill in the same branch before
+calling the work done.** That covers a blueprint, a block, anything that changes how a ship is
+laid out, flies, looks, sounds or is walked, or a system it has to fit (engine room, power,
+thrusters):
+- put new checks in its checklist;
+- put new lessons in *Mistakes already made*;
+- put new numbers and APIs in `reference.md`;
+- make anything checkable a line in `ship_probe.gd`.
+
+If a name in the skill no longer exists, fix the skill. The owner asked for this on 2026-09-25.
+
 ## Exterior space has a floating origin
 
 The outside world is re-centred on you every 2 km (`src/world/universe.gd`,
