@@ -65,22 +65,28 @@ Until these exist the player cannot build anything; they fly the one blueprint d
 
 Slice 1's Definition of Done (spec §14) is therefore **not met**.
 
-**Designed, awaiting the owner's review: quantum energy** (2026-09-24, revised 2026-09-25). It adds
-the ship's power source and the universe's currency:
+**Designed, awaiting the owner's review of the whole spec: quantum energy** (2026-09-24, revised
+twice on 2026-09-25). It adds the ship's power source and the universe's currency:
 - a quantum core at the centre of the bridge, and the quantum machine beside it;
 - converting objects to QE and making them back;
+- low power when the store runs low, and a pilot light when it is empty;
 - a suit cell;
-- salvage in space, gathered with a hose on the airlock.
+- salvage behind the stern and round every asteroid group, found with a HUD marker (a ping, then a
+  region) and gathered with a hose on the airlock.
 
 It retires `reactor` and `battery`. The ship keeps its size and no room moves.
 
-**Decided by the owner, 2026-09-25:**
-- the core is the reactor, weighs 5 t and stands at the bridge's centre;
-- the machine stands on the bridge and makes anything;
-- making costs twice what converting gives.
+**Every design question is decided** (spec §2.1). The last seven, on 2026-09-25:
+- flight is free; boost, making and the suit spend QE;
+- no reserve: below 10% of capacity the ship limps in low power, with half authority, no boost, no
+  making and emergency light; an empty store's pilot light refills it to 25;
+- the hose, the suit and salvage behind the stern as recommended, plus salvage at the groups;
+- QE's colour is chosen at the Task 3 renders.
 
-**Seven questions stay open** (spec §2.1): flight cost, what spends QE, the reserve, the hose,
-salvage, the suit and QE's colour.
+The spec is also brought up to date with the floating origin and the asteroids.
+
+**Next, its own spec:** a bridge computer with a map, which the owner wants for finding salvage
+and more.
 
 Spec `docs/superpowers/specs/2026-09-24-quantum-energy-design.md`, plan
 `docs/superpowers/plans/2026-09-24-quantum-energy.md`. Nothing is built.
