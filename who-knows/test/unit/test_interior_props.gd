@@ -318,6 +318,123 @@ func test_the_washstand_has_a_bracket_for_a_medkit():
 	_built_with_colliders(1)
 	_assert_spots_clear(InteriorProps.washstand_spots(), [&"tool"])
 
+## Quantum energy spec §6.2: the core, in a bare fixture frame -- origin on
+## the floor under it, -z the way it faces.
+func test_the_quantum_core_builds_in_a_bare_fixture_frame():
+	InteriorProps.quantum_core(_kit, Transform3D.IDENTITY, 0.5)
+	var names := _batch_names()
+	assert_has(names, "DressingSolid", "the plinth, the crown and the spine")
+	assert_has(names, "DressingGlass", "the column is glass")
+	assert_has(names, "DressingGlow", "the plinth's glowing base")
+	assert_eq(_colliders().size(), 1)
+
+func test_the_quantum_cores_collider_is_a_square_the_full_height():
+	InteriorProps.quantum_core(_kit, Transform3D.IDENTITY, 0.5)
+	var c: CollisionShape3D = _colliders()[0]
+	var size := (c.shape as BoxShape3D).size
+	assert_almost_eq(size, Vector3(1.1, InteriorProps.HEADROOM, 1.1), Vector3.ONE * 0.0001)
+	assert_almost_eq(c.position, Vector3(0, InteriorProps.HEADROOM * 0.5, 0), Vector3.ONE * 0.0001,
+		"centred in its frame, floor to ceiling")
+	assert_almost_eq(InteriorProps.QUANTUM_CORE_FOOTPRINT, 1.2, 0.0001)
+
+## Spec §6.1: the crown carries its cell's light, the same as a ring light's.
+func test_the_quantum_cores_crown_carries_the_cells_light():
+	InteriorProps.quantum_core(_kit, Transform3D.IDENTITY, 0.5)
+	var lights := _lights(InteriorProps.CELL_LIGHT_ROLE)
+	assert_eq(lights.size(), 1)
+	var l: OmniLight3D = lights[0]
+	assert_almost_eq(l.position, InteriorProps.quantum_core_crown_light(), Vector3.ONE * 0.0001)
+	assert_almost_eq(l.light_energy, InteriorProps.CELL_LIGHT_ENERGY, 0.0001)
+	assert_almost_eq(l.omni_range, InteriorProps.CELL_LIGHT_RANGE, 0.0001)
+	assert_eq(l.light_color, InteriorPalette.LIGHT_WARM)
+
+func test_a_ring_light_is_a_cell_light():
+	InteriorProps.ceiling_light(_kit, Vector3(0, 2.5, 0))
+	var l: OmniLight3D = _lights(InteriorProps.CELL_LIGHT_ROLE)[0]
+	assert_almost_eq(l.light_energy, InteriorProps.CELL_LIGHT_ENERGY, 0.0001)
+	assert_almost_eq(l.omni_range, InteriorProps.CELL_LIGHT_RANGE, 0.0001)
+
+## The crown hangs from the ceiling whatever the storey (style guide §3.2).
+func test_the_quantum_cores_crown_follows_the_headroom():
+	InteriorProps.quantum_core(_kit, Transform3D.IDENTITY, 0.5)
+	var top := -INF
+	for mi in _kit.commit():
+		top = maxf(top, mi.mesh.get_aabb().end.y)
+	assert_almost_eq(top, InteriorProps.HEADROOM, 0.001)
+
+## Its gauge runs up the spine on its facing side (-z), ten bars.
+func test_the_quantum_cores_gauge_is_ten_bars_up_its_facing_side():
+	var bars := InteriorProps.quantum_core_bars()
+	assert_eq(bars.size(), 10)
+	for i in bars.size():
+		var at := bars[i].origin
+		assert_lt(at.z, -0.4, "on the facing side")
+		assert_gt(Vector2(at.x, at.z).length(), InteriorProps.QUANTUM_CORE_GLASS * 0.5 / cos(PI / 8.0),
+			"outside the glass")
+		assert_lt(maxf(absf(at.x), absf(at.z)), InteriorProps.QUANTUM_CORE_COLLIDER * 0.5, "inside the collider")
+		assert_lt((bars[i].basis * Vector3.BACK).z, -0.8, "facing out, the way the core faces")
+		if i > 0:
+			assert_gt(bars[i].origin.y, bars[i - 1].origin.y, "bar %d above bar %d" % [i, i - 1])
+
+## Quantum energy spec §6.3: the machine, in a bare wall frame.
+func test_the_quantum_machine_builds_in_a_bare_wall_frame():
+	InteriorProps.quantum_machine(_kit, Transform3D.IDENTITY, 0.5)
+	_assert_built()
+	assert_eq(_colliders().size(), 4, "built round the bay: below, above and either side of it")
+	var lo := INF
+	var hi := -INF
+	for c in _colliders():
+		var half := (c.shape as BoxShape3D).size.x * 0.5
+		lo = minf(lo, c.position.x - half)
+		hi = maxf(hi, c.position.x + half)
+	assert_almost_eq(hi - lo, InteriorProps.QUANTUM_MACHINE_WIDTH, 0.001)
+	assert_almost_eq(InteriorProps.QUANTUM_MACHINE_WIDTH, 1.5, 0.0001)
+
+## The Interactor must reach what sits in the bay (style guide §3): the
+## largest thing it takes, 0.55 m on a side (spec §7.1), floats clear of
+## every collider.
+func test_the_bay_is_clear_of_the_machines_colliders():
+	InteriorProps.quantum_machine(_kit, Transform3D.IDENTITY, 0.5)
+	var bay := InteriorProps.quantum_machine_bay()
+	assert_gt(bay.origin.z, 0.0)
+	for c in _colliders():
+		var size := (c.shape as BoxShape3D).size
+		var gap: Vector3 = (c.position - bay.origin).abs() - (size + Vector3.ONE * 0.55) * 0.5
+		assert_true(gap.x >= 0.0 or gap.y >= 0.0 or gap.z >= 0.0,
+			"a 0.55 m item in the bay is clear of the collider at %s" % c.position)
+
+func test_the_machines_face_is_on_its_cabinet_front():
+	InteriorProps.quantum_machine(_kit, Transform3D.IDENTITY, 0.5)
+	var front := InteriorProps.QUANTUM_MACHINE_DEPTH
+	var bay := InteriorProps.quantum_machine_bay().origin
+	var buttons := InteriorProps.quantum_machine_buttons()
+	assert_eq(buttons.size(), 3, "prev, big, next")
+	for b in buttons:
+		assert_gt(b.origin.x, bay.x + 0.3, "in a column right of the bay")
+		assert_between(b.origin.z, front, front + 0.02, "on the cabinet's front")
+	assert_gt(buttons[0].origin.y, buttons[1].origin.y, "prev above the big button")
+	assert_gt(buttons[1].origin.y, buttons[2].origin.y, "the big button above next")
+	var screen := InteriorProps.quantum_machine_screen().origin
+	assert_almost_eq(screen.x, bay.x, 0.001, "the screen stands over the bay")
+	assert_gt(screen.y, bay.y + 0.3)
+	var plate := InteriorProps.quantum_machine_plate().origin
+	assert_almost_eq(plate.y, 1.2, 0.001)
+	assert_gt(plate.x, buttons[1].origin.x, "the plate at the right-hand end")
+
+func test_the_machines_conduit_leaves_its_top_and_rises_to_the_ceiling():
+	var path := InteriorProps.quantum_machine_conduit()
+	assert_eq(path.size(), 2)
+	assert_almost_eq(path[0].y, InteriorProps.QUANTUM_MACHINE_HEIGHT, 0.001, "out of the cabinet's top")
+	assert_almost_eq(path[1].y, InteriorProps.QUANTUM_CONDUIT_HEIGHT, 0.001)
+	assert_lt(InteriorProps.QUANTUM_CONDUIT_HEIGHT, InteriorProps.HEADROOM, "under the ceiling")
+	assert_almost_eq(Vector2(path[0].x, path[0].z), Vector2(path[1].x, path[1].z), Vector2.ONE * 0.001,
+		"straight up")
+
+func test_a_conduit_draws_along_its_path():
+	var path := PackedVector3Array([Vector3.ZERO, Vector3(0, 1, 0), Vector3(2, 1, 0)])
+	InteriorProps.conduit(_kit, path)
+	_built_with_colliders(0)
+
 func test_something_can_lie_on_the_lower_bunk():
 	for low_only in [true, false]:
 		var body := StaticBody3D.new()

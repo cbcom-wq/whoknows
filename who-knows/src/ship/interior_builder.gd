@@ -163,7 +163,6 @@ func fixture_positions() -> Array[Vector3]:
 		out.append(f.position)
 	return out
 
-## Every StowPoint the last rebuild() placed (hands-and-items spec §5).
 ## Every airlock room the last rebuild dressed (airlock spec §3).
 func airlock_rooms() -> Array[AirlockRoom]:
 	var out: Array[AirlockRoom] = []
@@ -173,6 +172,26 @@ func airlock_rooms() -> Array[AirlockRoom]:
 				out.append(node)
 	return out
 
+## Every quantum core the last rebuild dressed (quantum energy spec §6.4).
+func quantum_cores() -> Array[QuantumCore]:
+	var out: Array[QuantumCore] = []
+	if is_instance_valid(_physics_body):
+		for node in _physics_body.find_children("*", "Node3D", true, false):
+			if node is QuantumCore:
+				out.append(node)
+	return out
+
+## Every quantum machine the last rebuild dressed (quantum energy spec §6.4).
+func quantum_machines() -> Array[QuantumMachine]:
+	var out: Array[QuantumMachine] = []
+	if is_instance_valid(_physics_body):
+		for node in _physics_body.find_children("*", "Node3D", true, false):
+			if node is QuantumMachine:
+				out.append(node)
+	return out
+
+## Every StowPoint the last rebuild() placed (hands-and-items spec §5),
+## quantum bays included.
 func stow_points() -> Array[StowPoint]:
 	var out: Array[StowPoint] = []
 	if not is_instance_valid(_physics_body):

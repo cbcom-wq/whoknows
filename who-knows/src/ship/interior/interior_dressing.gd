@@ -7,6 +7,11 @@ extends RefCounted
 ## place that decides which prop goes where -- the props themselves never see
 ## a grid, which is what lets other generators reuse them.
 
+## The quantum fixtures (quantum energy spec §6): the core at the bridge's
+## centre and the machine against a wall.
+const QUANTUM_CORE_ID := &"quantum_core"
+const QUANTUM_MACHINE_ID := &"quantum_machine"
+
 ## Builds everything under one `Dressing` node inside `body`, so the builder's
 ## single remove_child() + free() clears it with the rest of the interior.
 static func build(layout: InteriorLayout, body: StaticBody3D, canopy_material: Material) -> Node3D:
@@ -14,16 +19,28 @@ static func build(layout: InteriorLayout, body: StaticBody3D, canopy_material: M
 	root.name = "Dressing"
 	body.add_child(root)
 	var kit := InteriorKit.new(root, body, portal_material(canopy_material))
+	# A core's cell takes no round ceiling light: its crown carries the cell's.
+	var core_cells := {}
+	for fixture in layout.fixtures():
+		if fixture["id"] == QUANTUM_CORE_ID:
+			core_cells[fixture["coord"]] = true
 	for face in layout.faces():
-		_dress(kit, face)
+		_dress(kit, face, core_cells)
 	for group in layout.canopy_groups():
 		var pods: Array = group["pods"]
 		if pods.is_empty():
 			_nose(kit, group, canopy_material)
 		else:
 			_cockpit(kit, group)
+	# Cores first: each machine's conduit runs to the nearest one.
+	var cores: Array[QuantumCore] = []
 	for fixture in layout.fixtures():
-		_fixture(kit, layout, fixture)
+		var core := _fixture(kit, layout, fixture)
+		if core != null:
+			cores.append(core)
+	for fixture in layout.fixtures():
+		if fixture["id"] == QUANTUM_MACHINE_ID:
+			_quantum_machine(kit, fixture, cores)
 	for site in layout.airlocks():
 		_airlock_room(kit, layout, site)
 	kit.commit()
@@ -32,7 +49,7 @@ static func build(layout: InteriorLayout, body: StaticBody3D, canopy_material: M
 ## Whether the dressing draws this MOUNT block itself, as a prop. The builder
 ## draws a block's own mesh only for the fixtures this leaves out.
 static func draws_fixture(id: StringName) -> bool:
-	return id == InteriorLayout.HELM_ID
+	return id == InteriorLayout.HELM_ID or id == QUANTUM_CORE_ID or id == QUANTUM_MACHINE_ID
 
 ## A fixture's frame (cockpit pod spec §5): origin on the floor under it, -z
 ## the way it faces, +y up. A helm with a pod ahead stands POD_SEAT_DEPTH
@@ -42,15 +59,19 @@ static func fixture_frame(layout: InteriorLayout, coord: Vector3i) -> Transform3
 	var facing := Vector3i(0, 0, -1)
 	for fixture in layout.fixtures():
 		if fixture["coord"] == coord:
-			facing = InteriorLayout.facing(fixture["orientation"])
-	if facing.y != 0:
-		facing = Vector3i(0, 0, -1)   # a fixture stands upright, whichever way its block points
+			facing = _upright_facing(fixture["orientation"])
 	for pod in layout.pods():
 		if pod["coord"] == coord:
 			return pod_frame(coord, pod["normal"]) * InteriorKit.at(Vector3(0, 0, -InteriorProps.POD_SEAT_DEPTH))
 	var origin := ShipGrid.cell_center(coord)
 	origin.y = floor_y(coord)
 	return Transform3D(Basis.looking_at(Vector3(facing), Vector3.UP), origin)
+
+## The horizontal way a fixture with this orientation faces: a fixture stands
+## upright, whichever way its block points.
+static func _upright_facing(orientation: int) -> Vector3i:
+	var facing := InteriorLayout.facing(orientation)
+	return Vector3i(0, 0, -1) if facing.y != 0 else facing
 
 ## A pod's frame, as InteriorProps.cockpit_pod expects it: origin at the floor
 ## centre of the canopy face it juts out through, on the canopy plane; -z out
@@ -125,19 +146,98 @@ static func _cockpit(kit: InteriorKit, group: Dictionary) -> void:
 			InteriorProps.shoulder(kit, wall_frame(coord, normal),
 				face_variety({"coord": coord, "normal": normal}))
 
-## The fixtures the dressing draws itself (draws_fixture), at their frames.
-static func _fixture(kit: InteriorKit, layout: InteriorLayout, fixture: Dictionary) -> void:
+## The fixtures the dressing draws at their fixture frames (draws_fixture):
+## the helm, and the quantum core, which it returns. Machines stand against a
+## wall instead, and are built after every core (_quantum_machine).
+static func _fixture(kit: InteriorKit, layout: InteriorLayout, fixture: Dictionary) -> QuantumCore:
 	var coord: Vector3i = fixture["coord"]
+	var variety := face_variety({"coord": coord, "normal": Vector3i.ZERO})
 	if fixture["id"] == InteriorLayout.HELM_ID:
-		InteriorProps.pilot_station(kit, fixture_frame(layout, coord),
-			face_variety({"coord": coord, "normal": Vector3i.ZERO}))
+		InteriorProps.pilot_station(kit, fixture_frame(layout, coord), variety)
+	elif fixture["id"] == QUANTUM_CORE_ID:
+		var f := fixture_frame(layout, coord)
+		InteriorProps.quantum_core(kit, f, variety)
+		var core := QuantumCore.new()
+		core.name = "QuantumCore_%d_%d_%d" % [coord.x, coord.y, coord.z]
+		core.setup(f, kit.layer)
+		kit.root.add_child(core)
+		return core
+	return null
 
-static func _dress(kit: InteriorKit, face: Dictionary) -> void:
+## One quantum machine (quantum energy spec §6.3-§6.4), in the frame of the
+## wall at its back -- the one its orientation turns away from: the cabinet,
+## and on a QuantumMachine its bay, its big button (whose lines show on the
+## screen over the bay), its two arrow buttons, its charge plate and the
+## conduit, up from its top and along the ceiling into the nearest core's
+## crown.
+static func _quantum_machine(kit: InteriorKit, fixture: Dictionary, cores: Array[QuantumCore]) -> QuantumMachine:
+	var coord: Vector3i = fixture["coord"]
+	var back := -_upright_facing(fixture["orientation"])
+	var f := wall_frame(coord, back)
+	InteriorProps.quantum_machine(kit, f, face_variety({"coord": coord, "normal": back}))
+	var machine := QuantumMachine.new()
+	machine.name = "QuantumMachine_%d_%d_%d" % [coord.x, coord.y, coord.z]
+	machine.cell = coord
+	kit.root.add_child(machine)
+
+	machine.bay = QuantumBay.new()
+	machine.bay.name = "QuantumBay"
+	machine.bay.transform = f * InteriorProps.quantum_machine_bay()
+	machine.add_child(machine.bay)
+	var frames := InteriorProps.quantum_machine_buttons()
+	machine.prev_button = _machine_button(machine, &"prev", f * frames[0], InteriorProps.QUANTUM_MACHINE_ARROW, kit.layer)
+	machine.panel = _machine_button(machine, &"big", f * frames[1], InteriorProps.QUANTUM_MACHINE_BUTTON, kit.layer)
+	machine.next_button = _machine_button(machine, &"next", f * frames[2], InteriorProps.QUANTUM_MACHINE_ARROW, kit.layer)
+	var screen := ReadoutPanel.make_readout(kit.layer)
+	screen.name = "Screen"
+	screen.pixel_size = InteriorProps.QUANTUM_MACHINE_SCREEN_PIXEL
+	screen.transform = f * InteriorProps.quantum_machine_screen() * InteriorKit.at(Vector3(0, 0, 0.002))
+	machine.add_child(screen)
+	machine.panel.readout = screen
+	machine.plate = ChargeDock.new()
+	machine.plate.setup(InteriorProps.QUANTUM_MACHINE_PLATE_RADIUS, InteriorKit.LAYER, kit.layer)
+	machine.plate.transform = f * InteriorProps.quantum_machine_plate()
+	machine.add_child(machine.plate)
+	# Dark until whoever runs the machine lights what can be used.
+	for button in [machine.prev_button, machine.panel, machine.next_button]:
+		button.set_readout(PackedStringArray(), &"")
+	machine.plate.set_lit(false)
+
+	var path := PackedVector3Array()
+	for p in InteriorProps.quantum_machine_conduit():
+		path.append(f * p)
+	var core := _nearest_core(cores, path[path.size() - 1])
+	if core != null:
+		path.append(core.crown())
+	machine.conduit_path = path
+	InteriorProps.conduit(kit, path)
+	return machine
+
+## A button on the machine: a ReadoutPanel on interior_geometry, like the
+## airlock's panels, with no screen of its own.
+static func _machine_button(machine: QuantumMachine, role: StringName, f: Transform3D, size: Vector3,
+		render_layer: int) -> ReadoutPanel:
+	var panel := ReadoutPanel.new()
+	panel.setup(role, InteriorKit.LAYER, render_layer, size, false)
+	panel.transform = f
+	machine.add_child(panel)
+	return panel
+
+static func _nearest_core(cores: Array[QuantumCore], from: Vector3) -> QuantumCore:
+	var best: QuantumCore = null
+	for core in cores:
+		if best == null or core.crown().distance_to(from) < best.crown().distance_to(from):
+			best = core
+	return best
+
+static func _dress(kit: InteriorKit, face: Dictionary, core_cells: Dictionary) -> void:
 	var coord: Vector3i = face["coord"]
 	if face["zone"] == InteriorLayout.AIRLOCK_ZONE and face["kind"] != InteriorLayout.Kind.DOORWAY:
 		return   # _airlock_room dresses the airlock's walls and ceiling
 	match face["kind"]:
 		InteriorLayout.Kind.CEILING:
+			if core_cells.has(coord):
+				return   # the core's crown carries this cell's light
 			var centre := ShipGrid.cell_center(coord)
 			centre.y = floor_y(coord) + InteriorProps.HEADROOM
 			InteriorProps.ceiling_light(kit, centre)

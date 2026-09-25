@@ -252,6 +252,130 @@ func test_the_dressing_draws_the_helm():
 	assert_true(InteriorDressing.draws_fixture(InteriorLayout.HELM_ID))
 	assert_false(InteriorDressing.draws_fixture(&"seat"))
 
+## Quantum energy spec §6: the core and the machine on the starter's bridge.
+func test_the_dressing_draws_the_quantum_fixtures():
+	assert_true(InteriorDressing.draws_fixture(&"quantum_core"))
+	assert_true(InteriorDressing.draws_fixture(&"quantum_machine"))
+
+const CORE_CELL := Vector3i(0, 0, -2)
+const MACHINE_CELL := Vector3i(1, 0, -1)
+
+func _starter() -> void:
+	_cat = BlockCatalog.load_from_dir("res://data/blocks")
+	var bootstrap: Node = load("res://scenes/flight_test.gd").new()
+	_grid = bootstrap._starter_grid()
+	bootstrap.free()
+	_builder.bind(_grid, _cat)
+	_builder.rebuild()
+
+func test_the_starter_has_one_quantum_core_and_one_machine_with_every_reference_set():
+	_starter()
+	_builder.rebuild()
+	var cores := _builder.quantum_cores()
+	var machines := _builder.quantum_machines()
+	assert_eq(cores.size(), 1, "one core, however many rebuilds")
+	assert_eq(machines.size(), 1)
+	assert_eq(_builder.fixture_count(), 0, "the dressing draws every fixture aboard; no block meshes")
+	var core: QuantumCore = cores[0]
+	assert_true(core.transform.is_equal_approx(InteriorDressing.fixture_frame(_builder.layout(), CORE_CELL)),
+		"the core stands at its fixture frame")
+	var m: QuantumMachine = machines[0]
+	assert_eq(m.cell, MACHINE_CELL)
+	assert_true(m.bay is QuantumBay)
+	assert_eq(m.bay.accepts, &"any")
+	assert_true(_builder.stow_points().has(m.bay), "the bay is a stow point like any other")
+	for pair in [[m.panel, &"big"], [m.prev_button, &"prev"], [m.next_button, &"next"]]:
+		var panel: ReadoutPanel = pair[0]
+		assert_not_null(panel)
+		assert_eq(panel.role, pair[1])
+		assert_eq(panel.collision_layer, InteriorKit.LAYER, "on interior_geometry, like the airlock panels")
+		assert_true(panel.is_inside_tree())
+	assert_not_null(m.panel.readout, "the big button's lines show on the screen over the bay")
+	assert_null(m.prev_button.readout)
+	assert_null(m.next_button.readout)
+	for panel in [m.panel, m.prev_button, m.next_button]:
+		assert_eq(panel.button_state(), &"", "dark until whoever runs the machine lights it")
+	assert_true(m.plate is ChargeDock)
+	assert_false(m.plate.is_lit())
+	assert_true(m.plate.is_in_group("interactable"))
+	assert_eq(m.plate.collision_layer, InteriorKit.LAYER)
+	assert_gt(m.conduit_path.size(), 2)
+
+## Spec §6.1: the machine builds in the frame of the wall at its back -- the
+## galley's partition, (1, 0, -1)'s +Z wall.
+func test_the_machine_stands_against_the_wall_at_its_back():
+	_starter()
+	var m: QuantumMachine = _builder.quantum_machines()[0]
+	var f := InteriorDressing.wall_frame(MACHINE_CELL, Vector3i(0, 0, 1))
+	assert_true(m.bay.transform.is_equal_approx(f * InteriorProps.quantum_machine_bay()))
+	var buttons := InteriorProps.quantum_machine_buttons()
+	assert_true(m.prev_button.transform.is_equal_approx(f * buttons[0]))
+	assert_true(m.panel.transform.is_equal_approx(f * buttons[1]))
+	assert_true(m.next_button.transform.is_equal_approx(f * buttons[2]))
+	assert_true(m.plate.transform.is_equal_approx(f * InteriorProps.quantum_machine_plate()))
+	assert_almost_eq(m.panel.readout.global_position,
+		(f * InteriorProps.quantum_machine_screen()).origin, Vector3.ONE * 0.01)
+
+func test_the_conduit_runs_from_the_machine_along_the_ceiling_to_the_cores_crown():
+	_starter()
+	var m: QuantumMachine = _builder.quantum_machines()[0]
+	var core: QuantumCore = _builder.quantum_cores()[0]
+	var f := InteriorDressing.wall_frame(MACHINE_CELL, Vector3i(0, 0, 1))
+	var own := InteriorProps.quantum_machine_conduit()
+	var path := m.conduit_path
+	assert_almost_eq(path[0], f * own[0], Vector3.ONE * 0.0001, "out of the cabinet's top")
+	assert_almost_eq(path[1], f * own[1], Vector3.ONE * 0.0001, "up to the ceiling")
+	assert_almost_eq(path[path.size() - 1], core.crown(), Vector3.ONE * 0.0001, "into the core's crown")
+	var run := InteriorBuilder.floor_y(MACHINE_CELL) + InteriorProps.QUANTUM_CONDUIT_HEIGHT
+	for i in range(1, path.size()):
+		assert_almost_eq(path[i].y, run, 0.0001, "point %d is along the ceiling" % i)
+
+func _cell_lights(coord: Vector3i) -> Array:
+	var centre := ShipGrid.cell_center(coord)
+	return _lights().filter(func(l):
+		var role: StringName = l.get_meta(&"role", &"")
+		return (role == InteriorProps.CELL_LIGHT_ROLE or role == &"airlock") \
+			and absf(l.global_position.x - centre.x) < ShipGrid.CELL_SIZE * 0.5 \
+			and absf(l.global_position.z - centre.z) < ShipGrid.CELL_SIZE * 0.5)
+
+## Spec §6.1: the core takes the place of its cell's round ceiling light, and
+## its crown carries that cell's light.
+func test_the_core_cell_has_no_ring_light_and_exactly_one_cell_light():
+	_starter()
+	var lights := _cell_lights(CORE_CELL)
+	assert_eq(lights.size(), 1)
+	var at := InteriorDressing.fixture_frame(_builder.layout(), CORE_CELL) * InteriorProps.quantum_core_crown_light()
+	assert_almost_eq(lights[0].global_position, at, Vector3.ONE * 0.0001, "the crown's, not a ring light's")
+
+func test_every_walkable_cell_of_the_starter_still_has_one_cell_light():
+	_starter()
+	for coord in _builder.walkable_coords():
+		assert_eq(_cell_lights(coord).size(), 1, "%s has one light of its own" % coord)
+
+## The bay's own rules (value, size, mass) come in Task 6; for now it takes
+## any item, floating at its centre (spec §6.3).
+func test_the_bay_takes_any_item_and_holds_it_at_its_centre():
+	_starter()
+	var bay: QuantumBay = _builder.quantum_machines()[0].bay
+	var item := Item.new()
+	item.setup(ItemCatalog.load_from_dir().get_def(&"crate"))
+	add_child_autofree(item)
+	assert_true(bay.fits(item))
+	bay.secure(item)
+	assert_almost_eq(item.global_position, bay.global_position, Vector3.ONE * 0.0001)
+	assert_false(bay.fits(item), "one at a time")
+
+func test_a_machine_with_no_core_still_builds_its_own_conduit():
+	_cat.register(_def(&"quantum_machine", BlockDefinition.Occupancy.MOUNT))
+	_put(Vector3i(0, 0, 0), &"deck")
+	_put(Vector3i(0, 0, 1), &"quantum_machine")
+	_put(Vector3i(0, 0, 2), &"hull")
+	_builder.rebuild()
+	var machines := _builder.quantum_machines()
+	assert_eq(machines.size(), 1)
+	assert_eq(machines[0].conduit_path.size(), 2, "out of the top and up, with nowhere to run to")
+	assert_eq(_builder.quantum_cores().size(), 0)
+
 ## Airlock spec §3: the airlock room, its two hatches and its panels.
 func _airlock_off_a_corridor() -> void:
 	_cat.register(_def(&"airlock", BlockDefinition.Occupancy.DECK))
