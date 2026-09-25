@@ -207,9 +207,9 @@ static func _process_material() -> ParticleProcessMaterial:
 	m.damping_max = 9.0
 	m.gravity = Vector3.ZERO
 	m.inherit_velocity_ratio = 1.0
-	m.scale_min = 0.3
-	m.scale_max = 0.45
-	m.scale_curve = Puffs.grow(0.7, 2.2)
+	m.scale_min = 0.7
+	m.scale_max = 1.0
+	m.scale_curve = Puffs.grow(0.6, 2.2)
 	m.color_ramp = Puffs.fade(0.7)
 	m.angle_min = 0.0
 	m.angle_max = 360.0

@@ -30,6 +30,12 @@ func _ready() -> void:
 	hint.text = HINT
 	hint.add_theme_font_size_override("font_size", 12)
 	hint.add_theme_color_override("font_color", HudPalette.READOUT)
+	# On the band's own dark ground: bare, it sat on the cream canopy frame and
+	# could not be read.
+	var ground := StyleBoxFlat.new()
+	ground.bg_color = HudPalette.BACKDROP
+	ground.set_content_margin_all(6.0)
+	hint.add_theme_stylebox_override("normal", ground)
 	hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hint.visible = false
 	add_child(hint)

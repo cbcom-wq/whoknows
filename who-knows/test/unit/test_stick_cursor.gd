@@ -49,3 +49,11 @@ func test_it_ignores_the_mouse():
 	var c := _cursor()
 	assert_eq(c.mouse_filter, Control.MOUSE_FILTER_IGNORE)
 	assert_eq(c.hint.mouse_filter, Control.MOUSE_FILTER_IGNORE)
+
+## Rendered, the bare hint sat on the cream canopy frame and could not be read:
+## it carries the HUD band's dark backdrop so it reads over anything.
+func test_the_hint_sits_on_the_hud_backdrop():
+	var c := _cursor()
+	var box := c.hint.get_theme_stylebox("normal") as StyleBoxFlat
+	assert_not_null(box)
+	assert_eq(box.bg_color, HudPalette.BACKDROP)
