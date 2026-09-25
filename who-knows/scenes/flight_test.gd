@@ -159,10 +159,16 @@ func _starter_grid() -> ShipGrid:
 	for z in [-2, -1, 0, 1, 2]:
 		_put(g, Vector3i(-2, 0, z), &"hull")
 		_put(g, Vector3i(2, 0, z), &"hull")
-	for x in [-1, 0, 1]:
-		_put(g, Vector3i(x, 0, -2), &"deck")
-	for x in [-1, 0, 1]:
-		_put(g, Vector3i(x, 0, -1), &"deck")
+	# The quantum core stands at the bridge's centre, straight behind the
+	# helm, facing aft so its gauge faces the corridor (quantum energy spec
+	# §5.3); the quantum machine stands in the bridge's starboard back
+	# corner, facing forward with its back to the galley's wall.
+	_put(g, Vector3i(-1, 0, -2), &"deck")
+	_put(g, Vector3i(0, 0, -2), &"quantum_core", O_STERN)
+	_put(g, Vector3i(1, 0, -2), &"deck")
+	_put(g, Vector3i(-1, 0, -1), &"deck")
+	_put(g, Vector3i(0, 0, -1), &"deck")
+	_put(g, Vector3i(1, 0, -1), &"quantum_machine", O_FORWARD)
 	# Behind the bridge, a corridor down the centreline with rooms either side
 	# (interior redesign spec §7.5). Room blocks weigh and draw what deck
 	# does, so the flight balance measured below is unchanged.
@@ -200,12 +206,14 @@ func _starter_grid() -> ShipGrid:
 	_put(g, Vector3i(0, 1, -1), &"core")
 	for x in [-2, 2]:
 		_put(g, Vector3i(x, 1, 0), &"hull")
-	# Reactor row: spec §3.2 places two (x=-1,+1). A third, centred at
+	# Quantum cell row: spec §3.2 places two (x=-1,+1). A third, centred at
 	# x=0, was added here -- see the block below on power and pitch
-	# balance for why.
-	_put(g, Vector3i(-1, 1, 0), &"reactor")
-	_put(g, Vector3i(0, 1, 0), &"reactor")
-	_put(g, Vector3i(1, 1, 0), &"reactor")
+	# balance for why. These three were reactors; the quantum core now
+	# generates the ship's power, and the cells keep their mass and hp,
+	# storing QE instead (quantum energy spec §5.1, §5.3).
+	_put(g, Vector3i(-1, 1, 0), &"quantum_cell")
+	_put(g, Vector3i(0, 1, 0), &"quantum_cell")
+	_put(g, Vector3i(1, 1, 0), &"quantum_cell")
 	for x in [-2, 2]:
 		_put(g, Vector3i(x, 1, 1), &"hull")
 	_put(g, Vector3i(0, 1, 1), &"hull")
@@ -262,24 +270,41 @@ func _starter_grid() -> ShipGrid:
 	#    this; the stern roof's three hull cells became a second thruster
 	#    bank instead (thrust higher, closer to the mass-weighted centre),
 	#    which alone brought it to -14,371 N*m. The nose RCS trim the
-	#    remainder: the grid now sits at +101,408 N*m, 3% of its own pitch
-	#    authority, so the assist holds the nose through a full burn.
+	#    remainder: the grid then sat at +101,408 N*m, 3% of its own pitch
+	#    authority, so the assist held the nose through a full burn.
+	#
+	# 2b. The quantum core (quantum energy spec §5.1, §5.3, §5.4), added at
+	#    y=0 in the cabin itself rather than on the equipment deck, brings
+	#    the imbalance closer to zero rather than adding to it. Its 5 t sit
+	#    at cabin level, pulling the centre of mass down from 1.268 m to
+	#    1.206 m -- almost exactly the 1.2 m average height of the ship's
+	#    thrust (two nose pods at 0 m, three stern thrusters at 2 m). A full
+	#    burn now barely pitches the ship at all: torque_imbalance.x falls
+	#    from 101,408 to 9,278 N*m, well under 1% of pitch authority. The
+	#    quantum machine, standing starboard against the galley's wall,
+	#    introduces the only yaw imbalance the starter has: 3,093 N*m,
+	#    0.15% of yaw authority -- still negligible.
 	#
 	# 3. Power margin. The extra stern thrusters draw 9.0 MW more than
 	#    §3.4's two-reactor estimate covers (that estimate assumed four
-	#    thrusters total, not five). A third reactor restores comfortable
-	#    margin: 36.0 MW generated against 30.8 MW drawn.
+	#    thrusters total, not five). Three reactors restored comfortable
+	#    margin; the quantum core now generates all 36 MW of it alone, and
+	#    the quantum machine's own draw (0.5 MW) is the only change to the
+	#    load side.
 	#
 	# Real numbers for this exact grid (via ShipStats/ShipValidator,
-	# res://data/blocks catalog): 84 blocks, 92,300 kg, center_of_mass =
-	# (0, 1.268, 0.325), inertia = (1.82, 2.65, 1.06) million kg*m²,
-	# torque_budget = (3162514, 2081257, 2183099), torque_imbalance =
-	# (101408, 0, 0), thrust_budget forward/reverse/lateral/vertical =
-	# 1500/500/500/1000 kN, power_gen = 36.0 MW, power_draw = 30.8 MW,
-	# zero validation issues, can_launch = true. Measured handling under
-	# assist: 58 deg/s pitch and roll, 45 deg/s yaw, each reached within a
-	# second of full stick. See task-15-report.md for the original
-	# derivation.
+	# res://data/blocks catalog), with the quantum core and machine aboard
+	# and the reactors replaced by quantum cells (quantum energy spec §5.4):
+	# 84 blocks, 97,000 kg, center_of_mass = (0.002, 1.206, 0.118),
+	# inertia = (1.91, 2.74, 1.07) million kg*m², torque_budget =
+	# (3058763, 2029382, 2198454), torque_imbalance = (9278, -3093, 0),
+	# thrust_budget forward/reverse/lateral/vertical = 1500/500/500/1000 kN,
+	# power_gen = 36.0 MW (all from the quantum core), power_draw = 31.1 MW,
+	# quantum_capacity = 1200 QE, zero validation issues, can_launch = true.
+	# Handling under assist is essentially unchanged from the pre-quantum
+	# grid (see task-1-report.md): pitch and roll assist still reach their
+	# target rates within about a second, and a full burn barely pitches the
+	# ship. See task-15-report.md for the original pre-quantum derivation.
 	_put(g, Vector3i(-1, 1, -4), &"rcs", O_RCS_STARBOARD)
 	_put(g, Vector3i(1, 1, -4), &"rcs", O_RCS_PORT)
 	_put(g, Vector3i(-2, 1, -3), &"rcs", O_RCS_UP)

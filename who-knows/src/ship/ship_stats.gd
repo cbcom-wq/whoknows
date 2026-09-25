@@ -28,6 +28,8 @@ var torque_budget: Vector3 = Vector3.ZERO
 var torque_imbalance: Vector3 = Vector3.ZERO
 var power_gen: float = 0.0
 var power_draw: float = 0.0
+## QE the ship's quantum cells can hold, summed like power.
+var quantum_capacity: int = 0
 
 static func compute(grid: ShipGrid, catalog: BlockCatalog) -> ShipStats:
 	var s := ShipStats.new()
@@ -36,6 +38,7 @@ static func compute(grid: ShipGrid, catalog: BlockCatalog) -> ShipStats:
 	s._accumulate_inertia(entries)
 	s._accumulate_power(entries)
 	s._accumulate_thrust(entries)
+	s._accumulate_quantum(entries)
 	return s
 
 ## Returns [{def, coord, center, force}] once so each pass can reuse it.
@@ -83,6 +86,10 @@ func _accumulate_power(entries: Array) -> void:
 	for e in entries:
 		power_gen += e["def"].power_gen
 		power_draw += e["def"].power_draw
+
+func _accumulate_quantum(entries: Array) -> void:
+	for e in entries:
+		quantum_capacity += e["def"].quantum_capacity
 
 func _accumulate_thrust(entries: Array) -> void:
 	# Attitude authority, accumulated per axis and per direction so the two

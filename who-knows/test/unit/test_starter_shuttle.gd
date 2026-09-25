@@ -40,6 +40,22 @@ func test_the_starter_shuttle_still_launches():
 	assert_eq(issues.size(), 0, "zero validation issues")
 	assert_true(ShipValidator.can_launch(issues))
 
+## The starter's figures with the quantum core and machine aboard and the
+## reactors replaced by quantum cells (quantum energy spec §5.4). Pinned from
+## ShipStats itself -- Godot is the truth -- rather than hand-derived.
+func test_the_starter_shuttle_is_pinned_with_the_quantum_core_and_machine():
+	assert_eq(_grid.coords().size(), 84, "84 blocks")
+	var s := ShipStats.compute(_grid, _cat)
+	assert_almost_eq(s.total_mass_kg, 97_000.0, 1.0)
+	assert_almost_eq(s.center_of_mass, Vector3(0.002, 1.206, 0.118), Vector3.ONE * 0.001)
+	assert_almost_eq(s.torque_imbalance, Vector3(9278, -3093, 0), Vector3.ONE * 1.0)
+	assert_almost_eq(s.torque_budget, Vector3(3_058_763, 2_029_381, 2_198_454), Vector3.ONE * 1.0)
+	assert_almost_eq(s.power_gen, 36.0, 0.05)
+	assert_almost_eq(s.power_draw, 31.1, 0.05)
+	assert_eq(s.quantum_capacity, 1200)
+	var issues := ShipValidator.validate(_grid, _cat)
+	assert_eq(issues.size(), 0, "zero issues")
+
 func _built() -> InteriorBuilder:
 	var b := InteriorBuilder.new()
 	add_child_autofree(b)

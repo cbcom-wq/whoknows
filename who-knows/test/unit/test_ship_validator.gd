@@ -16,6 +16,11 @@ func before_each():
 	var lamp := _def(&"lamp", BlockDefinition.Occupancy.SOLID)
 	lamp.power_draw = 50.0
 	_cat.register(lamp)
+	_cat.register(_def(&"quantum_core", BlockDefinition.Occupancy.MOUNT))
+	_cat.register(_def(&"quantum_machine", BlockDefinition.Occupancy.MOUNT))
+	var cell := _def(&"quantum_cell", BlockDefinition.Occupancy.SOLID)
+	cell.quantum_capacity = 400
+	_cat.register(cell)
 	_grid = ShipGrid.new()
 
 func _def(id: StringName, occ: BlockDefinition.Occupancy) -> BlockDefinition:
@@ -36,12 +41,18 @@ func _codes(issues: Array) -> Array:
 		out.append(issue.code)
 	return out
 
-## A minimal ship that passes every rule: core, one deck, a seat beside it.
+## A minimal ship that passes every rule: core, one deck, a seat beside it,
+## and -- spec §5.2's Rule 7 -- a quantum core, machine and cell too, each
+## face-connected and the two MOUNTs walkable from the seat, so every other
+## test here still isolates its own rule.
 func _build_valid_ship() -> void:
 	_put(Vector3i(0, 0, 0), &"core")
 	_put(Vector3i(1, 0, 0), &"deck")
 	_put(Vector3i(2, 0, 0), &"pilot_seat")
 	_put(Vector3i(3, 0, 0), &"reactor")
+	_put(Vector3i(2, 0, -1), &"quantum_core")
+	_put(Vector3i(2, 0, -2), &"quantum_machine")
+	_put(Vector3i(1, 0, -1), &"quantum_cell")
 
 func test_valid_ship_has_no_issues():
 	_build_valid_ship()
@@ -126,3 +137,42 @@ func test_an_airlock_with_no_single_face_onto_space_is_a_warning():
 	var issues := ShipValidator.validate(_grid, _cat)
 	assert_true(_codes(issues).has(&"AIRLOCK_HATCH"))
 	assert_true(ShipValidator.can_launch(issues), "a warning, not an error")
+
+## Rule 7 (spec §5.2): a ship needs at least one quantum core, one quantum
+## machine and one quantum cell -- no power, no way to gain QE, or nowhere to
+## keep it, as fatal as having no pilot seat.
+func test_missing_quantum_core_is_an_error():
+	_build_valid_ship()
+	_grid.clear_block(Vector3i(2, 0, -1))
+	var issues := ShipValidator.validate(_grid, _cat)
+	assert_true(_codes(issues).has(&"QUANTUM"))
+	assert_false(ShipValidator.can_launch(issues))
+
+func test_missing_quantum_machine_is_an_error():
+	_build_valid_ship()
+	_grid.clear_block(Vector3i(2, 0, -2))
+	var issues := ShipValidator.validate(_grid, _cat)
+	assert_true(_codes(issues).has(&"QUANTUM"))
+	assert_false(ShipValidator.can_launch(issues))
+
+func test_missing_quantum_cell_is_an_error():
+	_build_valid_ship()
+	_grid.clear_block(Vector3i(1, 0, -1))
+	var issues := ShipValidator.validate(_grid, _cat)
+	assert_true(_codes(issues).has(&"QUANTUM"))
+	assert_false(ShipValidator.can_launch(issues))
+
+func test_missing_all_three_quantum_blocks_is_three_errors():
+	_build_valid_ship()
+	_grid.clear_block(Vector3i(2, 0, -1))
+	_grid.clear_block(Vector3i(2, 0, -2))
+	_grid.clear_block(Vector3i(1, 0, -1))
+	var issues := ShipValidator.validate(_grid, _cat)
+	var quantum_issues := issues.filter(func(i): return i.code == &"QUANTUM")
+	assert_eq(quantum_issues.size(), 3, "no core, no machine and no cell each report")
+	assert_false(ShipValidator.can_launch(issues))
+
+func test_ship_with_all_three_quantum_blocks_has_no_quantum_issue():
+	_build_valid_ship()
+	var issues := ShipValidator.validate(_grid, _cat)
+	assert_false(_codes(issues).has(&"QUANTUM"))
