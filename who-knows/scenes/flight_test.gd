@@ -111,6 +111,9 @@ func _wire_universe() -> void:
 	var start := AsteroidRecipe.new(_stream.seed).find_start()
 	_universe.origin = start
 	_stream.start(_universe, start)
+	# Godot's cameras stop drawing at 4 km; big rocks show from 25 km.
+	for cam: Camera3D in [$Ship/Exterior/ChaseCamera, $Ship/Canopy/CanopyCam, _avatar.camera]:
+		cam.far = AsteroidStream.VIEW_FAR
 	_avatar.mode_changed.connect(
 		func(mode: Avatar.Mode) -> void:
 			_universe.set_focus(_avatar if mode == Avatar.Mode.SUIT else _ship.exterior)

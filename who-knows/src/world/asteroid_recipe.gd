@@ -2,9 +2,15 @@ class_name AsteroidRecipe
 extends RefCounted
 
 ## What rocks are where (docs/superpowers/specs/2026-09-24-asteroids-design.md
-## §5): a pure function from (seed, tier, cell) to that cell's rocks, the same
-## every time, on any thread. Touches no nodes. Each instance has its own
-## noise and cache, so give each worker its own.
+## §5, as amended by §17): a pure function from (seed, tier, cell) to that
+## cell's rocks, the same every time, on any thread. Touches no nodes. Each
+## instance has its own noise and cache, so give each worker its own.
+##
+## Rocks come in groups: each giant cell -- a 5 km region -- holds at most one
+## big rock, by a chance the noise sets, so groups are mostly 3 to 6 km apart
+## with empty stretches between. Mid-size and rubble rocks crowd round the big
+## ones, thickest just off the surface and thinning out over a few of its
+## radii; elsewhere there is only a thin sprinkle.
 ##
 ## Cells nest: each tier's cell is NEST times the one below, so a cell lies in
 ## exactly one cell of every larger tier. A rock stays inside its own cell and
@@ -17,11 +23,19 @@ const TIERS := 3
 const NEST := 5
 ## Cell edge per tier, metres.
 const CELL: Array[int] = [200, 1000, 5000]
-const D_MIN: Array[float] = [1.0, 5.0, 40.0]
-const D_MAX: Array[float] = [5.0, 40.0, 300.0]
-const MOST: Array[int] = [40, 16, 3]
-## Giants live only where density is over this: the cores of fields.
-const GIANT_DENSITY := 0.7
+const D_MIN: Array[float] = [1.0, 5.0, 150.0]
+const D_MAX: Array[float] = [5.0, 40.0, 600.0]
+## Candidates per cell: a region has one big rock at most.
+const MOST: Array[int] = [40, 16, 1]
+## Round a big rock, the chance a candidate is kept just off its surface, per
+## tier; it falls off as exp(-height / (HALO_SCALE x radius)) and stops at
+## HALO_REACH of those.
+const HALO_PEAK: Array[float] = [0.6, 0.6, 0.0]
+const HALO_SCALE := 1.0
+const HALO_REACH := 4.0
+## Away from every big rock, the chance a candidate is kept: a thin sprinkle,
+## about one piece of rubble every 270 m and a stray mid-size rock every 1.5 km.
+const SPRINKLE: Array[float] = [0.01, 0.02, 0.0]
 const STRETCH_MIN := 0.75
 const STRETCH_MAX := 1.25
 ## Bounding radius per metre of diameter per unit of stretch: over
@@ -31,19 +45,17 @@ const VEINED_CHANCE := 0.1
 ## Kilograms per cubic metre of diameter: rock at about 2,000 kg/m3 in a rough
 ## sphere, less voids.
 const MASS_PER_M3 := 840.0
-## How full of rock the start is: inside a field, short of its core.
-const START_DENSITY_MIN := 0.55
-const START_DENSITY_MAX := 0.85
-## Nothing within this of the start, in any tier: room for the ship, and
-## rocks close enough to see from the first frame.
+## The flight starts this far off a big rock's surface, facing it.
+const START_STANDOFF := 700.0
+## Nothing within this of the start, in any tier: room for the ship.
 const START_CLEAR := 80.0
-## Density noise, in universe kilometres: fields about 15 km across.
+## The noise that makes some stretches of space busier than others, in
+## universe kilometres: features about 15 km across.
 const NOISE_FREQUENCY := 0.05
-## Density is the noise shaped: nothing below LOW, a full core above HIGH.
-## Set from the noise's own spread: LOW is its median, so about half of space
-## is empty; HIGH its 90th percentile, so a tenth is core.
-const DENSITY_LOW := 0.5
-const DENSITY_HIGH := 0.67
+## The chance a region holds a group is the noise shaped: none below LOW,
+## certain above HIGH. Tuned so groups are mostly 3 to 6 km apart.
+const GROUP_LOW := 0.42
+const GROUP_HIGH := 0.6
 ## splitmix64's constants, as signed 64-bit ints.
 const _GOLDEN := -7046029254386353131
 const _MIX_1 := -4658895280553007687
@@ -66,25 +78,17 @@ func _init(p_seed: int, p_start: UniversePoint = null) -> void:
 	_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
 	_noise.fractal_octaves = 3
 
-## How full of rock space is at `u`: 0, empty, to 1, a field's core. The one
-## place density is decided -- the hook for keeping fields off worlds later.
+## The chance a group is at `u`, 0 to 1. The one place it is decided -- the
+## hook for keeping groups off worlds later.
 func density_at(u: UniversePoint) -> float:
 	var n := _noise.get_noise_3d((u.x + u.fx) / 1000.0, (u.y + u.fy) / 1000.0, (u.z + u.fz) / 1000.0)
-	return smoothstep(DENSITY_LOW, DENSITY_HIGH, (n + 1.0) * 0.5)
+	return smoothstep(GROUP_LOW, GROUP_HIGH, (n + 1.0) * 0.5)
 
-## The density at a cell's centre.
-func cell_density(tier: int, cell: Vector3i) -> float:
-	var size := CELL[tier]
+## The chance a region (a giant cell) holds a group: taken at its centre.
+func group_chance(cell: Vector3i) -> float:
+	var size := CELL[Tier.GIANT]
 	var half := size / 2
 	return density_at(UniversePoint.at(cell.x * size + half, cell.y * size + half, cell.z * size + half))
-
-## How many rocks a cell tries to place at `density`.
-static func count_for(tier: int, density: float) -> int:
-	if tier == Tier.GIANT:
-		if density <= GIANT_DENSITY:
-			return 0
-		return roundi((density - GIANT_DENSITY) / (1.0 - GIANT_DENSITY) * MOST[tier])
-	return roundi(density * MOST[tier])
 
 ## The cell's rocks, in candidate order. Cached.
 func cell_rocks(tier: int, cell: Vector3i) -> Array[AsteroidRock]:
@@ -98,12 +102,17 @@ func cell_rocks(tier: int, cell: Vector3i) -> Array[AsteroidRock]:
 	var size := float(CELL[tier])
 	var margin := BOUND * D_MAX[tier] * STRETCH_MAX
 	var blockers := _blockers(tier, cell)
+	var chance := group_chance(cell) if tier == Tier.GIANT else 0.0
+	var bigs := _big_rocks_near(tier, cell) if tier != Tier.GIANT else []
 	var rocks: Array[AsteroidRock] = []
-	for i in count_for(tier, cell_density(tier, cell)):
-		# Every candidate takes the same draws, placed or not, so one rejection
-		# never reshuffles the rest.
+	for i in MOST[tier]:
 		var local := Vector3(rng.randf_range(margin, size - margin), rng.randf_range(margin, size - margin),
 			rng.randf_range(margin, size - margin))
+		var keep := chance if tier == Tier.GIANT else _keep_chance(tier, local, bigs)
+		if rng.randf() >= keep:
+			continue
+		# A kept candidate takes the same draws whether or not it fits, so one
+		# that overlaps never reshuffles the rest.
 		var u := rng.randf()
 		var diameter := D_MIN[tier] * pow(D_MAX[tier] / D_MIN[tier], u * u)
 		var stretch := Vector3(rng.randf_range(STRETCH_MIN, STRETCH_MAX), rng.randf_range(STRETCH_MIN, STRETCH_MAX),
@@ -172,6 +181,50 @@ func _blockers(tier: int, cell: Vector3i) -> Array:
 		out.append([start.minus(corner), START_CLEAR])
 	return out
 
+## The big rocks whose halo reaches this cell: [centre from its corner,
+## radius]. A halo reaches at most half a region, so the region round this
+## cell's and its neighbours cover it.
+func _big_rocks_near(tier: int, cell: Vector3i) -> Array:
+	var out := []
+	var corner := cell_corner(tier, cell)
+	var size := float(CELL[tier])
+	var home := parent_of(tier, cell, Tier.GIANT)
+	var region_size := float(CELL[Tier.GIANT])
+	var middle := Vector3.ONE * size * 0.5
+	# The farthest any big rock's halo reaches from its centre.
+	var reach_most := BOUND * D_MAX[Tier.GIANT] * STRETCH_MAX * (1.0 + HALO_REACH * HALO_SCALE)
+	for x in range(-1, 2):
+		for y in range(-1, 2):
+			for z in range(-1, 2):
+				var region := home + Vector3i(x, y, z)
+				var offset := cell_corner(Tier.GIANT, region).minus(corner)
+				# Too far for any halo: skip it before making its rock.
+				if box_distance(middle - offset, region_size) - size * 0.87 > reach_most:
+					continue
+				for big in cell_rocks(Tier.GIANT, region):
+					var at := offset + big.local
+					var reach := big.radius * (1.0 + HALO_REACH * HALO_SCALE)
+					if box_distance(at, size) <= reach:
+						out.append([at, big.radius])
+	return out
+
+## The chance a candidate at `local` is kept: the sprinkle, plus the halo of
+## every big rock near.
+static func _keep_chance(tier: int, local: Vector3, bigs: Array) -> float:
+	var keep := SPRINKLE[tier]
+	for b in bigs:
+		var radius: float = b[1]
+		var height := maxf(0.0, local.distance_to(b[0]) - radius)
+		var scale := HALO_SCALE * radius
+		if height < HALO_REACH * scale:
+			keep += HALO_PEAK[tier] * exp(-height / scale)
+	return minf(keep, 1.0)
+
+## How far `p` (from a box's lowest corner) is from the box [0, size]^3.
+static func box_distance(p: Vector3, size: float) -> float:
+	return Vector3(maxf(0.0, maxf(-p.x, p.x - size)), maxf(0.0, maxf(-p.y, p.y - size)),
+		maxf(0.0, maxf(-p.z, p.z - size))).length()
+
 static func _touches(local: Vector3, radius: float, rocks: Array[AsteroidRock], blockers: Array) -> bool:
 	for rock in rocks:
 		if local.distance_to(rock.local) < radius + rock.radius:
@@ -200,14 +253,17 @@ static func mix(x: int) -> int:
 	x ^= (x >> 31) & 0x1FFFFFFFF
 	return x
 
-## Where a flight starts (§5.6): the first whole kilometre along +z from the
-## universe's origin that sits inside a field, short of its core -- rocks all
-## around from the first frame, and space to fly.
+## Where a flight starts (§17): START_STANDOFF off the surface of the first
+## big rock along +z from the universe's origin, on its +z side, so it is dead
+## ahead of a ship facing -z, with its swarm round it.
 func find_start() -> UniversePoint:
 	for k in 4000:
-		var u := UniversePoint.at(0, 0, k * 1000)
-		var d := density_at(u)
-		if d >= START_DENSITY_MIN and d <= START_DENSITY_MAX:
-			return u
-	push_warning("AsteroidRecipe: no field found; starting at the universe's origin")
+		var region := Vector3i(0, 0, k)
+		var rocks := cell_rocks(Tier.GIANT, region)
+		if rocks.is_empty():
+			continue
+		var big := rocks[0]
+		var at := cell_corner(Tier.GIANT, region).plus(big.local + Vector3(0, 0, big.radius + START_STANDOFF))
+		return UniversePoint.at(at.x, at.y, at.z)
+	push_warning("AsteroidRecipe: no group found; starting at the universe's origin")
 	return UniversePoint.at(0, 0, 0)

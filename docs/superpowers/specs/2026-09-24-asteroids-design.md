@@ -568,3 +568,51 @@ Deviations from the design above, each found by testing or the live check:
 The unit suite grew from 599 to 646 tests and from about 30 s to about 65 s: every test that
 loads the flight scene now streams its asteroids.
 
+---
+
+## 17. Amended 2026-09-24: groups, not fields
+
+After flying it, the owner: "I feel there are too many small asteroids and don't see many big ones.
+I'd rather have fewer asteroids where you have to fly a bit to reach them but then be meaningful
+once there. Maybe they are grouped where you have a really big one with little ones around it."
+They chose groups mostly 3–6 km apart, a big rock of 150–600 m, and a thin sprinkle between.
+This replaces §5.1's giant row, §5.2 (fields with gaps) and §5.6 (the start); the rest of §5 and
+all of §6–§7 stand.
+
+**Groups.** Each giant cell, a 5 km region, holds at most one big rock, 150–600 m across. Whether
+it does is a chance the density noise sets (`AsteroidRecipe.group_chance`: the noise shaped by
+`smoothstep(0.42, 0.6, ...)`). Measured over 1,728 regions: 47% hold a group; the nearest group
+is a median 3.8 km away (10% under 2.7 km, 10% over 5.1 km).
+
+**Little ones round each big rock.** A mid-size or rubble candidate is kept with a chance that is
+the sprinkle plus, for every big rock near, `0.6 × exp(-height / radius)` for heights above its
+surface up to four of its radii. So:
+
+- rubble is thickest just off the surface: 12 per 200 m cell there, against 0.4 in open space;
+- a 150 m rock gets a light swarm and a few moons; a 600 m one a cloud of thousands and a few
+  dozen moons;
+- between groups, only the sprinkle: a stray piece of rubble every 270 m or so, a stray mid-size
+  rock every 1.5 km.
+
+A candidate is drawn where it would sit, then kept or not, then its other draws taken; a kept
+candidate takes all its draws whether or not it fits, so an overlap never reshuffles the rest.
+A cell looks for big rocks in its own region and the neighbours a halo could reach from.
+
+**Seen from far.** Big rocks fade in from 25 km to 20 km and load within 30 km (unload 35 km).
+The cameras outside -- the chase camera, the canopy's and yours on a spacewalk -- see to 30 km
+(`AsteroidStream.VIEW_FAR`): they had Godot's default of 4 km, so no giant past it had ever
+been drawn.
+
+**The start** is 700 m off the surface of the first big rock along +z from the universe's
+origin, on its +z side: dead ahead of a ship facing -z, with its swarm round it, and 80 m clear.
+
+**Live check,** windowed, real scene: from the pilot's seat the start is a big rock ahead with
+its rubble round it; 20 km at boost across groups had 0 late cells and one frame over 33 ms (the
+first after switching to the chase camera); at most 3 rock bodies at once between groups. At
+60 m/s the ship brushes 1 m rubble aside, bounces off a 10 m moon (737 t) at about 4 m/s, and off
+a 434 m big rock at about 9 m/s; each felt aboard, capped, with the jolt and the thump. A
+spacewalk bump shares momentum exactly (246 kg·m/s each way).
+
+**Cost.** A rubble cell's recipe takes about 0.6 ms (it looks for big rocks round it); the flight
+scene's first load takes about 0.8 s, against 0.6 s before. The unit suite takes about 97 s.
+
