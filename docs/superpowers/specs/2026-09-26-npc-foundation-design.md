@@ -1,10 +1,10 @@
 # NPCs — a foundation for things that live: a creature on the rocks and a droid aboard
 
 **Date:** 2026-09-26
-**Status:** The owner answered the first draft's six questions on 2026-09-26 (§3.1). This
-revision folds them in. It adds a second NPC, a maintenance droid aboard, so the foundation is
-proven outside and inside from the first build. It awaits the owner's review of the written spec.
-No code has changed.
+**Status:** Approved by the owner on 2026-09-26. The owner answered the first draft's six
+questions (§3.1), and this revision folds them in. It adds a second NPC, a maintenance droid aboard,
+so the foundation is proven outside and inside from the first build. No code has changed.
+**Plan:** `docs/superpowers/plans/2026-09-26-npc-foundation.md`
 **Depends on:** `main` at `a67439d`: the floating origin, the asteroid groups, big rocks in detail,
 the interior redesign's rooms and sliding doors, hands and items, the spacewalk. It does not depend
 on quantum energy or the bridge computer, which are designed but not built; it leaves hooks for
