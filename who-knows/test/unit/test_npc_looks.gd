@@ -89,3 +89,15 @@ func test_the_skitters_legs_reach_their_feet():
 	assert_almost_eq(knee.distance_to(foot), SkitterLook.SHIN, 0.001)
 	assert_gt(knee.y, foot.y + 0.05, "the knee bends up off the ground")
 	assert_gt(absf(knee.x), absf(hip.x), "and out to the side")
+
+func test_the_skitters_legs_never_stretch():
+	var look := autofree(NpcLooks.build(&"skitter", 0.4, false, SpacePalette.UMBER, Vector2(250, 300))) as SkitterLook
+	add_child(look)
+	var far: Array[Vector3] = []
+	for f in SkitterLook.FEET:
+		far.append(f + Vector3(0, 0, 3.0))
+	look._pose_legs(far)
+	for mi in look.find_children("Leg*", "MeshInstance3D", true, false):
+		var length := (mi as MeshInstance3D).transform.basis.z.length()
+		assert_lt(length, SkitterLook.SHIN + 0.01, "%s is %.2f m long" % [mi.name, length])
+	remove_child(look)

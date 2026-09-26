@@ -148,9 +148,15 @@ func _tucked() -> Array[Vector3]:
 func _pose_legs(feet: Array[Vector3]) -> void:
 	for i in HIPS.size():
 		var hip := HIPS[i] + Vector3(0, _shell.position.y, 0)
-		var knee := knee_for(hip, feet[i], THIGH, SHIN)
+		# A foot left behind by a bolting body is drawn at the end of its reach:
+		# legs never stretch.
+		var foot := feet[i]
+		var reach := (THIGH + SHIN) * 0.97
+		if hip.distance_to(foot) > reach:
+			foot = hip + (foot - hip).normalized() * reach
+		var knee := knee_for(hip, foot, THIGH, SHIN)
 		_segment(_segments[i * 2], hip, knee)
-		_segment(_segments[i * 2 + 1], knee, feet[i])
+		_segment(_segments[i * 2 + 1], knee, foot)
 
 ## Where the knee goes for a leg from `hip` to `foot`: bent up, in the plane
 ## through both and the body's up.
