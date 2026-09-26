@@ -126,6 +126,7 @@ toggle_controls={
 3d_physics/layer_5="exterior_props"
 3d_physics/layer_6="items"
 3d_physics/layer_7="asteroids"
+3d_physics/layer_8="npcs"
 
 3d_render/layer_1="exterior"
 3d_render/layer_2="interior"
