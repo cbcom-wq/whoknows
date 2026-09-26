@@ -3,8 +3,8 @@ extends Locomotor
 
 ## Walks on any surface, any way up (docs/superpowers/specs/
 ## 2026-09-26-npc-foundation-design.md §5.3): what a rock in zero g needs.
-## Three short rays down its own body -- centre, fore and aft -- find the
-## ground; its up turns smoothly to the ground's normal; while it grips it moves
+## Two short rays down its own body -- under its middle and ahead of it --
+## find the ground; its up turns smoothly to the ground's normal; while it grips it moves
 ## only along the surface, pressed gently onto it, which stands in for gravity. Over a convex edge it wraps round by looking
 ## down and back from ahead of its feet; into a concave corner it climbs. With
 ## no ground under it, or knocked off, it hands over to ZeroGDrift.
@@ -31,6 +31,14 @@ const LOST_AFTER := 0.2
 const KNOCKED_OFF := 1.5
 ## Footing moving faster than this is lost, m/s.
 const SLIPPERY := 3.0
+## It stands this far off the ground it settles on, and stops this far short
+## of a wall ahead, metres.
+const LIFT := 0.01
+const WALL_GAP := 0.45
+## Slower than this, m/s, it is standing still.
+const STILL := 0.25
+## At rest, it looks at the ground again every this many ticks.
+const RECHECK := 30
 ## A leap reaches at most this far, metres.
 const LEAP_REACH := 30.0
 const ARRIVED := 0.15
@@ -42,6 +50,12 @@ var _lost_for := 0.0
 var _let_go := false
 var _leap_to: Variant = null
 var _leapt: Intent = null
+var _rest_ticks := 0
+## The ground under it when it last settled, and where it was then.
+var _settled := {}
+var _settled_at := Vector3.INF
+## Standing on something that does not move.
+var _on_rock := false
 
 func enter(npc: Npc) -> void:
 	npc.motion_mode = CharacterBody3D.MOTION_MODE_FLOATING
@@ -51,6 +65,8 @@ func enter(npc: Npc) -> void:
 	_leap_to = null
 
 func step(npc: Npc, intent: Intent, delta: float) -> void:
+	if _resting(npc, intent):
+		return
 	var space := npc.get_world_3d().direct_space_state
 	var basis := npc.global_basis.orthonormalized()
 	var up := basis.y
@@ -59,16 +75,14 @@ func step(npc: Npc, intent: Intent, delta: float) -> void:
 	var length := npc.species.size
 	var height := npc.species.height
 	var exclude: Array[RID] = [npc.get_rid()]
-	var centre := _ray(space, o + up * height * 0.75, o - up * height * 1.5, exclude)
+	# The ground found when it last settled is the ground under it now.
+	var centre: Dictionary = _settled if _settled_at.is_equal_approx(o) and not _settled.is_empty() \
+		else _ray(space, o + up * height * 0.75, o - up * height * 1.5, exclude)
 	var fore := _ray(space, o + fwd * length * 0.5 + up * height * 0.75, o + fwd * length * 0.5 - up * height * 1.5, exclude)
-	var aft := _ray(space, o - fwd * length * 0.5 + up * height * 0.75, o - fwd * length * 0.5 - up * height * 1.5, exclude)
 	var target := Vector3.ZERO
 	var hits := 0
 	if not centre.is_empty():
 		target += centre["normal"] * 2.0
-		hits += 1
-	if not aft.is_empty():
-		target += aft["normal"]
 		hits += 1
 	# The ground ahead leads: where the surface turns, it turns with it, rather
 	# than settling halfway between the two faces.
@@ -97,6 +111,7 @@ func step(npc: Npc, intent: Intent, delta: float) -> void:
 		up = new_up
 	# Its feet on moving footing (a shoved piece of rubble) move with it.
 	var footing := Vector3.ZERO
+	_on_rock = not centre.is_empty() and not (centre["collider"] is RigidBody3D)
 	if not centre.is_empty() and centre["collider"] is RigidBody3D:
 		var body := centre["collider"] as RigidBody3D
 		footing = body.linear_velocity + body.angular_velocity.cross(o - body.global_position)
@@ -121,9 +136,6 @@ func step(npc: Npc, intent: Intent, delta: float) -> void:
 	var along := npc.velocity - normal_v - footing
 	along -= up * along.dot(up)
 	along = along.move_toward(want, ACCEL * delta)
-	if gripping:
-		normal_v = -up * STICK
-	npc.velocity = along + normal_v + footing
 	# Face the way it goes, or what it looks at.
 	var look := want
 	if intent.face != null:
@@ -134,10 +146,69 @@ func step(npc: Npc, intent: Intent, delta: float) -> void:
 		basis = Basis(up, clampf(angle, -TURN_RATE * delta, TURN_RATE * delta)) * basis
 	npc.global_basis = basis.orthonormalized()
 	npc.up_direction = up
-	npc.move_and_slide()
+	if gripping:
+		_walk(npc, space, exclude, along, footing, ahead, fwd, up, delta)
+	else:
+		npc.velocity = along + normal_v + footing
+		npc.move_and_slide()
 	if intent.action == &"leap" and intent != _leapt and intent.leap_to != null:
 		_leapt = intent
 		_leap_to = aim_leap(npc, frame * (intent.leap_to as Vector3))
+
+## Gripping, it steps along the surface and settles onto the ground found by a
+## ray under its new place, rather than sliding its body against the rock:
+## the rock's collision is thousands of triangles, and a slide against it
+## costs three times all its rays together. It stops short of a wall ahead,
+## which the ground ahead will have it climb.
+func _walk(npc: Npc, space: PhysicsDirectSpaceState3D, exclude: Array[RID], along: Vector3, footing: Vector3,
+		ahead: Dictionary, fwd: Vector3, up: Vector3, delta: float) -> void:
+	var move := (along + footing) * delta
+	if not ahead.is_empty():
+		var gap := ((ahead["position"] as Vector3) - npc.global_position).dot(fwd) - WALL_GAP
+		var into := move.dot(fwd)
+		if into > gap:
+			move -= fwd * (into - maxf(gap, 0.0))
+	var p := npc.global_position + move
+	var height := npc.species.height
+	var ground := _ray(space, p + up * height * 0.75, p - up * height * 1.5, exclude)
+	if not ground.is_empty():
+		p = (ground["position"] as Vector3) + up * LIFT
+	else:
+		p -= up * STICK * delta
+	npc.global_position = p
+	npc.velocity = along + footing
+	_settled = ground
+	_settled_at = npc.global_position
+
+## Standing still on solid rock with nowhere to go, it does nothing at all: no
+## rays, no sliding. Most skitters are grazing or keeping still most of the
+## time, so this is most of what they cost. It looks again every RECHECK
+## ticks, and at once if anything moves it.
+func _resting(npc: Npc, intent: Intent) -> bool:
+	var going := intent.move_to != null and npc.global_position.distance_to(npc.site.frame() * (intent.move_to as Vector3)) > ARRIVED
+	var leaping := intent.action == &"leap" and intent != _leapt
+	var turning := intent.face != null
+	if going or leaping or turning or not gripping or _let_go or not _on_rock \
+			or _along(npc).length() > STILL or not mates.is_empty() and _crowded(npc):
+		_rest_ticks = 0
+		return false
+	_rest_ticks += 1
+	if _rest_ticks % RECHECK == 0:
+		return false
+	return true
+
+## Its speed along the surface, not counting the press onto it.
+static func _along(npc: Npc) -> Vector3:
+	var up := npc.global_basis.y
+	return npc.velocity - up * npc.velocity.dot(up)
+
+## A herd mate close enough to push it aside.
+func _crowded(npc: Npc) -> bool:
+	var frame := npc.site.frame()
+	for m in mates:
+		if npc.global_position.distance_to(frame * m) < PERSONAL * 0.8:
+			return true
+	return false
 
 ## Where a leap toward `toward` (engine space) would land, or null: nothing to
 ## land on within reach, and it does not jump.

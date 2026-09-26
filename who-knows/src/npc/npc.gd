@@ -41,6 +41,16 @@ var memory: NpcMemory
 var skin: Area3D
 ## The last think's context, for the overlay.
 var last_context: NpcContext
+## Level of detail, set by its director from how near a camera is: it moves
+## every `move_every` physics ticks (with their time added up) and thinks on
+## one in `think_every` of its turns. 1 near a camera.
+var move_every := 1
+var think_every := 1
+## Which physics tick of its director's round it thinks on (NpcDirector).
+var think_group := 0
+var _move_tick := 0
+var _move_time := 0.0
+var _think_turn := 0
 
 var _shape: CollisionShape3D
 var _skin_shape: CollisionShape3D
@@ -141,7 +151,14 @@ func switch_to(id: StringName) -> void:
 func _physics_process(delta: float) -> void:
 	if active == null or site == null:
 		return
-	active.step(self, intent, delta)
+	_move_time += delta
+	_move_tick += 1
+	if _move_tick < move_every:
+		return
+	var step_time := _move_time
+	_move_tick = 0
+	_move_time = 0.0
+	active.step(self, intent, step_time)
 	var next := active.handover(self)
 	if next != &"":
 		switch_to(next)
@@ -202,6 +219,11 @@ func local_transform() -> Transform3D:
 func think(time: float, dt: float) -> void:
 	if site == null or not site.alive() or brain == null:
 		return
+	_think_turn += 1
+	if _think_turn < think_every:
+		return
+	dt *= _think_turn
+	_think_turn = 0
 	var ctx := NpcContext.new()
 	ctx.record = record
 	ctx.species = species

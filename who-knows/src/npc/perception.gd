@@ -18,6 +18,8 @@ const FAINT := 0.05
 const CARRIED := 2.0
 ## Moved this far since the last think: moving.
 const MOVED := 0.3
+## Faded percepts are cleared out once there are more than this.
+const FORGET_OVER := 8
 ## A mate running this behaviour has bolted.
 const BOLTING := &"scatter"
 
@@ -49,7 +51,8 @@ func sense(npc: Npc, ctx: NpcContext, bus: StimulusBus, time: float) -> void:
 	for t: Array in _touches:
 		memory.note(Stimulus.TOUCH, t[2], to_local * (t[0] as Vector3), t[1], time)
 	_touches.clear()
-	memory.forget_faded(time)
+	if memory.percepts.size() > FORGET_OVER:
+		memory.forget_faded(time)
 
 ## How strongly `species` feels stimulus `s` at `at`, standing on `site`
 ## (`grounded`), 0-1. Pure.
@@ -119,9 +122,10 @@ func _look(npc: Npc, ctx: NpcContext, lights: Array[Node3D], to_local: Transform
 	var mask := _sight_mask(npc)
 	var eye := npc.global_position + npc.global_basis.y * npc.species.height * 0.8
 	var forward := -npc.global_basis.z
+	var mine: Node = npc.bus if npc.bus != null else StimulusBus.for_node(npc)
 	for node in npc.get_tree().get_nodes_in_group(Avatar.GROUP):
 		var avatar := node as Node3D
-		if avatar == null or StimulusBus.for_node(avatar) != StimulusBus.for_node(npc):
+		if avatar == null or StimulusBus.for_node(avatar) != mine:
 			continue
 		var head := avatar.get(&"head") as Node3D
 		var at := head.global_position if head != null else avatar.global_position
@@ -152,9 +156,9 @@ func _look(npc: Npc, ctx: NpcContext, lights: Array[Node3D], to_local: Transform
 	# Herd mates that bolted, in sight: panic spreads by sight (spec §7.3).
 	if npc.record.herd < 0 or npc.director == null:
 		return
-	for other in npc.director.call(&"live_npcs"):
+	for other in npc.director.call(&"herd_of", npc):
 		var mate := other as Npc
-		if mate == null or mate == npc or mate.record.herd != npc.record.herd or mate.site != npc.site:
+		if mate == null or mate == npc or mate.site != npc.site:
 			continue
 		if mate.brain == null or mate.brain.current == null or mate.brain.current.id != BOLTING:
 			continue

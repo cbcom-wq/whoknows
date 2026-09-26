@@ -55,8 +55,8 @@ func lights() -> Array[Node3D]:
 		return out
 	for node in get_tree().get_nodes_in_group(LIGHTS):
 		var light := node as Node3D
-		if light != null and light.is_inside_tree() and for_node(light) == self \
-				and float(light.call(&"light_reach")) > 0.0:
+		if light != null and light.is_inside_tree() and float(light.call(&"light_reach")) > 0.0 \
+				and for_node(light) == self:
 			out.append(light)
 	return out
 

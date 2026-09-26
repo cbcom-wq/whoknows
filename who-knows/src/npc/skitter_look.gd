@@ -20,6 +20,10 @@ const FLATTEN := 0.04
 const REST_DROP := 0.08
 const EASE := 10.0
 const PUFF_TIME := 0.6
+## Farther than this from the camera, metres, its legs are posed every
+## FAR_EVERY frames.
+const LEGS_DETAILED := 100.0
+const FAR_EVERY := 6
 
 var action: StringName = &""
 var gait: LeggedGait
@@ -30,6 +34,8 @@ var _segments: Array[MeshInstance3D] = []
 var _body_material: StandardMaterial3D
 var _leg_material: StandardMaterial3D
 var _bob := 0.0
+var _frame := 0
+var _skipped := 0.0
 
 ## Builds it in `colour` (its rock's), with `variety` picking which facet
 ## carries the lavender.
@@ -90,11 +96,21 @@ func _process(delta: float) -> void:
 	var npc := get_parent() as Npc
 	if npc == null:
 		return
+	var cam := get_viewport().get_camera_3d() if is_inside_tree() else null
+	var far := cam.global_position.distance_to(global_position) if cam != null else INF
+	# Past its fade nobody can see it; far off, its legs are a few pixels and
+	# can be posed now and then.
+	if fade.y > 0.0 and far > fade.y:
+		return
+	_skipped += delta
+	_frame += 1
+	if far > LEGS_DETAILED and _frame % FAR_EVERY != 0:
+		return
 	var drifting := npc.active is ZeroGDrift
 	var speed := npc.velocity.length()
-	var cam := get_viewport().get_camera_3d() if is_inside_tree() else null
-	var near := cam != null and cam.global_position.distance_to(global_position) < LeggedGait.NEAR
-	pose(delta, speed, drifting, npc.get_world_3d().direct_space_state if near else null, [npc.get_rid()])
+	var near := far < LeggedGait.NEAR
+	pose(_skipped, speed, drifting, npc.get_world_3d().direct_space_state if near else null, [npc.get_rid()])
+	_skipped = 0.0
 
 ## Moves its parts for `delta` seconds at `speed`.
 func pose(delta: float, speed: float, drifting: bool, space: PhysicsDirectSpaceState3D, exclude: Array[RID]) -> void:

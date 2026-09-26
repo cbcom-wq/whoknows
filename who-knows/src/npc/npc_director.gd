@@ -18,6 +18,9 @@ const THINK_HZ := 5.0
 ## Outside, a live NPC is demoted only this far past its live radius.
 const DEMOTE_MARGIN := 100.0
 const REVIEW_EVERY := 0.25
+## Level of detail by distance to the nearest camera, metres (set_detail).
+const DETAIL_NEAR := 60.0
+const DETAIL_MID := 150.0
 
 var rule := Rule.BY_DISTANCE
 var max_live := 32
@@ -39,6 +42,7 @@ var live := {}
 var over_budget := 0
 
 var _pool := {}   # species id -> Array[Npc]
+var _herds := {}  # "site:herd" -> Array[Npc], live ones
 var _since_review := REVIEW_EVERY
 var _tick := 0
 
@@ -57,8 +61,31 @@ func think_step() -> void:
 	_tick += 1
 	var dt := float(every) / float(Engine.physics_ticks_per_second)
 	for npc: Npc in live.values():
-		if group_of(npc.record, every) == turn and is_instance_valid(npc):
+		if npc.think_group % every == turn and is_instance_valid(npc):
+			set_detail(npc)
 			npc.think(time, dt)
+
+## How finely `npc` is worth running (spec §16): near a camera, every tick;
+## farther off, where it is a few pixels, it moves less often and thinks less
+## often. Inside there are no cameras to ask: always full.
+func set_detail(npc: Npc) -> void:
+	if cameras.is_empty():
+		npc.move_every = 1
+		npc.think_every = 1
+		return
+	var nearest := INF
+	for cam in cameras:
+		if is_instance_valid(cam) and cam.is_inside_tree():
+			nearest = minf(nearest, cam.global_position.distance_to(npc.global_position))
+	if nearest < DETAIL_NEAR:
+		npc.move_every = 1
+		npc.think_every = 1
+	elif nearest < DETAIL_MID:
+		npc.move_every = 3
+		npc.think_every = 2
+	else:
+		npc.move_every = 6
+		npc.think_every = 3
 
 ## How many physics ticks between one NPC's thinks: 12 at 60 Hz.
 static func ticks_per_think() -> int:
@@ -187,7 +214,10 @@ func promote(record: NpcRecord, site: NpcSite) -> Npc:
 	npc.bus = bus
 	holder.add_child(npc)
 	npc.setup(record, species, site, rule == Rule.BY_SITE, site.start_pose(record, time))
+	npc.think_group = group_of(record, 1 << 20)
 	live[record.id] = npc
+	if record.herd >= 0:
+		_herds.get_or_add(_herd_key(npc), []).append(npc)
 	return npc
 
 ## A new body for the pool. Tests override it.
@@ -202,6 +232,11 @@ func demote(npc: Npc) -> void:
 		live.erase(npc.record.id)
 	if not is_instance_valid(npc):
 		return
+	if npc.record != null and npc.record.herd >= 0:
+		var herd: Array = _herds.get(_herd_key(npc), [])
+		herd.erase(npc)
+		if herd.is_empty():
+			_herds.erase(_herd_key(npc))
 	if npc.get_parent() != null:
 		npc.get_parent().remove_child(npc)
 	_pool.get_or_add(npc.species.id, []).append(npc)
@@ -209,6 +244,13 @@ func demote(npc: Npc) -> void:
 ## Every live NPC, in no particular order.
 func live_npcs() -> Array:
 	return live.values()
+
+## The live members of `npc`'s herd, itself included; empty for no herd.
+func herd_of(npc: Npc) -> Array:
+	return _herds.get(_herd_key(npc), [])
+
+static func _herd_key(npc: Npc) -> String:
+	return "%s:%d" % [npc.site.id if npc.site != null else &"", npc.record.herd]
 
 ## The bodies whose nearness makes NPCs live: the hull, you on a spacewalk.
 func anchors() -> Array:

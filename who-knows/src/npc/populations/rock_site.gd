@@ -19,6 +19,11 @@ var herds: Array[Dictionary] = []
 var records: Array[NpcRecord] = []
 ## record id -> the direction its home was made from.
 var dirs := {}
+## Every crater's floor, worked out once: the exact surface is costly to ask.
+var _floors: Array[Vector3] = []
+## herd index -> [second, point]: where its round has got to, redone once a
+## second.
+var _rounds := {}
 ## The director that keeps its skitters, for their herd mates.
 var director: NpcDirector
 
@@ -33,6 +38,8 @@ func _init(p_detail: AsteroidDetail, world_seed: int) -> void:
 		var made := RockHerds.member_dirs(h, data)
 		for m in made.size():
 			dirs[StringName("skitter:%s:%d:%d" % [id, h["index"], m])] = made[m]
+	for c in data.craters:
+		_floors.append(data.surface_point(c[0]))
 
 func frame() -> Transform3D:
 	return detail.global_transform
@@ -85,13 +92,13 @@ func herd_of(record: NpcRecord) -> Dictionary:
 func fill(ctx: NpcContext, npc: Npc) -> void:
 	var to_local := frame().affine_inverse()
 	if director != null:
-		for other in director.live_npcs():
+		for other in director.herd_of(npc):
 			var mate := other as Npc
-			if mate != null and mate != npc and mate.site == self and mate.record.herd == npc.record.herd:
+			if mate != null and mate != npc and mate.site == self:
 				ctx.mates.append(to_local * mate.global_position)
 	var h := herd_of(npc.record)
 	if not h.is_empty():
-		ctx.places[&"round"] = data.surface_point(RockHerds.round_dir(h, ctx.time))
+		ctx.places[&"round"] = round_point(h, ctx.time)
 		ctx.extra[&"graze"] = ctx.places[&"round"]
 	ctx.places[&"shelter"] = shelter(ctx.position)
 	for m in ctx.mates:
@@ -103,12 +110,20 @@ func fill(ctx: NpcContext, npc: Npc) -> void:
 	if not frightened:
 		ctx.ease(&"fear", 0.1)
 
+## Where herd `h`'s round has got to at `time`, on the surface.
+func round_point(h: Dictionary, time: float) -> Vector3:
+	var second := int(time)
+	var cached: Array = _rounds.get(h["index"], [])
+	if cached.is_empty() or cached[0] != second:
+		cached = [second, data.surface_point(RockHerds.round_dir(h, float(second)))]
+		_rounds[h["index"]] = cached
+	return cached[1]
+
 ## The floor of the nearest crater to `local`.
 func shelter(local: Vector3) -> Vector3:
 	var best := local
 	var best_d := INF
-	for c in data.craters:
-		var p := data.surface_point(c[0])
+	for p in _floors:
 		var d := p.distance_to(local)
 		if d < best_d:
 			best = p
