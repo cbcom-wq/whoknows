@@ -286,6 +286,6 @@ func _build_look() -> void:
 		remove_child(look)
 		look.free()
 		look = null
-	look = NpcLooks.build(species.look, float(record.seed & 0xFFFF) / 65535.0, inside)
+	look = NpcLooks.build(species.look, float(record.seed & 0xFFFF) / 65535.0, inside, site.tint(), species.fade)
 	look.name = "Look"
 	add_child(look)

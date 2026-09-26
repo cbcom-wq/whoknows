@@ -22,12 +22,17 @@ const DROID_TRIMS: Array[Color] = [InteriorPalette.BELT, InteriorPalette.CORAL, 
 
 ## The look called `look`, its origin at the feet. `variety` in [0, 1) picks
 ## among small differences so no two are quite alike.
-static func build(look: StringName, variety: float, inside: bool) -> Node3D:
+static func build(look: StringName, variety: float, inside: bool, tint := SpacePalette.UNTINTED,
+		fade := Vector2.ZERO) -> Node3D:
 	match look:
 		&"droid":
 			var droid := DroidLook.new()
 			droid.build(variety)
 			return droid
+		&"skitter":
+			var skitter := SkitterLook.new()
+			skitter.build(variety, tint, fade)
+			return skitter
 		_:
 			return placeholder(inside)
 

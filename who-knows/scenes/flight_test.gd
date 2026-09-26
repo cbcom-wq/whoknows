@@ -22,6 +22,8 @@ var _interact_prompt := ""
 var _grasp_prompt := ""
 var _universe_readout: Label
 var npc_debug: NpcDebug
+var npc_bus: StimulusBus
+var exterior_npcs: NpcDirector
 
 ## The interior's own mood (spec §3.3): dim and warm, with bloom turning the
 ## thin lit strips into light. It goes on the interior camera, not the world,
@@ -133,10 +135,31 @@ func _wire_universe() -> void:
 ## NPCs (docs/superpowers/specs/2026-09-26-npc-foundation-design.md): the
 ## overlay (F4) watches every director.
 func _wire_npcs() -> void:
+	# Outside: skitters on the big rocks near you, live within 350 m of the hull
+	# or of you on a spacewalk. The bus and the holder never move; each live
+	# skitter is shifted by the floating origin itself.
+	npc_bus = StimulusBus.new()
+	npc_bus.name = "StimulusBus"
+	add_child(npc_bus)
+	npc_bus.setup(self, _universe)
+	var holder := Node3D.new()
+	holder.name = "Npcs"
+	add_child(holder)
+	exterior_npcs = NpcDirector.new()
+	exterior_npcs.name = "NpcDirector"
+	exterior_npcs.rule = NpcDirector.Rule.BY_DISTANCE
+	exterior_npcs.max_live = 32
+	exterior_npcs.holder = holder
+	exterior_npcs.catalog = _ship.npc_director.catalog
+	exterior_npcs.bus = npc_bus
+	exterior_npcs.cameras = [$Ship/Exterior/ChaseCamera as Camera3D, $Ship/Canopy/CanopyCam as Camera3D, _avatar.camera]
+	exterior_npcs.sources = [RockHerdSource.new(_stream)]
+	add_child(exterior_npcs)
 	npc_debug = NpcDebug.new()
 	npc_debug.name = "NpcDebug"
 	add_child(npc_debug)
 	npc_debug.directors.append(_ship.npc_director)
+	npc_debug.directors.append(exterior_npcs)
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	var key := event as InputEventKey

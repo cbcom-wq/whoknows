@@ -21,6 +21,10 @@ const UNTINTED := Color(1, 1, 1)
 ## planes read apart in flat light (asteroids spec §18).
 const SHADES: Array[float] = [0.88, 1.0, 1.1]
 
+## A skitter's eyes (NPC foundation spec §13.4): two pale facets that catch
+## your lamp. Its back takes its rock's colour, its underside a darker shade.
+const SKITTER_EYE := Color(0.86, 0.84, 0.78)
+
 ## Loose stones lying on a big rock, darker than the ground they lie on:
 ## scree, which shows against it in flat light.
 const SCREE := 0.68

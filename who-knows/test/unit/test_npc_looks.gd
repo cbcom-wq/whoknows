@@ -51,3 +51,40 @@ func test_the_droid_moves_its_parts():
 func test_an_unknown_look_is_a_box():
 	var look := autofree(NpcLooks.build(&"nothing_yet", 0.0, false)) as Node3D
 	assert_not_null(look.get_node_or_null("Placeholder"))
+
+func test_the_skitter_is_chunky_faceted_and_in_its_rocks_colour():
+	var look := autofree(NpcLooks.build(&"skitter", 0.4, false, SpacePalette.UMBER, Vector2(250, 300))) as SkitterLook
+	assert_not_null(look)
+	assert_lt(_triangles(look), 300, "under 300 triangles")
+	var colours := {}
+	for mi: MeshInstance3D in look.find_children("*", "MeshInstance3D", true, false):
+		assert_eq(mi.layers, 1, "%s outside" % mi.name)
+		var m := mi.material_override as StandardMaterial3D
+		assert_eq(m.distance_fade_mode, BaseMaterial3D.DISTANCE_FADE_PIXEL_DITHER, "%s fades" % mi.name)
+		assert_almost_eq(m.distance_fade_min_distance, 300.0, 0.001)
+		assert_almost_eq(m.distance_fade_max_distance, 250.0, 0.001)
+		if mi.mesh is ArrayMesh:
+			for c in (mi.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_COLOR]:
+				colours[c] = true
+	assert_true(_has(colours, SpacePalette.CRYSTAL), "a lavender patch")
+	assert_true(_has(colours, SpacePalette.SKITTER_EYE), "pale eyes")
+	var in_rock := 0
+	for k in SpacePalette.SHADES.size():
+		if _has(colours, SpacePalette.shade(SpacePalette.UMBER, k)):
+			in_rock += 1
+	assert_gt(in_rock, 0, "its back in its rock's shades")
+
+## Mesh colours are stored at 8 bits a channel.
+static func _has(colours: Dictionary, want: Color) -> bool:
+	for c: Color in colours:
+		if absf(c.r - want.r) < 0.01 and absf(c.g - want.g) < 0.01 and absf(c.b - want.b) < 0.01:
+			return true
+	return false
+
+func test_the_skitters_legs_reach_their_feet():
+	var hip := Vector3(-0.2, 0.14, -0.2)
+	var foot := Vector3(-0.42, 0.0, -0.32)
+	var knee := SkitterLook.knee_for(hip, foot, SkitterLook.THIGH, SkitterLook.SHIN)
+	assert_almost_eq(knee.distance_to(hip), SkitterLook.THIGH, 0.001)
+	assert_almost_eq(knee.distance_to(foot), SkitterLook.SHIN, 0.001)
+	assert_gt(knee.y, hip.y, "the knee bends up")

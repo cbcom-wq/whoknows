@@ -9,6 +9,8 @@ extends NpcSite
 
 ## Starting this far off the surface, metres, it settles onto it.
 const LIFT := 0.05
+## How far either side of the exact surface to look for the solid one.
+const FIND_GROUND := 3.0
 
 var detail: AsteroidDetail
 var rock: AsteroidRock
@@ -49,12 +51,28 @@ func start_pose(record: NpcRecord, time: float) -> Transform3D:
 		dir = (Quaternion(home, now) * dir).normalized() if not home.is_equal_approx(now) else dir
 	return pose_at(dir)
 
-## Standing on the surface along direction `dir`, up its normal.
+## Standing on the surface along direction `dir`, up its normal. The solid
+## rock is a mesh of the exact surface, a little inside it on the bulges and
+## outside it in the hollows, so the ground is found with a ray down onto the
+## mesh itself when the rock is in the world.
 func pose_at(dir: Vector3) -> Transform3D:
 	var n := RockHerds.surface_normal(data, dir)
+	var at := data.surface_point(dir)
+	if is_instance_valid(detail) and detail.is_inside_tree():
+		var f := frame()
+		var from := f * (at + n * FIND_GROUND)
+		var to := f * (at - n * FIND_GROUND)
+		var q := PhysicsRayQueryParameters3D.create(from, to, AsteroidBody.LAYER)
+		var hit := detail.get_world_3d().direct_space_state.intersect_ray(q)
+		if not hit.is_empty() and hit["collider"] == detail:
+			at = f.affine_inverse() * (hit["position"] as Vector3)
+			n = (f.basis.inverse() * (hit["normal"] as Vector3)).normalized()
 	var forward := n.cross(Vector3.RIGHT if absf(n.x) < 0.9 else Vector3.FORWARD).normalized()
 	var basis := Basis(n.cross(forward), n, forward).orthonormalized()
-	return Transform3D(basis, data.surface_point(dir) + n * LIFT)
+	return Transform3D(basis, at + n * LIFT)
+
+func tint() -> Color:
+	return rock.colour
 
 func herd_of(record: NpcRecord) -> Dictionary:
 	for h in herds:
@@ -76,6 +94,10 @@ func fill(ctx: NpcContext, npc: Npc) -> void:
 		ctx.places[&"round"] = data.surface_point(RockHerds.round_dir(h, ctx.time))
 		ctx.extra[&"graze"] = ctx.places[&"round"]
 	ctx.places[&"shelter"] = shelter(ctx.position)
+	for m in ctx.mates:
+		if m.distance_to(ctx.position) < 3.0:
+			ctx.ease(&"company", 0.2)
+			break
 	var frightened := ctx.recent(Stimulus.VIBRATION, 2.0) != null or ctx.recent(Stimulus.TOUCH, 2.0) != null \
 		or ctx.lit
 	if not frightened:

@@ -26,6 +26,10 @@ func alive() -> bool:
 func start_pose(record: NpcRecord, _time: float) -> Transform3D:
 	return Transform3D(Basis.IDENTITY, record.home)
 
+## The colour its NPCs take from it, if any: a skitter wears its rock's.
+func tint() -> Color:
+	return SpacePalette.UNTINTED
+
 ## Fills in what behaviours may ask of this place: mates, shelter, spots...
 func fill(_ctx: NpcContext, _npc: Npc) -> void:
 	pass

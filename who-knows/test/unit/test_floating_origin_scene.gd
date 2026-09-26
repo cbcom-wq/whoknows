@@ -84,6 +84,20 @@ func test_everything_outside_is_covered_on_a_spacewalk():
 	_out(Vector3(0, 0, 12))
 	assert_eq(_uncovered(), [])
 
+func test_everything_outside_is_covered_with_a_herd_awake():
+	var stream: AsteroidStream = _root.get_node("AsteroidStream")
+	await wait_physics_frames(5)
+	var detail: AsteroidDetail = stream.details.live.values()[0]
+	var site := RockSite.new(detail, stream.seed)
+	var at := site.frame() * site.start_pose(site.records[0], 0.0).origin
+	var out := (at - detail.global_position).normalized()
+	for i in 20:
+		_ship.exterior.global_position = at + out * lerpf(400.0, 60.0, i / 19.0)
+		_ship.exterior.linear_velocity = Vector3.ZERO
+		await wait_physics_frames(3)
+	assert_gt((_root.exterior_npcs as NpcDirector).live.size(), 0, "a herd is awake")
+	assert_eq(_uncovered(), [], "skitters and their looks shift too")
+
 func test_the_readout_starts_hidden():
 	var label := _root.get_node_or_null("Prompt/UniverseReadout") as Label
 	assert_not_null(label)

@@ -210,6 +210,10 @@ func demote(npc: Npc) -> void:
 func live_npcs() -> Array:
 	return live.values()
 
+## The bodies whose nearness makes NPCs live: the hull, you on a spacewalk.
+func anchors() -> Array:
+	return _anchors()
+
 func _anchors() -> Array:
 	var out: Array = []
 	if not is_inside_tree():
