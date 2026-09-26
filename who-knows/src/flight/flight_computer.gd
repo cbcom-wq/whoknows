@@ -266,13 +266,18 @@ static func heading_rate(target_local: Vector3, budget: Vector3, moment: Vector3
 ## type and no base class to inherit, which is what lets a future ground
 ## vehicle or turret station light the same HUD.
 func build_telemetry() -> VehicleTelemetry:
+	# boost_active must mean "boost is applying this tick", not merely "the
+	# pilot is holding it" -- otherwise VelocityPanel's BOOST ON contradicts
+	# EnergyPanel's BOOST · LOW POWER off the same tick. `boosting` is the
+	# same gated flag that multiplies the force in _apply_translation(); the
+	# raw `_boost` (held, regardless of whether it applies) stays internal.
 	var t := VehicleTelemetry.from_state(
 		_hull.global_transform.basis,
 		_hull.global_position,
 		_hull.linear_velocity,
 		_hull.angular_velocity,
 		assist_enabled,
-		_boost,
+		boosting,
 		CRUISE_LIMIT_MPS
 	)
 	t.heading_hold = heading_hold

@@ -255,6 +255,27 @@ func test_a_null_store_means_free_boost_and_full_power():
 		_fc.thrust_budget[&"lateral"] * FlightComputer.BOOST_MULTIPLIER, 1.0)
 	assert_true(_fc.boosting)
 	assert_false(_fc.boost_refused)
+	assert_true(_fc.build_telemetry().boost_active, "a null store: boost applies, as today")
+
+## The HUD must not contradict itself: VelocityPanel reads boost_active, and
+## EnergyPanel reads boost_refused off the same tick. boost_active has to
+## mean "boost is applying right now", not merely "the pilot is holding it".
+
+func test_boost_active_telemetry_is_true_while_boost_is_actually_applying():
+	_fc.quantum = QuantumStore.new(1000, 1000)   # full power
+	_fc.set_pilot_input(Vector3(1.0, 0.0, 0.0), Vector3.ZERO, true)
+	_fc._physics_process(1.0 / 60.0)
+	var t := _fc.build_telemetry()
+	assert_true(t.boost_active)
+	assert_false(t.boost_refused)
+
+func test_boost_active_telemetry_is_false_when_boost_is_refused():
+	_fc.quantum = QuantumStore.new(1000, 50)   # low power: line is 100
+	_fc.set_pilot_input(Vector3(1.0, 0.0, 0.0), Vector3.ZERO, true)
+	_fc._physics_process(1.0 / 60.0)
+	var t := _fc.build_telemetry()
+	assert_false(t.boost_active, "refused, so it is not actually applying")
+	assert_true(t.boost_refused)
 
 func test_low_power_halves_every_force():
 	_fc.quantum = QuantumStore.new(1000, 50)   # line is 100: 50 is low power
