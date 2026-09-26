@@ -12,3 +12,4 @@ grip = 0
 stow_class = &"small"
 look = &"rock_sample"
 grip_point = Vector3(0.07, 0, 0)
+quantum_value = 9

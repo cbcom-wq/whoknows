@@ -47,6 +47,8 @@ func test_a_harder_knock_thumps_louder():
 func test_bumping_a_rock_on_a_spacewalk_shares_momentum():
 	var outside: Node3D = _root.get_node("Outside")
 	_ship.exterior.global_position = Vector3(0, 0, 500)
+	# A charged suit coasts, assist off; a dry one's emergency cell would steer.
+	_avatar.suit_cell.charge = SuitCell.CAPACITY
 	_avatar.enter_suit(outside, Transform3D(Basis.IDENTITY, Vector3(0, 0, 0)), Vector3.ZERO, _ship.exterior)
 	var rock := AsteroidRock.new()
 	rock.cell = Vector3i(7, 7, 7)

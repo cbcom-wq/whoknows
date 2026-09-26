@@ -12,3 +12,4 @@ grip = 0
 stow_class = &"small"
 look = &"o2_tank"
 grip_point = Vector3(0.04, 0.15, 0)
+quantum_value = 25

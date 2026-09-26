@@ -12,3 +12,4 @@ grip = 0
 stow_class = &"small"
 look = &"power_cell"
 grip_point = Vector3(0.05, 0.02, 0)
+quantum_value = 150

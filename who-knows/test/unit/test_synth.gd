@@ -6,7 +6,8 @@ extends GutTest
 const LENGTHS := {
 	&"hatch_motor": 0.9, &"bolt_clunk": 0.3, &"seal_thump": 0.35, &"hiss_out": 2.8, &"steam_in": 2.8,
 	&"panel_beep": 0.15, &"warning_chime": 0.5, &"ship_hum": 2.0, &"breath": 4.0, &"thruster_puff": 1.0,
-	&"hull_thump": 0.6, &"rcs_puff": 0.25,
+	&"hull_thump": 0.6, &"rcs_puff": 0.25, &"core_hum": 4.0, &"convert": 1.4, &"materialize": 1.8,
+	&"charge": 1.0,
 }
 
 func test_every_sound_builds_at_its_length():
@@ -20,7 +21,7 @@ func test_every_sound_builds_at_its_length():
 		assert_almost_eq(s.get_length(), LENGTHS[sound_name], 0.01, sound_name)
 
 func test_sounds_are_the_same_every_time():
-	for sound_name in [&"hiss_out", &"bolt_clunk", &"breath"]:
+	for sound_name in [&"hiss_out", &"bolt_clunk", &"breath", &"core_hum", &"convert", &"materialize", &"charge"]:
 		assert_eq(Synth.build(sound_name).data, Synth.build(sound_name).data, sound_name)
 
 func test_every_sound_is_audible_and_never_clips():
@@ -43,6 +44,37 @@ func test_ambient_sounds_loop():
 		assert_eq(s.loop_mode, AudioStreamWAV.LOOP_FORWARD, sound_name)
 		assert_eq(s.loop_end, s.data.size() / 2)
 	assert_eq(Synth.build(&"bolt_clunk").loop_mode, AudioStreamWAV.LOOP_DISABLED)
+
+## Quantum energy spec §13: the core hums in a seamless loop; converting and
+## making are one-shots at the bay.
+func test_the_quantum_sounds():
+	assert_true(Synth.LOOPED.has(&"core_hum"))
+	for sound_name in [&"convert", &"materialize"]:
+		assert_true(Synth.NAMES.has(sound_name))
+		assert_eq(Synth.build(sound_name).loop_mode, AudioStreamWAV.LOOP_DISABLED, sound_name)
+
+## Spec §7.3, §13: charging the suit is a tone looped while it charges (its
+## player lifts the pitch as the suit fills), seamless across the loop.
+func test_the_charge_tone_loops_without_a_seam():
+	assert_true(Synth.NAMES.has(&"charge"))
+	assert_true(Synth.LOOPED.has(&"charge"))
+	var data := Synth.build(&"charge").data
+	var n := data.size() / 2
+	var last := data.decode_s16((n - 1) * 2)
+	var first := data.decode_s16(0)
+	var step := absi(data.decode_s16(2) - first)
+	assert_lt(absi(first - last), step + 400, "the last sample leads into the first")
+
+## The core's hum sits under the bridge, softer than the ship's own hum.
+func test_the_core_hum_is_softer_than_the_ship_hum():
+	assert_lt(_peak(&"core_hum"), _peak(&"ship_hum"))
+
+func _peak(sound_name: StringName) -> int:
+	var data := Synth.build(sound_name).data
+	var peak := 0
+	for i in data.size() / 2:
+		peak = maxi(peak, absi(data.decode_s16(i * 2)))
+	return peak
 
 func test_the_cache_hands_out_one_stream_per_sound():
 	Synth.warm_up()

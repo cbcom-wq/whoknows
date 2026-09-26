@@ -34,3 +34,11 @@ enum Grip {
 ## The datapad is tilted toward you, the flare held up like a torch; zero holds
 ## an item as it lies.
 @export var hold_rotation: Vector3 = Vector3.ZERO
+## What this kind is worth in quantum energy (quantum energy spec §4.2), set
+## by hand on each item .tres following the rule of thumb in §4.1. 0 means
+## the item has no value yet (a hand-built test definition; every catalogue
+## item on disk has one).
+@export var quantum_value: int = 0
+## An EVA tool (the hose nozzle, spec §11): never converted or made, however
+## it fills quantum_value (spec §4.2's table).
+@export var eva_tool: bool = false

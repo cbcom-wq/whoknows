@@ -84,6 +84,39 @@ func test_everything_outside_is_covered_on_a_spacewalk():
 	_out(Vector3(0, 0, 12))
 	assert_eq(_uncovered(), [])
 
+func _salvage() -> SalvageField:
+	return _outside.get_node_or_null("SalvageField") as SalvageField
+
+## Quantum energy spec §10.1, §10.2: the near cloud is out behind the stern
+## from the first frame, each item a member of its own under a field that is
+## never moved and never a member, so the walk below covers them.
+func test_the_near_cloud_is_loaded_behind_the_stern_from_the_start():
+	var field := _salvage()
+	assert_not_null(field, "Outside/SalvageField")
+	if field == null:
+		return
+	assert_false(field.is_in_group(Universe.EXTERIOR_SPACE))
+	assert_eq(field.global_transform, Transform3D.IDENTITY)
+	var items := field.loaded_items(SalvageField.NEAR)
+	assert_eq(items.size(), 12)
+	var hatch: Transform3D = (_ship.airlocks.values()[0] as Airlock).alcove.outer_hatch.global_transform
+	for item in items:
+		assert_true(item.is_in_group(Universe.EXTERIOR_SPACE))
+		var aft := _ship.exterior.global_transform.affine_inverse() * item.global_position \
+			- _ship.exterior.global_transform.affine_inverse() * hatch.origin
+		assert_between(aft.z, 12.0, 40.0, "%s is aft of the stern" % item.name)
+	assert_eq(_uncovered(), [], "and every one of them is covered")
+
+func test_a_shift_moves_the_salvage_with_the_hull():
+	var items := _salvage().loaded_items(SalvageField.NEAR)
+	assert_eq(items.size(), 12)
+	_ship.exterior.global_position = Vector3(2500, 0, -40)
+	var offsets := items.map(func(i: Item) -> Vector3: return i.global_position - _ship.exterior.global_position)
+	assert_true(_universe.check())
+	for k in items.size():
+		assert_almost_eq(items[k].global_position - _ship.exterior.global_position, offsets[k], Vector3.ONE * 0.001)
+	assert_eq(_salvage().global_transform, Transform3D.IDENTITY)
+
 func test_the_readout_starts_hidden():
 	var label := _root.get_node_or_null("Prompt/UniverseReadout") as Label
 	assert_not_null(label)

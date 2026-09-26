@@ -46,6 +46,9 @@ const DOOR_WIDTH := 1.0
 ## A doorway's clear height: door height, not ceiling height, with a lintel
 ## above -- and well over the 1.8 m avatar.
 const DOOR_HEIGHT := 2.1
+## How far a door frame's lit header stands over DOOR_HEIGHT: anything run
+## past a doorway overhead keeps above it.
+const DOOR_HEADER := 0.12
 
 ## The airlock's clear height (airlock spec §3.2): its ceiling is where the
 ## hull cell's is, so its copy on the hull matches it exactly. Lower than the
@@ -120,6 +123,78 @@ const SHOULDER_WINDOW_HALF := 0.55
 ## just behind it, and the scene's PilotSeat/Eye must match it.
 const SEATED_EYE := Vector3(0, 1.35, 0.45)
 
+## Every walkable cell's own light (style guide §2.3): a round ceiling light's
+## lamp, or the quantum core's crown, which takes its place (quantum energy
+## spec §6.1). One role, energy and range, so a cell lit either way is lit
+## the same, and whatever dims the ship's lights finds both.
+const CELL_LIGHT_ROLE := &"ceiling"
+const CELL_LIGHT_ENERGY := 0.45
+const CELL_LIGHT_RANGE := 4.0
+## A round ceiling light's frame: the ring's outer radius, round the cell's
+## centre. Anything run along the ceiling keeps clear of it.
+const CEILING_LIGHT_RIM := 0.42
+
+## The quantum core (quantum energy spec §6.2), in a fixture frame: an
+## octagonal plinth FOOTPRINT across, a glass column, a crown at the ceiling
+## and a spine carrying the gauge on its facing side (-z). Octagons are
+## measured across their flats, which face +-x and +-z.
+const QUANTUM_CORE_FOOTPRINT := 1.2
+## Its collider: a square this wide, floor to ceiling.
+const QUANTUM_CORE_COLLIDER := 1.1
+const QUANTUM_CORE_PLINTH := 0.25
+const QUANTUM_CORE_GLASS := 0.9
+const QUANTUM_CORE_GLASS_LOW := 0.35
+const QUANTUM_CORE_GLASS_HIGH := 2.15
+const QUANTUM_CORE_CROWN := 1.1
+## How far the crown hangs below the ceiling.
+const QUANTUM_CORE_CROWN_DEPTH := 0.26
+## What QuantumCore turns inside the glass: the heart's centre and radius, and
+## the three rings round it, inner and outer radius. Each ring lies on its own
+## sphere, clear of the next, so they never touch however they turn, and the
+## outermost stays inside the glass.
+const QUANTUM_HEART := Vector3(0, 1.25, 0)
+const QUANTUM_HEART_RADIUS := 0.3
+const QUANTUM_RINGS: Array[Vector2] = [Vector2(0.34, 0.36), Vector2(0.37, 0.39), Vector2(0.40, 0.42)]
+const QUANTUM_RING_THICKNESS := 0.036
+## The gauge: this many bars up the spine, each this big.
+const QUANTUM_GAUGE_BARS := 10
+const QUANTUM_GAUGE_BAR := Vector3(0.11, 0.09, 0.02)
+const _QUANTUM_GAUGE_LOW := 0.62
+const _QUANTUM_GAUGE_PITCH := 0.13
+## The spine's width and depth.
+const _QUANTUM_SPINE := Vector2(0.16, 0.06)
+
+## The quantum machine (quantum energy spec §6.3), in the frame of the wall at
+## its back: a cabinet WIDTH wide, HEIGHT tall and DEPTH deep, with a bay
+## left of centre, a screen over it, a column of three buttons right of it
+## and the charge plate at the right-hand end.
+const QUANTUM_MACHINE_WIDTH := 1.5
+const QUANTUM_MACHINE_HEIGHT := 2.0
+const QUANTUM_MACHINE_DEPTH := 0.6
+## Its big button, and the two small arrow buttons either side of it
+## (ReadoutPanel sizes).
+const QUANTUM_MACHINE_BUTTON := Vector3(0.24, 0.24, 0.05)
+const QUANTUM_MACHINE_ARROW := Vector3(0.16, 0.16, 0.05)
+## The screen's black glass, across and up.
+const QUANTUM_MACHINE_SCREEN_GLASS := Vector2(0.56, 0.3)
+## The screen's readout: sized so its longest line -- CONVERT · and the
+## longest item name, 23 capitals -- fits across the glass.
+const QUANTUM_MACHINE_SCREEN_PIXEL := 0.0014
+## The bay's mouth: centre across, bottom, side, and how deep it goes in.
+const _QUANTUM_BAY_X := -0.35
+const _QUANTUM_BAY_LOW := 0.9
+const _QUANTUM_BAY_SIDE := 0.6
+const _QUANTUM_BAY_BACK := 0.06
+const _QUANTUM_BUTTONS_X := 0.16
+const _QUANTUM_PLATE_X := 0.52
+## The charge plate: 0.22 m across (spec §6.3).
+const QUANTUM_MACHINE_PLATE_RADIUS := 0.11
+## Where the conduit leaves the cabinet's top, across and out from the wall.
+const _QUANTUM_CONDUIT_AT := Vector2(0.5, 0.3)
+## The conduit's height along the ceiling: into the side of the core's crown.
+const QUANTUM_CONDUIT_HEIGHT := HEADROOM - QUANTUM_CORE_CROWN_DEPTH * 0.5
+const CONDUIT_RADIUS := 0.04
+
 ## Pilasters, a kick band, a terracotta belt, a light shelf with a warm strip
 ## above it, and a cove up to the ceiling: what makes a bare wall read as a
 ## ship's wall. Neighbouring walls both build a pilaster on their shared
@@ -144,9 +219,10 @@ static func wall_trim(kit: InteriorKit, f: Transform3D) -> void:
 ## lamp that actually lights the room below it.
 static func ceiling_light(kit: InteriorKit, ceiling_centre: Vector3) -> void:
 	var down := Transform3D(Basis(Vector3.RIGHT, PI * 0.5), ceiling_centre)
-	kit.ring(SOLID, down, 0.3, 0.42, -0.02, 0.05, _c(InteriorPalette.TRIM))
+	kit.ring(SOLID, down, 0.3, CEILING_LIGHT_RIM, -0.02, 0.05, _c(InteriorPalette.TRIM))
 	kit.disc(GLOW, down * _at(Vector3(0, 0, 0.02)), 0.3, _lit(InteriorPalette.LIGHT_WARM, 0.9))
-	kit.light(ceiling_centre + Vector3(0, -0.9, 0), InteriorPalette.LIGHT_WARM, 0.45, 4.0, &"ceiling")
+	kit.light(ceiling_centre + Vector3(0, -0.9, 0), InteriorPalette.LIGHT_WARM, CELL_LIGHT_ENERGY,
+		CELL_LIGHT_RANGE, CELL_LIGHT_ROLE)
 
 ## A station console: glowing plinth, bevelled body, a sloped screen, four big
 ## buttons (one blinks) and, unless `wall_screen` is false (a window needs the
@@ -623,6 +699,241 @@ static func pilot_station(kit: InteriorKit, f: Transform3D, variety: float) -> v
 	kit.collider(f * _at(Vector3(0, 0.4, -0.72)), Vector3(1.1, 0.8, 0.3))
 	kit.light(f * Vector3(0, 0.9, -0.3), InteriorPalette.LIGHT_WARM, 0.35, 1.6, &"helm")
 
+## The quantum core's fixed parts (quantum energy spec §6.2), in a fixture
+## frame: an octagonal plinth on a violet-glowing base, a glass column between
+## two collars, a crown hanging from the ceiling with a warm lit band round it
+## -- the cell's light fitting, and the cell's light beneath it -- two conduits
+## rising up the back into the crown, and a slim spine up the facing side (-z)
+## for the gauge. The heart, the rings and the gauge's bars move, and are
+## QuantumCore's. One collider, a square floor to ceiling.
+static func quantum_core(kit: InteriorKit, f: Transform3D, _variety: float) -> void:
+	var trim := _c(InteriorPalette.TRIM)
+	var low := _c(InteriorPalette.WALL_LOW)
+	var collar := QUANTUM_CORE_GLASS + 0.08
+	_octagon(kit, GLOW, f, QUANTUM_CORE_FOOTPRINT - 0.08, 0.0, 0.05, 0.0,
+		_lit(InteriorPalette.QUANTUM, 1.4), false)
+	_octagon(kit, SOLID, f, QUANTUM_CORE_FOOTPRINT, 0.05, QUANTUM_CORE_PLINTH, 0.04, trim)
+	_octagon(kit, SOLID, f, collar, QUANTUM_CORE_PLINTH, QUANTUM_CORE_GLASS_LOW, 0.02, trim)
+	var crown_low := HEADROOM - QUANTUM_CORE_CROWN_DEPTH
+	_octagon(kit, SOLID, f, collar, QUANTUM_CORE_GLASS_HIGH, crown_low, 0.0, trim)
+	# The column: an octagonal tube of glass, its flats turned to the plinth's.
+	var tall := QUANTUM_CORE_GLASS_HIGH - QUANTUM_CORE_GLASS_LOW
+	var upright := Basis(Vector3.UP, PI / 8.0) * Basis(Vector3.UP, Vector3.BACK, Vector3.RIGHT)
+	kit.tube_x(GLASS, f * Transform3D(upright, Vector3(0, QUANTUM_CORE_GLASS_LOW + tall * 0.5, 0)),
+		QUANTUM_CORE_GLASS * 0.5 / cos(PI / 8.0), tall, InteriorPalette.GLASS)
+	# The crown, built upside down from the ceiling so its chamfer is below.
+	var hang := f * Transform3D(Basis(Vector3.RIGHT, Vector3.DOWN, Vector3.BACK), Vector3(0, HEADROOM, 0))
+	_octagon(kit, SOLID, hang, QUANTUM_CORE_CROWN, 0.0, QUANTUM_CORE_CROWN_DEPTH, 0.05, trim)
+	_octagon(kit, GLOW, hang, QUANTUM_CORE_CROWN + 0.02, 0.1, 0.14, 0.0,
+		_lit(InteriorPalette.LIGHT_WARM, 2.2), false)
+	# Two conduits up the back, clamped to the column.
+	var back := QUANTUM_CORE_GLASS * 0.5 + CONDUIT_RADIUS + 0.01
+	for x in [-0.22, 0.22]:
+		kit.tube_between(SOLID, f * Vector3(x, QUANTUM_CORE_PLINTH, back), f * Vector3(x, crown_low, back),
+			CONDUIT_RADIUS, low)
+		for y in [0.62, 1.34, 1.98]:
+			kit.bevel_box(SOLID, f * _at(Vector3(x, y, back)), Vector3(0.12, 0.05, 0.11), 0.015, trim)
+	# The spine, from the plinth to the crown, on the facing side's corner so
+	# the heart shows through the facing flat.
+	var spine := f * _quantum_spine() * _at(Vector3(0, 0, -_QUANTUM_SPINE.y * 0.5))
+	kit.bevel_box(SOLID, spine * _at(Vector3(0, (QUANTUM_CORE_PLINTH + crown_low) * 0.5, 0)),
+		Vector3(_QUANTUM_SPINE.x, crown_low - QUANTUM_CORE_PLINTH, _QUANTUM_SPINE.y), 0.02, low)
+	kit.collider(f * _at(Vector3(0, HEADROOM * 0.5, 0)),
+		Vector3(QUANTUM_CORE_COLLIDER, HEADROOM, QUANTUM_CORE_COLLIDER))
+	kit.light(f * quantum_core_crown_light(), InteriorPalette.LIGHT_WARM, CELL_LIGHT_ENERGY, CELL_LIGHT_RANGE,
+		CELL_LIGHT_ROLE)
+
+## Where the core's cell light goes, in its fixture frame: beneath the crown,
+## in the top of the column.
+static func quantum_core_crown_light() -> Vector3:
+	return Vector3(0, QUANTUM_CORE_GLASS_HIGH - 0.15, 0)
+
+## The crown's centre in the core's fixture frame, where a conduit ends.
+static func quantum_core_crown() -> Vector3:
+	return Vector3(0, HEADROOM - QUANTUM_CORE_CROWN_DEPTH * 0.5, 0)
+
+## Each gauge bar's centre on the spine's face, lowest first, +z out of the
+## spine (toward the core's facing side). The lowest is the low-power line.
+static func quantum_core_bars() -> Array[Transform3D]:
+	var out: Array[Transform3D] = []
+	var face := _quantum_spine() * Transform3D(Basis(Vector3.UP, PI),
+		Vector3(0, 0, -(_QUANTUM_SPINE.y + QUANTUM_GAUGE_BAR.z * 0.5)))
+	for i in QUANTUM_GAUGE_BARS:
+		out.append(face * _at(Vector3(0, _QUANTUM_GAUGE_LOW + i * _QUANTUM_GAUGE_PITCH, 0)))
+	return out
+
+## The spine's frame: on the floor at the back of the spine, where it stands
+## against the column's corner beside the facing flat (on the core's -x side),
+## -z pointing out. The spine stands out from it along -z.
+static func _quantum_spine() -> Transform3D:
+	var corner := QUANTUM_CORE_GLASS * 0.5 / cos(PI / 8.0)
+	return Transform3D(Basis(Vector3.UP, PI / 8.0), Vector3.ZERO) * _at(Vector3(0, 0, -(corner + 0.005)))
+
+## The quantum machine (quantum energy spec §6.3), in the frame of the wall at
+## its back: a trim cabinet on a taupe base over a glowing plinth. Its bay is a
+## square recess with a violet-lit mouth and a glowing disc for a floor, and
+## the cabinet's four colliders are built round it, so the Interactor can
+## reach what floats there. Over the bay, the screen's black glass and bezel
+## (the readout is a Label3D, placed at quantum_machine_screen()); right of it,
+## a backing strip for the three buttons (ReadoutPanels, at
+## quantum_machine_buttons()) with arrows on the small ones; at the right-hand
+## end, the charge plate's bevelled ring (the plate is ChargeDock's); and on
+## top, the collar the conduit leaves by.
+static func quantum_machine(kit: InteriorKit, f: Transform3D, _variety: float) -> void:
+	var trim := _c(InteriorPalette.TRIM)
+	var low := _c(InteriorPalette.WALL_LOW)
+	var w := QUANTUM_MACHINE_WIDTH
+	var d := QUANTUM_MACHINE_DEPTH
+	kit.box(GLOW, f * _at(Vector3(0, 0.03, d * 0.5)), Vector3(w - 0.2, 0.06, d - 0.14),
+		_lit(InteriorPalette.LIGHT_WARM, 2.5))
+	kit.bevel_box(SOLID, f * _at(Vector3(0, 0.13, d * 0.5 - 0.01)), Vector3(w - 0.04, 0.14, d - 0.02), 0.03, low)
+	for block in _quantum_machine_blocks():
+		var b: AABB = block
+		if b.position.y < 0.01:
+			b = AABB(b.position + Vector3(0, 0.2, 0), b.size - Vector3(0, 0.2, 0))   # the base is below it
+		kit.bevel_box(SOLID, f * _at(b.get_center()), b.size, 0.03, trim)
+		kit.collider(f * _at(block.get_center()), block.size)
+	# The bay: a dark lining, a violet ring round its mouth, a glowing floor.
+	var bay := quantum_machine_bay().origin
+	var half := _QUANTUM_BAY_SIDE * 0.5
+	var deep := d - _QUANTUM_BAY_BACK
+	var lining := _c(InteriorPalette.GUNMETAL)
+	var ring_glow := _lit(InteriorPalette.QUANTUM, 1.4)
+	kit.box(SOLID, f * _at(Vector3(bay.x, bay.y, _QUANTUM_BAY_BACK * 0.5)),
+		Vector3(_QUANTUM_BAY_SIDE, _QUANTUM_BAY_SIDE, _QUANTUM_BAY_BACK), lining)
+	for side in [-1.0, 1.0]:
+		kit.box(SOLID, f * _at(Vector3(bay.x + side * (half - 0.005), bay.y, _QUANTUM_BAY_BACK + deep * 0.5 - 0.02)),
+			Vector3(0.01, _QUANTUM_BAY_SIDE, deep - 0.04), lining)
+		kit.box(GLOW, f * _at(Vector3(bay.x + side * (half - 0.012), bay.y, d - 0.035)),
+			Vector3(0.012, _QUANTUM_BAY_SIDE - 0.02, 0.04), ring_glow)
+		kit.box(GLOW, f * _at(Vector3(bay.x, bay.y + side * (half - 0.012), d - 0.035)),
+			Vector3(_QUANTUM_BAY_SIDE - 0.02, 0.012, 0.04), ring_glow)
+	kit.box(SOLID, f * _at(Vector3(bay.x, bay.y + half - 0.005, _QUANTUM_BAY_BACK + deep * 0.5 - 0.02)),
+		Vector3(_QUANTUM_BAY_SIDE, 0.01, deep - 0.04), lining)
+	kit.disc(GLOW, f * Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), Vector3(bay.x, _QUANTUM_BAY_LOW + 0.002, bay.z)),
+		0.24, _lit(InteriorPalette.QUANTUM, 0.9))
+	# The screen over the bay.
+	var screen := quantum_machine_screen()
+	kit.bevel_box(SOLID, f * screen * _at(Vector3(0, 0, -0.024)), Vector3(0.64, 0.38, 0.04), 0.015, trim)
+	kit.box(SOLID, f * screen * _at(Vector3(0, 0, -0.002)),
+		Vector3(QUANTUM_MACHINE_SCREEN_GLASS.x, QUANTUM_MACHINE_SCREEN_GLASS.y, 0.004), _c(InteriorPalette.SCREEN_BACK))
+	# The buttons' backing strip, and a dark arrow on each small button's face.
+	var buttons := quantum_machine_buttons()
+	kit.bevel_box(SOLID, f * _at(Vector3(_QUANTUM_BUTTONS_X, buttons[1].origin.y, d + 0.005)),
+		Vector3(0.3, 0.72, 0.01), 0.004, low)
+	for i in [0, 2]:
+		var face := f * buttons[i] * _at(Vector3(0, 0, QUANTUM_MACHINE_ARROW.z + 0.016))
+		var s := -1.0 if i == 0 else 1.0
+		kit.tri(SOLID, face * Vector3(s * 0.028, 0, 0), face * Vector3(-s * 0.018, 0.026, 0),
+			face * Vector3(-s * 0.018, -0.026, 0), (face.basis * Vector3.BACK).normalized(),
+			_c(InteriorPalette.SCREEN_BACK))
+	# The charge plate's ring, and the conduit's collar on top.
+	kit.ring(SOLID, f * quantum_machine_plate(), QUANTUM_MACHINE_PLATE_RADIUS + 0.005,
+		QUANTUM_MACHINE_PLATE_RADIUS + 0.05, 0.0, 0.03, low)
+	var out := quantum_machine_conduit()[0]
+	conduit_collar(kit, f * Transform3D(Basis(Vector3.RIGHT, Vector3.FORWARD, Vector3.UP), out))
+
+## The cabinet's four blocks round the bay, each one collider: below it,
+## above it, and either side.
+static func _quantum_machine_blocks() -> Array[AABB]:
+	var hw := QUANTUM_MACHINE_WIDTH * 0.5
+	var d := QUANTUM_MACHINE_DEPTH
+	var x0 := _QUANTUM_BAY_X - _QUANTUM_BAY_SIDE * 0.5
+	var x1 := _QUANTUM_BAY_X + _QUANTUM_BAY_SIDE * 0.5
+	var top := _QUANTUM_BAY_LOW + _QUANTUM_BAY_SIDE
+	return [
+		AABB(Vector3(-hw, 0, 0), Vector3(QUANTUM_MACHINE_WIDTH, _QUANTUM_BAY_LOW, d)),
+		AABB(Vector3(-hw, top, 0), Vector3(QUANTUM_MACHINE_WIDTH, QUANTUM_MACHINE_HEIGHT - top, d)),
+		AABB(Vector3(-hw, _QUANTUM_BAY_LOW, 0), Vector3(x0 + hw, _QUANTUM_BAY_SIDE, d)),
+		AABB(Vector3(x1, _QUANTUM_BAY_LOW, 0), Vector3(hw - x1, _QUANTUM_BAY_SIDE, d)),
+	]
+
+## Where an item in the bay floats: the recess's centre, axes along the
+## machine's own.
+static func quantum_machine_bay() -> Transform3D:
+	var back := _QUANTUM_BAY_BACK
+	return _at(Vector3(_QUANTUM_BAY_X, _QUANTUM_BAY_LOW + _QUANTUM_BAY_SIDE * 0.5,
+		back + (QUANTUM_MACHINE_DEPTH - back) * 0.5))
+
+## The screen over the bay: its centre, on the black glass, +z out.
+static func quantum_machine_screen() -> Transform3D:
+	return _at(Vector3(_QUANTUM_BAY_X, 1.74, QUANTUM_MACHINE_DEPTH + 0.044))
+
+## The three buttons' frames, top to bottom -- prev, big, next -- each the
+## centre of a ReadoutPanel's back on the backing strip, +z out.
+static func quantum_machine_buttons() -> Array[Transform3D]:
+	var z := QUANTUM_MACHINE_DEPTH + 0.01
+	return [
+		_at(Vector3(_QUANTUM_BUTTONS_X, 1.46, z)),
+		_at(Vector3(_QUANTUM_BUTTONS_X, 1.2, z)),
+		_at(Vector3(_QUANTUM_BUTTONS_X, 0.94, z)),
+	]
+
+## The charge plate: its centre on the cabinet's front, 1.2 m up, +z out.
+static func quantum_machine_plate() -> Transform3D:
+	return _at(Vector3(_QUANTUM_PLATE_X, 1.2, QUANTUM_MACHINE_DEPTH))
+
+## Where the conduit -- and the bead's path along it -- leaves the cabinet:
+## out of its top, and straight up to QUANTUM_CONDUIT_HEIGHT under the
+## ceiling. Whoever knows where the core is takes it on from there.
+static func quantum_machine_conduit() -> PackedVector3Array:
+	var at := _QUANTUM_CONDUIT_AT
+	return PackedVector3Array([Vector3(at.x, QUANTUM_MACHINE_HEIGHT, at.y),
+		Vector3(at.x, QUANTUM_CONDUIT_HEIGHT, at.y)])
+
+## Where the conduit goes into the ceiling when it has no core to run to
+## (quantum energy spec §6.3): straight over where it leaves the cabinet, on
+## the ceiling, +z out of it and down the pipe -- a frame for
+## conduit_collar(). The conduit then rises from the cabinet's top to here and
+## ends, rather than stopping in mid-air under the ceiling.
+static func quantum_machine_ceiling_port() -> Transform3D:
+	var at := _QUANTUM_CONDUIT_AT
+	return Transform3D(Basis(Vector3.RIGHT, Vector3.BACK, Vector3.DOWN), Vector3(at.x, HEADROOM, at.y))
+
+## A conduit along `path`, in the kit's own space: a chunky taupe pipe with a
+## bevelled joint at every bend. The quantum machine's runs from its top along
+## the ceiling into the core's crown; the dressing gives it the path, because
+## only it knows where the core is. High overhead: no collider.
+static func conduit(kit: InteriorKit, path: PackedVector3Array) -> void:
+	for i in range(1, path.size()):
+		kit.tube_between(SOLID, path[i - 1], path[i], CONDUIT_RADIUS, _c(InteriorPalette.WALL_LOW))
+	for i in range(1, path.size() - 1):
+		kit.bevel_box(SOLID, _at(path[i]), Vector3.ONE * CONDUIT_RADIUS * 3.0, 0.015, _c(InteriorPalette.TRIM))
+
+## A bevelled collar round a conduit where it goes into a surface -- the
+## machine's cabinet top it leaves by, or the ceiling it rises into when it has
+## no core to run to -- in a frame on that surface: origin on the pipe's centre
+## line, +z out of the surface along the pipe. No collider.
+static func conduit_collar(kit: InteriorKit, f: Transform3D) -> void:
+	kit.bevel_box(SOLID, f * _at(Vector3(0, 0, 0.03)), Vector3(0.14, 0.14, 0.06), 0.02, _c(InteriorPalette.TRIM))
+
+## An octagonal prism in frame `f`, `across` its flats (which face +-x and
+## +-z), from `y0` up to `y1`, its top edge chamfered by `bevel`; `caps` false
+## leaves off the ends, for a band round something else.
+static func _octagon(kit: InteriorKit, batch: InteriorKit.Batch, f: Transform3D, across: float, y0: float,
+		y1: float, bevel: float, color: Color, caps := true) -> void:
+	var k := 1.0 / cos(PI / 8.0)
+	var r := across * 0.5 * k
+	var r_top := (across * 0.5 - bevel) * k
+	var side_top := y1 - bevel
+	var up := (f.basis * Vector3.UP).normalized()
+	var lo := Vector3(0, y0, 0)
+	var mid := Vector3(0, side_top, 0)
+	var hi := Vector3(0, y1, 0)
+	for i in 8:
+		var t0 := PI / 8.0 + i * PI / 4.0
+		var d0 := Vector3(cos(t0), 0, sin(t0))
+		var d1 := Vector3(cos(t0 + PI / 4.0), 0, sin(t0 + PI / 4.0))
+		var out := (d0 + d1).normalized()
+		kit.quad(batch, f * (d0 * r + lo), f * (d1 * r + lo), f * (d1 * r + mid), f * (d0 * r + mid),
+			(f.basis * out).normalized(), color)
+		if bevel > 0.0:
+			kit.quad(batch, f * (d0 * r + mid), f * (d1 * r + mid), f * (d1 * r_top + hi), f * (d0 * r_top + hi),
+				(f.basis * (out + Vector3.UP)).normalized(), color)
+		if caps:
+			kit.tri(batch, f * hi, f * (d0 * r_top + hi), f * (d1 * r_top + hi), up, color)
+			kit.tri(batch, f * lo, f * (d0 * r + lo), f * (d1 * r + lo), -up, color)
+
 ## A bunk bed along the wall, two tiers with a reading strip under the top one;
 ## or, where the wall has a porthole above, one low bunk under it.
 static func bunks(kit: InteriorKit, f: Transform3D, _variety: float, low_only: bool) -> void:
@@ -868,8 +1179,8 @@ static func door_frame(kit: InteriorKit, f: Transform3D) -> void:
 	for side in [-1.0, 1.0]:
 		kit.bevel_box(SOLID, f * _at(Vector3(side * (DOOR_WIDTH * 0.5 + 0.07), DOOR_HEIGHT * 0.5, mid)),
 			Vector3(0.14, DOOR_HEIGHT, 0.24), 0.04, _c(InteriorPalette.TRIM))
-	kit.bevel_box(SOLID, f * _at(Vector3(0, DOOR_HEIGHT + 0.06, mid)), Vector3(DOOR_WIDTH + 0.28, 0.12, 0.24),
-		0.04, _c(InteriorPalette.TRIM))
+	kit.bevel_box(SOLID, f * _at(Vector3(0, DOOR_HEIGHT + DOOR_HEADER * 0.5, mid)),
+		Vector3(DOOR_WIDTH + 0.28, DOOR_HEADER, 0.24), 0.04, _c(InteriorPalette.TRIM))
 	kit.box(GLOW, f * _at(Vector3(0, DOOR_HEIGHT - 0.012, mid)), Vector3(DOOR_WIDTH, 0.02, 0.12),
 		_lit(InteriorPalette.LIGHT_WARM, 2.0))
 	kit.light(f * Vector3(0, DOOR_HEIGHT, 0.3), InteriorPalette.LIGHT_WARM, 0.5, 2.5, &"door")

@@ -2,19 +2,20 @@
 
 [ext_resource type="Script" path="res://src/ship/block_definition.gd" id="1_script"]
 
-[sub_resource type="BoxMesh" id="BoxMesh_battery"]
+[sub_resource type="BoxMesh" id="BoxMesh_quantum_cell"]
 size = Vector3(2, 2, 2)
 
 [resource]
 script = ExtResource("1_script")
-id = &"battery"
-display_name = "Battery"
+id = &"quantum_cell"
+display_name = "Quantum Cell"
 category = 1
 occupancy = 0
-mass_t = 2.0
-hp = 120
+mass_t = 5.0
+hp = 250
 power_gen = 0.0
 power_draw = 0.0
 thrust_kn = 0.0
 grav_radius = 0.0
-mesh = SubResource("BoxMesh_battery")
+quantum_capacity = 400
+mesh = SubResource("BoxMesh_quantum_cell")

@@ -133,6 +133,17 @@ func test_power_is_summed():
 	assert_almost_eq(s.power_gen, 8.0, 0.001)
 	assert_almost_eq(s.power_draw, 4.0, 0.001)
 
+func test_quantum_capacity_is_summed_like_power():
+	var cell := _def(&"cell")
+	cell.mass_t = 1.0
+	cell.quantum_capacity = 400
+	_cat.register(cell)
+	_put(Vector3i(0, 0, 0), &"cell")
+	_put(Vector3i(1, 0, 0), &"cell")
+	_put(Vector3i(2, 0, 0), &"hull")   # no capacity; should not contribute
+	var s := ShipStats.compute(_grid, _cat)
+	assert_eq(s.quantum_capacity, 800, "two 400-capacity cells sum to 800")
+
 func test_unknown_block_ids_are_ignored():
 	_put(Vector3i.ZERO, &"mystery")
 	var s := ShipStats.compute(_grid, _cat)

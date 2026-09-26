@@ -56,5 +56,18 @@ const PLASMA := Color("ff9a52")
 ## open" -- and the warm off-white of steam and fog.
 const SIGNAL_GO := Color("8fd6a0")
 const STEAM := Color("f2ece2")
+## Quantum energy (docs/superpowers/specs/2026-09-24-quantum-energy-design.md
+## §2 row 11, §14.3): QUANTUM, a soft luminous violet, is the colour of QE --
+## the core's heart and gauge, the machine's bay and plate. It is only ever
+## glow, never a light: every light stays LIGHT_WARM and bloom carries the
+## colour. QUANTUM_DEEP is the unlit heart and the gauge's dark bars. Built
+## violet until the owner chooses, from the Task 3 renders, between it and a
+## warm gold; that choice changes these two lines only.
+const QUANTUM := Color("9a6bff")
+const QUANTUM_DEEP := Color("3a2f55")
+## Salvage (quantum energy spec §10.5, §14.3): the pale lump of an ice chunk,
+## and a wire coil's copper -- brighter and more orange than the BELT stripe.
+const ICE := Color("d6e7ee")
+const COPPER := Color("cc7a3c")
 ## Crates, on shelves and as items: one of these, chosen by variety.
 const CRATES: Array[Color] = [AMBER, SKY, CORAL, OLIVE, TRIM]

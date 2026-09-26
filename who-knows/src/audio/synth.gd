@@ -15,10 +15,10 @@ const MIX_RATE := 22050
 const NAMES: Array[StringName] = [
 	&"hatch_motor", &"bolt_clunk", &"seal_thump", &"hiss_out", &"steam_in",
 	&"panel_beep", &"warning_chime", &"ship_hum", &"breath", &"thruster_puff", &"hull_thump",
-	&"rcs_puff",
+	&"rcs_puff", &"core_hum", &"convert", &"materialize", &"charge",
 ]
 ## Sounds that play as seamless loops.
-const LOOPED: Array[StringName] = [&"ship_hum", &"breath", &"thruster_puff"]
+const LOOPED: Array[StringName] = [&"ship_hum", &"breath", &"thruster_puff", &"core_hum", &"charge"]
 
 static var _cache: Dictionary = {}
 static var _mutex := Mutex.new()
@@ -81,6 +81,14 @@ static func build(sound_name: StringName) -> AudioStreamWAV:
 			x = _thruster()
 		&"rcs_puff":
 			x = _rcs_puff()
+		&"core_hum":
+			x = _core_hum()
+		&"convert":
+			x = _convert()
+		&"materialize":
+			x = _materialize()
+		&"charge":
+			x = _charge()
 		_:
 			push_error("Synth: no sound called %s" % sound_name)
 			return null
@@ -228,6 +236,82 @@ static func _rcs_puff() -> PackedFloat32Array:
 		var t := float(i) / MIX_RATE
 		x[i] *= minf(t / 0.012, 1.0) * exp(-t / 0.07)
 	return _gain(x, 0.6)
+
+## The quantum core (quantum energy spec §13): two soft sines a hair apart,
+## beating slowly, with a quieter octave beating along. Every partial fits a
+## whole number of cycles into the loop, so it loops without a seam; softer
+## than the ship's hum, so the bridge stays calm. The player lifts its pitch
+## while boosting.
+static func _core_hum() -> PackedFloat32Array:
+	var n := _len(4.0)
+	var x := PackedFloat32Array()
+	x.resize(n)
+	for i in n:
+		var t := float(i) / MIX_RATE
+		x[i] = sin(TAU * 110.0 * t) + sin(TAU * 110.5 * t) \
+			+ 0.3 * (sin(TAU * 220.0 * t) + sin(TAU * 221.0 * t))
+	return _gain(x, 0.22)
+
+## Converting (spec §13): a rising shimmer -- filtered noise swept up and a
+## sine gliding up an octave and more over the convert's 1.2 s -- ending in a
+## soft pop as the energy leaves.
+static func _convert() -> PackedFloat32Array:
+	var n := _len(1.4)
+	var shimmer := _sweep_lowpass(_highpass(_noise(n, 29), 400.0), 700.0, 6000.0)
+	var x := PackedFloat32Array()
+	x.resize(n)
+	var phase := 0.0
+	var pop_phase := 0.0
+	for i in n:
+		var t := float(i) / MIX_RATE
+		var rise := clampf(t / 1.2, 0.0, 1.0)
+		phase += TAU * lerpf(220.0, 660.0, rise * rise) / MIX_RATE
+		var swell := _ramp(t, 0.15, 1.2, 0.08) * (0.4 + 0.6 * rise)
+		var pop := 0.0
+		if t >= 1.18:
+			var p := t - 1.18
+			pop_phase += TAU * lerpf(520.0, 260.0, minf(p / 0.05, 1.0)) / MIX_RATE
+			pop = sin(pop_phase) * minf(p / 0.004, 1.0) * exp(-p / 0.045)
+		x[i] = (shimmer[i] * 0.5 + sin(phase) * 0.35) * swell + pop * 0.8
+	return _gain(x, 0.5)
+
+## Making (spec §13): the convert's shimmer falling -- noise swept down, a
+## sine gliding down -- over the make's 1.5 s, ending in a soft thump as the
+## item arrives.
+static func _materialize() -> PackedFloat32Array:
+	var n := _len(1.8)
+	var shimmer := _sweep_lowpass(_highpass(_noise(n, 30), 300.0), 6000.0, 600.0)
+	var rumble := _lowpass(_noise(n, 31), 250.0)
+	var x := PackedFloat32Array()
+	x.resize(n)
+	var phase := 0.0
+	var thump_phase := 0.0
+	for i in n:
+		var t := float(i) / MIX_RATE
+		var fall := clampf(t / 1.5, 0.0, 1.0)
+		phase += TAU * lerpf(660.0, 220.0, sqrt(fall)) / MIX_RATE
+		var swell := _ramp(t, 0.1, 1.5, 0.1)
+		var thump := 0.0
+		if t >= 1.46:
+			var p := t - 1.46
+			thump_phase += TAU * lerpf(90.0, 50.0, minf(p / 0.15, 1.0)) / MIX_RATE
+			thump = sin(thump_phase) * minf(p / 0.006, 1.0) * exp(-p / 0.09) + rumble[i] * exp(-p / 0.04) * 1.5
+		x[i] = (shimmer[i] * 0.5 + sin(phase) * 0.35) * swell + thump * 0.9
+	return _gain(x, 0.55)
+
+## Charging the suit (spec §7.3, §13): a soft tone, a fifth with a faint
+## octave, shimmering gently, looped while the charge runs. It rises because
+## the plate's player lifts its pitch as the suit fills. Every partial and
+## the shimmer fit a whole number of cycles into the loop, so it has no seam.
+static func _charge() -> PackedFloat32Array:
+	var n := _len(1.0)
+	var x := PackedFloat32Array()
+	x.resize(n)
+	for i in n:
+		var t := float(i) / MIX_RATE
+		var shimmer := 1.0 + 0.25 * sin(TAU * 6.0 * t)
+		x[i] = (sin(TAU * 330.0 * t) + 0.6 * sin(TAU * 495.0 * t) + 0.15 * sin(TAU * 660.0 * t)) * shimmer
+	return _gain(x, 0.3)
 
 # --- building blocks ----------------------------------------------------------
 

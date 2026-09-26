@@ -30,6 +30,11 @@ enum Occupancy {
 ## Radius in metres over which Grav Plating confers gravity on walkable cells.
 @export var grav_radius: float = 0.0
 
+@export_group("Quantum")
+## QE the block can store. Only the quantum cell has this; summed by
+## ShipStats into the ship's total store capacity.
+@export var quantum_capacity: int = 0
+
 @export_group("Presentation")
 @export var mesh: Mesh
 @export var icon: Texture2D

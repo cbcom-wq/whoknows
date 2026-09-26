@@ -41,6 +41,12 @@ const PAINTING_FILES := [
 	"res://src/world/asteroid_details.gd",
 	"res://src/world/puffs.gd",
 	"res://src/flight/rcs_show.gd",
+	"res://src/ship/interior/readout_panel.gd",
+	"res://src/quantum/quantum_core.gd",
+	"res://src/quantum/quantum_machine.gd",
+	"res://src/quantum/quantum_bay.gd",
+	"res://src/quantum/charge_dock.gd",
+	"res://src/quantum/quantum_show.gd",
 ]
 
 ## The reusable asset library and what it builds with. Ships are generated
@@ -57,6 +63,12 @@ const REUSABLE_FILES := [
 	"res://src/ship/airlock/airlock_panel.gd",
 	"res://src/ship/airlock/airlock_show.gd",
 	"res://src/world/puffs.gd",
+	"res://src/ship/interior/readout_panel.gd",
+	"res://src/quantum/quantum_core.gd",
+	"res://src/quantum/quantum_bay.gd",
+	"res://src/quantum/charge_dock.gd",
+	"res://src/quantum/quantum_show.gd",
+	"res://src/quantum/quantum_machine.gd",
 ]
 const GRID_SIDE := ["ShipGrid", "BlockCatalog", "DeckGraph", "InteriorLayout", "InteriorBuilder",
 	"InteriorDressing"]

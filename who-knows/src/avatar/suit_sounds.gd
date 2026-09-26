@@ -6,16 +6,23 @@ extends Node
 ## your thrusters while they fire, and a chime the moment your ship starts
 ## moving or turning hard enough to leave you. On the Suit bus, which no
 ## pressure touches: space itself is silent.
+##
+## The same chime warns as the suit's cell falls below 25 and again below 10
+## (quantum energy spec §9), once each time it crosses.
 
 const BREATH_DB := -16.0
 const THRUSTER_DB := -12.0
 const CHIME_DB := -8.0
+## The suit's levels that chime as the cell falls into them (SuitCell.level).
+const CHIME_LEVELS: Array[StringName] = [&"low", &"critical"]
+const _LEVEL_RANK := {&"ok": 0, &"low": 1, &"critical": 2, &"dry": 3}
 
 var _avatar: Avatar
 var _breath: AudioStreamPlayer
 var _thruster: AudioStreamPlayer
 var _chime: AudioStreamPlayer
 var _alarm := false
+var _level: StringName = &"ok"
 
 func bind(avatar: Avatar) -> void:
 	_avatar = avatar
@@ -40,11 +47,18 @@ func tick() -> void:
 		alarm = AirlockCycle.motion_warning(hull.linear_velocity.length(),
 			rad_to_deg(hull.angular_velocity.length()))["level"] >= 2
 	if alarm and not _alarm:
-		var s := Synth.sound(&"warning_chime")
-		if s != null:
-			_chime.stream = s
-			_chime.play()
+		_play_chime()
 	_alarm = alarm
+	var level: StringName = _avatar.suit_cell.level() if out else &"ok"
+	if CHIME_LEVELS.has(level) and _LEVEL_RANK[level] > _LEVEL_RANK[_level]:
+		_play_chime()
+	_level = level
+
+func _play_chime() -> void:
+	var s := Synth.sound(&"warning_chime")
+	if s != null:
+		_chime.stream = s
+		_chime.play()
 
 func breathing() -> bool:
 	return _breath.playing

@@ -49,6 +49,13 @@ const CANOPY_ID := &"canopy"
 const AIRLOCK_ID := &"airlock"
 ## The fixture the ship is flown from. A canopy face ahead of it becomes a pod.
 const HELM_ID := &"pilot_seat"
+## Fixtures that stand IN the bridge without reshaping it (quantum energy
+## spec §6.1): unlike the helm, a quiet fixture does not turn its own cell,
+## or any neighbour's, into bridge zone or a console -- a zone is a floor
+## colour, and the starter's floors stay exactly as they were. Its own cell
+## is still a MOUNT for its own WALLS only, which go plain (PANEL), or
+## PORTHOLE on a skin flank -- nothing else stands where it does.
+const QUIET_FIXTURES: Array[StringName] = [&"quantum_core", &"quantum_machine"]
 const _HORIZONTAL: Array[Vector3i] = [
 	Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 0, 1), Vector3i(0, 0, -1),
 ]
@@ -192,13 +199,19 @@ static func _common_variant(grid: ShipGrid, coord: Vector3i, normal: Vector3i,
 		return WallVariant.PORTHOLE
 	return WallVariant.LOCKERS if face_hash(coord, normal) % 2 == 0 else WallVariant.DISPLAY
 
+## A zone is a floor colour (spec §6.1): a quiet fixture zones its own cell
+## as if it were deck (`_is_loud_mount`, not `_is_mount`), so its floor stays
+## exactly what it was. Only its walls still use the unfiltered MOUNT rule
+## (`_common_variant`'s `is_mount` parameter, computed with `_is_mount` in
+## `plan()`), so the fixture still gets plain walls, or a porthole on a skin
+## flank, and nothing else stands where it does.
 static func _zone(grid: ShipGrid, catalog: BlockCatalog, coord: Vector3i) -> StringName:
 	var id := _id_at(grid, coord)
 	if id == AIRLOCK_ID and AirlockSite.hatch_normal(grid, coord) != Vector3i.ZERO:
 		return AIRLOCK_ZONE
 	if ROOM_IDS.has(id):
 		return id
-	if _is_mount(grid, catalog, coord) or _has_mount_neighbour(grid, catalog, coord) \
+	if _is_loud_mount(grid, catalog, coord) or _has_mount_neighbour(grid, catalog, coord) \
 			or _has_canopy_neighbour(grid, coord):
 		return ZONE_BRIDGE
 	return ZONE_COMMON
@@ -374,9 +387,12 @@ static func _has_canopy_neighbour(grid: ShipGrid, coord: Vector3i) -> bool:
 			return true
 	return false
 
+## Whether `coord` has a neighbour that makes IT bridge/console (spec §6.1):
+## any ordinary MOUNT does, but a quiet fixture does not -- only its own
+## cell counts (_is_mount), never a neighbour's.
 static func _has_mount_neighbour(grid: ShipGrid, catalog: BlockCatalog, coord: Vector3i) -> bool:
 	for normal in _HORIZONTAL:
-		if _is_mount(grid, catalog, coord + normal):
+		if _is_loud_mount(grid, catalog, coord + normal):
 			return true
 	return false
 
@@ -386,6 +402,14 @@ static func _is_mount(grid: ShipGrid, catalog: BlockCatalog, coord: Vector3i) ->
 		return false
 	var def := catalog.get_def(inst.block_id)
 	return def != null and def.occupancy == BlockDefinition.Occupancy.MOUNT
+
+## A MOUNT that is not one of QUIET_FIXTURES: one whose presence spreads
+## bridge zone and consoles to its neighbours.
+static func _is_loud_mount(grid: ShipGrid, catalog: BlockCatalog, coord: Vector3i) -> bool:
+	var inst := grid.get_block(coord)
+	if inst != null and QUIET_FIXTURES.has(inst.block_id):
+		return false
+	return _is_mount(grid, catalog, coord)
 
 static func _id_at(grid: ShipGrid, coord: Vector3i) -> StringName:
 	var inst := grid.get_block(coord)

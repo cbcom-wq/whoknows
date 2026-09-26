@@ -5,12 +5,17 @@ extends RefCounted
 ## rule 5 is a warning because a power deficit becomes the brownout mechanic
 ## rather than an invalid ship. Rule 6 (airlock spec §3.1) is a warning too: an
 ## airlock without exactly one face onto open space still flies, it just never
-## cycles.
+## cycles. Rule 7 (quantum energy spec §5.2) is an error: without a quantum
+## core, machine or cell the ship has no power, no way to gain QE, or nowhere
+## to keep it, as fatal as having no pilot seat.
 
 enum Severity { ERROR, WARNING }
 
 const CORE_ID := &"core"
 const PILOT_SEAT_ID := &"pilot_seat"
+const QUANTUM_CORE_ID := &"quantum_core"
+const QUANTUM_MACHINE_ID := &"quantum_machine"
+const QUANTUM_CELL_ID := &"quantum_cell"
 
 class Issue extends RefCounted:
 	var severity: Severity
@@ -38,6 +43,7 @@ static func validate(grid: ShipGrid, catalog: BlockCatalog) -> Array:
 		_check_mounts_reachable(grid, catalog, seats[0], issues)
 	_check_power_margin(grid, catalog, issues)
 	_check_airlocks(grid, issues)
+	_check_quantum_systems(grid, issues)
 	return issues
 
 static func can_launch(issues: Array) -> bool:
@@ -120,6 +126,20 @@ static func _check_power_margin(grid: ShipGrid, catalog: BlockCatalog,
 		issues.append(Issue.new(
 			Severity.WARNING, &"POWER_MARGIN",
 			"Power draw %.1f MW exceeds generation %.1f MW." % [draw, gen]
+		))
+
+static func _check_quantum_systems(grid: ShipGrid, issues: Array) -> void:
+	if _find_all(grid, QUANTUM_CORE_ID).is_empty():
+		issues.append(Issue.new(
+			Severity.ERROR, &"QUANTUM", "Ship has no Quantum Core."
+		))
+	if _find_all(grid, QUANTUM_MACHINE_ID).is_empty():
+		issues.append(Issue.new(
+			Severity.ERROR, &"QUANTUM", "Ship has no Quantum Machine."
+		))
+	if _find_all(grid, QUANTUM_CELL_ID).is_empty():
+		issues.append(Issue.new(
+			Severity.ERROR, &"QUANTUM", "Ship has no Quantum Cell."
 		))
 
 static func _check_airlocks(grid: ShipGrid, issues: Array) -> void:

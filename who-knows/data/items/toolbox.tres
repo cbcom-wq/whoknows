@@ -11,3 +11,4 @@ size = Vector3(0.5, 0.26, 0.2)
 grip = 1
 stow_class = &"crate"
 look = &"toolbox"
+quantum_value = 40

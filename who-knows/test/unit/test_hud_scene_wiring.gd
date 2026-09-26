@@ -44,6 +44,14 @@ func test_band_holds_both_panels():
 		"attitude panel present"
 	)
 
+## Quantum energy spec §12: the ship's store, in the band alongside the
+## other two. Read back at runtime, not just checked for a load error --
+## CLAUDE.md's .tscn parser defect passes a clean headless load either way.
+func test_band_holds_the_energy_panel():
+	var panel := _root.get_node_or_null("HudRoot/Screen/Band/Row/EnergyPanel")
+	assert_not_null(panel, "energy panel present")
+	assert_true(panel is EnergyPanel, "and carries its script")
+
 func test_band_carries_its_chrome_script():
 	# Without HudBand the readouts float over the scene with no lit surface
 	# behind them, which is the layout that was explicitly not chosen.
@@ -180,6 +188,15 @@ func test_pilot_seat_sits_at_the_chairs_frame():
 	assert_true(seat.transform.is_equal_approx(frame), "PilotSeat at the chair's fixture frame")
 	var canopy_plane := ShipGrid.cell_center(Vector3i(0, 0, -3)).z - ShipGrid.CELL_SIZE * 0.5
 	assert_almost_eq(seat.position.z, canopy_plane - InteriorProps.POD_SEAT_DEPTH, 0.001, "out in the pod")
+
+## Quantum energy spec §5.3: the quantum core now stands where the avatar
+## used to spawn, one cell aft of the helm, so the spawn moved one cell
+## further aft, clear of the core's footprint.
+func test_the_avatar_spawns_clear_of_the_quantum_core():
+	var avatar: Node3D = _root.get_node("Ship/Interior/Avatar")
+	var expected := ShipGrid.cell_center(Vector3i(0, 0, -1))
+	assert_almost_eq(avatar.position.x, expected.x, 0.001)
+	assert_almost_eq(avatar.position.z, expected.z, 0.001, "one cell aft of the core, not inside it")
 
 func test_the_seated_eye_is_the_chairs():
 	var eye: Node3D = _root.get_node("Ship/Interior/PilotSeat/Eye")

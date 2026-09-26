@@ -13,3 +13,4 @@ stow_class = &"tool"
 look = &"spare_module"
 grip_point = Vector3(0.08, 0, 0.02)
 hold_rotation = Vector3(30, 0, 0)
+quantum_value = 60

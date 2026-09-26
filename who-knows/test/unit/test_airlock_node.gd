@@ -16,6 +16,9 @@ func before_each():
 	_ship = _root.get_node("Ship")
 	_airlock = _ship.airlocks.get(Vector3i(0, 0, 3))
 	_avatar = _root.get_node("Ship/Interior/Avatar")
+	# A charged suit, so the room panel lets you out (quantum energy spec §9);
+	# the refusal's own tests empty it.
+	_avatar.suit_cell.charge = SuitCell.CAPACITY
 	if _airlock != null:
 		_airlock.set_physics_process(false)   # stepped by hand below
 
@@ -85,6 +88,94 @@ func test_the_motion_warning_reaches_the_panels():
 	_step(DT)
 	assert_true(_airlock.room.room_panel.readout_text().contains("SHIP MOVING · 5.0 M/S"))
 	assert_true(_airlock.room.outer_hatch.warning_shown())
+
+# --- the suit's charge (quantum energy spec §9) ------------------------------
+
+## The room panel will not depressurize while your suit holds under 10 QE: the
+## airlock's first refusal in open space.
+func test_the_room_panel_refuses_to_let_an_empty_suit_out():
+	_avatar.suit_cell.charge = 9.9
+	_open_inner()
+	_stand(_airlock.room.room_frame.origin)
+	_step(DT)
+	var panel := _airlock.room.room_panel
+	assert_eq(panel.prompt_text(), "Charge suit first")
+	assert_eq(panel.readout_text(), "PRESSURE 101 kPa\nCHARGE SUIT")
+	assert_eq(panel.button_state(), &"vacuum", "CORAL, as a refusal is")
+	assert_true(_airlock.room.corridor_panel.readout_text().contains("CHARGE SUIT"), "on every panel")
+	panel.interact(null)
+	_step(5.0)
+	assert_eq(_airlock.cycle.stage, AirlockCycle.Stage.IDLE, "nothing happens")
+	assert_almost_eq(_airlock.cycle.pressure, AirlockCycle.ATMOSPHERE, 0.001, "still pressurized")
+	assert_eq(_airlock.room.inner_hatch.open_amount, 1.0)
+	assert_eq(_airlock.room.outer_hatch.open_amount, 0.0)
+
+func test_at_10_it_lets_you_out():
+	_avatar.suit_cell.charge = SuitCell.GO_OUT_MIN
+	_open_inner()
+	_stand(_airlock.room.room_frame.origin)
+	_step(DT)
+	assert_eq(_airlock.room.room_panel.prompt_text(), "Depressurize")
+	assert_true(_airlock.room.room_panel.readout_text().contains("READY"))
+	assert_eq(_airlock.room.room_panel.button_state(), &"go")
+	_airlock.room.room_panel.interact(null)
+	_step(5.0)
+	assert_eq(_airlock.room.outer_hatch.open_amount, 1.0, "out you go")
+
+## Only going out is refused: an empty suit can always come home.
+func test_coming_in_is_never_refused():
+	_open_inner()
+	_stand(_airlock.room.room_frame.origin)
+	_airlock.room.room_panel.interact(null)
+	_step(5.0)
+	_avatar.suit_cell.charge = 0.0
+	_step(DT)
+	assert_eq(_airlock.room.room_panel.prompt_text(), "Pressurize")
+	assert_true(_airlock.room.room_panel.readout_text().contains("VACUUM"))
+	_airlock.room.room_panel.interact(null)
+	_step(5.0)
+	assert_almost_eq(_airlock.cycle.pressure, AirlockCycle.ATMOSPHERE, 0.001)
+	assert_eq(_airlock.room.inner_hatch.open_amount, 1.0)
+
+func test_the_refusal_sounds_the_warning():
+	await _warm()
+	_avatar.suit_cell.charge = 0.0
+	_airlock.room.room_panel.interact(null)
+	assert_same(_airlock.player(&"panel").stream, Synth.sound(&"warning_chime"))
+	assert_almost_eq(_airlock.player(&"panel").global_position, _airlock.room.room_panel.global_position,
+		Vector3.ONE * 0.0001, "at the panel")
+
+## A dry suit (spec §9) is brought to a point 1.5 m outside the outer hatch,
+## at its middle -- and, once the hatch is opening, just inside it, so the
+## emergency cell floats you in; a closing hatch sends you back out.
+func test_a_dry_suits_home_is_1_5_m_outside_the_outer_hatch():
+	var hatch := _airlock.alcove.outer_hatch.global_transform
+	var outside := Vector3(0, InteriorProps.HATCH_HEIGHT * 0.5, -1.5)
+	var inside := Vector3(0, InteriorProps.HATCH_HEIGHT * 0.5, Airlock.ENTRY_DEPTH)
+	assert_almost_eq(hatch.affine_inverse() * _airlock.home(), outside, Vector3.ONE * 0.0001)
+	_airlock.room.room_panel.interact(null)
+	_step(AirlockCycle.CYCLE_TIME - 0.2)
+	assert_almost_eq(hatch.affine_inverse() * _airlock.home(), outside, Vector3.ONE * 0.0001, "held while it cycles")
+	_step(0.4)
+	assert_eq(_airlock.cycle.stage, AirlockCycle.Stage.OPENING)
+	assert_almost_eq(hatch.affine_inverse() * _airlock.home(), inside, Vector3.ONE * 0.0001, "in as the bolts draw")
+	_step(AirlockCycle.OPEN_TIME)
+	assert_almost_eq(hatch.affine_inverse() * _airlock.home(), inside, Vector3.ONE * 0.0001, "in through the open hatch")
+	_step(AirlockCycle.AUTO_CLOSE + 0.2)
+	assert_eq(_airlock.cycle.stage, AirlockCycle.Stage.SEALING, "nobody came: it closes itself")
+	assert_almost_eq(hatch.affine_inverse() * _airlock.home(), outside, Vector3.ONE * 0.0001, "back out, clear of the leaves")
+
+## Going out, the suit learns where home is.
+func test_crossing_out_gives_the_suit_its_way_home():
+	_open_inner()
+	_stand(_airlock.room.room_frame.origin)
+	_airlock.room.room_panel.interact(null)
+	_step(5.0)
+	_stand(_airlock.room.outer_frame * Vector3(0, 0, -0.1))
+	_step(DT)
+	assert_eq(_avatar.mode, Avatar.Mode.SUIT, "out on a spacewalk")
+	assert_true(_avatar.home_source.is_valid())
+	assert_almost_eq(_avatar.home_source.call(), _airlock.home(), Vector3.ONE * 0.0001)
 
 func after_each():
 	AudioBuses.set_air(1.0)

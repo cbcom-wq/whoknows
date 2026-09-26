@@ -2,19 +2,20 @@
 
 [ext_resource type="Script" path="res://src/ship/block_definition.gd" id="1_script"]
 
-[sub_resource type="BoxMesh" id="BoxMesh_reactor"]
-size = Vector3(2, 2, 2)
+[sub_resource type="BoxMesh" id="BoxMesh_quantum_core"]
+size = Vector3(1.2, 2, 1.2)
 
 [resource]
 script = ExtResource("1_script")
-id = &"reactor"
-display_name = "Reactor"
-category = 1
-occupancy = 0
+id = &"quantum_core"
+display_name = "Quantum Core"
+category = 2
+occupancy = 2
 mass_t = 5.0
 hp = 250
-power_gen = 12.0
+power_gen = 36.0
 power_draw = 0.0
 thrust_kn = 0.0
 grav_radius = 0.0
-mesh = SubResource("BoxMesh_reactor")
+quantum_capacity = 0
+mesh = SubResource("BoxMesh_quantum_core")
