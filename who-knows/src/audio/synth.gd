@@ -15,10 +15,10 @@ const MIX_RATE := 22050
 const NAMES: Array[StringName] = [
 	&"hatch_motor", &"bolt_clunk", &"seal_thump", &"hiss_out", &"steam_in",
 	&"panel_beep", &"warning_chime", &"ship_hum", &"breath", &"thruster_puff", &"hull_thump",
-	&"rcs_puff", &"core_hum", &"convert", &"materialize",
+	&"rcs_puff", &"core_hum", &"convert", &"materialize", &"charge",
 ]
 ## Sounds that play as seamless loops.
-const LOOPED: Array[StringName] = [&"ship_hum", &"breath", &"thruster_puff", &"core_hum"]
+const LOOPED: Array[StringName] = [&"ship_hum", &"breath", &"thruster_puff", &"core_hum", &"charge"]
 
 static var _cache: Dictionary = {}
 static var _mutex := Mutex.new()
@@ -87,6 +87,8 @@ static func build(sound_name: StringName) -> AudioStreamWAV:
 			x = _convert()
 		&"materialize":
 			x = _materialize()
+		&"charge":
+			x = _charge()
 		_:
 			push_error("Synth: no sound called %s" % sound_name)
 			return null
@@ -296,6 +298,20 @@ static func _materialize() -> PackedFloat32Array:
 			thump = sin(thump_phase) * minf(p / 0.006, 1.0) * exp(-p / 0.09) + rumble[i] * exp(-p / 0.04) * 1.5
 		x[i] = (shimmer[i] * 0.5 + sin(phase) * 0.35) * swell + thump * 0.9
 	return _gain(x, 0.55)
+
+## Charging the suit (spec §7.3, §13): a soft tone, a fifth with a faint
+## octave, shimmering gently, looped while the charge runs. It rises because
+## the plate's player lifts its pitch as the suit fills. Every partial and
+## the shimmer fit a whole number of cycles into the loop, so it has no seam.
+static func _charge() -> PackedFloat32Array:
+	var n := _len(1.0)
+	var x := PackedFloat32Array()
+	x.resize(n)
+	for i in n:
+		var t := float(i) / MIX_RATE
+		var shimmer := 1.0 + 0.25 * sin(TAU * 6.0 * t)
+		x[i] = (sin(TAU * 330.0 * t) + 0.6 * sin(TAU * 495.0 * t) + 0.15 * sin(TAU * 660.0 * t)) * shimmer
+	return _gain(x, 0.3)
 
 # --- building blocks ----------------------------------------------------------
 

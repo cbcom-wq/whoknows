@@ -17,7 +17,9 @@ func before_each():
 	_avatar = _root.get_node("Ship/Interior/Avatar")
 	_hud = _root.get_node("HudRoot")
 
-func _out() -> void:
+## Out on a spacewalk with a full suit, unless `charge` says otherwise.
+func _out(charge := SuitCell.CAPACITY) -> void:
+	_avatar.suit_cell.charge = charge
 	_avatar.enter_suit(_root.get_node("Outside"), Transform3D(Basis.IDENTITY, Vector3(0, 0, 12)), Vector3.ZERO,
 		_ship.exterior)
 
@@ -46,6 +48,29 @@ func test_the_suit_knows_the_way_home():
 	assert_true(t.has_beacon)
 	assert_eq(t.beacon, home)
 
+## Quantum energy spec §12: the suit reports its cell as the HUD's energy --
+## SUIT, the charge out of 100, no low-power line, and its level.
+func test_the_suit_reports_its_charge():
+	_out(64.7)
+	var t := _avatar.build_telemetry()
+	assert_true(t.has_energy)
+	assert_eq(t.energy_label, &"SUIT")
+	assert_eq(t.energy, 64, "whole QE, never rounded up past what is there")
+	assert_eq(t.energy_capacity, 100)
+	assert_eq(t.energy_line, 0)
+	assert_eq(t.energy_state, &"ok")
+	_avatar.suit_cell.charge = 9.5
+	assert_eq(_avatar.build_telemetry().energy_state, &"critical")
+	_avatar.suit_cell.charge = 0.0
+	assert_eq(_avatar.build_telemetry().energy_state, &"dry")
+
+func test_the_band_shows_the_suit_on_a_spacewalk():
+	_out(20.0)
+	var panel: EnergyPanel = _root.get_node("HudRoot/Screen/Band/Row/EnergyPanel")
+	panel.render(_avatar.build_telemetry())
+	assert_eq(panel.energy_label.text, "SUIT 20%")
+	assert_eq(panel.status_label.text, "SUIT LOW")
+
 func test_the_marker_is_on_the_hud():
 	var marker := _root.get_node_or_null("HudRoot/Screen/AirlockMarker")
 	assert_true(marker is AirlockMarker, "AirlockMarker survived the parse")
@@ -70,3 +95,29 @@ func test_outside_you_hear_your_breathing_and_your_thrusters():
 	assert_true(sounds.thrusting())
 	for p in sounds.get_children():
 		assert_eq((p as AudioStreamPlayer).bus, AudioBuses.SUIT)
+
+## Quantum energy spec §9: the suit's warning chime as the cell falls below 25,
+## and again below 10 -- once each, not every frame.
+func test_the_suit_chimes_at_25_and_at_10():
+	await _warm()
+	var sounds: SuitSounds = _avatar.get_node("SuitSounds")
+	_ship.exterior.linear_velocity = Vector3.ZERO
+	_ship.exterior.angular_velocity = Vector3.ZERO
+	_out(26.0)
+	var chime: AudioStreamPlayer = sounds.get_node("Chime")
+	sounds.tick()
+	assert_false(chime.playing, "not above 25")
+	_avatar.suit_cell.charge = 24.9
+	sounds.tick()
+	assert_true(chime.playing, "below 25")
+	assert_same(chime.stream, Synth.sound(&"warning_chime"))
+	chime.stop()
+	sounds.tick()
+	assert_false(chime.playing, "once")
+	_avatar.suit_cell.charge = 9.9
+	sounds.tick()
+	assert_true(chime.playing, "below 10")
+	chime.stop()
+	_avatar.suit_cell.charge = 0.0
+	sounds.tick()
+	assert_false(chime.playing, "dry is quiet: the emergency cell is already bringing you home")

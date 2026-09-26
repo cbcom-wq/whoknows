@@ -23,7 +23,9 @@ func _layers_of_hands() -> Array:
 		out.append(g.layers)
 	return out
 
-func _out() -> void:
+## Out on a spacewalk with a full suit, unless `charge` says otherwise.
+func _out(charge := SuitCell.CAPACITY) -> void:
+	_avatar.suit_cell.charge = charge
 	_avatar.enter_suit(_outside, Transform3D(Basis(Vector3.UP, 0.3), Vector3(5, 2, 10)), Vector3(1, 0, 0), _ship.exterior)
 
 func test_aboard_you_walk_the_ship():
@@ -86,6 +88,75 @@ func test_the_suit_assist_holds_you_to_your_drifting_ship():
 	_avatar.velocity = Vector3.ZERO
 	for i in 90:
 		_avatar.suit_step(DT, Vector3.ZERO)
+	assert_almost_eq(_avatar.velocity, Vector3(2, 0, 0), Vector3.ONE * 0.001)
+
+# --- the suit runs on quantum energy (quantum energy spec §9) -----------------
+
+func test_the_suit_starts_empty():
+	assert_not_null(_avatar.suit_cell)
+	assert_eq(_avatar.suit_cell.charge, 0.0)
+
+## Spec §9: the thrusters' Δv is charged to the cell, 1 QE per m/s: full
+## thrust for a second costs 2.5.
+func test_full_thrust_for_a_second_costs_2_5():
+	_out()
+	_ship.exterior.linear_velocity = Vector3.ZERO
+	_ship.exterior.angular_velocity = Vector3.ZERO
+	_avatar.velocity = Vector3.ZERO
+	for i in 60:
+		_avatar.suit_step(DT, Vector3(0, 0, -1))
+	assert_almost_eq(SuitCell.CAPACITY - _avatar.suit_cell.charge, 2.5, 0.001)
+
+## Spec §9: holding station beside a drifting, slowly turning ship costs
+## almost nothing -- in the real scene, the physics running.
+func test_holding_station_beside_a_drifting_ship_costs_under_0_1_a_second():
+	_ship.flight_computer.assist_enabled = false   # nobody at the helm to brake it: it drifts
+	_ship.exterior.global_position = Vector3(0, 0, 300)
+	_ship.exterior.linear_velocity = Vector3(1.5, 0, -1)
+	_ship.exterior.angular_velocity = Vector3(0, deg_to_rad(1.0), 0)
+	_avatar.suit_cell.charge = SuitCell.CAPACITY
+	var at := _ship.exterior.global_position + Vector3(8, 0, 0)
+	_avatar.enter_suit(_outside, Transform3D(Basis.IDENTITY, at), Vector3.ZERO, _ship.exterior)
+	_avatar.velocity = _avatar._hull_velocity_at(at)
+	await wait_physics_frames(60)
+	assert_gt(_ship.exterior.linear_velocity.length(), 1.7, "the ship drifted on")
+	var spent := SuitCell.CAPACITY - _avatar.suit_cell.charge
+	assert_lt(spent, 0.1, "%.4f QE over a second" % spent)
+
+## Spec §9: dry, your thrusters do nothing; the emergency cell brings you home
+## to where the airlock says, at no cost.
+func test_dry_turns_thrust_off_and_heads_home():
+	_out(0.0)
+	_ship.exterior.linear_velocity = Vector3.ZERO
+	_ship.exterior.angular_velocity = Vector3.ZERO
+	_avatar.velocity = Vector3.ZERO
+	var home := _avatar.global_transform * Vector3(0, Avatar.STAND_HEIGHT * 0.5, 0) + Vector3(0, 0, 20)
+	_avatar.home_source = func() -> Vector3: return home
+	for i in 60:
+		_avatar.suit_step(DT, Vector3(0, 0, -1))
+	assert_false(_avatar.thrusting, "the thrusters are off")
+	assert_almost_eq(_avatar.velocity, Vector3(0, 0, 1), Vector3.ONE * 0.001, "homing at 1 m/s^2, not thrusting away")
+	assert_eq(_avatar.suit_cell.charge, 0.0, "at no cost")
+
+## The emergency cell steers the middle of you, not your feet, to the point.
+func test_dry_homes_your_body_on_the_point():
+	_out(0.0)
+	_ship.exterior.linear_velocity = Vector3.ZERO
+	_ship.exterior.angular_velocity = Vector3.ZERO
+	_avatar.velocity = Vector3.ZERO
+	var middle := _avatar.global_transform * Vector3(0, Avatar.STAND_HEIGHT * 0.5, 0)
+	_avatar.home_source = func() -> Vector3: return middle + Vector3(3, 0, 0)
+	_avatar.suit_step(DT, Vector3.ZERO)
+	assert_almost_eq(_avatar.velocity.normalized(), Vector3(1, 0, 0), Vector3.ONE * 0.001)
+
+## With no airlock to go home to, a dry suit holds station beside the ship.
+func test_dry_with_no_home_holds_station():
+	_out(0.0)
+	_ship.exterior.linear_velocity = Vector3(2, 0, 0)
+	_ship.exterior.angular_velocity = Vector3.ZERO
+	_avatar.velocity = Vector3.ZERO
+	for i in 180:
+		_avatar.suit_step(DT, Vector3(0, 0, -1))
 	assert_almost_eq(_avatar.velocity, Vector3(2, 0, 0), Vector3.ONE * 0.001)
 
 func test_you_cannot_take_the_seat_from_outside():

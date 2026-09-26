@@ -21,10 +21,16 @@ extends Node
 ## made item into the bay, the show and the sounds. While the machine works,
 ## the item it is converting or making is in its grip -- HELD, so nothing
 ## takes it -- and the bay takes nothing else.
+##
+## Each machine's charge plate charges a suit from the store (spec §7.3, §9):
+## pressed, it moves CHARGE_RATE QE a second into the presser's `suit_cell`,
+## one for one, down to 0 and in low power too, while they stay within the
+## plate's reach -- the screen counting up, the plate glowing and a tone
+## rising. A charge is kept by the machine's cell, so a rebuild never stops it.
 
 signal low_power_changed(low: bool)
 ## A credit landed: how much, and from where (spec §3.2's sources):
-## &"pilot", &"convert"; later tasks add the hose and the suit charge.
+## &"pilot", &"convert"; later the hose.
 signal credited(amount: int, source: StringName)
 
 ## The big button's colours (MachineCycle.button_colour) as ReadoutPanel's
@@ -41,6 +47,15 @@ const HUM_SLIDE := 0.5
 ## The machine's positional players, as the airlock's.
 const PLAYER_UNIT_SIZE := 3.0
 const PLAYER_MAX_DISTANCE := 30.0
+## The charge plate (spec §7.3): QE a second into the suit.
+const CHARGE_RATE := 50.0
+## The charge tone's pitch from an empty suit to a full one: it rises as the
+## suit fills.
+const CHARGE_PITCH_FROM := 0.8
+const CHARGE_PITCH_TO := 1.6
+## A fraction owed this close to a whole QE is that whole QE: the owed sum
+## gathers float error tick by tick.
+const OWED_SNAP := 1e-6
 
 var store: QuantumStore
 var cores: Array[QuantumCore] = []
@@ -65,6 +80,11 @@ var _players: Dictionary = {}   # Vector3i -> {StringName: AudioStreamPlayer3D}
 var _written: Dictionary = {}   # Vector3i -> Array
 ## Per core: its hum.
 var _hums: Dictionary = {}   # QuantumCore -> AudioStreamPlayer3D
+## Per machine cell: whoever its plate is charging.
+var _charges: Dictionary = {}   # Vector3i -> Node3D
+## QE a suit has taken that the store has not yet paid for: always under one.
+## The store pays in whole QE (spec §3.2), so a fraction waits for the next.
+var _charge_owed := 0.0
 
 ## Sets the capacity from the ship's blocks, drives every core from the
 ## result, and -- on the very first bind only -- starts the store at half
@@ -163,16 +183,22 @@ func _bind_machines() -> void:
 		_players[cell] = {
 			&"bay": _player(machine, "Sound_bay", machine.bay.position),
 			&"panel": _player(machine, "Sound_panel", machine.panel.position),
+			&"plate": _player(machine, "Sound_plate", machine.plate.position),
 		}
 		for button: ReadoutPanel in [machine.panel, machine.prev_button, machine.next_button]:
 			button.prompt_source = cycle.prompt.bind(button.role)
 			var on_pressed := _on_pressed.bind(cell, button)
 			if not button.pressed.is_connected(on_pressed):
 				button.pressed.connect(on_pressed)
+		machine.plate.prompt_source = _plate_prompt
+		var on_plate := _on_plate_pressed.bind(cell)
+		if not machine.plate.pressed.is_connected(on_plate):
+			machine.plate.pressed.connect(on_plate)
 		machine.bay.busy = cycle.stage != MachineCycle.Stage.IDLE
 	for cell in cycles.keys():
 		if not seen.has(cell):
 			cycles.erase(cell)
+			_charges.erase(cell)
 			var item: Item = _held.get(cell)
 			_held.erase(cell)
 			if is_instance_valid(item):
@@ -197,6 +223,7 @@ func _tick_machine(machine: QuantumMachine, delta: float) -> void:
 	bay.busy = cycle.stage != MachineCycle.Stage.IDLE
 	bay.hold_turn(delta)
 	_show(machine, cycle)
+	_charge(machine, delta)
 	_write(machine, cycle)
 
 ## Does what a cue means (spec §7.1-§7.2, §7.5).
@@ -273,9 +300,11 @@ func _show(machine: QuantumMachine, cycle: MachineCycle) -> void:
 		QuantumShow.swell(item, cycle.elapsed / MachineCycle.MAKE_TIME)
 
 ## The screen over the bay, the big button's colour and the arrows, written
-## only when they change.
+## only when they change. While the plate charges a suit, the screen counts
+## the charge up instead (spec §7.3).
 func _write(machine: QuantumMachine, cycle: MachineCycle) -> void:
-	var lines := cycle.screen()
+	var suit := _suit_of(_charges.get(machine.cell))
+	var lines := charge_screen(_percent(suit), store.amount) if suit != null else cycle.screen()
 	var state: StringName = PANEL_STATES.get(cycle.button_colour(), &"")
 	var prev := &"go" if cycle.prompt(&"prev") != "" else &""
 	var next := &"go" if cycle.prompt(&"next") != "" else &""
@@ -331,6 +360,127 @@ func _play(cell: Vector3i, key: StringName, sound_name: StringName) -> void:
 		return
 	p.stream = s
 	p.play()
+
+# --- the charge plate (spec §7.3, §9) ---------------------------------------------
+
+## What pressing a plate would do for `actor`: *Charge suit (+n QE)*, n being
+## what the suit will take or, if less, all the store can give; *Suit
+## charged* when it is full; *Store empty* when the store has nothing to
+## give. "" for anyone without a suit.
+func plate_prompt(actor: Variant) -> String:
+	var suit := _suit_of(actor)
+	if suit == null or store == null:
+		return ""
+	if suit.room() <= 0.0:
+		return "Suit charged"
+	var n := minf(suit.room(), _can_give())
+	if n <= 0.0:
+		return "Store empty"
+	return "Charge suit (+%d QE)" % maxi(roundi(n), 1)
+
+## The machine's screen while its plate charges a suit `percent` full, over a
+## store of `stored` QE.
+static func charge_screen(percent: int, stored: int) -> PackedStringArray:
+	return PackedStringArray(["CHARGE · SUIT", "SUIT %d%%" % percent, "STORE %d QE" % stored])
+
+## The plates prompt for whoever would press them: the avatar.
+func _plate_prompt() -> String:
+	return plate_prompt(get_tree().get_first_node_in_group(Avatar.GROUP) if is_inside_tree() else null)
+
+## A plate pressed by `actor`: its charge starts, at the next tick. A full
+## suit is told so with the small chime, and an empty store with the warning.
+## One suit charges at one plate at a time.
+func _on_plate_pressed(actor: Node, cell: Vector3i) -> void:
+	var suit := _suit_of(actor)
+	if suit == null or store == null:
+		return
+	if suit.room() <= 0.0:
+		_play(cell, &"plate", &"panel_beep")
+		return
+	if _can_give() <= 0.0:
+		_play(cell, &"plate", &"warning_chime")
+		return
+	for other: Vector3i in _charges.keys():
+		if _charges[other] == actor:
+			_end_charge(other, &"")
+	_charges[cell] = actor
+
+## Moves QE from the store into the suit charging at `machine`'s plate:
+## CHARGE_RATE a second, one for one, down to 0 and in low power too (spec
+## §3.2), while its wearer stays within the plate's reach. The store pays in
+## whole QE, and any fraction is owed (_charge_owed). The charge ends when the
+## suit is full (the small chime), when the store has nothing left to give
+## (the warning), or as soon as you step away; stepping back does not restart
+## it. Then the plate shows what it is doing.
+func _charge(machine: QuantumMachine, delta: float) -> void:
+	var cell := machine.cell
+	var actor = _charges.get(cell)   # untyped: it may have been freed since
+	var suit := _suit_of(actor)
+	if _charges.has(cell) and (suit == null or not machine.plate.within_reach(actor)):
+		_end_charge(cell, &"")
+		suit = null
+	if suit != null:
+		var give := _can_give()
+		var want := minf(CHARGE_RATE * delta, suit.room())
+		if want >= give:
+			# All the store has left: settle exactly, to the last QE.
+			suit.add(maxf(give, 0.0))
+			_charge_owed = float(store.amount)
+		else:
+			_charge_owed += suit.add(want)
+		var whole := mini(floori(_charge_owed + OWED_SNAP), store.amount)
+		store.spend(whole, &"suit")
+		_charge_owed = maxf(_charge_owed - whole, 0.0)
+		if suit.room() <= 0.0:
+			_end_charge(cell, &"panel_beep")
+		elif _can_give() <= 0.0:
+			_end_charge(cell, &"warning_chime")
+	_show_plate(machine)
+
+## Lit and glowing while it charges, the tone rising with the suit; lit while
+## a press would charge; dark otherwise.
+func _show_plate(machine: QuantumMachine) -> void:
+	var cell := machine.cell
+	var suit := _suit_of(_charges.get(cell))
+	if suit == null:
+		machine.plate.set_readout(-1)
+		machine.plate.set_lit(_plate_prompt().begins_with("Charge"))
+		return
+	machine.plate.set_readout(_percent(suit))
+	machine.plate.set_lit(true)
+	var tone := player(cell, &"plate")
+	if tone == null:
+		return
+	tone.pitch_scale = lerpf(CHARGE_PITCH_FROM, CHARGE_PITCH_TO, suit.charge / SuitCell.CAPACITY)
+	var s := Synth.sound(&"charge")
+	if s != null and (tone.stream != s or not tone.playing) and tone.is_inside_tree():
+		tone.stream = s
+		tone.play()
+
+## Ends the charge at `cell`: the tone stops, and `chime` (if any) sounds.
+func _end_charge(cell: Vector3i, chime: StringName) -> void:
+	_charges.erase(cell)
+	var tone := player(cell, &"plate")
+	if tone != null:
+		tone.stop()
+		tone.pitch_scale = 1.0
+	if chime != &"":
+		_play(cell, &"plate", chime)
+
+## How much the store can still give a suit: what it holds, less what is owed.
+func _can_give() -> float:
+	return float(store.amount) - _charge_owed
+
+## How full `suit` is, in whole percent, never rounded up.
+static func _percent(suit: SuitCell) -> int:
+	return floori(suit.charge * 100.0 / SuitCell.CAPACITY)
+
+## The suit `actor` wears, or null -- for no actor, one freed since it
+## pressed, or one without a suit.
+static func _suit_of(actor: Variant) -> SuitCell:
+	if not is_instance_valid(actor):
+		return null
+	return actor.get(&"suit_cell") as SuitCell
 
 # --- the core's hum (spec §13) ------------------------------------------------
 

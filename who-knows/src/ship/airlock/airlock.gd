@@ -11,6 +11,11 @@ extends Node
 ## One per airlock cell, under Ship/Airlocks, kept across rebuilds: a rebuild
 ## frees the room it drives and builds a new one, and bind() hands it over
 ## without resetting the pressure or moving a hatch.
+##
+## It keeps the airlock's first refusal in open space (quantum energy spec
+## §9): the room panel will not depressurize while the one aboard holds a suit
+## under SuitCell.GO_OUT_MIN. And it tells whoever goes out where home is --
+## for the HUD's beacon, and for a dry suit's emergency cell.
 
 ## A cue from the cycle (AirlockCycle.step), and which hatch it was about.
 signal cue(name: StringName, door: AirlockCycle.Door)
@@ -26,6 +31,9 @@ const BODY_RADIUS := 0.35
 ## and no further across than this, so your body clears the hatch frame.
 const ENTRY_DEPTH := 0.45
 const ENTRY_SIDEWAYS := 0.15
+## Where a dry suit holds you, this far outside the outer hatch (quantum
+## energy spec §9).
+const HOME_OUT := 1.5
 
 var coord := Vector3i.ZERO
 var cycle := AirlockCycle.new()
@@ -65,10 +73,28 @@ func bind(new_room: AirlockRoom, new_alcove: AirlockAlcove = null) -> void:
 	show.setup(room.room_frame, room.nozzles, room.ceiling_light, InteriorKit.LAYER)
 	_make_players()
 	for panel in panels():
-		panel.prompt_source = cycle.prompt.bind(panel.role)
+		panel.prompt_source = prompt.bind(panel.role)
 		if not panel.pressed.is_connected(_on_pressed):
 			panel.pressed.connect(_on_pressed)
 	_apply()
+
+## What pressing panel `role` would do now, or "": the cycle's prompt, unless
+## the room panel is refusing to let an empty suit out.
+func prompt(role: StringName) -> String:
+	if role == &"room" and must_charge():
+		return "Charge suit first"
+	return cycle.prompt(role)
+
+## True while the room panel refuses to depressurize (quantum energy spec §9):
+## the room is idle and pressurized -- pressing would take you out -- and
+## the one aboard holds a suit under SuitCell.GO_OUT_MIN. Coming in, and a
+## cycle already running, are never refused.
+func must_charge() -> bool:
+	if cycle.stage != AirlockCycle.Stage.IDLE or not cycle.pressurized():
+		return false
+	var avatar := _avatar()
+	return avatar != null and _ship != null and avatar.get_parent() == _ship.interior \
+		and avatar.suit_cell.charge < SuitCell.GO_OUT_MIN
 
 ## Every panel this airlock has right now.
 func panels() -> Array[AirlockPanel]:
@@ -155,6 +181,7 @@ func _watch_threshold() -> void:
 		_restore_environment()   # the avatar keeps the cabin's own mood, not the haze copy
 		avatar.enter_suit(_ship.outside, world, v, hull)
 		avatar.beacon_source = beacon
+		avatar.home_source = home
 		crossed.emit(avatar, true)
 	elif avatar.hull == hull:
 		var local := alcove.outer_frame.affine_inverse() * (hull.global_transform.affine_inverse() * avatar.global_position)
@@ -175,6 +202,23 @@ func beacon() -> Vector3:
 	if not is_instance_valid(alcove):
 		return Vector3.ZERO
 	return alcove.outer_hatch.global_transform * Vector3(0, InteriorProps.HATCH_HEIGHT * 0.5, 0)
+
+## Where a dry suit brings the middle of you (quantum energy spec §9): level
+## with the outer hatch's middle, HOME_OUT outside it, and held there. Once
+## the hatch is opening or open, ENTRY_DEPTH inside it instead, so the
+## emergency cell floats you in across the threshold -- you still press the
+## hull panel yourself. It sets off as the bolts draw, not once the leaves
+## have parted, so you are in the doorway well before an empty airlock would
+## close itself (AirlockCycle.AUTO_CLOSE); and a closing hatch sends you back
+## out rather than into its leaves. Non-finite with no hatch on the hull to
+## go home to.
+func home() -> Vector3:
+	if not is_instance_valid(alcove):
+		return Vector3.INF
+	var coming_in := cycle.outer_open >= 1.0 \
+		or (cycle.stage == AirlockCycle.Stage.OPENING and cycle.outer_bolts > 0.0)
+	var depth := ENTRY_DEPTH if coming_in else -HOME_OUT
+	return alcove.outer_hatch.global_transform * Vector3(0, InteriorProps.HATCH_HEIGHT * 0.5, depth)
 
 ## Inside the opening, across and up, in a hatch frame.
 static func _in_opening(local: Vector3) -> bool:
@@ -242,12 +286,18 @@ func _restore_environment() -> void:
 		_hazed_camera.environment = _saved_environment
 	_hazed_camera = null
 
+## A panel pressed: the cycle acts on it at its next step, and the panel beeps
+## where it is -- or, refusing an empty suit, sounds the warning instead.
 func _on_pressed(role: StringName) -> void:
-	cycle.press(role)
 	for panel in panels():
 		if panel.role == role and _players.has(&"panel"):
 			var beep: AudioStreamPlayer3D = _players[&"panel"]
 			beep.global_position = panel.global_position
+	if role == &"room" and must_charge():
+		cue.emit(&"refused", AirlockCycle.Door.NONE)
+		_play(&"panel", &"warning_chime")
+		return
+	cycle.press(role)
 	cue.emit(&"panel_beep", AirlockCycle.Door.NONE)
 	_play(&"panel", &"panel_beep")
 
@@ -335,7 +385,9 @@ func _apply() -> void:
 		hatch.bolts_out = cycle.outer_bolts
 		hatch.set_strip(outer_strip)
 		hatch.set_warning(not idle or warning["level"] > 0)
-	var lines := PackedStringArray(["PRESSURE %d kPa" % roundi(cycle.pressure), cycle.status()])
+	var refusing := must_charge()
+	var lines := PackedStringArray(["PRESSURE %d kPa" % roundi(cycle.pressure),
+		"CHARGE SUIT" if refusing else cycle.status()])
 	if warning["level"] > 0:
 		lines.append(warning["text"])
 	for panel in panels():
@@ -347,7 +399,8 @@ func _apply() -> void:
 				&"outer":
 					state = &"vacuum" if air else &"go"
 				_:
-					state = &"go"
+					# CORAL while it refuses, as the machine's button is.
+					state = &"vacuum" if refusing else &"go"
 		panel.set_readout(lines, state)
 
 ## The outer hatch in the room and, once built, its copy on the hull.

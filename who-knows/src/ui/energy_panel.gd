@@ -3,8 +3,13 @@ extends HudElement
 
 ## The ship's store, seated (quantum energy spec §12): *QE 600*, a bar with
 ## a notch at the low-power line, and a status line beneath it for whatever
-## the vehicle needs to add -- the ship's running boost cost, or (once the
-## suit is wired, Task 7) the hose's paid-out length.
+## the vehicle needs to add -- the ship's running boost cost, or the hose's
+## paid-out length.
+##
+## On a spacewalk it shows the suit's cell instead (§9, §12): *SUIT 64%*, a
+## bar with no notch (the suit has no low-power line), in WARNING below 25
+## with *SUIT LOW*, below 10 with *SUIT CRITICAL*, and dry with *SUIT DRY ·
+## RETURNING* while the emergency cell brings you home.
 ##
 ## Children are built in code rather than authored in the scene, exactly
 ## like VelocityPanel and AttitudePanel -- see CLAUDE.md on the text-scene
@@ -14,6 +19,9 @@ const BAR_WIDTH := 150.0
 const BAR_HEIGHT := 4.0
 const NOTCH_WIDTH := 2.0
 const NOTCH_HEIGHT := 8.0
+## The suit's warnings (VehicleTelemetry.energy_state), as the status line
+## reads them.
+const SUIT_WARNINGS := {&"low": "SUIT LOW", &"critical": "SUIT CRITICAL", &"dry": "SUIT DRY · RETURNING"}
 
 var energy_label: Label
 var bar_track: ColorRect
@@ -73,10 +81,16 @@ func render(telemetry: VehicleTelemetry) -> void:
 		return
 	visible = true
 
-	energy_label.text = "%s %d" % [telemetry.energy_label, telemetry.energy]
+	var suit := telemetry.energy_label == &"SUIT"
+	if suit:
+		var percent := floori(100.0 * telemetry.energy / telemetry.energy_capacity) if telemetry.energy_capacity > 0 else 0
+		energy_label.text = "SUIT %d%%" % percent
+	else:
+		energy_label.text = "%s %d" % [telemetry.energy_label, telemetry.energy]
 
 	var low := telemetry.energy_state == &"low_power"
-	var colour := HudPalette.WARNING if low else HudPalette.READOUT
+	var warning: String = SUIT_WARNINGS.get(telemetry.energy_state, "") if suit else ""
+	var colour := HudPalette.WARNING if low or warning != "" else HudPalette.READOUT
 	energy_label.add_theme_color_override("font_color", colour)
 	status_label.add_theme_color_override("font_color", colour)
 	bar_fill.color = colour
@@ -88,10 +102,15 @@ func render(telemetry: VehicleTelemetry) -> void:
 		line_fraction = clampf(float(telemetry.energy_line) / float(telemetry.energy_capacity), 0.0, 1.0)
 	bar_fill.size.x = bar_track.size.x * fraction
 	notch.position.x = bar_track.position.x + bar_track.size.x * line_fraction - NOTCH_WIDTH * 0.5
+	notch.visible = telemetry.energy_line > 0
 
 	if telemetry.boost_refused:
 		status_label.text = "BOOST · LOW POWER"
 	elif low:
 		status_label.text = "LOW POWER"
+	elif warning != "" and telemetry.tool_text != "":
+		status_label.text = "%s · %s" % [warning, telemetry.tool_text]
+	elif warning != "":
+		status_label.text = warning
 	else:
 		status_label.text = telemetry.tool_text

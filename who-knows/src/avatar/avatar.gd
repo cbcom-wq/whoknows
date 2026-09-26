@@ -53,6 +53,13 @@ var hull: RigidBody3D
 var thrusting := false
 ## Returns where home is -- the airlock you left -- for the suit's HUD.
 var beacon_source: Callable
+## The suit's quantum cell (quantum energy spec §9): empty at the start,
+## charged at the quantum machine's plate, spent by the suit's thrusters.
+var suit_cell := SuitCell.new()
+## Returns where a dry suit takes the middle of you, in the world (the
+## airlock you left: Airlock.home), or a non-finite point for nowhere. With
+## nowhere to go, a dry suit holds station beside the ship.
+var home_source: Callable
 
 ## Local gravity, supplied by Grav Plating. Zero means the cell is unplated.
 var grav_strength: float = 9.8
@@ -257,13 +264,21 @@ func enter_plating(interior: Node3D, pose: Transform3D, pitch: float, start_velo
 
 ## The suit's HUD (airlock spec §8.3): the same duck-typed contract a ship's
 ## flight computer answers, so the HUD needs no idea what a suit is. Speed is
-## relative to your own ship, and the beacon is the way home.
+## relative to your own ship, and the beacon is the way home. Its energy is
+## the suit's cell (quantum energy spec §12): whole QE of 100, floored so it
+## never shows more than is there, with no low-power line.
 func build_telemetry() -> VehicleTelemetry:
 	var t := VehicleTelemetry.from_state(head.global_basis, global_position,
 		velocity - _hull_velocity_at(global_position), Vector3.ZERO, suit_assist, false, Suit.ASSIST_CAP)
 	if beacon_source.is_valid():
 		t.has_beacon = true
 		t.beacon = beacon_source.call()
+	t.has_energy = true
+	t.energy = floori(suit_cell.charge)
+	t.energy_capacity = int(SuitCell.CAPACITY)
+	t.energy_line = 0
+	t.energy_label = &"SUIT"
+	t.energy_state = suit_cell.level()
 	return t
 
 ## Eases the view upright after floating in (enter_plating).
@@ -277,9 +292,30 @@ func tick_righting(delta: float) -> void:
 
 ## One suit step with thrust `input` (view axes: +x right, +y up, +z back).
 ## Called every physics frame on a spacewalk; tests call it directly.
+##
+## The suit's cell pays for the Δv its thrusters deliver, assist included
+## (quantum energy spec §9). Whatever else pulls on you after this step --
+## the hose's tether at full length (§11.3) -- is not the suit's doing, and
+## costs the cell nothing. Dry, the thrusters are off and the emergency cell
+## steers you home instead, free.
 func suit_step(delta: float, input: Vector3) -> void:
-	velocity = Suit.step(velocity, _hull_velocity_at(global_position), input, head.global_basis, suit_assist, delta)
+	var v_ref := _hull_velocity_at(global_position)
+	if suit_cell.is_dry():
+		velocity = Suit.home_step(velocity, v_ref, _to_home(), delta)
+		thrusting = false
+		return
+	var v := Suit.step(velocity, v_ref, input, head.global_basis, suit_assist, delta)
+	suit_cell.spend_dv((v - velocity).length())
+	velocity = v
 	thrusting = input.length() > 0.01
+
+## From the middle of you to where a dry suit takes you, or zero -- hold
+## station -- with nowhere to go.
+func _to_home() -> Vector3:
+	var home: Vector3 = home_source.call() if home_source.is_valid() else Vector3.INF
+	if not home.is_finite():
+		return Vector3.ZERO
+	return home - _collider.global_position
 
 func _suit_physics(delta: float) -> void:
 	var input := Vector3(

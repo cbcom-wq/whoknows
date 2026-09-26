@@ -152,10 +152,12 @@ func test_binding_the_same_machine_twice_adds_nothing_twice():
 	var core: QuantumCore = ship.interior_builder.quantum_cores()[0]
 	plant.bind(ship.interior_builder.quantum_cores(), ship.interior_builder.quantum_machines(), ship.stats)
 	assert_eq(m.get_children().filter(func(n): return n is QuantumShow).size(), 1, "one show")
-	assert_eq(m.get_children().filter(func(n): return n is AudioStreamPlayer3D).size(), 2, "the bay's and the panel's")
+	assert_eq(m.get_children().filter(func(n): return n is AudioStreamPlayer3D).size(), 3,
+		"the bay's, the panel's and the plate's")
 	assert_eq(core.get_children().filter(func(n): return n is AudioStreamPlayer3D).size(), 1, "one hum")
 	for button: ReadoutPanel in [m.panel, m.prev_button, m.next_button]:
 		assert_eq(button.pressed.get_connections().size(), 1, "%s wired once" % button.role)
+	assert_eq(m.plate.pressed.get_connections().size(), 1, "the plate wired once")
 
 ## Style guide §2.8: a few capitalised words on the glass, never spilling off
 ## it. Every line the machine can show, for every kind in the catalogue and
