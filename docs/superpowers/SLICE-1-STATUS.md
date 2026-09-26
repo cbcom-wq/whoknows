@@ -1,8 +1,8 @@
 # Slice 1 — status and handoff
 
-**Last updated:** 2026-09-24
+**Last updated:** 2026-09-26
 **Branch history:** `design/slice-1` (Tasks 1–12, merged) → `feat/slice-1-builders` (Tasks 13–15)
-**Suite:** 550 tests, green
+**Suite:** 905 tests, green (2026-09-26, the NPC foundation branch)
 
 Governing documents:
 
@@ -43,6 +43,13 @@ scenery any more.
   - the game's first sound, synthesized in code;
   - a spacewalk on suit thrusters, stepping out through the outer hatch and floating back in,
     with a marker home (docs/superpowers/specs/2026-09-24-airlock-design.md)
+- **NPCs** (docs/superpowers/specs/2026-09-26-npc-foundation-design.md), on a reusable
+  foundation: seeded records, a director per space, locomotors, stimuli and senses, a needs-and-
+  scores brain, species as `.tres`, and an F4 overlay:
+  - a **maintenance droid** aboard that tends portholes, consoles and the helm, recharges in the
+    closet, gives way, notices you, startles and braces;
+  - **skitters**, shy grazers in herds on the big rocks, that crawl any way up, freeze in your
+    lamp, scatter when the rock shakes, leap to moons and puff home when knocked off.
 
 Derived stats for the starter shuttle: 92,300 kg, torque imbalance 3.2% of pitch budget, power
 36.0 gen / 30.8 draw MW, **zero validation issues**, `can_launch = true`.

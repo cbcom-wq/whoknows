@@ -26,17 +26,20 @@ const CROUCH_HEIGHT := 1.0
 ## How hard walking into a loose thing pushes it, at walking pace
 ## (hands-and-items spec §7.5).
 const PUSH_FORCE := 150.0
-## interior_geometry | items (project.godot 3d_physics layers 2 and 6).
-const COLLISION_MASK := 2 | 32
+## interior_geometry | items | npcs (project.godot 3d_physics layers 2, 6 and 8).
+const COLLISION_MASK := 2 | 32 | Npc.LAYER
 ## Every avatar is in this group, so the things it walks through -- an
 ## airlock's doorways -- can find it.
 const GROUP := &"avatar"
-## exterior_hull | items | asteroids: on a spacewalk you bump along your own
-## hull, and into rocks (asteroids spec §7.6).
-const SUIT_MASK := 1 | 32 | AsteroidBody.LAYER
+## exterior_hull | items | asteroids | npcs: on a spacewalk you bump along your
+## own hull, into rocks (asteroids spec §7.6) and into skitters.
+const SUIT_MASK := 1 | 32 | AsteroidBody.LAYER | Npc.LAYER
 ## You and your suit, kilograms, for bumping into things in space.
 const SUIT_MASS := 120.0
 const BUMP_BOUNCE := 0.2
+const FOOTFALL_EVERY := 0.5
+## Meeting a rock slower than this, m/s, jolts nothing.
+const JOLT_SPEED := 0.3
 ## How long the view takes to right itself after floating in tilted.
 const RIGHTING_TIME := 0.4
 
@@ -87,6 +90,9 @@ var _camera_home := Vector3.ZERO
 @onready var head: Node3D = $Head
 @onready var camera: Camera3D = $Head/Camera3D
 @onready var _collider: CollisionShape3D = $Collider
+
+## Seconds to the next footfall while sprinting.
+var _footfall_in := 0.0
 
 func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -199,9 +205,21 @@ func _physics_process(delta: float) -> void:
 	var pushing := velocity
 	move_and_slide()
 	_push_loose_things(pushing, delta)
+	_footfalls(speed == SPRINT_SPEED and Vector2(velocity.x, velocity.z).length() > WALK_SPEED * 0.5, delta)
 
 func _process(delta: float) -> void:
 	tick_righting(delta)
+
+## Sprinting aboard is loud enough for NPCs to hear (NPC foundation spec
+## §6.1): a footfall every FOOTFALL_EVERY seconds.
+func _footfalls(sprinting: bool, delta: float) -> void:
+	if not sprinting:
+		_footfall_in = 0.0
+		return
+	_footfall_in -= delta
+	if _footfall_in <= 0.0:
+		_footfall_in = FOOTFALL_EVERY
+		StimulusBus.send(self, Stimulus.make(Stimulus.SOUND, global_position, 0.4, 6.0, self))
 
 ## Steps off the ship onto a spacewalk, at `pose` in the world, moving at
 ## `velocity`, with `ship_hull` as the ship you left.
@@ -342,7 +360,26 @@ func _bump_in_space(before: Vector3) -> void:
 	for i in get_slide_collision_count():
 		var hit := get_slide_collision(i)
 		hits.append([hit.get_collider(), hit.get_normal(), hit.get_position()])
+	_jolt_rocks(before, hits)
 	velocity = bump(before, velocity, hits)
+
+## Landing on or bumping into a rock jolts it: a vibration through the stone
+## that anything living on it feels (NPC foundation spec §6.1).
+func _jolt_rocks(before: Vector3, hits: Array) -> void:
+	var jolted := {}
+	for h in hits:
+		var rock: AsteroidRock = null
+		if h[0] is AsteroidDetail:
+			rock = (h[0] as AsteroidDetail).rock
+		elif h[0] is AsteroidBody:
+			rock = (h[0] as AsteroidBody).rock
+		if rock == null or jolted.has(rock):
+			continue
+		jolted[rock] = true
+		var closing := -before.dot(h[1])
+		if closing > JOLT_SPEED:
+			StimulusBus.send(self, Stimulus.make(Stimulus.VIBRATION, h[2], clampf(closing / 3.0, 0.0, 1.0),
+				30.0, self, RockHerds.site_of(rock)))
 
 ## Your velocity after bumping the rocks in `hits` ([collider, normal,
 ## point]), moving at `before` into them and `slid` after the slide. Sliding
@@ -352,17 +389,29 @@ func bump(before: Vector3, slid: Vector3, hits: Array) -> Vector3:
 	var bumped := {}
 	for h in hits:
 		var body := h[0] as AsteroidBody
-		if body == null or bumped.has(body):
+		# A skitter is bumped the same way (NPC foundation spec §12.1): it is
+		# kinematic, so it is told the impulse instead of being given it.
+		var npc := h[0] as Npc
+		if (body == null and npc == null) or bumped.has(h[0]):
 			continue
-		bumped[body] = true
+		bumped[h[0]] = true
 		var n: Vector3 = h[1]
-		var at: Vector3 = h[2] - body.global_position
-		var closing := -(before - (body.linear_velocity + body.angular_velocity.cross(at))).dot(n)
+		var other_v := npc.velocity if npc != null else Vector3.ZERO
+		var other_mass := npc.species.mass if npc != null else 0.0
+		var at := Vector3.ZERO
+		if body != null:
+			at = h[2] - body.global_position
+			other_v = body.linear_velocity + body.angular_velocity.cross(at)
+			other_mass = body.mass
+		var closing := -(before - other_v).dot(n)
 		if closing <= 0.0:
 			continue
-		var m := SUIT_MASS * body.mass / (SUIT_MASS + body.mass)
+		var m := SUIT_MASS * other_mass / (SUIT_MASS + other_mass)
 		var j := (1.0 + BUMP_BOUNCE) * m * closing
-		body.apply_impulse(-n * j, at)
+		if body != null:
+			body.apply_impulse(-n * j, at)
+		else:
+			npc.shove(-n * j)
 		v += n * (before.dot(n) + j / SUIT_MASS - v.dot(n))
 	return v
 

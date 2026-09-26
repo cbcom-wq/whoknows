@@ -7,7 +7,7 @@ const LENGTHS := {
 	&"hatch_motor": 0.9, &"bolt_clunk": 0.3, &"seal_thump": 0.35, &"hiss_out": 2.8, &"steam_in": 2.8,
 	&"panel_beep": 0.15, &"warning_chime": 0.5, &"ship_hum": 2.0, &"breath": 4.0, &"thruster_puff": 1.0,
 	&"hull_thump": 0.6, &"rcs_puff": 0.25, &"core_hum": 4.0, &"convert": 1.4, &"materialize": 1.8,
-	&"charge": 1.0,
+	&"charge": 1.0, &"droid_whir": 1.0, &"droid_chirp": 0.14, &"droid_beep": 0.2,
 }
 
 func test_every_sound_builds_at_its_length():

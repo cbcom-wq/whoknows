@@ -15,8 +15,9 @@ const OPEN_TIME := 0.25
 const LEAF_THICKNESS := 0.06
 ## How deep the trigger reaches into the rooms on both sides.
 const TRIGGER_DEPTH := 2.4
-## The avatar's physics layer (project.godot 3d_physics/layer_3) as a mask.
-const AVATAR_MASK := 4
+## Who the door opens for: the avatar and NPCs (project.godot 3d_physics
+## layers 3 and 8), so the droid can walk through (NPC foundation spec §5.5).
+const OPENS_FOR := 4 | 128
 
 var is_open := false
 
@@ -50,7 +51,7 @@ func setup(opening_width: float, opening_height: float) -> void:
 	var trigger := Area3D.new()
 	trigger.name = "Trigger"
 	trigger.collision_layer = 0
-	trigger.collision_mask = AVATAR_MASK
+	trigger.collision_mask = OPENS_FOR
 	trigger.add_child(trigger_shape)
 	add_child(trigger)
 	trigger.body_entered.connect(_on_body_entered)

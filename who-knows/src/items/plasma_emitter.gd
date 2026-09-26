@@ -12,7 +12,7 @@ const COOLDOWN := 0.25
 const AIM_RANGE := 100.0
 const MAX_BOLTS := 8
 ## interior_geometry | items.
-const RAY_MASK := 2 | 32
+const RAY_MASK := 2 | 32 | Npc.LAYER
 
 var _cooldown := 0.0
 var _bolts: Array[PlasmaBolt] = []

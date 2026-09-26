@@ -14,7 +14,8 @@ func test_setup_builds_two_leaves_and_a_trigger():
 	var trigger := _door.get_node_or_null("Trigger") as Area3D
 	assert_not_null(trigger)
 	assert_eq(trigger.collision_layer, 0, "the trigger is detected by nothing")
-	assert_eq(trigger.collision_mask, SlidingDoor.AVATAR_MASK, "and detects the avatar")
+	assert_eq(trigger.collision_mask, SlidingDoor.OPENS_FOR, "and detects the avatar and NPCs")
+	assert_true(trigger.collision_mask & 4 != 0 and trigger.collision_mask & Npc.LAYER != 0)
 	assert_eq(_door.leaf_positions().size(), 2)
 
 func test_closed_leaves_meet_in_the_middle():

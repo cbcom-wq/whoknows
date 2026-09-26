@@ -45,7 +45,7 @@ func test_the_avatar_owns_a_grasp():
 	assert_eq(_avatar.grasp.get_parent(), _avatar)
 
 func test_the_avatar_collides_with_items():
-	assert_eq(_avatar.collision_mask, 2 | 32)
+	assert_eq(_avatar.collision_mask, 2 | 32 | Npc.LAYER)
 
 func test_plating_gravity_is_unchanged():
 	assert_eq(_avatar.grav_strength, 9.8)

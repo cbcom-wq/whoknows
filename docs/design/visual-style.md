@@ -291,6 +291,28 @@ the owner with that spec on 2026-09-24:
 - **They fade in with distance,** by the built-in distance dither of `StandardMaterial3D`, never
   a new shader: at the far edge of its fade a tier's largest rock is only a few pixels across.
 
+### 3.6 NPCs
+
+The first two NPCs (`docs/superpowers/specs/2026-09-26-npc-foundation-design.md` §13.4, §14.4),
+rendered in the real scene on 2026-09-26 and sent to the owner. The looks await the owner's word;
+until then these are the rules they were built to:
+
+- **Each NPC takes the palette of the space it is in.** Outside: `SpacePalette`. Inside:
+  `InteriorPalette` and the interior kit. No NPC palette of its own.
+- **The maintenance droid is built like a prop,** from the interior kit, `(kit, frame, variety)`,
+  never seeing the grid (`NpcLooks.droid_*`, `DroidLook`): a bevelled drum on two wheels, a cap
+  with an eye strip, one short arm. Its body is `InteriorPalette.DROID_BODY`, a muted teal: in
+  the walls' beige it read as part of the corridor, and the one cool thing in a warm ship reads
+  as alive. Its eye is the kit's `GLOW` batch; it has no light of its own, so the light budget is
+  unchanged. Three soft synthesized sounds on the Ship bus (`droid_whir`, `droid_chirp`,
+  `droid_beep`).
+- **The skitter is chunky facets in its rock's own colour** (`SkitterLook`): a domed back of big
+  flat faces in the rock's shades, so a still skitter reads as a stone; a small lavender patch
+  (`SpacePalette.CRYSTAL`); pale eyes that catch a lamp (`SpacePalette.SKITTER_EYE`); six short,
+  stubby legs -- long legs read as a spider. Under 300 triangles. It fades in with distance by
+  the built-in dither, as the rocks do. Silent, as everything outside is (§2.9).
+- **Legs never stretch.** A foot left behind by a bolting body is drawn at the end of its reach.
+
 ## 4. Adding something new
 
 **A new prop:**
@@ -352,12 +374,12 @@ shader.
 
 `test/unit/test_visual_style_rules.gd` fails the build if:
 
-- a colour literal appears in interior, item, hand, airlock or asteroid code other than the
-  palettes (`InteriorPalette`, `HullPalette` for the hull's outside, `SpacePalette` for rocks;
-  `InteriorKit` is exempt: it packs data into vertex colours);
+- a colour literal appears in interior, item, hand, airlock, asteroid or NPC-look code other than
+  the palettes (`InteriorPalette`, `HullPalette` for the hull's outside, `SpacePalette` for rocks
+  and skitters; `InteriorKit` is exempt: it packs data into vertex colours);
 - `interior_props.gd`, `interior_kit.gd`, `sliding_door.gd`, `item_looks.gd`, `item.gd`,
-  `glove.gd`, `hands.gd`, `airlock_hatch.gd`, `airlock_panel.gd` or `airlock_show.gd` reference
-  the grid, the layout, the builder or the dressing;
+  `glove.gd`, `hands.gd`, `airlock_hatch.gd`, `airlock_panel.gd`, `airlock_show.gd`,
+  `npc_looks.gd` or `droid_look.gd` reference the grid, the layout, the builder or the dressing;
 - the set of interior shaders changes.
 
 Other interior tests pin the rest: render layer 2 and cull mask 2, no interior shadows, colliders

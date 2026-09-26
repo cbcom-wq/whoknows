@@ -15,10 +15,11 @@ const MIX_RATE := 22050
 const NAMES: Array[StringName] = [
 	&"hatch_motor", &"bolt_clunk", &"seal_thump", &"hiss_out", &"steam_in",
 	&"panel_beep", &"warning_chime", &"ship_hum", &"breath", &"thruster_puff", &"hull_thump",
-	&"rcs_puff", &"core_hum", &"convert", &"materialize", &"charge",
+	&"rcs_puff", &"core_hum", &"convert", &"materialize", &"charge", &"droid_whir", &"droid_chirp",
+	&"droid_beep",
 ]
 ## Sounds that play as seamless loops.
-const LOOPED: Array[StringName] = [&"ship_hum", &"breath", &"thruster_puff", &"core_hum", &"charge"]
+const LOOPED: Array[StringName] = [&"ship_hum", &"breath", &"thruster_puff", &"core_hum", &"charge", &"droid_whir"]
 
 static var _cache: Dictionary = {}
 static var _mutex := Mutex.new()
@@ -89,6 +90,12 @@ static func build(sound_name: StringName) -> AudioStreamWAV:
 			x = _materialize()
 		&"charge":
 			x = _charge()
+		&"droid_whir":
+			x = _droid_whir()
+		&"droid_chirp":
+			x = _tones([880.0, 1175.0], 0.14, 0.35)
+		&"droid_beep":
+			x = _droid_beep()
 		_:
 			push_error("Synth: no sound called %s" % sound_name)
 			return null
@@ -216,6 +223,33 @@ static func _breath() -> PackedFloat32Array:
 		var b := sin(PI * clampf((t - 1.9) / 1.8, 0.0, 1.0)) if t >= 1.9 and t < 3.7 else 0.0
 		x[i] = inhale[i] * a * 1.2 + exhale[i] * b * 1.4
 	return _gain(x, 0.6)
+
+## The maintenance droid's wheels (NPC foundation spec §14.5): a soft motor
+## under a breath of filtered noise, quiet, looping.
+static func _droid_whir() -> PackedFloat32Array:
+	var n := _len(1.0)
+	var total := n + n / 10
+	var air := _lowpass(_noise(total, 21), 600.0)
+	var x := PackedFloat32Array()
+	x.resize(total)
+	for i in total:
+		var t := float(i) / MIX_RATE
+		x[i] = sin(TAU * 140.0 * t) * 0.35 + sin(TAU * 280.0 * t) * 0.1 + air[i] * 1.4
+	return _gain(_loopable(x, n), 0.25)
+
+## The droid startled (NPC foundation spec §14.5): two low notes, wobbling.
+static func _droid_beep() -> PackedFloat32Array:
+	var n := _len(0.2)
+	var x := PackedFloat32Array()
+	x.resize(n)
+	var phase := 0.0
+	for i in n:
+		var t := float(i) / MIX_RATE
+		var f := (520.0 if t < 0.1 else 440.0) * (1.0 + 0.03 * sin(TAU * 7.0 * t))
+		phase += TAU * f / MIX_RATE
+		var local := fmod(t, 0.1)
+		x[i] = sin(phase) * _ramp(local, 0.008, 0.1, 0.06)
+	return _gain(x, 0.4)
 
 ## A suit thruster: a soft, fluttering band of air.
 static func _thruster() -> PackedFloat32Array:

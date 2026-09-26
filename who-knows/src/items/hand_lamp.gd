@@ -38,6 +38,8 @@ func _ready() -> void:
 		InteriorKit.lit(InteriorPalette.LIGHT_WARM, InteriorMaterials.GLOW_ENERGY))
 	kit.commit()
 	_show()
+	# NPCs see it while it is on (NPC foundation spec §6.2).
+	add_to_group(StimulusBus.LIGHTS)
 
 func use(_item: Item, _aim: Transform3D, _world: Node3D, _holder: CollisionObject3D) -> bool:
 	on = not on
@@ -46,6 +48,20 @@ func use(_item: Item, _aim: Transform3D, _world: Node3D, _holder: CollisionObjec
 
 func status() -> String:
 	return "on" if on else ""
+
+## What NPCs see of it (StimulusBus.LIGHTS): how far it reaches while on,
+## its cone's whole width, and where it shines from, along -z.
+func light_reach() -> float:
+	return RANGE if on else 0.0
+
+func light_cone_deg() -> float:
+	return ANGLE * 2.0
+
+func light_origin() -> Transform3D:
+	return _beam.global_transform
+
+func light_kind() -> StringName:
+	return &"lamp"
 
 func _show() -> void:
 	_beam.visible = on

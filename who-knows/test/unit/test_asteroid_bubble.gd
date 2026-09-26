@@ -58,7 +58,7 @@ func test_a_rock_within_reach_becomes_a_sleeping_body_just_where_it_was():
 	assert_true(body.global_transform.is_equal_approx(_stream.rock_pose(rock)))
 	assert_almost_eq(body.mass, minf(rock.mass, AsteroidBody.MASS_CAP), rock.mass * 1e-6)
 	assert_eq(body.collision_layer, 64)
-	assert_eq(body.collision_mask, 1 | 4 | 32 | 64)
+	assert_eq(body.collision_mask, 1 | 4 | 32 | 64 | Npc.LAYER)
 	assert_true(body.is_in_group(Universe.EXTERIOR_SPACE))
 	assert_true(_stream.is_hidden(rock), "its picture gives way")
 

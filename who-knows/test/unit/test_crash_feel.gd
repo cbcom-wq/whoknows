@@ -67,6 +67,24 @@ func test_bumping_a_rock_on_a_spacewalk_shares_momentum():
 	assert_lt(body.linear_velocity.z, -0.05, "the rock drifts away")
 	assert_almost_eq(p_avatar + p_rock, Avatar.SUIT_MASS * -3.0, 40.0, "momentum is shared, not made")
 
+func test_bumping_a_skitter_shares_momentum_by_the_same_rule():
+	var sp := NpcSpecies.new()
+	sp.id = &"skitter"
+	sp.size = 0.85
+	sp.height = 0.4
+	sp.mass = 25.0
+	var npc := Npc.new()
+	add_child_autofree(npc)
+	npc.setup(NpcRecord.make(&"s:0", &"skitter", &"x", Vector3.ZERO, 1), sp, NpcSite.new(), false,
+		Transform3D(Basis.IDENTITY, Vector3(0, 0, -600)))
+	npc.set_physics_process(false)
+	var n := Vector3(0, 0, 1)
+	var v := _avatar.bump(Vector3(0, 0, -1), Vector3.ZERO, [[npc, n, npc.global_position], [npc, n, npc.global_position]])
+	var m := Avatar.SUIT_MASS * 25.0 / (Avatar.SUIT_MASS + 25.0)
+	var j := (1.0 + Avatar.BUMP_BOUNCE) * m * 1.0
+	assert_almost_eq(npc.velocity.z * 25.0, -j, 0.001, "one impulse, into it")
+	assert_almost_eq(v.z, -1.0 + j / Avatar.SUIT_MASS, 0.001, "and you slow")
+
 func test_touching_a_rock_twice_in_one_step_is_one_bump():
 	var outside: Node3D = _root.get_node("Outside")
 	var rock := AsteroidRock.new()

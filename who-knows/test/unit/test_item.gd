@@ -45,7 +45,7 @@ func test_builds_from_a_definition_alone():
 func test_lives_on_the_items_layer():
 	var item := _item()
 	assert_eq(item.collision_layer, 32)
-	assert_eq(item.collision_mask, 2 | 4 | 32)
+	assert_eq(item.collision_mask, 2 | 4 | 32 | Npc.LAYER)
 	assert_true(item.continuous_cd, "thrown items must not tunnel through 0.1 m walls")
 	assert_true(item.is_in_group(&"interactable"))
 
@@ -84,7 +84,7 @@ func test_letting_go_restores_the_layers():
 	item.set_held()
 	item.set_loose()
 	assert_eq(item.collision_layer, 32)
-	assert_eq(item.collision_mask, 38)
+	assert_eq(item.collision_mask, 38 | Npc.LAYER)
 	assert_false(item.freeze)
 
 func test_prompts_name_the_item():
@@ -168,7 +168,7 @@ func test_set_space_puts_it_in_the_world_and_back_aboard():
 	item.set_space(true)
 	assert_true(item.in_space)
 	assert_eq(item.collision_layer, 32)
-	assert_eq(item.collision_mask, 1 | 4 | 32 | 64)
+	assert_eq(item.collision_mask, 1 | 4 | 32 | 64 | Npc.LAYER)
 	assert_eq(item.collision_mask, AsteroidBody.MASK, "the mask a rock has")
 	assert_gt(_looks(item).size(), 0, "the look was rebuilt")
 	for g in _looks(item):
@@ -177,7 +177,7 @@ func test_set_space_puts_it_in_the_world_and_back_aboard():
 	assert_eq(item.get_groups(), groups, "no floating-origin group joined")
 	item.set_space(false)
 	assert_false(item.in_space)
-	assert_eq(item.collision_mask, 2 | 4 | 32)
+	assert_eq(item.collision_mask, 2 | 4 | 32 | Npc.LAYER)
 	for g in _looks(item):
 		assert_eq(g.layers, 2, "%s back on the interior layer" % g.name)
 	assert_eq(item.get_groups(), groups)
