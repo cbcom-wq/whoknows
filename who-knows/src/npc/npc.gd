@@ -44,6 +44,12 @@ var last_context: NpcContext
 
 var _shape: CollisionShape3D
 var _skin_shape: CollisionShape3D
+## Its voice and its wheels' whir, aboard only: outside is silent (style
+## guide §2.9).
+var _voice: AudioStreamPlayer3D
+var _whir: AudioStreamPlayer3D
+## Moving faster than this, m/s, its whir plays.
+const WHIRS_OVER := 0.1
 ## A thing moving at least this fast against it is a touch, m/s.
 const TOUCH_SPEED := 1.0
 
@@ -91,6 +97,7 @@ func setup(p_record: NpcRecord, p_species: NpcSpecies, p_site: NpcSite, p_inside
 	if not species.locomotors.is_empty() and locomotors.has(species.locomotors[0]):
 		active = locomotors[species.locomotors[0]]
 	_build_look()
+	_set_up_sound()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = record.seed
 	brain = Brain.new()
@@ -135,6 +142,49 @@ func _physics_process(delta: float) -> void:
 	if next != &"":
 		switch_to(next)
 
+## Says `sound` (a Synth sound: &"droid_chirp", &"droid_beep"), if it can be
+## heard where it is.
+func voice(sound: StringName) -> void:
+	if _voice == null or not inside:
+		return
+	var s := Synth.sound(sound)
+	if s == null:
+		return
+	_voice.stream = s
+	_voice.play()
+
+func _process(_delta: float) -> void:
+	if _whir == null:
+		return
+	var moving := inside and species.move_sound != &"" and Vector2(velocity.x, velocity.z).length() > WHIRS_OVER
+	if moving and not _whir.playing:
+		var s := Synth.sound(species.move_sound)
+		if s != null:
+			_whir.stream = s
+			_whir.play()
+	elif not moving and _whir.playing:
+		_whir.stop()
+
+func _set_up_sound() -> void:
+	if not inside:
+		for p in [_voice, _whir]:
+			if p != null:
+				p.stop()
+		return
+	if _voice == null:
+		_voice = _player("Voice", -8.0)
+		_whir = _player("Whir", -20.0)
+
+func _player(label: String, db: float) -> AudioStreamPlayer3D:
+	var p := AudioStreamPlayer3D.new()
+	p.name = label
+	p.bus = AudioBuses.SHIP
+	p.volume_db = db
+	p.unit_size = 2.0
+	p.position = Vector3(0, species.height * 0.6, 0)
+	add_child(p)
+	return p
+
 ## Its position in its site's frame.
 func local_position() -> Vector3:
 	return site.frame().affine_inverse() * global_position
@@ -165,8 +215,8 @@ func think(time: float, dt: float) -> void:
 	last_context = ctx
 	if look != null and look.has_method(&"act"):
 		look.call(&"act", intent.action)
-	if ctx.voice != &"" and has_method(&"voice"):
-		call(&"voice", ctx.voice)
+	if ctx.voice != &"":
+		voice(ctx.voice)
 
 ## A hit from a bolt or a thrown thing (hands-and-items spec §9.3): a touch,
 ## and a shove. Nothing takes damage yet.

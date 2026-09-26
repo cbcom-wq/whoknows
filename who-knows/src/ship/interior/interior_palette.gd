@@ -41,6 +41,9 @@ const ROOM_FLOOR := {
 }
 const MATTRESS := Color("6f9c9a")
 const GUNMETAL := Color("3a3d44")
+## The maintenance droid's wheels (NPC foundation spec §14.4): darker than
+## gunmetal, so they read under its warm body.
+const DROID_WHEEL := Color("2c2e33")
 const OLIVE := Color("8a9a5b")
 const MIRROR := Color("5a7e96")
 

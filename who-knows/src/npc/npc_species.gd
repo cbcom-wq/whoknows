@@ -22,11 +22,16 @@ extends Resource
 ## The first is the one it starts with.
 @export var locomotors: Array[StringName] = []
 @export var look: StringName
+## A Synth sound that loops while it moves, aboard only; &"" for none.
+@export var move_sound: StringName
 @export_group("Senses")
 @export var sight_range := 20.0
 @export var sight_cone_deg := 180.0
 ## Sight in the dark as a fraction of sight_range (outside only; inside is lit).
 @export var dark_sight := 1.0
+## Within this, metres, it notices the player all round, cone or no cone:
+## something coming up behind it in a corridor.
+@export var near_sense := 0.0
 ## 0 feels no vibration; 1 feels a stimulus to its full radius.
 @export var feels_vibration := 0.0
 @export var hears := 0.0

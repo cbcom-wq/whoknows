@@ -132,9 +132,10 @@ func _look(npc: Npc, ctx: NpcContext, lights: Array[Node3D], to_local: Transform
 				lit = true
 				break
 		var to := at - eye
-		if to.length() > sight_range(npc.species, lit, npc.inside):
+		var near := to.length() <= npc.species.near_sense
+		if not near and to.length() > sight_range(npc.species, lit, npc.inside):
 			continue
-		if not in_cone(forward, to, npc.species.sight_cone_deg):
+		if not near and not in_cone(forward, to, npc.species.sight_cone_deg):
 			continue
 		var exclude: Array[RID] = [npc.get_rid()]
 		if avatar is CollisionObject3D:

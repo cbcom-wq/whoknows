@@ -16,6 +16,7 @@ look = &"skitter"
 sight_range = 40.0
 sight_cone_deg = 220.0
 dark_sight = 0.33
+near_sense = 2.0
 feels_vibration = 1.0
 hears = 0.0
 feels_shake = 0.0

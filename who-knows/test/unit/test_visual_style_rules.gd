@@ -41,6 +41,8 @@ const PAINTING_FILES := [
 	"res://src/world/asteroid_details.gd",
 	"res://src/world/puffs.gd",
 	"res://src/flight/rcs_show.gd",
+	"res://src/npc/npc_looks.gd",
+	"res://src/npc/droid_look.gd",
 ]
 
 ## The reusable asset library and what it builds with. Ships are generated
@@ -57,6 +59,8 @@ const REUSABLE_FILES := [
 	"res://src/ship/airlock/airlock_panel.gd",
 	"res://src/ship/airlock/airlock_show.gd",
 	"res://src/world/puffs.gd",
+	"res://src/npc/npc_looks.gd",
+	"res://src/npc/droid_look.gd",
 ]
 const GRID_SIDE := ["ShipGrid", "BlockCatalog", "DeckGraph", "InteriorLayout", "InteriorBuilder",
 	"InteriorDressing"]

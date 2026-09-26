@@ -15,6 +15,9 @@ var _closing := false
 var _to: Variant = null
 
 func _init() -> void:
+	# A reflex, so it steps aside even in the middle of a job.
+	reflex = true
+	threshold = 0.8
 	min_time = 1.5
 
 func score(ctx: NpcContext) -> float:
@@ -23,7 +26,7 @@ func score(ctx: NpcContext) -> float:
 		_closing = false
 		return 0.0
 	var d := flat_distance(ctx.player, ctx.position)
-	_closing = d < _last_distance - 0.05
+	_closing = _last_distance < INF and d < _last_distance - 0.05
 	_last_distance = d
 	if d < TOO_CLOSE or (d < NEAR and _closing):
 		return 0.9

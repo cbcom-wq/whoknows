@@ -99,6 +99,15 @@ func test_it_sees_the_player_ahead_inside_but_not_behind_or_through_a_wall():
 	ctx = _sense(1.4)
 	assert_null(ctx.player, "through a wall")
 
+func test_close_by_it_notices_you_all_round():
+	_make(true)
+	_species.near_sense = 3.0
+	_player.global_position = Vector3(0, 0.4, 2.5)
+	await wait_physics_frames(2)
+	assert_not_null(_sense().player, "behind it, but near")
+	_player.global_position = Vector3(0, 0.4, 3.5)
+	assert_null(_sense(1.2).player, "behind it, and not near")
+
 func test_outside_a_dark_player_is_seen_only_close():
 	_make(false)
 	await wait_physics_frames(2)

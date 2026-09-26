@@ -3,7 +3,8 @@ extends Locomotor
 
 ## Walks an interior's floors under its felt gravity (docs/superpowers/specs/
 ## 2026-09-26-npc-foundation-design.md §5.5). It plans over the site's
-## DeckPaths, cell centre to cell centre, rounding each corner as it nears it,
+## DeckPaths and walks cell centre to cell centre, starting from its own
+## cell's, so it always goes through a doorway square on,
 ## and holds its line against the hull's shove up to its grip: past that it
 ## slides, like a crate. Braced, it grips harder.
 ##
@@ -13,8 +14,10 @@ extends Locomotor
 ## felt shove is capped at 12 (MotionCoupling.SHOVE_CAP).
 const GRIP := 8.0
 const BRACED_GRIP := 10.0
-## Within this of a waypoint it turns for the next one.
-const CORNER := 0.8
+## Within this of a waypoint it turns for the next one. Small, so it passes
+## doorways through their middle: a 1 m door leaves a 0.5 m droid a hand's
+## width either side.
+const CORNER := 0.3
 ## It slows within this of where it is going, and stops within ARRIVED.
 const SLOWING := 0.5
 const ARRIVED := 0.05
@@ -75,7 +78,7 @@ func _plan(site: ShipSite, here: Vector3, to: Vector3) -> void:
 	_target = to
 	_version = site.version
 	_path = site.paths.path(DeckPaths.cell_at(here), DeckPaths.cell_at(to))
-	_next = 1 if _path.size() > 1 else 0
+	_next = 0
 
 ## Turns about its up toward what it faces, or the way it goes.
 func _turn(npc: Npc, intent: Intent, frame: Transform3D, flat: Vector3, delta: float) -> void:
