@@ -47,6 +47,15 @@ func test_ceiling_light_brings_its_light():
 	_assert_built()
 	assert_eq(_lights(&"ceiling").size(), 1)
 
+## What runs along a ceiling keeps clear of its lights by the published rim.
+func test_a_ceiling_lights_rim_is_as_published():
+	InteriorProps.ceiling_light(_kit, Vector3(0, 1.9, 0))
+	var box := AABB()
+	for mi in _kit.commit():
+		box = mi.mesh.get_aabb() if box.size == Vector3.ZERO else box.merge(mi.mesh.get_aabb())
+	assert_almost_eq(box.end.x, InteriorProps.CEILING_LIGHT_RIM, 0.001)
+	assert_almost_eq(box.end.z, InteriorProps.CEILING_LIGHT_RIM, 0.01)
+
 func test_console_is_solid_and_lit():
 	InteriorProps.console(_kit, Transform3D.IDENTITY, 0.4)
 	_assert_built()
@@ -223,6 +232,14 @@ func test_door_frame_is_lit_and_leaves_the_opening_clear():
 	InteriorProps.door_frame(_kit, Transform3D.IDENTITY)
 	_built_with_colliders(0)
 	assert_eq(_lights(&"door").size(), 1)
+
+## What runs over a doorway keeps above its lit header, whose top is published.
+func test_a_door_frames_header_tops_out_as_published():
+	InteriorProps.door_frame(_kit, Transform3D.IDENTITY)
+	var top := -INF
+	for mi in _kit.commit():
+		top = maxf(top, mi.mesh.get_aabb().end.y)
+	assert_almost_eq(top, InteriorProps.DOOR_HEIGHT + InteriorProps.DOOR_HEADER, 0.001)
 
 func test_every_room_has_a_floor_colour():
 	for id in InteriorLayout.ROOM_IDS:

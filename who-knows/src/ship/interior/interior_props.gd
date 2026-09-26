@@ -46,6 +46,9 @@ const DOOR_WIDTH := 1.0
 ## A doorway's clear height: door height, not ceiling height, with a lintel
 ## above -- and well over the 1.8 m avatar.
 const DOOR_HEIGHT := 2.1
+## How far a door frame's lit header stands over DOOR_HEIGHT: anything run
+## past a doorway overhead keeps above it.
+const DOOR_HEADER := 0.12
 
 ## The airlock's clear height (airlock spec §3.2): its ceiling is where the
 ## hull cell's is, so its copy on the hull matches it exactly. Lower than the
@@ -127,6 +130,9 @@ const SEATED_EYE := Vector3(0, 1.35, 0.45)
 const CELL_LIGHT_ROLE := &"ceiling"
 const CELL_LIGHT_ENERGY := 0.45
 const CELL_LIGHT_RANGE := 4.0
+## A round ceiling light's frame: the ring's outer radius, round the cell's
+## centre. Anything run along the ceiling keeps clear of it.
+const CEILING_LIGHT_RIM := 0.42
 
 ## The quantum core (quantum energy spec §6.2), in a fixture frame: an
 ## octagonal plinth FOOTPRINT across, a glass column, a crown at the ceiling
@@ -213,7 +219,7 @@ static func wall_trim(kit: InteriorKit, f: Transform3D) -> void:
 ## lamp that actually lights the room below it.
 static func ceiling_light(kit: InteriorKit, ceiling_centre: Vector3) -> void:
 	var down := Transform3D(Basis(Vector3.RIGHT, PI * 0.5), ceiling_centre)
-	kit.ring(SOLID, down, 0.3, 0.42, -0.02, 0.05, _c(InteriorPalette.TRIM))
+	kit.ring(SOLID, down, 0.3, CEILING_LIGHT_RIM, -0.02, 0.05, _c(InteriorPalette.TRIM))
 	kit.disc(GLOW, down * _at(Vector3(0, 0, 0.02)), 0.3, _lit(InteriorPalette.LIGHT_WARM, 0.9))
 	kit.light(ceiling_centre + Vector3(0, -0.9, 0), InteriorPalette.LIGHT_WARM, CELL_LIGHT_ENERGY,
 		CELL_LIGHT_RANGE, CELL_LIGHT_ROLE)
@@ -1173,8 +1179,8 @@ static func door_frame(kit: InteriorKit, f: Transform3D) -> void:
 	for side in [-1.0, 1.0]:
 		kit.bevel_box(SOLID, f * _at(Vector3(side * (DOOR_WIDTH * 0.5 + 0.07), DOOR_HEIGHT * 0.5, mid)),
 			Vector3(0.14, DOOR_HEIGHT, 0.24), 0.04, _c(InteriorPalette.TRIM))
-	kit.bevel_box(SOLID, f * _at(Vector3(0, DOOR_HEIGHT + 0.06, mid)), Vector3(DOOR_WIDTH + 0.28, 0.12, 0.24),
-		0.04, _c(InteriorPalette.TRIM))
+	kit.bevel_box(SOLID, f * _at(Vector3(0, DOOR_HEIGHT + DOOR_HEADER * 0.5, mid)),
+		Vector3(DOOR_WIDTH + 0.28, DOOR_HEADER, 0.24), 0.04, _c(InteriorPalette.TRIM))
 	kit.box(GLOW, f * _at(Vector3(0, DOOR_HEIGHT - 0.012, mid)), Vector3(DOOR_WIDTH, 0.02, 0.12),
 		_lit(InteriorPalette.LIGHT_WARM, 2.0))
 	kit.light(f * Vector3(0, DOOR_HEIGHT, 0.3), InteriorPalette.LIGHT_WARM, 0.5, 2.5, &"door")

@@ -329,14 +329,14 @@ func test_the_conduit_runs_from_the_machine_along_the_ceiling_to_the_cores_crown
 	for i in range(1, cells.size()):
 		assert_null(_face_between(cells[i - 1], cells[i]),
 			"through no wall or doorway from %s to %s: the bridge is one open space" % [cells[i - 1], cells[i]])
+	assert_almost_eq(path[2].z, path[1].z, 0.0001, "it sets off along the galley wall at the machine's back")
 
 # --- The conduit on any blueprint (quantum energy spec §6.3) ------------------
 
-## A ceiling light's rim is 0.42 m from its centre (InteriorProps.ceiling_light):
-## a run keeps the pipe's radius and 5 cm more clear of it.
-const RING_CLEAR := 0.42 + InteriorProps.CONDUIT_RADIUS + 0.05
-## The top of a door frame's lit header (InteriorProps.door_frame).
-const HEADER_TOP := InteriorProps.DOOR_HEIGHT + 0.12
+## A run keeps the pipe's radius and 5 cm more clear of a ceiling light's rim.
+const RING_CLEAR := InteriorProps.CEILING_LIGHT_RIM + InteriorProps.CONDUIT_RADIUS + 0.05
+## The top of a door frame's lit header.
+const HEADER_TOP := InteriorProps.DOOR_HEIGHT + InteriorProps.DOOR_HEADER
 
 func _quantum_blocks() -> void:
 	_cat.register(_def(&"quantum_core", BlockDefinition.Occupancy.MOUNT))
@@ -508,9 +508,93 @@ func test_a_core_on_another_storey_only_leaves_the_conduit_ending_in_the_ceiling
 	var core: QuantumCore = _builder.quantum_cores()[0]
 	_assert_ends_in_the_ceiling(m)
 	assert_gt(core.crown().distance_to(m.conduit_path[1]), 0.01)
+	assert_null(_core_the_plant_finds(m), "no core at the end of it to flash")
+
+## A core in the next cell along the machine's wall: a two-cell route, straight
+## along the wall and into the crown's side.
+func test_a_core_beside_the_machine_takes_a_two_cell_route():
+	_quantum_blocks()
+	_put(Vector3i(0, 0, 0), &"quantum_machine")   # facing -z, its back to the +z wall
+	_put(Vector3i(1, 0, 0), &"quantum_core")
+	_builder.rebuild()
+	var m: QuantumMachine = _builder.quantum_machines()[0]
+	var core := _core_at(Vector3i(1, 0, 0))
+	assert_eq(_assert_conduit_rules(m, core), [Vector3i(0, 0, 0), Vector3i(1, 0, 0)])
+	assert_eq(_core_the_plant_finds(m), core)
+
+## A core in the next cell out from the machine's wall: a two-cell route that
+## leaves the wall square, onto its lane first.
+func test_a_core_in_front_of_the_machine_takes_a_two_cell_route():
+	_quantum_blocks()
+	_put(Vector3i(0, 0, 0), &"quantum_machine")   # facing -z, its back to the +z wall
+	_put(Vector3i(0, 0, -1), &"quantum_core")
+	_builder.rebuild()
+	var m: QuantumMachine = _builder.quantum_machines()[0]
+	var core := _core_at(Vector3i(0, 0, -1))
+	assert_eq(_assert_conduit_rules(m, core), [Vector3i(0, 0, 0), Vector3i(0, 0, -1)])
+	assert_eq(_core_the_plant_finds(m), core)
+
+## A machine with no walkable neighbour on its storey, a core two cells away
+## behind the hull: nowhere to run, so up into the ceiling.
+func test_a_machine_walled_in_on_its_storey_gets_the_ceiling_port():
+	_quantum_blocks()
+	_put(Vector3i(0, 0, 0), &"quantum_machine")
+	for c in [Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 0, 1), Vector3i(0, 0, -1)]:
+		_put(c, &"hull")
+	_put(Vector3i(2, 0, 0), &"quantum_core")
+	_builder.rebuild()
+	var m: QuantumMachine = _builder.quantum_machines()[0]
+	_assert_ends_in_the_ceiling(m)
+	assert_null(_core_the_plant_finds(m))
+
+## A core whose only way to the machine is through an airlock. Airlock cells
+## are never on a route -- the pipe would have to drop under the airlock's
+## low ceiling -- and an airlock opens only through its one inner hatch, so
+## the far side is a wall anyway: the machine gets the ceiling port.
+func test_a_core_beyond_an_airlock_leaves_the_conduit_ending_in_the_ceiling():
+	_quantum_blocks()
+	_put(Vector3i(2, 0, 0), &"quantum_machine")   # facing -z
+	_put(Vector3i(1, 0, 0), &"airlock")           # its one face onto space is +z
+	_put(Vector3i(1, 0, -1), &"hull")
+	_put(Vector3i(0, 0, 0), &"quantum_core")
+	_builder.rebuild()
+	assert_eq(_builder.layout().zone_at(Vector3i(1, 0, 0)), InteriorLayout.AIRLOCK_ZONE)
+	assert_eq(_builder.layout().airlocks()[0]["door_normal"], Vector3i(1, 0, 0),
+		"its inner hatch opens towards the machine")
+	var m: QuantumMachine = _builder.quantum_machines()[0]
+	_assert_ends_in_the_ceiling(m)
+	assert_null(_core_the_plant_finds(m))
+
+## Wherever a machine's outlet stands in its cell -- centred along its wall,
+## or nearer the middle than a light allows on both axes -- the conduit steps
+## onto its lane square and every run after that keeps clear of the lights of
+## the cells it crosses.
+func test_the_conduit_steps_onto_its_lane_square_from_any_outlet():
+	var route: Array[Vector3i] = [Vector3i(0, 0, 0), Vector3i(-1, 0, 0), Vector3i(-1, 0, -1), Vector3i(-1, 0, -2)]
+	var h := InteriorProps.QUANTUM_CONDUIT_HEIGHT
+	var crown := Vector3(-2.0, h, -4.0)
+	for outlet: Vector2 in [Vector2(0.0, 0.65), Vector2(0.45, 0.45), Vector2(-0.5, 0.65), Vector2(0.5, -0.3)]:
+		var rise := Vector3(outlet.x, h, outlet.y)
+		var path := InteriorDressing._conduit_path(route, rise - Vector3(0, 0.4, 0), rise, crown)
+		assert_almost_eq(path[path.size() - 1], crown, Vector3.ONE * 0.0001)
+		for i in range(2, path.size()):
+			var step := path[i] - path[i - 1]
+			assert_false(absf(step.x) > 0.0001 and absf(step.z) > 0.0001,
+				"outlet %s: segment %d is not diagonal: %s" % [outlet, i - 1, step])
+			assert_almost_eq(path[i].y, h, 0.0001)
+			if i == 2:
+				continue   # the step off the outlet, which is where the prop put it
+			for cell in route.slice(0, route.size() - 1):
+				var lamp := ShipGrid.cell_center(cell)
+				assert_gt(_from_above(lamp, path[i - 1], path[i]),
+					InteriorProps.CEILING_LIGHT_RIM + InteriorProps.CONDUIT_RADIUS,
+					"outlet %s: segment %d clear of the light over %s" % [outlet, i - 1, cell])
+
+## Which core a real QuantumPlant finds at the end of the machine's conduit.
+func _core_the_plant_finds(m: QuantumMachine) -> QuantumCore:
 	var plant: QuantumPlant = autofree(QuantumPlant.new())   # out of the tree: nothing ticks it
 	plant.bind(_builder.quantum_cores(), _builder.quantum_machines(), _quantum_stats())
-	assert_null(plant._core_at_end_of(m), "no core at the end of it to flash")
+	return plant._core_at_end_of(m)
 
 func _quantum_stats() -> ShipStats:
 	var s := ShipStats.new()

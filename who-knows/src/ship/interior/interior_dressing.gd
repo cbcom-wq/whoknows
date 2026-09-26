@@ -12,14 +12,16 @@ extends RefCounted
 const QUANTUM_CORE_ID := &"quantum_core"
 const QUANTUM_MACHINE_ID := &"quantum_machine"
 
-## How far off the centre lines of the cells it crosses the machine's conduit
-## runs along the ceiling (quantum energy spec §6.3). Every walkable cell's
-## ceiling light hangs on its centre, its ring 0.42 m out, so a run down a
-## centre line would pass under it: 0.65 m leaves the 0.04 m pipe 0.19 m clear
-## of the ring and 0.3 m off a wall's face, clear of its trim. It is also how
-## far the machine's rise stands off its cell's centre towards the wall at its
-## back, so a run along that wall sets off with no jog.
-const CONDUIT_LANE := 0.65
+## The air the machine's conduit keeps between itself and a ceiling light's
+## rim as it runs past.
+const CONDUIT_LAMP_GAP := 0.19
+## The least a conduit run along the ceiling stands off the centre lines of
+## the cells it crosses (quantum energy spec §6.3). Every walkable cell's
+## ceiling light hangs on its centre, so a run down a centre line would pass
+## under it: this keeps the pipe CONDUIT_LAMP_GAP clear of the light's rim --
+## 0.65 m, which is also 0.3 m off a wall's face, clear of its trim. A run
+## stands farther out where the machine's outlet does (_conduit_path).
+const CONDUIT_LANE := InteriorProps.CEILING_LIGHT_RIM + InteriorProps.CONDUIT_RADIUS + CONDUIT_LAMP_GAP
 ## How far short of a core's centre the conduit steps off its lane onto the
 ## crown's centre line, to run into the crown square to a flat: 0.25 m clear
 ## of the crown (0.55 m to a flat), inside the core's cell and well clear of
@@ -259,43 +261,41 @@ static func _conduit_route(layout: InteriorLayout, from: Vector3i, back: Vector3
 	for coord in layout.walkable_coords():
 		if coord.y == from.y and layout.zone_at(coord) != InteriorLayout.AIRLOCK_ZONE:
 			open[coord] = true
-	var walls := {}   # "coord|normal" -> true
+	# A state is a cell and the way the step into it went, as an index into
+	# _HORIZONTAL; w = _HORIZONTAL.size() for the machine's cell, not yet left.
+	var walls := {}   # Vector4i (coord, way) -> true
 	for face in layout.faces():
 		if face["kind"] == InteriorLayout.Kind.WALL:
-			walls["%s|%s" % [face["coord"], face["normal"]]] = true
-	# Cheapest first by (steps, turns), over states (cell, the way the step
-	# into it went); w = _HORIZONTAL.size() for the machine's cell, not yet
-	# left.
+			var coord: Vector3i = face["coord"]
+			walls[Vector4i(coord.x, coord.y, coord.z, _HORIZONTAL.find(face["normal"]))] = true
+	# Cheapest first by (steps, turns), a layer of steps at a time, so each
+	# state is visited once: the first layer to reach a state settles it, with
+	# the fewest turns any state of the layer before gives it -- the first
+	# found, on a tie.
 	var start := Vector4i(from.x, from.y, from.z, _HORIZONTAL.size())
-	var cost := {start: Vector2i.ZERO}   # Vector4i -> Vector2i
+	var cost := {start: Vector2i.ZERO}   # Vector4i -> Vector2i(steps, turns)
 	var came := {}   # Vector4i -> Vector4i
-	var done := {}
-	var frontier: Array[Vector4i] = [start]
-	while not frontier.is_empty():
-		var at := 0
-		for i in range(1, frontier.size()):
-			if cost[frontier[i]] < cost[frontier[at]]:
-				at = i
-		var state := frontier[at]
-		frontier.remove_at(at)
-		if done.has(state):
-			continue
-		done[state] = true
-		var cell := Vector3i(state.x, state.y, state.z)
-		for way in _HORIZONTAL.size():
-			var step := _HORIZONTAL[way]
-			var next := cell + step
-			if not open.has(next) or walls.has("%s|%s" % [cell, step]):
-				continue
-			var turn := 0 if way == state.w else 1
-			if state.w == _HORIZONTAL.size():
-				turn = 0 if step.x * back.x + step.z * back.z == 0 else 1
-			var to := Vector4i(next.x, next.y, next.z, way)
-			var c: Vector2i = cost[state] + Vector2i(1, turn)
-			if not cost.has(to) or c < cost[to]:
+	var layer: Array[Vector4i] = [start]
+	while not layer.is_empty():
+		var next_layer: Array[Vector4i] = []
+		for state in layer:
+			var cell := Vector3i(state.x, state.y, state.z)
+			for way in _HORIZONTAL.size():
+				var next := cell + _HORIZONTAL[way]
+				if not open.has(next) or walls.has(Vector4i(cell.x, cell.y, cell.z, way)):
+					continue
+				var turn := 0 if way == state.w else 1
+				if state.w == _HORIZONTAL.size():
+					turn = 0 if _HORIZONTAL[way].x * back.x + _HORIZONTAL[way].z * back.z == 0 else 1
+				var to := Vector4i(next.x, next.y, next.z, way)
+				var c: Vector2i = cost[state] + Vector2i(1, turn)
+				if not cost.has(to):
+					next_layer.append(to)
+				elif cost[to] <= c:
+					continue
 				cost[to] = c
 				came[to] = state
-				frontier.append(to)
+		layer = next_layer
 	var cores := core_cells.duplicate()
 	cores.sort()
 	var best := start
@@ -319,17 +319,29 @@ static func _conduit_route(layout: InteriorLayout, from: Vector3i, back: Vector3
 	return route
 
 ## The conduit's path over `route`, in interior space (quantum energy spec
-## §6.3): from the cabinet's `top` straight up to `rise`, then along the
-## ceiling in straight runs, CONDUIT_LANE off the centre lines of the cells
-## it crosses -- clear of their lights, and square across any wall between
-## them -- to CONDUIT_APPROACH short of the core, where it steps onto the
-## crown's centre line and runs square into the crown's side, to its centre,
-## `crown`. It keeps only the bends: a point that carries a run straight on
-## is left out.
+## §6.3): from the cabinet's `top` straight up to `rise`, square onto its lane
+## and along the ceiling in straight runs, at least CONDUIT_LANE off the
+## centre lines of the cells it crosses -- clear of their lights, and square
+## across any wall between them -- to CONDUIT_APPROACH short of the core,
+## where it steps onto the crown's centre line and runs square into the
+## crown's side, to its centre, `crown`. It keeps only the bends: a point that
+## carries a run straight on is left out.
+##
+## The lane is the same offset from every cell's centre, so every run is
+## square. On each axis it is on the outlet's side and as far out as the
+## outlet stands, or CONDUIT_LANE if that is farther: a run along the wall at
+## the machine's back then sets off from the rise with no jog.
 static func _conduit_path(route: Array[Vector3i], top: Vector3, rise: Vector3, crown: Vector3) -> PackedVector3Array:
 	var home := ShipGrid.cell_center(route[0])
-	var lane := Vector3(signf(rise.x - home.x), 0.0, signf(rise.z - home.z)) * CONDUIT_LANE
+	var off := Vector2(rise.x - home.x, rise.z - home.z)
+	var lane := Vector3(_lane(off.x), 0.0, _lane(off.y))
 	var points: Array[Vector3] = [top, rise]
+	var first := Vector3(home.x + lane.x, rise.y, home.z + lane.z)
+	if not is_equal_approx(rise.x, first.x) and not is_equal_approx(rise.z, first.z):
+		# Off the lane both ways: step onto it square, first along whichever
+		# axis keeps the step farther from the cell's light.
+		points.append(Vector3(first.x, rise.y, rise.z) if absf(off.y) >= absf(off.x)
+			else Vector3(rise.x, rise.y, first.z))
 	for i in route.size() - 1:
 		var p := ShipGrid.cell_center(route[i]) + lane
 		points.append(Vector3(p.x, rise.y, p.z))
@@ -348,6 +360,12 @@ static func _conduit_path(route: Array[Vector3i], top: Vector3, rise: Vector3, c
 		else:
 			out.append(p)
 	return out
+
+## The lane's offset on one axis, for an outlet standing `off` from its cell's
+## centre line: on the outlet's side -- either, for an outlet on the line,
+## never on it -- and at least CONDUIT_LANE out.
+static func _lane(off: float) -> float:
+	return (-1.0 if off < 0.0 else 1.0) * maxf(absf(off), CONDUIT_LANE)
 
 static func _dress(kit: InteriorKit, face: Dictionary, core_cells: Dictionary) -> void:
 	var coord: Vector3i = face["coord"]
