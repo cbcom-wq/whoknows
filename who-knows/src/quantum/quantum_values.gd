@@ -17,7 +17,9 @@ static func make_cost(def: ItemDefinition) -> int:
 	return def.quantum_value * MAKE_MARKUP
 
 ## Everything the machine can make (spec §4.3): every catalogue item with a
-## value, EVA tools left out, cheapest first.
+## value, EVA tools left out, cheapest first. A cost tie (o2_tank/hand_lamp,
+## toolbox/medkit in the spec's own table) breaks on id, ascending, so the
+## order is a decision and not whatever the catalogue happened to enumerate.
 static func makeable(catalog: ItemCatalog) -> Array[ItemDefinition]:
 	var result: Array[ItemDefinition] = []
 	for id in catalog.ids():
@@ -26,5 +28,9 @@ static func makeable(catalog: ItemCatalog) -> Array[ItemDefinition]:
 			continue
 		result.append(def)
 	result.sort_custom(func(a: ItemDefinition, b: ItemDefinition) -> bool:
-		return make_cost(a) < make_cost(b))
+		var cost_a := make_cost(a)
+		var cost_b := make_cost(b)
+		if cost_a != cost_b:
+			return cost_a < cost_b
+		return String(a.id) < String(b.id))
 	return result

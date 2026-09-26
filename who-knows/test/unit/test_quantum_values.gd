@@ -24,6 +24,31 @@ func test_makeable_lists_every_item_in_the_catalogue_cheapest_first():
 			"cheapest first"
 		)
 
+func test_makeable_breaks_a_cost_tie_by_id():
+	# Registered in descending-id order, so a comparator with no secondary
+	# key would leave them exactly as inserted; the fix must sort them.
+	var cat := ItemCatalog.new()
+	var z := ItemDefinition.new()
+	z.id = &"zzz_item"
+	z.quantum_value = 25
+	cat.register(z)
+	var a := ItemDefinition.new()
+	a.id = &"aaa_item"
+	a.quantum_value = 25
+	cat.register(a)
+
+	var list := QuantumValues.makeable(cat)
+
+	assert_eq(list[0].id, &"aaa_item", "tied cost: ascending id first")
+	assert_eq(list[1].id, &"zzz_item")
+
+func test_the_spec_tables_two_tied_pairs_come_out_in_id_order():
+	# o2_tank/hand_lamp both cost 50; toolbox/medkit both cost 80 (spec §4.2).
+	var list := QuantumValues.makeable(_cat)
+	var ids: Array = list.map(func(d: ItemDefinition) -> StringName: return d.id)
+	assert_lt(ids.find(&"hand_lamp"), ids.find(&"o2_tank"), "tied at 50: id order")
+	assert_lt(ids.find(&"medkit"), ids.find(&"toolbox"), "tied at 80: id order")
+
 func test_makeable_leaves_out_eva_tools():
 	var cat := ItemCatalog.new()
 	var nozzle := ItemDefinition.new()
