@@ -21,6 +21,7 @@ var _reticle: Reticle
 var _interact_prompt := ""
 var _grasp_prompt := ""
 var _universe_readout: Label
+var npc_debug: NpcDebug
 
 ## The interior's own mood (spec §3.3): dim and warm, with bloom turning the
 ## thin lit strips into light. It goes on the interior camera, not the world,
@@ -49,6 +50,7 @@ func _ready() -> void:
 	_wire_prompt()
 	_wire_hands()
 	_wire_universe()
+	_wire_npcs()
 
 ## The interior camera is also the seated camera -- CameraDirector moves it
 ## between head and seat -- so one assignment covers walking and flying.
@@ -127,6 +129,14 @@ func _wire_universe() -> void:
 	_universe_readout.position = Vector2(16, 16)
 	_universe_readout.visible = false
 	$Prompt.add_child(_universe_readout)
+
+## NPCs (docs/superpowers/specs/2026-09-26-npc-foundation-design.md): the
+## overlay (F4) watches every director.
+func _wire_npcs() -> void:
+	npc_debug = NpcDebug.new()
+	npc_debug.name = "NpcDebug"
+	add_child(npc_debug)
+	npc_debug.directors.append(_ship.npc_director)
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	var key := event as InputEventKey

@@ -29,6 +29,8 @@ const BOUNCE := 0.15
 
 static var _material: PhysicsMaterial
 
+var _impact_speed := 0.0
+
 var definition: ItemDefinition
 var state: State = State.LOOSE
 ## The point securing it, while STOWED.
@@ -120,6 +122,21 @@ func can_interact(actor: Node) -> bool:
 func interact(actor: Node) -> void:
 	if actor != null and actor.has_method(&"take_item"):
 		actor.take_item(self)
+
+## After a throw: its first landing is a sound NPCs can hear (NPC foundation
+## spec §6.1), louder the faster it was thrown. Then it stops listening.
+func watch_first_impact(speed: float) -> void:
+	_impact_speed = speed
+	contact_monitor = true
+	max_contacts_reported = maxi(max_contacts_reported, 1)
+	if not body_entered.is_connected(_on_first_impact):
+		body_entered.connect(_on_first_impact)
+
+func _on_first_impact(_body: Node) -> void:
+	body_entered.disconnect(_on_first_impact)
+	contact_monitor = false
+	StimulusBus.send(self, Stimulus.make(Stimulus.SOUND, global_position,
+		clampf(_impact_speed / 6.0, 0.2, 1.0), 10.0, self))
 
 func use(aim: Transform3D, world: Node3D, holder: CollisionObject3D) -> bool:
 	return use_node != null and use_node.use(self, aim, world, holder)

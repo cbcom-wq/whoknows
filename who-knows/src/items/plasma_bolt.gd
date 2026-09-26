@@ -82,9 +82,22 @@ func impact(result: Dictionary) -> void:
 		body.sleeping = false
 	if collider != null and collider.has_method(&"receive_hit"):
 		collider.receive_hit(Hit.make(point, normal, direction, direction * PUSH, source))
+	_tell_npcs(point, collider)
 	ImpactFlash.spawn(get_parent(), point, normal, ImpactFlash.Kind.IMPACT)
 	struck.emit(point, collider)
 	queue_free()
+
+## What NPCs notice of a hit (NPC foundation spec §6.1): a crack they hear
+## through air, and, on a rock, a jolt through the stone.
+func _tell_npcs(point: Vector3, collider: Object) -> void:
+	StimulusBus.send(self, Stimulus.make(Stimulus.SOUND, point, 1.0, 15.0, source))
+	var rock: AsteroidRock = null
+	if collider is AsteroidDetail:
+		rock = (collider as AsteroidDetail).rock
+	elif collider is AsteroidBody:
+		rock = (collider as AsteroidBody).rock
+	if rock != null:
+		StimulusBus.send(self, Stimulus.make(Stimulus.VIBRATION, point, 0.8, 40.0, source, RockHerds.site_of(rock)))
 
 ## A stretched glowing capsule along -z, shared by every bolt.
 static func _shared_mesh() -> Mesh:

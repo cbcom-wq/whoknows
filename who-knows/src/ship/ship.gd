@@ -11,6 +11,10 @@ const SLOT_SPACING := 2000.0
 ## How close a rebuilt stow point must be to where a stowed item's point was
 ## for the item to stay stowed through the rebuild.
 const RESEAT_TOLERANCE := 0.05
+## How often, and how far past the hull, a hard burn is checked for blasting a
+## rock's surface.
+const BLAST_EVERY := 0.5
+const BLAST_REACH := 50.0
 
 ## The exact ShaderMaterial `hull`/`hull_wedge` meshes reference (their .tres
 ## surfaces point at this same path, and Godot's resource cache guarantees a
@@ -43,6 +47,7 @@ var _airlocks_root: Node
 ## Who lives aboard (NPC foundation spec §4.2, §14): the interior's director,
 ## the holder its NPCs stand under, and the place they live in.
 var npc_director: NpcDirector
+var npc_bus: StimulusBus
 var npcs: Node3D
 var crew_site: ShipSite
 var _crew: Array = []
@@ -52,6 +57,7 @@ var _hum: AudioStreamPlayer
 ## A rock striking the hull, heard aboard (asteroids spec §7.5).
 var _thump: AudioStreamPlayer
 var _last_hull_velocity := Vector3.ZERO
+var _blast_in := 0.0
 
 @onready var exterior: RigidBody3D = $Exterior
 @onready var interior: Node3D = $Interior
@@ -129,12 +135,48 @@ func _update_hum() -> void:
 	elif not aboard and _hum.playing:
 		_hum.stop()
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	_last_hull_velocity = exterior.linear_velocity
+	_blast_in -= delta
+	if _blast_in <= 0.0:
+		_blast_in = BLAST_EVERY
+		_blast_rock()
 
 func _on_hull_struck(body: Node) -> void:
+	var knock := (exterior.linear_velocity - _last_hull_velocity).length()
 	if body is AsteroidBody:
-		hull_struck((exterior.linear_velocity - _last_hull_velocity).length())
+		hull_struck(knock)
+	_jolt_rock(body, knock)
+
+## A strike carries through the rock it hit: anything living on it feels it
+## (NPC foundation spec §6.1).
+func _jolt_rock(body: Node, knock: float) -> void:
+	var rock: AsteroidRock = null
+	if body is AsteroidDetail:
+		rock = (body as AsteroidDetail).rock
+	elif body is AsteroidBody:
+		rock = (body as AsteroidBody).rock
+	if rock == null:
+		return
+	StimulusBus.send(exterior, Stimulus.make(Stimulus.VIBRATION, exterior.global_position,
+		clampf(knock / 4.0, 0.2, 1.0), rock.radius * 2.0, exterior, RockHerds.site_of(rock)), 1.0)
+
+## Thrusting hard close over a big rock blasts its surface (NPC foundation spec
+## §6.1): one ray the way the exhaust goes, a few times a second.
+func _blast_rock() -> void:
+	var force := flight_computer.commanded_force_local
+	var budget: float = flight_computer.thrust_budget[&"forward"]
+	if force.length() < budget * 0.1 or not exterior.is_inside_tree():
+		return
+	var exhaust := -(exterior.global_basis * force).normalized()
+	var from := exterior.global_position
+	var reach := float(exterior.get_meta(AsteroidStream.ANCHOR_RADIUS, 10.0)) + BLAST_REACH
+	var query := PhysicsRayQueryParameters3D.create(from, from + exhaust * reach, AsteroidBody.LAYER, [exterior.get_rid()])
+	var hit := exterior.get_world_3d().direct_space_state.intersect_ray(query)
+	if hit.is_empty() or not (hit["collider"] is AsteroidDetail):
+		return
+	StimulusBus.send(exterior, Stimulus.make(Stimulus.VIBRATION, hit["position"], 0.6, 40.0, exterior,
+		RockHerds.site_of((hit["collider"] as AsteroidDetail).rock)), BLAST_EVERY)
 
 ## A strike you feel aboard (asteroids spec §7.5): a thump, louder the harder
 ## the hull was knocked (`knock`: its change of speed, m/s). Outside is silent.
@@ -219,6 +261,11 @@ func _make_crew_quarters() -> void:
 	npc_director.catalog = NpcCatalog.load_from_dir("res://data/npcs")
 	npc_director.sources = [self]
 	add_child(npc_director)
+	npc_bus = StimulusBus.new()
+	npc_bus.name = "StimulusBus"
+	add_child(npc_bus)
+	npc_bus.setup(interior)
+	npc_director.bus = npc_bus
 
 ## Re-reads the rebuilt interior for its crew: the droid's map, dock and jobs.
 ## A live droid survives the rebuild; one left on a cell that is gone is put

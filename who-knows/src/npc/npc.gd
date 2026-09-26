@@ -31,8 +31,21 @@ var intent: Intent = Intent.idle()
 var locomotors := {}
 var active: Locomotor
 var look: Node3D
+## Its mind, its senses and what they remember (spec §6, §7). Plain objects,
+## so each can be tested without a scene.
+var brain: Brain
+var perception: Perception
+var memory: NpcMemory
+## Feels touches: a kinematic body is never pushed by a rigid one, so this is
+## how it knows something ran into it (spec §6.1).
+var skin: Area3D
+## The last think's context, for the overlay.
+var last_context: NpcContext
 
 var _shape: CollisionShape3D
+var _skin_shape: CollisionShape3D
+## A thing moving at least this fast against it is a touch, m/s.
+const TOUCH_SPEED := 1.0
 
 func _init() -> void:
 	collision_layer = LAYER
@@ -41,6 +54,15 @@ func _init() -> void:
 	_shape.name = "Body"
 	_shape.shape = CapsuleShape3D.new()
 	add_child(_shape)
+	skin = Area3D.new()
+	skin.name = "Skin"
+	skin.collision_layer = 0
+	skin.monitorable = false
+	_skin_shape = CollisionShape3D.new()
+	_skin_shape.shape = CapsuleShape3D.new()
+	skin.add_child(_skin_shape)
+	add_child(skin)
+	skin.body_entered.connect(_on_skin_touched)
 
 ## Becomes `p_record`, at home in `p_site`, standing as `pose` (site-local).
 func setup(p_record: NpcRecord, p_species: NpcSpecies, p_site: NpcSite, p_inside: bool,
@@ -51,6 +73,7 @@ func setup(p_record: NpcRecord, p_species: NpcSpecies, p_site: NpcSite, p_inside
 	inside = p_inside
 	name = String(record.id).validate_node_name()
 	collision_mask = MASK_INSIDE if inside else MASK_OUTSIDE
+	skin.collision_mask = (4 | 32) if inside else (4 | 32 | 64)
 	if inside:
 		if is_in_group(Universe.EXTERIOR_SPACE):
 			remove_from_group(Universe.EXTERIOR_SPACE)
@@ -68,6 +91,13 @@ func setup(p_record: NpcRecord, p_species: NpcSpecies, p_site: NpcSite, p_inside
 	if not species.locomotors.is_empty() and locomotors.has(species.locomotors[0]):
 		active = locomotors[species.locomotors[0]]
 	_build_look()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = record.seed
+	brain = Brain.new()
+	brain.setup(species, rng)
+	perception = Perception.new()
+	memory = NpcMemory.new()
+	last_context = null
 	intent = Intent.idle()
 	velocity = Vector3.ZERO
 	global_transform = site.frame() * pose
@@ -115,12 +145,34 @@ func local_transform() -> Transform3D:
 
 ## Senses, decides, and sets the intent its locomotor follows (spec §7).
 ## Called by its director a few times a second.
-func think(_time: float, _dt: float) -> void:
-	pass
+func think(time: float, dt: float) -> void:
+	if site == null or not site.alive() or brain == null:
+		return
+	var ctx := NpcContext.new()
+	ctx.record = record
+	ctx.species = species
+	ctx.memory = memory
+	ctx.time = time
+	ctx.dt = dt
+	var local := local_transform()
+	ctx.position = local.origin
+	ctx.forward = -local.basis.z.normalized()
+	ctx.up = local.basis.y.normalized()
+	ctx.grounded = active.grounded() if active != null else true
+	perception.sense(self, ctx, bus as StimulusBus, time)
+	site.fill(ctx, self)
+	intent = brain.think(ctx)
+	last_context = ctx
+	if look != null and look.has_method(&"act"):
+		look.call(&"act", intent.action)
+	if ctx.voice != &"" and has_method(&"voice"):
+		call(&"voice", ctx.voice)
 
 ## A hit from a bolt or a thrown thing (hands-and-items spec §9.3): a touch,
 ## and a shove. Nothing takes damage yet.
 func receive_hit(hit: Hit) -> void:
+	if perception != null:
+		perception.touched(hit.position, 1.0, hit.source.get_instance_id() if is_instance_valid(hit.source) else 0)
 	shove(hit.impulse)
 
 ## An impulse, N·s: each locomotor decides what it does to its grip.
@@ -155,6 +207,25 @@ func _fit_body() -> void:
 		capsule.radius = species.width * 0.5
 		capsule.height = maxf(species.height, species.width)
 		_shape.transform = Transform3D(Basis.IDENTITY, Vector3(0, capsule.height * 0.5, 0))
+	var around := _skin_shape.shape as CapsuleShape3D
+	around.radius = capsule.radius + 0.12
+	around.height = capsule.height + 0.24
+	_skin_shape.transform = _shape.transform
+
+## Something ran into it: the avatar, or a thing moving against it fast
+## enough to count.
+func _on_skin_touched(body: Node3D) -> void:
+	if body == self or perception == null:
+		return
+	var strength := 0.0
+	if body.is_in_group(Avatar.GROUP):
+		strength = 0.7
+	elif body is RigidBody3D:
+		var rel := ((body as RigidBody3D).linear_velocity - velocity).length()
+		if rel >= TOUCH_SPEED:
+			strength = clampf(rel / 4.0, 0.3, 1.0)
+	if strength > 0.0:
+		perception.touched(body.global_position, strength, body.get_instance_id())
 
 func _build_look() -> void:
 	if look != null:

@@ -37,6 +37,9 @@ const SUIT_MASK := 1 | 32 | AsteroidBody.LAYER | Npc.LAYER
 ## You and your suit, kilograms, for bumping into things in space.
 const SUIT_MASS := 120.0
 const BUMP_BOUNCE := 0.2
+const FOOTFALL_EVERY := 0.5
+## Meeting a rock slower than this, m/s, jolts nothing.
+const JOLT_SPEED := 0.3
 ## How long the view takes to right itself after floating in tilted.
 const RIGHTING_TIME := 0.4
 
@@ -80,6 +83,9 @@ var _camera_home := Vector3.ZERO
 @onready var head: Node3D = $Head
 @onready var camera: Camera3D = $Head/Camera3D
 @onready var _collider: CollisionShape3D = $Collider
+
+## Seconds to the next footfall while sprinting.
+var _footfall_in := 0.0
 
 func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -192,9 +198,21 @@ func _physics_process(delta: float) -> void:
 	var pushing := velocity
 	move_and_slide()
 	_push_loose_things(pushing, delta)
+	_footfalls(speed == SPRINT_SPEED and Vector2(velocity.x, velocity.z).length() > WALK_SPEED * 0.5, delta)
 
 func _process(delta: float) -> void:
 	tick_righting(delta)
+
+## Sprinting aboard is loud enough for NPCs to hear (NPC foundation spec
+## §6.1): a footfall every FOOTFALL_EVERY seconds.
+func _footfalls(sprinting: bool, delta: float) -> void:
+	if not sprinting:
+		_footfall_in = 0.0
+		return
+	_footfall_in -= delta
+	if _footfall_in <= 0.0:
+		_footfall_in = FOOTFALL_EVERY
+		StimulusBus.send(self, Stimulus.make(Stimulus.SOUND, global_position, 0.4, 6.0, self))
 
 ## Steps off the ship onto a spacewalk, at `pose` in the world, moving at
 ## `velocity`, with `ship_hull` as the ship you left.
@@ -306,7 +324,26 @@ func _bump_in_space(before: Vector3) -> void:
 	for i in get_slide_collision_count():
 		var hit := get_slide_collision(i)
 		hits.append([hit.get_collider(), hit.get_normal(), hit.get_position()])
+	_jolt_rocks(before, hits)
 	velocity = bump(before, velocity, hits)
+
+## Landing on or bumping into a rock jolts it: a vibration through the stone
+## that anything living on it feels (NPC foundation spec §6.1).
+func _jolt_rocks(before: Vector3, hits: Array) -> void:
+	var jolted := {}
+	for h in hits:
+		var rock: AsteroidRock = null
+		if h[0] is AsteroidDetail:
+			rock = (h[0] as AsteroidDetail).rock
+		elif h[0] is AsteroidBody:
+			rock = (h[0] as AsteroidBody).rock
+		if rock == null or jolted.has(rock):
+			continue
+		jolted[rock] = true
+		var closing := -before.dot(h[1])
+		if closing > JOLT_SPEED:
+			StimulusBus.send(self, Stimulus.make(Stimulus.VIBRATION, h[2], clampf(closing / 3.0, 0.0, 1.0),
+				30.0, self, RockHerds.site_of(rock)))
 
 ## Your velocity after bumping the rocks in `hits` ([collider, normal,
 ## point]), moving at `before` into them and `slid` after the slide. Sliding
