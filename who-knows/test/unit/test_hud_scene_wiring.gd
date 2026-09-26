@@ -44,6 +44,14 @@ func test_band_holds_both_panels():
 		"attitude panel present"
 	)
 
+## Quantum energy spec §12: the ship's store, in the band alongside the
+## other two. Read back at runtime, not just checked for a load error --
+## CLAUDE.md's .tscn parser defect passes a clean headless load either way.
+func test_band_holds_the_energy_panel():
+	var panel := _root.get_node_or_null("HudRoot/Screen/Band/Row/EnergyPanel")
+	assert_not_null(panel, "energy panel present")
+	assert_true(panel is EnergyPanel, "and carries its script")
+
 func test_band_carries_its_chrome_script():
 	# Without HudBand the readouts float over the scene with no lit surface
 	# behind them, which is the layout that was explicitly not chosen.

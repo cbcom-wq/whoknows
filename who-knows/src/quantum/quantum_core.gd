@@ -80,8 +80,10 @@ func setup(frame: Transform3D, layer: int) -> void:
 
 ## Lights the gauge for a store `fraction` full, whose low-power line is at
 ## `line_fraction`. The lowest bar is the line itself: lit whenever there is
-## anything at all, AMBER when it is all that is left, and AMBER at half
-## brightness at 0. The other nine share what lies above the line.
+## anything at all, AMBER strictly below the line (ruling R15: full power
+## returns exactly at the line, so the line itself is still violet), and
+## AMBER at half brightness at 0. The other nine share what lies above the
+## line.
 func set_fill(fraction: float, line_fraction: float) -> void:
 	var line := clampf(line_fraction, 0.0, 0.99)
 	var step := (1.0 - line) / float(_bars.size() - 1)
@@ -92,7 +94,7 @@ func set_fill(fraction: float, line_fraction: float) -> void:
 	var lowest := &"lit"
 	if fraction <= 0.0:
 		lowest = &"amber_dim"
-	elif lit == 1:
+	elif fraction < line:
 		lowest = &"amber"
 	for i in _bars.size():
 		var look: StringName = &"dark"
@@ -113,6 +115,7 @@ func set_state(new_state: StringName) -> void:
 	elif RATES.has(new_state):
 		_rates = RATES[new_state]
 	else:
+		push_error("QuantumCore: unknown state %s" % new_state)
 		return
 	state = new_state
 	_apply()

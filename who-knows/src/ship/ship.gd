@@ -37,6 +37,10 @@ var airlocks: Dictionary = {}   # Vector3i -> Airlock
 ## The RCS thrusters you see and hear (flight controls spec §6). On the hull,
 ## so the floating origin carries it.
 var rcs_show: RcsShow
+## The quantum store and the core(s) it drives (quantum energy spec §3.2,
+## §8). At Ship/Quantum, alongside FlightComputer -- the two share the one
+## QuantumStore instance below.
+var quantum: QuantumPlant
 
 var _stocked := false
 var _airlocks_root: Node
@@ -84,6 +88,10 @@ func _ready() -> void:
 	rcs_show.name = "RcsShow"
 	exterior.add_child(rcs_show)
 	rcs_show.setup(flight_computer, interior)
+	quantum = QuantumPlant.new()
+	quantum.name = "Quantum"
+	quantum.flight_computer = flight_computer
+	add_child(quantum)
 	AudioBuses.ensure()
 	Synth.warm_up()
 	_hum = AudioStreamPlayer.new()
@@ -184,6 +192,8 @@ func _rebuild_everything() -> void:
 		_stocked = true
 	stats = ShipStats.compute(grid, catalog)
 	_apply_stats()
+	quantum.bind(interior_builder.quantum_cores(), interior_builder.quantum_machines(), stats)
+	flight_computer.quantum = quantum.store
 	if rcs_show != null:
 		rcs_show.rebuild(grid, catalog, stats.center_of_mass)
 	stats_changed.emit(stats)

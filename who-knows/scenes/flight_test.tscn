@@ -1,4 +1,4 @@
-[gd_scene load_steps=31 format=3]
+[gd_scene load_steps=32 format=3]
 
 [ext_resource type="Script" path="res://src/ship/ship.gd" id="1_ship"]
 [ext_resource type="PackedScene" path="res://scenes/avatar.tscn" id="2_avatar"]
@@ -24,6 +24,7 @@
 [ext_resource type="Script" path="res://src/ui/stick_cursor.gd" id="23_stick_cursor"]
 [ext_resource type="Script" path="res://src/ui/heading_marker.gd" id="24_heading_marker"]
 [ext_resource type="Script" path="res://src/ui/controls_card.gd" id="25_controls_card"]
+[ext_resource type="Script" path="res://src/ui/energy_panel.gd" id="26_energy_panel"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_flighttest"]
 sky_top_color = Color(0.02, 0.02, 0.05, 1)
@@ -228,6 +229,10 @@ script = ExtResource("14_velocity_panel")
 [node name="AttitudePanel" type="Control" parent="HudRoot/Screen/Band/Row"]
 mouse_filter = 2
 script = ExtResource("15_attitude_panel")
+
+[node name="EnergyPanel" type="Control" parent="HudRoot/Screen/Band/Row"]
+mouse_filter = 2
+script = ExtResource("26_energy_panel")
 
 [node name="ChaseMarker" type="Control" parent="HudRoot/Screen"]
 anchors_preset = 15

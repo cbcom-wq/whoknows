@@ -51,6 +51,18 @@ var heading := Vector3.FORWARD
 ## This tick's twist, after clamping, in the hull's own axes, newton-metres.
 ## RcsShow reads it.
 var commanded_torque_local := Vector3.ZERO
+## The ship's quantum store (quantum energy spec §8), or null. Null means
+## free boost and full power, as in every test above that never sets it --
+## a ship whose plant has not bound one yet flies exactly as before the
+## quantum system existed.
+var quantum: QuantumStore = null
+## True while boost is actually applying this tick: held, with translation
+## input, at full power (spec §8.2). QuantumPlant polls this exactly as
+## RcsShow polls commanded_force_local, to run the core's ring speed.
+var boosting: bool = false
+## True while boost is held but refused because the store is in low power.
+## Goes to telemetry so the HUD can read *BOOST · LOW POWER*.
+var boost_refused: bool = false
 
 ## Newtons available along each axis. Overwritten from ShipStats in Task 15.
 var thrust_budget: Dictionary = {
@@ -110,18 +122,42 @@ func _physics_process(delta: float) -> void:
 	_apply_translation(delta)
 	_apply_rotation(delta)
 
-func _apply_translation(_delta: float) -> void:
+func _apply_translation(delta: float) -> void:
 	var basis := _hull.global_transform.basis
 	var local_velocity := basis.inverse() * _hull.linear_velocity
 	# While locked, W or S moves the lock: letting go holds the new speed.
 	if speed_locked and not is_zero_approx(_translate_input.z):
 		locked_speed = clampf(-local_velocity.z, -CRUISE_LIMIT_MPS, CRUISE_LIMIT_MPS)
+	var full_power := quantum == null or not quantum.is_low_power()
+	# "Boost with translation input" (spec §8.2): held, and asking for some
+	# thrust -- holding it with the stick centred costs nothing, because the
+	# multiplier below would have nothing to multiply anyway.
+	var wants_boost := _boost and not is_zero_approx(_translate_input.length())
+	boosting = wants_boost and full_power
+	boost_refused = wants_boost and not full_power
+	if boosting and quantum != null:
+		quantum.spend_continuous(QuantumValues.BOOST_COST * delta, &"boost")
 	commanded_force_local = translation_force(local_velocity, _translate_input, _hull.mass,
-		thrust_budget, _boost, assist_enabled, speed_locked, locked_speed)
+		_authority_budget(thrust_budget), boosting, assist_enabled, speed_locked, locked_speed)
 	_hull.apply_central_force(basis * commanded_force_local)
 
 	if assist_enabled and _hull.linear_velocity.length() > CRUISE_LIMIT_MPS:
 		_hull.linear_velocity = _hull.linear_velocity.normalized() * CRUISE_LIMIT_MPS
+
+## The share of the RCS's rated force or torque the core still delivers
+## right now: half in low power, all of it otherwise (spec §8.3). A null
+## store is free full power, as every pre-quantum test assumes.
+func _authority() -> float:
+	return QuantumValues.LOW_POWER_AUTHORITY if (quantum != null and quantum.is_low_power()) else 1.0
+
+func _authority_budget(budget: Dictionary) -> Dictionary:
+	var authority := _authority()
+	if authority >= 1.0:
+		return budget
+	var scaled := {}
+	for key in budget:
+		scaled[key] = budget[key] * authority
+	return scaled
 
 ## The push along the hull's own axes, newtons (spec §5.3, §5.4). Pure, so
 ## drift and the speed lock are tested without physics.
@@ -166,7 +202,9 @@ func _apply_rotation(_delta: float) -> void:
 	var rotate := _rotate_input
 	if heading_hold:
 		# The hold flies pitch and yaw as a stick would; roll stays the pilot's.
-		var rate := heading_rate(basis.inverse() * heading, torque_budget, inertia)
+		# Low power limps the hold too (spec §8.3), so it still reaches its
+		# target rate, just more slowly.
+		var rate := heading_rate(basis.inverse() * heading, torque_budget * _authority(), inertia)
 		rotate = Vector3(rate.x / ASSIST_TURN_RATE, rate.y / ASSIST_TURN_RATE, _rotate_input.z)
 	commanded_torque_local = attitude_torque(rotate, local_spin)
 	_hull.apply_torque(basis * commanded_torque_local)
@@ -188,14 +226,17 @@ func _apply_rotation(_delta: float) -> void:
 ## shuttle, swamped its own RCS authority several times over -- the assist
 ## fought every turn the pilot asked for.
 func attitude_torque(rotate_input: Vector3, local_angular_velocity: Vector3) -> Vector3:
+	# Low power halves the RCS's authority here too (spec §8.3): the ship
+	# still turns and brakes, just at half the rate.
+	var budget := torque_budget * _authority()
 	if not assist_enabled:
-		return rotate_input * torque_budget
+		return rotate_input * budget
 	var rate_error := rotate_input * ASSIST_TURN_RATE - local_angular_velocity
 	var wanted := rate_error * RATE_GAIN * inertia
 	return Vector3(
-		clampf(wanted.x, -torque_budget.x, torque_budget.x),
-		clampf(wanted.y, -torque_budget.y, torque_budget.y),
-		clampf(wanted.z, -torque_budget.z, torque_budget.z)
+		clampf(wanted.x, -budget.x, budget.x),
+		clampf(wanted.y, -budget.y, budget.y),
+		clampf(wanted.z, -budget.z, budget.z)
 	)
 
 ## The (pitch, yaw) turn rate, rad/s, that swings the nose (-Z) onto
@@ -238,4 +279,15 @@ func build_telemetry() -> VehicleTelemetry:
 	t.heading = heading
 	t.speed_locked = speed_locked
 	t.locked_speed = locked_speed
+	t.has_energy = true
+	t.energy_label = &"QE"
+	if quantum != null:
+		t.energy = quantum.amount
+		t.energy_capacity = quantum.capacity
+		t.energy_line = quantum.line()
+		t.energy_state = &"low_power" if quantum.is_low_power() else &"full"
+	else:
+		t.energy_state = &"full"
+	t.boost_refused = boost_refused
+	t.tool_text = "BOOST −%d/S" % roundi(QuantumValues.BOOST_COST) if boosting else ""
 	return t

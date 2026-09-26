@@ -245,3 +245,87 @@ func test_the_telemetry_carries_the_hold_and_the_lock():
 	assert_almost_eq(t.heading, Vector3.LEFT, Vector3.ONE * 0.0001)
 	assert_true(t.speed_locked)
 	assert_almost_eq(t.locked_speed, 30.0, 0.001)
+
+## Quantum energy (spec §8): low power, boost, and a null store.
+
+func test_a_null_store_means_free_boost_and_full_power():
+	_fc.set_pilot_input(Vector3(1.0, 0.0, 0.0), Vector3.ZERO, true)
+	_fc._physics_process(1.0 / 60.0)
+	assert_almost_eq(_fc.commanded_force_local.x,
+		_fc.thrust_budget[&"lateral"] * FlightComputer.BOOST_MULTIPLIER, 1.0)
+	assert_true(_fc.boosting)
+	assert_false(_fc.boost_refused)
+
+func test_low_power_halves_every_force():
+	_fc.quantum = QuantumStore.new(1000, 50)   # line is 100: 50 is low power
+	_fc.set_pilot_input(Vector3(1.0, 0.0, 0.0), Vector3.ZERO, false)
+	_fc._physics_process(1.0 / 60.0)
+	assert_almost_eq(_fc.commanded_force_local.x,
+		_fc.thrust_budget[&"lateral"] * QuantumValues.LOW_POWER_AUTHORITY, 1.0)
+
+func test_full_power_leaves_force_as_today():
+	_fc.quantum = QuantumStore.new(1000, 999)
+	_fc.set_pilot_input(Vector3(1.0, 0.0, 0.0), Vector3.ZERO, false)
+	_fc._physics_process(1.0 / 60.0)
+	assert_almost_eq(_fc.commanded_force_local.x, _fc.thrust_budget[&"lateral"], 1.0)
+
+func test_low_power_halves_torque_too():
+	_fc.quantum = QuantumStore.new(1000, 50)
+	_fc.torque_budget = BUDGET
+	var torque := _fc.attitude_torque(Vector3(1, -1, 1), Vector3.ZERO)
+	assert_almost_eq(torque, Vector3(BUDGET.x, -BUDGET.y, BUDGET.z) * QuantumValues.LOW_POWER_AUTHORITY,
+		Vector3.ONE * 1.0)
+
+func test_boost_is_refused_in_low_power():
+	_fc.quantum = QuantumStore.new(1000, 50)
+	_fc.set_pilot_input(Vector3(1.0, 0.0, 0.0), Vector3.ZERO, true)
+	_fc._physics_process(1.0 / 60.0)
+	assert_false(_fc.boosting)
+	assert_true(_fc.boost_refused)
+	assert_almost_eq(_fc.commanded_force_local.x,
+		_fc.thrust_budget[&"lateral"] * QuantumValues.LOW_POWER_AUTHORITY, 1.0,
+		"low power's authority, not boosted")
+
+func test_boost_costs_five_qe_a_second():
+	_fc.quantum = QuantumStore.new(1000, 1000)
+	_fc.set_pilot_input(Vector3(1.0, 0.0, 0.0), Vector3.ZERO, true)
+	for i in 60:
+		_fc._physics_process(1.0 / 60.0)
+	assert_eq(_fc.quantum.amount, 995, "5 QE spent over one second")
+
+func test_boost_with_no_thrust_costs_nothing():
+	_fc.quantum = QuantumStore.new(1000, 1000)
+	_fc.set_pilot_input(Vector3.ZERO, Vector3.ZERO, true)
+	for i in 60:
+		_fc._physics_process(1.0 / 60.0)
+	assert_eq(_fc.quantum.amount, 1000, "holding boost with no thrust spends nothing")
+
+func test_boost_cuts_out_once_the_store_is_in_low_power():
+	_fc.quantum = QuantumStore.new(1000, 101)   # line is 100
+	_fc.set_pilot_input(Vector3(1.0, 0.0, 0.0), Vector3.ZERO, true)
+	for i in 200:
+		_fc._physics_process(1.0 / 60.0)
+		if _fc.quantum.is_low_power():
+			break
+	assert_true(_fc.quantum.is_low_power(), "the store ran down across the line")
+	_fc._physics_process(1.0 / 60.0)
+	assert_false(_fc.boosting, "boost cuts out once in low power")
+	assert_true(_fc.boost_refused)
+
+func test_the_telemetry_carries_the_energy_fields():
+	_fc.quantum = QuantumStore.new(1000, 50)   # low power
+	var t := _fc.build_telemetry()
+	assert_true(t.has_energy)
+	assert_eq(t.energy, 50)
+	assert_eq(t.energy_capacity, 1000)
+	assert_eq(t.energy_line, 100)
+	assert_eq(t.energy_label, &"QE")
+	assert_eq(t.energy_state, &"low_power")
+
+func test_boost_telemetry_shows_the_running_cost():
+	_fc.quantum = QuantumStore.new(1000, 1000)
+	_fc.set_pilot_input(Vector3(1.0, 0.0, 0.0), Vector3.ZERO, true)
+	_fc._physics_process(1.0 / 60.0)
+	var t := _fc.build_telemetry()
+	assert_eq(t.tool_text, "BOOST −5/S")
+	assert_false(t.boost_refused)

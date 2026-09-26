@@ -58,6 +58,12 @@ func test_the_lowest_bar_is_violet_again_once_another_is_lit():
 	assert_eq(_core.lit_bars(), 2)
 	assert_eq(_core.bar_look(0), &"lit")
 
+## Ruling R15: AMBER only strictly below the line -- at exactly the line the
+## ship is at full power (global constraints: "full power at it").
+func test_exactly_at_the_line_the_lowest_bar_is_not_amber():
+	_core.set_fill(0.1, 0.1)
+	assert_eq(_core.bar_look(0), &"lit")
+
 ## At 0 it stays lit, so the gauge never reads as dead.
 func test_empty_still_lights_the_lowest_bar_amber_at_half_brightness():
 	_core.set_fill(0.0, 0.1)
@@ -78,6 +84,12 @@ func test_the_rates_follow_the_state():
 	_core.set_state(&"boost")
 	assert_almost_eq(_core.ring_rate(), 0.75, 0.0001, "three times as fast")
 	assert_almost_eq(_core.pulse_rate(), 2.0, 0.0001)
+
+## Ruling R15: a typo in the plant's wiring must not fail silently.
+func test_an_unknown_state_pushes_an_error():
+	_core.set_state(&"nonsense")
+	assert_push_error("unknown state", "set_state() should push an error")
+	assert_eq(_core.state, &"full", "and leaves the state as it was")
 
 func test_low_power_slows_the_rings_and_pulse_to_a_crawl():
 	_core.set_state(&"low_power")

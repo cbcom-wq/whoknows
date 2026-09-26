@@ -46,6 +46,25 @@ var stick_radius: float = 0.0
 var stick_deadzone: float = 0.0
 var pointing: bool = false
 var pointer: Vector2 = Vector2.ZERO
+## Quantum energy (spec §12): whether this vehicle has an energy readout at
+## all. False hides EnergyPanel; nothing here fills the rest of these
+## fields until the source sets them, as the ship's flight computer does.
+var has_energy: bool = false
+var energy: int = 0
+var energy_capacity: int = 0
+## The low-power line, in the same units as `energy`; 0 for the suit.
+var energy_line: int = 0
+## &"QE" or &"SUIT".
+var energy_label: StringName = &""
+## The ship: &"full" or &"low_power". The suit: &"ok", &"low", &"critical"
+## or &"dry".
+var energy_state: StringName = &""
+## Extra text under the energy bar that only the source can know: the
+## ship's running boost cost, or the suit's paid-out hose length. Empty
+## when there is nothing to add.
+var tool_text: String = ""
+## True while boost is held but refused: in low power (spec §8.2).
+var boost_refused: bool = false
 
 ## Takes plain values rather than a body on purpose: it is the seam that lets
 ## every derivation here be tested headless, with no nodes and no physics

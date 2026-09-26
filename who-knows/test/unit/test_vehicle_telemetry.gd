@@ -62,3 +62,17 @@ func test_holds_and_the_stick_start_off():
 	assert_false(t.pointing)
 	assert_eq(t.stick, Vector2.ZERO)
 	assert_eq(t.pointer, Vector2.ZERO)
+
+## Quantum energy spec §12: anything with no energy readout reports none,
+## rather than a stale or made-up reading.
+func test_energy_fields_start_off():
+	var t := VehicleTelemetry.from_state(Basis.IDENTITY, Vector3.ZERO, Vector3.ZERO, Vector3.ZERO,
+		true, false, 120.0)
+	assert_false(t.has_energy)
+	assert_eq(t.energy, 0)
+	assert_eq(t.energy_capacity, 0)
+	assert_eq(t.energy_line, 0)
+	assert_eq(t.energy_label, &"")
+	assert_eq(t.energy_state, &"")
+	assert_eq(t.tool_text, "")
+	assert_false(t.boost_refused)
