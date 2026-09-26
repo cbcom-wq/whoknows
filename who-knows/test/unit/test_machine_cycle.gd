@@ -205,7 +205,7 @@ func test_next_steps_through_the_list_cheapest_first_and_wraps():
 		assert_eq(cycle.step(DT, &"", 0, store, _list), [], "browsing fires no cue")
 	assert_eq(seen.size(), _list.size())
 	assert_eq(seen[0], &"mug")
-	assert_eq(seen[-1], &"power_cell")
+	assert_eq(seen[-1], &"quantum_shard", "salvage is made too (spec §4.3)")
 	assert_eq(cycle.selected, 0, "past the dearest, back to the cheapest")
 
 func test_prev_wraps_from_the_cheapest_to_the_dearest():
@@ -215,7 +215,7 @@ func test_prev_wraps_from_the_cheapest_to_the_dearest():
 	cycle.press(&"prev")
 	cycle.step(DT, &"", 0, store, _list)
 	assert_eq(cycle.selected, _list.size() - 1)
-	assert_eq(cycle.screen()[0], "MAKE · POWER CELL")
+	assert_eq(cycle.screen()[0], "MAKE · QUANTUM SHARD")
 	cycle.press(&"prev")
 	cycle.step(DT, &"", 0, store, _list)
 	assert_eq(cycle.selected, _list.size() - 2)

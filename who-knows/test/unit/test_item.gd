@@ -154,6 +154,82 @@ func test_consume_frees_an_item_outside_the_tree_too():
 	assert_freed(item, "the consumed item")
 	assert_no_new_orphans()
 
+func _looks(item: Item) -> Array:
+	return item.get_node("Look").find_children("*", "GeometryInstance3D", true, false)
+
+## Quantum energy spec §10.1, §14.2: outside, an item is drawn on the world's
+## layer, lit by the sun, and meets the hull, you, other items and rocks --
+## AsteroidBody's own mask. Aboard again, both come back. Whoever parents it
+## decides how it follows the floating origin, so its groups never change.
+func test_set_space_puts_it_in_the_world_and_back_aboard():
+	var item := _item()
+	item.set_loose()
+	var groups := item.get_groups()
+	item.set_space(true)
+	assert_true(item.in_space)
+	assert_eq(item.collision_layer, 32)
+	assert_eq(item.collision_mask, 1 | 4 | 32 | 64)
+	assert_eq(item.collision_mask, AsteroidBody.MASK, "the mask a rock has")
+	assert_gt(_looks(item).size(), 0, "the look was rebuilt")
+	for g in _looks(item):
+		assert_eq(g.layers, 1, "%s on the exterior layer" % g.name)
+	assert_eq(item.get_node("Look").get_child_count(), _looks(item).size(), "one look, not two")
+	assert_eq(item.get_groups(), groups, "no floating-origin group joined")
+	item.set_space(false)
+	assert_false(item.in_space)
+	assert_eq(item.collision_mask, 2 | 4 | 32)
+	for g in _looks(item):
+		assert_eq(g.layers, 2, "%s back on the interior layer" % g.name)
+	assert_eq(item.get_groups(), groups)
+
+func test_set_space_rebuilds_the_kit_on_the_worlds_layer():
+	var item := _item()
+	item.set_space(true)
+	var kit_meshes := item.get_node("Look").get_children().filter(func(n): return n is MeshInstance3D)
+	assert_eq(kit_meshes.size(), 1, "the canister's one solid batch")
+	assert_eq(kit_meshes[0].name, "DressingSolid")
+	assert_eq(kit_meshes[0].layers, 1)
+
+func test_set_space_frees_the_old_look_with_no_orphans():
+	var item := _item()
+	item.set_space(true)
+	item.set_space(false)
+	assert_eq(item.get_children().filter(func(n): return n.name == &"Look").size(), 1)
+	assert_no_new_orphans()
+
+func test_outside_letting_go_and_stowing_keep_the_worlds_mask():
+	var item := _item()
+	item.set_space(true)
+	item.set_held()
+	assert_eq(item.collision_mask, 0, "held, it is out of the physics world")
+	item.set_loose()
+	assert_eq(item.collision_mask, AsteroidBody.MASK)
+	item.set_stowed(null)
+	assert_eq(item.collision_mask, AsteroidBody.MASK)
+
+func test_set_space_leaves_a_held_item_out_of_the_physics_world():
+	var item := _item()
+	item.set_held()
+	item.set_space(true)
+	assert_eq(item.collision_layer, 0)
+	assert_eq(item.collision_mask, 0)
+
+func test_only_salvage_glints_and_only_outside():
+	var cat := ItemCatalog.load_from_dir()
+	var rock := Item.new()
+	rock.setup(cat.get_def(&"rock_chunk"), 0.3)
+	add_child_autofree(rock)
+	assert_null(rock.get_node("Look").get_node_or_null("Glint"), "aboard there is no sun to catch")
+	rock.set_space(true)
+	assert_not_null(rock.get_node("Look").get_node_or_null("Glint"), "outside, it catches the sun")
+	rock.set_space(false)
+	assert_null(rock.get_node("Look").get_node_or_null("Glint"))
+	var mug := Item.new()
+	mug.setup(cat.get_def(&"mug"))
+	add_child_autofree(mug)
+	mug.set_space(true)
+	assert_null(mug.get_node("Look").get_node_or_null("Glint"), "a mug is not salvage")
+
 func test_a_use_sits_on_the_item():
 	var d := _def()
 	d.use = load("res://src/items/item_use.gd")

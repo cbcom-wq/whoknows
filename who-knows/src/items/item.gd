@@ -31,6 +31,12 @@ const LIFT_LIMIT_KG := 40.0
 const LAYER := 32
 ## interior_geometry | avatar | items.
 const MASK := 2 | 4 | 32
+## Outside (quantum energy spec §10.1, §14.2): exterior_hull | avatar | items |
+## asteroids -- AsteroidBody's own mask, which already takes items.
+const SPACE_MASK := 1 | 4 | 32 | 64
+## project.godot 3d_render/layer_1 "exterior": drawn in the world, lit by the
+## sun.
+const SPACE_LAYER := 1
 const FRICTION := 0.5
 const BOUNCE := 0.15
 
@@ -42,13 +48,17 @@ var state: State = State.LOOSE
 var stow_point: StowPoint = null
 ## Its use behaviour, if the definition has one.
 var use_node: ItemUse = null
+## Out in the world rather than aboard (set_space).
+var in_space := false
 
 var _shape: BoxShape3D
+var _variety := 0.0
 
 ## Builds the look, the collider and the use. Call once, before the item
 ## enters the tree.
 func setup(def: ItemDefinition, variety := 0.0) -> void:
 	definition = def
+	_variety = variety
 	name = String(def.id).to_pascal_case() if def.id != &"" else "Item"
 	mass = def.mass_kg
 	collision_layer = LAYER
@@ -61,12 +71,7 @@ func setup(def: ItemDefinition, variety := 0.0) -> void:
 	collider.name = "Collider"
 	collider.shape = _shape
 	add_child(collider)
-	var look := Node3D.new()
-	look.name = "Look"
-	add_child(look)
-	var kit := InteriorKit.new(look)
-	ItemLooks.build(kit, def.look, def.size, variety)
-	kit.commit()
+	_build_look()
 	if def.use != null:
 		use_node = def.use.new() as ItemUse
 		use_node.name = "Use"
@@ -77,12 +82,28 @@ func setup(def: ItemDefinition, variety := 0.0) -> void:
 func shape() -> BoxShape3D:
 	return _shape
 
+## Out in the world, or back aboard (quantum energy spec §10.1, §14.2).
+## Outside, its look is rebuilt on the world's render layer, lit by the sun --
+## with a glint, if it is salvage -- and it meets the hull, you, other items
+## and rocks. Aboard, the interior's layer and mask again. A held item stays
+## out of the physics world until it is let go.
+##
+## It never touches floating-origin groups: a member must never sit under
+## another member, so whoever parents an item outside decides how it follows
+## the origin (§10.1) -- SalvageField makes its salvage members, and the hose
+## nozzle lives under a reel or a hand that are already shifted.
+func set_space(outside: bool) -> void:
+	in_space = outside
+	_build_look()
+	if state != State.HELD:
+		collision_mask = _mask()
+
 ## Secured at `point`: frozen static, so it ignores the felt-gravity field.
 func set_stowed(point: StowPoint) -> void:
 	state = State.STOWED
 	stow_point = point
 	collision_layer = LAYER
-	collision_mask = MASK
+	collision_mask = _mask()
 	freeze_mode = RigidBody3D.FREEZE_MODE_STATIC
 	freeze = true
 
@@ -90,7 +111,7 @@ func set_loose() -> void:
 	state = State.LOOSE
 	stow_point = null
 	collision_layer = LAYER
-	collision_mask = MASK
+	collision_mask = _mask()
 	freeze = false
 
 ## In someone's hands: frozen and out of the physics world, so it can never
@@ -141,6 +162,31 @@ static func consume(item: Item) -> void:
 	if parent != null:
 		parent.remove_child(item)
 	item.free()
+
+func _mask() -> int:
+	return SPACE_MASK if in_space else MASK
+
+## The look, from ItemLooks, on the layer for where the item is: built afresh,
+## so the kit's merged meshes and any glint match it.
+func _build_look() -> void:
+	var at := -1
+	var old := get_node_or_null(^"Look")
+	if old != null:
+		at = old.get_index()
+		remove_child(old)
+		old.free()
+	var look := Node3D.new()
+	look.name = "Look"
+	add_child(look)
+	if at >= 0:
+		move_child(look, at)
+	var kit := InteriorKit.new(look)
+	kit.layer = SPACE_LAYER if in_space else InteriorKit.LAYER
+	kit.light_mask = kit.layer
+	ItemLooks.build(kit, definition.look, definition.size, _variety)
+	kit.commit()
+	if in_space and ItemLooks.has_glint(definition.look):
+		ItemLooks.glint(look, _variety)
 
 static func _physics_material() -> PhysicsMaterial:
 	if _material == null:

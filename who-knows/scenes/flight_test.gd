@@ -17,6 +17,9 @@ extends Node3D
 @onready var _stream: AsteroidStream = $AsteroidStream
 @onready var _pilot: PilotControls = $Ship/PilotControls
 
+## Every salvage cloud, under Outside (quantum energy spec §10.2).
+var salvage: SalvageField
+
 var _reticle: Reticle
 var _interact_prompt := ""
 var _grasp_prompt := ""
@@ -113,6 +116,7 @@ func _wire_universe() -> void:
 	var start := AsteroidRecipe.new(_stream.seed).find_start()
 	_universe.origin = start
 	_stream.start(_universe, start)
+	_wire_salvage()
 	# Godot's cameras stop drawing at 4 km; big rocks show from 25 km.
 	for cam: Camera3D in [$Ship/Exterior/ChaseCamera, $Ship/Canopy/CanopyCam, _avatar.camera]:
 		cam.far = AsteroidStream.VIEW_FAR
@@ -127,6 +131,27 @@ func _wire_universe() -> void:
 	_universe_readout.position = Vector2(16, 16)
 	_universe_readout.visible = false
 	$Prompt.add_child(_universe_readout)
+
+## Salvage (quantum energy spec §10.2, §14): the field under Outside, at the
+## identity, with the same world seed as the rocks; and the near cloud out of
+## the starter's airlock, behind its stern, fixed in the universe now.
+func _wire_salvage() -> void:
+	salvage = SalvageField.new()
+	salvage.name = "SalvageField"
+	$Outside.add_child(salvage)
+	salvage.setup(_universe, _ship.item_catalog, _stream.seed)
+	salvage.add_near_cloud(_stern())
+
+## A frame on the hull at the middle of the airlock's outer hatch, +z pointing
+## out of it along the airlock's line: aft, on the starter.
+func _stern() -> Transform3D:
+	for airlock: Airlock in _ship.airlocks.values():
+		if not is_instance_valid(airlock.alcove):
+			continue
+		var hatch := airlock.alcove.outer_hatch.global_transform
+		var out := -hatch.basis.z.normalized()
+		return Transform3D(Basis.looking_at(-out, hatch.basis.y), airlock.beacon())
+	return _ship.exterior.global_transform
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	var key := event as InputEventKey

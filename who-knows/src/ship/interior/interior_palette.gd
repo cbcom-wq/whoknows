@@ -65,5 +65,9 @@ const STEAM := Color("f2ece2")
 ## warm gold; that choice changes these two lines only.
 const QUANTUM := Color("9a6bff")
 const QUANTUM_DEEP := Color("3a2f55")
+## Salvage (quantum energy spec §10.5, §14.3): the pale lump of an ice chunk,
+## and a wire coil's copper -- brighter and more orange than the BELT stripe.
+const ICE := Color("d6e7ee")
+const COPPER := Color("cc7a3c")
 ## Crates, on shelves and as items: one of these, chosen by variety.
 const CRATES: Array[Color] = [AMBER, SKY, CORAL, OLIVE, TRIM]
