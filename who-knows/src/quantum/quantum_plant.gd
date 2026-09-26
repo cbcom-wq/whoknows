@@ -373,19 +373,27 @@ func plate_prompt(actor: Variant) -> String:
 		return ""
 	if suit.room() <= 0.0:
 		return "Suit charged"
-	var n := minf(suit.room(), _can_give())
-	if n <= 0.0:
+	if not _can_charge(suit):
 		return "Store empty"
-	return "Charge suit (+%d QE)" % maxi(roundi(n), 1)
+	return "Charge suit (+%d QE)" % maxi(roundi(minf(suit.room(), _can_give())), 1)
 
 ## The machine's screen while its plate charges a suit `percent` full, over a
 ## store of `stored` QE.
 static func charge_screen(percent: int, stored: int) -> PackedStringArray:
 	return PackedStringArray(["CHARGE · SUIT", "SUIT %d%%" % percent, "STORE %d QE" % stored])
 
-## The plates prompt for whoever would press them: the avatar.
+## The plates prompt for whoever would press them.
 func _plate_prompt() -> String:
-	return plate_prompt(get_tree().get_first_node_in_group(Avatar.GROUP) if is_inside_tree() else null)
+	return plate_prompt(_presser())
+
+## Whoever would press a plate: the avatar.
+func _presser() -> Node:
+	return get_tree().get_first_node_in_group(Avatar.GROUP) if is_inside_tree() else null
+
+## True while pressing a plate would charge `suit`: it has room, and the store
+## has something to give.
+func _can_charge(suit: SuitCell) -> bool:
+	return suit != null and store != null and suit.room() > 0.0 and _can_give() > 0.0
 
 ## A plate pressed by `actor`: its charge starts, at the next tick. A full
 ## suit is told so with the small chime, and an empty store with the warning.
@@ -397,7 +405,7 @@ func _on_plate_pressed(actor: Node, cell: Vector3i) -> void:
 	if suit.room() <= 0.0:
 		_play(cell, &"plate", &"panel_beep")
 		return
-	if _can_give() <= 0.0:
+	if not _can_charge(suit):
 		_play(cell, &"plate", &"warning_chime")
 		return
 	for other: Vector3i in _charges.keys():
@@ -444,7 +452,7 @@ func _show_plate(machine: QuantumMachine) -> void:
 	var suit := _suit_of(_charges.get(cell))
 	if suit == null:
 		machine.plate.set_readout(-1)
-		machine.plate.set_lit(_plate_prompt().begins_with("Charge"))
+		machine.plate.set_lit(_can_charge(_suit_of(_presser())))
 		return
 	machine.plate.set_readout(_percent(suit))
 	machine.plate.set_lit(true)

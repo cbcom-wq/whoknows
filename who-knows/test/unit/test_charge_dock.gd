@@ -15,21 +15,45 @@ func _dock() -> ChargeDock:
 	add_child_autofree(dock)
 	return dock
 
+## Someone standing `away` metres out from `dock`'s face.
+func _someone(dock: ChargeDock, away: float) -> Node3D:
+	var who := Node3D.new()
+	add_child_autofree(who)
+	who.global_position = dock.global_transform * Vector3(0, 0, away)
+	return who
+
 func test_it_prompts_from_its_source_and_is_offered_only_with_a_prompt():
 	var dock := _dock()
+	var near := _someone(dock, 0.5)
 	assert_eq(dock.prompt_text(), "")
-	assert_false(dock.can_interact(null))
+	assert_false(dock.can_interact(near))
 	dock.prompt_source = func() -> String: return "Charge suit (+100 QE)"
 	assert_eq(dock.prompt_text(), "Charge suit (+100 QE)")
-	assert_true(dock.can_interact(null))
+	assert_true(dock.can_interact(near))
+
+## The Interactor's ray reaches 2.5 m, but the plate charges only within
+## REACH: from further off it is not offered, so F never seems to do nothing.
+func test_it_is_offered_only_within_reach():
+	var dock := _dock()
+	dock.prompt_source = func() -> String: return "Charge suit (+100 QE)"
+	assert_true(dock.can_interact(_someone(dock, 1.15)))
+	assert_false(dock.can_interact(_someone(dock, 1.8)), "in the ray's reach, out of the plate's")
+	assert_false(dock.can_interact(null))
 
 func test_pressing_it_says_who_pressed():
 	var dock := _dock()
-	var who := Node3D.new()
-	add_child_autofree(who)
+	dock.prompt_source = func() -> String: return "Charge suit (+100 QE)"
+	var who := _someone(dock, 0.5)
 	watch_signals(dock)
 	dock.interact(who)
 	assert_signal_emitted_with_parameters(dock, "pressed", [who])
+
+func test_a_press_from_out_of_reach_says_nothing():
+	var dock := _dock()
+	dock.prompt_source = func() -> String: return "Charge suit (+100 QE)"
+	watch_signals(dock)
+	dock.interact(_someone(dock, 1.8))
+	assert_signal_not_emitted(dock, "pressed")
 
 ## While a charge runs the plate glows: a brighter disc swells from its centre
 ## to its rim as the suit fills.
@@ -92,6 +116,64 @@ func _stand(ship: Ship, away: float) -> void:
 func _press(ship: Ship) -> void:
 	_stand(ship, 0.5)
 	_machine(ship).plate.interact(_avatar(ship))
+
+## Stands `away` metres out from the plate looking straight at it, and lets
+## the Interactor look.
+func _aim_from(ship: Ship, away: float) -> void:
+	_stand(ship, away)
+	var avatar := _avatar(ship)
+	avatar.velocity = Vector3.ZERO
+	var d := _machine(ship).plate.global_position - avatar.head.global_position
+	avatar._yaw = atan2(-d.x, -d.z)
+	avatar.rotation.y = avatar._yaw
+	avatar._pitch = atan2(d.y, Vector2(d.x, d.z).length())
+	avatar.head.rotation.x = avatar._pitch
+	await wait_physics_frames(3)
+
+## F, as the Interactor hears it.
+func _press_f(ship: Ship) -> void:
+	var f := InputEventAction.new()
+	f.action = &"interact"
+	f.pressed = true
+	_avatar(ship).interactor._unhandled_input(f)
+
+## The review's case: the ray reaches 2.5 m, the plate 1.2 m. From 1.8 m the
+## plate is not offered and F does nothing; from 0.8 m it is, and F charges.
+func test_the_interactor_offers_the_plate_only_within_reach():
+	var ship := _ship()
+	var plant := ship.quantum
+	var avatar := _avatar(ship)
+	var plate := _machine(ship).plate
+	plant.tick(DT)
+	await _aim_from(ship, 1.75)
+	assert_almost_eq(avatar.head.global_position.distance_to(plate.global_position), 1.8, 0.05)
+	assert_ne(avatar.interactor.current(), plate, "not offered from 1.8 m")
+	_press_f(ship)
+	_step(plant, 1.0)
+	assert_eq(avatar.suit_cell.charge, 0.0, "and F does nothing")
+	await _aim_from(ship, 0.7)
+	assert_almost_eq(avatar.head.global_position.distance_to(plate.global_position), 0.8, 0.05)
+	assert_eq(avatar.interactor.current(), plate, "offered from 0.8 m")
+	assert_eq(plate.prompt_text(), "Charge suit (+100 QE)")
+	_press_f(ship)
+	_step(plant, 1.0)
+	assert_almost_eq(avatar.suit_cell.charge, 50.0, 0.9, "and F charges")
+
+## Lit while a press would charge: dark once the suit is full, and dark with
+## nothing in the store to give.
+func test_the_plate_is_lit_while_it_could_charge():
+	var ship := _ship()
+	var plant := ship.quantum
+	var plate := _machine(ship).plate
+	plant.tick(DT)
+	assert_true(plate.is_lit())
+	_avatar(ship).suit_cell.charge = SuitCell.CAPACITY
+	plant.tick(DT)
+	assert_false(plate.is_lit(), "the suit is full")
+	_avatar(ship).suit_cell.charge = 0.0
+	plant.store.drain(plant.store.amount, &"test")
+	plant.tick(DT)
+	assert_false(plate.is_lit(), "the store is empty")
 
 func test_the_plate_offers_to_charge_an_empty_suit():
 	var ship := _ship()

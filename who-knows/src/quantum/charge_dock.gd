@@ -5,9 +5,9 @@ extends Area3D
 ## 2026-09-24-quantum-energy-design.md §6.3, §7.3): a round hand plate the
 ## Interactor finds like any interactable, lit QUANTUM when it is ready.
 ## Pressing it says who pressed it and nothing more, and it offers itself only
-## while its prompt source has something to say. Whoever owns it -- the ship's
-## QuantumPlant -- charges that actor's suit while they stay within REACH, and
-## shows the charge on it with set_readout.
+## to someone within REACH, while its prompt source has something to say.
+## Whoever owns it -- the ship's QuantumPlant -- charges that actor's suit
+## while they stay within REACH, and shows the charge on it with set_readout.
 ##
 ## Knows nothing about ships, like ReadoutPanel. Its frame: origin at the
 ## plate's centre on the surface it is mounted on, +z out of that surface.
@@ -95,12 +95,17 @@ func within_reach(actor: Node3D) -> bool:
 func prompt_text() -> String:
 	return prompt_source.call() if prompt_source.is_valid() else ""
 
-## Offered only while pressing it would do something.
-func can_interact(_actor: Node) -> bool:
-	return prompt_text() != ""
+## Offered only to someone within REACH, and only while pressing it would do
+## something. The Interactor's ray reaches further than the plate does, so
+## from beyond REACH it passes the plate over: F is never offered where it
+## would start a charge that ends at once.
+func can_interact(actor: Node) -> bool:
+	return actor is Node3D and within_reach(actor) and prompt_text() != ""
 
+## Says who pressed it -- if it is offered to them.
 func interact(actor: Node) -> void:
-	pressed.emit(actor)
+	if can_interact(actor):
+		pressed.emit(actor)
 
 func _kit(render_layer: int) -> InteriorKit:
 	var kit := InteriorKit.new(self)
