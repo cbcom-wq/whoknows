@@ -97,11 +97,13 @@ func is_loaded(cloud_id: StringName) -> bool:
 	return _loaded.has(cloud_id)
 
 ## The cloud's items now in the world, in index order: none if it is not
-## loaded, and none that were taken.
+## loaded, and none that were taken. One freed some other way than
+## Item.consume is simply gone, and comes back when its cloud next loads.
 func loaded_items(cloud_id: StringName) -> Array[Item]:
 	var out: Array[Item] = []
 	for item in _loaded.get(cloud_id, {}).values():
-		out.append(item)
+		if is_instance_valid(item):
+			out.append(item)
 	return out
 
 ## A cloud's seed: splitmix64 over the world seed and the id's bytes, written
@@ -156,9 +158,10 @@ func _load(cloud_id: StringName) -> void:
 
 ## Frees what is left of a cloud, each item out of the group first.
 func _free(cloud_id: StringName) -> void:
-	for item: Item in _loaded[cloud_id].values():
-		if not is_instance_valid(item) or item.get_parent() != self:
+	for entry in _loaded[cloud_id].values():
+		if not is_instance_valid(entry) or entry.get_parent() != self:
 			continue
+		var item: Item = entry
 		item.remove_from_group(Universe.EXTERIOR_SPACE)
 		remove_child(item)
 		item.free()
@@ -169,10 +172,10 @@ func _free(cloud_id: StringName) -> void:
 func _on_consumed(cloud_id: StringName, index: int) -> void:
 	ledger.take(cloud_id, index)
 	var items: Dictionary = _loaded.get(cloud_id, {})
-	var item: Item = items.get(index)
+	var item: Variant = items.get(index)
 	items.erase(index)
 	if is_instance_valid(item):
-		item.remove_from_group(Universe.EXTERIOR_SPACE)
+		(item as Item).remove_from_group(Universe.EXTERIOR_SPACE)
 
 static func _mix_total() -> int:
 	var total := 0

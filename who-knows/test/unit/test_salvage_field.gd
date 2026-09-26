@@ -178,6 +178,24 @@ func test_a_swallowed_item_is_recorded_once_and_left_out_when_the_cloud_reloads(
 	assert_eq(_field.ledger.remaining(SalvageField.NEAR, 12), 11)
 	assert_no_new_orphans()
 
+## Only swallowing takes salvage (spec §10.3): an item freed some other way is
+## not in the ledger, and is back when its cloud next loads.
+func test_an_item_freed_behind_the_fields_back_is_not_taken():
+	_field.add_near_cloud(_stern)
+	var gone := _near()[7]
+	gone.get_parent().remove_child(gone)
+	gone.free()
+	assert_eq(_near().size(), 11)
+	assert_false(_field.ledger.is_taken(SalvageField.NEAR, 7))
+	var centre := _universe.to_engine(_field.centre(SalvageField.NEAR))
+	_focus.position = centre + Vector3(4100, 0, 0)
+	_field.update()
+	assert_eq(_field.get_child_count(), 0)
+	_focus.position = centre
+	_field.update()
+	assert_eq(_near().size(), 12, "back")
+	assert_no_new_orphans()
+
 func test_something_pushed_but_not_taken_returns_to_its_place_on_reload():
 	_field.add_near_cloud(_stern)
 	var pushed := _near()[2]
