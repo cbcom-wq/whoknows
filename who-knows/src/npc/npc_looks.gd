@@ -51,9 +51,9 @@ static func droid_body(kit: InteriorKit, f: Transform3D, variety: float) -> void
 	var upright := Basis(Vector3.BACK, PI * 0.5)
 	var face_up := Basis(Vector3.RIGHT, -PI * 0.5)
 	kit.tube_x(SOLID, f * Transform3D(upright, Vector3(0, DROID_BODY_BOTTOM + height * 0.5, 0)),
-		DROID_RADIUS, height, InteriorKit.solid(InteriorPalette.WALL))
+		DROID_RADIUS, height, InteriorKit.solid(InteriorPalette.DROID_BODY))
 	kit.disc(SOLID, f * Transform3D(face_up, Vector3(0, DROID_BODY_TOP, 0)), DROID_RADIUS,
-		InteriorKit.solid(InteriorPalette.WALL))
+		InteriorKit.solid(InteriorPalette.DROID_BODY))
 	kit.disc(SOLID, f * Transform3D(face_up.inverse(), Vector3(0, DROID_BODY_BOTTOM, 0)), DROID_RADIUS,
 		InteriorKit.solid(InteriorPalette.WALL_LOW))
 	kit.tube_x(SOLID, f * Transform3D(upright, Vector3(0, DROID_BODY_BOTTOM + height * 0.45, 0)),
@@ -75,7 +75,7 @@ static func droid_cap(kit: InteriorKit, f: Transform3D, variety: float) -> void:
 	kit.bevel_box(SOLID, f * InteriorKit.at(Vector3(0, DROID_CAP.y + 0.02, 0)), Vector3(0.18, 0.04, 0.18), 0.015,
 		InteriorKit.solid(trim(variety)))
 	kit.bevel_box(GLOW, f * InteriorKit.at(Vector3(0, DROID_CAP.y * 0.55, -DROID_CAP.z * 0.5 - 0.005)),
-		Vector3(0.22, 0.04, 0.02), 0.008, InteriorKit.lit(InteriorPalette.LIGHT_WARM, InteriorMaterials.GLOW_ENERGY))
+		Vector3(0.26, 0.055, 0.02), 0.01, InteriorKit.lit(InteriorPalette.LIGHT_WARM, InteriorMaterials.GLOW_ENERGY))
 
 ## The arm, folded, in frame `f` (at the shoulder): two segments and a pad.
 static func droid_arm(kit: InteriorKit, f: Transform3D) -> void:

@@ -41,6 +41,10 @@ const ROOM_FLOOR := {
 }
 const MATTRESS := Color("6f9c9a")
 const GUNMETAL := Color("3a3d44")
+## The maintenance droid's body (NPC foundation spec §14.4): a muted teal, the
+## one cool thing in a warm corridor, so it reads as something alive and not as
+## part of the walls. Chosen at the renders.
+const DROID_BODY := Color("6f9c9a")
 ## The maintenance droid's wheels (NPC foundation spec §14.4): darker than
 ## gunmetal, so they read under its warm body.
 const DROID_WHEEL := Color("2c2e33")
