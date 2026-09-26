@@ -22,8 +22,8 @@ const GROUP := &"item"
 const LIFT_LIMIT_KG := 40.0
 ## project.godot 3d_physics/layer_6 "items", as a bit.
 const LAYER := 32
-## interior_geometry | avatar | items.
-const MASK := 2 | 4 | 32
+## interior_geometry | avatar | items | npcs.
+const MASK := 2 | 4 | 32 | Npc.LAYER
 const FRICTION := 0.5
 const BOUNCE := 0.15
 

@@ -40,6 +40,12 @@ var rcs_show: RcsShow
 
 var _stocked := false
 var _airlocks_root: Node
+## Who lives aboard (NPC foundation spec §4.2, §14): the interior's director,
+## the holder its NPCs stand under, and the place they live in.
+var npc_director: NpcDirector
+var npcs: Node3D
+var crew_site: ShipSite
+var _crew: Array = []
 ## The ship's air handling (airlock spec §6): heard everywhere aboard,
 ## through the Ship bus, so it drains away with the air in the airlock.
 var _hum: AudioStreamPlayer
@@ -59,7 +65,7 @@ func _ready() -> void:
 	exterior.angular_damp = 0.0
 	exterior.can_sleep = false
 	exterior.collision_layer = 1   # exterior_hull
-	exterior.collision_mask = 1 | AsteroidBody.LAYER   # other hulls, and rocks
+	exterior.collision_mask = 1 | AsteroidBody.LAYER | Npc.LAYER   # other hulls, rocks, NPCs
 	# At boost the hull moves 5 m a tick: without this it passes through rubble.
 	exterior.continuous_cd = true
 	# Outside, so the floating origin moves it (asteroids spec §4.2).
@@ -80,6 +86,7 @@ func _ready() -> void:
 	_airlocks_root = Node.new()
 	_airlocks_root.name = "Airlocks"
 	add_child(_airlocks_root)
+	_make_crew_quarters()
 	rcs_show = RcsShow.new()
 	rcs_show.name = "RcsShow"
 	exterior.add_child(rcs_show)
@@ -188,6 +195,7 @@ func _rebuild_everything() -> void:
 		rcs_show.rebuild(grid, catalog, stats.center_of_mass)
 	stats_changed.emit(stats)
 	_set_anchor_radius()
+	_bind_crew()
 
 ## How far the hull reaches from its origin, for the asteroid bubble.
 func _set_anchor_radius() -> void:
@@ -195,6 +203,43 @@ func _set_anchor_radius() -> void:
 	for c: Vector3i in grid.coords():
 		reach = maxf(reach, ShipGrid.cell_center(c).length())
 	exterior.set_meta(AsteroidStream.ANCHOR_RADIUS, reach + ShipGrid.CELL_SIZE * 0.87)
+
+## The interior's NPC director and the holder its NPCs stand under, made once
+## and kept across rebuilds, like Airlocks. Inside, every record of the ship
+## is live while its interior is built (NPC foundation spec §4.3).
+func _make_crew_quarters() -> void:
+	npcs = Node3D.new()
+	npcs.name = "Npcs"
+	interior.add_child(npcs)
+	npc_director = NpcDirector.new()
+	npc_director.name = "NpcDirector"
+	npc_director.rule = NpcDirector.Rule.BY_SITE
+	npc_director.max_live = 8
+	npc_director.holder = npcs
+	npc_director.catalog = NpcCatalog.load_from_dir("res://data/npcs")
+	npc_director.sources = [self]
+	add_child(npc_director)
+
+## Re-reads the rebuilt interior for its crew: the droid's map, dock and jobs.
+## A live droid survives the rebuild; one left on a cell that is gone is put
+## back at its dock.
+func _bind_crew() -> void:
+	if npc_director == null or interior_builder.layout() == null:
+		return
+	if crew_site == null:
+		crew_site = ShipSite.new(self)
+	crew_site.rebind(interior_builder.layout())
+	_crew.clear()
+	for record in ShipCrew.records(interior_builder.layout(), crew_site.paths, name, 0):
+		_crew.append([record, crew_site])
+	for npc: Npc in npc_director.live_npcs():
+		if npc.site == crew_site and not crew_site.paths.has(DeckPaths.cell_at(npc.local_position())):
+			npc.global_transform = crew_site.frame() * crew_site.start_pose(npc.record, 0.0)
+			npc.velocity = Vector3.ZERO
+
+## The ship's crew, as its director asks for them.
+func records(_director: NpcDirector) -> Array:
+	return _crew
 
 ## Hands each rebuilt airlock room to its Airlock, making one for a new
 ## airlock and dropping those whose cell is gone. An Airlock keeps its cycle,

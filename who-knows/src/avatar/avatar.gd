@@ -26,14 +26,14 @@ const CROUCH_HEIGHT := 1.0
 ## How hard walking into a loose thing pushes it, at walking pace
 ## (hands-and-items spec §7.5).
 const PUSH_FORCE := 150.0
-## interior_geometry | items (project.godot 3d_physics layers 2 and 6).
-const COLLISION_MASK := 2 | 32
+## interior_geometry | items | npcs (project.godot 3d_physics layers 2, 6 and 8).
+const COLLISION_MASK := 2 | 32 | Npc.LAYER
 ## Every avatar is in this group, so the things it walks through -- an
 ## airlock's doorways -- can find it.
 const GROUP := &"avatar"
-## exterior_hull | items | asteroids: on a spacewalk you bump along your own
-## hull, and into rocks (asteroids spec §7.6).
-const SUIT_MASK := 1 | 32 | AsteroidBody.LAYER
+## exterior_hull | items | asteroids | npcs: on a spacewalk you bump along your
+## own hull, into rocks (asteroids spec §7.6) and into skitters.
+const SUIT_MASK := 1 | 32 | AsteroidBody.LAYER | Npc.LAYER
 ## You and your suit, kilograms, for bumping into things in space.
 const SUIT_MASS := 120.0
 const BUMP_BOUNCE := 0.2

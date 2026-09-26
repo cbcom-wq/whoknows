@@ -78,6 +78,8 @@ func setup(p_record: NpcRecord, p_species: NpcSpecies, p_site: NpcSite, p_inside
 static func make_locomotor(id: StringName) -> Locomotor:
 	var loco: Locomotor = null
 	match id:
+		&"deck_walker":
+			loco = DeckWalker.new()
 		_:
 			loco = null
 	if loco == null:

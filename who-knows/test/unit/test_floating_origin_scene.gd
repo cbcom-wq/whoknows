@@ -92,12 +92,12 @@ func test_the_readout_starts_hidden():
 
 func test_the_hull_and_a_spacewalker_touch_rocks():
 	assert_true(_ship.exterior.is_in_group(AsteroidStream.SPACE_ANCHOR))
-	assert_eq(_ship.exterior.collision_mask, 1 | 64)
+	assert_eq(_ship.exterior.collision_mask, 1 | 64 | Npc.LAYER)
 	assert_true(_ship.exterior.continuous_cd)
 	assert_gt(float(_ship.exterior.get_meta(AsteroidStream.ANCHOR_RADIUS)), 7.0)
 	_out(Vector3(0, 0, 12))
 	assert_true(_avatar.is_in_group(AsteroidStream.SPACE_ANCHOR))
-	assert_eq(_avatar.collision_mask, 1 | 32 | 64)
+	assert_eq(_avatar.collision_mask, 1 | 32 | 64 | Npc.LAYER)
 	_back_in()
 	assert_false(_avatar.is_in_group(AsteroidStream.SPACE_ANCHOR))
 

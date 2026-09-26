@@ -14,7 +14,7 @@ const LIFETIME := 1.5
 ## Newton-seconds given to whatever it hits.
 const PUSH := 6.0
 ## interior_geometry | items.
-const RAY_MASK := 2 | 32
+const RAY_MASK := 2 | 32 | Npc.LAYER
 ## Chunky enough to read at the far end of a corridor: at 0.06 m thick it was
 ## a hairline by four metres.
 const LENGTH := 0.5
