@@ -132,6 +132,16 @@ Spec `docs/superpowers/specs/2026-09-24-quantum-energy-design.md`, plan
 
 ---
 
+**Drafted, awaiting the owner's answers: habitat modules** (2026-09-26). The quantum machine makes
+module packages; you carry one out and plant it on a big rock, where it levels on legs and unfolds.
+Modules share one grid, one interior slot and one store, and are joined by corridors you pull on a
+spacewalk. Inside you walk in gravity. A hub, a drill that mines QE, a store, a fabricator, a suit
+bay and a ship builder (the shipyard's home) give QE a progression. Spec
+`docs/superpowers/specs/2026-09-26-habitat-modules-design.md`. Its §2 recommends thirteen decisions,
+none taken yet. There is no plan and nothing is built.
+
+---
+
 ## Known open problems
 
 ### Unverified: the feel verdict
