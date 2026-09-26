@@ -47,6 +47,9 @@ const PAINTING_FILES := [
 	"res://src/quantum/quantum_bay.gd",
 	"res://src/quantum/charge_dock.gd",
 	"res://src/quantum/quantum_show.gd",
+	"res://src/npc/npc_looks.gd",
+	"res://src/npc/droid_look.gd",
+	"res://src/npc/skitter_look.gd",
 ]
 
 ## The reusable asset library and what it builds with. Ships are generated
@@ -69,6 +72,8 @@ const REUSABLE_FILES := [
 	"res://src/quantum/charge_dock.gd",
 	"res://src/quantum/quantum_show.gd",
 	"res://src/quantum/quantum_machine.gd",
+	"res://src/npc/npc_looks.gd",
+	"res://src/npc/droid_look.gd",
 ]
 const GRID_SIDE := ["ShipGrid", "BlockCatalog", "DeckGraph", "InteriorLayout", "InteriorBuilder",
 	"InteriorDressing"]

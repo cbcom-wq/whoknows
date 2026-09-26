@@ -47,6 +47,8 @@ func _ready() -> void:
 		0.01, InteriorKit.lit(InteriorPalette.LIGHT_WARM, InteriorMaterials.GLOW_ENERGY))
 	kit.commit()
 	_show()
+	# NPCs see it while it burns (NPC foundation spec §6.2).
+	add_to_group(StimulusBus.LIGHTS)
 
 func use(_item: Item, _aim: Transform3D, _world: Node3D, _holder: CollisionObject3D) -> bool:
 	if burn != Burn.UNLIT:
@@ -82,6 +84,19 @@ func _process(delta: float) -> void:
 		return
 	_phase += delta
 	_light.light_energy = ENERGY * (1.0 + FLICKER * sin(_phase * 23.0) * sin(_phase * 7.3))
+
+## What NPCs see of it (StimulusBus.LIGHTS): all round, while it burns.
+func light_reach() -> float:
+	return RANGE if burn == Burn.BURNING else 0.0
+
+func light_cone_deg() -> float:
+	return 360.0
+
+func light_origin() -> Transform3D:
+	return _light.global_transform
+
+func light_kind() -> StringName:
+	return &"flare"
 
 func _show() -> void:
 	var lit := burn == Burn.BURNING

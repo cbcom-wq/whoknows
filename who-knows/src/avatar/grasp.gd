@@ -162,6 +162,7 @@ func throw(amount: float) -> void:
 	var direction := -aim().basis.z
 	_release()
 	thrown.linear_velocity = direction * throw_speed(thrown.mass, amount) + _body.velocity
+	thrown.watch_first_impact(throw_speed(thrown.mass, amount))
 	changed.emit()
 
 ## Lets go, or stows the item if you are aiming at a fitting stow point.

@@ -33,6 +33,18 @@ thrusters):
 
 If a name in the skill no longer exists, fix the skill. The owner asked for this on 2026-09-25.
 
+## NPCs: use and keep the `building-an-npc` skill current
+
+`.claude/skills/building-an-npc/` is how NPCs are built here: creatures, droids, crew, and new
+behaviours, senses, locomotors, looks or populations. It has templates, and
+`test_npc_catalog.gd` checks every species in `data/npcs/` automatically. **When NPC work is
+finished, update the skill in the same branch**:
+- put new checks in its checklist;
+- put new lessons in *Mistakes already made*;
+- put new numbers and APIs in `reference.md`.
+
+If a name in the skill no longer exists, fix the skill.
+
 ## Exterior space has a floating origin
 
 The outside world is re-centred on you every 2 km (`src/world/universe.gd`,

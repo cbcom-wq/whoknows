@@ -13,6 +13,10 @@ const SLOT_SPACING := 2000.0
 const RESEAT_TOLERANCE := 0.05
 ## How long after a rock strikes the hull a save waits (saving spec §5).
 const STRUCK_CALM := 5.0
+## How often, and how far past the hull, a hard burn is checked for blasting a
+## rock's surface.
+const BLAST_EVERY := 0.5
+const BLAST_REACH := 50.0
 
 ## The exact ShaderMaterial `hull`/`hull_wedge` meshes reference (their .tres
 ## surfaces point at this same path, and Godot's resource cache guarantees a
@@ -49,12 +53,20 @@ var since_struck := INF
 
 var _stocked := false
 var _airlocks_root: Node
+## Who lives aboard (NPC foundation spec §4.2, §14): the interior's director,
+## the holder its NPCs stand under, and the place they live in.
+var npc_director: NpcDirector
+var npc_bus: StimulusBus
+var npcs: Node3D
+var crew_site: ShipSite
+var _crew: Array = []
 ## The ship's air handling (airlock spec §6): heard everywhere aboard,
 ## through the Ship bus, so it drains away with the air in the airlock.
 var _hum: AudioStreamPlayer
 ## A rock striking the hull, heard aboard (asteroids spec §7.5).
 var _thump: AudioStreamPlayer
 var _last_hull_velocity := Vector3.ZERO
+var _blast_in := 0.0
 
 @onready var exterior: RigidBody3D = $Exterior
 @onready var interior: Node3D = $Interior
@@ -68,7 +80,7 @@ func _ready() -> void:
 	exterior.angular_damp = 0.0
 	exterior.can_sleep = false
 	exterior.collision_layer = 1   # exterior_hull
-	exterior.collision_mask = 1 | AsteroidBody.LAYER   # other hulls, and rocks
+	exterior.collision_mask = 1 | AsteroidBody.LAYER | Npc.LAYER   # other hulls, rocks, NPCs
 	# At boost the hull moves 5 m a tick: without this it passes through rubble.
 	exterior.continuous_cd = true
 	# Outside, so the floating origin moves it (asteroids spec §4.2).
@@ -89,6 +101,7 @@ func _ready() -> void:
 	_airlocks_root = Node.new()
 	_airlocks_root.name = "Airlocks"
 	add_child(_airlocks_root)
+	_make_crew_quarters()
 	rcs_show = RcsShow.new()
 	rcs_show.name = "RcsShow"
 	exterior.add_child(rcs_show)
@@ -140,11 +153,47 @@ func _update_hum() -> void:
 func _physics_process(delta: float) -> void:
 	_last_hull_velocity = exterior.linear_velocity
 	since_struck += delta
+	_blast_in -= delta
+	if _blast_in <= 0.0:
+		_blast_in = BLAST_EVERY
+		_blast_rock()
 
 func _on_hull_struck(body: Node) -> void:
+	var knock := (exterior.linear_velocity - _last_hull_velocity).length()
 	if body is AsteroidBody:
 		since_struck = 0.0
-		hull_struck((exterior.linear_velocity - _last_hull_velocity).length())
+		hull_struck(knock)
+	_jolt_rock(body, knock)
+
+## A strike carries through the rock it hit: anything living on it feels it
+## (NPC foundation spec §6.1).
+func _jolt_rock(body: Node, knock: float) -> void:
+	var rock: AsteroidRock = null
+	if body is AsteroidDetail:
+		rock = (body as AsteroidDetail).rock
+	elif body is AsteroidBody:
+		rock = (body as AsteroidBody).rock
+	if rock == null:
+		return
+	StimulusBus.send(exterior, Stimulus.make(Stimulus.VIBRATION, exterior.global_position,
+		clampf(knock / 4.0, 0.2, 1.0), rock.radius * 2.0, exterior, RockHerds.site_of(rock)), 1.0)
+
+## Thrusting hard close over a big rock blasts its surface (NPC foundation spec
+## §6.1): one ray the way the exhaust goes, a few times a second.
+func _blast_rock() -> void:
+	var force := flight_computer.commanded_force_local
+	var budget: float = flight_computer.thrust_budget[&"forward"]
+	if force.length() < budget * 0.1 or not exterior.is_inside_tree():
+		return
+	var exhaust := -(exterior.global_basis * force).normalized()
+	var from := exterior.global_position
+	var reach := float(exterior.get_meta(AsteroidStream.ANCHOR_RADIUS, 10.0)) + BLAST_REACH
+	var query := PhysicsRayQueryParameters3D.create(from, from + exhaust * reach, AsteroidBody.LAYER, [exterior.get_rid()])
+	var hit := exterior.get_world_3d().direct_space_state.intersect_ray(query)
+	if hit.is_empty() or not (hit["collider"] is AsteroidDetail):
+		return
+	StimulusBus.send(exterior, Stimulus.make(Stimulus.VIBRATION, hit["position"], 0.6, 40.0, exterior,
+		RockHerds.site_of((hit["collider"] as AsteroidDetail).rock)), BLAST_EVERY)
 
 ## A strike you feel aboard (asteroids spec §7.5): a thump, louder the harder
 ## the hull was knocked (`knock`: its change of speed, m/s). Outside is silent.
@@ -211,6 +260,7 @@ func _rebuild_everything() -> void:
 		rcs_show.rebuild(grid, catalog, stats.center_of_mass)
 	stats_changed.emit(stats)
 	_set_anchor_radius()
+	_bind_crew()
 
 ## How far the hull reaches from its origin, for the asteroid bubble.
 func _set_anchor_radius() -> void:
@@ -218,6 +268,48 @@ func _set_anchor_radius() -> void:
 	for c: Vector3i in grid.coords():
 		reach = maxf(reach, ShipGrid.cell_center(c).length())
 	exterior.set_meta(AsteroidStream.ANCHOR_RADIUS, reach + ShipGrid.CELL_SIZE * 0.87)
+
+## The interior's NPC director and the holder its NPCs stand under, made once
+## and kept across rebuilds, like Airlocks. Inside, every record of the ship
+## is live while its interior is built (NPC foundation spec §4.3).
+func _make_crew_quarters() -> void:
+	npcs = Node3D.new()
+	npcs.name = "Npcs"
+	interior.add_child(npcs)
+	npc_director = NpcDirector.new()
+	npc_director.name = "NpcDirector"
+	npc_director.rule = NpcDirector.Rule.BY_SITE
+	npc_director.max_live = 8
+	npc_director.holder = npcs
+	npc_director.catalog = NpcCatalog.load_from_dir("res://data/npcs")
+	npc_director.sources = [self]
+	add_child(npc_director)
+	npc_bus = StimulusBus.new()
+	npc_bus.name = "StimulusBus"
+	add_child(npc_bus)
+	npc_bus.setup(interior)
+	npc_director.bus = npc_bus
+
+## Re-reads the rebuilt interior for its crew: the droid's map, dock and jobs.
+## A live droid survives the rebuild; one left on a cell that is gone is put
+## back at its dock.
+func _bind_crew() -> void:
+	if npc_director == null or interior_builder.layout() == null:
+		return
+	if crew_site == null:
+		crew_site = ShipSite.new(self)
+	crew_site.rebind(interior_builder.layout())
+	_crew.clear()
+	for record in ShipCrew.records(interior_builder.layout(), crew_site.paths, name, 0):
+		_crew.append([record, crew_site])
+	for npc: Npc in npc_director.live_npcs():
+		if npc.site == crew_site and not crew_site.paths.has(DeckPaths.cell_at(npc.local_position())):
+			npc.global_transform = crew_site.frame() * crew_site.start_pose(npc.record, 0.0)
+			npc.velocity = Vector3.ZERO
+
+## The ship's crew, as its director asks for them.
+func records(_director: NpcDirector) -> Array:
+	return _crew
 
 ## Hands each rebuilt airlock room to its Airlock, making one for a new
 ## airlock and dropping those whose cell is gone. An Airlock keeps its cycle,

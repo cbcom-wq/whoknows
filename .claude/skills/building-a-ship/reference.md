@@ -158,6 +158,30 @@ touches no nodes.
   - the avatar is a capsule of radius 0.35 m and height 1.8 m, with the eye at 1.6 m; a room
     needs an aisle ≥ 1.0 m.
 
+## Who lives aboard (NPC foundation spec §14)
+
+`Ship` makes an `NpcDirector` (`Ship.npc_director`, rule `BY_SITE`, at most 8) and a
+`StimulusBus` (`Ship.npc_bus`) for its interior, and rebinds its `crew_site` (`ShipSite`) after
+every rebuild. Any blueprint gets its crew from its own layout:
+
+- **`ShipCrew.records(layout, paths, ship, seed)`:** one `maintenance_droid` if the layout has at
+  least `ShipCrew.MIN_CELLS` (12) walkable cells and a dock.
+- **`ShipCrew.dock(layout, paths)`:** the first cell of a `closet` room, else the path cell
+  farthest from the cells beside the helm.
+- **`ShipCrew.reachable_spots(layout, paths)`:** the jobs it can walk to from its dock;
+  `ShipSite.spots` holds these and `ShipSite.unreachable` the rest.
+- **`ShipCrew.work_spots(layout, paths)`:** `{cell, facing, action, key}`: portholes `&"polish"`,
+  `CONSOLE`/`DISPLAY` walls `&"scan"`, `LOCKERS` `&"tidy"`, and each fixture `&"scan"` from its
+  first walkable neighbour.
+- **`DeckPaths.build(layout, avoid)`:** walkable cells joined where no wall face stands between
+  them, doorways included; never the airlock (`AIRLOCK_ZONE`), a fixture's cell, or a cell in
+  `avoid` (the ship passes none: the felt gravity is the same in every cell). `path(from, to)`, `distances(from)`,
+  `cell_at(p)`, `floor_point(cell)`.
+- **Layers:** NPCs are physics layer 8, `npcs` (128). Inside, an `Npc`'s mask is 2 | 4 | 32;
+  the avatar's, items' and the doors' masks include 128.
+- **Felt gravity:** the droid reads `FeltGravity.felt`, the same number loose items get; it holds
+  against 8 m/s² of shove walking and 10 braced, and slides past that.
+
 ## Thrusters you see and hear (`RcsShow`, `src/flight/rcs_show.gd`)
 
 `Ship` builds one on the hull (`Ship/Exterior/RcsShow`) and rebuilds it with the stats, so any

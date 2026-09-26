@@ -17,6 +17,8 @@ extends Node
 ## so flying is untouched, but a crash cannot fling you across the room
 ## (asteroids spec §7.5). The rest becomes a jolt of the head.
 const SHOVE_CAP := 12.0
+## A change of felt shove bigger than this in one tick, m/s^2, is a shake.
+const SHAKE_AT := 3.0
 ## Head lurch per m/s^2 of shove over the cap, metres; at most JOLT_MAX.
 const JOLT_PER_ACCEL := 0.0015
 const JOLT_MAX := 0.06
@@ -30,6 +32,7 @@ const JOLT_DECAY := 8.0
 
 var _last_velocity: Vector3 = Vector3.ZERO
 var _shake_phase: float = 0.0
+var _last_shove := Vector3.ZERO
 ## Where a crash has thrown the head, dying away.
 var jolt := Vector3.ZERO
 
@@ -87,3 +90,9 @@ func drive_felt_gravity(shove: Vector3) -> void:
 	if _builder == null or _builder.felt_gravity == null:
 		return
 	_builder.felt_gravity.set_felt(Vector3.DOWN * _avatar.grav_strength + shove)
+	# A sudden change -- a burn starting, a hull strike -- is a shake the whole
+	# interior feels (NPC foundation spec §6.1).
+	if (shove - _last_shove).length() > SHAKE_AT:
+		StimulusBus.send(_builder.felt_gravity, Stimulus.make(Stimulus.SHAKE, Vector3.ZERO,
+			clampf(shove.length() / SHOVE_CAP, 0.3, 1.0), 0.0, _builder), 0.3)
+	_last_shove = shove

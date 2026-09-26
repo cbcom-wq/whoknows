@@ -107,6 +107,14 @@ func _run(scene: Node) -> void:
 		print("room    %s %s doorway %s" % [room["zone"], room["coords"], room["doorway"]])
 	print("pods    %s" % [layout.pods()])
 	print("locks   %s" % [layout.airlocks()])
+	# The maintenance droid (NPC foundation spec §14): its dock, and every job it
+	# must be able to reach on foot from there.
+	var crew := ship.crew_site
+	if crew != null and crew.dock != ShipCrew.NO_DOCK:
+		print("droid   dock %s, %d jobs it can reach%s" % [crew.dock, crew.spots.size(),
+			"" if crew.unreachable.is_empty() else ", UNREACHABLE %s" % [crew.unreachable.map(func(s): return s["key"])]])
+	else:
+		print("droid   none (under %d walkable cells, or no dock)" % ShipCrew.MIN_CELLS)
 
 	await _shot("spawn")
 	print("fps     %.0f standing at spawn" % await _fps(2.0))

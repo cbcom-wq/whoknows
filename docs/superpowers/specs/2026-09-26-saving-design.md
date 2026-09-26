@@ -76,6 +76,7 @@ What follows from them:
 | Where the flight started | `AsteroidRecipe.find_start()` works it out from the seed again. The rocks depend on it, so it must stay a pure function of the seed. |
 | The pilot light's timer, boost's fractional QE | Less than one QE. Dropping it is invisible. |
 | HUD toggles (F3 readout, the controls card) | Session conveniences, not game state. |
+| NPCs (the droid aboard, skitters on the rocks) | Not yet: each loads as its director first makes it. Saving what an NPC remembers is a later step (§12). |
 
 ---
 
@@ -292,7 +293,9 @@ tune in play.
 - **Starting over:** `play.bat -- --new-game` starts a new game. The old save is renamed to
   `game.json.old` rather than deleted. Nothing in the game deletes a save.
 - **Headless runs never touch the real save.** Tests, probes and `--headless` scene loads get
-  saving **off** unless a test turns it on with a temporary path (`SaveGame.path`). The
+  saving **off** unless a test turns it on with a temporary path (`SaveGame.path`). Windowed
+  probes and render scripts (`ship_probe.gd`, `test/probes/*.gd`) set `save_enabled = false`
+  before the scene enters the tree. The
   headless probes and GUT runs must stay deterministic, and must never overwrite the owner's
   game.
 
@@ -381,6 +384,7 @@ compares the grid and the store.
 - Slice 5's permanent empire vs expedition split: which parts survive losing a ship. The format
   allows one ship per file today; a fleet is a list of ships.
 - Cloud sync, and save thumbnails.
+- NPCs: where the droid was and what it was doing, and anything a herd remembers.
 
 ---
 

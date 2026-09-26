@@ -1,0 +1,44 @@
+[gd_resource type="Resource" script_class="NpcSpecies" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/npc/npc_species.gd" id="1_species"]
+
+[resource]
+script = ExtResource("1_species")
+id = &"maintenance_droid"
+display_name = "Maintenance droid"
+size = 0.55
+height = 0.55
+width = 0.5
+mass = 40.0
+top_speed = 1.8
+locomotors = Array[StringName]([&"deck_walker"])
+look = &"droid"
+move_sound = &"droid_whir"
+sight_range = 8.0
+sight_cone_deg = 140.0
+dark_sight = 1.0
+near_sense = 3.0
+feels_vibration = 0.0
+hears = 1.0
+feels_shake = 1.0
+light_response = 0.0
+needs = {
+&"charge": 0.004,
+&"curiosity": 0.01,
+&"duty": 0.02,
+&"fear": 0.0
+}
+need_start = {
+&"charge": Vector2(0, 0.3),
+&"curiosity": Vector2(0, 0.1),
+&"duty": Vector2(0.3, 0.7),
+&"fear": Vector2(0, 0.1)
+}
+behaviours = Array[StringName]([&"tend", &"roam", &"recharge", &"give_way", &"notice", &"startle", &"brace", &"keep_away"])
+behaviour_weights = {}
+fear_of_player = 0.1
+curiosity_about_player = 0.6
+population = &"ship_crew"
+live_radius = 0.0
+fade = Vector2(0, 0)
+interactions = Array[StringName]([])
