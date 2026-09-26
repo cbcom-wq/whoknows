@@ -12,6 +12,24 @@ extends RefCounted
 const QUANTUM_CORE_ID := &"quantum_core"
 const QUANTUM_MACHINE_ID := &"quantum_machine"
 
+## How far off the centre lines of the cells it crosses the machine's conduit
+## runs along the ceiling (quantum energy spec §6.3). Every walkable cell's
+## ceiling light hangs on its centre, its ring 0.42 m out, so a run down a
+## centre line would pass under it: 0.65 m leaves the 0.04 m pipe 0.19 m clear
+## of the ring and 0.3 m off a wall's face, clear of its trim. It is also how
+## far the machine's rise stands off its cell's centre towards the wall at its
+## back, so a run along that wall sets off with no jog.
+const CONDUIT_LANE := 0.65
+## How far short of a core's centre the conduit steps off its lane onto the
+## crown's centre line, to run into the crown square to a flat: 0.25 m clear
+## of the crown (0.55 m to a flat), inside the core's cell and well clear of
+## the last cell's light.
+const CONDUIT_APPROACH := 0.8
+
+const _HORIZONTAL: Array[Vector3i] = [
+	Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 0, 1), Vector3i(0, 0, -1),
+]
+
 ## Builds everything under one `Dressing` node inside `body`, so the builder's
 ## single remove_child() + free() clears it with the rest of the interior.
 static func build(layout: InteriorLayout, body: StaticBody3D, canopy_material: Material) -> Node3D:
@@ -32,15 +50,15 @@ static func build(layout: InteriorLayout, body: StaticBody3D, canopy_material: M
 			_nose(kit, group, canopy_material)
 		else:
 			_cockpit(kit, group)
-	# Cores first: each machine's conduit runs to the nearest one.
-	var cores: Array[QuantumCore] = []
+	# Cores first: each machine's conduit runs to one on its own storey.
+	var cores := {}   # Vector3i -> QuantumCore
 	for fixture in layout.fixtures():
 		var core := _fixture(kit, layout, fixture)
 		if core != null:
-			cores.append(core)
+			cores[fixture["coord"]] = core
 	for fixture in layout.fixtures():
 		if fixture["id"] == QUANTUM_MACHINE_ID:
-			_quantum_machine(kit, fixture, cores)
+			_quantum_machine(kit, layout, fixture, cores)
 	for site in layout.airlocks():
 		_airlock_room(kit, layout, site)
 	kit.commit()
@@ -168,9 +186,11 @@ static func _fixture(kit: InteriorKit, layout: InteriorLayout, fixture: Dictiona
 ## wall at its back -- the one its orientation turns away from: the cabinet,
 ## and on a QuantumMachine its bay, its big button (whose lines show on the
 ## screen over the bay), its two arrow buttons, its charge plate and the
-## conduit, up from its top and along the ceiling into the nearest core's
-## crown.
-static func _quantum_machine(kit: InteriorKit, fixture: Dictionary, cores: Array[QuantumCore]) -> QuantumMachine:
+## conduit: up from its top and along the ceiling into the crown of the core
+## _conduit_route() picks, or, with no core it can reach, up into the ceiling
+## and no further. The pipe is drawn along the path the bead runs.
+static func _quantum_machine(kit: InteriorKit, layout: InteriorLayout, fixture: Dictionary,
+		cores: Dictionary) -> QuantumMachine:
 	var coord: Vector3i = fixture["coord"]
 	var back := -_upright_facing(fixture["orientation"])
 	var f := wall_frame(coord, back)
@@ -203,14 +223,16 @@ static func _quantum_machine(kit: InteriorKit, fixture: Dictionary, cores: Array
 		button.set_readout(PackedStringArray(), &"")
 	machine.plate.set_lit(false)
 
-	var path := PackedVector3Array()
-	for p in InteriorProps.quantum_machine_conduit():
-		path.append(f * p)
-	var core := _nearest_core(cores, path[path.size() - 1])
-	if core != null:
-		path.append(core.crown())
-	machine.conduit_path = path
-	InteriorProps.conduit(kit, path)
+	var own := InteriorProps.quantum_machine_conduit()
+	var route := _conduit_route(layout, coord, back, cores.keys())
+	if route.is_empty():
+		var port := f * InteriorProps.quantum_machine_ceiling_port()
+		machine.conduit_path = PackedVector3Array([f * own[0], port.origin])
+		InteriorProps.conduit_collar(kit, port)
+	else:
+		var core: QuantumCore = cores[route[route.size() - 1]]
+		machine.conduit_path = _conduit_path(route, f * own[0], f * own[1], core.crown())
+	InteriorProps.conduit(kit, machine.conduit_path)
 	return machine
 
 ## A button on the machine: a ReadoutPanel on interior_geometry, like the
@@ -223,12 +245,109 @@ static func _machine_button(machine: QuantumMachine, role: StringName, f: Transf
 	machine.add_child(panel)
 	return panel
 
-static func _nearest_core(cores: Array[QuantumCore], from: Vector3) -> QuantumCore:
-	var best: QuantumCore = null
-	for core in cores:
-		if best == null or core.crown().distance_to(from) < best.crown().distance_to(from):
-			best = core
-	return best
+## The cells a machine's conduit runs over, the machine's first and a core's
+## last (quantum energy spec §6.3): across the walkable cells of the machine's
+## own storey, from one to the next through open floor or a doorway -- never
+## a wall, an airlock or another storey -- to the core the fewest cells away,
+## a tie going to the lower cell coordinate. Of the shortest routes there, the
+## one with the fewest turns, a first step away from (or towards) the wall at
+## the machine's `back` counting as one, so the conduit sets off along that
+## wall when it can. Empty when no core on the storey can be reached.
+static func _conduit_route(layout: InteriorLayout, from: Vector3i, back: Vector3i,
+		core_cells: Array) -> Array[Vector3i]:
+	var open := {}   # Vector3i -> true: the storey's cells a conduit may cross
+	for coord in layout.walkable_coords():
+		if coord.y == from.y and layout.zone_at(coord) != InteriorLayout.AIRLOCK_ZONE:
+			open[coord] = true
+	var walls := {}   # "coord|normal" -> true
+	for face in layout.faces():
+		if face["kind"] == InteriorLayout.Kind.WALL:
+			walls["%s|%s" % [face["coord"], face["normal"]]] = true
+	# Cheapest first by (steps, turns), over states (cell, the way the step
+	# into it went); w = _HORIZONTAL.size() for the machine's cell, not yet
+	# left.
+	var start := Vector4i(from.x, from.y, from.z, _HORIZONTAL.size())
+	var cost := {start: Vector2i.ZERO}   # Vector4i -> Vector2i
+	var came := {}   # Vector4i -> Vector4i
+	var done := {}
+	var frontier: Array[Vector4i] = [start]
+	while not frontier.is_empty():
+		var at := 0
+		for i in range(1, frontier.size()):
+			if cost[frontier[i]] < cost[frontier[at]]:
+				at = i
+		var state := frontier[at]
+		frontier.remove_at(at)
+		if done.has(state):
+			continue
+		done[state] = true
+		var cell := Vector3i(state.x, state.y, state.z)
+		for way in _HORIZONTAL.size():
+			var step := _HORIZONTAL[way]
+			var next := cell + step
+			if not open.has(next) or walls.has("%s|%s" % [cell, step]):
+				continue
+			var turn := 0 if way == state.w else 1
+			if state.w == _HORIZONTAL.size():
+				turn = 0 if step.x * back.x + step.z * back.z == 0 else 1
+			var to := Vector4i(next.x, next.y, next.z, way)
+			var c: Vector2i = cost[state] + Vector2i(1, turn)
+			if not cost.has(to) or c < cost[to]:
+				cost[to] = c
+				came[to] = state
+				frontier.append(to)
+	var cores := core_cells.duplicate()
+	cores.sort()
+	var best := start
+	for core: Vector3i in cores:
+		for way in _HORIZONTAL.size():
+			var end := Vector4i(core.x, core.y, core.z, way)
+			if not cost.has(end):
+				continue
+			var c: Vector2i = cost[end]
+			var least: Vector2i = cost[best]
+			if best == start or c.x < least.x or (c < least and Vector3i(best.x, best.y, best.z) == core):
+				best = end
+	var route: Array[Vector3i] = []
+	if best == start:
+		return route
+	var trace := best
+	route.append(Vector3i(trace.x, trace.y, trace.z))
+	while came.has(trace):
+		trace = came[trace]
+		route.push_front(Vector3i(trace.x, trace.y, trace.z))
+	return route
+
+## The conduit's path over `route`, in interior space (quantum energy spec
+## §6.3): from the cabinet's `top` straight up to `rise`, then along the
+## ceiling in straight runs, CONDUIT_LANE off the centre lines of the cells
+## it crosses -- clear of their lights, and square across any wall between
+## them -- to CONDUIT_APPROACH short of the core, where it steps onto the
+## crown's centre line and runs square into the crown's side, to its centre,
+## `crown`. It keeps only the bends: a point that carries a run straight on
+## is left out.
+static func _conduit_path(route: Array[Vector3i], top: Vector3, rise: Vector3, crown: Vector3) -> PackedVector3Array:
+	var home := ShipGrid.cell_center(route[0])
+	var lane := Vector3(signf(rise.x - home.x), 0.0, signf(rise.z - home.z)) * CONDUIT_LANE
+	var points: Array[Vector3] = [top, rise]
+	for i in route.size() - 1:
+		var p := ShipGrid.cell_center(route[i]) + lane
+		points.append(Vector3(p.x, rise.y, p.z))
+	var last := Vector3(route[route.size() - 1] - route[route.size() - 2])
+	var onto := Vector3(crown.x, rise.y, crown.z) - last * CONDUIT_APPROACH
+	points.append(onto + lane - last * lane.dot(last))
+	points.append(onto)
+	points.append(crown)
+	var out := PackedVector3Array()
+	for p in points:
+		var n := out.size()
+		if n > 0 and out[n - 1].is_equal_approx(p):
+			continue
+		if n > 1 and (out[n - 1] - out[n - 2]).cross(p - out[n - 1]).length_squared() < 0.000001:
+			out[n - 1] = p   # straight on, or doubling back along the same line
+		else:
+			out.append(p)
+	return out
 
 static func _dress(kit: InteriorKit, face: Dictionary, core_cells: Dictionary) -> void:
 	var coord: Vector3i = face["coord"]

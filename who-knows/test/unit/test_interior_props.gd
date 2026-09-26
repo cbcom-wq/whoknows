@@ -435,6 +435,26 @@ func test_a_conduit_draws_along_its_path():
 	InteriorProps.conduit(_kit, path)
 	_built_with_colliders(0)
 
+## With no core to run to, the conduit rises into the ceiling straight over
+## where it leaves the cabinet, and a collar shows where it goes in.
+func test_the_machines_ceiling_port_is_in_the_ceiling_over_its_conduit():
+	var rise := InteriorProps.quantum_machine_conduit()[1]
+	var port := InteriorProps.quantum_machine_ceiling_port()
+	assert_almost_eq(port.origin, Vector3(rise.x, InteriorProps.HEADROOM, rise.z), Vector3.ONE * 0.0001)
+	assert_almost_eq(port.basis * Vector3.BACK, Vector3.DOWN, Vector3.ONE * 0.0001, "+z out of the ceiling, down the pipe")
+
+func test_a_conduit_collar_stands_out_of_its_surface_round_the_pipe():
+	var up := Transform3D(Basis(Vector3.RIGHT, Vector3.FORWARD, Vector3.UP), Vector3(0, 2, 0))
+	InteriorProps.conduit_collar(_kit, up)
+	var box := AABB()
+	for mi in _kit.commit():
+		box = mi.mesh.get_aabb()
+	assert_almost_eq(box.position.y, 2.0, 0.001, "on the surface")
+	assert_gt(box.end.y, 2.0, "out of it, along the pipe")
+	assert_gt(box.size.x, InteriorProps.CONDUIT_RADIUS * 2.0, "round the pipe")
+	assert_almost_eq(box.get_center().x, 0.0, 0.001)
+	assert_eq(_colliders().size(), 0, "a collar has no collider")
+
 func test_something_can_lie_on_the_lower_bunk():
 	for low_only in [true, false]:
 		var body := StaticBody3D.new()

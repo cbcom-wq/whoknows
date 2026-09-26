@@ -825,7 +825,7 @@ static func quantum_machine(kit: InteriorKit, f: Transform3D, _variety: float) -
 	kit.ring(SOLID, f * quantum_machine_plate(), QUANTUM_MACHINE_PLATE_RADIUS + 0.005,
 		QUANTUM_MACHINE_PLATE_RADIUS + 0.05, 0.0, 0.03, low)
 	var out := quantum_machine_conduit()[0]
-	kit.bevel_box(SOLID, f * _at(out + Vector3(0, 0.03, 0)), Vector3(0.14, 0.06, 0.14), 0.02, trim)
+	conduit_collar(kit, f * Transform3D(Basis(Vector3.RIGHT, Vector3.FORWARD, Vector3.UP), out))
 
 ## The cabinet's four blocks round the bay, each one collider: below it,
 ## above it, and either side.
@@ -875,6 +875,15 @@ static func quantum_machine_conduit() -> PackedVector3Array:
 	return PackedVector3Array([Vector3(at.x, QUANTUM_MACHINE_HEIGHT, at.y),
 		Vector3(at.x, QUANTUM_CONDUIT_HEIGHT, at.y)])
 
+## Where the conduit goes into the ceiling when it has no core to run to
+## (quantum energy spec §6.3): straight over where it leaves the cabinet, on
+## the ceiling, +z out of it and down the pipe -- a frame for
+## conduit_collar(). The conduit then rises from the cabinet's top to here and
+## ends, rather than stopping in mid-air under the ceiling.
+static func quantum_machine_ceiling_port() -> Transform3D:
+	var at := _QUANTUM_CONDUIT_AT
+	return Transform3D(Basis(Vector3.RIGHT, Vector3.BACK, Vector3.DOWN), Vector3(at.x, HEADROOM, at.y))
+
 ## A conduit along `path`, in the kit's own space: a chunky taupe pipe with a
 ## bevelled joint at every bend. The quantum machine's runs from its top along
 ## the ceiling into the core's crown; the dressing gives it the path, because
@@ -884,6 +893,13 @@ static func conduit(kit: InteriorKit, path: PackedVector3Array) -> void:
 		kit.tube_between(SOLID, path[i - 1], path[i], CONDUIT_RADIUS, _c(InteriorPalette.WALL_LOW))
 	for i in range(1, path.size() - 1):
 		kit.bevel_box(SOLID, _at(path[i]), Vector3.ONE * CONDUIT_RADIUS * 3.0, 0.015, _c(InteriorPalette.TRIM))
+
+## A bevelled collar round a conduit where it goes into a surface -- the
+## machine's cabinet top it leaves by, or the ceiling it rises into when it has
+## no core to run to -- in a frame on that surface: origin on the pipe's centre
+## line, +z out of the surface along the pipe. No collider.
+static func conduit_collar(kit: InteriorKit, f: Transform3D) -> void:
+	kit.bevel_box(SOLID, f * _at(Vector3(0, 0, 0.03)), Vector3(0.14, 0.14, 0.06), 0.02, _c(InteriorPalette.TRIM))
 
 ## An octagonal prism in frame `f`, `across` its flats (which face +-x and
 ## +-z), from `y0` up to `y1`, its top edge chamfered by `bevel`; `caps` false

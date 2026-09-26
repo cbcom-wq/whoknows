@@ -17,7 +17,9 @@ var panel: ReadoutPanel
 var prev_button: ReadoutPanel
 var next_button: ReadoutPanel
 var plate: ChargeDock
-## The bead's path in interior space: out of the cabinet's top, up to the
-## ceiling and along it into the nearest core's crown -- or just up to the
-## ceiling, on a ship with no core.
+## The path the conduit is drawn along and the bead runs, in interior space:
+## out of the cabinet's top, up to the ceiling and along it in straight runs
+## to a core on the machine's own storey, the fewest cells away, ending at
+## its crown's centre -- or, with no core it can reach, up into the ceiling
+## over the cabinet and no further. InteriorDressing routes it.
 var conduit_path := PackedVector3Array()
