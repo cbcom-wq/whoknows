@@ -15,3 +15,4 @@ look = &"plasma_pistol"
 use = ExtResource("2_use")
 grip_point = Vector3(0, -0.03, 0.07)
 use_point = Vector3(0, 0.045, -0.125)
+quantum_value = 120

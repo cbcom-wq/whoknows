@@ -12,3 +12,4 @@ grip = 0
 stow_class = &"small"
 look = &"ration_tin"
 grip_point = Vector3(0.036, 0, 0)
+quantum_value = 5

@@ -15,3 +15,4 @@ look = &"datapad"
 use = ExtResource("2_use")
 grip_point = Vector3(0.08, 0, 0.09)
 hold_rotation = Vector3(55, 0, 0)
+quantum_value = 50

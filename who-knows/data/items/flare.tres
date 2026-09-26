@@ -16,3 +16,4 @@ use = ExtResource("2_use")
 grip_point = Vector3(0, 0, 0.06)
 use_point = Vector3(0, 0, -0.12)
 hold_rotation = Vector3(60, 0, 0)
+quantum_value = 10

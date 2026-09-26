@@ -80,3 +80,45 @@ func test_the_lamp_flare_and_datapad_do_something():
 
 func test_the_datapad_is_held_tilted_toward_you():
 	assert_gt(_cat.get_def(&"datapad").hold_rotation.x, 0.0)
+
+## Quantum values (quantum energy spec §4.2): every starter item is worth
+## something, and matches the spec's table exactly.
+const QUANTUM_VALUES := {
+	&"mug": 3,
+	&"ration_tin": 5,
+	&"spanner": 8,
+	&"rock_sample": 9,
+	&"flare": 10,
+	&"canister": 14,
+	&"o2_tank": 25,
+	&"hand_lamp": 25,
+	&"crate": 30,
+	&"spare_helmet": 35,
+	&"toolbox": 40,
+	&"medkit": 40,
+	&"datapad": 50,
+	&"spare_module": 60,
+	&"plasma_pistol": 120,
+	&"power_cell": 150,
+}
+
+func test_every_item_has_a_quantum_value_unless_it_is_an_eva_tool():
+	for id in _cat.ids():
+		var def := _cat.get_def(id)
+		if def.eva_tool:
+			continue
+		assert_gt(def.quantum_value, 0, "%s has a quantum value" % id)
+
+func test_quantum_values_match_the_spec_table():
+	for id in QUANTUM_VALUES:
+		assert_true(_cat.has(id), "data/items has %s" % id)
+		if not _cat.has(id):
+			continue
+		assert_eq(
+			_cat.get_def(id).quantum_value, QUANTUM_VALUES[id],
+			"%s's quantum value matches spec §4.2" % id
+		)
+
+func test_no_starter_item_is_an_eva_tool():
+	for id in _cat.ids():
+		assert_false(_cat.get_def(id).eva_tool, "%s is not an EVA tool" % id)

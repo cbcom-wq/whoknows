@@ -12,3 +12,4 @@ grip = 1
 stow_class = &"crate"
 look = &"spare_helmet"
 hold_rotation = Vector3(-35, 0, 0)
+quantum_value = 35
