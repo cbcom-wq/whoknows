@@ -34,6 +34,12 @@ Do these in order. Each one names the check that proves it.
    - an `airlock` with **exactly one** horizontal face onto an empty cell (its outer hatch), and
      walkable deck straight through on the opposite side, not a room.
    - room blocks (`bunk_room`, `galley`...) each touching walkable space for their doorway.
+   - **the maintenance droid's needs** (NPC foundation spec §14), on any ship with 12 or more
+     walkable cells: a `closet` for its dock (otherwise it docks in the walkable cell farthest
+     from the helm), and every porthole, console, locker and fixture it tends reachable on foot
+     from there over `DeckPaths`, which leaves out the airlock, every fixture's own cell, and
+     any walkable cell with no grav plating in reach. The probe prints the dock and any job it
+     cannot reach.
 3. **Propulsion:**
    - main `thruster`s oriented FORWARD (`o=0`), at the stern;
    - `rcs` in **opposed pairs** on every axis: pitch, yaw and roll both ways;
@@ -75,6 +81,7 @@ Do these in order. Each one names the check that proves it.
    - the validator, the stats, and the feel numbers;
    - any `rcs` whose exhaust is `BLOCKED`;
    - rooms, pods and airlocks;
+   - the droid's dock and its jobs, flagging any `UNREACHABLE`;
    - fps.
 
    It also sits, stands and walks, and flags `STUCK`.
@@ -123,6 +130,7 @@ thrust.
 | RCS packed against other blocks | On the starter shuttle, 6 of 8 fire into a neighbour: yaw into pitch-down, pitch-up into the hull wedges, retros into pitch-up. Their puffs never show, and no validator rule catches it | Leave the face opposite each `rcs` block's push open to space; the probe flags `BLOCKED` |
 | "Assist will stop the slide" | 500 kN of side thrust on 92 t: 100 m/s sideways takes 18 s to cancel after a turn | Size `lateral` / mass for the feel; assist can only spend what the RCS has |
 | All RCS behind and above the helm | The pilot hears every thruster and sees none | Put some in view of the pod if they should be seen |
+| A door trigger that sees only the avatar | Found while planning NPCs: a sliding door has no collider, so the droid would have trundled through it shut | `SlidingDoor.OPENS_FOR` is the avatar's layer and `npcs` (layer 8); anything new that opens for people opens for NPCs too |
 | An off-centre retro counted as steering | It would light up for yaw, but `ShipStats` never counts pure fore-and-aft thrust as authority | Steer with blocks that push across the hull; retros only brake |
 
 ## Not built yet (plan for it; don't assume it works)

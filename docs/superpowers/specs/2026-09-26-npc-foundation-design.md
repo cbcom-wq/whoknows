@@ -1,9 +1,11 @@
 # NPCs — a foundation for things that live: a creature on the rocks and a droid aboard
 
 **Date:** 2026-09-26
-**Status:** Approved by the owner on 2026-09-26. The owner answered the first draft's six
-questions (§3.1), and this revision folds them in. It adds a second NPC, a maintenance droid aboard,
-so the foundation is proven outside and inside from the first build. No code has changed.
+**Status:** Approved by the owner on 2026-09-26, and **built** the same day on branch
+`claude/npc-foundation-asteroids-29668p` (§21, *As built*). The droid's and the skitter's looks
+were rendered and sent to the owner; they await the owner's word. The owner answered the first
+draft's six questions (§3.1), and this revision folds them in. It adds a second NPC, a
+maintenance droid aboard, so the foundation is proven outside and inside from the first build.
 **Plan:** `docs/superpowers/plans/2026-09-26-npc-foundation.md`
 **Depends on:** `main` at `a67439d`: the floating origin, the asteroid groups, big rocks in detail,
 the interior redesign's rooms and sliding doors, hands and items, the spacewalk. It does not depend
@@ -860,3 +862,89 @@ freshest percepts. Off by default.
 5. **`SurfaceCrawler` and `ZeroGDrift`** on test meshes, then on a big rock.
 6. **The skitter's behaviours, look and gait,** rendered and shown to the owner.
 7. **Tuning** by playing both halves of the pitch, and the live checks.
+
+---
+
+## 21. As built (2026-09-26)
+
+All eleven plan tasks are built. The suite is 905 tests, green (782 before), headless.
+
+### 21.1 Live checks
+
+In the real flight scene. Frame times are CPU only: this was measured headless in a cloud
+container on a shared 2.1 GHz Xeon vCPU, not on the GTX 960 target. The renders used Mesa's
+software Vulkan.
+
+| Check | Result |
+|---|---|
+| The droid walks closet → bridge, through the closet door | arrives within 0.3 m; the door opens for it; never in the airlock or the helm's cell (`test_deck_walker`) |
+| The droid tends a job, goes home to charge, gives way, startles at a thrown mug, braces at a shake | all pass in the real scene (`test_droid_scene`) |
+| The droid at eye height: corridor, porthole, galley doorway, close up, dock | rendered, sent to the owner |
+| A herd wakes as the hull approaches | every skitter woke more than 250 m from the chase camera, beyond its fade (`test_exterior_npcs`) |
+| Leaving puts them back to sleep; a floating-origin shift leaves every skitter's place on its rock unchanged within 1 mm; nothing outside is left uncovered with a herd awake | pass (`test_exterior_npcs`, `test_floating_origin_scene`) |
+| A herd from a spacewalk: grazing, lamp on, a jolt through the rock | rendered, sent to the owner; 6 of 7 froze in the lamp, 5 to 7 of 7 scattered, run to run |
+| Crawling: over a cube's edge, round a sphere to upside down, up a wall, knocked off and puffing back, leaping to another rock, footing moving at 2 m/s kept and at 4 m/s lost | pass on test shapes (`test_surface_crawler`) |
+| All NPC work, 32 skitters (the start rock's herds, copied twice) and the droid, the hull 60 m off, over 600 frames (`test/probes/npc_probe.gd`) | **mean 1.2 ms, worst 2.9–4.4 ms**: over the 1 ms budget on this machine. From 4.5 ms before the changes in §21.2. |
+| A 20 km boost across groups with herds waking and sleeping | **not run.** The shift test and the wake/sleep tests cover the parts |
+
+The budget is not yet shown to hold. The probe's herd is a hard case: 32 skitters crowded into
+two herds, most of them walking, near the hull's cameras. The next steps, if the target machine
+also runs over: fewer live outside (`max_live`), a slower think outside the nearest 60 m, or a C#
+port of `SurfaceCrawler` and `Perception`. The plan named C# as the project's usual fallback.
+
+### 21.2 Where the build differs from the text
+
+- **`Brain`, `Perception` and `NpcMemory` are plain objects the `Npc` holds,** not child nodes
+  (§5.1's tree), so each is tested without a scene.
+- **The droid reads `FeltGravity.felt` through its `ShipSite`** rather than joining
+  `FeltGravity`'s mask (§5.1). It is the same number, with no physics query.
+- **Touch comes from a skin:** an `Area3D` a little larger than the body. A kinematic body is
+  never pushed by a rigid one, so this is how it knows something ran into it (§6.1).
+- **Time is the director's own clock.** There is no universe time yet (§4.4).
+- **Lights are a group** (`StimulusBus.LIGHTS`) looked at when an NPC thinks, not stimuli
+  emitted every think (§6.1). The hand lamp and the flare join it.
+- **`give_way` is a reflex** (threshold 0.8). As an ordinary behaviour, a job it had just started
+  held it in your way for six seconds.
+- **A near sense:** `NpcSpecies.near_sense`, 3 m for the droid and 2 m for the skitter. Within
+  it, the NPC notices the player all round, so the droid steps aside for someone coming up
+  behind it.
+- **New species fields:** `height` and `width` (with `size`, its body), `move_sound` (the droid's
+  whir), `near_sense`.
+- **The droid walks cell centre to cell centre,** starting from its own cell's centre (§5.5 said
+  it would cut corners). Cutting corners clipped the closet's door frame. A 1 m door leaves a
+  0.5 m droid a hand's width each side.
+- **The skitter grips by moving only along the surface,** pressed on at 0.6 m/s (§5.3 said a
+  4 m/s² pull). The pull built up speed into the surface and flung it off the first edge.
+- **The ground ahead leads:** where the surface turns, the normal ahead counts six times the
+  ground under it. With equal weights the crawler settled at 45° in every corner.
+- **Gripping, the skitter settles onto the ground a ray finds** instead of sliding its body
+  against the rock. A slide against a big rock's 5,000-triangle collision cost 64 µs, three times
+  all its rays. Drifting still slides. Its rays are one under it (reusing the last settle) and
+  one ahead, plus one to wrap an edge and one for a wall.
+- **Resting and level of detail** (§16): a skitter standing still does nothing but look again
+  every half second. Beyond 60 m from every camera an NPC moves every third tick and thinks every
+  second turn; beyond 150 m, every sixth tick and every third turn. Legs are posed every sixth
+  frame beyond 100 m and not at all past the fade.
+- **Rocks cache their crater floors and their herds' rounds,** and the director keeps a list per
+  herd, so a think never walks every live NPC.
+- **Skitter homes keep the direction they were made from.** A big rock is stretched, so a
+  point's own direction from the centre is not the direction that made it. Waking skitters find
+  the solid ground with a ray, because the rock's collision mesh sits a little inside the exact
+  surface on bulges and outside it in hollows.
+- **The plasma bolt cannot reach a skitter in play:** your hands are idle on a spacewalk (airlock
+  spec §7.4). `Npc.receive_hit` and the bolt's mask are ready for when they are not.
+- **A burn starting is a shake** (the felt shove changing by over 3 m/s² in a tick), so the droid
+  braces as the ship moves off. It reads as a small, careful droid, and is one constant
+  (`MotionCoupling.SHAKE_AT`).
+- **Looks,** chosen at the renders: the droid's body is a muted teal, `InteriorPalette.DROID_BODY`,
+  because beige vanished against the walls. The skitter's legs are short (0.15 and 0.17 m) and
+  never stretch, because long legs read as a spider.
+
+### 21.3 Files
+
+As the plan's File Structure, plus:
+- `src/npc/droid_look.gd` and `skitter_look.gd`, the looks' moving parts;
+- `src/npc/npc_context.gd`;
+- `src/npc/populations/rock_herd_source.gd`;
+- `test/probes/`, with the frame-time probe and the droid and skitter renders. GUT does not run
+  them.
