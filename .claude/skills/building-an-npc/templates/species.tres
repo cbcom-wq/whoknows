@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="NpcSpecies" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/npc/npc_species.gd" id="1_species"]
+
+[resource]
+script = ExtResource("1_species")
+id = &"CHANGE_id"
+display_name = "CHANGE Name"
+size = 0.8
+height = 0.4
+width = 0.5
+mass = 25.0
+top_speed = 2.0
+locomotors = Array[StringName]([&"surface_crawler", &"zero_g_drift"])
+look = &"CHANGE_look"
+move_sound = &""
+sight_range = 20.0
+sight_cone_deg = 180.0
+dark_sight = 0.5
+near_sense = 2.0
+feels_vibration = 1.0
+hears = 0.0
+feels_shake = 0.0
+light_response = 0.0
+needs = {
+&"fear": 0.0,
+&"hunger": 0.006
+}
+need_start = {
+&"fear": Vector2(0, 0.1),
+&"hunger": Vector2(0.2, 0.6)
+}
+behaviours = Array[StringName]([&"graze", &"wander", &"freeze", &"scatter", &"hide"])
+behaviour_weights = {}
+fear_of_player = 0.5
+curiosity_about_player = 0.3
+population = &"CHANGE_population"
+live_radius = 350.0
+fade = Vector2(250, 300)
+interactions = Array[StringName]([])
