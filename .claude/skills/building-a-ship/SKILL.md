@@ -67,7 +67,12 @@ Do these in order. Each one names the check that proves it.
      `CameraDirector`, `Exterior` and `Interior`), and the HUD's vehicle set to that node while
      seated. It adds the stick and pointer to the flight computer's telemetry. `Ship` makes the
      `RcsShow` puffs and sounds itself;
-   - anything outside the hull goes in `Universe.EXTERIOR_SPACE` (CLAUDE.md).
+   - anything outside the hull goes in `Universe.EXTERIOR_SPACE` (CLAUDE.md);
+   - **a ship's state round-trips through the save** (`docs/superpowers/specs/
+     2026-09-26-saving-design.md`). A block with state of its own (a fixture, a store, a door that
+     can be left open) needs a `to_dict`/`from_dict` gathered by `Ship.to_dict`, a busy source in
+     `Ship.busy()` if it has actions that run over time, and a line in
+     `test_save_scene.gd`'s round-trip. The probe prints `save ... round-trips`.
 7. **Run the full suite** (`who-knows/run_tests.ps1`). Add ship-specific tests: launches, stats,
    rooms, and the pod and airlock present.
 8. **Probe the real scene:** run `ship_probe.gd` (in this folder) **without** `--headless`. It
@@ -123,6 +128,8 @@ thrust.
 | RCS packed against other blocks | On the starter shuttle, 6 of 8 fire into a neighbour: yaw into pitch-down, pitch-up into the hull wedges, retros into pitch-up. Their puffs never show, and no validator rule catches it | Leave the face opposite each `rcs` block's push open to space; the probe flags `BLOCKED` |
 | "Assist will stop the slide" | 500 kN of side thrust on 92 t: 100 m/s sideways takes 18 s to cancel after a turn | Size `lateral` / mass for the feel; assist can only spend what the RCS has |
 | All RCS behind and above the helm | The pilot hears every thruster and sees none | Put some in view of the pod if they should be seen |
+| A windowed script loading `flight_test.tscn` with saving on | Saving is on outside `--headless`, so a probe or render script would load and overwrite the owner's real game | Set `scene.save_enabled = false` before `add_child`, as `ship_probe.gd` does |
+| Giving a new fixture state the save doesn't know | Quit and relaunch: the fixture is back to its defaults, silently | `to_dict`/`from_dict` on it, gathered in `Ship.to_dict`, and a round-trip test |
 | An off-centre retro counted as steering | It would light up for yaw, but `ShipStats` never counts pure fore-and-aft thrust as authority | Steer with blocks that push across the hull; retros only brake |
 
 ## Not built yet (plan for it; don't assume it works)

@@ -17,6 +17,14 @@ func use(_item: Item, _aim: Transform3D, _world: Node3D, _holder: CollisionObjec
 func status() -> String:
 	return ""
 
+## What a save keeps of this use (saving spec §6.5), or {}.
+func save() -> Dictionary:
+	return {}
+
+## Takes back what save() gave, before or after entering the tree.
+func restore(_state: Dictionary) -> void:
+	pass
+
 ## How hard using it kicks the hand back, 0 to 1. Only a gun kicks.
 func recoil() -> float:
 	return 0.0

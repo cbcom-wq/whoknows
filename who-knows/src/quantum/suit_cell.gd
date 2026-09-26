@@ -43,6 +43,13 @@ func add(n: float) -> float:
 func room() -> float:
 	return CAPACITY - charge
 
+## What a save keeps (saving spec §3).
+func to_dict() -> Dictionary:
+	return {"charge": charge}
+
+func from_dict(d: Dictionary) -> void:
+	charge = clampf(float(d.get("charge", charge)), 0.0, CAPACITY)
+
 func is_dry() -> bool:
 	return charge <= 0.0
 

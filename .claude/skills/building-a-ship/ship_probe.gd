@@ -12,6 +12,10 @@ extends SceneTree
 # Ship, with Interior/Avatar, Interior/PilotSeat and CameraDirector, as that
 # scene does. Writes <out>/probe_spawn.png, probe_seated.png and
 # probe_stood.png.
+#
+# A windowed run would save and load the owner's real game
+# (docs/superpowers/specs/2026-09-26-saving-design.md §9), so the probe turns
+# saving off before the scene enters the tree.
 
 var _out := ""
 
@@ -22,6 +26,8 @@ func _initialize() -> void:
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	var path := args[1] if args.size() > 1 else "res://scenes/flight_test.tscn"
 	var scene: Node = load(path).instantiate()
+	if &"save_enabled" in scene:
+		scene.save_enabled = false
 	root.add_child(scene)
 	_run.call_deferred(scene)
 
@@ -81,6 +87,20 @@ func _run(scene: Node) -> void:
 			blocked.append(b["coord"])
 	print("rcs     %d blocks%s" % [rcs.size(),
 		"" if blocked.is_empty() else ", exhaust BLOCKED at %s" % [blocked]])
+
+	# The ship's part of a save must bring back the same grid and store.
+	var universe: Universe = scene.get_node_or_null("Universe")
+	if universe != null:
+		var part := JSON.parse_string(JSON.stringify(ship.to_dict(universe), "", false, true)) as Dictionary
+		var again := Ship.layout_of(part)
+		var same := again.coords().size() == ship.grid.coords().size()
+		for c in ship.grid.coords():
+			same = same and again.has_block(c) and again.get_block(c).block_id == ship.grid.get_block(c).block_id \
+				and again.get_block(c).orientation == ship.grid.get_block(c).orientation
+		var store := QuantumStore.new(ship.quantum.store.capacity, 0)
+		store.from_dict(part.get("store", {}))
+		print("save    layout %s, store %s, %d items aboard" % ["round-trips" if same else "MISMATCH",
+			"round-trips" if store.amount == ship.quantum.store.amount else "MISMATCH", part["items"].size()])
 
 	var layout := ship.interior_builder.layout()
 	for room in layout.rooms():

@@ -92,6 +92,27 @@ func step(delta: float, clear_inner: bool, clear_outer: bool, room_empty: bool) 
 			_step_idle(delta, clear_inner and clear_outer and room_empty, cues)
 	return cues
 
+## Puts the airlock at rest as a save left it (saving spec §6.6): at
+## `at_pressure`, with `side` standing open -- the inner hatch only with air,
+## the outer only in vacuum -- and nothing moving.
+func restore_idle(at_pressure: float, side: Door) -> void:
+	stage = Stage.IDLE
+	pressure = clampf(at_pressure, 0.0, ATMOSPHERE)
+	_p_start = pressure
+	_p_goal = pressure
+	_pending = &""
+	_moving = Door.NONE
+	_then_cycle = false
+	_reversing = false
+	_empty_time = 0.0
+	blocked = false
+	var inner := side == Door.INNER and pressurized()
+	var outer := side == Door.OUTER and not pressurized()
+	inner_open = 1.0 if inner else 0.0
+	inner_bolts = inner_open
+	outer_open = 1.0 if outer else 0.0
+	outer_bolts = outer_open
+
 func pressurized() -> bool:
 	return pressure > ATMOSPHERE * 0.5
 

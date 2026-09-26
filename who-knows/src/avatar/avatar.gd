@@ -39,6 +39,8 @@ const SUIT_MASS := 120.0
 const BUMP_BOUNCE := 0.2
 ## How long the view takes to right itself after floating in tilted.
 const RIGHTING_TIME := 0.4
+## How long after bumping a rock a save waits (saving spec §5).
+const BUMP_CALM := 5.0
 
 enum Mode { PLATING, SUIT }
 
@@ -73,6 +75,9 @@ var grasp: Grasp
 var hands: Hands
 ## The ray that finds interactables, when the scene gives the head one.
 var interactor: Interactor
+
+## Seconds since you last bumped a rock on a spacewalk.
+var since_bumped := INF
 
 var _control_enabled: bool = true
 var _yaw: float = 0.0
@@ -128,6 +133,26 @@ func can_stand_at(pose: Transform3D) -> bool:
 	var ray := PhysicsRayQueryParameters3D.create(pose.origin + up * 0.3, pose.origin - up * 0.3,
 		COLLISION_MASK, [get_rid()])
 	return not space.intersect_ray(ray).is_empty()
+
+## Why a save must wait (saving spec §5), or "": the view still righting
+## after coming aboard, a dry suit's emergency cell bringing you home, a rock
+## bumped less than BUMP_CALM ago, or your hands busy.
+func busy() -> String:
+	if _righting_t < RIGHTING_TIME:
+		return "coming aboard"
+	if mode == Mode.SUIT and suit_cell.is_dry():
+		return "suit dry, coming home"
+	if since_bumped < BUMP_CALM:
+		return "bumped a rock"
+	return grasp.busy() if grasp != null else ""
+
+## How far the head is pitched, radians: up is positive.
+func head_pitch() -> float:
+	return _pitch
+
+func set_head_pitch(pitch: float) -> void:
+	_pitch = clampf(pitch, -PITCH_LIMIT, PITCH_LIMIT)
+	head.rotation.x = _pitch
 
 ## Stands you at `pose` (upright), turned its way, at rest.
 func place(pose: Transform3D) -> void:
@@ -202,6 +227,7 @@ func _physics_process(delta: float) -> void:
 
 func _process(delta: float) -> void:
 	tick_righting(delta)
+	since_bumped += delta
 
 ## Steps off the ship onto a spacewalk, at `pose` in the world, moving at
 ## `velocity`, with `ship_hull` as the ship you left.
@@ -360,6 +386,7 @@ func bump(before: Vector3, slid: Vector3, hits: Array) -> Vector3:
 		var closing := -(before - (body.linear_velocity + body.angular_velocity.cross(at))).dot(n)
 		if closing <= 0.0:
 			continue
+		since_bumped = 0.0
 		var m := SUIT_MASS * body.mass / (SUIT_MASS + body.mass)
 		var j := (1.0 + BUMP_BOUNCE) * m * closing
 		body.apply_impulse(-n * j, at)

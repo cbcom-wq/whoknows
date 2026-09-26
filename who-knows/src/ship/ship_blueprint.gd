@@ -40,6 +40,28 @@ func to_grid() -> ShipGrid:
 		grid.set_block(coords[index], inst)
 	return grid
 
+## The blueprint as plain data for a save file (docs/superpowers/specs/
+## 2026-09-26-saving-design.md §6.2): never a .tres, which can carry a script.
+func to_dict() -> Dictionary:
+	var cells := []
+	for index in coords.size():
+		cells.append([coords[index].x, coords[index].y, coords[index].z, String(block_ids[index]),
+			orientations[index], hp_values[index]])
+	return {"name": ship_name, "format": format_version, "cells": cells}
+
+static func from_dict(d: Dictionary) -> ShipBlueprint:
+	var bp := ShipBlueprint.new()
+	bp.ship_name = String(d.get("name", bp.ship_name))
+	bp.format_version = int(d.get("format", CURRENT_FORMAT_VERSION))
+	for cell in d.get("cells", []):
+		if not (cell is Array) or cell.size() != 6:
+			continue
+		bp.coords.append(Vector3i(int(cell[0]), int(cell[1]), int(cell[2])))
+		bp.block_ids.append(StringName(cell[3]))
+		bp.orientations.append(int(cell[4]))
+		bp.hp_values.append(int(cell[5]))
+	return bp
+
 static func _compare_coords(a: Vector3i, b: Vector3i) -> bool:
 	if a.x != b.x:
 		return a.x < b.x

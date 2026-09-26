@@ -11,6 +11,8 @@ const SLOT_SPACING := 2000.0
 ## How close a rebuilt stow point must be to where a stowed item's point was
 ## for the item to stay stowed through the rebuild.
 const RESEAT_TOLERANCE := 0.05
+## How long after a rock strikes the hull a save waits (saving spec §5).
+const STRUCK_CALM := 5.0
 
 ## The exact ShaderMaterial `hull`/`hull_wedge` meshes reference (their .tres
 ## surfaces point at this same path, and Godot's resource cache guarantees a
@@ -41,6 +43,9 @@ var rcs_show: RcsShow
 ## §8). At Ship/Quantum, alongside FlightComputer -- the two share the one
 ## QuantumStore instance below.
 var quantum: QuantumPlant
+
+## Seconds since a rock last struck the hull.
+var since_struck := INF
 
 var _stocked := false
 var _airlocks_root: Node
@@ -132,11 +137,13 @@ func _update_hum() -> void:
 	elif not aboard and _hum.playing:
 		_hum.stop()
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	_last_hull_velocity = exterior.linear_velocity
+	since_struck += delta
 
 func _on_hull_struck(body: Node) -> void:
 	if body is AsteroidBody:
+		since_struck = 0.0
 		hull_struck((exterior.linear_velocity - _last_hull_velocity).length())
 
 ## A strike you feel aboard (asteroids spec §7.5): a thump, louder the harder
@@ -168,7 +175,11 @@ func interior_slot_origin() -> Vector3:
 func load_blueprint(bp: ShipBlueprint) -> void:
 	set_grid(bp.to_grid())
 
-func set_grid(new_grid: ShipGrid) -> void:
+## Builds the ship from `new_grid`. `stock` false leaves the shelves empty --
+## a loaded game brings its own items (saving spec §6.1).
+func set_grid(new_grid: ShipGrid, stock := true) -> void:
+	if not stock:
+		_stocked = true
 	if grid != null and grid.cell_changed.is_connected(_on_cell_changed):
 		grid.cell_changed.disconnect(_on_cell_changed)
 	grid = new_grid
@@ -277,6 +288,106 @@ func _stock() -> void:
 		item.setup(def, fposmod(at.x * 0.37 + at.z * 0.61, 1.0))
 		items.add_child(item, true)
 		point.secure(item)
+
+# --- saving (docs/superpowers/specs/2026-09-26-saving-design.md §3, §6) ------
+
+## Why a save must wait (§5), or "": a rock struck the hull lately, an
+## airlock is cycling, the quantum machine is busy, or a bolt is in flight.
+func busy() -> String:
+	if since_struck < STRUCK_CALM:
+		return "hull struck"
+	for airlock: Airlock in airlocks.values():
+		var why := airlock.busy()
+		if why != "":
+			return why
+	var why := quantum.busy() if quantum != null else ""
+	if why != "":
+		return why
+	if items != null:
+		for node in items.get_children():
+			if node is PlasmaBolt:
+				return "bolt in flight"
+	return ""
+
+## The ship's part of a save: its layout, where it is in `universe` and how
+## it moves, its flight settings, its store, its airlocks and every item
+## aboard that is not in someone's hand.
+func to_dict(universe: Universe) -> Dictionary:
+	var hull := exterior.global_transform
+	var saved_airlocks := {}
+	for at: Vector3i in airlocks:
+		saved_airlocks[SaveCodec.cell_key(at)] = airlocks[at].to_dict()
+	var saved_items := []
+	var frame := interior.global_transform
+	for node in items.get_children():
+		var item := node as Item
+		if item != null and item.state != Item.State.HELD and not item.is_queued_for_deletion():
+			saved_items.append(item.to_dict(frame))
+	return {
+		"layout": ShipBlueprint.from_grid(grid, String(name)).to_dict(),
+		"hull": {
+			"at": SaveCodec.upoint(universe.to_universe(hull.origin)),
+			"turn": SaveCodec.basis(hull.basis),
+			"v": SaveCodec.vec3(exterior.linear_velocity),
+			"w": SaveCodec.vec3(exterior.angular_velocity),
+		},
+		"flight": flight_computer.to_dict(),
+		"store": quantum.store.to_dict() if quantum.store != null else {},
+		"airlocks": saved_airlocks,
+		"items": saved_items,
+	}
+
+## The grid a saved ship was built from.
+static func layout_of(d: Dictionary) -> ShipGrid:
+	return ShipBlueprint.from_dict(d.get("layout", {})).to_grid()
+
+## Puts the hull where the save had it in `universe`, moving as it was. The
+## universe's origin must already be near there.
+func restore_hull(d: Dictionary, universe: Universe) -> void:
+	var hull: Dictionary = d.get("hull", {})
+	exterior.global_transform = Transform3D(SaveCodec.to_basis(hull.get("turn")),
+		universe.to_engine(SaveCodec.to_upoint(hull.get("at"))))
+	exterior.linear_velocity = SaveCodec.to_vec3(hull.get("v"))
+	exterior.angular_velocity = SaveCodec.to_vec3(hull.get("w"))
+	_last_hull_velocity = exterior.linear_velocity
+
+## Everything aboard as the save had it: flight settings, store, airlocks
+## and items. Call after set_grid(layout_of(d), false).
+func restore_aboard(d: Dictionary) -> void:
+	flight_computer.from_dict(d.get("flight", {}))
+	if quantum.store != null:
+		quantum.store.from_dict(d.get("store", {}))
+	var saved_airlocks: Dictionary = d.get("airlocks", {})
+	for key: String in saved_airlocks:
+		var airlock: Airlock = airlocks.get(SaveCodec.to_cell(key))
+		if airlock != null:
+			airlock.from_dict(saved_airlocks[key])
+	for entry in d.get("items", []):
+		if entry is Dictionary:
+			restore_item(entry)
+
+## One saved item back aboard: in the stow point it was in (the rebuild's
+## own RESEAT_TOLERANCE rule), or loose where it was -- on the floor under
+## its point if that point has gone (§6.4). Null if its kind has gone.
+func restore_item(d: Dictionary) -> Item:
+	var item := Item.from_dict(d, item_catalog)
+	if item == null:
+		return null
+	items.add_child(item, true)
+	var frame := interior.global_transform
+	var place := frame * SaveCodec.to_transform(d.get("place"))
+	if String(d.get("state", "")) == "stowed":
+		var was := frame * SaveCodec.to_vec3(d.get("point"), place.origin)
+		for point in interior_builder.stow_points():
+			if point.fits(item) and point.global_position.distance_to(was) < RESEAT_TOLERANCE:
+				point.secure(item)
+				return item
+		place = Transform3D(place.basis, Vector3(was.x, was.y + item.definition.size.y * 0.5, was.z))
+	item.set_loose()
+	item.global_transform = place
+	item.linear_velocity = frame.basis * SaveCodec.to_vec3(d.get("v"))
+	item.angular_velocity = frame.basis * SaveCodec.to_vec3(d.get("w"))
+	return item
 
 func _apply_stats() -> void:
 	exterior.mass = maxf(stats.total_mass_kg, 1.0)

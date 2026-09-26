@@ -1,8 +1,9 @@
 # Saving — one game, kept for you, only when it is calm
 
 **Date:** 2026-09-26
-**Status:** The owner answered the three design questions (§2) on 2026-09-26. The spec awaits the
-owner's review. No code has changed.
+**Status:** The owner answered the three design questions (§2) on 2026-09-26 and asked for it to be
+built the same day. Built on `claude/game-saving-gfabv1`; §15 records where the build differs
+from the first draft.
 **Depends on:** `main` at `ae32d48`, which has the floating origin, asteroids, the airlock,
 hands and items, flight controls, and quantum energy through salvage.
 **Governed by:** CLAUDE.md's floating-origin rule. A position that must survive a shift is a
@@ -51,17 +52,17 @@ What follows from them:
 | Part | Holds | Owner of `to_dict()` / `from_dict()` |
 |---|---|---|
 | Header | format version, generator versions (§8), save time, play time | `SaveGame` |
-| World | universe seed | `SaveGame` (from `AsteroidStream.seed`) |
+| World | universe seed | `flight_test.gd` (from `AsteroidStream.seed`) |
 | Ship's layout | the grid: coords, block ids, orientations, hp | `ShipBlueprint` (reused, as a dictionary; §6.2) |
 | Ship in space | position (`UniversePoint`), rotation, linear and angular velocity | `Ship` |
-| Flight settings | assist on/off, speed lock and its speed, heading hold and its heading | `FlightComputer` |
+| Flight settings | assist on/off, speed lock and its speed, heading hold and its heading, a burn latched when you stood up | `FlightComputer` |
 | Store | QE amount | `QuantumStore` |
 | Airlocks | per airlock cell: pressure, and whether each hatch is open | `Airlock` |
 | Items aboard | per item: kind, variety, state, where (§6.4), use state (§6.5) | `Ship` via `Item` |
-| You | mode (walking, seated or suit), pose, head pitch, velocity, what's in your hand | `Avatar` + `Grasp` |
+| You | mode (walking, seated or suit), pose, head pitch, velocity, what's in your hand | `flight_test.gd`, through `Avatar` and `Grasp` |
 | Suit cell | charge | `SuitCell` |
-| Salvage taken | the ledger: cloud id → taken indices | `SalvageLedger` |
-| Strays | per stray: kind, variety, universe position, rotation, velocities, far-time (§7) | `StrayLedger` (new) |
+| Salvage | each cloud's centre, and the ledger: cloud id → taken indices | `SalvageField` + `SalvageLedger` |
+| Strays | per stray: kind, variety, universe position, rotation, velocities, use state, far-time (§7) | `StrayLedger` (new) |
 
 ### 3.1 What is not saved, and why
 
@@ -72,6 +73,7 @@ What follows from them:
 | Airlock or machine mid-cycle, seat transitions, bolts in flight, a charging throw | A save is never written during one (§5). |
 | Camera view (cockpit, chase, first or third person) | Falls out of the mode: seated loads to the cockpit, walking to first person. |
 | The floating origin's offset | The origin is placed where the saved focus is on load (§6.1). Nothing engine-sized is stored. |
+| Where the flight started | `AsteroidRecipe.find_start()` works it out from the seed again. The rocks depend on it, so it must stay a pure function of the seed. |
 | The pilot light's timer, boost's fractional QE | Less than one QE. Dropping it is invisible. |
 | HUD toggles (F3 readout, the controls card) | Session conveniences, not game state. |
 
@@ -105,16 +107,16 @@ been for the last **CALM_FOR = 2 s**, so it never saves on the very tick an acti
 | each `QuantumMachine` | its cycle's stage is not `IDLE`, or an item is in its bay |
 | the quantum machine's charge plate | it is charging the suit |
 | `Avatar` | re-entry righting is running; the suit is dry and the emergency cell is bringing you home |
-| `Grasp` | a throw is charging |
-| items in use | a `PlasmaEmitter` has a bolt in flight |
+| `Grasp` | a throw is charging; something just let go of still ignores you (its release grace) |
+| items in use | a `PlasmaBolt` is in flight aboard |
 | `Ship` | a rock struck the hull less than **STRUCK_CALM = 5 s** ago |
 | `Avatar` (suit) | you bumped a rock less than 5 s ago |
-| `Universe` | a shift is held (`is_held()`: world-space particles still alive) |
 | **damage (future)** | anything took damage less than 5 s ago. Slice 2 plugs in here. |
 
 Deliberately **not** busy:
 - **Flying.** Seated at the helm, burning or drifting, is a stable state. It loads mid-flight
-  at the saved velocity.
+  at the saved velocity, with speed lock and heading hold as they were. A seated burn stops on
+  load, because no key is held yet; a burn latched by standing up mid-burn keeps burning.
 - **Spacewalking.** Drifting outside on suit thrusters is a stable state too. You load outside,
   at your saved place and velocity relative to the universe.
 - **Holding an item.** It loads in your hand.
@@ -132,7 +134,8 @@ one new source, with no change to the gate.
 
 A load builds the scene exactly as a new game does, then overwrites its state. It never
 builds the scene a second way. `flight_test.gd::_ready()` gains one branch: build the ship from
-the saved layout, or from `_starter_grid()` when there is no save.
+the saved layout, or from `_starter_grid()` when there is no save. A save whose layout has no
+blocks is treated as no save.
 
 ### 6.1 Order
 
@@ -166,8 +169,10 @@ saved layout is whatever you launched. Hp is saved now so block damage needs no 
 | suit | outside at the saved universe position and rotation, at the saved velocity, via `Avatar.enter_suit()`; the universe focuses on you |
 
 The interior pose is stored in the ship's interior space. The interior never moves, so this is
-safe. The load checks `Avatar.can_stand_at()`. If the pose is blocked, because the layout
-changed or a saved item landed there, you stand at the new-game spawn instead.
+safe. The load checks that the cell under the pose is still a walkable block. If it is not,
+because the layout changed, you stand at the new-game spawn instead. (`Avatar.can_stand_at()`
+was the first plan, but it is a physics query, and the interior's colliders are not in the
+physics space yet while the scene is still being built.)
 
 ### 6.4 Items aboard
 
@@ -176,7 +181,7 @@ Each item under `Ship.items` and in your hand is saved:
 - `state`: stowed, loose or held;
 - **stowed:** the stow point's position in interior space. On load, the item goes to the stow
   point within `Ship.RESEAT_TOLERANCE` of it. This is the same rule a rebuild already uses. If
-  no point matches, the item loads loose on the floor under where the point was.
+  no point matches, the item loads loose where the point was, and falls to the floor.
 - **loose:** interior-space transform, linear and angular velocity;
 - **held:** attached to your hand through `Grasp`, as if just taken.
 
@@ -193,6 +198,8 @@ is there (§5).
 | `Datapad` | `on` |
 | `Flare` | `burn`, `burn_left` |
 | `PlasmaEmitter` | nothing (its cooldown is shorter than the calm window) |
+
+Items that no longer exist in the catalogue are skipped with a warning.
 
 ### 6.6 Airlocks
 
@@ -270,9 +277,11 @@ tune in play.
 - **`generators`**: `{asteroids: AsteroidRecipe.VERSION, salvage: SalvageField.VERSION}`. Each is
   a new constant, starting at 1, bumped whenever a seed's output changes. If salvage's version
   differs, the **ledger is dropped** (with a log line), because its indices would point at
-  different items. If the asteroids' version differs, the ship keeps its universe position.
-  The rocks around it may have moved, so the load checks the hull's shape for overlap and, if it
-  overlaps a rock, moves the ship straight out along the rock's normal until it is clear.
+  different items. If the asteroids' version differs, the rocks may now stand where the ship
+  was, so **the world starts over**: the ship goes back to the start, at rest, and you come back
+  aboard. You keep the ship, its store, everything aboard and your suit; the salvage clouds and
+  strays start fresh. (The first draft pushed the hull clear of whatever rock it overlapped.
+  Starting over is simpler and always safe.)
 
 ---
 
@@ -293,7 +302,7 @@ tune in play.
 
 | File | Change |
 |---|---|
-| `src/save/save_game.gd` | **New.** `SaveGame`: collects and applies the parts, versions, migration, safe write and read. |
+| `src/save/save_game.gd` | **New.** `SaveGame`: the file, its header, versions, migration, safe write and read. |
 | `src/save/save_gate.gd` | **New.** `SaveGate`: busy sources, the calm window, the timers (§4, §5). |
 | `src/save/save_codec.gd` | **New.** Pure helpers: `Vector3`, `Basis`, `Transform3D`, `UniversePoint` to and from JSON arrays. |
 | `src/world/stray_ledger.gd` | **New.** §7.2. |
@@ -309,7 +318,7 @@ tune in play.
 | `src/avatar/avatar.gd`, `src/avatar/grasp.gd` | `to_dict`/`from_dict`; busy sources. |
 | `src/items/item_use.gd` and its four uses | `save`/`restore` (§6.5). |
 | `src/camera/camera_director.gd` | Busy source; seat you with no transition. |
-| `scenes/flight_test.gd` | Owns the `SaveGame`, `SaveGate` and `StrayField`; load-or-new in `_ready()`; save on quit. |
+| `scenes/flight_test.gd` | Owns the `SaveGame`, `SaveGate` and `StrayField`; `capture()` and the restore that gather and hand out every part; load-or-new in `_ready()`; save on quit; the gate's state on F3. |
 
 `to_dict`/`from_dict` follows `WorldState`'s naming in the planetfall spec §12.4. The bridge
 computer plan uses `save()`/`restore()` for the same idea within a session. When the computer is
@@ -344,8 +353,8 @@ built, its state joins the save through a thin `to_dict` wrapper.
 ### 11.2 In the real game (mandatory)
 
 Launch with `play.bat`, and for each of the following, quit and relaunch:
-1. Fly out, burn, and quit seated mid-burn. You reload seated, moving and still burning the same
-   way.
+1. Fly out, lock your speed, and quit seated. You reload seated, moving as you were, the speed
+   lock still on.
 2. Stow a pistol in the galley, leave a mug on the corridor floor, and quit walking. Both are
    where you left them. The weapon rack is not restocked.
 3. Cycle the airlock, step out, and quit on the spacewalk. You reload outside, with the airlock
@@ -396,7 +405,19 @@ compares the grid and the store.
 
 ---
 
-## 15. Build order
+## 15. How the build differs from the first draft
+
+- `capture()` and the restore live in `flight_test.gd`, the one place that knows every part, as
+  the HUD wiring already does. `SaveGame` is only the file.
+- A saved standing place is checked against the grid, not with a physics query (§6.3).
+- A save from another asteroid generator starts the world over rather than pushing the hull
+  clear (§8.1).
+- A seated burn does not survive a load; a burn latched by standing up does (§5).
+- The floating origin's held shift (world-space particles alive) is not a busy source. The RCS
+  puffs keep it held for most of any flight, which kept every save waiting, and a particle is
+  never saved anyway.
+
+## 16. Build order
 
 1. `SaveCodec` and the pure parts' `to_dict`/`from_dict`: store, suit cell, ledger, blueprint,
    flight settings, with round-trip tests.

@@ -43,6 +43,12 @@ scenery any more.
   - the game's first sound, synthesized in code;
   - a spacewalk on suit thrusters, stepping out through the outer hatch and floating back in,
     with a marker home (docs/superpowers/specs/2026-09-24-airlock-design.md)
+- **Saving (2026-09-26):** one game, autosaved to `user://save/game.json` only in calm moments,
+  and resumed on launch. It keeps the ship, where it is, its store, everything aboard, the suit,
+  the airlocks, the salvage taken, and you, walking, seated or outside. Items left adrift outside
+  are forgotten after 10 minutes spent more than 5 km away. `play.bat -- --new-game` starts
+  over, and headless runs never touch the save
+  (docs/superpowers/specs/2026-09-26-saving-design.md)
 
 Derived stats for the starter shuttle: 92,300 kg, torque imbalance 3.2% of pitch budget, power
 36.0 gen / 30.8 draw MW, **zero validation issues**, `can_launch = true`.

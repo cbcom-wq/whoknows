@@ -4,6 +4,11 @@ extends Node3D
 ## docs/superpowers/specs/2026-08-23-starter-shuttle-art-direction.md §3 --
 ## so flight_test.tscn always has a ship. Once the shipyard exists
 ## (Task 20) this loads a saved blueprint instead.
+##
+## It also keeps the one saved game (docs/superpowers/specs/
+## 2026-09-26-saving-design.md): a launch resumes it, and it saves itself in
+## calm moments. This is the one place that knows every part of the game, so
+## capture() and restore here gather and hand out each part's dictionary.
 
 @onready var _ship: Ship = $Ship
 @onready var _hud: HudRoot = $HudRoot
@@ -19,11 +24,25 @@ extends Node3D
 
 ## Every salvage cloud, under Outside (quantum energy spec §10.2).
 var salvage: SalvageField
+## Every stray item adrift outside (saving spec §7), under Outside.
+var strays: StrayField
+
+## Saving (saving spec §9): on in the real game, off in headless runs. A test
+## turns it on, with a path of its own, before the scene enters the tree.
+var save_enabled := SaveGame.enabled_by_default()
+var save_path := SaveGame.DEFAULT_PATH
+var save_game: SaveGame
+var save_gate := SaveGate.new()
+## Seconds of play in this game, across every session of it.
+var play_time := 0.0
+## True when this session resumed a saved game rather than starting a new one.
+var resumed := false
 
 var _reticle: Reticle
 var _interact_prompt := ""
 var _grasp_prompt := ""
 var _universe_readout: Label
+var _saved_tag: SavedTag
 
 ## The interior's own mood (spec §3.3): dim and warm, with bloom turning the
 ## thin lit strips into light. It goes on the interior camera, not the world,
@@ -45,13 +64,23 @@ const O_RCS_UP := 16         ## UP: thrust along +Y
 const O_RCS_DOWN := 20       ## DOWN: thrust along -Y
 
 func _ready() -> void:
-	_ship.set_grid(_starter_grid())
+	var saved := _read_save()
+	var ship_part: Dictionary = saved.get("ship", {})
+	var layout := Ship.layout_of(ship_part) if resumed else null
+	if resumed and (layout == null or layout.coords().is_empty()):
+		push_error("FlightTest: the saved ship has no blocks; starting a new game")
+		resumed = false
+		saved = {}
+	_ship.set_grid(layout if resumed else _starter_grid(), not resumed)
+	if resumed:
+		_ship.restore_aboard(ship_part)
 	_place_avatar_on_deck()
 	_set_interior_mood()
 	_wire_hud()
 	_wire_prompt()
 	_wire_hands()
-	_wire_universe()
+	_wire_universe(saved)
+	_wire_saving()
 
 ## The interior camera is also the seated camera -- CameraDirector moves it
 ## between head and seat -- so one assignment covers walking and flying.
@@ -109,14 +138,31 @@ func _on_view_changed(view: CameraDirector.View, moving: bool) -> void:
 ## The floating origin (asteroids spec §4) follows whoever is outside: the
 ## hull, or you on a spacewalk. Wired here so neither Ship nor Avatar needs to
 ## know about Universe. F3 shows where you are in the universe.
-func _wire_universe() -> void:
+##
+## A resumed game puts the origin where you were, then the hull and you back
+## where the save had you, before the rocks load (saving spec §6.1). A save
+## from another asteroid generator starts the world over at the start, with
+## your ship, its store and everything aboard (§8.1).
+func _wire_universe(saved: Dictionary) -> void:
 	_universe.set_focus(_ship.exterior)
+	var world: Dictionary = saved.get("world", {})
+	if world.has("seed"):
+		_stream.seed = int(world["seed"])
 	# The flight starts at a field's edge (asteroids spec §5.6): the universe's
 	# origin goes there, and the rocks around it load before the first frame.
 	var start := AsteroidRecipe.new(_stream.seed).find_start()
-	_universe.origin = start
+	var same_world := resumed and _same_generator(saved, "asteroids")
+	if resumed and not same_world:
+		push_warning("FlightTest: the save's asteroids are another version; back to the start")
+	if same_world:
+		_restore_places(saved)
+	else:
+		_universe.origin = start
+		if resumed:
+			_restore_you(saved.get("avatar", {}), false)
 	_stream.start(_universe, start)
-	_wire_salvage()
+	_wire_salvage(saved if same_world else {}, _same_generator(saved, "salvage"))
+	_wire_strays(saved.get("strays", {}) if same_world else {})
 	# Godot's cameras stop drawing at 4 km; big rocks show from 25 km.
 	for cam: Camera3D in [$Ship/Exterior/ChaseCamera, $Ship/Canopy/CanopyCam, _avatar.camera]:
 		cam.far = AsteroidStream.VIEW_FAR
@@ -135,12 +181,29 @@ func _wire_universe() -> void:
 ## Salvage (quantum energy spec §10.2, §14): the field under Outside, at the
 ## identity, with the same world seed as the rocks; and the near cloud out of
 ## the starter's airlock, behind its stern, fixed in the universe now.
-func _wire_salvage() -> void:
+## A resumed game takes its clouds and ledger from the save instead; a save
+## from another salvage generator keeps its clouds but not its ledger, whose
+## indices would name other items (saving spec §8.1).
+func _wire_salvage(saved: Dictionary, same_salvage: bool) -> void:
 	salvage = SalvageField.new()
 	salvage.name = "SalvageField"
 	$Outside.add_child(salvage)
 	salvage.setup(_universe, _ship.item_catalog, _stream.seed)
-	salvage.add_near_cloud(_stern())
+	var part: Dictionary = saved.get("salvage", {})
+	if part.get("centres", {}).is_empty():
+		salvage.add_near_cloud(_stern())
+		return
+	if not same_salvage:
+		push_warning("FlightTest: the save's salvage is another version; what was taken is forgotten")
+	salvage.from_dict(part, same_salvage)
+
+func _wire_strays(saved: Dictionary) -> void:
+	strays = StrayField.new()
+	strays.name = "StrayField"
+	$Outside.add_child(strays)
+	strays.setup(_universe, _ship.item_catalog)
+	if not saved.is_empty():
+		strays.from_dict(saved)
 
 ## A frame on the hull at the middle of the airlock's outer hatch, +z pointing
 ## out of it along the airlock's line: aft, on the starter.
@@ -163,10 +226,181 @@ func _process(_delta: float) -> void:
 		return
 	var u := _universe.to_universe(_universe.focus.global_position)
 	_universe_readout.text = "universe %.3f, %.3f, %.3f km   origin shifts %d
-rock cells %d / %d / %d   bodies %d   late cells %d" % [
+rock cells %d / %d / %d   bodies %d   late cells %d
+save %s   last %ds ago   strays %d" % [
 		(u.x + u.fx) / 1000.0, (u.y + u.fy) / 1000.0, (u.z + u.fz) / 1000.0, _universe.shifts,
 		_stream.loaded_count(0), _stream.loaded_count(1), _stream.loaded_count(2), _stream.bubble.live.size(),
-		_stream.late_cells]
+		_stream.late_cells, _save_readout(), int(save_gate.since_save), strays.count() if strays != null else 0]
+
+## The save's state for F3: off, calm, or what it is waiting on.
+func _save_readout() -> String:
+	if not save_enabled:
+		return "off"
+	if save_gate.reason != "":
+		return "waiting: " + save_gate.reason
+	return "calm" if save_gate.is_calm() else "calming"
+
+# --- saving (docs/superpowers/specs/2026-09-26-saving-design.md) -------------
+
+## Reads the save, unless saving is off or a new game was asked for. Sets
+## `resumed`; {} for a new game.
+func _read_save() -> Dictionary:
+	resumed = false
+	if not save_enabled:
+		return {}
+	save_game = SaveGame.new(save_path)
+	if SaveGame.new_game_asked():
+		save_game.set_aside()
+		return {}
+	var data := save_game.read()
+	if data.is_empty():
+		return {}
+	resumed = true
+	play_time = float(data.get("play_time", 0.0))
+	return data
+
+## The gate's sources (§5), the SAVED tag, and a settling spell after the
+## game begins.
+func _wire_saving() -> void:
+	save_gate.add_source(func() -> String: return "sitting" if _director.is_moving() else "")
+	save_gate.add_source(_ship.busy)
+	save_gate.add_source(_avatar.busy)
+	save_gate.settle()
+	_saved_tag = SavedTag.new()
+	_saved_tag.name = "SavedTag"
+	$Prompt.add_child(_saved_tag)
+	if save_game != null and save_game.locked:
+		_saved_tag.show_locked()
+
+func _physics_process(delta: float) -> void:
+	play_time += delta
+	if not save_enabled:
+		return
+	if save_gate.tick(delta):
+		save_now()
+
+## Writes the game, now, whatever the gate says: the gate decides when. True
+## if it was written.
+func save_now() -> bool:
+	if not save_enabled:
+		return false
+	if save_game == null:
+		save_game = SaveGame.new(save_path)
+	var err := save_game.write(capture(), play_time)
+	save_gate.saved()
+	if err != OK:
+		if not save_game.locked:
+			push_error("FlightTest: could not save (%s)" % error_string(err))
+		return false
+	if _saved_tag != null:
+		_saved_tag.flash()
+	return true
+
+## On quit: save if it is calm; otherwise the last save stands (§4).
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST and save_enabled and save_gate.is_calm():
+		save_now()
+
+## Every part of the game as plain data (§3).
+func capture() -> Dictionary:
+	return {
+		"world": {"seed": _stream.seed},
+		"ship": _ship.to_dict(_universe),
+		"avatar": _capture_you(),
+		"salvage": salvage.to_dict(),
+		"strays": strays.to_dict(),
+	}
+
+## You: walking, seated or on a spacewalk, where, which way, your suit and
+## what is in your hand (§6.3).
+func _capture_you() -> Dictionary:
+	var d := {
+		"suit": _avatar.suit_cell.to_dict(),
+		"suit_assist": _avatar.suit_assist,
+		"pitch": _avatar.head_pitch(),
+	}
+	if _avatar.mode == Avatar.Mode.SUIT:
+		d["mode"] = "suit"
+		d["at"] = SaveCodec.upoint(_universe.to_universe(_avatar.global_position))
+		d["turn"] = SaveCodec.basis(_avatar.global_basis)
+		d["v"] = SaveCodec.vec3(_avatar.velocity)
+		var airlock := _avatar.beacon_source.get_object() as Airlock if _avatar.beacon_source.is_valid() else null
+		if airlock != null:
+			d["airlock"] = SaveCodec.cell_key(airlock.coord)
+	else:
+		d["mode"] = "seated" if _director.is_seated else "walking"
+		d["place"] = SaveCodec.transform(_ship.interior.global_transform.affine_inverse() * _avatar.global_transform)
+	if _avatar.grasp.item != null:
+		d["held"] = _avatar.grasp.item.to_dict(Transform3D.IDENTITY)
+	return d
+
+## True when the save's generator `which` made the world this game makes.
+static func _same_generator(saved: Dictionary, which: String) -> bool:
+	var theirs: Dictionary = saved.get("generators", {})
+	return int(theirs.get(which, -1)) == int(SaveGame.generators()[which])
+
+## The origin near where you were, then the hull and you (§6.1).
+func _restore_places(saved: Dictionary) -> void:
+	var ship_part: Dictionary = saved.get("ship", {})
+	var you: Dictionary = saved.get("avatar", {})
+	var focus := SaveCodec.to_upoint(ship_part.get("hull", {}).get("at"))
+	if String(you.get("mode", "")) == "suit":
+		focus = SaveCodec.to_upoint(you.get("at"))
+	_universe.origin = UniversePoint.at(
+		roundi(focus.x / Universe.STEP) * int(Universe.STEP),
+		roundi(focus.y / Universe.STEP) * int(Universe.STEP),
+		roundi(focus.z / Universe.STEP) * int(Universe.STEP))
+	_ship.restore_hull(ship_part, _universe)
+	_restore_you(you, true)
+
+## You as the save had you (§6.3). With `outside_too` false -- the world
+## started over -- a spacewalk comes back aboard, standing.
+func _restore_you(d: Dictionary, outside_too: bool) -> void:
+	_avatar.suit_cell.from_dict(d.get("suit", {}))
+	_avatar.suit_assist = bool(d.get("suit_assist", true))
+	var mode := String(d.get("mode", "walking"))
+	if mode != "suit":
+		var pose := _ship.interior.global_transform * SaveCodec.to_transform(d.get("place"))
+		if _can_stand(pose):
+			_avatar.place(Transform3D(Basis(Vector3.UP, pose.basis.get_euler().y), pose.origin))
+		_avatar.set_head_pitch(float(d.get("pitch", 0.0)))
+	# Hands work only aboard and standing, so the held item is taken first.
+	var held: Variant = d.get("held")
+	if held is Dictionary:
+		var item := _ship.restore_item(held)
+		if item != null and not _avatar.grasp.take(item):
+			item.set_loose()
+	if mode == "seated":
+		_director.sit_now($Ship/Interior/PilotSeat)
+	elif mode == "suit" and outside_too:
+		_restore_spacewalk(d)
+
+func _restore_spacewalk(d: Dictionary) -> void:
+	var airlock: Airlock = _ship.airlocks.get(SaveCodec.to_cell(String(d.get("airlock", ""))))
+	if airlock == null or not is_instance_valid(airlock.alcove):
+		for a: Airlock in _ship.airlocks.values():
+			if is_instance_valid(a.alcove):
+				airlock = a
+				break
+	var pose := Transform3D(SaveCodec.to_basis(d.get("turn")), _universe.to_engine(SaveCodec.to_upoint(d.get("at"))))
+	_avatar.enter_suit(_ship.outside, pose, SaveCodec.to_vec3(d.get("v")), _ship.exterior)
+	_avatar.set_head_pitch(float(d.get("pitch", 0.0)))
+	if airlock != null:
+		_avatar.beacon_source = airlock.beacon
+		_avatar.home_source = airlock.home
+	_universe.set_focus(_avatar)
+
+## Whether a saved standing place is still somewhere to stand: a walkable
+## block under it, so a changed layout never leaves you in a wall (§6.3).
+func _can_stand(pose: Transform3D) -> bool:
+	var local := _ship.interior.global_transform.affine_inverse() * pose.origin
+	var cell := Vector3i(roundi(local.x / ShipGrid.CELL_SIZE),
+		roundi((local.y - InteriorBuilder.floor_y(Vector3i.ZERO)) / InteriorBuilder.STOREY_HEIGHT),
+		roundi(local.z / ShipGrid.CELL_SIZE))
+	if not _ship.grid.has_block(cell):
+		return false
+	var def := _ship.catalog.get_def(_ship.grid.get_block(cell).block_id)
+	return def != null and def.is_walkable()
 
 func _starter_grid() -> ShipGrid:
 	var g := ShipGrid.new()

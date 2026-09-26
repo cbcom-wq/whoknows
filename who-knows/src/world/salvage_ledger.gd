@@ -5,8 +5,8 @@ extends RefCounted
 ## 2026-09-24-quantum-energy-design.md §10.3), by cloud id and item index. A
 ## cloud that loads again leaves those out, so nothing taken comes back.
 ## Taken means swallowed by the hose; nothing else removes salvage in this
-## build. Pure; SalvageField owns one for the session (saving it is a hook,
-## §17).
+## build. Pure; SalvageField owns one, and it is saved with the game
+## (docs/superpowers/specs/2026-09-26-saving-design.md §3).
 
 var _taken := {}   # StringName cloud id -> {int index: true}
 
@@ -25,3 +25,22 @@ func is_taken(cloud_id: StringName, index: int) -> bool:
 func remaining(cloud_id: StringName, count: int) -> int:
 	var gone: int = _taken[cloud_id].size() if _taken.has(cloud_id) else 0
 	return maxi(count - gone, 0)
+
+## {cloud id: [taken indices, ascending]}.
+func to_dict() -> Dictionary:
+	var out := {}
+	for cloud_id: StringName in _taken:
+		var indices: Array = _taken[cloud_id].keys()
+		indices.sort()
+		out[String(cloud_id)] = indices
+	return out
+
+## Replaces what this ledger remembers with a saved one.
+func from_dict(d: Dictionary) -> void:
+	_taken.clear()
+	for key in d:
+		var indices: Variant = d[key]
+		if not (indices is Array):
+			continue
+		for index in indices:
+			take(StringName(key), int(index))

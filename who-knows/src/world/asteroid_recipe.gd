@@ -19,6 +19,10 @@ extends RefCounted
 
 enum Tier { RUBBLE, MID, GIANT }
 
+## Bumped whenever a seed's rocks change: a save made by another version is
+## put back at the start (docs/superpowers/specs/2026-09-26-saving-design.md
+## §8.1).
+const VERSION := 1
 const TIERS := 3
 const NEST := 5
 ## Cell edge per tier, metres.

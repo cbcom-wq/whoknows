@@ -205,6 +205,23 @@ vehicle is that node, not the `FlightComputer`:
 _hud.set_active_vehicle(_pilot if piloting else null)   # _pilot: $Ship/PilotControls
 ```
 
+## Saving (`docs/superpowers/specs/2026-09-26-saving-design.md`)
+
+One autosaved game at `user://save/game.json`, JSON, written only when `SaveGate` says it is calm.
+What a ship contributes:
+
+| API | Does |
+|---|---|
+| `Ship.to_dict(universe)` | layout (`ShipBlueprint.to_dict`), hull place and motion, `FlightComputer.to_dict`, `QuantumStore.to_dict`, each `Airlock.to_dict`, every item aboard (`Item.to_dict`) |
+| `Ship.layout_of(d)` → `ShipGrid` | the grid a save was built from |
+| `Ship.set_grid(grid, false)` | builds without stocking the shelves: a loaded game brings its own items |
+| `Ship.restore_hull(d, universe)` / `restore_aboard(d)` / `restore_item(d)` | puts it all back; an item whose stow point is gone comes loose |
+| `Ship.busy()` | why a save must wait: hull struck (`STRUCK_CALM` 5 s), airlock cycling, machine working, charging suit, bolt in flight |
+| `flight_test.gd` `save_enabled`, `save_path` | set before `add_child`; saving is off under `--headless` |
+
+Saved places outside are `UniversePoint`s (`SaveCodec.upoint`). The world's start comes from
+`AsteroidRecipe.find_start()` again, so keep it a pure function of the seed.
+
 ## Commands
 
 - **Tests:** `who-knows/run_tests.ps1`, or `-gselect=test_name` for one file (PowerShell).
@@ -230,3 +247,4 @@ _hud.set_active_vehicle(_pilot if piloting else null)   # _pilot: $Ship/PilotCon
 - `docs/superpowers/specs/2026-09-24-asteroids-design.md` §4: the floating origin.
 - `docs/superpowers/specs/2026-09-25-flight-controls-design.md`: how the flight computer spends
   the budgets, the RCS show, and (§9.4) what the starter's layout does to the feel.
+- `docs/superpowers/specs/2026-09-26-saving-design.md`: what a ship saves, and when.

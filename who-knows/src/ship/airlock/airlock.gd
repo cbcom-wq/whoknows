@@ -96,6 +96,31 @@ func must_charge() -> bool:
 	return avatar != null and _ship != null and avatar.get_parent() == _ship.interior \
 		and avatar.suit_cell.charge < SuitCell.GO_OUT_MIN
 
+## What a save keeps (saving spec §6.6): a save is only taken at rest, so the
+## pressure and which hatch stands open are the whole of it.
+func to_dict() -> Dictionary:
+	var open := ""
+	match cycle.open_side():
+		AirlockCycle.Door.INNER:
+			open = "inner"
+		AirlockCycle.Door.OUTER:
+			open = "outer"
+	return {"pressure": cycle.pressure, "open": open}
+
+func from_dict(d: Dictionary) -> void:
+	var side := AirlockCycle.Door.NONE
+	match String(d.get("open", "")):
+		"inner":
+			side = AirlockCycle.Door.INNER
+		"outer":
+			side = AirlockCycle.Door.OUTER
+	cycle.restore_idle(float(d.get("pressure", AirlockCycle.ATMOSPHERE)), side)
+	_apply()
+
+## Why a save must wait (saving spec §5), or "".
+func busy() -> String:
+	return "" if cycle.stage == AirlockCycle.Stage.IDLE else "airlock cycling"
+
 ## Every panel this airlock has right now.
 func panels() -> Array[AirlockPanel]:
 	var out: Array[AirlockPanel] = []

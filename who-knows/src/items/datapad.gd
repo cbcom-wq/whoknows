@@ -27,6 +27,14 @@ func _ready() -> void:
 	kit.commit()
 	_screen.visible = on
 
+func save() -> Dictionary:
+	return {"on": on}
+
+func restore(state: Dictionary) -> void:
+	on = bool(state.get("on", on))
+	if _screen != null:
+		_screen.visible = on
+
 func use(_item: Item, _aim: Transform3D, _world: Node3D, _holder: CollisionObject3D) -> bool:
 	on = not on
 	_screen.visible = on

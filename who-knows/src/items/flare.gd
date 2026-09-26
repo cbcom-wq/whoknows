@@ -55,6 +55,15 @@ func use(_item: Item, _aim: Transform3D, _world: Node3D, _holder: CollisionObjec
 	_show()
 	return true
 
+func save() -> Dictionary:
+	return {"burn": int(burn), "burn_left": burn_left}
+
+func restore(state: Dictionary) -> void:
+	burn = clampi(int(state.get("burn", burn)), Burn.UNLIT, Burn.SPENT) as Burn
+	burn_left = clampf(float(state.get("burn_left", burn_left)), 0.0, BURN_TIME)
+	if _light != null:
+		_show()
+
 func status() -> String:
 	match burn:
 		Burn.BURNING:

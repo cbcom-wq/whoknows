@@ -118,6 +118,35 @@ func set_heading(direction: Vector3) -> void:
 func clear_heading() -> void:
 	heading_hold = false
 
+## What a save keeps (docs/superpowers/specs/2026-09-26-saving-design.md §3):
+## assist, the speed lock, heading hold, and a burn latched when the pilot
+## stood up (clear_pilot_input). Seated, the stick overwrites the burn on the
+## next frame.
+func to_dict() -> Dictionary:
+	return {
+		"assist": assist_enabled,
+		"speed_locked": speed_locked,
+		"locked_speed": locked_speed,
+		"heading_hold": heading_hold,
+		"heading": SaveCodec.vec3(heading),
+		"burn": SaveCodec.vec3(_translate_input),
+		"boost": _boost,
+	}
+
+func from_dict(d: Dictionary) -> void:
+	# Assist first: turning it off drops the locks.
+	assist_enabled = bool(d.get("assist", true))
+	speed_locked = bool(d.get("speed_locked", false)) and assist_enabled
+	locked_speed = float(d.get("locked_speed", 0.0))
+	heading = SaveCodec.to_vec3(d.get("heading"), Vector3.FORWARD)
+	if heading.is_zero_approx():
+		heading = Vector3.FORWARD
+	heading = heading.normalized()
+	heading_hold = bool(d.get("heading_hold", false)) and assist_enabled
+	_translate_input = SaveCodec.to_vec3(d.get("burn")).clampf(-1.0, 1.0)
+	_rotate_input = Vector3.ZERO
+	_boost = bool(d.get("boost", false))
+
 func _physics_process(delta: float) -> void:
 	_apply_translation(delta)
 	_apply_rotation(delta)

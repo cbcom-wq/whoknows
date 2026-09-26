@@ -74,6 +74,15 @@ func bind(body: CharacterBody3D, head: Node3D, wield: Node3D = null, carry: Node
 	wield_socket = wield if wield != null else _socket(head, "WieldSocket", DEFAULT_WIELD_SOCKET)
 	carry_socket = carry if carry != null else _socket(head, "CarrySocket", DEFAULT_CARRY_SOCKET)
 
+## Why a save must wait (saving spec §5), or "": a throw winding up, or
+## something just let go of that still ignores you.
+func busy() -> String:
+	if charge >= 0.0:
+		return "throwing"
+	if not _releasing.is_empty():
+		return "letting go"
+	return ""
+
 func set_enabled(on: bool) -> void:
 	enabled = on
 	if not on:

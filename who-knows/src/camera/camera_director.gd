@@ -53,6 +53,25 @@ func sit(seat: PilotSeat) -> void:
 	_move_camera_to(seat.eye.global_transform)
 	piloting_changed.emit(true)
 
+## Seats you at once, with no camera move (saving spec §6.3): a loaded game
+## that was saved at the helm.
+func sit_now(seat: PilotSeat) -> void:
+	if is_seated or _tween != null or _avatar.mode == Avatar.Mode.SUIT:
+		return
+	_seat = seat
+	is_seated = true
+	_avatar.set_control_enabled(false)
+	_interior_cam.reparent(seat.eye, false)
+	_interior_cam.transform = Transform3D.IDENTITY
+	view = View.COCKPIT
+	piloting_changed.emit(true)
+	_apply_view()
+
+## True while a sit or stand camera move is running: a save waits (saving
+## spec §5).
+func is_moving() -> bool:
+	return _tween != null
+
 func stand() -> void:
 	if not is_seated or _tween != null:
 		return

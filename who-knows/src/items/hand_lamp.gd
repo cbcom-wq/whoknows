@@ -47,6 +47,14 @@ func use(_item: Item, _aim: Transform3D, _world: Node3D, _holder: CollisionObjec
 func status() -> String:
 	return "on" if on else ""
 
+func save() -> Dictionary:
+	return {"on": on}
+
+func restore(state: Dictionary) -> void:
+	on = bool(state.get("on", on))
+	if _beam != null:
+		_show()
+
 func _show() -> void:
 	_beam.visible = on
 	_lens.visible = on

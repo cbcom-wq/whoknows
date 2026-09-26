@@ -122,6 +122,18 @@ func tick(delta: float) -> void:
 	_drive_cores()
 	_update_hums(delta)
 
+## Why a save must wait (saving spec §5), or "": a machine converting or
+## making, an item in its grip, or a suit charging at its plate.
+func busy() -> String:
+	for cycle: MachineCycle in cycles.values():
+		if cycle.stage != MachineCycle.Stage.IDLE:
+			return "machine working"
+	if not _held.is_empty():
+		return "machine working"
+	if not _charges.is_empty():
+		return "charging suit"
+	return ""
+
 ## The positional player `key` (&"bay" or &"panel") of the machine at `cell`.
 func player(cell: Vector3i, key: StringName) -> AudioStreamPlayer3D:
 	return _players.get(cell, {}).get(key)

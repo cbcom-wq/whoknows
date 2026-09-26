@@ -122,6 +122,17 @@ func set_capacity(c: int) -> void:
 	amount = clampi(amount, 0, capacity)
 	_settle()
 
+## What a save keeps (saving spec §3): the amount. The capacity comes from
+## the ship's blocks, and the pilot light's timer and boost's fraction are
+## less than one QE.
+func to_dict() -> Dictionary:
+	return {"amount": amount}
+
+## Takes a saved amount, clamped to this store's capacity.
+func from_dict(d: Dictionary) -> void:
+	amount = clampi(int(d.get("amount", amount)), 0, capacity)
+	_settle()
+
 func _settle() -> void:
 	changed.emit(amount, capacity)
 	var low := is_low_power()

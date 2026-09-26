@@ -20,6 +20,9 @@ extends Node3D
 ## What is taken -- an item that says it was consumed, swallowed by the hose
 ## -- goes in the ledger, and a cloud that loads again leaves it out.
 
+## Bumped whenever a seed's clouds change: a save made by another version
+## drops its ledger, whose indices would name other items (saving spec §8.1).
+const VERSION := 1
 ## The near cloud's id: 12 items out of the starter's airlock, behind its
 ## stern, so the first spacewalk has something to gather (spec §10.2).
 const NEAR := &"near"
@@ -114,6 +117,27 @@ static func cloud_seed(p_world_seed: int, cloud_id: StringName) -> int:
 	for b in String(cloud_id).to_utf8_buffer():
 		h = AsteroidRecipe.mix(h ^ AsteroidRecipe.mix(b + _SALT))
 	return h
+
+## What a save keeps (saving spec §3): where each cloud is, and the ledger.
+## Where loaded items drift to is not kept: pushed salvage goes back to its
+## seeded place (spec §10.3).
+func to_dict() -> Dictionary:
+	var centres := {}
+	for id: StringName in _centres:
+		centres[String(id)] = SaveCodec.upoint(_centres[id])
+	return {"centres": centres, "taken": ledger.to_dict()}
+
+## Takes the saved clouds and, unless `keep_taken` is false (a save from
+## another salvage VERSION, §8.1), the ledger. Loaded clouds load again.
+func from_dict(d: Dictionary, keep_taken := true) -> void:
+	for id: StringName in _loaded.keys():
+		_free(id)
+	var centres: Dictionary = d.get("centres", {})
+	for key: String in centres:
+		_centres[StringName(key)] = SaveCodec.to_upoint(centres[key])
+	if keep_taken:
+		ledger.from_dict(d.get("taken", {}))
+	update()
 
 func _physics_process(_delta: float) -> void:
 	update()

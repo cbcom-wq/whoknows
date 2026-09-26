@@ -79,6 +79,47 @@ func setup(def: ItemDefinition, variety := 0.0) -> void:
 	add_to_group(&"interactable")
 	add_to_group(GROUP)
 
+## The 0..1 its look was varied by.
+func variety() -> float:
+	return _variety
+
+## What a save keeps of this item (saving spec §6.4), with its place in
+## `frame`'s space (the ship's interior, or none for a held item): kind,
+## variety, state, where, how it moves and what its use is doing.
+func to_dict(frame: Transform3D) -> Dictionary:
+	var d := {"kind": String(definition.id), "variety": _variety}
+	match state:
+		State.STOWED:
+			d["state"] = "stowed"
+			if is_instance_valid(stow_point):
+				d["point"] = SaveCodec.vec3(frame.affine_inverse() * stow_point.global_position)
+		State.HELD:
+			d["state"] = "held"
+		_:
+			d["state"] = "loose"
+	if state != State.HELD:
+		d["place"] = SaveCodec.transform(frame.affine_inverse() * global_transform)
+		d["v"] = SaveCodec.vec3(frame.basis.inverse() * linear_velocity)
+		d["w"] = SaveCodec.vec3(frame.basis.inverse() * angular_velocity)
+	if use_node != null:
+		var saved := use_node.save()
+		if not saved.is_empty():
+			d["use"] = saved
+	return d
+
+## A new item of the saved kind, set up but not yet placed, or null if the
+## catalogue no longer has it.
+static func from_dict(d: Dictionary, catalog: ItemCatalog) -> Item:
+	var def := catalog.get_def(StringName(d.get("kind", ""))) if catalog != null else null
+	if def == null:
+		push_warning("Item: no item called %s to load" % d.get("kind", ""))
+		return null
+	var item := Item.new()
+	item.setup(def, float(d.get("variety", 0.0)))
+	if item.use_node != null and d.get("use") is Dictionary:
+		item.use_node.restore(d["use"])
+	return item
+
 func shape() -> BoxShape3D:
 	return _shape
 
