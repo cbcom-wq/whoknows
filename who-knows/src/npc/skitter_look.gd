@@ -10,11 +10,12 @@ extends Node3D
 
 const HIPS: Array[Vector3] = [Vector3(-0.2, 0.14, -0.2), Vector3(0.2, 0.14, -0.2), Vector3(-0.22, 0.14, 0.0),
 	Vector3(0.22, 0.14, 0.0), Vector3(-0.2, 0.14, 0.2), Vector3(0.2, 0.14, 0.2)]
-const FEET: Array[Vector3] = [Vector3(-0.42, 0.0, -0.32), Vector3(0.42, 0.0, -0.32), Vector3(-0.46, 0.0, 0.0),
-	Vector3(0.46, 0.0, 0.0), Vector3(-0.42, 0.0, 0.32), Vector3(0.42, 0.0, 0.32)]
-const THIGH := 0.24
-const SHIN := 0.28
-const LEG_THICKNESS := 0.035
+const FEET: Array[Vector3] = [Vector3(-0.36, 0.0, -0.3), Vector3(0.36, 0.0, -0.3), Vector3(-0.4, 0.0, 0.0),
+	Vector3(0.4, 0.0, 0.0), Vector3(-0.36, 0.0, 0.3), Vector3(0.36, 0.0, 0.3)]
+## Short, stubby legs: a squat grazer, not a spider.
+const THIGH := 0.15
+const SHIN := 0.17
+const LEG_THICKNESS := 0.055
 const FLATTEN := 0.04
 const REST_DROP := 0.08
 const EASE := 10.0

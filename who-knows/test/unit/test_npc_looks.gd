@@ -87,4 +87,5 @@ func test_the_skitters_legs_reach_their_feet():
 	var knee := SkitterLook.knee_for(hip, foot, SkitterLook.THIGH, SkitterLook.SHIN)
 	assert_almost_eq(knee.distance_to(hip), SkitterLook.THIGH, 0.001)
 	assert_almost_eq(knee.distance_to(foot), SkitterLook.SHIN, 0.001)
-	assert_gt(knee.y, hip.y, "the knee bends up")
+	assert_gt(knee.y, foot.y + 0.05, "the knee bends up off the ground")
+	assert_gt(absf(knee.x), absf(hip.x), "and out to the side")
