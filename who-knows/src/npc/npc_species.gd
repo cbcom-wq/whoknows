@@ -12,6 +12,9 @@ extends Resource
 @export_group("Body")
 ## Its longest side, metres.
 @export var size := 1.0
+## Standing height and width, metres: with size, its body's box.
+@export var height := 0.5
+@export var width := 0.5
 ## For bumps, kg.
 @export var mass := 25.0
 ## m/s at speed 1.0.
