@@ -353,17 +353,29 @@ func bump(before: Vector3, slid: Vector3, hits: Array) -> Vector3:
 	var bumped := {}
 	for h in hits:
 		var body := h[0] as AsteroidBody
-		if body == null or bumped.has(body):
+		# A skitter is bumped the same way (NPC foundation spec §12.1): it is
+		# kinematic, so it is told the impulse instead of being given it.
+		var npc := h[0] as Npc
+		if (body == null and npc == null) or bumped.has(h[0]):
 			continue
-		bumped[body] = true
+		bumped[h[0]] = true
 		var n: Vector3 = h[1]
-		var at: Vector3 = h[2] - body.global_position
-		var closing := -(before - (body.linear_velocity + body.angular_velocity.cross(at))).dot(n)
+		var other_v := npc.velocity if npc != null else Vector3.ZERO
+		var other_mass := npc.species.mass if npc != null else 0.0
+		var at := Vector3.ZERO
+		if body != null:
+			at = h[2] - body.global_position
+			other_v = body.linear_velocity + body.angular_velocity.cross(at)
+			other_mass = body.mass
+		var closing := -(before - other_v).dot(n)
 		if closing <= 0.0:
 			continue
-		var m := SUIT_MASS * body.mass / (SUIT_MASS + body.mass)
+		var m := SUIT_MASS * other_mass / (SUIT_MASS + other_mass)
 		var j := (1.0 + BUMP_BOUNCE) * m * closing
-		body.apply_impulse(-n * j, at)
+		if body != null:
+			body.apply_impulse(-n * j, at)
+		else:
+			npc.shove(-n * j)
 		v += n * (before.dot(n) + j / SUIT_MASS - v.dot(n))
 	return v
 

@@ -117,6 +117,10 @@ static func make_locomotor(id: StringName) -> Locomotor:
 	match id:
 		&"deck_walker":
 			loco = DeckWalker.new()
+		&"surface_crawler":
+			loco = SurfaceCrawler.new()
+		&"zero_g_drift":
+			loco = ZeroGDrift.new()
 		_:
 			loco = null
 	if loco == null:
