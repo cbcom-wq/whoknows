@@ -169,8 +169,11 @@ const QUANTUM_MACHINE_DEPTH := 0.6
 ## (ReadoutPanel sizes).
 const QUANTUM_MACHINE_BUTTON := Vector3(0.24, 0.24, 0.05)
 const QUANTUM_MACHINE_ARROW := Vector3(0.16, 0.16, 0.05)
-## The screen's readout: three lines of a dozen or so capitals fill its glass.
-const QUANTUM_MACHINE_SCREEN_PIXEL := 0.0019
+## The screen's black glass, across and up.
+const QUANTUM_MACHINE_SCREEN_GLASS := Vector2(0.56, 0.3)
+## The screen's readout: sized so its longest line -- CONVERT · and the
+## longest item name, 23 capitals -- fits across the glass.
+const QUANTUM_MACHINE_SCREEN_PIXEL := 0.0014
 ## The bay's mouth: centre across, bottom, side, and how deep it goes in.
 const _QUANTUM_BAY_X := -0.35
 const _QUANTUM_BAY_LOW := 0.9
@@ -806,8 +809,8 @@ static func quantum_machine(kit: InteriorKit, f: Transform3D, _variety: float) -
 	# The screen over the bay.
 	var screen := quantum_machine_screen()
 	kit.bevel_box(SOLID, f * screen * _at(Vector3(0, 0, -0.024)), Vector3(0.64, 0.38, 0.04), 0.015, trim)
-	kit.box(SOLID, f * screen * _at(Vector3(0, 0, -0.002)), Vector3(0.56, 0.3, 0.004),
-		_c(InteriorPalette.SCREEN_BACK))
+	kit.box(SOLID, f * screen * _at(Vector3(0, 0, -0.002)),
+		Vector3(QUANTUM_MACHINE_SCREEN_GLASS.x, QUANTUM_MACHINE_SCREEN_GLASS.y, 0.004), _c(InteriorPalette.SCREEN_BACK))
 	# The buttons' backing strip, and a dark arrow on each small button's face.
 	var buttons := quantum_machine_buttons()
 	kit.bevel_box(SOLID, f * _at(Vector3(_QUANTUM_BUTTONS_X, buttons[1].origin.y, d + 0.005)),

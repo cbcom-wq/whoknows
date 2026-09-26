@@ -126,6 +126,34 @@ func test_a_use_can_add_a_status_to_the_prompt():
 	item.set_stowed(null)
 	assert_eq(item.prompt_text(), "Take Canister (burning)")
 
+## Quantum energy spec §7.1, §11.4, §14: a converted or swallowed item says so
+## through `consumed`, once, while it is still whole and in the tree, then is
+## gone at once -- removed, then freed, never queued (SLICE-1-STATUS lessons).
+func test_consume_says_so_once_then_frees_the_item():
+	var holder := Node3D.new()
+	add_child_autofree(holder)
+	var item := Item.new()
+	item.setup(_def())
+	holder.add_child(item)
+	var heard := []
+	item.consumed.connect(func() -> void:
+		heard.append([is_instance_valid(item), item.is_inside_tree(), item.get_parent() == holder]))
+	Item.consume(item)
+	assert_eq(heard, [[true, true, true]], "once, before it is freed")
+	assert_freed(item, "the consumed item")
+	assert_eq(holder.get_child_count(), 0, "out of the tree at once, not queued")
+	assert_no_new_orphans()
+
+func test_consume_frees_an_item_outside_the_tree_too():
+	var item := Item.new()
+	item.setup(_def())
+	var heard := [0]
+	item.consumed.connect(func() -> void: heard[0] += 1)
+	Item.consume(item)
+	assert_eq(heard[0], 1)
+	assert_freed(item, "the consumed item")
+	assert_no_new_orphans()
+
 func test_a_use_sits_on_the_item():
 	var d := _def()
 	d.use = load("res://src/items/item_use.gd")

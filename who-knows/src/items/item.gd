@@ -14,6 +14,13 @@ extends RigidBody3D
 ## implement take_item(item) and can_take_item(item) -> bool; that is the whole
 ## contract.
 
+## Converted at the quantum machine or swallowed by the hose (quantum energy
+## spec §7.1, §11.4, §14): emitted once, while the item is still whole and in
+## the tree, just before it is freed. Whoever cares -- the salvage ledger --
+## listens; the item never knows who converted it. Item.consume() is the one
+## way it is done.
+signal consumed
+
 enum State { STOWED, LOOSE, HELD }
 
 ## Every item joins this group, so anything looking for items can find them.
@@ -123,6 +130,17 @@ func interact(actor: Node) -> void:
 
 func use(aim: Transform3D, world: Node3D, holder: CollisionObject3D) -> bool:
 	return use_node != null and use_node.use(self, aim, world, holder)
+
+## Uses `item` up: `consumed`, once, then out of the tree and freed at once --
+## remove_child() then free(), never queue_free(), which would leave its
+## collider registered until the engine flushes its queue (SLICE-1-STATUS).
+## Static, so nothing runs on an item after it is gone.
+static func consume(item: Item) -> void:
+	item.consumed.emit()
+	var parent := item.get_parent()
+	if parent != null:
+		parent.remove_child(item)
+	item.free()
 
 static func _physics_material() -> PhysicsMaterial:
 	if _material == null:

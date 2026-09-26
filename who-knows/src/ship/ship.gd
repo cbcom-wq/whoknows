@@ -91,6 +91,8 @@ func _ready() -> void:
 	quantum = QuantumPlant.new()
 	quantum.name = "Quantum"
 	quantum.flight_computer = flight_computer
+	quantum.items = items
+	quantum.item_catalog = item_catalog
 	add_child(quantum)
 	AudioBuses.ensure()
 	Synth.warm_up()

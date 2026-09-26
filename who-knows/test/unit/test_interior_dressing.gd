@@ -352,8 +352,8 @@ func test_every_walkable_cell_of_the_starter_still_has_one_cell_light():
 	for coord in _builder.walkable_coords():
 		assert_eq(_cell_lights(coord).size(), 1, "%s has one light of its own" % coord)
 
-## The bay's own rules (value, size, mass) come in Task 6; for now it takes
-## any item, floating at its centre (spec §6.3).
+## The dressing's bay takes a crate, floating at its centre (spec §6.3, §7.1);
+## its rules -- value, size, mass -- are test_quantum_bay.gd's.
 func test_the_bay_takes_any_item_and_holds_it_at_its_centre():
 	_starter()
 	var bay: QuantumBay = _builder.quantum_machines()[0].bay
