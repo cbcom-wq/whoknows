@@ -606,8 +606,9 @@ static func _pod_point(i: int) -> Vector3:
 ## A shoulder of the front wall beside a pod, in a wall frame on the canopy
 ## face: the wall itself (the builder draws none at canopy faces) round a
 ## portal window at eye height in a chunky frame, the usual trim, and a
-## console desk under the window.
-static func shoulder(kit: InteriorKit, f: Transform3D, variety: float) -> void:
+## console desk under the window -- left out where a fixture stands in front
+## of the glass, like the bridge computer's table.
+static func shoulder(kit: InteriorKit, f: Transform3D, variety: float, with_console := true) -> void:
 	var wall := _c(InteriorPalette.WALL)
 	var trim := _c(InteriorPalette.TRIM)
 	var back := -WALL_THICKNESS * 0.5
@@ -630,7 +631,8 @@ static func shoulder(kit: InteriorKit, f: Transform3D, variety: float) -> void:
 	for y in [SHOULDER_WINDOW_LOW - 0.05, SHOULDER_WINDOW_HIGH + 0.05]:
 		kit.bevel_box(SOLID, f * _at(Vector3(0, y, 0.03)), Vector3(2.0 * w + 0.2, 0.1, 0.08), 0.03, trim)
 	wall_trim(kit, f)
-	console(kit, f, variety, false)
+	if with_console:
+		console(kit, f, variety, false)
 
 ## The captain's chair and helm console, in a fixture frame: origin on the
 ## floor under the seat, -z the way it faces, +y up (cockpit pod spec §5). A

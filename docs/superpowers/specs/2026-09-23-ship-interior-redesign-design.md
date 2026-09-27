@@ -389,18 +389,19 @@ zero issues, and `ShipStats` numbers must not move (§7.1).
 
 > **Amended 2026-09-27.** The bridge as it now stands, after the cockpit pod moved the helm
 > forward, quantum energy put its core and machine on the bridge, and the bridge computer put its
-> holo table in the port back corner (`docs/superpowers/specs/2026-09-25-bridge-computer-design.md`
+> holo table in the port front corner (`docs/superpowers/specs/2026-09-25-bridge-computer-design.md`
 > §3.2):
 >
 > ```
 >  z \ x       −1             0              +1
->   −3        deck       pilot_seat         deck
+>   −3      computer     pilot_seat         deck
 >   −2        deck      quantum_core        deck
->   −1      computer        deck       quantum_machine
+>   −1        deck          deck       quantum_machine
 > ```
 >
 > The core, the machine and the table are quiet fixtures: the zones and walls round them are as
-> they were, but for their own walls.
+> they were, but for their own walls -- and the port front corner's console, which the table hands
+> to the port back corner's wall.
 
 ---
 

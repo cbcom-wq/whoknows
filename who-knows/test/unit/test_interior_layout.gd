@@ -463,8 +463,10 @@ func test_no_other_room_opens_into_the_airlock():
 
 ## Bridge computer spec §3.1: a quiet fixture keeps the bridge as it was. Only
 ## its own cell's walls change, by the quiet-fixture rule: plain, or a
-## porthole on the skin.
-func test_the_computer_leaves_the_bridge_alone():
+## porthole on the skin. Beside the helm, the console its port wall would
+## have had goes to the port wall of the back corner (§3.2, as amended
+## 2026-09-27).
+func test_the_computer_leaves_the_bridge_alone_and_hands_its_console_aft():
 	var cat := BlockCatalog.load_from_dir("res://data/blocks")
 	var bootstrap: Node = load("res://scenes/flight_test.gd").new()
 	var grid: ShipGrid = bootstrap._starter_grid()
@@ -474,12 +476,31 @@ func test_the_computer_leaves_the_bridge_alone():
 	b.bind(grid, cat)
 	b.rebuild()
 	var layout := b.layout()
-	var cell := Vector3i(-1, 0, -1)
-	assert_eq(layout.zone_at(cell), layout.zone_at(Vector3i(0, 0, -1)),
-		"the same floor as the deck beside it, where you stand to use it")
+	var cell := Vector3i(-1, 0, -3)
+	assert_eq(layout.zone_at(cell), layout.zone_at(Vector3i(1, 0, -3)),
+		"the same floor as the other front corner")
 	var variants := {}
 	for face in layout.faces():
-		if face["coord"] == cell and face["kind"] == InteriorLayout.Kind.WALL:
-			variants[face["normal"]] = face["variant"]
-	assert_eq(variants.get(Vector3i(0, 0, 1)), InteriorLayout.WallVariant.PANEL, "its back wall goes plain")
-	assert_eq(variants.get(Vector3i(-1, 0, 0)), InteriorLayout.WallVariant.PORTHOLE, "its port wall is a porthole")
+		if face["kind"] == InteriorLayout.Kind.WALL and face["normal"] == Vector3i(-1, 0, 0):
+			variants[face["coord"]] = face["variant"]
+	assert_eq(variants.get(cell), InteriorLayout.WallVariant.PORTHOLE, "its port wall is a porthole")
+	assert_eq(variants.get(Vector3i(-1, 0, -1)), InteriorLayout.WallVariant.CONSOLE, "the back corner has the console")
+	assert_eq(variants.get(Vector3i(-1, 0, -2)), InteriorLayout.WallVariant.PORTHOLE, "the middle keeps its porthole")
+
+## The console is handed straight back from the glass to the last open cell
+## behind it: never into a room, and never where there is no wall.
+func test_a_quiet_fixture_at_the_glass_hands_its_console_back():
+	_cat.register(_def(InteriorLayout.COMPUTER_ID, BlockDefinition.Occupancy.MOUNT))
+	_put(Vector3i(0, 0, -1), &"canopy")
+	_put(Vector3i(0, 0, 0), &"computer")
+	_put(Vector3i(0, 0, 1), &"deck")
+	_put(Vector3i(0, 0, 2), &"deck")
+	_put(Vector3i(0, 0, 3), &"bunk_room")
+	for z in [0, 1, 2, 3]:
+		_put(Vector3i(-1, 0, z), &"hull")
+	var layout := _plan()
+	var handed := layout.faces().filter(func(f): return f["variant"] == InteriorLayout.WallVariant.CONSOLE)
+	var at := handed.map(func(f): return [f["coord"], f["normal"]])
+	assert_true(at.has([Vector3i(0, 0, 2), Vector3i(-1, 0, 0)]), "to the last deck before the room: %s" % [at])
+	assert_false(at.has([Vector3i(0, 0, 0), Vector3i(-1, 0, 0)]), "not on the table's own wall")
+	assert_false(at.has([Vector3i(0, 0, 3), Vector3i(-1, 0, 0)]), "never into the room")

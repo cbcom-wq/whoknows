@@ -42,10 +42,11 @@ func test_rooms_do_not_move_the_flight_balance():
 ## Pins "today's bridge" by comparing against a copy with both swapped for
 ## plain deck, cell by cell and face by face, rather than hand-copying a
 ## table -- the only things that differ are the machine's own wall to the
-## galley and the bridge computer's to the bunk room, which their
-## (unfiltered) MOUNT rule always keeps plain, same as the helm's own walls
-## (spec §6.1, "a fixture's own cell keeps plain walls"; bridge computer spec
-## §3.1).
+## galley, which its (unfiltered) MOUNT rule always keeps plain, same as the
+## helm's own walls (spec §6.1, "a fixture's own cell keeps plain walls"), and
+## the bridge computer's port wall in the front corner, whose console it hands
+## to the port wall of the back corner (bridge computer spec §3.2, as amended
+## 2026-09-27).
 func test_the_quantum_fixtures_do_not_reshape_the_bridge():
 	var quiet := ShipGrid.new()
 	for coord in _grid.coords():
@@ -71,9 +72,11 @@ func test_the_quantum_fixtures_do_not_reshape_the_bridge():
 		if f["coord"] == Vector3i(1, 0, -1) and f["normal"] == Vector3i(0, 0, 1):
 			assert_eq(f["variant"], InteriorLayout.WallVariant.PANEL,
 				"the machine's own wall to the galley goes plain")
-		elif f["coord"] == Vector3i(-1, 0, -1) and f["normal"] == Vector3i(0, 0, 1):
-			assert_eq(f["variant"], InteriorLayout.WallVariant.PANEL,
-				"the computer's own wall to the bunk room goes plain")
+		elif f["coord"] == Vector3i(-1, 0, -3) and f["normal"] == Vector3i(-1, 0, 0):
+			assert_eq(was["variant"], InteriorLayout.WallVariant.CONSOLE, "a console by the helm")
+			assert_eq(f["variant"], InteriorLayout.WallVariant.PORTHOLE, "the computer's own skin wall")
+		elif f["coord"] == Vector3i(-1, 0, -1) and f["normal"] == Vector3i(-1, 0, 0):
+			assert_eq(f["variant"], InteriorLayout.WallVariant.CONSOLE, "the console, handed to the back corner")
 		else:
 			assert_eq(f["variant"], was["variant"], "variant at %s unchanged" % key)
 	assert_eq(checked, today.faces().size(), "no face went missing")
@@ -93,23 +96,25 @@ func test_the_starter_shuttle_is_pinned_with_the_quantum_core_machine_and_comput
 	assert_eq(_grid.coords().size(), 84, "84 blocks")
 	var s := ShipStats.compute(_grid, _cat)
 	assert_almost_eq(s.total_mass_kg, 96_900.0, 1.0)
-	assert_almost_eq(s.center_of_mass, Vector3(0.004, 1.207, 0.120), Vector3.ONE * 0.001)
+	assert_almost_eq(s.center_of_mass, Vector3(0.004, 1.207, 0.124), Vector3.ONE * 0.001)
 	assert_almost_eq(s.torque_imbalance, Vector3(11146, -6192, 0), Vector3.ONE * 1.0)
-	assert_almost_eq(s.torque_budget, Vector3(3_059_856, 2_029_928, 2_198_143), Vector3.ONE * 1.0)
+	assert_almost_eq(s.torque_budget, Vector3(3_061_920, 2_030_960, 2_198_143), Vector3.ONE * 1.0)
 	assert_almost_eq(s.power_gen, 36.0, 0.05)
 	assert_almost_eq(s.power_draw, 31.3, 0.05)
 	assert_eq(s.quantum_capacity, 1200)
 	var issues := ShipValidator.validate(_grid, _cat)
 	assert_eq(issues.size(), 0, "zero issues")
 
-## Bridge computer spec §3.2: the table in the bridge's port back corner,
-## facing starboard, toward where you stand to use it.
-func test_the_computer_stands_in_the_port_back_corner():
-	var inst := _grid.get_block(Vector3i(-1, 0, -1))
+## Bridge computer spec §3.2, as amended 2026-09-27: the table in the
+## bridge's port front corner, beside the helm, facing aft toward where you
+## stand to use it, so you look forward over it out of the window.
+func test_the_computer_stands_in_the_port_front_corner():
+	var inst := _grid.get_block(Vector3i(-1, 0, -3))
 	assert_not_null(inst)
 	assert_eq(inst.block_id, InteriorLayout.COMPUTER_ID)
-	assert_eq(InteriorLayout.facing(inst.orientation), Vector3i(1, 0, 0))
-	assert_eq(_grid.get_block(Vector3i(0, 0, -1)).block_id, &"deck", "where you stand to use it")
+	assert_eq(InteriorLayout.facing(inst.orientation), Vector3i(0, 0, 1))
+	assert_eq(_grid.get_block(Vector3i(-1, 0, -2)).block_id, &"deck", "where you stand to use it")
+	assert_eq(_grid.get_block(Vector3i(-4 + 3, 0, -4)).block_id, &"canopy", "glass ahead of it")
 
 func _built() -> InteriorBuilder:
 	var b := InteriorBuilder.new()

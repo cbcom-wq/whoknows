@@ -23,7 +23,7 @@ func _status(c: ShipComputer) -> void:
 
 func test_the_starter_has_one_table_bound_to_its_ship():
 	var c := _computer()
-	assert_eq(c.cell, Vector3i(-1, 0, -1))
+	assert_eq(c.cell, Vector3i(-1, 0, -3))
 	assert_eq(c.ctx.sensors, _ship.sensors)
 	assert_eq(c.ctx.store, _ship.quantum.store)
 	assert_eq(c.ctx.stats, _ship.stats)
@@ -36,10 +36,10 @@ func test_its_buttons_are_interactables_on_the_interior_layer():
 		assert_true(panel.is_in_group("interactable"))
 		assert_eq(panel.collision_layer, InteriorKit.LAYER)
 
-## Spec §3.2: you start beside it, and can reach its buttons from there.
-func test_its_buttons_are_within_reach_of_where_you_start():
-	var avatar: Avatar = _root.get_node("Ship/Interior/Avatar")
-	var eye := avatar.global_position + Vector3(0, 1.6, 0)
+## Spec §3.2: you can reach its buttons from where you stand to use it.
+func test_its_buttons_are_within_reach_of_its_operator_s_spot():
+	var spot := DeckPaths.floor_point(Vector3i(-1, 0, -2))
+	var eye := _ship.interior.global_transform * (spot + Vector3(0, 1.6, 0))
 	for button in ShipComputer.BUTTONS:
 		var panel: ReadoutPanel = _computer().panels[button]
 		assert_lt(eye.distance_to(panel.global_position), 2.5, "%s within the Interactor's 2.5 m" % button)

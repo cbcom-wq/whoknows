@@ -334,7 +334,9 @@ The ship's computer (`docs/superpowers/specs/2026-09-25-bridge-computer-design.m
 2026-09-27 and rendered at eye height for the owner:
 
 - **A quiet fixture,** like the quantum core and machine: a round table on a glowing plinth in
-  the bridge's port back corner, leaving the floors, consoles and portholes round it as they were.
+  the bridge's port front corner, beside the helm, so you use it looking forward out of the
+  window. Its floor stays as it was; the corner's console is handed aft to the back corner's wall,
+  and the shoulder window in front of it loses its desk (the owner, 2026-09-27).
   Its rim console faces the operator, with a black-glass screen and five chunky buttons that are
   small `ReadoutPanel`s, dark when they would do nothing.
 - **The holo is glowing kit geometry with no collider,** turned with the ship, not the table:

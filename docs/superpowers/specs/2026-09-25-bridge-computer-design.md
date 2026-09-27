@@ -109,23 +109,31 @@ Every row was decided by the owner on 2026-09-25, as recommended unless it says 
 
 ### 3.2 On the starter
 
+> **Amended 2026-09-27 by the owner, after the first renders:** the table moves to the bridge's
+> port **front** corner, so you use it looking forward, with the window in front of you, and the
+> corner's console moves to the port back corner. As first designed, it stood in the port back
+> corner facing starboard, used from (0, 0, −1).
+
 ```
  z \ x       −1             0              +1
-  −3        deck       pilot_seat         deck            ┐
+  −3      computer     pilot_seat         deck            ┐
   −2        deck      quantum_core        deck            │ bridge
-  −1      computer        deck       quantum_machine      ┘
+  −1        deck          deck       quantum_machine      ┘
    0      bunk_room       deck           galley
 ```
 
-- **At (−1, 0, −1),** the port back corner, mirroring the machine, and facing starboard (+x). You
-  use it from (0, 0, −1), looking to port, which is also where you start.
-- **Walking round it:**
-  - between the table's edge and the core's corner there is 1.4 m clear, so the walk from the
-    corridor round the core's port side still works;
-  - the table stands 0.45 m off the port wall, a gap nobody walks.
-- **The starter's figures move slightly:** 300 kg at cabin level, to port. That eases the yaw
-  imbalance the machine's 500 kg to starboard caused. The plan re-measures and pins every figure of
-  quantum spec §5.4 in its Task 1.
+- **At (−1, 0, −3),** the port front corner, beside the helm, facing aft (orientation 4). You use
+  it from (−1, 0, −2), looking forward over the holo and out of the shoulder window beside the pod.
+- **The corner's instruments go aft.** A quiet fixture's own walls go plain, so the table would
+  have taken the front corner's console with it. `InteriorLayout._handed_consoles` hands a console
+  displaced by a quiet fixture at the glass (or beside the helm) straight back, to the same wall of
+  the last open cell behind it: on the starter, the port wall of the back corner (−1, 0, −1). The
+  shoulder window in front of the table keeps its glass but loses the desk under it, which would
+  have stood 5 cm from the table's rim.
+- **Walking round it:** the table stands 0.45 m off the port wall and 0.45 m from the glass, gaps
+  nobody walks; the helm's cell beside it and the deck behind it are open.
+- **The starter's figures:** the table replaces a 0.4 t deck cell (§18.2): 96,900 kg, 31.3 MW
+  drawn, pinned from Godot in `test_starter_shuttle.gd`.
 
 ### 3.3 The look
 
@@ -493,7 +501,7 @@ data/blocks/computer.tres
   validator issues; a ship with no computer validates.
 - **Layout and dressing:**
   - the starter's zones and wall variants are unchanged by the computer;
-  - one `ShipComputer` at (−1, 0, −1) with every reference set;
+  - one `ShipComputer` at (−1, 0, −3) with every reference set;
   - one light per walkable cell still holds.
 - **The prop:** builds in a bare frame; pinned collider count; nothing collides inside the holo
   volume.
@@ -548,7 +556,7 @@ Made in this spec's change, so quantum energy is built with them:
 
 And to the other documents, applied with the code:
 - **The slice spec §5:** the `computer` block joins the catalogue.
-- **The interior redesign §7.5:** the starter's bridge gains the computer at (−1, 0, −1).
+- **The interior redesign §7.5:** the starter's bridge gains the computer at (−1, 0, −3).
 - **The visual style guide:**
   - a section on the holo table: a quiet fixture, and a holo of glowing kit geometry, no collider;
   - §2.8: the first graphical live-data screen, the holo, and its colours;
@@ -587,7 +595,7 @@ And to the other documents, applied with the code:
 
 | Risk | Mitigation |
 |---|---|
-| The table crowds the bridge's back corner | 1.4 m clear between it and the core; the walk probe and the corridor render prove it. Shrink the table to 0.9 m if needed. |
+| The table crowds the bridge's corner | The corridor render proves it (it stands in the front corner, §3.2). Shrink the table to 0.9 m if needed. |
 | The 30 km map is a cloud of dots that says nothing | It shows where the fields are, which is that range's job. If it reads as noise, thin it to rocks over 300 m across. |
 | Tiny contacts are hard to see in a 1 m holo at eye height | Minimum pip sizes per range; the stalks; the bracket. Tuned at the renders. |
 | The holo's glow blooms into a blur | Pips are small and few; the glow energy of holo pieces is its own constant, tuned at the renders. |
@@ -646,16 +654,19 @@ had since built `Contact`, `ShipSensors` and `LifeContacts`. The computer is bui
 
 ### 18.2 Differences
 
+- **Where it stands.** First built in the port back corner as designed; moved by the owner to the
+  port front corner after the first renders, with the corner's console handed aft (§3.2).
 - **The starter's figures.** The table replaces a 0.4 t deck cell drawing 0.1 MW, so the ship is
   100 kg *lighter* (96,900 kg), not 300 kg heavier, and draws 31.3 MW, not 31.4. The centre of mass
-  edges 2 mm to starboard, so the yaw imbalance *doubles*, to 6,192 N·m (0.3% of yaw authority);
-  pitch is 11,146 N·m (0.36%). Both are negligible. Godot's figures are pinned in
+  moves to (0.004, 1.207, 0.124); the imbalance under burn is (11,146, −6,192, 0) N·m, 0.36% and
+  0.3% of pitch and yaw authority, negligible. Godot's figures are pinned in
   `test_starter_shuttle.gd` and in `_starter_grid()`'s comments.
-- **The droid.** With the table in the port back corner, the table, the core and the machine
-  walled the maintenance droid off from the whole front of the bridge. `DeckPaths` now steps
-  diagonally past the corner between two quiet fixtures, where the floor round it is open -- the
-  1.3 m gap you walk through round the core's port side (§3.2). The droid reaches all 11 of its
-  jobs on the starter; before the table it reached 10 of 12.
+- **The droid.** In the back corner, the table, the core and the machine walled the maintenance
+  droid off from the whole front of the bridge. `DeckPaths` now steps diagonally past the corner
+  between two quiet fixtures where the floor round it is open (1.3 m between the core and the
+  machine), which also opens the starboard front the core and machine had cut off. With the table
+  in the front corner the droid reaches all 12 of its jobs on the starter; before this work it
+  reached 10 of 12.
 - **Marks by shape and colour.** `HoloVolume` draws shapes (ball, diamond, sphere, pin, stalk,
   tick) in any palette colour, one MultiMesh per pair, rather than a fixed kind per mesh. The
   course's own mark is drawn `AMBER`.
@@ -677,8 +688,8 @@ had since built `Contact`, `ShipSensors` and `LifeContacts`. The computer is bui
 
 ### 18.3 Renders (sent to the owner)
 
-`test/probes/computer_render.gd` renders the bridge from the corridor; the table from where you
-use it; the holo close at 30, 2 and 10 km, and from above; the status page with the miniature;
+`test/probes/computer_render.gd` renders the bridge from the corridor; the back corner, with the
+console the table handed it; the table from where you use it; the holo close at 30, 2 and 10 km, and from above; the status page with the miniature;
 the course set at the table; and the course on the HUD through the canopy and in chase view. Not
 yet rendered: the table in low power (quantum energy's low-power look is its Task 11), and the HUD
 with a course to a ping and to a region (no salvage source yet).

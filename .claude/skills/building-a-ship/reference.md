@@ -192,7 +192,13 @@ every rebuild. Any blueprint gets its crew from its own layout:
   `InteriorLayout.QUIET_FIXTURES`: its own walls go plain, or a porthole on the skin, and nothing
   else round it changes. Not required by the validator.
 - **Its frame** (`InteriorDressing.fixture_frame`): −z toward where you stand to use it. On the
-  starter it is at (−1, 0, −1), orientation 12 (facing +x), used from (0, 0, −1), where you start.
+  starter it is at (−1, 0, −3), the port front corner, orientation 4 (facing +z, aft), used from
+  (−1, 0, −2), looking forward out of the shoulder window.
+- **Consoles it displaces** (`InteriorLayout._handed_consoles`): a quiet fixture at a canopy face
+  or beside a loud fixture hands each wall that would have been a console straight back, away
+  from the glass, to the same wall of the last open bridge or common cell behind it (on the
+  starter, the port wall of (−1, 0, −1)). A shoulder in front of a fixture drops its desk
+  (`InteriorProps.shoulder(..., with_console)`).
 - **The prop:** `InteriorProps.holo_table`, a 1.1 m top at 0.9 m on a pedestal, a rim console
   tilted 55° on the operator's side; colliders 1.0 × 0.95 × 1.0 m and the console's lip, nothing
   above 1.05 m. Frames: `holo_table_console()`, `holo_table_screen()`, `holo_table_buttons()`
@@ -207,7 +213,8 @@ every rebuild. Any blueprint gets its crew from its own layout:
   `course_contact()`, `check_course()` at 4 Hz, signals `course_changed` and `course_arrived`;
   it arrives inside a region or within `ARRIVE_ROCK` (1 km) of a big rock's surface.
 - **On the starter** (Godot's figures, 2026-09-27): 84 blocks, 96,900 kg, centre of mass
-  (0.004, 1.207, 0.120), torque imbalance (11,146, −6,192, 0) N·m, 31.3 MW drawn of 36.0.
+  (0.004, 1.207, 0.124), torque imbalance (11,146, −6,192, 0) N·m, 31.3 MW drawn of 36.0; the
+  droid reaches all 12 of its jobs.
 
 ## Thrusters you see and hear (`RcsShow`, `src/flight/rcs_show.gd`)
 

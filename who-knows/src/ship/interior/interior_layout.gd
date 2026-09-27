@@ -86,6 +86,7 @@ static func plan(grid: ShipGrid, catalog: BlockCatalog, walkable: Array) -> Inte
 		if layout._zones[coord] == AIRLOCK_ZONE:
 			layout._hatches[coord] = AirlockSite.hatch_normal(grid, coord)
 			layout._doors[coord] = AirlockSite.door_normal(grid, catalog, coord)
+	var handed := _handed_consoles(grid, catalog, walkable_set, layout._zones)
 	var groups := {}   # plane key -> {normal, coords}
 	for coord: Vector3i in layout._walkable:
 		var zone: StringName = layout._zones[coord]
@@ -104,7 +105,7 @@ static func plan(grid: ShipGrid, catalog: BlockCatalog, walkable: Array) -> Inte
 				partition["partition"] = true
 				partition["owner"] = coord < neighbour
 				partition["variant"] = room_wall if in_room else _common_variant(
-					grid, coord, normal, is_mount, by_the_helm, true)
+					grid, coord, normal, is_mount, by_the_helm or handed.has(_key(coord, normal)), true)
 				layout._faces.append(partition)
 				continue
 			if _id_at(grid, neighbour) == CANOPY_ID:
@@ -119,7 +120,8 @@ static func plan(grid: ShipGrid, catalog: BlockCatalog, walkable: Array) -> Inte
 			elif in_room:
 				face["variant"] = room_wall
 			else:
-				var variant := _common_variant(grid, coord, normal, is_mount, by_the_helm, false)
+				var variant := _common_variant(grid, coord, normal, is_mount,
+					by_the_helm or handed.has(_key(coord, normal)), false)
 				face["variant"] = variant
 				face["porthole"] = variant == WallVariant.PORTHOLE
 			layout._faces.append(face)
@@ -201,6 +203,54 @@ static func _common_variant(grid: ShipGrid, coord: Vector3i, normal: Vector3i,
 	if skin_flank:
 		return WallVariant.PORTHOLE
 	return WallVariant.LOCKERS if face_hash(coord, normal) % 2 == 0 else WallVariant.DISPLAY
+
+## The walls a quiet fixture beside the helm hands its consoles to (bridge
+## computer spec §3.2, as amended 2026-09-27). A quiet fixture's own walls go
+## plain, so one standing where the consoles would be -- beside a canopy, or
+## beside a loud fixture like the helm -- would take the bridge's instruments
+## with it. Instead each wall of its cell that would have been a console hands
+## the console straight back, away from the glass: to the same wall of the
+## last cell behind it that is still open bridge or common space, not a room
+## and not a fixture. On the starter the bridge computer's table stands in the
+## port front corner, and its console goes to the port back corner. Keys are
+## "coord|normal".
+static func _handed_consoles(grid: ShipGrid, catalog: BlockCatalog, walkable: Dictionary,
+		zones: Dictionary) -> Dictionary:
+	var out := {}
+	for coord: Vector3i in walkable:
+		if not _is_mount(grid, catalog, coord) or _is_loud_mount(grid, catalog, coord) \
+				or _is_room(zones[coord]):
+			continue
+		var toward := Vector3i.ZERO   # the glass, or the loud fixture, it stands beside
+		for normal in _HORIZONTAL:
+			if _id_at(grid, coord + normal) == CANOPY_ID:
+				toward = normal
+		if toward == Vector3i.ZERO:
+			for normal in _HORIZONTAL:
+				if _is_loud_mount(grid, catalog, coord + normal):
+					toward = normal
+		if toward == Vector3i.ZERO:
+			continue
+		var back := -toward
+		var last := coord
+		while walkable.has(last + back) and not _is_room(zones[last + back]) \
+				and not _is_mount(grid, catalog, last + back):
+			last += back
+		if last == coord:
+			continue
+		for normal in _HORIZONTAL:
+			if normal == toward or normal == back:
+				continue
+			var beside := coord + normal
+			if walkable.has(beside) or _id_at(grid, beside) == CANOPY_ID:
+				continue   # no wall there, so no console to hand on
+			var target := last + normal
+			if walkable.has(target) and _room_of(zones[target]) == _room_of(zones[last]):
+				continue   # open floor there: nowhere to stand it
+			if _id_at(grid, target) == CANOPY_ID:
+				continue
+			out[_key(last, normal)] = true
+	return out
 
 ## A zone is a floor colour (spec §6.1): a quiet fixture zones its own cell
 ## as if it were deck (`_is_loud_mount`, not `_is_mount`), so its floor stays

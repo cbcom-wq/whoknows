@@ -52,7 +52,7 @@ scenery any more.
     lamp, scatter when the rock shakes, leap to moons and puff home when knocked off.
 
 - **A bridge computer** (docs/superpowers/specs/2026-09-25-bridge-computer-design.md, §18 as
-  built): a holo table in the bridge's port back corner that
+  built): a holo table in the bridge's port front corner, beside the helm, that
   - maps what the ship's sensors know -- big rocks out to 30 km, signs of life -- turned with the
     ship, at 2, 10 and 30 km;
   - sets a course to a big rock (salvage once quantum energy's Task 10 registers it), which an

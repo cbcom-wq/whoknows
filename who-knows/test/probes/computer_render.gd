@@ -6,8 +6,9 @@ extends SceneTree
 #
 #   godot --path who-knows --resolution 1280x720 --script res://test/probes/computer_render.gd -- <abs out dir>
 #
-# Writes computer_bridge.png (the bridge from the corridor, the table on the
-# left and the machine on the right), computer_table.png (the table from where
+# Writes computer_bridge.png (the bridge from the corridor, the table at the
+# front on the left), computer_back_corner.png (the console handed to the port
+# back corner), computer_table.png (the table from where
 # you use it), computer_map_30, _2 and _10.png (close in, at each range),
 # computer_status.png, computer_map_above.png, computer_course_set.png, and
 # the course on the HUD from the seat and in chase view (computer_hud_cockpit
@@ -62,22 +63,25 @@ func _run(scene: Node) -> void:
 	# machine on the right.
 	_eye(Vector3i(0, 0, 0), Vector3(0, 0, -0.85), DeckPaths.floor_point(Vector3i(0, 0, -2)) + Vector3(0, 0.9, 0))
 	await _shot("bridge")
+	# 1b. The back corner, where the table's console went.
+	_eye(Vector3i(0, 0, -1), Vector3(0.7, 0, -0.3), DeckPaths.floor_point(Vector3i(-1, 0, -1)) + Vector3(-0.8, 0.9, 0.2))
+	await _shot("back_corner")
 	# 2. The table from where you use it, at each range, then the status page.
-	var table := DeckPaths.floor_point(Vector3i(-1, 0, -1))
+	var table := DeckPaths.floor_point(Vector3i(-1, 0, -3))
 	var computer: ShipComputer = _ship.interior_builder.computers()[0]
 	computer.ctx.operator = avatar
-	_eye(Vector3i(0, 0, -1), Vector3(-0.1, 0, 0), table + Vector3(0, 1.1, 0))
+	_eye(Vector3i(-1, 0, -2), Vector3(0, 0, 0.1), table + Vector3(0, 1.1, 0))
 	await _shot("table")
 	for i in 3:
 		computer.press(&"range")   # 30, 2, then 10 km
 		var map := computer.page() as MapPage
-		_eye(Vector3i(0, 0, -1), Vector3(-0.75, -0.05, 0), table + Vector3(0, 1.2, 0))
+		_eye(Vector3i(-1, 0, -2), Vector3(0, -0.05, -0.7), table + Vector3(0, 1.2, 0))
 		await _shot("map_%d" % roundi(map.range_m() / 1000.0))
 	computer.press(&"page")
 	await _shot("status")
 	computer.press(&"page")
 	# 3. The holo from above, the way the map is laid out.
-	_eye(Vector3i(0, 0, -1), Vector3(-1.2, 0.6, 0.35), table + Vector3(0, 1.3, 0))
+	_eye(Vector3i(-1, 0, -2), Vector3(0.35, 0.6, -1.2), table + Vector3(0, 1.3, 0))
 	await _shot("map_above")
 	# 4. The course on the HUD: set at the table to a big rock ahead, then
 	# seen from the seat through the canopy, and in chase view.

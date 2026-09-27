@@ -39,7 +39,7 @@ func test_without_a_closet_it_docks_farthest_from_the_helm():
 	var layout := InteriorLayout.plan(grid, catalog, DeckGraph.build(grid, catalog).walkable_coords())
 	var paths := DeckPaths.build(layout)
 	var at := ShipCrew.dock(layout, paths)
-	var steps := paths.distances(Vector3i(-1, 0, -3))
+	var steps := paths.distances(Vector3i(-1, 0, -2))
 	for cell in paths.cells():
 		assert_true(int(steps.get(cell, -1)) <= int(steps[at]), "%s is farther than the dock %s" % [cell, at])
 
@@ -68,7 +68,7 @@ func test_on_the_starter_every_job_is_reachable():
 	assert_eq(reachable.size(), ShipCrew.work_spots(_layout, _paths).size())
 	var keys := reachable.map(func(s: Dictionary) -> StringName: return s["key"])
 	assert_true(keys.has(StringName("fixture:%s" % Vector3i(0, 0, -3))), "the helm")
-	assert_true(keys.has(StringName("fixture:%s" % Vector3i(-1, 0, -1))), "the bridge computer")
+	assert_true(keys.has(StringName("fixture:%s" % Vector3i(-1, 0, -3))), "the bridge computer")
 
 func test_the_starter_has_something_to_polish_and_scan_and_its_helm_to_tend():
 	var actions := {}

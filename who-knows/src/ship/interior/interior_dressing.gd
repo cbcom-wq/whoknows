@@ -51,7 +51,7 @@ static func build(layout: InteriorLayout, body: StaticBody3D, canopy_material: M
 		if pods.is_empty():
 			_nose(kit, group, canopy_material)
 		else:
-			_cockpit(kit, group)
+			_cockpit(kit, layout, group)
 	# Cores first: each machine's conduit runs to one on its own storey.
 	var cores := {}   # Vector3i -> QuantumCore
 	for fixture in layout.fixtures():
@@ -151,9 +151,12 @@ static func _nose(kit: InteriorKit, group: Dictionary, material: Material) -> vo
 
 ## A windshield with a helm behind it: the pod out through the helm's face,
 ## with a CockpitPod marker at its frame, and a shoulder on every other face.
-static func _cockpit(kit: InteriorKit, group: Dictionary) -> void:
+static func _cockpit(kit: InteriorKit, layout: InteriorLayout, group: Dictionary) -> void:
 	var normal: Vector3i = group["normal"]
 	var pods: Array = group["pods"]
+	var fixture_cells := {}
+	for fixture in layout.fixtures():
+		fixture_cells[fixture["coord"]] = true
 	for coord: Vector3i in group["coords"]:
 		if pods.has(coord):
 			var f := pod_frame(coord, normal)
@@ -163,8 +166,10 @@ static func _cockpit(kit: InteriorKit, group: Dictionary) -> void:
 			marker.transform = f
 			kit.root.add_child(marker)
 		else:
+			# A fixture standing at the glass (the bridge computer's table)
+			# takes the desk's place under the window.
 			InteriorProps.shoulder(kit, wall_frame(coord, normal),
-				face_variety({"coord": coord, "normal": normal}))
+				face_variety({"coord": coord, "normal": normal}), not fixture_cells.has(coord))
 
 ## The fixtures the dressing draws at their fixture frames (draws_fixture):
 ## the helm, the bridge computer's holo table, and the quantum core, which it
