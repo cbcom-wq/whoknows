@@ -52,6 +52,7 @@ const PAINTING_FILES := [
 	"res://src/npc/skitter_look.gd",
 	"res://src/ship/computer/holo_volume.gd",
 	"res://src/ship/computer/ship_computer.gd",
+	"res://src/ship/computer/map_page.gd",
 ]
 
 ## The reusable asset library and what it builds with. Ships are generated

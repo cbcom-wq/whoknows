@@ -45,7 +45,7 @@ func test_marks_are_drawn_by_shape_and_colour():
 	assert_eq(_holo.mark_count(&"ball", InteriorPalette.AMBER), 1)
 	assert_eq(_holo.mark_count(&"diamond"), 1)
 	assert_eq(_holo.mark_count(&"sphere"), 0)
-	var groups := _holo.find_children("*", "MultiMeshInstance3D", true, false)
+	var groups := _holo.find_children("Marks_*", "MultiMeshInstance3D", true, false)
 	assert_eq(groups.size(), 3, "one MultiMesh per shape and colour")
 	_holo.show_marks([])
 	assert_eq(_holo.mark_count(&"ball"), 0, "an empty list clears them")

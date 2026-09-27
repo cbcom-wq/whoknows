@@ -18,6 +18,8 @@ const SCREEN_SIZE := Vector3(0.5, 0.15, 0.012)
 const SCREEN_PIXEL := 0.00105
 const HUM_DB := -30.0
 const BLIP_DB := -14.0
+## Farther than this from the camera, the holo is not worth redrawing.
+const SEEN_WITHIN := 12.0
 
 var cell := Vector3i.ZERO
 var holo: HoloVolume
@@ -27,13 +29,14 @@ var page_index := 0
 var ctx := ComputerContext.new()
 
 var _label: Label3D
+var _unseen_for := 0.0
 var _hum: AudioStreamPlayer3D
 var _blip: AudioStreamPlayer3D
 
 ## Builds the table's moving parts at `f`, the table's fixture frame in this
 ## node's parent's space. Call once, before it enters the tree.
 func setup(f: Transform3D, render_layer := InteriorKit.LAYER) -> void:
-	pages = [StatusPage.new()]
+	pages = [MapPage.new(), StatusPage.new()]
 	holo = HoloVolume.new()
 	holo.name = "Holo"
 	# Turned with the ship, not the table (spec §5.1): only the origin moves.
@@ -131,12 +134,36 @@ func _on_pressed(role: StringName, panel: ReadoutPanel) -> void:
 
 func _process(delta: float) -> void:
 	ctx.time += delta
-	page().holo(holo, ctx, delta)
-	_refresh()
+	_unseen_for += delta
+	if _seen():
+		update(_unseen_for)
+		_unseen_for = 0.0
 	if _hum.stream == null:
 		_hum.stream = Synth.sound(&"holo_hum")
 	if _hum.stream != null and not _hum.playing and _hum.is_inside_tree():
 		_hum.play()
+
+## Redraws the holo and the rim, `delta` seconds since the last time.
+func update(delta: float) -> void:
+	page().holo(holo, ctx, delta)
+	_refresh()
+
+## Whether anyone can see the table: the holo and the rim are redrawn only
+## then. The 30 km map places hundreds of marks, and nobody at the helm or
+## outside needs them. With no camera (a headless test), always.
+func _seen() -> bool:
+	var vp := get_viewport()
+	var cam := vp.get_camera_3d() if vp != null else null
+	if cam == null or not is_inside_tree():
+		return true
+	var at := holo.global_position
+	if cam.global_position.distance_to(at) > SEEN_WITHIN:
+		return false
+	for corner in [Vector3.ZERO, Vector3(HoloVolume.RADIUS, 0, 0), Vector3(-HoloVolume.RADIUS, 0, 0),
+			Vector3(0, 0, HoloVolume.RADIUS), Vector3(0, 0, -HoloVolume.RADIUS)]:
+		if cam.is_position_in_frustum(at + corner):
+			return true
+	return false
 
 func _refresh() -> void:
 	var p := page()

@@ -7,8 +7,9 @@ extends SceneTree
 #   godot --path who-knows --resolution 1280x720 --script res://test/probes/computer_render.gd -- <abs out dir>
 #
 # Writes computer_bridge.png (the bridge from the corridor, the table on the
-# left and the machine on the right) and computer_table.png (the table from
-# where you use it).
+# left and the machine on the right), computer_table.png (the table from where
+# you use it), computer_map_30, _2 and _10.png (close in, at each range),
+# computer_status.png and computer_map_above.png.
 
 var _out := ""
 var _ship: Ship
@@ -59,11 +60,21 @@ func _run(scene: Node) -> void:
 	# machine on the right.
 	_eye(Vector3i(0, 0, 0), Vector3(0, 0, -0.85), DeckPaths.floor_point(Vector3i(0, 0, -2)) + Vector3(0, 0.9, 0))
 	await _shot("bridge")
-	# 2. The table from where you use it.
+	# 2. The table from where you use it, at each range, then the status page.
 	var table := DeckPaths.floor_point(Vector3i(-1, 0, -1))
+	var computer: ShipComputer = _ship.interior_builder.computers()[0]
+	computer.ctx.operator = avatar
 	_eye(Vector3i(0, 0, -1), Vector3(-0.1, 0, 0), table + Vector3(0, 1.1, 0))
 	await _shot("table")
-	# 3. Close in on the holo.
-	_eye(Vector3i(0, 0, -1), Vector3(-0.7, -0.1, 0), table + Vector3(0, 1.25, 0))
-	await _shot("holo")
+	for i in 3:
+		computer.press(&"range")   # 30, 2, then 10 km
+		var map := computer.page() as MapPage
+		_eye(Vector3i(0, 0, -1), Vector3(-0.75, -0.05, 0), table + Vector3(0, 1.2, 0))
+		await _shot("map_%d" % roundi(map.range_m() / 1000.0))
+	computer.press(&"page")
+	await _shot("status")
+	computer.press(&"page")
+	# 3. The holo from above, the way the map is laid out.
+	_eye(Vector3i(0, 0, -1), Vector3(-1.2, 0.6, 0.35), table + Vector3(0, 1.3, 0))
+	await _shot("map_above")
 	quit()

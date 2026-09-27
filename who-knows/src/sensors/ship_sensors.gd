@@ -32,6 +32,8 @@ var last_arrived: StringName = &""
 
 var _sources: Array = []
 var _cache: Array[Contact] = []
+## How far each cached contact was from the focus when it was read.
+var _dist := PackedFloat32Array()
 var _cache_range := 0.0
 var _since := INF
 var _course_since := 0.0
@@ -69,14 +71,23 @@ func refresh(range_m: float) -> void:
 	_since = 0.0
 	_cache_range = range_m
 	_cache.clear()
+	_dist.resize(0)
 	var focus := focus_point()
 	if focus == null:
+		# Nothing to read from yet: not an answer worth keeping.
+		_since = INF
 		return
+	# Each distance worked out once, not once per comparison: at 30 km there
+	# are hundreds of big rocks.
+	var keyed: Array = []
 	for source in _sources:
 		for c: Contact in source.contacts(focus, range_m, time):
-			_cache.append(c)
-	_cache.sort_custom(func(a: Contact, b: Contact) -> bool:
-		return a.point.minus(focus).length_squared() < b.point.minus(focus).length_squared())
+			keyed.append([c.point.minus(focus).length(), c])
+	keyed.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
+	_dist.resize(keyed.size())
+	for i in keyed.size():
+		_dist[i] = keyed[i][0]
+		_cache.append(keyed[i][1])
 
 ## The contact called `id`, looked up through its source, whatever the range.
 func contact(id: StringName) -> Contact:
@@ -94,9 +105,9 @@ func _filter(range_m: float) -> Array[Contact]:
 	var out: Array[Contact] = []
 	if focus == null:
 		return out
-	for c in _cache:
-		if c.point.minus(focus).length() <= range_m + c.radius:
-			out.append(c)
+	for i in _cache.size():
+		if _dist[i] <= range_m + _cache[i].radius:
+			out.append(_cache[i])
 	return out
 
 func set_course(id: StringName) -> void:

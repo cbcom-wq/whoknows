@@ -113,3 +113,12 @@ func test_it_checks_the_course_as_time_passes():
 	_sensors.set_course(&"rock:1,0,0")
 	_sensors._process(ShipSensors.REFRESH_EVERY)
 	assert_eq(_sensors.course, &"", "already there")
+
+## A read before the sensors have a focus (the ship binds its tables before
+## the scene wires the universe) is not kept: the next read asks again.
+func test_a_read_with_no_focus_is_not_cached():
+	_add(&"rock:1,0,0", Contact.EXACT, Vector3(0, 0, -5000), 300.0)
+	_sensors.universe = null
+	assert_eq(_sensors.contacts(10000.0).size(), 0)
+	_sensors.universe = _universe
+	assert_eq(_sensors.contacts(10000.0).size(), 1)

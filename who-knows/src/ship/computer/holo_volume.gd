@@ -24,8 +24,12 @@ const CAPACITY := 512
 ## The miniature's longest side, metres (spec §7.1), and how fast it turns.
 const MINIATURE_SIZE := 0.8
 const SPIN := deg_to_rad(10.0)
-## How strongly the holo glows, against the glow batch's other pieces.
-const ENERGY := 1.4
+## How strongly the holo glows, against the glow batch's other pieces: bright
+## enough that a pip a centimetre across still reads at arm's length.
+const ENERGY := 2.0
+## The bracket's corner ticks, metres across whatever the size of what they
+## close round: the selection must show even on the smallest pip.
+const BRACKET_TICK := 0.007
 const BRACKET_PULSE_HZ := 1.5
 ## A faceted ball (a rock), a diamond (a ping), three rings round a sphere (a
 ## region), a hollow ring facing out (a pin on the edge), a stalk down or up to
@@ -35,15 +39,17 @@ const SHAPES: Array[StringName] = [&"ball", &"diamond", &"sphere", &"pin", &"sta
 const _GLOW := InteriorKit.Batch.GLOW
 
 var layer := InteriorKit.LAYER
-var _groups: Dictionary = {}   # "shape|colour" -> MultiMeshInstance3D, in the order first drawn
-## What each group was last given, kept here too: the renderer owns a
-## MultiMesh's transforms, and a headless run's keeps none to read back.
-var _placed: Dictionary = {}   # "shape|colour" -> Array[Transform3D]
+var _groups: Dictionary = {}   # StringName shape -> {Color: MultiMeshInstance3D}
+## What each group was given this time. Kept here too: the renderer owns a
+## MultiMesh's own copy, and a headless run keeps none to read back.
+var _placed: Dictionary = {}   # MultiMeshInstance3D -> Array[Transform3D]
 var _frame_parts: Array[MeshInstance3D] = []
-var _bracket: MeshInstance3D
+var _bracket: MultiMeshInstance3D
 var _bracket_at := Vector3.ZERO
 var _bracket_size := 0.0
 var _pivot: Node3D
+## The marks and the bracket, turned as a whole by set_turn.
+var _marks_root: Node3D
 var _mini_meshes: Array[MultiMesh] = []
 var _time := 0.0
 
@@ -57,15 +63,23 @@ func setup(render_layer := InteriorKit.LAYER) -> void:
 	_frame_parts = kit.commit()
 	for part in _frame_parts:
 		part.name = "MapFrame"
+	_marks_root = Node3D.new()
+	_marks_root.name = "Marks"
+	add_child(_marks_root)
 	var bracket_kit := _kit()
-	var amber := InteriorKit.lit(InteriorPalette.AMBER, ENERGY)
-	for sx in [-0.5, 0.5]:
-		for sy in [-0.5, 0.5]:
-			for sz in [-0.5, 0.5]:
-				bracket_kit.bevel_box(_GLOW, InteriorKit.at(Vector3(sx, sy, sz)), Vector3.ONE * 0.18, 0.05, amber)
-	_bracket = bracket_kit.commit()[0]
+	bracket_kit.bevel_box(_GLOW, Transform3D.IDENTITY, Vector3.ONE, 0.25, InteriorKit.lit(InteriorPalette.AMBER, ENERGY))
+	var corners := MultiMesh.new()
+	corners.transform_format = MultiMesh.TRANSFORM_3D
+	corners.mesh = bracket_kit.mesh(_GLOW)
+	corners.instance_count = 8
+	_bracket = MultiMeshInstance3D.new()
 	_bracket.name = "Bracket"
+	_bracket.multimesh = corners
+	_bracket.material_override = InteriorMaterials.glow()
+	_bracket.layers = layer
+	_bracket.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_bracket.visible = false
+	_marks_root.add_child(_bracket)
 	_pivot = Node3D.new()
 	_pivot.name = "Miniature"
 	add_child(_pivot)
@@ -87,43 +101,63 @@ static func place(relative: Vector3, range_m: float) -> Dictionary:
 ## with none this time is emptied. For &"stalk", `position` is the top of the
 ## stalk, and it runs from there to the ship's level.
 func show_marks(marks: Array) -> void:
-	var by_key := {}
+	begin_marks()
 	for m in marks:
-		var key := _key(m["shape"], m["colour"])
-		if not by_key.has(key):
-			by_key[key] = []
-		by_key[key].append(m)
-	for key: String in by_key:
-		if not _groups.has(key):
-			var first: Dictionary = by_key[key][0]
-			_groups[key] = _group(first["shape"], first["colour"])
-	for key: String in _groups:
-		var list: Array = by_key.get(key, [])
-		var mm: MultiMesh = _groups[key].multimesh
-		var n := mini(list.size(), CAPACITY)
-		var placed: Array[Transform3D] = []
-		for i in n:
-			var xf := _transform(list[i])
-			mm.set_instance_transform(i, xf)
-			placed.append(xf)
-		mm.visible_instance_count = n
-		_placed[key] = placed
+		add_mark(m["shape"], m["colour"], m["position"], m["size"])
+	end_marks()
+
+## The same, a mark at a time, with nothing allocated per mark: begin, add
+## each, end. For the map, which draws hundreds every frame.
+func begin_marks() -> void:
+	for mmi in _placed:
+		(_placed[mmi] as Array).clear()
+
+func add_mark(shape: StringName, colour: Color, position: Vector3, size: float) -> void:
+	var placed: Array = _placed[_group(shape, colour)]
+	if placed.size() < CAPACITY:
+		placed.append(_transform(shape, position, size))
+
+## Hands each group its transforms in one buffer, 12 floats apiece as
+## MultiMesh.buffer lays them out: one call, not one per mark.
+func end_marks() -> void:
+	for mmi: MultiMeshInstance3D in _placed:
+		var placed: Array = _placed[mmi]
+		var buf := PackedFloat32Array()
+		buf.resize(CAPACITY * 12)
+		var i := 0
+		for xf: Transform3D in placed:
+			var b := xf.basis
+			buf[i] = b.x.x
+			buf[i + 1] = b.y.x
+			buf[i + 2] = b.z.x
+			buf[i + 3] = xf.origin.x
+			buf[i + 4] = b.x.y
+			buf[i + 5] = b.y.y
+			buf[i + 6] = b.z.y
+			buf[i + 7] = xf.origin.y
+			buf[i + 8] = b.x.z
+			buf[i + 9] = b.y.z
+			buf[i + 10] = b.z.z
+			buf[i + 11] = xf.origin.z
+			i += 12
+		mmi.multimesh.buffer = buf
+		mmi.multimesh.visible_instance_count = placed.size()
 
 ## How many marks of `shape` are drawn, in any colour or in `colour` alone.
 func mark_count(shape: StringName, colour: Variant = null) -> int:
 	var n := 0
-	for key: String in _placed:
-		if _matches(key, shape, colour):
-			n += (_placed[key] as Array).size()
+	for c: Color in _groups.get(shape, {}):
+		if colour == null or c == colour:
+			n += (_placed[_groups[shape][c]] as Array).size()
 	return n
 
 ## The `index`th mark of `shape` drawn, counting through its colours in the
 ## order they were first drawn. For tests.
 func mark_transform(shape: StringName, index: int, colour: Variant = null) -> Transform3D:
-	for key: String in _placed:
-		if not _matches(key, shape, colour):
+	for c: Color in _groups.get(shape, {}):
+		if colour != null and c != colour:
 			continue
-		var placed: Array = _placed[key]
+		var placed: Array = _placed[_groups[shape][c]]
 		if index < placed.size():
 			return placed[index]
 		index -= placed.size()
@@ -140,6 +174,15 @@ func bracket_shown() -> bool:
 
 func bracket_position() -> Vector3:
 	return _bracket_at
+
+## Turns every mark and the bracket together: for a map placed a moment ago,
+## brought round to the way the ship faces now, without placing each mark
+## again. The chevron and the ring never turn.
+func set_turn(turn: Basis) -> void:
+	_marks_root.basis = turn
+
+func turn() -> Basis:
+	return _marks_root.basis
 
 ## The ship's chevron and the edge ring, which the map shows and the status
 ## page doesn't.
@@ -190,20 +233,26 @@ func _process(delta: float) -> void:
 	_pivot.rotate_y(SPIN * delta)
 	_place_bracket()
 
+## Eight corner ticks round the selected mark, breathing gently in and out.
 func _place_bracket() -> void:
-	if _bracket.visible:
-		var pulse := 1.0 + 0.1 * sin(TAU * BRACKET_PULSE_HZ * _time)
-		_bracket.transform = Transform3D(Basis.from_scale(Vector3.ONE * _bracket_size * pulse), _bracket_at)
+	if not _bracket.visible:
+		return
+	var half := _bracket_size * 0.5 * (1.0 + 0.12 * sin(TAU * BRACKET_PULSE_HZ * _time))
+	var i := 0
+	for sx in [-1.0, 1.0]:
+		for sy in [-1.0, 1.0]:
+			for sz in [-1.0, 1.0]:
+				_bracket.multimesh.set_instance_transform(i, Transform3D(Basis.from_scale(Vector3.ONE * BRACKET_TICK),
+					_bracket_at + Vector3(sx, sy, sz) * half))
+				i += 1
 
-static func _key(shape: StringName, colour: Color) -> String:
-	return "%s|%s" % [shape, colour.to_html()]
-
-static func _matches(key: String, shape: StringName, colour: Variant) -> bool:
-	if colour == null:
-		return key.begins_with("%s|" % shape)
-	return key == _key(shape, colour)
-
+## The MultiMesh for marks of `shape` in `colour`, made the first time.
 func _group(shape: StringName, colour: Color) -> MultiMeshInstance3D:
+	if not _groups.has(shape):
+		_groups[shape] = {}
+	var by_colour: Dictionary = _groups[shape]
+	if by_colour.has(colour):
+		return by_colour[colour]
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.mesh = _mesh_for(shape, colour)
@@ -215,13 +264,13 @@ func _group(shape: StringName, colour: Color) -> MultiMeshInstance3D:
 	mmi.material_override = InteriorMaterials.glow()
 	mmi.layers = layer
 	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(mmi)
+	_marks_root.add_child(mmi)
+	by_colour[colour] = mmi
+	_placed[mmi] = []
 	return mmi
 
-func _transform(m: Dictionary) -> Transform3D:
-	var at: Vector3 = m["position"]
-	var size: float = m["size"]
-	match m["shape"]:
+static func _transform(shape: StringName, at: Vector3, size: float) -> Transform3D:
+	match shape:
 		&"stalk":
 			# A centred unit stalk, scaled to the drop: never a negative
 			# scale, which would turn it inside out.
@@ -248,7 +297,7 @@ func _mesh_for(shape: StringName, colour: Color) -> ArrayMesh:
 		&"pin":
 			_two_sided_ring(kit, Basis.IDENTITY, 0.3, 0.5, lit)
 		&"stalk":
-			kit.box(_GLOW, Transform3D.IDENTITY, Vector3(0.003, 1.0, 0.003), InteriorKit.lit(colour, ENERGY * 0.45))
+			kit.box(_GLOW, Transform3D.IDENTITY, Vector3(0.004, 1.0, 0.004), InteriorKit.lit(colour, ENERGY * 0.5))
 		&"tick":
 			kit.bevel_box(_GLOW, Transform3D.IDENTITY, Vector3(1.0, 0.15, 1.0), 0.05, InteriorKit.lit(colour, ENERGY * 0.45))
 	return kit.mesh(_GLOW)
@@ -289,14 +338,15 @@ static func _two_sided_ring(kit: InteriorKit, b: Basis, r_in: float, r_out: floa
 	kit.annulus(_GLOW, Transform3D(b, Vector3.ZERO), r_in, r_out, colour)
 	kit.annulus(_GLOW, Transform3D(b * Basis(Vector3.UP, PI), Vector3.ZERO), r_in, r_out, colour)
 
-## The ship: a small warm arrow at the centre, pointing forward (-z).
+## The ship: a small warm arrow at the centre, pointing forward (-z), 4 cm
+## long.
 static func _chevron(kit: InteriorKit) -> void:
 	var warm := InteriorKit.lit(InteriorPalette.LIGHT_WARM, ENERGY)
-	var tip := Vector3(0, 0, -0.012)
+	var tip := Vector3(0, 0, -0.02)
 	for side in [-1.0, 1.0]:
-		var back := Basis(Vector3.UP, side * deg_to_rad(30.0))
-		kit.bevel_box(_GLOW, Transform3D(back, tip + back * Vector3(0, 0, 0.015)), Vector3(0.006, 0.006, 0.03),
-			0.002, warm)
+		var back := Basis(Vector3.UP, side * deg_to_rad(28.0))
+		kit.bevel_box(_GLOW, Transform3D(back, tip + back * Vector3(0, 0, 0.022)), Vector3(0.012, 0.018, 0.046),
+			0.003, warm)
 
 ## A faint ring round the volume's edge at the ship's level, both faces.
 static func _edge_ring(kit: InteriorKit) -> void:

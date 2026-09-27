@@ -19,7 +19,16 @@ var time := 0.0
 ## (spec §5.1). The floating origin moves the hull and the universe's origin
 ## together, so a shift changes nothing here.
 func relative(point: UniversePoint) -> Vector3:
+	return relative_in(map_frame(), point)
+
+## From the engine into the map's frame: the hull's transform, undone. Work
+## it out once a frame and pass it to relative_in for each contact.
+func map_frame() -> Transform3D:
+	if hull == null:
+		return Transform3D.IDENTITY
+	return hull.global_transform.orthonormalized().affine_inverse()
+
+func relative_in(frame: Transform3D, point: UniversePoint) -> Vector3:
 	if sensors == null or sensors.universe == null or hull == null or point == null:
 		return Vector3.ZERO
-	var basis := hull.global_basis.orthonormalized()
-	return basis.inverse() * (sensors.universe.to_engine(point) - hull.global_position)
+	return frame * sensors.universe.to_engine(point)
