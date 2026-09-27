@@ -104,11 +104,11 @@ It decides:
 | Piece | First guess | Notes |
 |---|---|---|
 | Star | radius 2.5–4 km; colour one of a few warm star palettes | The light source. Has a well. What happens close to it waits for damage (§13). |
-| Planet slots | 5–9 planets; the first at about 20 km from the star, spacing growing by about ×1.3, the outermost at 150 km or less | Each slot has a seeded angle round the star and a small tilt off the plane, so the system is a flattened disc, not a ring. |
-| Planets | `WorldRecipe` from the slot's sub-seed | Planetfall §5.2 unchanged: radius 300–1200 m, well radius 3R. |
+| Slots | 7–10; the first at about 30 km from the star, spacing growing by ×1.18–1.30, the outermost at 150 km or less. Each slot is a planet or a belt (the system skeleton spec, §4.1) | Each planet has a seeded angle round the star and a small height off the plane, so the system is a flattened disc, not a ring. |
+| Planets | 5–9; `WorldRecipe` from the slot's sub-seed | Planetfall §5.2 unchanged: radius 300–1200 m, well radius 3R. |
 | Moons | 0–3 per planet; radius 120–400 m; 6–14 km from their planet | A moon's well never overlaps its planet's. |
 | Rings | about 1 planet in 4 | A flat rubble torus in the planet's own plane (§5). |
-| Belts | 1–2 round the star, between slots | Where the big asteroid fields live now. |
+| Belts | 1–2 slots, round the star | Where the big asteroid fields live now. A belt takes a slot of its own: squeezed between planets, it did not fit. |
 | Regions | 4–12 (§8) | Gas clouds, plasma zones, dust lanes, comets. |
 | Entry point | a seeded point clear of wells and belts | Where jumps arrive (§10.3). |
 
