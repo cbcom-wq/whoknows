@@ -106,6 +106,6 @@ func test_scores_are_kept_for_the_overlay():
 	assert_almost_eq(float(brain.scores[&"b"]), 0.2, 0.0001)
 
 func test_the_overlay_describes_a_brain():
-	assert_eq(NpcDebug.bar(0.0), "▯▯▯▯▯")
-	assert_eq(NpcDebug.bar(0.6), "▮▮▮▯▯")
-	assert_eq(NpcDebug.bar(1.0), "▮▮▮▮▮")
+	assert_eq(NpcDebug.bar(0.0), ".....")
+	assert_eq(NpcDebug.bar(0.6), "###..")
+	assert_eq(NpcDebug.bar(1.0), "#####")

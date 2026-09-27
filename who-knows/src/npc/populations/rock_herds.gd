@@ -25,7 +25,7 @@ const ROUND_MAX := 40.0 * 60.0
 ## A herd lives this far up its crater's wall, as a share of its radius.
 const WALL := 0.8
 ## Members start within this of their herd's home, metres.
-const HUDDLE := 3.0
+const HUDDLE := 4.0
 ## Salt for the herds' generator, apart from the rock's other seeds.
 const SALT := 11
 

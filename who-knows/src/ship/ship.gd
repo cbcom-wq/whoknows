@@ -52,6 +52,9 @@ var _airlocks_root: Node
 ## the holder its NPCs stand under, and the place they live in.
 var npc_director: NpcDirector
 var npc_bus: StimulusBus
+## What the ship knows is out there (NPC foundation spec §22.3): the flight
+## scene gives it the universe and its sources.
+var sensors: ShipSensors
 var npcs: Node3D
 var crew_site: ShipSite
 var _crew: Array = []
@@ -97,6 +100,9 @@ func _ready() -> void:
 	_airlocks_root.name = "Airlocks"
 	add_child(_airlocks_root)
 	_make_crew_quarters()
+	sensors = ShipSensors.new()
+	sensors.name = "Sensors"
+	add_child(sensors)
 	rcs_show = RcsShow.new()
 	rcs_show.name = "RcsShow"
 	exterior.add_child(rcs_show)

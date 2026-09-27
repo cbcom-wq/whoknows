@@ -26,7 +26,7 @@ Two worked examples, one per space. Read the one nearest to what you are making:
 - **The maintenance droid** (inside): `data/npcs/maintenance_droid.tres`, `ShipCrew` +
   `ShipSite`, `DeckWalker` over `DeckPaths`, `behaviours/{tend,roam,recharge,give_way,notice,
   startle,brace,keep_away}.gd`, `DroidLook`.
-- **The skitter** (outside): `data/npcs/skitter.tres`, `RockHerds` + `RockSite` +
+- **The skitter** (outside, 1.3 m, found with the ship's life sensor): `data/npcs/skitter.tres`, `RockHerds` + `RockSite` +
   `RockHerdSource`, `SurfaceCrawler` + `ZeroGDrift`, `behaviours/{graze,wander,stay_with_herd,
   freeze,scatter,hide,investigate,rest,drawn_to_flare}.gd`, `SkitterLook` + `LeggedGait`.
 
@@ -51,7 +51,9 @@ Answer these, in the spec or the task, before writing code. Each answer picks ex
 5. **What does it need, and what does it do?** Needs with rise rates; behaviours and which are
    reflexes. Reuse behaviours by id where the meaning fits (a new species can list `startle`).
 6. **What does it look and sound like?** Palette of its space; silent outside.
-7. **What can the player do to it?** Nothing yet unless asked: the interaction seam exists
+7. **How does the player find it?** If it is small or rare, give it a sensor source (as
+   `LifeContacts`): a ping far off, a region close by, then the player looks (§ *Recipes*).
+8. **What can the player do to it?** Nothing yet unless asked: the interaction seam exists
    (`species.interactions`, empty).
 
 ## Checklist
@@ -125,6 +127,12 @@ Do these in order. Each names the check that proves it.
   Keep a resting path that does nothing.
 - **A stimulus kind:** add a constant to `Stimulus`, a case in `Perception.feel` with a species
   sensitivity field, and emitters.
+- **Making it findable:** a source class with `contacts(focus, range_m, time)` and
+  `contact(id, focus, time)` that turns each group into a `Contact` with
+  `Sense.read(profile, focus, target, id, time)`; a `SenseProfile` for its kind (reach, where
+  regions start, region radius, and an offset no bigger than the radius less the group's
+  spread); `_ship.sensors.add_source(...)` in `flight_test.gd`; a colour in `HudPalette.for_kind`.
+  `ContactMarker` draws it with no change.
 - **An interaction** (only when the owner asks): a class with `can`, `prompt`, `run`; its id in
   `species.interactions`; route it in `Npc.interact`/`prompt_text`/`can_interact`; add `npcs`
   (128) to the `Interactor`'s mask.
@@ -153,6 +161,9 @@ Do these in order. Each names the check that proves it.
 | "It's standing still" from `velocity` | The press onto the surface counted as motion; nothing ever rested | Measure speed along the surface |
 | Leaving unplated cells off the droid's map | `gravity_at` said the front of the bridge was unplated, so the droid never went there, though you and loose items feel the same gravity everywhere aboard | Trust the felt gravity the NPC actually reads; don't filter the map by a number nothing else uses |
 | Assuming the ship's layout stays put | Main added the quantum core and machine as fixtures; with the helm they walled the droid off from the starboard bridge, and the avatar's spawn moved onto its route | Filter jobs to those reachable (`ShipCrew.reachable_spots`); keep the probe's `UNREACHABLE` line; in hand-driven tests, stand the avatar out of the way |
+| No way to find it | Herds existed on 90 of 114 rocks and were awake as you came near, yet the owner found none | Small or rare things get a sensor source and a HUD mark (§22), and a look that stands out once you are close |
+| Rendering only close up | The skitter renders were taken 3–8 m away; on the PC the owner visited several rocks and never saw one. A herd is on average 200 m from you, and at 40 m a 0.85 m skitter is smaller than the scree round it | Render from where the player will be (the cockpit 40–100 m off, a random spot on a spacewalk) and ask "would I notice it?"; check how far the nearest one usually is |
+| World-sized overlay labels | F4's text was 6 cm tall: unreadable past a few metres, useless for finding a herd | `Label3D.fixed_size`, one short line far off, full detail within 30 m; ASCII only (the default font has no block glyphs) |
 | Beige droid, long skitter legs | Read as a bin and a spider | Render early; contrast with the space; short, clamped legs |
 | Feet trailing a bolting body | Legs stretched to reach them | Clamp each foot to the leg's reach |
 | `push_warning`/`push_error` in a test | GUT fails the test on an unexpected engine error | `assert_engine_error(...)` / `assert_push_error(...)` for expected ones |

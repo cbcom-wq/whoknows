@@ -961,3 +961,70 @@ As the plan's File Structure, plus:
 - `src/npc/populations/rock_herd_source.gd`;
 - `test/probes/`, with the frame-time probe and the droid and skitter renders. GUT does not run
   them.
+
+---
+
+## 22. Amended 2026-09-27: tracking skitters down
+
+The owner, testing on the PC: the droid worked well, but no skitters were found on several big
+rocks, including a veined one. They were there and awake: 90 of 114 big rocks carry herds, and
+hovering 100 m over one, a herd is awake 93% of the time. But the nearest herd is on average
+200 m away, and at 40 m a 0.85 m skitter in its rock's colour is smaller than the scree round
+it. The owner chose to make finding them a game:
+
+> The ship's scanners could pick up signs of life when within a range and indicate a general
+> direction. The player then tracks to the general area and then has to manually search for them.
+
+And: build the sensor layer; show life and salvage in different colours; a region 30 m
+across; skitters grown to 1.3 m with a little violet.
+
+### 22.1 Signs of life
+
+`LifeContacts` is a source for the ship's sensors: one contact per herd on every big rock held
+in detail (within 4 km). A sleeping herd is where its round has got to; an awake herd is where
+its members actually are, so a region follows a herd that bolts or hides. Contact ids are
+`&"life:<site>:<herd>"`.
+
+### 22.2 Pings and regions
+
+`Sense.read(profile, focus, target, id, time)` is pure: nothing beyond `reach`; beyond
+`region_within` a **ping**, the true distance in a direction up to 10° off, re-drawn every 4 s
+with a new seeded error (*LIFE? ~3 KM*); nearer, a **region**, a sphere the herd lies inside but
+seldom at the middle of, its offset fixed per herd (*LIFE? 640 M*). `SenseProfile.life()`:
+reach 4 km, regions within 1 km, radius 15 m (30 m across), offset at most 7 m, so the herd and
+its spread fit inside. `SenseProfile.salvage()` carries the quantum spec's numbers (§10.4: 2 km,
+75 m, 50 m) for its Task 10.
+
+### 22.3 The ship's sensors
+
+`ShipSensors` (`Ship/Sensors`), as the bridge computer spec §4.3 describes it, without the course
+yet: `add_source`, `contacts(range_m)` nearest first (cached 0.25 s), `contact(id)`,
+`focus_point()`. The flight scene gives it the universe and the life source. A source answers
+`contacts(focus, range_m, time)` and `contact(id, focus, time)`; `Contact` carries `id`, `kind`,
+`label`, `point`, `precision`, `radius`, `km`, `taken`, `fresh_for`.
+
+### 22.4 On the HUD
+
+`ContactMarker` draws the nearest three contacts **in their kind's colour**
+(`HudPalette.for_kind`): life a soft green (`HudPalette.LIFE`), salvage the quantum violet
+(`HudPalette.SALVAGE`). A ping is a diamond that fades until the next; a region is a ring round
+its sphere; inside the region the ring fades out and you look; off-screen or behind, a chevron
+at the edge. Mounted three times, like the velocity marker: the canopy overlay with `CanopyCam`,
+the HUD screen with `ChaseCamera`, and the HUD screen on a spacewalk (`has_beacon`).
+
+### 22.5 A skitter you can see once you look
+
+1.3 m long, 0.6 m high, 90 kg (was 0.85 m, 25 kg). Its look is built at 0.85 m and scaled by
+the `Npc` (`NpcLooks.built_size`). Its back leans 30% from its rock's colour toward the crystal
+(`SpacePalette.skitter`), with two lavender patches. Spacing scales with size: personal space is
+1.4 body lengths, a wall stops it 0.55 lengths short, and herds huddle within 4 m.
+
+### 22.6 Checked
+
+Tests: `test_sense`, `test_ship_sensors`, `test_life_contacts` (the start rock's herds are
+sensed, ping from 2.5 km, regions close by, an awake herd lies inside its region, the HUD marks
+them in life's colour). Frame time: a sensor refresh is about 90 µs, four times a second; the
+NPC probe (32 skitters crowded onto two herds' spots) reads 1.4 ms, up from 1.2 ms, as the
+bigger bodies jostle more and rest less. Renders in the real scene: two pings from 2.5 km, two green rings from
+450 m in the cockpit, a ring round the herd from 40 m on a spacewalk, and inside it the ring
+gone and the herd plain to see.

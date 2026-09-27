@@ -24,6 +24,14 @@ const SHADES: Array[float] = [0.88, 1.0, 1.1]
 ## A skitter's eyes (NPC foundation spec §13.4): two pale facets that catch
 ## your lamp. Its back takes its rock's colour, its underside a darker shade.
 const SKITTER_EYE := Color(0.86, 0.84, 0.78)
+## How far a skitter's back leans from its rock's colour toward the crystal it
+## grazes: enough violet to tell it from a stone once you are looking
+## (the owner, 2026-09-27; NPC foundation spec §22.5).
+const SKITTER_VIOLET := 0.3
+
+## A skitter's back on a rock of `colour`.
+static func skitter(colour: Color) -> Color:
+	return colour.lerp(CRYSTAL, SKITTER_VIOLET)
 
 ## Loose stones lying on a big rock, darker than the ground they lie on:
 ## scree, which shows against it in flat light.

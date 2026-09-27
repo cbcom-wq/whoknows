@@ -36,6 +36,14 @@ static func build(look: StringName, variety: float, inside: bool, tint := SpaceP
 		_:
 			return placeholder(inside)
 
+## How long a look is as built, metres: the Npc scales it to its species'
+## size. 0 for a look drawn at its species' size already.
+static func built_size(look: StringName) -> float:
+	match look:
+		&"skitter":
+			return 0.85
+	return 0.0
+
 ## A box: an NPC with no look yet.
 static func placeholder(inside: bool) -> Node3D:
 	var root := Node3D.new()
