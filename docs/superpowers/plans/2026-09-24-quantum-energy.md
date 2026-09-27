@@ -701,6 +701,13 @@ Measure frame time on a spacewalk in the near cloud.
 
 ### Task 10: Salvage at the groups, and finding it
 
+> **Built ahead, 2026-09-27** (NPC foundation spec §22): `Contact`, `ShipSensors` (`Ship/Sensors`),
+> the pure `Sense.read` with `SenseProfile.salvage()` holding this task's numbers, and
+> `ContactMarker` (the world marker, mounted three ways, colouring each kind; salvage is
+> `HudPalette.SALVAGE`). Use them: `SalvageField` becomes a source (`contacts(focus, range, time)`,
+> `contact(id, focus, time)`) registered with `_ship.sensors.add_source`, and `SalvageSense` is
+> `Sense.read(SenseProfile.salvage(), ...)`. No separate `SalvageMarker` or `WorldMarker` is needed.
+
 **Files:**
 - Create: `src/world/salvage_sense.gd`, `src/ui/world_marker.gd`, `src/ui/salvage_marker.gd`,
   `src/sensors/contact.gd`, `src/sensors/ship_sensors.gd`

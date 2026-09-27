@@ -17,3 +17,18 @@ const BACKDROP := Color(0.07, 0.10, 0.13, 0.92)
 const BORDER := Color(READOUT, 0.28)
 ## Labels and rules that should recede.
 const DIM := Color(READOUT, 0.55)
+## What the ship's sensors pick up, one colour per kind, so a glance tells
+## life from salvage (NPC foundation spec §22.4; the owner, 2026-09-27).
+## Signs of life: a soft green.
+const LIFE := Color("8ee8a0")
+## Salvage: the quantum violet, for what it will become.
+const SALVAGE := Color("c3a8ff")
+
+## The colour for a sensor contact of `kind`; the readout's for any other.
+static func for_kind(kind: StringName) -> Color:
+	match kind:
+		&"life":
+			return LIFE
+		&"salvage":
+			return SALVAGE
+	return READOUT

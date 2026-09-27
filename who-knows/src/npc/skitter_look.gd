@@ -2,9 +2,9 @@ class_name SkitterLook
 extends Node3D
 
 ## The skitter as you see it (docs/superpowers/specs/
-## 2026-09-26-npc-foundation-design.md §13.4): a plated, domed back of big flat
-## facets in its rock's own colour -- a still skitter is a stone -- with a
-## lavender patch from grazing crystal, a squat head, two pale eyes, and six
+## 2026-09-26-npc-foundation-design.md §13.4, §22.5): a plated, domed back of
+## big flat facets in its rock's colour leaning toward violet, with two
+## lavender patches from grazing crystal, a squat head, two pale eyes, and six
 ## two-segment legs set by a tripod gait. Flat-shaded, no texture, colours from
 ## SpacePalette only; it fades in with distance as the rocks do. Silent.
 
@@ -195,8 +195,9 @@ func puff() -> void:
 	t.tween_property(p, "transparency", 1.0, PUFF_TIME)
 	t.chain().tween_callback(p.queue_free)
 
-## The back: a low dome of big facets in the rock's colour, each facet one of
-## the rock's three shades, one of them lavender, and a darker underside.
+## The back: a low dome of big facets in the rock's colour leaning violet,
+## each facet one of three shades, two of them lavender, and a darker
+## underside. Built at 0.85 m long; NpcLooks scales it to the species.
 static func back_mesh(colour: Color, variety: float) -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -208,12 +209,14 @@ static func back_mesh(colour: Color, variety: float) -> ArrayMesh:
 		high.append(Vector3(sin(a) * 0.15, 0.3, cos(a) * 0.25))
 	var apex := Vector3(0, 0.37, 0.02)
 	var patch := int(variety * 6.0) % 6
+	var back := SpacePalette.skitter(colour)
 	for i in 6:
 		var j := (i + 1) % 6
-		var shade := SpacePalette.shade(colour, i % SpacePalette.SHADES.size())
+		var shade := SpacePalette.shade(back, i % SpacePalette.SHADES.size())
 		_tri(st, low[i], low[j], high[j], shade)
 		_tri(st, low[i], high[j], high[i], shade)
-		_tri(st, high[i], high[j], apex, SpacePalette.CRYSTAL if i == patch else SpacePalette.shade(colour, (i + 1) % 3))
+		var crystal := i == patch or i == (patch + 3) % 6
+		_tri(st, high[i], high[j], apex, SpacePalette.CRYSTAL if crystal else SpacePalette.shade(back, (i + 1) % 3))
 		_tri(st, low[j], low[i], Vector3(0, 0.1, 0), SpacePalette.scree(colour))
 	return st.commit()
 
