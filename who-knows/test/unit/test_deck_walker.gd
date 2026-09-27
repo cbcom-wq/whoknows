@@ -31,8 +31,11 @@ func test_it_wakes_at_its_dock_in_the_closet():
 	assert_eq(DeckPaths.cell_at(_droid.local_position()), Vector3i(1, 0, 2))
 	assert_true(_droid.active is DeckWalker)
 
+## Past the corner between the bridge computer's table and the quantum core
+## too (DeckPaths' diagonal step; bridge computer spec §3.2): the port front
+## of the bridge is on the far side of that squeeze.
 func test_it_walks_from_the_closet_to_the_bridge_through_the_door():
-	var goal := DeckPaths.floor_point(Vector3i(-1, 0, -1))
+	var goal := DeckPaths.floor_point(Vector3i(-1, 0, -2))
 	_droid.intent = Intent.go(goal, 1.0)
 	var doors := _root.find_children("*", "SlidingDoor", true, false)
 	var opened := {}

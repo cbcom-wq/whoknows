@@ -45,6 +45,7 @@ const O_PORT_FWD := 3        ## FORWARD, rolled 270 deg: hull_wedge chamfer face
 const O_STERN := 4       ## BACK: hull_wedge chamfer faces +Z,+Y, for the tail taper
 const O_RCS_PORT := 8        ## LEFT: thrust along -X
 const O_RCS_STARBOARD := 12  ## RIGHT: thrust along +X
+const O_STARBOARD := 12      ## RIGHT: a fixture facing +x
 const O_RCS_UP := 16         ## UP: thrust along +Y
 const O_RCS_DOWN := 20       ## DOWN: thrust along -Y
 
@@ -248,7 +249,10 @@ func _starter_grid() -> ShipGrid:
 	_put(g, Vector3i(-1, 0, -2), &"deck")
 	_put(g, Vector3i(0, 0, -2), &"quantum_core", O_STERN)
 	_put(g, Vector3i(1, 0, -2), &"deck")
-	_put(g, Vector3i(-1, 0, -1), &"deck")
+	# The bridge computer's holo table in the port back corner, facing
+	# starboard toward where you use it, and where you start (bridge
+	# computer spec §3.2).
+	_put(g, Vector3i(-1, 0, -1), InteriorLayout.COMPUTER_ID, O_STARBOARD)
 	_put(g, Vector3i(0, 0, -1), &"deck")
 	_put(g, Vector3i(1, 0, -1), &"quantum_machine", O_FORWARD)
 	# Behind the bridge, a corridor down the centreline with rooms either side
@@ -367,6 +371,12 @@ func _starter_grid() -> ShipGrid:
 	#    introduces the only yaw imbalance the starter has: 3,093 N*m,
 	#    0.15% of yaw authority -- still negligible.
 	#
+	# 2c. The bridge computer (bridge computer spec §3.2), a 0.3 t holo table
+	#    in the port back corner, replaced a 0.4 t deck cell: the ship is
+	#    100 kg lighter, and the centre of mass edges 2 mm to starboard, so
+	#    the yaw imbalance doubles to 6,192 N*m -- 0.3% of yaw authority,
+	#    still negligible. Pitch moves to 11,146 N*m, 0.36% of authority.
+	#
 	# 3. Power margin. The extra stern thrusters draw 9.0 MW more than
 	#    §3.4's two-reactor estimate covers (that estimate assumed four
 	#    thrusters total, not five). Three reactors restored comfortable
@@ -375,13 +385,14 @@ func _starter_grid() -> ShipGrid:
 	#    load side.
 	#
 	# Real numbers for this exact grid (via ShipStats/ShipValidator,
-	# res://data/blocks catalog), with the quantum core and machine aboard
-	# and the reactors replaced by quantum cells (quantum energy spec §5.4):
-	# 84 blocks, 97,000 kg, center_of_mass = (0.002, 1.206, 0.118),
-	# inertia = (1.91, 2.74, 1.07) million kg*m², torque_budget =
-	# (3058763, 2029382, 2198454), torque_imbalance = (9278, -3093, 0),
+	# res://data/blocks catalog), with the quantum core, the machine and the
+	# bridge computer aboard and the reactors replaced by quantum cells
+	# (quantum energy spec §5.4; bridge computer spec §3.2):
+	# 84 blocks, 96,900 kg, center_of_mass = (0.004, 1.207, 0.120),
+	# torque_budget = (3059856, 2029928, 2198143),
+	# torque_imbalance = (11146, -6192, 0),
 	# thrust_budget forward/reverse/lateral/vertical = 1500/500/500/1000 kN,
-	# power_gen = 36.0 MW (all from the quantum core), power_draw = 31.1 MW,
+	# power_gen = 36.0 MW (all from the quantum core), power_draw = 31.3 MW,
 	# quantum_capacity = 1200 QE, zero validation issues, can_launch = true.
 	# Handling under assist is essentially unchanged from the pre-quantum
 	# grid (see task-1-report.md): pitch and roll assist still reach their

@@ -74,3 +74,42 @@ func test_avoided_cells_are_left_out():
 	assert_false(paths.has(Vector3i(0, 0, 1)))
 	assert_eq(paths.path(Vector3i(1, 0, 2), Vector3i(-1, 0, -3)).size(), 0,
 		"with the corridor cut, the closet is cut off")
+
+## Bridge computer spec §3.2: the table, the core and the machine are quiet
+## fixtures, clear of their cells' corners, so the droid steps diagonally
+## between two of them -- round the core's port side past the table, and its
+## starboard side past the machine -- where the avatar walks too.
+func test_it_squeezes_past_the_corner_between_two_quiet_fixtures():
+	assert_true(_paths.linked(Vector3i(0, 0, -1), Vector3i(-1, 0, -2)), "between the table and the core")
+	assert_true(_paths.linked(Vector3i(-1, 0, -2), Vector3i(0, 0, -1)), "both ways")
+	assert_true(_paths.linked(Vector3i(0, 0, -1), Vector3i(1, 0, -2)), "between the machine and the core")
+	var way := _paths.path(Vector3i(0, 0, 0), Vector3i(-1, 0, -3))
+	assert_eq(way, [Vector3i(0, 0, 0), Vector3i(0, 0, -1), Vector3i(-1, 0, -2), Vector3i(-1, 0, -3)] as Array[Vector3i])
+
+func test_it_never_cuts_a_corner_past_the_helm_or_open_floor():
+	# (-1,-2) to (0,-3) would pass the helm, which is no quiet fixture.
+	assert_false(_paths.linked(Vector3i(-1, 0, -2), Vector3i(0, 0, -3)))
+	assert_false(_paths.linked(Vector3i(-1, 0, -3), Vector3i(0, 0, -2)), "never into a fixture's cell")
+
+func test_a_wall_round_the_corner_keeps_it_shut():
+	var cat := BlockCatalog.load_from_dir("res://data/blocks")
+	var grid := ShipGrid.new()
+	for c in [Vector3i(0, 0, 0), Vector3i(1, 0, 1)]:
+		var deck := BlockInstance.new()
+		deck.block_id = &"deck"
+		grid.set_block(c, deck)
+	for c in [Vector3i(1, 0, 0), Vector3i(0, 0, 1)]:
+		var q := BlockInstance.new()
+		q.block_id = &"quantum_core"
+		grid.set_block(c, q)
+	var core := BlockInstance.new()
+	core.block_id = &"core"
+	grid.set_block(Vector3i(0, 1, 0), core)
+	var layout := InteriorLayout.plan(grid, cat, DeckGraph.build(grid, cat).walkable_coords())
+	assert_true(DeckPaths.build(layout).linked(Vector3i(0, 0, 0), Vector3i(1, 0, 1)), "open all round")
+	var bunk := BlockInstance.new()
+	bunk.block_id = &"bunk_room"
+	grid.set_block(Vector3i(1, 0, 1), bunk)
+	layout = InteriorLayout.plan(grid, cat, DeckGraph.build(grid, cat).walkable_coords())
+	assert_false(DeckPaths.build(layout).linked(Vector3i(0, 0, 0), Vector3i(1, 0, 1)),
+		"a room's walls close the corner")

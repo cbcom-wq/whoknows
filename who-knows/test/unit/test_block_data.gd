@@ -5,16 +5,16 @@ var _cat: BlockCatalog
 func before_all():
 	_cat = BlockCatalog.load_from_dir("res://data/blocks")
 
-func test_all_twenty_two_blocks_load():
-	assert_eq(_cat.ids().size(), 22,
-		"21 minus retired reactor and battery, plus the three quantum blocks")
+func test_all_twenty_three_blocks_load():
+	assert_eq(_cat.ids().size(), 23,
+		"21 minus retired reactor and battery, plus the three quantum blocks and the bridge computer")
 
 func test_required_ids_exist():
 	for id in [&"hull", &"hull_wedge", &"armour", &"core",
 			&"thruster", &"rcs", &"grav_plating", &"deck",
 			&"bulkhead", &"door", &"pilot_seat", &"ladder", &"airlock", &"canopy",
 			&"bunk_room", &"galley", &"bathroom", &"closet", &"weapon_room",
-			&"quantum_core", &"quantum_machine", &"quantum_cell"]:
+			&"quantum_core", &"quantum_machine", &"quantum_cell", &"computer"]:
 		assert_true(_cat.has(id), "missing block definition: %s" % id)
 
 func test_reactor_and_battery_are_retired():
@@ -59,7 +59,7 @@ func test_walkable_blocks_are_exactly_the_interior_traversables():
 	walkable.sort()
 	var expected := [&"airlock", &"deck", &"door", &"ladder", &"pilot_seat",
 		&"bunk_room", &"galley", &"bathroom", &"closet", &"weapon_room",
-		&"quantum_core", &"quantum_machine"]
+		&"quantum_core", &"quantum_machine", &"computer"]
 	expected.sort()
 	assert_eq(walkable, expected)
 

@@ -49,13 +49,16 @@ const CANOPY_ID := &"canopy"
 const AIRLOCK_ID := &"airlock"
 ## The fixture the ship is flown from. A canopy face ahead of it becomes a pod.
 const HELM_ID := &"pilot_seat"
+## The bridge computer's holo table (bridge computer spec §3.1): a fixture
+## the dressing draws, and a quiet one, so it leaves the bridge as it is.
+const COMPUTER_ID := &"computer"
 ## Fixtures that stand IN the bridge without reshaping it (quantum energy
 ## spec §6.1): unlike the helm, a quiet fixture does not turn its own cell,
 ## or any neighbour's, into bridge zone or a console -- a zone is a floor
 ## colour, and the starter's floors stay exactly as they were. Its own cell
 ## is still a MOUNT for its own WALLS only, which go plain (PANEL), or
 ## PORTHOLE on a skin flank -- nothing else stands where it does.
-const QUIET_FIXTURES: Array[StringName] = [&"quantum_core", &"quantum_machine"]
+const QUIET_FIXTURES: Array[StringName] = [&"quantum_core", &"quantum_machine", COMPUTER_ID]
 const _HORIZONTAL: Array[Vector3i] = [
 	Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 0, 1), Vector3i(0, 0, -1),
 ]

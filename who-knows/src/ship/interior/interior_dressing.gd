@@ -69,7 +69,7 @@ static func build(layout: InteriorLayout, body: StaticBody3D, canopy_material: M
 ## Whether the dressing draws this MOUNT block itself, as a prop. The builder
 ## draws a block's own mesh only for the fixtures this leaves out.
 static func draws_fixture(id: StringName) -> bool:
-	return id == InteriorLayout.HELM_ID or id == QUANTUM_CORE_ID or id == QUANTUM_MACHINE_ID
+	return id in [InteriorLayout.HELM_ID, QUANTUM_CORE_ID, QUANTUM_MACHINE_ID, InteriorLayout.COMPUTER_ID]
 
 ## A fixture's frame (cockpit pod spec §5): origin on the floor under it, -z
 ## the way it faces, +y up. A helm with a pod ahead stands POD_SEAT_DEPTH
@@ -167,7 +167,8 @@ static func _cockpit(kit: InteriorKit, group: Dictionary) -> void:
 				face_variety({"coord": coord, "normal": normal}))
 
 ## The fixtures the dressing draws at their fixture frames (draws_fixture):
-## the helm, and the quantum core, which it returns. Machines stand against a
+## the helm, the bridge computer's holo table, and the quantum core, which it
+## returns. Machines stand against a
 ## wall instead, and are built after every core (_quantum_machine).
 static func _fixture(kit: InteriorKit, layout: InteriorLayout, fixture: Dictionary) -> QuantumCore:
 	var coord: Vector3i = fixture["coord"]
@@ -182,6 +183,8 @@ static func _fixture(kit: InteriorKit, layout: InteriorLayout, fixture: Dictiona
 		core.setup(f, kit.layer)
 		kit.root.add_child(core)
 		return core
+	elif fixture["id"] == InteriorLayout.COMPUTER_ID:
+		InteriorProps.holo_table(kit, fixture_frame(layout, coord), variety)
 	return null
 
 ## One quantum machine (quantum energy spec §6.3-§6.4), in the frame of the

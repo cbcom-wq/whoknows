@@ -460,3 +460,26 @@ func test_no_other_room_opens_into_the_airlock():
 	for room in layout.rooms():
 		if room["zone"] == &"bunk_room":
 			assert_true(room["doorway"].is_empty(), "the bunk room gets no door of its own into the airlock")
+
+## Bridge computer spec §3.1: a quiet fixture keeps the bridge as it was. Only
+## its own cell's walls change, by the quiet-fixture rule: plain, or a
+## porthole on the skin.
+func test_the_computer_leaves_the_bridge_alone():
+	var cat := BlockCatalog.load_from_dir("res://data/blocks")
+	var bootstrap: Node = load("res://scenes/flight_test.gd").new()
+	var grid: ShipGrid = bootstrap._starter_grid()
+	bootstrap.free()
+	var b := InteriorBuilder.new()
+	add_child_autofree(b)
+	b.bind(grid, cat)
+	b.rebuild()
+	var layout := b.layout()
+	var cell := Vector3i(-1, 0, -1)
+	assert_eq(layout.zone_at(cell), layout.zone_at(Vector3i(0, 0, -1)),
+		"the same floor as the deck beside it, where you stand to use it")
+	var variants := {}
+	for face in layout.faces():
+		if face["coord"] == cell and face["kind"] == InteriorLayout.Kind.WALL:
+			variants[face["normal"]] = face["variant"]
+	assert_eq(variants.get(Vector3i(0, 0, 1)), InteriorLayout.WallVariant.PANEL, "its back wall goes plain")
+	assert_eq(variants.get(Vector3i(-1, 0, 0)), InteriorLayout.WallVariant.PORTHOLE, "its port wall is a porthole")

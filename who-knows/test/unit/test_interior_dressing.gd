@@ -700,3 +700,23 @@ func test_the_airlock_takes_no_cabin_trim_or_ring_light():
 	_builder.rebuild()
 	assert_eq(_lights(&"airlock").size(), 1, "the airlock's own flush light")
 	assert_eq(_lights(&"ceiling").size(), 1, "only the corridor cell has a ring light")
+
+## Bridge computer spec §3.1: the dressing draws the holo table.
+func test_the_dressing_draws_the_computer():
+	assert_true(InteriorDressing.draws_fixture(InteriorLayout.COMPUTER_ID))
+
+func test_a_computer_gets_its_table_where_its_frame_says():
+	_cat.register(_def(InteriorLayout.COMPUTER_ID, BlockDefinition.Occupancy.MOUNT))
+	_put(Vector3i(0, 0, 0), InteriorLayout.COMPUTER_ID, 12)   # facing +x
+	_put(Vector3i(1, 0, 0), &"deck")
+	_builder.rebuild()
+	var table := _dressing_colliders().filter(
+		func(c): return (c.shape as BoxShape3D).size.is_equal_approx(Vector3(1.0, 0.95, 1.0)))
+	assert_eq(table.size(), 1, "one table collider")
+	var floor_y := InteriorBuilder.floor_y(Vector3i.ZERO)
+	assert_almost_eq(table[0].position, Vector3(0, floor_y + 0.475, 0), Vector3.ONE * 0.0001,
+		"at its cell's floor centre")
+	var lip := _dressing_colliders().filter(
+		func(c): return (c.shape as BoxShape3D).size.is_equal_approx(Vector3(0.8, 0.14, 0.2)))
+	assert_eq(lip.size(), 1)
+	assert_gt(lip[0].position.x, 0.4, "the console is on the +x side, toward its operator")
