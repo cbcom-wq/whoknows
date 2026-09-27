@@ -60,11 +60,19 @@ func render(telemetry: VehicleTelemetry) -> void:
 	for c: Contact in sensors.contacts(RANGE):
 		if shown >= MOST:
 			break
+		if not marks_kind(c.kind):
+			continue
 		var mark := mark_for(c, cam, focus, sensors.time, size)
 		if not mark.is_empty():
 			marks.append(mark)
 		shown += 1
 	queue_redraw()
+
+## Whether it marks contacts of `kind`. Not the big rocks: you see those
+## through the canopy, and the bridge computer's map is where they are named
+## (bridge computer spec §8).
+static func marks_kind(kind: StringName) -> bool:
+	return kind != RockContacts.KIND
 
 ## The camera it projects through, or null when it should not show.
 func _view_camera(telemetry: VehicleTelemetry) -> Camera3D:

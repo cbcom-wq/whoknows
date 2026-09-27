@@ -190,12 +190,15 @@ func _wire_npcs() -> void:
 	npc_debug.directors.append(exterior_npcs)
 
 ## The ship's sensors (NPC foundation spec §22): they follow the universe's
-## focus, and read signs of life off the rocks. Their contacts show on the HUD
+## focus, and read signs of life and the big rocks. Their contacts show on the HUD
 ## three ways, like the velocity marker: through the canopy, in chase view, and
 ## on a spacewalk.
 func _wire_sensors() -> void:
 	_ship.sensors.universe = _universe
 	_ship.sensors.add_source(LifeContacts.new(_stream, exterior_npcs, _universe))
+	# Big rocks out to 30 km, for the bridge computer's map and the course
+	# (bridge computer spec §4.2). The same seed and start as the stream.
+	_ship.sensors.add_source(RockContacts.new(_stream.seed, _stream.recipe.start))
 	contact_markers.clear()
 	for mount: Array in [[$Ship/Canopy/CanopyOverlay, $Ship/Canopy/CanopyCam, "ContactsCockpit"],
 			[$HudRoot/Screen, $Ship/Exterior/ChaseCamera, "ContactsChase"], [$HudRoot/Screen, null, "ContactsSpacewalk"]]:
