@@ -95,6 +95,16 @@ func _run(scene: Node) -> void:
 			"" if crew.unreachable.is_empty() else ", UNREACHABLE %s" % [crew.unreachable.map(func(s): return s["key"])]])
 	else:
 		print("droid   none (under %d walkable cells, or no dock)" % ShipCrew.MIN_CELLS)
+	# The bridge computer's tables (bridge computer spec §3): each needs its
+	# operator's spot on walkable deck, and every reference bound.
+	for computer in ship.interior_builder.computers():
+		var spot := computer.cell + InteriorLayout.facing(ship.grid.get_block(computer.cell).orientation)
+		var inst := ship.grid.get_block(spot)
+		var def := ship.catalog.get_def(inst.block_id) if inst != null else null
+		var standable := def != null and def.is_walkable() and def.occupancy != BlockDefinition.Occupancy.MOUNT
+		var bound := computer.ctx.sensors != null and computer.ctx.store != null and computer.ctx.stats != null
+		print("table   %s, used from %s%s%s" % [computer.cell, spot, "" if standable else "  <-- NOWHERE TO STAND",
+			"" if bound else "  <-- UNBOUND"])
 
 	await _shot("spawn")
 	print("fps     %.0f standing at spawn" % await _fps(2.0))

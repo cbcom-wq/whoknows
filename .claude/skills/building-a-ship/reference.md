@@ -1,6 +1,6 @@
 # Ship building reference
 
-The facts behind `SKILL.md`, checked against the code on 2026-09-25. Paths are relative to
+The facts behind `SKILL.md`, checked against the code on 2026-09-27. Paths are relative to
 `who-knows/` unless they start with `docs/`. If a name here no longer exists, trust the code and
 fix this file.
 
@@ -35,6 +35,7 @@ fix this file.
 | airlock | deck | 1.2 | | 0.6 | | |
 | door | deck | 0.6 | | 0.3 | | |
 | pilot_seat | mount | 0.5 | | 0.5 | | the helm |
+| computer | mount | 0.3 | | 0.3 | | the bridge computer's holo table; a quiet fixture, optional |
 | ladder | mount | 0.3 | | | | vertical link in `DeckGraph` only (see SKILL.md) |
 
 Room blocks weigh and draw exactly what `deck` does, so swapping deck for rooms never moves the
@@ -175,12 +176,38 @@ every rebuild. Any blueprint gets its crew from its own layout:
   first walkable neighbour.
 - **`DeckPaths.build(layout, avoid)`:** walkable cells joined where no wall face stands between
   them, doorways included; never the airlock (`AIRLOCK_ZONE`), a fixture's cell, or a cell in
-  `avoid` (the ship passes none: the felt gravity is the same in every cell). `path(from, to)`, `distances(from)`,
-  `cell_at(p)`, `floor_point(cell)`.
+  `avoid` (the ship passes none: the felt gravity is the same in every cell). Also one diagonal
+  step: past the corner between two cells that are both `InteriorLayout.QUIET_FIXTURES`, when no
+  wall or doorway stands on any of the four edges round it (1.3 m clear between the table and
+  the core on the starter). `path(from, to)`, `distances(from)`, `linked(a, b)`, `cell_at(p)`,
+  `floor_point(cell)`.
 - **Layers:** NPCs are physics layer 8, `npcs` (128). Inside, an `Npc`'s mask is 2 | 4 | 32;
   the avatar's, items' and the doors' masks include 128.
 - **Felt gravity:** the droid reads `FeltGravity.felt`, the same number loose items get; it holds
   against 8 m/s² of shove walking and 10 braced, and slides past that.
+
+## The bridge computer (bridge computer spec)
+
+- **The block:** `computer` (`InteriorLayout.COMPUTER_ID`), MOUNT, 0.3 t, 0.3 MW, hp 60, in
+  `InteriorLayout.QUIET_FIXTURES`: its own walls go plain, or a porthole on the skin, and nothing
+  else round it changes. Not required by the validator.
+- **Its frame** (`InteriorDressing.fixture_frame`): −z toward where you stand to use it. On the
+  starter it is at (−1, 0, −1), orientation 12 (facing +x), used from (0, 0, −1), where you start.
+- **The prop:** `InteriorProps.holo_table`, a 1.1 m top at 0.9 m on a pedestal, a rim console
+  tilted 55° on the operator's side; colliders 1.0 × 0.95 × 1.0 m and the console's lip, nothing
+  above 1.05 m. Frames: `holo_table_console()`, `holo_table_screen()`, `holo_table_buttons()`
+  (PAGE, RANGE, ◀, big, ▶), `holo_table_volume()` (centre 1.35 m).
+- **At runtime:** the dressing builds a `ShipComputer` per table
+  (`InteriorBuilder.computers()`); `Ship` binds each to a `ComputerContext` (its sensors, store,
+  stats, hull, exterior builder) after every rebuild and keeps its page, range and selection by
+  cell across one. The status page's miniature shares `ExteriorBuilder.multimeshes()`, sized by
+  `ExteriorBuilder.bounds()`, so any blueprint gets its own model.
+- **The sensors** (`Ship.sensors`): `RockContacts` (big rocks to 30 km) and `LifeContacts` are
+  registered by the flight scene. One course per ship: `set_course(id)`, `clear_course()`,
+  `course_contact()`, `check_course()` at 4 Hz, signals `course_changed` and `course_arrived`;
+  it arrives inside a region or within `ARRIVE_ROCK` (1 km) of a big rock's surface.
+- **On the starter** (Godot's figures, 2026-09-27): 84 blocks, 96,900 kg, centre of mass
+  (0.004, 1.207, 0.120), torque imbalance (11,146, −6,192, 0) N·m, 31.3 MW drawn of 36.0.
 
 ## Thrusters you see and hear (`RcsShow`, `src/flight/rcs_show.gd`)
 
@@ -252,5 +279,7 @@ _hud.set_active_vehicle(_pilot if piloting else null)   # _pilot: $Ship/PilotCon
 - `docs/superpowers/specs/2026-09-23-cockpit-pod-design.md`: the pod, the chair, standing up.
 - `docs/superpowers/specs/2026-09-24-airlock-design.md`: the airlock.
 - `docs/superpowers/specs/2026-09-24-asteroids-design.md` §4: the floating origin.
+- `docs/superpowers/specs/2026-09-25-bridge-computer-design.md`: the holo table, the sensors'
+  course, and (§18) what was built.
 - `docs/superpowers/specs/2026-09-25-flight-controls-design.md`: how the flight computer spends
   the budgets, the RCS show, and (§9.4) what the starter's layout does to the feel.

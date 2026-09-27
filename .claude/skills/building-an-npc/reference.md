@@ -161,7 +161,10 @@ percepts), then the site's `fill`:
   `FeltGravity.felt`. Plans with `DeckPaths.path(cell_at(here), cell_at(to))`, replans when
   `move_to` or `ShipSite.version` changes.
 - **`DeckPaths`:** no airlock, no fixture cells, no `avoid` cells (the ship passes none); rooms joined only
-  through their doorway; `cell_at(p)`, `floor_point(cell)`, `path`, `distances`, `linked`.
+  through their doorway; one diagonal step past the corner between two quiet fixtures
+  (`InteriorLayout.QUIET_FIXTURES`) with open floor all round it -- `DeckWalker` drives it
+  straight, 1.3 m clear on the starter; `cell_at(p)`, `floor_point(cell)`, `path`, `distances`,
+  `linked`.
 - **`SurfaceCrawler`:** `STICK` 0.6 m/s, `SETTLE` 0.05 s, `LEAD` 6, `ACCEL` 10, `TURN_RATE` 5,
   `PERSONAL` 1.2 m, `LOST_AFTER` 0.2 s, `KNOCKED_OFF` 1.5 m/s, `SLIPPERY` 3 m/s, `LEAP_REACH`
   30 m, `STILL` 0.25 m/s, `RECHECK` 30 ticks, `WALL_GAP` 0.45 m. Rays on layer 64 only.

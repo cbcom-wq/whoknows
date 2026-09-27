@@ -1,8 +1,9 @@
 # Bridge computer — a holo table that knows what is out there
 
 **Date:** 2026-09-25
-**Status:** Design approved section by section by the owner on 2026-09-25. It awaits the owner's
-review of the written spec. No code has changed.
+**Status:** Design approved section by section by the owner on 2026-09-25. **Built 2026-09-27**
+(branch `claude/bridge-computer-implementation-nclero`), ahead of quantum energy's salvage at the
+groups: see §18 for what differs. The renders await the owner's word.
 **Depends on:** quantum energy, built at least through its Task 10
 (`docs/superpowers/specs/2026-09-24-quantum-energy-design.md`, plan
 `docs/superpowers/plans/2026-09-24-quantum-energy.md`). The computer is built after quantum
@@ -619,3 +620,65 @@ After quantum energy is built. Each step ends with something to see:
 4. PAGE shows your ship in miniature, with your store, power and suit on the rim.
 5. The GUT suite is green with pristine output, every render in §12.2 has gone to the owner, and
    the bridge holds 120 fps on the GTX 960 looking into the 30 km map.
+
+---
+
+## 18. As built (2026-09-27)
+
+Built from the plan, task by task, with the full suite green at each step (1,307 tests). Where the
+build differs from the spec above, this section wins.
+
+### 18.1 Built before its gate
+
+The plan waited for quantum energy through its Task 12. Quantum energy was built through Task 8
+(the core, the machine, the store, the suit cell and the near salvage cloud); the NPC foundation
+had since built `Contact`, `ShipSensors` and `LifeContacts`. The computer is built on what exists:
+
+- **No salvage source yet.** `SalvageField` is not a sensor source (quantum Task 10), so salvage
+  shows on the map and takes a course only once that task registers it. Everything salvage-shaped
+  (pings, regions, the violet, the course's vagueness) is built and tested with stand-in contacts.
+- **Signs of life are on the map,** in `SIGNAL_GO`, the HUD's green, since the sensors know them.
+  **A course cannot be set to life** (§15): the big button is dark on a herd. Whether it should be
+  is the owner's call.
+- **`WorldMarker` is built here** (quantum §13 left it to Task 10): the per-view camera the
+  NPC foundation's `ContactMarker` had, lifted into a base both markers share. `ContactMarker`
+  now skips the big rocks (the map names them, the canopy shows them) and the course's contact.
+
+### 18.2 Differences
+
+- **The starter's figures.** The table replaces a 0.4 t deck cell drawing 0.1 MW, so the ship is
+  100 kg *lighter* (96,900 kg), not 300 kg heavier, and draws 31.3 MW, not 31.4. The centre of mass
+  edges 2 mm to starboard, so the yaw imbalance *doubles*, to 6,192 N·m (0.3% of yaw authority);
+  pitch is 11,146 N·m (0.36%). Both are negligible. Godot's figures are pinned in
+  `test_starter_shuttle.gd` and in `_starter_grid()`'s comments.
+- **The droid.** With the table in the port back corner, the table, the core and the machine
+  walled the maintenance droid off from the whole front of the bridge. `DeckPaths` now steps
+  diagonally past the corner between two quiet fixtures, where the floor round it is open -- the
+  1.3 m gap you walk through round the core's port side (§3.2). The droid reaches all 11 of its
+  jobs on the starter; before the table it reached 10 of 12.
+- **Marks by shape and colour.** `HoloVolume` draws shapes (ball, diamond, sphere, pin, stalk,
+  tick) in any palette colour, one MultiMesh per pair, rather than a fixed kind per mesh. The
+  course's own mark is drawn `AMBER`.
+- **Sizes and glow, tuned at the renders** (§16's risk): pips 8–30 mm (rocks 12–30 mm at 10 km,
+  8 mm at 30 km; pings 18 mm; regions at least 20 mm), the holo's glow energy 2.0, a 4.6 cm
+  chevron, and bracket corners 7 mm whatever they close round.
+- **The miniature is lit and emissive,** `LIGHT_WARM`, not unshaded: an unshaded one read as a
+  flat cream silhouette. Still an engine material and opaque.
+- **Ping age** comes from each contact's `taken` and `fresh_for`, not a salvage constant.
+- **Frame time.** The map places marks through one buffer per MultiMesh. At 30 km it places its
+  ~415 marks twice a second (about 4 ms each time, headless on the build machine) and turns them
+  with the ship every frame in between (`HoloVolume.set_turn`); at 2 and 10 km it places them every
+  frame (under 0.5 ms). The table redraws only while a camera can see it. The sensors' 30 km read
+  costs about 3 ms four times a second, and the first read of the rocks about 67 ms at the scene's
+  start (under the plan's 100 ms line). **Not yet measured on the GTX 960.**
+- **A sensors fix.** A read taken before the sensors had a focus was cached as "nothing out there"
+  for a quarter second; the ship's first build binds its tables before the scene wires the
+  universe, so the map opened empty. Such a read is no longer kept.
+
+### 18.3 Renders (sent to the owner)
+
+`test/probes/computer_render.gd` renders the bridge from the corridor; the table from where you
+use it; the holo close at 30, 2 and 10 km, and from above; the status page with the miniature;
+the course set at the table; and the course on the HUD through the canopy and in chase view. Not
+yet rendered: the table in low power (quantum energy's low-power look is its Task 11), and the HUD
+with a course to a ping and to a region (no salvage source yet).
