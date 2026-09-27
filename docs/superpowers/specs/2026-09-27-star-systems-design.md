@@ -1,10 +1,10 @@
 # Star systems — a galaxy of toy-scale systems, generated with hand-made worlds sprinkled in
 
 **Date:** 2026-09-27
-**Status:** Direction agreed with the owner on 2026-09-27 (§2). This is an umbrella design: it sets
-the shape of the universe and splits it into pieces (§12), each of which gets its own
-spec → plan → build cycle. The numbers here are first guesses to be tuned by flying; the open
-questions are in §13. Awaits the owner's review.
+**Status:** Direction agreed with the owner on 2026-09-27 (§2), and the follow-up questions
+answered the same day (§13). This is an umbrella design: it sets the shape of the universe and
+splits it into pieces (§12), each of which gets its own spec → plan → build cycle. The numbers here
+are first guesses to be tuned by flying. Two questions stay open (§13).
 **Depends on:** `main` at `1d23261` (the floating origin and asteroids, saving, the bridge computer)
 **Relates to:** asteroids spec §5.2 (`density_at`), §5.6 (the start), §13; Planetfall §3, §7, §14,
 §18 (*Many worlds*); saving spec §3; bridge computer spec §4; quantum energy spec §8
@@ -48,7 +48,9 @@ three.
 | Does anything move | **No, except a few specific cases** (comets, §8.4; later perhaps an authored mover). | No rotating frames: landing, saving, belts and the floating origin stay simple. |
 | Rocks | **Belts round the star and rings round planets,** not an endless field. | Rocks become places. |
 | The space between | **Space dust everywhere, plus regions with real variety:** gas clouds, plasma zones, dust lanes, comets, who knows (§8). | The owner: "something in between to give the sense of movement". |
+| Crossing a system | **A cruise mode** (§7). | Keeps toy-scale systems roomy without a 17-minute boost across. |
 | Jumps | **The bridge computer manages them, and they cost quantum energy** (§10). | Gives the holo table and quantum energy a big job. |
+| Galaxy size | **A few dozen systems** (§10.1). | Enough to explore; few enough that the hand-made ones are found. |
 | Gravity | **Wells only:** gravity inside a body's well, none between. | Arcade and readable; it is what Planetfall already built its flight and landing on. |
 | Authored vs generated | **Generated, with hand-made pieces sprinkled in.** A seeded system of 8 planets and 12 moons can have 3 planets and 4 moons that are the owner's own design (§9). | Variety from the seed, the owner's dreaming where it counts. |
 
@@ -101,7 +103,7 @@ It decides:
 
 | Piece | First guess | Notes |
 |---|---|---|
-| Star | radius 2.5–4 km; colour one of a few warm star palettes | The light source. Has a well; too close is a hazard (§13). |
+| Star | radius 2.5–4 km; colour one of a few warm star palettes | The light source. Has a well. What happens close to it waits for damage (§13). |
 | Planet slots | 5–9 planets; the first at about 20 km from the star, spacing growing by about ×1.3, the outermost at 150 km or less | Each slot has a seeded angle round the star and a small tilt off the plane, so the system is a flattened disc, not a ring. |
 | Planets | `WorldRecipe` from the slot's sub-seed | Planetfall §5.2 unchanged: radius 300–1200 m, well radius 3R. |
 | Moons | 0–3 per planet; radius 120–400 m; 6–14 km from their planet | A moon's well never overlaps its planet's. |
@@ -175,8 +177,8 @@ it becomes system-aware:
 
 ## 7. Cruise: crossing a system
 
-Boost alone makes a cross-system trip 17 minutes. **Quantum cruise** (a first guess, pending the
-owner, §13) closes the gap:
+Boost alone makes a cross-system trip 17 minutes. **Quantum cruise** (chosen by the owner on
+2026-09-27; the numbers are first guesses) closes the gap:
 
 - **Engaged from the pilot's seat,** outside every well and every region that forbids it
   (`Whereabouts`). It spools up for about 5 s, like the core spinning up to boost.
@@ -232,16 +234,20 @@ transform: no new shader). One draw call; world-space, so it follows the origin 
 Clouds are built of puffs like the airlock's `Puffs`, only much bigger. The guide warns that
 transparent overdraw is the cost to watch, so puffs use the built-in distance dither (an opaque
 pass, like the rocks' fade), not alpha blending. The fog inside a region is the `Environment`'s
-own fog. No new shader. Anything that glows outside (the star, plasma) is a style decision for
-the owner (§13), checked by rendering it.
+own fog. No new shader. Anything that glows outside (the star, plasma) is approved by the owner from
+renders of the real scene, and the style guide gains the rule when it is.
 
 ### 8.4 The few things that move
 
 A mover's position is a **pure function of the universe clock:** `position(t)`. The clock is a
 number the save keeps, so a comet is where it should be on reload, and nothing about it needs
-remembering. Comets fly a long, slow ellipse through the system, with no landing in the first
-version (a moving surface needs a moving frame, §13). An authored mover (a station on a slow
-orbit, say) follows the same rule.
+remembering. Comets fly a long, slow ellipse through the system.
+
+**Comets are to be landable** (the owner, 2026-09-27). Landing on something that moves needs a
+moving frame: near a mover, its own neighbourhood carries the ship, the avatar and anything loose
+along with it, so that standing on a comet feels like standing on a still rock. That is the
+movers piece's own spec (§12, step 7), not the first version of comets. An authored mover (a
+station on a slow orbit, say) follows the same rules.
 
 ---
 
@@ -282,7 +288,7 @@ data/systems/kestrel.tres            SystemDesign
 |---|---|---|
 | **Tweak** | Recipe fields: name, radius, gravity, palette, archetype, atmosphere, rings, moons | Terrain, boulders, sites |
 | **Stamp** | Plus authored terrain features (a crater, a canyon, an arch, a flattened pad) that `height_at` blends in, and pinned sites or scenes at a latitude and longitude | The rest of the ground |
-| **Hand-built** | A whole scene: a hollow world, a cube moon, a station that is a moon | Nothing. It must still honour the body contract (§9.3). |
+| **Hand-built** | A whole scene: a hollow world, a cube moon, a station that is a moon. It **may break the round-world rules** (the owner, 2026-09-27) | Nothing. It must still honour the body contract (§9.3). |
 
 Most special worlds should be *stamps*: cheap to make, and they still get Planetfall's streaming,
 landing and walking for free.
@@ -315,7 +321,7 @@ Whatever makes a body, generated or hand-built, it offers:
 
 ### 10.1 The galaxy
 
-`GalaxyRecipe.from_seed(seed, design)` places a few dozen systems (§13) as points in a flat
+`GalaxyRecipe.from_seed(seed, design)` places a few dozen systems as points in a flat
 disc, measured in light-years only for the map. Each has a seed and a star palette. The owner's
 hand-made systems are pinned by id, the same way as bodies (§9.1). A galaxy is data only: nothing
 of a system exists until you arrive.
@@ -327,7 +333,7 @@ systems as pips, your own marked, those in reach lit.
 
 - **◀ ▶** choose a target; the page shows its name, its distance and the cost.
 - **Cost:** `JUMP_BASE + JUMP_PER_LY × distance` quantum energy. First guess: 150 + 20 per
-  light-year, tuned so the starter shuttle's full store makes one or two short jumps (§13).
+  light-year. How many jumps a full starter shuttle makes is still open (§13).
 - **The big button** spools the jump. It is refused, with the reason on the page, inside any
   well, inside a region that forbids it, in cruise, or without the energy.
 
@@ -378,7 +384,7 @@ one: every step is flyable by itself.
 | 4 | **Regions:** dust lanes and gas clouds first, then plasma zones | The space between has places in it |
 | 5 | **Authoring:** `SystemDesign`, tweaks and stamps, `SystemValidator`, the overview scene | The owner's 3 planets and 4 moons |
 | 6 | **Galaxy and jumps:** `GalaxyRecipe`, the JUMP page, the jump sequence, saving per system | Travel between stars |
-| 7 | **Movers:** comets on the clock | Something moves in the sky |
+| 7 | **Movers:** comets on the clock, then the moving frame that lets you land on one | Something moves in the sky, and you can land on it |
 
 Documents that will be amended as the pieces land: asteroids spec §5.2 and §5.6 (density and the
 start), Planetfall §3 ("a few km apart" becomes slots), §14 (the test area becomes a system) and
@@ -388,17 +394,22 @@ are built (CLAUDE.md).
 
 ---
 
-## 13. Open questions for the owner
+## 13. The owner's answers, and what stays open
 
-1. **Cruise:** is a separate cruise mode right, and does about 2,500 m/s feel right? The
-   alternative is a smaller system (about 60 km across) crossed at boost.
-2. **Jump cost and reach:** how many jumps should a full starter shuttle make? Is reach limited
-   by distance, or can you jump anywhere you can pay for?
-3. **Galaxy size:** a few dozen systems, or a few hundred?
-4. **Glow outside:** the style guide gives the outside no glow except practicals. The star and
-   plasma zones need some. Approve by rendering?
-5. **The star:** can you fly into it? A heat hazard near it, or just a well you cannot land in?
-6. **Hand-built worlds:** may they break the round-world rules (a hollow world, a cube moon), as
-   long as they honour the body contract (§9.3)?
-7. **Comets:** landable later (it needs a moving frame), or only something to chase and salvage
-   behind?
+Answered on 2026-09-27:
+
+| Question | Answer | Where |
+|---|---|---|
+| A cruise mode, or a smaller system crossed at boost? | **Cruise mode.** | §7 |
+| Galaxy size | **A few dozen systems.** | §10.1 |
+| Glow outside (the star, plasma) | **Approved by renders** of the real scene. | §6, §8.3 |
+| May hand-built worlds break the round-world rules? | **Yes,** if they honour the body contract. | §9.2, §9.3 |
+| Are comets landable? | **Yes,** later, with a moving frame. | §8.4, §12 |
+
+Still open:
+
+1. **Jump cost and reach:** how many jumps a full starter shuttle makes, and whether reach is
+   limited by distance or only by what you can pay. The first guess (150 + 20 QE per light-year)
+   stands until the jumps spec (§12, step 6), where it is tuned by playing.
+2. **The star up close:** whether you can fly into it, and what heat does. It depends on damage
+   (Slice 2), so it is decided with damage. Until then the star is a well you cannot land in.
