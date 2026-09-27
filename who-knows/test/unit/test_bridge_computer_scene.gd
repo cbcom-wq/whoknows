@@ -120,3 +120,49 @@ func test_it_redraws_only_while_someone_can_see_it():
 	assert_true(c._seen(), "looking at it")
 	cam.look_at(c.holo.global_position + Vector3(0, 0, 6))
 	assert_false(c._seen(), "looking away")
+
+## Spec §8: the course marker is mounted once per view.
+func test_the_course_marker_is_mounted_per_view():
+	var overlay := _root.get_node("Ship/Canopy/CanopyOverlay").get_children().filter(
+		func(n): return n is CourseMarker)
+	var screen := _root.get_node("HudRoot/Screen").get_children().filter(
+		func(n): return n is CourseMarker)
+	assert_eq(overlay.size(), 1, "the cockpit's")
+	assert_eq(screen.size(), 2, "the chase camera's and the spacewalk's")
+	for m in overlay + screen:
+		assert_eq((m as CourseMarker).sensors, _ship.sensors)
+	assert_not_null(_root.course_chime, "and a chime for arriving")
+
+## The start is 700 m off a big rock, so at 10 km there is always one to pick.
+func test_setting_a_course_at_the_table_reaches_the_ship_s_sensors():
+	var c := _computer()
+	var map := c.pages[0] as MapPage
+	map.reselect(c.ctx)
+	while map.selected_contact(c.ctx).kind != &"rock":
+		c.press(&"next")
+	var rock := map.selected
+	c.press(&"big")
+	assert_eq(_ship.sensors.course, rock)
+	assert_eq(c.panels[&"big"].button_state(), &"cycling", "amber: pressing again clears it")
+	assert_eq(c.prompt(&"big"), "Clear course")
+	c.press(&"big")
+	assert_eq(_ship.sensors.course, &"")
+
+## Spec §6.2: a course to the big rock you start by arrives at once -- you
+## are within a kilometre of its surface -- and the table says so.
+func test_a_course_to_where_you_are_arrives_and_the_table_says_so():
+	var c := _computer()
+	var map := c.pages[0] as MapPage
+	map.reselect(c.ctx)
+	while map.selected_contact(c.ctx).kind != &"rock":
+		c.press(&"next")
+	var rock := map.selected_contact(c.ctx)
+	var off := rock.point.minus(_ship.sensors.focus_point()).length() - rock.radius
+	assert_lt(off, ShipSensors.ARRIVE_ROCK, "the start's rock is close")
+	watch_signals(_ship.sensors)
+	c.press(&"big")
+	_ship.sensors.check_course()
+	assert_signal_emitted(_ship.sensors, "course_arrived")
+	assert_eq(_ship.sensors.course, &"")
+	c.update(0.016)
+	assert_eq(c.screen_text().split("\n")[2], "ARRIVED")

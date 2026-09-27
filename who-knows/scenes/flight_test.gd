@@ -28,6 +28,9 @@ var npc_debug: NpcDebug
 var npc_bus: StimulusBus
 var exterior_npcs: NpcDirector
 var contact_markers: Array[ContactMarker] = []
+## The course on the HUD, one per view (bridge computer spec §6.1, §8).
+var course_markers: Array[CourseMarker] = []
+var course_chime: AudioStreamPlayer
 
 ## The interior's own mood (spec §3.3): dim and warm, with bloom turning the
 ## thin lit strips into light. It goes on the interior camera, not the world,
@@ -190,9 +193,9 @@ func _wire_npcs() -> void:
 	npc_debug.directors.append(exterior_npcs)
 
 ## The ship's sensors (NPC foundation spec §22): they follow the universe's
-## focus, and read signs of life and the big rocks. Their contacts show on the HUD
-## three ways, like the velocity marker: through the canopy, in chase view, and
-## on a spacewalk.
+## focus, and read signs of life and the big rocks. Their contacts, and the
+## course the bridge computer sets, show on the HUD three ways, like the
+## velocity marker: through the canopy, in chase view, and on a spacewalk.
 func _wire_sensors() -> void:
 	_ship.sensors.universe = _universe
 	_ship.sensors.add_source(LifeContacts.new(_stream, exterior_npcs, _universe))
@@ -200,19 +203,48 @@ func _wire_sensors() -> void:
 	# (bridge computer spec §4.2). The same seed and start as the stream.
 	_ship.sensors.add_source(RockContacts.new(_stream.seed, _stream.recipe.start))
 	contact_markers.clear()
-	for mount: Array in [[$Ship/Canopy/CanopyOverlay, $Ship/Canopy/CanopyCam, "ContactsCockpit"],
-			[$HudRoot/Screen, $Ship/Exterior/ChaseCamera, "ContactsChase"], [$HudRoot/Screen, null, "ContactsSpacewalk"]]:
-		var marker := ContactMarker.new()
-		marker.name = mount[2]
+	for m in _mount_per_view(func() -> WorldMarker: return ContactMarker.new(), "Contacts"):
+		(m as ContactMarker).sensors = _ship.sensors
+		contact_markers.append(m)
+	course_markers.clear()
+	for m in _mount_per_view(func() -> WorldMarker: return CourseMarker.new(), "Course"):
+		(m as CourseMarker).bind(_ship.sensors)
+		course_markers.append(m)
+	_wire_course_chime()
+
+## Mounts a world marker once per view (bridge computer spec §8): in the canopy
+## overlay with CanopyCam, on the HUD screen with ChaseCamera, and on the HUD
+## screen with no camera of its own, for a spacewalk. `make` returns a fresh
+## marker; each is named `prefix` and its view.
+func _mount_per_view(make: Callable, prefix: String) -> Array[WorldMarker]:
+	var out: Array[WorldMarker] = []
+	for mount: Array in [[$Ship/Canopy/CanopyOverlay, $Ship/Canopy/CanopyCam, "Cockpit"],
+			[$HudRoot/Screen, $Ship/Exterior/ChaseCamera, "Chase"], [$HudRoot/Screen, null, "Spacewalk"]]:
+		var marker: WorldMarker = make.call()
+		marker.name = prefix + mount[2]
 		marker.set_anchors_preset(Control.PRESET_FULL_RECT)
-		marker.sensors = _ship.sensors
 		(mount[0] as Node).add_child(marker)
 		marker.set_camera(mount[1])
 		# HudRoot finds its own descendants; the canopy's is in the ship's
 		# SubViewport, so it is registered.
 		if not _hud.is_ancestor_of(marker):
 			_hud.register_element(marker)
-		contact_markers.append(marker)
+		out.append(marker)
+	return out
+
+## A soft chime when a course clears by arriving (bridge computer spec §9):
+## through the suit on a spacewalk, else the ship.
+func _wire_course_chime() -> void:
+	course_chime = AudioStreamPlayer.new()
+	course_chime.name = "CourseChime"
+	add_child(course_chime)
+	_ship.sensors.course_arrived.connect(func(_id: StringName) -> void:
+		var s := Synth.sound(&"course_arrived")
+		if s == null:
+			return
+		course_chime.bus = AudioBuses.SUIT if _avatar.mode == Avatar.Mode.SUIT else AudioBuses.SHIP
+		course_chime.stream = s
+		course_chime.play())
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	var key := event as InputEventKey

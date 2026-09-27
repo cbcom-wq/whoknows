@@ -1,5 +1,5 @@
 class_name ContactMarker
-extends HudElement
+extends WorldMarker
 
 ## What the ship's sensors pick up, on the HUD (NPC foundation spec §22.4;
 ## quantum energy spec §10.4): the nearest few contacts, each in its kind's
@@ -9,10 +9,8 @@ extends HudElement
 ## fades out, and you look. Off-screen or behind, it pins to the edge with a
 ## chevron, by the velocity marker's rule (VelocityMarker.resolve).
 ##
-## Mounted per view, like the velocity marker: in the canopy overlay with
-## CanopyCam and on the HUD screen with ChaseCamera, each shown while its
-## camera is current; and on the HUD screen with no camera of its own, shown
-## only on a spacewalk, through the viewport's camera.
+## Mounted per view, like every WorldMarker. The course's own contact is left
+## to the CourseMarker (bridge computer spec §6.1), so it is never drawn twice.
 
 ## How many contacts it shows: the nearest.
 const MOST := 3
@@ -30,25 +28,14 @@ const PING_LOW := 0.3
 ## Inside a region it fades over this share of the radius.
 const INSIDE_FADE := 0.25
 
-@export var camera_path: NodePath
 var sensors: ShipSensors
 ## What was drawn this frame, for tests: one per contact shown,
 ## {kind, precision, mode, position, radius, alpha, text}.
 var marks: Array[Dictionary] = []
 
-var _camera: Camera3D = null
-
-func _ready() -> void:
-	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if not camera_path.is_empty():
-		_camera = get_node_or_null(camera_path) as Camera3D
-
-func set_camera(cam: Camera3D) -> void:
-	_camera = cam
-
 func render(telemetry: VehicleTelemetry) -> void:
 	marks.clear()
-	var cam := _view_camera(telemetry)
+	var cam := view_camera(telemetry)
 	if cam == null or sensors == null or sensors.universe == null:
 		queue_redraw()
 		return
@@ -60,7 +47,7 @@ func render(telemetry: VehicleTelemetry) -> void:
 	for c: Contact in sensors.contacts(RANGE):
 		if shown >= MOST:
 			break
-		if not marks_kind(c.kind):
+		if not marks_kind(c.kind) or c.id == sensors.course:
 			continue
 		var mark := mark_for(c, cam, focus, sensors.time, size)
 		if not mark.is_empty():
@@ -73,16 +60,6 @@ func render(telemetry: VehicleTelemetry) -> void:
 ## (bridge computer spec §8).
 static func marks_kind(kind: StringName) -> bool:
 	return kind != RockContacts.KIND
-
-## The camera it projects through, or null when it should not show.
-func _view_camera(telemetry: VehicleTelemetry) -> Camera3D:
-	if telemetry == null:
-		return null
-	if _camera != null:
-		return _camera if _camera.current and _camera.is_inside_tree() else null
-	if not telemetry.has_beacon:
-		return null
-	return get_viewport().get_camera_3d() if is_inside_tree() else null
 
 ## How contact `c` is drawn through `cam`: empty when it is not drawn at all.
 func mark_for(c: Contact, cam: Camera3D, focus: UniversePoint, time: float, view: Vector2) -> Dictionary:

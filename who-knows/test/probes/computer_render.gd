@@ -9,7 +9,9 @@ extends SceneTree
 # Writes computer_bridge.png (the bridge from the corridor, the table on the
 # left and the machine on the right), computer_table.png (the table from where
 # you use it), computer_map_30, _2 and _10.png (close in, at each range),
-# computer_status.png and computer_map_above.png.
+# computer_status.png, computer_map_above.png, computer_course_set.png, and
+# the course on the HUD from the seat and in chase view (computer_hud_cockpit
+# and computer_hud_chase.png).
 
 var _out := ""
 var _ship: Ship
@@ -77,4 +79,29 @@ func _run(scene: Node) -> void:
 	# 3. The holo from above, the way the map is laid out.
 	_eye(Vector3i(0, 0, -1), Vector3(-1.2, 0.6, 0.35), table + Vector3(0, 1.3, 0))
 	await _shot("map_above")
+	# 4. The course on the HUD: set at the table to a big rock ahead, then
+	# seen from the seat through the canopy, and in chase view.
+	var map := computer.pages[0] as MapPage
+	while map.range_index != 2:
+		computer.press(&"range")
+	var best := -1.0
+	var pick: StringName = &""
+	for c in map.targets(computer.ctx):
+		var rel := computer.ctx.relative(c.point)
+		var ahead := -rel.normalized().z
+		if c.kind == &"rock" and rel.length() > 3000.0 and ahead > best:
+			best = ahead
+			pick = c.id
+	map.selected = pick
+	computer.press(&"big")
+	print("course  %s, %s" % [_ship.sensors.course, computer.screen_text().replace("\n", " / ")])
+	await _shot("course_set")
+	var seat: PilotSeat = _ship.get_node("Interior/PilotSeat")
+	var director: CameraDirector = _ship.get_node("CameraDirector")
+	seat.interact(avatar)
+	await director.transition_finished
+	await _shot("hud_cockpit")
+	director.cycle_view()
+	await _frames(30)
+	await _shot("hud_chase")
 	quit()
