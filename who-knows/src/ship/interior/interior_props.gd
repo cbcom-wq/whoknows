@@ -726,7 +726,8 @@ static func holo_table(kit: InteriorKit, f: Transform3D, _variety: float) -> voi
 	# The plinth: a glowing disc, a chunky foot and a column.
 	kit.disc(GLOW, f * Transform3D(up, Vector3(0, 0.012, 0)), 0.42, _lit(InteriorPalette.LIGHT_WARM, 2.2))
 	kit.bevel_box(SOLID, f * _at(Vector3(0, 0.06, 0)), Vector3(0.62, 0.1, 0.62), 0.04, trim)
-	kit.tube_between(SOLID, f * Vector3(0, 0.1, 0), f * Vector3(0, HOLO_TABLE_TOP - 0.06, 0), 0.16, low)
+	# tube_between runs half its radius past each end: stop it under the top.
+	kit.tube_between(SOLID, f * Vector3(0, 0.1, 0), f * Vector3(0, HOLO_TABLE_TOP - 0.16, 0), 0.16, low)
 	# The top: a cream rim, black glass inside it, the emitter ring and the
 	# underside.
 	var rim_base := HOLO_TABLE_TOP - 0.06

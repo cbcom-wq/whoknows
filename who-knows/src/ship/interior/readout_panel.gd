@@ -31,6 +31,9 @@ var prompt_source: Callable
 ## Where set_readout writes its lines: the panel's own screen, or one standing
 ## apart from it (make_readout), or null for a button that shows no lines.
 var readout: Label3D
+## Whoever pressed it last, for an owner that needs to know whose hand it was
+## (the bridge computer shows their suit, bridge computer spec §7.2).
+var last_actor: Node
 
 var _buttons: Dictionary = {}   # StringName -> MeshInstance3D
 
@@ -113,7 +116,8 @@ func prompt_text() -> String:
 func can_interact(_actor: Node) -> bool:
 	return prompt_text() != ""
 
-func interact(_actor: Node) -> void:
+func interact(actor: Node) -> void:
+	last_actor = actor
 	pressed.emit(role)
 
 ## Shows `lines` on the readout, if there is one, and the button lit as

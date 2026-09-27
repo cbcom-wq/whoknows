@@ -523,3 +523,19 @@ func test_the_holo_volume_hangs_over_the_table():
 	assert_almost_eq(v.origin, Vector3(0, InteriorProps.HOLO_VOLUME_CENTRE, 0), Vector3.ONE * 0.0001)
 	assert_gt(InteriorProps.HOLO_VOLUME_CENTRE - 0.3, InteriorProps.HOLO_TABLE_TOP,
 		"the holo's floor is above the table top")
+
+## Nothing solid pokes up through the holo table's black glass.
+func test_the_holo_table_s_glass_is_clear():
+	InteriorProps.holo_table(_kit, Transform3D.IDENTITY, 0.3)
+	var solid: MeshInstance3D = null
+	for m in _kit.commit():
+		if m.name == "DressingSolid":
+			solid = m
+	var glass_y := InteriorProps.HOLO_TABLE_TOP - 0.004
+	var inner := InteriorProps.HOLO_TABLE_RADIUS - 0.06
+	var verts: PackedVector3Array = solid.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	for v in verts:
+		if Vector2(v.x, v.z).length() < inner - 0.01 and v.z > -0.3:
+			assert_true(v.y <= glass_y + 0.0001, "a vertex above the glass at %s" % v)
+			if v.y > glass_y + 0.0001:
+				return

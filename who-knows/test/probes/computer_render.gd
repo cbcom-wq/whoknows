@@ -63,4 +63,7 @@ func _run(scene: Node) -> void:
 	var table := DeckPaths.floor_point(Vector3i(-1, 0, -1))
 	_eye(Vector3i(0, 0, -1), Vector3(-0.1, 0, 0), table + Vector3(0, 1.1, 0))
 	await _shot("table")
+	# 3. Close in on the holo.
+	_eye(Vector3i(0, 0, -1), Vector3(-0.7, -0.1, 0), table + Vector3(0, 1.25, 0))
+	await _shot("holo")
 	quit()

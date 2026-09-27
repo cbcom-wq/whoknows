@@ -41,6 +41,33 @@ func collider_coords() -> Array:
 func alcoves() -> Dictionary:
 	return _alcoves.duplicate()
 
+## The hull's per-type MultiMeshes, for the bridge computer's miniature
+## (bridge computer spec §7.1), which shares them rather than copying.
+func multimeshes() -> Array[MultiMesh]:
+	var out: Array[MultiMesh] = []
+	for mmi: MultiMeshInstance3D in _multimeshes.values():
+		if is_instance_valid(mmi):
+			out.append(mmi.multimesh)
+	return out
+
+## Everything the hull draws, in its own frame: the cells its meshes fill.
+## From the grid rather than the MultiMeshes' AABBs, which only a renderer
+## can work out.
+func bounds() -> AABB:
+	var box := AABB()
+	var first := true
+	if _grid == null or _catalog == null:
+		return box
+	var half := Vector3.ONE * ShipGrid.CELL_SIZE * 0.5
+	for coord in _grid.coords():
+		var def := _catalog.get_def(_grid.get_block(coord).block_id)
+		if def == null or def.mesh == null or _is_alcove(coord):
+			continue
+		var cell := AABB(ShipGrid.cell_center(coord) - half, half * 2.0)
+		box = cell if first else box.merge(cell)
+		first = false
+	return box
+
 func _clear() -> void:
 	# remove_child() then free() -- not queue_free(). remove_child() is
 	# synchronous and fires NOTIFICATION_UNPARENTED immediately, which is

@@ -44,14 +44,24 @@ static func props() -> StandardMaterial3D:
 	return _cache[&"props"]
 
 ## The bridge computer's miniature ship (bridge computer spec §7.1): the
-## hull's own meshes, drawn flat and warm, unshaded and opaque. The glow shader
-## would draw their uncoloured vertices white. An engine material, not a new
-## shader (style guide §2.5).
+## hull's own meshes, warm and glowing, and opaque. Lit as well as glowing, so
+## its faces take the cabin's light differently and it reads as a shape: an
+## unshaded one was a flat cream silhouette at the renders. The glow shader
+## would draw the meshes' uncoloured vertices white. An engine material, not a
+## new shader (style guide §2.5).
+const HOLO_EMISSION := 0.55
+
 static func holo() -> StandardMaterial3D:
 	if not _cache.has(&"holo"):
 		var m := StandardMaterial3D.new()
-		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		m.albedo_color = InteriorPalette.LIGHT_WARM
+		m.roughness = 0.6
+		m.emission_enabled = true
+		m.emission = InteriorPalette.LIGHT_WARM
+		m.emission_energy_multiplier = HOLO_EMISSION
+		m.rim_enabled = true
+		m.rim = 0.4
+		m.rim_tint = 0.3
 		_cache[&"holo"] = m
 	return _cache[&"holo"]
 

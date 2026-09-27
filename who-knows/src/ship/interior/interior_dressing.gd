@@ -184,7 +184,13 @@ static func _fixture(kit: InteriorKit, layout: InteriorLayout, fixture: Dictiona
 		kit.root.add_child(core)
 		return core
 	elif fixture["id"] == InteriorLayout.COMPUTER_ID:
-		InteriorProps.holo_table(kit, fixture_frame(layout, coord), variety)
+		var f := fixture_frame(layout, coord)
+		InteriorProps.holo_table(kit, f, variety)
+		var computer := ShipComputer.new()
+		computer.name = "Computer_%d_%d_%d" % [coord.x, coord.y, coord.z]
+		computer.cell = coord
+		computer.setup(f, kit.layer)
+		kit.root.add_child(computer)
 	return null
 
 ## One quantum machine (quantum energy spec §6.3-§6.4), in the frame of the

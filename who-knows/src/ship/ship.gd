@@ -58,6 +58,7 @@ var sensors: ShipSensors
 var npcs: Node3D
 var crew_site: ShipSite
 var _crew: Array = []
+var _computer_state: Dictionary = {}   # Vector3i -> ShipComputer.save()
 ## The ship's air handling (airlock spec §6): heard everywhere aboard,
 ## through the Ship bus, so it drains away with the air in the airlock.
 var _hum: AudioStreamPlayer
@@ -239,6 +240,7 @@ func _on_cell_changed(_coord: Vector3i) -> void:
 	_rebuild_everything()
 
 func _rebuild_everything() -> void:
+	_save_computers()
 	var stowed := _stowed_items()
 	exterior_builder.rebuild()
 	interior_builder.rebuild()
@@ -251,11 +253,32 @@ func _rebuild_everything() -> void:
 	_apply_stats()
 	quantum.bind(interior_builder.quantum_cores(), interior_builder.quantum_machines(), stats)
 	flight_computer.quantum = quantum.store
+	_bind_computers()
 	if rcs_show != null:
 		rcs_show.rebuild(grid, catalog, stats.center_of_mass)
 	stats_changed.emit(stats)
 	_set_anchor_radius()
 	_bind_crew()
+
+## Keeps each bridge computer's page, range and selection across a rebuild,
+## which frees the dressing and every table in it (bridge computer spec §10).
+func _save_computers() -> void:
+	for c in interior_builder.computers():
+		_computer_state[c.cell] = c.save()
+
+## Binds each table to this ship, once the stats, the store and the sensors
+## are all current, and gives it back its state.
+func _bind_computers() -> void:
+	for c in interior_builder.computers():
+		var context := ComputerContext.new()
+		context.sensors = sensors
+		context.store = quantum.store
+		context.stats = stats
+		context.hull = exterior
+		context.exterior_builder = exterior_builder
+		c.bind(context)
+		if _computer_state.has(c.cell):
+			c.restore(_computer_state[c.cell])
 
 ## How far the hull reaches from its origin, for the asteroid bubble.
 func _set_anchor_radius() -> void:

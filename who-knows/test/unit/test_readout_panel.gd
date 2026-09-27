@@ -80,3 +80,13 @@ func test_every_mesh_is_on_its_render_layer():
 	assert_gt(meshes.size(), 0)
 	for mesh in meshes:
 		assert_eq(mesh.layers, 4)
+
+## Bridge computer spec §7.2: the table shows the suit of whoever pressed it.
+func test_it_remembers_who_pressed_it():
+	var panel := ReadoutPanel.new()
+	panel.setup(&"page", 2)
+	add_child_autofree(panel)
+	var who := Node.new()
+	add_child_autofree(who)
+	panel.interact(who)
+	assert_eq(panel.last_actor, who)

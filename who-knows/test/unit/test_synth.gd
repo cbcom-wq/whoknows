@@ -8,6 +8,7 @@ const LENGTHS := {
 	&"panel_beep": 0.15, &"warning_chime": 0.5, &"ship_hum": 2.0, &"breath": 4.0, &"thruster_puff": 1.0,
 	&"hull_thump": 0.6, &"rcs_puff": 0.25, &"core_hum": 4.0, &"convert": 1.4, &"materialize": 1.8,
 	&"charge": 1.0, &"droid_whir": 1.0, &"droid_chirp": 0.14, &"droid_beep": 0.2,
+	&"holo_hum": 2.0, &"page": 0.08, &"course_set": 0.3, &"course_clear": 0.3, &"course_arrived": 0.6,
 }
 
 func test_every_sound_builds_at_its_length():
@@ -68,6 +69,15 @@ func test_the_charge_tone_loops_without_a_seam():
 ## The core's hum sits under the bridge, softer than the ship's own hum.
 func test_the_core_hum_is_softer_than_the_ship_hum():
 	assert_lt(_peak(&"core_hum"), _peak(&"ship_hum"))
+
+## Bridge computer spec §9: the holo table's shimmer is quieter than the
+## core's hum, loops, and the course's notes are one-shots.
+func test_the_bridge_computer_sounds():
+	assert_true(Synth.LOOPED.has(&"holo_hum"))
+	assert_lt(_peak(&"holo_hum"), _peak(&"core_hum"))
+	for sound_name in [&"page", &"course_set", &"course_clear", &"course_arrived"]:
+		assert_eq(Synth.build(sound_name).loop_mode, AudioStreamWAV.LOOP_DISABLED, sound_name)
+	assert_ne(Synth.build(&"course_set").data, Synth.build(&"course_clear").data, "rising, then falling")
 
 func _peak(sound_name: StringName) -> int:
 	var data := Synth.build(sound_name).data
