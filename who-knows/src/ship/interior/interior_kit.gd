@@ -266,6 +266,16 @@ func commit() -> Array[MeshInstance3D]:
 	_tools.clear()
 	return out
 
+## One batch as a mesh, with no node: for pieces something else instances,
+## like the bridge computer's holo marks (bridge computer spec §10). The batch
+## is emptied, as commit() empties all of them. Null if nothing was added to it.
+func mesh(batch: Batch) -> ArrayMesh:
+	if not _tools.has(batch):
+		return null
+	var st: SurfaceTool = _tools[batch]
+	_tools.erase(batch)
+	return st.commit()
+
 func _tool(batch: Batch) -> SurfaceTool:
 	if not _tools.has(batch):
 		var st := SurfaceTool.new()

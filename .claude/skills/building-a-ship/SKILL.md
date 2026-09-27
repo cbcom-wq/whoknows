@@ -38,9 +38,15 @@ Do these in order. Each one names the check that proves it.
      walkable cells: a `closet` for its dock (otherwise it docks in the walkable cell farthest
      from the helm), and every porthole, console, locker and fixture it tends reachable on foot
      from there over `DeckPaths`, which leaves out the airlock and every fixture's own cell.
-     Fixtures side by side can wall off part of a room: on the starter the helm, the quantum
-     core and the quantum machine cut the droid off from the starboard front of the bridge.
+     Fixtures side by side can wall off part of a room. `DeckPaths` steps diagonally past the
+     corner between two **quiet fixtures** (core, machine, bridge computer), where the floor
+     round that corner is open, but never past the helm. On the starter every job is reachable.
      Jobs it cannot reach are dropped; the probe prints the dock and names them `UNREACHABLE`.
+   - **a `computer`** (optional) for the bridge computer's holo table, a quiet fixture: put the
+     cell its frame faces (its operator's spot) on walkable deck, within the Interactor's 2.5 m of
+     its buttons, and face it so the operator looks out of a window (the owner's wish, 2026-09-27:
+     on the starter, the port front corner, facing aft). A console it displaces moves aft. The
+     probe prints each table and where you stand to use it.
 3. **Propulsion:**
    - main `thruster`s oriented FORWARD (`o=0`), at the stern;
    - `rcs` in **opposed pairs** on every axis: pitch, yaw and roll both ways;
@@ -139,6 +145,9 @@ thrust.
 | A windowed script loading `flight_test.tscn` with saving on | Saving is on outside `--headless`, so a probe or render script would load and overwrite the owner's real game | Set `scene.save_enabled = false` before `add_child`, as `ship_probe.gd` does |
 | Giving a new fixture state the save doesn't know | Quit and relaunch: the fixture is back to its defaults, silently | `to_dict`/`from_dict` on it, gathered in `Ship.to_dict`, and a round-trip test |
 | A door trigger that sees only the avatar | Found while planning NPCs: a sliding door has no collider, so the droid would have trundled through it shut | `SlidingDoor.OPENS_FOR` is the avatar's layer and `npcs` (layer 8); anything new that opens for people opens for NPCs too |
+| "The table adds 300 kg" | The bridge computer's spec pinned the starter at +300 kg and +0.3 MW, but the table replaced a 0.4 t deck cell drawing 0.1 MW: the ship came out 100 kg lighter, and the yaw imbalance the spec said it would ease doubled (still 0.3% of authority) | A block that replaces another changes the figures by the difference. Read the new ones from `ShipStats` (the probe), never add a block's own mass to the old total |
+| A fixture beside two others on a bridge | The bridge computer in the port back corner, with the core and the machine, cut the droid off from the whole front of the bridge: helm, core, portholes, the table itself | Keep a way round on foot. `DeckPaths` now squeezes past the corner between two quiet fixtures; a new fixture that is not quiet gets no such step, so check the probe's `UNREACHABLE` line |
+| A quiet fixture where the consoles are | Its own walls go plain, so a fixture at the glass or beside the helm would take the bridge's consoles with it, and the shoulder's desk would stand 5 cm from it | `InteriorLayout._handed_consoles` hands the console straight back to the last open cell's same wall; the shoulder drops its desk in front of a fixture. Render the corner it went to |
 | An off-centre retro counted as steering | It would light up for yaw, but `ShipStats` never counts pure fore-and-aft thrust as authority | Steer with blocks that push across the hull; retros only brake |
 
 ## Not built yet (plan for it; don't assume it works)

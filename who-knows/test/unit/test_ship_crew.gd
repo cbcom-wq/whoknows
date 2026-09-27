@@ -39,7 +39,7 @@ func test_without_a_closet_it_docks_farthest_from_the_helm():
 	var layout := InteriorLayout.plan(grid, catalog, DeckGraph.build(grid, catalog).walkable_coords())
 	var paths := DeckPaths.build(layout)
 	var at := ShipCrew.dock(layout, paths)
-	var steps := paths.distances(Vector3i(-1, 0, -3))
+	var steps := paths.distances(Vector3i(-1, 0, -2))
 	for cell in paths.cells():
 		assert_true(int(steps.get(cell, -1)) <= int(steps[at]), "%s is farther than the dock %s" % [cell, at])
 
@@ -59,13 +59,16 @@ func test_every_job_it_is_given_is_reachable_from_the_dock():
 	for spot in spots:
 		assert_true(steps.has(spot["cell"]), "%s at %s" % [spot["key"], spot["cell"]])
 
-func test_on_the_starter_the_quantum_fixtures_wall_off_the_starboard_bridge():
-	# The helm, the quantum core and the quantum machine are fixtures, off the
-	# droid's map; together they cut off (1, 0, -3) and (1, 0, -2).
+## The helm, the quantum core, the machine and the bridge computer's table are
+## fixtures, off the droid's map. Without the diagonal steps past the quiet
+## fixtures' corners (DeckPaths) they would wall off the whole front of the
+## bridge; with them, the droid reaches every job on the starter.
+func test_on_the_starter_every_job_is_reachable():
 	var reachable := ShipCrew.reachable_spots(_layout, _paths)
-	for spot in ShipCrew.work_spots(_layout, _paths):
-		var cut_off: bool = spot["cell"] == Vector3i(1, 0, -3) or spot["cell"] == Vector3i(1, 0, -2)
-		assert_eq(reachable.has(spot), not cut_off, "%s at %s" % [spot["key"], spot["cell"]])
+	assert_eq(reachable.size(), ShipCrew.work_spots(_layout, _paths).size())
+	var keys := reachable.map(func(s: Dictionary) -> StringName: return s["key"])
+	assert_true(keys.has(StringName("fixture:%s" % Vector3i(0, 0, -3))), "the helm")
+	assert_true(keys.has(StringName("fixture:%s" % Vector3i(-1, 0, -3))), "the bridge computer")
 
 func test_the_starter_has_something_to_polish_and_scan_and_its_helm_to_tend():
 	var actions := {}

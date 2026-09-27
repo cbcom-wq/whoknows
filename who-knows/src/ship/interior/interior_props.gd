@@ -606,8 +606,9 @@ static func _pod_point(i: int) -> Vector3:
 ## A shoulder of the front wall beside a pod, in a wall frame on the canopy
 ## face: the wall itself (the builder draws none at canopy faces) round a
 ## portal window at eye height in a chunky frame, the usual trim, and a
-## console desk under the window.
-static func shoulder(kit: InteriorKit, f: Transform3D, variety: float) -> void:
+## console desk under the window -- left out where a fixture stands in front
+## of the glass, like the bridge computer's table.
+static func shoulder(kit: InteriorKit, f: Transform3D, variety: float, with_console := true) -> void:
 	var wall := _c(InteriorPalette.WALL)
 	var trim := _c(InteriorPalette.TRIM)
 	var back := -WALL_THICKNESS * 0.5
@@ -630,7 +631,8 @@ static func shoulder(kit: InteriorKit, f: Transform3D, variety: float) -> void:
 	for y in [SHOULDER_WINDOW_LOW - 0.05, SHOULDER_WINDOW_HIGH + 0.05]:
 		kit.bevel_box(SOLID, f * _at(Vector3(0, y, 0.03)), Vector3(2.0 * w + 0.2, 0.1, 0.08), 0.03, trim)
 	wall_trim(kit, f)
-	console(kit, f, variety, false)
+	if with_console:
+		console(kit, f, variety, false)
 
 ## The captain's chair and helm console, in a fixture frame: origin on the
 ## floor under the seat, -z the way it faces, +y up (cockpit pod spec §5). A
@@ -698,6 +700,78 @@ static func pilot_station(kit: InteriorKit, f: Transform3D, variety: float) -> v
 			_lit(buttons[i], 1.6, 0.4 if i == 3 else 1.0))
 	kit.collider(f * _at(Vector3(0, 0.4, -0.72)), Vector3(1.1, 0.8, 0.3))
 	kit.light(f * Vector3(0, 0.9, -0.3), InteriorPalette.LIGHT_WARM, 0.35, 1.6, &"helm")
+
+## The bridge computer's holo table (bridge computer spec §3.3).
+const HOLO_TABLE_TOP := 0.9
+const HOLO_TABLE_RADIUS := 0.55
+## The holo's centre, floor-relative: it spans 1.05 to 1.65 m, just under a
+## standing eye, so you look slightly down into it.
+const HOLO_VOLUME_CENTRE := 1.35
+## The rim console's tilt from vertical, degrees: facing an operator's eyes.
+const HOLO_CONSOLE_TILT := 55.0
+## Where the five buttons sit along the console, operator's left to right:
+## PAGE, RANGE, prev, big, next.
+const HOLO_BUTTON_X: Array[float] = [-0.28, -0.14, 0.0, 0.14, 0.28]
+
+## The holo table, in a fixture frame: origin on the floor under the table's
+## centre, -z toward where its operator stands. A round top on a pedestal and
+## a glowing plinth, its black glass ringed by the holo's emitter, and a rim
+## console on the operator's side. The holo, the screen's text and the
+## buttons are ShipComputer's own nodes; this builds only what never moves.
+## Two colliders, neither reaching the holo above 1.05 m: you can put your
+## hand into it.
+static func holo_table(kit: InteriorKit, f: Transform3D, _variety: float) -> void:
+	var trim := _c(InteriorPalette.TRIM)
+	var low := _c(InteriorPalette.WALL_LOW)
+	var up := Basis(Vector3.RIGHT, -PI * 0.5)   # a disc's +z turned to face up
+	var down := Basis(Vector3.RIGHT, PI * 0.5)
+	# The plinth: a glowing disc, a chunky foot and a column.
+	kit.disc(GLOW, f * Transform3D(up, Vector3(0, 0.012, 0)), 0.42, _lit(InteriorPalette.LIGHT_WARM, 2.2))
+	kit.bevel_box(SOLID, f * _at(Vector3(0, 0.06, 0)), Vector3(0.62, 0.1, 0.62), 0.04, trim)
+	# tube_between runs half its radius past each end: stop it under the top.
+	kit.tube_between(SOLID, f * Vector3(0, 0.1, 0), f * Vector3(0, HOLO_TABLE_TOP - 0.16, 0), 0.16, low)
+	# The top: a cream rim, black glass inside it, the emitter ring and the
+	# underside.
+	var rim_base := HOLO_TABLE_TOP - 0.06
+	kit.ring(SOLID, f * Transform3D(up, Vector3(0, rim_base, 0)), HOLO_TABLE_RADIUS - 0.06,
+		HOLO_TABLE_RADIUS, 0.0, 0.06, trim)
+	kit.disc(SOLID, f * Transform3D(up, Vector3(0, HOLO_TABLE_TOP - 0.004, 0)), HOLO_TABLE_RADIUS - 0.06,
+		_c(InteriorPalette.SCREEN_BACK))
+	kit.annulus(GLOW, f * Transform3D(up, Vector3(0, HOLO_TABLE_TOP - 0.002, 0)), 0.40, 0.46,
+		_lit(InteriorPalette.SKY, 1.4))
+	kit.disc(SOLID, f * Transform3D(down, Vector3(0, rim_base, 0)), HOLO_TABLE_RADIUS, low)
+	# The rim console, its face on the surface of its own frame.
+	var console := f * holo_table_console()
+	kit.bevel_box(SOLID, console * _at(Vector3(0, 0, -0.03)), Vector3(0.8, 0.3, 0.06), 0.02, trim)
+	# Solid where you'd walk into it; nothing reaches the holo above 1.05 m.
+	kit.collider(f * _at(Vector3(0, 0.475, 0)), Vector3(1.0, 0.95, 1.0))
+	kit.collider(f * _at(Vector3(0, 0.97, -0.55)), Vector3(0.8, 0.14, 0.2))
+
+## The rim console's frame in the table's fixture frame: origin on its face,
+## +z out toward the operator's eyes, +x to the operator's right (fixture -x,
+## because the operator faces +z), +y up the slope.
+static func holo_table_console() -> Transform3D:
+	var t := deg_to_rad(HOLO_CONSOLE_TILT)
+	var out := Vector3(0, sin(t), -cos(t))
+	var right := Vector3(-1, 0, 0)
+	return Transform3D(Basis(right, out.cross(right), out), Vector3(0, 0.95, -0.52))
+
+## The screen's frame: the upper part of the console's face.
+static func holo_table_screen() -> Transform3D:
+	return holo_table_console() * _at(Vector3(0, 0.06, 0.0))
+
+## The five buttons' frames, in HOLO_BUTTON_X order, along the console's
+## lower edge.
+static func holo_table_buttons() -> Array[Transform3D]:
+	var out: Array[Transform3D] = []
+	for x in HOLO_BUTTON_X:
+		out.append(holo_table_console() * _at(Vector3(x, -0.08, 0.0)))
+	return out
+
+## The holo's centre over the table. Only its origin matters: the holo is
+## turned with the ship, not the table (spec §5.1).
+static func holo_table_volume() -> Transform3D:
+	return _at(Vector3(0, HOLO_VOLUME_CENTRE, 0))
 
 ## The quantum core's fixed parts (quantum energy spec §6.2), in a fixture
 ## frame: an octagonal plinth on a violet-glowing base, a glass column between

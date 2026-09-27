@@ -167,6 +167,10 @@ Fifteen blocks. No weapons — those are Slice 2.
 
 > **Amended 2026-08-23:** a sixteenth block, **Canopy** (Structure / SOLID), is added by `docs/superpowers/specs/2026-08-23-starter-shuttle-art-direction.md` §7. It is the raked bow glazing, the exterior face of the cockpit `SubViewport`, and a deliberate hp weak point for Slice 2.
 
+> **Amended 2026-09-27:** the **Bridge Computer** (`computer`, Interior / MOUNT, 0.3 t, 0.3 MW,
+> hp 60) joins the catalogue: a holo table, a quiet fixture, optional
+> (`docs/superpowers/specs/2026-09-25-bridge-computer-design.md` §3.1).
+
 | Block | Category | Occupancy | Notes |
 |-------|----------|-----------|-------|
 | Hull Block | Structure | SOLID | Baseline mass and hp |

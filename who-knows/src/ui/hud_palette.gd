@@ -24,6 +24,10 @@ const LIFE := Color("8ee8a0")
 ## Salvage: the quantum violet, for what it will become.
 const SALVAGE := Color("c3a8ff")
 
+## The course (bridge computer spec §6.1): an amber, so it never reads as the
+## readout's own cyan, and the same amber the bridge computer's holo gives it.
+const COURSE := Color("ffb45a")
+
 ## The colour for a sensor contact of `kind`; the readout's for any other.
 static func for_kind(kind: StringName) -> Color:
 	match kind:

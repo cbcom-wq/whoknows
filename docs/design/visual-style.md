@@ -107,6 +107,12 @@ Around the airlock (2026-09-24):
 **Transparent overdraw is the cost to watch.** Big puffs close to the camera stack up fast: the
 first tuning of the steam measured 86 fps before its puff counts and sizes came down.
 
+The bridge computer's holo (2026-09-27, measured headless on the build machine's CPU; the GTX
+960 figure is still to take): the table's work is 0.2–0.4 ms a frame at every range, and nothing
+while no camera can see it. At 30 km, a fresh placing of its ~415 marks costs about 4 ms twice a
+second, and the sensors' 30 km read about 3 ms four times a second; in between the marks are only
+turned with the ship.
+
 Measure after any change that adds lights, pieces, windows, particles or post-processing.
 
 ### 2.7 Windows show the real outside
@@ -140,6 +146,12 @@ are the first to:
 - they use a few capitalised words, never paragraphs.
 
 A new live-data screen follows the same look, and comes with the spec that designs it.
+
+**The bridge computer's holo is the first graphical one** (§3.7): a small glowing world over a
+table, not text. Its rim screen is the airlock panels' look. In the holo, colours are by kind,
+from `InteriorPalette`: big rocks `SKY`, salvage `QUANTUM`, signs of life `SIGNAL_GO` (the HUD's
+green), the ship's chevron and the stalks `LIGHT_WARM`, the selection's bracket and the course
+`AMBER`. On the HUD the course is `HudPalette.COURSE`, the same amber.
 
 ### 2.9 Sound
 
@@ -316,6 +328,29 @@ until then these are the rules they were built to:
   soft green, salvage the quantum violet, anything else the readout blue.
 - **Legs never stretch.** A foot left behind by a bolting body is drawn at the end of its reach.
 
+### 3.7 The bridge computer's holo table
+
+The ship's computer (`docs/superpowers/specs/2026-09-25-bridge-computer-design.md`), built
+2026-09-27 and rendered at eye height for the owner:
+
+- **A quiet fixture,** like the quantum core and machine: a round table on a glowing plinth in
+  the bridge's port front corner, beside the helm, so you use it looking forward out of the
+  window. Its floor stays as it was; the corner's console is handed aft to the back corner's wall,
+  and the shoulder window in front of it loses its desk (the owner, 2026-09-27).
+  Its rim console faces the operator, with a black-glass screen and five chunky buttons that are
+  small `ReadoutPanel`s, dark when they would do nothing.
+- **The holo is glowing kit geometry with no collider,** turned with the ship, not the table:
+  forward in it is toward the canopy. Faceted balls for rocks, diamonds for pings, three rings for
+  a region's sphere, hollow rings pinned on the edge, thin stalks for height and a warm chevron
+  for you. Each shape and colour is one MultiMesh with the colour baked into its mesh, on the glow
+  batch: no instance colours, no new shader.
+- **Sized to read at arm's length.** The spec's first pip sizes (6–20 mm) and glow vanished at
+  1.6 m eye height; pips are now 8–30 mm, the holo's glow energy 2.0, and the bracket's corners
+  7 mm whatever they close round.
+- **The miniature ship** on the status page shares the hull's own MultiMeshes in
+  `InteriorMaterials.holo()`: `LIGHT_WARM`, lit and emissive, opaque. An unshaded one read as a
+  flat cream silhouette; lit, its blocks separate.
+
 ## 4. Adding something new
 
 **A new prop:**
@@ -382,7 +417,9 @@ shader.
   and skitters; `InteriorKit` is exempt: it packs data into vertex colours);
 - `interior_props.gd`, `interior_kit.gd`, `sliding_door.gd`, `item_looks.gd`, `item.gd`,
   `glove.gd`, `hands.gd`, `airlock_hatch.gd`, `airlock_panel.gd`, `airlock_show.gd`,
-  `npc_looks.gd` or `droid_look.gd` reference the grid, the layout, the builder or the dressing;
+  `npc_looks.gd`, `droid_look.gd`, `holo_volume.gd` or `ship_computer.gd` reference the grid, the
+  layout, the builder or the dressing (the bridge computer's `map_page.gd` is held to the palette
+  too);
 - the set of interior shaders changes.
 
 Other interior tests pin the rest: render layer 2 and cull mask 2, no interior shadows, colliders

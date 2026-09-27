@@ -16,10 +16,11 @@ const NAMES: Array[StringName] = [
 	&"hatch_motor", &"bolt_clunk", &"seal_thump", &"hiss_out", &"steam_in",
 	&"panel_beep", &"warning_chime", &"ship_hum", &"breath", &"thruster_puff", &"hull_thump",
 	&"rcs_puff", &"core_hum", &"convert", &"materialize", &"charge", &"droid_whir", &"droid_chirp",
-	&"droid_beep",
+	&"droid_beep", &"holo_hum", &"page", &"course_set", &"course_clear", &"course_arrived",
 ]
 ## Sounds that play as seamless loops.
-const LOOPED: Array[StringName] = [&"ship_hum", &"breath", &"thruster_puff", &"core_hum", &"charge", &"droid_whir"]
+const LOOPED: Array[StringName] = [&"ship_hum", &"breath", &"thruster_puff", &"core_hum", &"charge", &"droid_whir",
+	&"holo_hum"]
 
 static var _cache: Dictionary = {}
 static var _mutex := Mutex.new()
@@ -96,6 +97,16 @@ static func build(sound_name: StringName) -> AudioStreamWAV:
 			x = _tones([880.0, 1175.0], 0.14, 0.35)
 		&"droid_beep":
 			x = _droid_beep()
+		&"holo_hum":
+			x = _holo_hum()
+		&"page":
+			x = _tones([1760.0], 0.08, 0.15)
+		&"course_set":
+			x = _tones([660.0, 880.0], 0.3, 0.2)
+		&"course_clear":
+			x = _tones([880.0, 660.0], 0.3, 0.2)
+		&"course_arrived":
+			x = _tones([1047.0], 0.6, 0.2)
 		_:
 			push_error("Synth: no sound called %s" % sound_name)
 			return null
@@ -183,6 +194,18 @@ static func _steam_in() -> PackedFloat32Array:
 		var swell := pow(u, 0.7) * _ramp(t, 0.0, 2.8, 0.3)
 		x[i] = jets[i] * burst * 0.6 + roar[i] * swell * 1.2
 	return _gain(x, 0.75)
+
+## The bridge computer's holo table (bridge computer spec §9): a very soft,
+## high shimmer, two close sines beating slowly. Whole cycles of both in 2 s,
+## so it loops clean.
+static func _holo_hum() -> PackedFloat32Array:
+	var n := _len(2.0)
+	var x := PackedFloat32Array()
+	x.resize(n)
+	for i in n:
+		var t := float(i) / MIX_RATE
+		x[i] = sin(TAU * 1320.0 * t) + sin(TAU * 1321.5 * t)
+	return _gain(x, 0.12)
 
 ## Soft sine notes one after another over `length` seconds.
 static func _tones(freqs: Array, length: float, level: float) -> PackedFloat32Array:

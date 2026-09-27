@@ -137,6 +137,14 @@ func rebuild() -> void:
 	_compute_gravity()
 	_fill_felt_gravity()
 
+## Every bridge computer the last rebuild dressed (bridge computer spec §10).
+func computers() -> Array[ShipComputer]:
+	var out: Array[ShipComputer] = []
+	if is_instance_valid(_physics_body):
+		for node in _physics_body.find_children("*", "ShipComputer", true, false):
+			out.append(node as ShipComputer)
+	return out
+
 func walkable_coords() -> Array:
 	return _walkable.duplicate()
 

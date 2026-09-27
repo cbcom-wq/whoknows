@@ -47,6 +47,9 @@ var npc_debug: NpcDebug
 var npc_bus: StimulusBus
 var exterior_npcs: NpcDirector
 var contact_markers: Array[ContactMarker] = []
+## The course on the HUD, one per view (bridge computer spec §6.1, §8).
+var course_markers: Array[CourseMarker] = []
+var course_chime: AudioStreamPlayer
 
 ## The interior's own mood (spec §3.3): dim and warm, with bloom turning the
 ## thin lit strips into light. It goes on the interior camera, not the world,
@@ -252,26 +255,58 @@ func _wire_npcs() -> void:
 	npc_debug.directors.append(exterior_npcs)
 
 ## The ship's sensors (NPC foundation spec §22): they follow the universe's
-## focus, and read signs of life off the rocks. Their contacts show on the HUD
-## three ways, like the velocity marker: through the canopy, in chase view, and
-## on a spacewalk.
+## focus, and read signs of life and the big rocks. Their contacts, and the
+## course the bridge computer sets, show on the HUD three ways, like the
+## velocity marker: through the canopy, in chase view, and on a spacewalk.
 func _wire_sensors() -> void:
 	_ship.sensors.universe = _universe
 	_ship.sensors.add_source(LifeContacts.new(_stream, exterior_npcs, _universe))
+	# Big rocks out to 30 km, for the bridge computer's map and the course
+	# (bridge computer spec §4.2). The same seed and start as the stream.
+	_ship.sensors.add_source(RockContacts.new(_stream.seed, _stream.recipe.start))
 	contact_markers.clear()
-	for mount: Array in [[$Ship/Canopy/CanopyOverlay, $Ship/Canopy/CanopyCam, "ContactsCockpit"],
-			[$HudRoot/Screen, $Ship/Exterior/ChaseCamera, "ContactsChase"], [$HudRoot/Screen, null, "ContactsSpacewalk"]]:
-		var marker := ContactMarker.new()
-		marker.name = mount[2]
+	for m in _mount_per_view(func() -> WorldMarker: return ContactMarker.new(), "Contacts"):
+		(m as ContactMarker).sensors = _ship.sensors
+		contact_markers.append(m)
+	course_markers.clear()
+	for m in _mount_per_view(func() -> WorldMarker: return CourseMarker.new(), "Course"):
+		(m as CourseMarker).bind(_ship.sensors)
+		course_markers.append(m)
+	_wire_course_chime()
+
+## Mounts a world marker once per view (bridge computer spec §8): in the canopy
+## overlay with CanopyCam, on the HUD screen with ChaseCamera, and on the HUD
+## screen with no camera of its own, for a spacewalk. `make` returns a fresh
+## marker; each is named `prefix` and its view.
+func _mount_per_view(make: Callable, prefix: String) -> Array[WorldMarker]:
+	var out: Array[WorldMarker] = []
+	for mount: Array in [[$Ship/Canopy/CanopyOverlay, $Ship/Canopy/CanopyCam, "Cockpit"],
+			[$HudRoot/Screen, $Ship/Exterior/ChaseCamera, "Chase"], [$HudRoot/Screen, null, "Spacewalk"]]:
+		var marker: WorldMarker = make.call()
+		marker.name = prefix + mount[2]
 		marker.set_anchors_preset(Control.PRESET_FULL_RECT)
-		marker.sensors = _ship.sensors
 		(mount[0] as Node).add_child(marker)
 		marker.set_camera(mount[1])
 		# HudRoot finds its own descendants; the canopy's is in the ship's
 		# SubViewport, so it is registered.
 		if not _hud.is_ancestor_of(marker):
 			_hud.register_element(marker)
-		contact_markers.append(marker)
+		out.append(marker)
+	return out
+
+## A soft chime when a course clears by arriving (bridge computer spec §9):
+## through the suit on a spacewalk, else the ship.
+func _wire_course_chime() -> void:
+	course_chime = AudioStreamPlayer.new()
+	course_chime.name = "CourseChime"
+	add_child(course_chime)
+	_ship.sensors.course_arrived.connect(func(_id: StringName) -> void:
+		var s := Synth.sound(&"course_arrived")
+		if s == null:
+			return
+		course_chime.bus = AudioBuses.SUIT if _avatar.mode == Avatar.Mode.SUIT else AudioBuses.SHIP
+		course_chime.stream = s
+		course_chime.play())
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
@@ -469,7 +504,12 @@ func _starter_grid() -> ShipGrid:
 	_put(g, Vector3i(2, 0, -3), &"hull_wedge", O_STARBOARD_FWD)
 	# The helm sits in the front row, facing the windshield: the cockpit pod
 	# juts out through the canopy face ahead of it (cockpit pod spec §7).
-	_put(g, Vector3i(-1, 0, -3), &"deck")
+	# The bridge computer's holo table in the port front corner, beside the
+	# helm, facing aft toward where you stand to use it: you look forward
+	# over it, out of the shoulder window (bridge computer spec §3.2, as
+	# amended 2026-09-27). The corner's console goes to the back corner
+	# (InteriorLayout._handed_consoles).
+	_put(g, Vector3i(-1, 0, -3), InteriorLayout.COMPUTER_ID, O_STERN)
 	_put(g, Vector3i(0, 0, -3), &"pilot_seat")
 	_put(g, Vector3i(1, 0, -3), &"deck")
 	for z in [-2, -1, 0, 1, 2]:
@@ -601,6 +641,12 @@ func _starter_grid() -> ShipGrid:
 	#    introduces the only yaw imbalance the starter has: 3,093 N*m,
 	#    0.15% of yaw authority -- still negligible.
 	#
+	# 2c. The bridge computer (bridge computer spec §3.2), a 0.3 t holo table
+	#    in the port front corner, replaced a 0.4 t deck cell: the ship is
+	#    100 kg lighter, and the centre of mass edges 2 mm to starboard, so
+	#    the yaw imbalance doubles to 6,192 N*m -- 0.3% of yaw authority,
+	#    still negligible. Pitch moves to 11,146 N*m, 0.36% of authority.
+	#
 	# 3. Power margin. The extra stern thrusters draw 9.0 MW more than
 	#    §3.4's two-reactor estimate covers (that estimate assumed four
 	#    thrusters total, not five). Three reactors restored comfortable
@@ -609,13 +655,14 @@ func _starter_grid() -> ShipGrid:
 	#    load side.
 	#
 	# Real numbers for this exact grid (via ShipStats/ShipValidator,
-	# res://data/blocks catalog), with the quantum core and machine aboard
-	# and the reactors replaced by quantum cells (quantum energy spec §5.4):
-	# 84 blocks, 97,000 kg, center_of_mass = (0.002, 1.206, 0.118),
-	# inertia = (1.91, 2.74, 1.07) million kg*m², torque_budget =
-	# (3058763, 2029382, 2198454), torque_imbalance = (9278, -3093, 0),
+	# res://data/blocks catalog), with the quantum core, the machine and the
+	# bridge computer aboard and the reactors replaced by quantum cells
+	# (quantum energy spec §5.4; bridge computer spec §3.2):
+	# 84 blocks, 96,900 kg, center_of_mass = (0.004, 1.207, 0.124),
+	# torque_budget = (3061920, 2030960, 2198143),
+	# torque_imbalance = (11146, -6192, 0),
 	# thrust_budget forward/reverse/lateral/vertical = 1500/500/500/1000 kN,
-	# power_gen = 36.0 MW (all from the quantum core), power_draw = 31.1 MW,
+	# power_gen = 36.0 MW (all from the quantum core), power_draw = 31.3 MW,
 	# quantum_capacity = 1200 QE, zero validation issues, can_launch = true.
 	# Handling under assist is essentially unchanged from the pre-quantum
 	# grid (see task-1-report.md): pitch and roll assist still reach their

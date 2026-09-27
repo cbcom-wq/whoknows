@@ -17,8 +17,9 @@ func before_each():
 	_avatar = _root.get_node("Ship/Interior/Avatar")
 	await wait_physics_frames(3)
 	_droid = _ship.npc_director.live.values()[0]
-	# Keep the avatar well away unless a test brings it close.
-	_stand_avatar(Vector3i(-1, 0, -3))
+	# Keep the avatar well away unless a test brings it close: at the back of
+	# the bunk room, with nothing for the droid to tend.
+	_stand_avatar(Vector3i(-1, 0, 1))
 
 func _stand_avatar(cell: Vector3i) -> void:
 	_avatar.place(_ship.interior.global_transform * Transform3D(Basis.IDENTITY, DeckPaths.floor_point(cell) + Vector3(0, 0.05, 0)))

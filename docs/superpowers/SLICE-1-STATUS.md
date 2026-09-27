@@ -1,8 +1,8 @@
 # Slice 1 — status and handoff
 
-**Last updated:** 2026-09-26
+**Last updated:** 2026-09-27
 **Branch history:** `design/slice-1` (Tasks 1–12, merged) → `feat/slice-1-builders` (Tasks 13–15)
-**Suite:** 905 tests, green (2026-09-26, the NPC foundation branch)
+**Suite:** 1,352 tests, green (2026-09-27, main with saving and the bridge computer)
 
 Governing documents:
 
@@ -57,8 +57,17 @@ scenery any more.
   - **skitters**, shy grazers in herds on the big rocks, that crawl any way up, freeze in your
     lamp, scatter when the rock shakes, leap to moons and puff home when knocked off.
 
-Derived stats for the starter shuttle: 92,300 kg, torque imbalance 3.2% of pitch budget, power
-36.0 gen / 30.8 draw MW, **zero validation issues**, `can_launch = true`.
+- **A bridge computer** (docs/superpowers/specs/2026-09-25-bridge-computer-design.md, §18 as
+  built): a holo table in the bridge's port front corner, beside the helm, that
+  - maps what the ship's sensors know -- big rocks out to 30 km, signs of life -- turned with the
+    ship, at 2, 10 and 30 km;
+  - sets a course to a big rock (salvage once quantum energy's Task 10 registers it), which an
+    amber marker on the HUD follows on every view, clearing on arrival with a chime;
+  - shows the ship in miniature, from its own hull, with its store, power and suit.
+
+Derived stats for the starter shuttle (2026-09-27, with the quantum fixtures and the bridge
+computer): 96,900 kg, torque imbalance 11,146 / −6,192 N·m (0.36% / 0.3% of pitch / yaw
+authority), power 36.0 gen / 31.3 draw MW, **zero validation issues**, `can_launch = true`.
 
 ---
 
@@ -98,16 +107,9 @@ It retires `reactor` and `battery`. The ship keeps its size and no room moves.
 
 The spec is also brought up to date with the floating origin and the asteroids.
 
-**Designed, awaiting the owner's review: the bridge computer** (2026-09-25), built after quantum
-energy. A holo table at (−1, 0, −1) on the bridge:
-- a map of the ship's sensor contacts, turned with the ship, at 2, 10 and 30 km;
-- a course to a big rock or salvage, which the HUD follows;
-- a status page with the ship in miniature.
-
-Spec `docs/superpowers/specs/2026-09-25-bridge-computer-design.md`, plan
-`docs/superpowers/plans/2026-09-25-bridge-computer.md` (seven tasks, after quantum energy). It
-amends quantum energy's Task 10 to build the ship's sensors and a `WorldMarker` base, mounted per
-view, which fixes a salvage marker that would have pointed nowhere from the cockpit.
+**Built: the bridge computer** (2026-09-27), ahead of quantum energy's salvage at the groups (see
+"What works" and the spec's §18). Its renders await the owner's word; its frame time is not yet
+measured on the GTX 960.
 
 Spec `docs/superpowers/specs/2026-09-24-quantum-energy-design.md`, plan
 `docs/superpowers/plans/2026-09-24-quantum-energy.md`. Nothing is built.

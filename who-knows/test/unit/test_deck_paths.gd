@@ -51,10 +51,10 @@ func test_each_room_opens_only_through_its_doorway():
 		assert_eq(crossings, 1, "%s has %d ways out" % [room["zone"], crossings])
 
 func test_a_path_from_the_closet_to_the_bridge_keeps_out_of_other_rooms():
-	var route := _paths.path(Vector3i(1, 0, 2), Vector3i(-1, 0, -3))
+	var route := _paths.path(Vector3i(1, 0, 2), Vector3i(-1, 0, -2))
 	assert_gt(route.size(), 0)
 	assert_eq(route[0], Vector3i(1, 0, 2))
-	assert_eq(route[route.size() - 1], Vector3i(-1, 0, -3))
+	assert_eq(route[route.size() - 1], Vector3i(-1, 0, -2))
 	for cell in route.slice(1, route.size() - 1):
 		assert_false(InteriorLayout.ROOM_IDS.has(_layout.zone_at(cell)), "passes through %s" % cell)
 	for i in route.size() - 1:
@@ -72,5 +72,42 @@ func test_cell_at_undoes_floor_point():
 func test_avoided_cells_are_left_out():
 	var paths := DeckPaths.build(_layout, [Vector3i(0, 0, 1)] as Array[Vector3i])
 	assert_false(paths.has(Vector3i(0, 0, 1)))
-	assert_eq(paths.path(Vector3i(1, 0, 2), Vector3i(-1, 0, -3)).size(), 0,
+	assert_eq(paths.path(Vector3i(1, 0, 2), Vector3i(-1, 0, -2)).size(), 0,
 		"with the corridor cut, the closet is cut off")
+
+## The core and the machine are quiet fixtures, clear of their cells'
+## corners, so the droid steps diagonally between them, round the core's
+## starboard side, where the avatar walks too (bridge computer spec §3.2).
+func test_it_squeezes_past_the_corner_between_two_quiet_fixtures():
+	assert_true(_paths.linked(Vector3i(0, 0, -1), Vector3i(1, 0, -2)), "between the machine and the core")
+	assert_true(_paths.linked(Vector3i(1, 0, -2), Vector3i(0, 0, -1)), "both ways")
+	var way := _paths.path(Vector3i(0, 0, 0), Vector3i(1, 0, -3))
+	assert_eq(way, [Vector3i(0, 0, 0), Vector3i(0, 0, -1), Vector3i(1, 0, -2), Vector3i(1, 0, -3)] as Array[Vector3i])
+
+func test_it_never_cuts_a_corner_past_open_floor_or_the_helm():
+	# (-1,-2) to (0,-1) would pass the core and open deck: walk round instead.
+	assert_false(_paths.linked(Vector3i(-1, 0, -2), Vector3i(0, 0, -1)))
+	assert_false(_paths.linked(Vector3i(1, 0, -2), Vector3i(0, 0, -3)), "never into a fixture's cell")
+
+func test_a_wall_round_the_corner_keeps_it_shut():
+	var cat := BlockCatalog.load_from_dir("res://data/blocks")
+	var grid := ShipGrid.new()
+	for c in [Vector3i(0, 0, 0), Vector3i(1, 0, 1)]:
+		var deck := BlockInstance.new()
+		deck.block_id = &"deck"
+		grid.set_block(c, deck)
+	for c in [Vector3i(1, 0, 0), Vector3i(0, 0, 1)]:
+		var q := BlockInstance.new()
+		q.block_id = &"quantum_core"
+		grid.set_block(c, q)
+	var core := BlockInstance.new()
+	core.block_id = &"core"
+	grid.set_block(Vector3i(0, 1, 0), core)
+	var layout := InteriorLayout.plan(grid, cat, DeckGraph.build(grid, cat).walkable_coords())
+	assert_true(DeckPaths.build(layout).linked(Vector3i(0, 0, 0), Vector3i(1, 0, 1)), "open all round")
+	var bunk := BlockInstance.new()
+	bunk.block_id = &"bunk_room"
+	grid.set_block(Vector3i(1, 0, 1), bunk)
+	layout = InteriorLayout.plan(grid, cat, DeckGraph.build(grid, cat).walkable_coords())
+	assert_false(DeckPaths.build(layout).linked(Vector3i(0, 0, 0), Vector3i(1, 0, 1)),
+		"a room's walls close the corner")

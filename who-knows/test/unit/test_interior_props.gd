@@ -486,3 +486,56 @@ func test_something_can_lie_on_the_lower_bunk():
 		_assert_spots_clear(InteriorProps.bunks_spots(), [&"tool"])
 		assert_almost_eq((InteriorProps.bunks_spots()[0][0] as Transform3D).origin.y,
 			InteriorProps.BUNK_MATTRESS_TOP, 0.001, "on the mattress")
+
+## Bridge computer spec §3.3: the holo table builds in a bare fixture frame,
+## solid where you would walk into it and open where the holo hangs.
+func test_the_holo_table_builds_in_a_bare_fixture_frame():
+	InteriorProps.holo_table(_kit, Transform3D.IDENTITY, 0.3)
+	assert_gt(_kit.commit().size(), 0, "the table added geometry")
+	assert_eq(_colliders().size(), 2, "the table, and the console's lip")
+	assert_eq(_root.get_children().filter(func(n): return n is OmniLight3D).size(), 0, "no light of its own")
+
+func test_nothing_solid_stands_in_the_holo():
+	InteriorProps.holo_table(_kit, Transform3D.IDENTITY, 0.3)
+	var c := InteriorProps.HOLO_VOLUME_CENTRE
+	var volume := AABB(Vector3(-0.5, c - 0.3, -0.5), Vector3(1.0, 0.6, 1.0))
+	for shape: CollisionShape3D in _colliders():
+		var half := (shape.shape as BoxShape3D).size * 0.5
+		var box := AABB(shape.position - half, half * 2.0)
+		assert_false(box.intersects(volume), "a collider reaches into the holo")
+
+func test_the_console_faces_its_operator_and_its_buttons_run_left_to_right():
+	var out := InteriorProps.holo_table_console().basis.z
+	assert_lt(out.z, 0.0, "the console faces -z, toward the operator")
+	assert_gt(out.y, 0.0, "and tilts up toward their eyes")
+	var buttons := InteriorProps.holo_table_buttons()
+	assert_eq(buttons.size(), 5, "PAGE, RANGE, prev, big, next")
+	# The operator faces +z, so their right is -x: PAGE is furthest to +x.
+	for i in 4:
+		assert_gt(buttons[i].origin.x, buttons[i + 1].origin.x)
+	assert_gt(InteriorProps.holo_table_screen().origin.y, buttons[0].origin.y,
+		"the screen sits above the buttons")
+	for b in buttons:
+		assert_almost_eq(b.basis.z, out, Vector3.ONE * 0.0001, "each button faces the operator")
+
+func test_the_holo_volume_hangs_over_the_table():
+	var v := InteriorProps.holo_table_volume()
+	assert_almost_eq(v.origin, Vector3(0, InteriorProps.HOLO_VOLUME_CENTRE, 0), Vector3.ONE * 0.0001)
+	assert_gt(InteriorProps.HOLO_VOLUME_CENTRE - 0.3, InteriorProps.HOLO_TABLE_TOP,
+		"the holo's floor is above the table top")
+
+## Nothing solid pokes up through the holo table's black glass.
+func test_the_holo_table_s_glass_is_clear():
+	InteriorProps.holo_table(_kit, Transform3D.IDENTITY, 0.3)
+	var solid: MeshInstance3D = null
+	for m in _kit.commit():
+		if m.name == "DressingSolid":
+			solid = m
+	var glass_y := InteriorProps.HOLO_TABLE_TOP - 0.004
+	var inner := InteriorProps.HOLO_TABLE_RADIUS - 0.06
+	var verts: PackedVector3Array = solid.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	for v in verts:
+		if Vector2(v.x, v.z).length() < inner - 0.01 and v.z > -0.3:
+			assert_true(v.y <= glass_y + 0.0001, "a vertex above the glass at %s" % v)
+			if v.y > glass_y + 0.0001:
+				return

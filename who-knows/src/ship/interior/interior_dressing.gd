@@ -51,7 +51,7 @@ static func build(layout: InteriorLayout, body: StaticBody3D, canopy_material: M
 		if pods.is_empty():
 			_nose(kit, group, canopy_material)
 		else:
-			_cockpit(kit, group)
+			_cockpit(kit, layout, group)
 	# Cores first: each machine's conduit runs to one on its own storey.
 	var cores := {}   # Vector3i -> QuantumCore
 	for fixture in layout.fixtures():
@@ -69,7 +69,7 @@ static func build(layout: InteriorLayout, body: StaticBody3D, canopy_material: M
 ## Whether the dressing draws this MOUNT block itself, as a prop. The builder
 ## draws a block's own mesh only for the fixtures this leaves out.
 static func draws_fixture(id: StringName) -> bool:
-	return id == InteriorLayout.HELM_ID or id == QUANTUM_CORE_ID or id == QUANTUM_MACHINE_ID
+	return id in [InteriorLayout.HELM_ID, QUANTUM_CORE_ID, QUANTUM_MACHINE_ID, InteriorLayout.COMPUTER_ID]
 
 ## A fixture's frame (cockpit pod spec §5): origin on the floor under it, -z
 ## the way it faces, +y up. A helm with a pod ahead stands POD_SEAT_DEPTH
@@ -151,9 +151,12 @@ static func _nose(kit: InteriorKit, group: Dictionary, material: Material) -> vo
 
 ## A windshield with a helm behind it: the pod out through the helm's face,
 ## with a CockpitPod marker at its frame, and a shoulder on every other face.
-static func _cockpit(kit: InteriorKit, group: Dictionary) -> void:
+static func _cockpit(kit: InteriorKit, layout: InteriorLayout, group: Dictionary) -> void:
 	var normal: Vector3i = group["normal"]
 	var pods: Array = group["pods"]
+	var fixture_cells := {}
+	for fixture in layout.fixtures():
+		fixture_cells[fixture["coord"]] = true
 	for coord: Vector3i in group["coords"]:
 		if pods.has(coord):
 			var f := pod_frame(coord, normal)
@@ -163,11 +166,14 @@ static func _cockpit(kit: InteriorKit, group: Dictionary) -> void:
 			marker.transform = f
 			kit.root.add_child(marker)
 		else:
+			# A fixture standing at the glass (the bridge computer's table)
+			# takes the desk's place under the window.
 			InteriorProps.shoulder(kit, wall_frame(coord, normal),
-				face_variety({"coord": coord, "normal": normal}))
+				face_variety({"coord": coord, "normal": normal}), not fixture_cells.has(coord))
 
 ## The fixtures the dressing draws at their fixture frames (draws_fixture):
-## the helm, and the quantum core, which it returns. Machines stand against a
+## the helm, the bridge computer's holo table, and the quantum core, which it
+## returns. Machines stand against a
 ## wall instead, and are built after every core (_quantum_machine).
 static func _fixture(kit: InteriorKit, layout: InteriorLayout, fixture: Dictionary) -> QuantumCore:
 	var coord: Vector3i = fixture["coord"]
@@ -182,6 +188,14 @@ static func _fixture(kit: InteriorKit, layout: InteriorLayout, fixture: Dictiona
 		core.setup(f, kit.layer)
 		kit.root.add_child(core)
 		return core
+	elif fixture["id"] == InteriorLayout.COMPUTER_ID:
+		var f := fixture_frame(layout, coord)
+		InteriorProps.holo_table(kit, f, variety)
+		var computer := ShipComputer.new()
+		computer.name = "Computer_%d_%d_%d" % [coord.x, coord.y, coord.z]
+		computer.cell = coord
+		computer.setup(f, kit.layer)
+		kit.root.add_child(computer)
 	return null
 
 ## One quantum machine (quantum energy spec §6.3-§6.4), in the frame of the

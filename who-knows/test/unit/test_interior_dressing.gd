@@ -700,3 +700,46 @@ func test_the_airlock_takes_no_cabin_trim_or_ring_light():
 	_builder.rebuild()
 	assert_eq(_lights(&"airlock").size(), 1, "the airlock's own flush light")
 	assert_eq(_lights(&"ceiling").size(), 1, "only the corridor cell has a ring light")
+
+## Bridge computer spec §3.1: the dressing draws the holo table.
+func test_the_dressing_draws_the_computer():
+	assert_true(InteriorDressing.draws_fixture(InteriorLayout.COMPUTER_ID))
+
+func test_a_computer_gets_its_table_where_its_frame_says():
+	_cat.register(_def(InteriorLayout.COMPUTER_ID, BlockDefinition.Occupancy.MOUNT))
+	_put(Vector3i(0, 0, 0), InteriorLayout.COMPUTER_ID, 12)   # facing +x
+	_put(Vector3i(1, 0, 0), &"deck")
+	_builder.rebuild()
+	var table := _dressing_colliders().filter(
+		func(c): return (c.shape as BoxShape3D).size.is_equal_approx(Vector3(1.0, 0.95, 1.0)))
+	assert_eq(table.size(), 1, "one table collider")
+	var floor_y := InteriorBuilder.floor_y(Vector3i.ZERO)
+	assert_almost_eq(table[0].position, Vector3(0, floor_y + 0.475, 0), Vector3.ONE * 0.0001,
+		"at its cell's floor centre")
+	var lip := _dressing_colliders().filter(
+		func(c): return (c.shape as BoxShape3D).size.is_equal_approx(Vector3(0.8, 0.14, 0.2)))
+	assert_eq(lip.size(), 1)
+	assert_gt(lip[0].position.x, 0.4, "the console is on the +x side, toward its operator")
+
+## Bridge computer spec §3.2, as amended 2026-09-27: a fixture at the glass
+## beside the helm takes the place of the shoulder's desk console, so nothing
+## stands between the table and the window.
+func test_a_fixture_at_the_glass_leaves_the_shoulder_its_window_only():
+	_helm_behind_a_windshield()
+	_builder.rebuild()
+	assert_gt(_desks_at_the_glass(Vector3i(-1, 0, 0)), 0, "a desk under the shoulder window")
+	_cat.register(_def(InteriorLayout.COMPUTER_ID, BlockDefinition.Occupancy.MOUNT))
+	_put(Vector3i(-1, 0, 0), InteriorLayout.COMPUTER_ID, 4)
+	_builder.rebuild()
+	assert_eq(_desks_at_the_glass(Vector3i(-1, 0, 0)), 0, "the table's shoulder has lost its desk")
+	assert_gt(_desks_at_the_glass(Vector3i(1, 0, 0)), 0, "the other shoulder keeps its own")
+	var table := _dressing_colliders().filter(
+		func(c): return (c.shape as BoxShape3D).size.is_equal_approx(Vector3(1.0, 0.95, 1.0)))
+	assert_eq(table.size(), 1, "and the table stands there")
+
+## Console desks standing against the glass at the front of `cell`.
+func _desks_at_the_glass(cell: Vector3i) -> int:
+	var centre := ShipGrid.cell_center(cell)
+	return _dressing_colliders().filter(func(c):
+		return (c.shape as BoxShape3D).size.is_equal_approx(Vector3(1.4, 1.1, 0.4)) \
+			and absf(c.position.x - centre.x) < 1.0 and c.position.z < centre.z - 0.5).size()
