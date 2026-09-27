@@ -10,7 +10,11 @@ extends Node3D
 const KEY := KEY_F4
 const RAISE := 0.35
 const FONT_SIZE := 28
-const PIXEL := 0.0022
+## The same size on screen at any distance, so a herd 300 m off, behind the
+## rock, can still be found and read.
+const PIXEL := 0.0009
+## Nearer than this to the camera, metres, a label shows everything.
+const DETAIL := 30.0
 
 var directors: Array[NpcDirector] = []
 var shown := false:
@@ -42,11 +46,19 @@ func _process(_delta: float) -> void:
 				label = _make_label()
 				_labels[npc] = label
 			label.global_position = npc.global_position + npc.global_basis.y * (npc.species.height + RAISE)
-			label.text = describe(npc)
+			var cam := get_viewport().get_camera_3d()
+			var near := cam != null and cam.global_position.distance_to(npc.global_position) < DETAIL
+			label.text = describe(npc) if near else headline(npc)
 	for npc in _labels.keys():
 		if not seen.has(npc):
 			_labels[npc].queue_free()
 			_labels.erase(npc)
+
+## Far off, one short line: what it is and what it is doing, so a herd reads
+## as a cluster of markers rather than a wall of text.
+static func headline(npc: Npc) -> String:
+	var doing: String = String(npc.brain.current.id) if npc.brain != null and npc.brain.current != null else "-"
+	return "%s %s" % [npc.species.id, doing]
 
 ## What the overlay says about `npc`.
 static func describe(npc: Npc) -> String:
@@ -70,16 +82,16 @@ static func describe(npc: Npc) -> String:
 			lines.append("~ %s %.2f" % [p.kind, npc.memory.sure_of(p, t)])
 	return "\n".join(lines)
 
-## A need as five blocks.
+## A need as five marks (plain ASCII: the default font has no block glyphs).
 static func bar(value: float) -> String:
 	var filled := clampi(roundi(value * 5.0), 0, 5)
-	return "▮".repeat(filled) + "▯".repeat(5 - filled)
+	return "#".repeat(filled) + ".".repeat(5 - filled)
 
 func _make_label() -> Label3D:
 	var label := Label3D.new()
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.no_depth_test = true
-	label.fixed_size = false
+	label.fixed_size = true
 	label.pixel_size = PIXEL
 	label.font_size = FONT_SIZE
 	label.modulate = HudPalette.READOUT

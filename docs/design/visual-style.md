@@ -306,11 +306,14 @@ until then these are the rules they were built to:
   as alive. Its eye is the kit's `GLOW` batch; it has no light of its own, so the light budget is
   unchanged. Three soft synthesized sounds on the Ship bus (`droid_whir`, `droid_chirp`,
   `droid_beep`).
-- **The skitter is chunky facets in its rock's own colour** (`SkitterLook`): a domed back of big
-  flat faces in the rock's shades, so a still skitter reads as a stone; a small lavender patch
-  (`SpacePalette.CRYSTAL`); pale eyes that catch a lamp (`SpacePalette.SKITTER_EYE`); six short,
+- **The skitter is chunky facets in its rock's colour leaning violet** (`SkitterLook`), 1.3 m
+  long: a domed back of big flat faces, 30% of the way from its rock's colour to the crystal
+  (`SpacePalette.skitter`, the owner, 2026-09-27), so it reads as a stone from afar and as a
+  creature once you are looking; two lavender patches (`SpacePalette.CRYSTAL`); pale eyes that catch a lamp (`SpacePalette.SKITTER_EYE`); six short,
   stubby legs -- long legs read as a spider. Under 300 triangles. It fades in with distance by
   the built-in dither, as the rocks do. Silent, as everything outside is (§2.9).
+- **Sensor contacts on the HUD are coloured by kind** (`HudPalette.for_kind`): signs of life a
+  soft green, salvage the quantum violet, anything else the readout blue.
 - **Legs never stretch.** A foot left behind by a bolting body is drawn at the end of its reach.
 
 ## 4. Adding something new

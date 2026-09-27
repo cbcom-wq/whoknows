@@ -29,8 +29,8 @@ trust the code and fix this file.
 
 | Group | Field | Droid | Skitter |
 |---|---|---|---|
-| Body | `size` (longest side), `height`, `width` | 0.55, 0.55, 0.5 | 0.85, 0.4, 0.5 |
-| | `mass` (for bumps, kg), `top_speed` (m/s at speed 1) | 40, 1.8 | 25, 4.0 |
+| Body | `size` (longest side), `height`, `width` | 0.55, 0.55, 0.5 | 1.3, 0.6, 0.75 |
+| | `mass` (for bumps, kg), `top_speed` (m/s at speed 1) | 40, 1.8 | 90, 4.0 |
 | | `locomotors` (first is active), `look`, `move_sound` | `deck_walker`; `droid`; `droid_whir` | `surface_crawler`, `zero_g_drift`; `skitter`; none |
 | Senses | `sight_range`, `sight_cone_deg` (whole cone), `dark_sight` (share, outside), `near_sense` | 8, 140, 1.0, 3 | 40, 220, 0.33, 2 |
 | | `feels_vibration`, `hears`, `feels_shake` (0–1), `light_response` (−1 flees … +1 drawn) | 0, 1, 1, 0 | 1, 0, 0, −1 |
@@ -120,6 +120,24 @@ percepts), then the site's `fill`:
 
 `RockHerds.site_of(rock)` names a rock as a site (`&"rock:x_y_z_w"`); vibrations carry it.
 
+## Sensors (NPC foundation spec §22)
+
+- **`ShipSensors`** at `Ship/Sensors`: `universe` (the flight scene sets it), `time` (its clock),
+  `add_source(source)`, `contacts(range_m)` (nearest first, cached 0.25 s), `refresh(range_m)`,
+  `contact(id)`, `focus_point()`.
+- **A source:** `contacts(focus: UniversePoint, range_m, time) -> Array[Contact]`,
+  `contact(id, focus, time) -> Contact`. `LifeContacts(stream, exterior director, universe)`:
+  one per herd in detail, id `&"life:<site>:<herd>"`, at its awake members' middle or its round.
+- **`Sense.read(profile, focus, target, id, time) -> Contact`**, pure. `SenseProfile.life()`:
+  reach 4000, region within 1000, radius 15, offset 7, ping ±10° every 4 s.
+  `SenseProfile.salvage()`: 10000, 2000, 75, 50.
+- **`Contact`:** `id`, `kind`, `label`, `point` (`UniversePoint`), `precision` (`EXACT`, `PING`,
+  `REGION`), `radius`, `km`, `taken`, `fresh_for`.
+- **`ContactMarker`:** nearest `MOST` (3); colour `HudPalette.for_kind(kind)` (`LIFE`,
+  `SALVAGE`, else `READOUT`); `set_camera(cam)` (null: spacewalk only, through the viewport's
+  camera when `telemetry.has_beacon`); `marks` lists what it drew. Mounted in
+  `flight_test._wire_sensors` as `ContactsCockpit`, `ContactsChase`, `ContactsSpacewalk`.
+
 ## Directors
 
 | | Exterior (`flight_test.gd._wire_npcs`) | Interior (`Ship._make_crew_quarters`) |
@@ -168,8 +186,10 @@ percepts), then the site's `fill`:
 - `DroidLook`: interior kit pieces (`NpcLooks.droid_body/wheel/cap/arm(kit, frame, ...)`),
   `InteriorPalette.DROID_BODY`, `DROID_WHEEL`; eye in the `GLOW` batch; actions `polish`,
   `scan`, `tidy`, `notice`, `startle`, `brace`; 512 triangles (pinned).
-- `SkitterLook`: `ArrayMesh` facets with vertex colours from `SpacePalette` (the rock's shades,
-  `CRYSTAL` patch, `SKITTER_EYE`, `scree` underside and legs); `THIGH` 0.15, `SHIN` 0.17, feet
+- `SkitterLook`: built 0.85 m long and scaled to the species by the `Npc`
+  (`NpcLooks.built_size`); `ArrayMesh` facets with vertex colours from `SpacePalette` (the back
+  `SpacePalette.skitter(rock colour)`, 30% toward `CRYSTAL`, in three shades; two `CRYSTAL`
+  patches; `SKITTER_EYE`; `scree` underside and legs); `THIGH` 0.15, `SHIN` 0.17, feet
   clamped to reach; `LeggedGait` tripods (legs 0, 3, 4 then 1, 2, 5), rays only within 60 m of
   the camera, legs posed every 6th frame beyond 100 m and not past the fade; actions `freeze`,
   `graze`, `rest`, `puff`; under 300 triangles.

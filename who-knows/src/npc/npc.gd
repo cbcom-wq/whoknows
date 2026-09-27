@@ -310,4 +310,7 @@ func _build_look() -> void:
 		look = null
 	look = NpcLooks.build(species.look, float(record.seed & 0xFFFF) / 65535.0, inside, site.tint(), species.fade)
 	look.name = "Look"
+	var built := NpcLooks.built_size(species.look)
+	if built > 0.0:
+		look.scale = Vector3.ONE * (species.size / built)
 	add_child(look)

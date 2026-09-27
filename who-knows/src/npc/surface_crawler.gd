@@ -22,8 +22,8 @@ const LEAD := 6.0
 const ACCEL := 10.0
 ## It turns about its up this fast, rad/s.
 const TURN_RATE := 5.0
-## Herd mates closer than this push it away.
-const PERSONAL := 1.2
+## Herd mates closer than this many body lengths push it away.
+const PERSONAL := 1.4
 const SEPARATION := 1.5
 ## With no ground this long, it lets go.
 const LOST_AFTER := 0.2
@@ -31,10 +31,10 @@ const LOST_AFTER := 0.2
 const KNOCKED_OFF := 1.5
 ## Footing moving faster than this is lost, m/s.
 const SLIPPERY := 3.0
-## It stands this far off the ground it settles on, and stops this far short
-## of a wall ahead, metres.
+## It stands this far off the ground it settles on, metres, and stops this
+## many body lengths short of a wall ahead.
 const LIFT := 0.01
-const WALL_GAP := 0.45
+const WALL_GAP := 0.55
 ## Slower than this, m/s, it is standing still.
 const STILL := 0.25
 ## At rest, it looks at the ground again every this many ticks.
@@ -130,8 +130,9 @@ func step(npc: Npc, intent: Intent, delta: float) -> void:
 		var away: Vector3 = o - frame * m
 		away -= up * away.dot(up)
 		var d := away.length()
-		if d > 0.01 and d < PERSONAL:
-			want += away / d * SEPARATION * (1.0 - d / PERSONAL)
+		var personal := PERSONAL * npc.species.size
+		if d > 0.01 and d < personal:
+			want += away / d * SEPARATION * (1.0 - d / personal)
 	var normal_v := up * npc.velocity.dot(up)
 	var along := npc.velocity - normal_v - footing
 	along -= up * along.dot(up)
@@ -164,7 +165,7 @@ func _walk(npc: Npc, space: PhysicsDirectSpaceState3D, exclude: Array[RID], alon
 		ahead: Dictionary, fwd: Vector3, up: Vector3, delta: float) -> void:
 	var move := (along + footing) * delta
 	if not ahead.is_empty():
-		var gap := ((ahead["position"] as Vector3) - npc.global_position).dot(fwd) - WALL_GAP
+		var gap := ((ahead["position"] as Vector3) - npc.global_position).dot(fwd) - WALL_GAP * npc.species.size
 		var into := move.dot(fwd)
 		if into > gap:
 			move -= fwd * (into - maxf(gap, 0.0))
@@ -206,7 +207,7 @@ static func _along(npc: Npc) -> Vector3:
 func _crowded(npc: Npc) -> bool:
 	var frame := npc.site.frame()
 	for m in mates:
-		if npc.global_position.distance_to(frame * m) < PERSONAL * 0.8:
+		if npc.global_position.distance_to(frame * m) < PERSONAL * npc.species.size * 0.8:
 			return true
 	return false
 

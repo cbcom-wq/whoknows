@@ -46,6 +46,7 @@ var _saved_tag: SavedTag
 var npc_debug: NpcDebug
 var npc_bus: StimulusBus
 var exterior_npcs: NpcDirector
+var contact_markers: Array[ContactMarker] = []
 
 ## The interior's own mood (spec §3.3): dim and warm, with bloom turning the
 ## thin lit strips into light. It goes on the interior camera, not the world,
@@ -84,6 +85,7 @@ func _ready() -> void:
 	_wire_hands()
 	_wire_universe(saved)
 	_wire_npcs()
+	_wire_sensors()
 	_wire_saving()
 
 ## The interior camera is also the seated camera -- CameraDirector moves it
@@ -248,6 +250,28 @@ func _wire_npcs() -> void:
 	add_child(npc_debug)
 	npc_debug.directors.append(_ship.npc_director)
 	npc_debug.directors.append(exterior_npcs)
+
+## The ship's sensors (NPC foundation spec §22): they follow the universe's
+## focus, and read signs of life off the rocks. Their contacts show on the HUD
+## three ways, like the velocity marker: through the canopy, in chase view, and
+## on a spacewalk.
+func _wire_sensors() -> void:
+	_ship.sensors.universe = _universe
+	_ship.sensors.add_source(LifeContacts.new(_stream, exterior_npcs, _universe))
+	contact_markers.clear()
+	for mount: Array in [[$Ship/Canopy/CanopyOverlay, $Ship/Canopy/CanopyCam, "ContactsCockpit"],
+			[$HudRoot/Screen, $Ship/Exterior/ChaseCamera, "ContactsChase"], [$HudRoot/Screen, null, "ContactsSpacewalk"]]:
+		var marker := ContactMarker.new()
+		marker.name = mount[2]
+		marker.set_anchors_preset(Control.PRESET_FULL_RECT)
+		marker.sensors = _ship.sensors
+		(mount[0] as Node).add_child(marker)
+		marker.set_camera(mount[1])
+		# HudRoot finds its own descendants; the canopy's is in the ship's
+		# SubViewport, so it is registered.
+		if not _hud.is_ancestor_of(marker):
+			_hud.register_element(marker)
+		contact_markers.append(marker)
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
