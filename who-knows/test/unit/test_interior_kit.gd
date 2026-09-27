@@ -100,3 +100,17 @@ func test_a_kit_can_build_on_another_layer():
 	var l := _kit.light(Vector3.ZERO, Color.WHITE, 1.0, 2.0, &"test")
 	assert_eq(_kit.commit()[0].layers, 4)
 	assert_eq(l.light_cull_mask, 5)
+
+## Bridge computer spec §10: one batch as a mesh, for pieces something else
+## instances, like the holo's MultiMeshes.
+func test_one_batch_comes_out_as_a_mesh_with_no_node():
+	_kit.bevel_box(InteriorKit.Batch.GLOW, Transform3D.IDENTITY, Vector3.ONE, 0.2,
+		InteriorKit.lit(InteriorPalette.SKY, 1.4))
+	_kit.box(InteriorKit.Batch.SOLID, Transform3D.IDENTITY, Vector3.ONE, InteriorKit.solid(InteriorPalette.TRIM))
+	var mesh := _kit.mesh(InteriorKit.Batch.GLOW)
+	assert_not_null(mesh)
+	assert_eq(mesh.get_surface_count(), 1)
+	assert_eq(_root.get_child_count(), 0, "no node was made")
+	var committed := _kit.commit()
+	assert_eq(committed.size(), 1, "only the solid batch is left to commit")
+	assert_null(_kit.mesh(InteriorKit.Batch.GLOW), "the batch was emptied")

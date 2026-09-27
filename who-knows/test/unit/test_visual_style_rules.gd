@@ -50,6 +50,7 @@ const PAINTING_FILES := [
 	"res://src/npc/npc_looks.gd",
 	"res://src/npc/droid_look.gd",
 	"res://src/npc/skitter_look.gd",
+	"res://src/ship/computer/holo_volume.gd",
 ]
 
 ## The reusable asset library and what it builds with. Ships are generated
@@ -74,6 +75,7 @@ const REUSABLE_FILES := [
 	"res://src/quantum/quantum_machine.gd",
 	"res://src/npc/npc_looks.gd",
 	"res://src/npc/droid_look.gd",
+	"res://src/ship/computer/holo_volume.gd",
 ]
 const GRID_SIDE := ["ShipGrid", "BlockCatalog", "DeckGraph", "InteriorLayout", "InteriorBuilder",
 	"InteriorDressing"]
