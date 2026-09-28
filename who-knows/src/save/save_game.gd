@@ -38,7 +38,7 @@ static func new_game_asked() -> bool:
 
 ## The generators whose output a save depends on (§8.1).
 static func generators() -> Dictionary:
-	return {"asteroids": AsteroidRecipe.VERSION, "salvage": SalvageField.VERSION}
+	return {"asteroids": AsteroidRecipe.VERSION, "salvage": SalvageField.VERSION, "system": SystemRecipe.VERSION}
 
 func exists() -> bool:
 	return FileAccess.file_exists(path) or FileAccess.file_exists(path + ".bak")

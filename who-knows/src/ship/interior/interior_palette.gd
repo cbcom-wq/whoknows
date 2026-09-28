@@ -62,6 +62,9 @@ const PLASMA := Color("ff9a52")
 ## soft signal green for hatch strips and panel buttons only -- "this side may
 ## open" -- and the warm off-white of steam and fog.
 const SIGNAL_GO := Color("8fd6a0")
+## A star, planet or moon on the bridge computer's map (the system skeleton
+## spec §10): apart from rocks, salvage, life and the course.
+const WORLD := Color("e89ab0")
 const STEAM := Color("f2ece2")
 ## Quantum energy (docs/superpowers/specs/2026-09-24-quantum-energy-design.md
 ## §2 row 11, §14.3): QUANTUM, a soft luminous violet, is the colour of QE --

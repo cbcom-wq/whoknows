@@ -22,6 +22,10 @@ extends Node3D
 @onready var _stream: AsteroidStream = $AsteroidStream
 @onready var _pilot: PilotControls = $Ship/PilotControls
 
+## The star system the flight is in (the system skeleton spec §4), from the
+## world seed, and the node that draws its star, planets and moons.
+var system: SystemRecipe
+var star_system: StarSystem
 ## Every salvage cloud, under Outside (quantum energy spec §10.2).
 var salvage: SalvageField
 ## Every stray item adrift outside (saving spec §7), under Outside.
@@ -50,6 +54,12 @@ var contact_markers: Array[ContactMarker] = []
 ## The course on the HUD, one per view (bridge computer spec §6.1, §8).
 var course_markers: Array[CourseMarker] = []
 var course_chime: AudioStreamPlayer
+## Which body the debug hop last put you by (F7), in the system's order.
+var hop_index := -1
+## The debug hop leaves you this far off a body's surface, or nearer a small
+## moon, so you are near it.
+const HOP_OFF := 3000.0
+const HOP_INSIDE := 200.0
 
 ## The interior's own mood (spec §3.3): dim and warm, with bloom turning the
 ## thin lit strips into light. It goes on the interior camera, not the world,
@@ -157,10 +167,14 @@ func _wire_universe(saved: Dictionary) -> void:
 	var world: Dictionary = saved.get("world", {})
 	if world.has("seed"):
 		_stream.seed = int(world["seed"])
-	# The flight starts at a field's edge (asteroids spec §5.6): the universe's
-	# origin goes there, and the rocks around it load before the first frame.
-	var start := AsteroidRecipe.new(_stream.seed).find_start()
-	var same_world := resumed and _same_generator(saved, "asteroids")
+	# The seed makes a star system, and its rocks lie in its belts and rings
+	# (the system skeleton spec §4, §6). The flight starts at its entry, by the
+	# first belt's first group: the universe's origin goes there, and the
+	# rocks around it load before the first frame.
+	system = SystemRecipe.from_seed(_stream.seed)
+	_stream.shapes = system.asteroid_shapes()
+	var start := system.entry()
+	var same_world := resumed and _same_generator(saved, "asteroids") and _same_generator(saved, "system")
 	if resumed and not same_world:
 		push_warning("FlightTest: the save's asteroids are another version; back to the start")
 	if same_world:
@@ -170,6 +184,7 @@ func _wire_universe(saved: Dictionary) -> void:
 		if resumed:
 			_restore_you(saved.get("avatar", {}), false)
 	_stream.start(_universe, start)
+	_wire_star_system()
 	_wire_salvage(saved if same_world else {}, _same_generator(saved, "salvage"))
 	_wire_strays(saved.get("strays", {}) if same_world else {})
 	# Godot's cameras stop drawing at 4 km; big rocks show from 25 km.
@@ -186,6 +201,14 @@ func _wire_universe(saved: Dictionary) -> void:
 	_universe_readout.position = Vector2(16, 16)
 	_universe_readout.visible = false
 	$Prompt.add_child(_universe_readout)
+
+## The star, planets and moons (the system skeleton spec §7), placed for the
+## focus before the first frame, and the sun aimed from the star.
+func _wire_star_system() -> void:
+	star_system = StarSystem.new()
+	star_system.name = "StarSystem"
+	add_child(star_system)
+	star_system.setup(system, _universe, $DirectionalLight3D)
 
 ## Salvage (quantum energy spec §10.2, §14): the field under Outside, at the
 ## identity, with the same world seed as the rocks; and the near cloud out of
@@ -263,7 +286,12 @@ func _wire_sensors() -> void:
 	_ship.sensors.add_source(LifeContacts.new(_stream, exterior_npcs, _universe))
 	# Big rocks out to 30 km, for the bridge computer's map and the course
 	# (bridge computer spec §4.2). The same seed and start as the stream.
-	_ship.sensors.add_source(RockContacts.new(_stream.seed, _stream.recipe.start))
+	_ship.sensors.add_source(RockContacts.new(_stream.seed, _stream.recipe.start, _stream.shapes))
+	# The star, planets and moons, anywhere in the system, and where you are
+	# (the system skeleton spec §8, §10).
+	_ship.sensors.add_source(BodyContacts.new(system))
+	_ship.sensors.system = system
+	_ship.sensors.whereabouts = star_system.whereabouts
 	contact_markers.clear()
 	for m in _mount_per_view(func() -> WorldMarker: return ContactMarker.new(), "Contacts"):
 		(m as ContactMarker).sensors = _ship.sensors
@@ -310,16 +338,56 @@ func _wire_course_chime() -> void:
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
-	if key != null and key.pressed and not key.echo and key.keycode == KEY_F3:
-		_universe_readout.visible = not _universe_readout.visible
+	if key == null or not key.pressed or key.echo:
+		return
+	match key.keycode:
+		KEY_F3:
+			_universe_readout.visible = not _universe_readout.visible
+		KEY_F7:
+			hop(-1 if key.shift_pressed else 1)
+
+## How far off `b`'s surface the hop leaves you.
+static func hop_off(b: SystemBody) -> float:
+	return minf(HOP_OFF, b.neighbourhood - b.radius - HOP_INSIDE)
+
+## The debug hop (the system skeleton spec §10): puts the ship at rest HOP_OFF
+## off the surface of the next body in the system's order (star, then each
+## planet and its moons), or the previous for `step` -1, on its sunward side
+## and facing it. A system is 300 km across; this stands in for cruise until
+## cruise exists. Refused on a spacewalk and while an airlock cycles. True if
+## it hopped.
+func hop(step: int) -> bool:
+	if _avatar.mode == Avatar.Mode.SUIT:
+		return false
+	for airlock: Airlock in _ship.airlocks.values():
+		if airlock.busy() != "":
+			return false
+	hop_index = posmod(hop_index + step, system.bodies.size())
+	var b := system.bodies[hop_index]
+	var out := Vector3.BACK if b == system.star else system.star.point.minus(b.point).normalized()
+	var at := b.point.plus(out * (b.radius + hop_off(b)))
+	var hull := _ship.exterior
+	hull.linear_velocity = Vector3.ZERO
+	hull.angular_velocity = Vector3.ZERO
+	var up := Vector3.UP if absf(out.dot(Vector3.UP)) < 0.99 else Vector3.RIGHT
+	hull.global_transform = Transform3D(Basis.looking_at(-out, up), _universe.to_engine(at))
+	# The origin follows at once, and the rocks and worlds there are ready
+	# before the next frame, as at the start.
+	_universe.check()
+	star_system.place_all()
+	star_system.whereabouts.look()
+	_stream.update(0.0, true)
+	return true
 
 func _process(_delta: float) -> void:
 	if not _universe_readout.visible or _universe.focus == null:
 		return
 	var u := _universe.to_universe(_universe.focus.global_position)
-	_universe_readout.text = "universe %.3f, %.3f, %.3f km   origin shifts %d
+	_universe_readout.text = "%s   seed %d
+universe %.3f, %.3f, %.3f km   origin shifts %d
 rock cells %d / %d / %d   bodies %d   late cells %d
 save %s   last %ds ago   strays %d" % [
+		star_system.whereabouts.text(), system.seed,
 		(u.x + u.fx) / 1000.0, (u.y + u.fy) / 1000.0, (u.z + u.fz) / 1000.0, _universe.shifts,
 		_stream.loaded_count(0), _stream.loaded_count(1), _stream.loaded_count(2), _stream.bubble.live.size(),
 		_stream.late_cells, _save_readout(), int(save_gate.since_save), strays.count() if strays != null else 0]

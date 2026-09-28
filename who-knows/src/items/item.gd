@@ -31,9 +31,10 @@ const LIFT_LIMIT_KG := 40.0
 const LAYER := 32
 ## interior_geometry | avatar | items | npcs.
 const MASK := 2 | 4 | 32 | Npc.LAYER
-## Outside (quantum energy spec §10.1, §14.2): exterior_hull | avatar | items |
-## asteroids | npcs -- AsteroidBody's own mask, which already takes items.
-const SPACE_MASK := 1 | 4 | 32 | 64 | Npc.LAYER
+## Outside (quantum energy spec §10.1, §14.2): exterior_hull | avatar |
+## terrain | items | asteroids | npcs -- AsteroidBody's own mask, which already
+## takes items.
+const SPACE_MASK := 1 | 4 | BodyProxy.LAYER | 32 | 64 | Npc.LAYER
 ## project.godot 3d_render/layer_1 "exterior": drawn in the world, lit by the
 ## sun.
 const SPACE_LAYER := 1

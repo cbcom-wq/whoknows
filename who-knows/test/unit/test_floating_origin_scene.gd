@@ -120,7 +120,7 @@ func test_a_shift_moves_the_salvage_with_the_hull():
 func test_everything_outside_is_covered_with_a_herd_awake():
 	var stream: AsteroidStream = _root.get_node("AsteroidStream")
 	await wait_physics_frames(5)
-	var detail: AsteroidDetail = stream.details.live.values()[0]
+	var detail: AsteroidDetail = stream.details.nearest((_root.get_node("Ship") as Ship).exterior.global_position)
 	var site := RockSite.new(detail, stream.seed)
 	var at := site.frame() * site.start_pose(site.records[0], 0.0).origin
 	var out := (at - detail.global_position).normalized()
@@ -139,12 +139,12 @@ func test_the_readout_starts_hidden():
 
 func test_the_hull_and_a_spacewalker_touch_rocks():
 	assert_true(_ship.exterior.is_in_group(AsteroidStream.SPACE_ANCHOR))
-	assert_eq(_ship.exterior.collision_mask, 1 | 64 | Npc.LAYER)
+	assert_eq(_ship.exterior.collision_mask, 1 | BodyProxy.LAYER | 64 | Npc.LAYER)
 	assert_true(_ship.exterior.continuous_cd)
 	assert_gt(float(_ship.exterior.get_meta(AsteroidStream.ANCHOR_RADIUS)), 7.0)
 	_out(Vector3(0, 0, 12))
 	assert_true(_avatar.is_in_group(AsteroidStream.SPACE_ANCHOR))
-	assert_eq(_avatar.collision_mask, 1 | 32 | 64 | Npc.LAYER)
+	assert_eq(_avatar.collision_mask, 1 | BodyProxy.LAYER | 32 | 64 | Npc.LAYER)
 	_back_in()
 	assert_false(_avatar.is_in_group(AsteroidStream.SPACE_ANCHOR))
 

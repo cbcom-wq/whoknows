@@ -22,6 +22,10 @@ const REFRESH_EVERY := 0.25
 const ARRIVE_ROCK := 1000.0
 
 var universe: Universe
+## The system you are in and where in it (the system skeleton spec §8, §10),
+## for the map; either may be null.
+var system: SystemRecipe
+var whereabouts: Whereabouts
 ## The sensors' clock, seconds: pings are re-drawn by it.
 var time := 0.0
 
