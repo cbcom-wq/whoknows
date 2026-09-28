@@ -131,7 +131,7 @@ Each skin record is `{coord, normal, kind, ...}`. The kinds:
 |---|---|---|
 | `CHAMFER` | 0.4 m | measured along each face from the edge; the strip is 0.57 m across |
 | `PLATE_PROUD` | 0.05 m | how far a plate stands off the cell face |
-| `PLATE_BEVEL` | 0.05 m | the plate's own bevel; the gap between plates is the panel line |
+| `PLATE_BEVEL` | 0.04 m | the plate's own bevel (under half the plate's 0.1 m depth, or its edges collapse) |
 | `PLATE_GAP` | 0.04 m | between neighbouring plates |
 
 A plate is inset by `CHAMFER` on each side that has a chamfered edge, and by `PLATE_GAP / 2`
@@ -140,8 +140,9 @@ elsewhere. Plate sizes and the chamfer are pinned at the first renders and may m
 ### 3.3 `HullDressing` and `HullProps`
 
 - **`HullDressing`** maps each skin record to a `HullProps` builder, in a **skin frame**: origin at
-  the face's centre on the cell face, −z along the face's outward normal (out of the hull), +y up
-  the face (or toward the bow on a roof or belly face), +x across. It commits one `InteriorKit` per
+  the face's centre on the cell face, +z along the face's outward normal (out of the hull), +y up
+  the face (or toward the bow on a roof or belly face), +x across. The pod shell keeps the interior's
+  pod frame (−z out into the pod), so both are built from the same numbers. It commits one `InteriorKit` per
   ship: layer `OWN_HULL_LAYER`, light mask `1 | OWN_HULL_LAYER`, the own-hull body for colliders.
 - **`HullProps`** builds from `(kit, frame, variety)` and never sees the grid, the layout or the
   dressing (style guide §3):
@@ -163,7 +164,9 @@ elsewhere. Plate sizes and the chamfer are pinned at the first renders and may m
 - It keeps building the colliders and the airlock alcoves, and calls `HullLayout` and
   `HullDressing` for the meshes. Its per-block `MultiMesh`es go.
 - **Colliders:** cubes keep one box per cell. A 0.4 m chamfer is too small to matter against rocks
-  or a spacewalker. **Fairings** get a `ConvexPolygonShape3D` matching their shape (§4).
+  or a spacewalker. **Every shaped block** (fairings, and `hull_wedge` and `canopy`, which are the
+  same wedge as `fairing_slope`) gets `ConvexPolygonShape3D`s matching its shape (§4). The one
+  exception is a pod's canopy cell, which keeps a box: the pod shell reaches past the wedge.
 - **The miniature:** `multimeshes()` is replaced by `hull_meshes() -> Array[MeshInstance3D]`, the
   dressing's merged meshes. The bridge computer's status page shares them, as it shared the
   `MultiMesh`es. `bounds()` stays.
@@ -183,7 +186,7 @@ fairings" counted the halves as one.) They are **structure, not armour**: light 
 | `fairing_slope_long_low` | the lower half of a two-cell ramp: 0 → 1 m rise across the cell | convex |
 | `fairing_slope_long_high` | the upper half: a 1 m block with a 1 → 2 m ramp on top | convex |
 | `fairing_corner_out` | an outer corner: the point where two slopes meet at a convex corner (a quarter pyramid) | convex, 4 points |
-| `fairing_corner_in` | an inner corner: where two slopes meet at a concave corner | convex |
+| `fairing_corner_in` | an inner corner: where two slopes meet at a concave corner (not convex) | two convex slopes |
 | `fairing_half` | the bottom half of a cell | box, 2 × 1 × 2 m |
 
 - **Orientation** works as it does for `hull_wedge`, with the 24 codes of `BlockOrientation`.
@@ -282,13 +285,17 @@ unit vector in hull space.
 - **cone:** 55°; **reach:** 40 m.
 - **fixture:** `flood_fixture`: a chunky bevelled housing hung under the face, and a round lens,
   lit when on.
+- **The belly** is every downward skin face within 1.5 m of the lowest, so the keel does not pull
+  every flood to the centreline. Keel floods: `floor(span / 6 m)` of them, evenly spaced between
+  the bow and stern corner floods.
 - On the reshaped starter: **6** floods (four corners and two on the keel).
 
 **Forward lights** (`group = &"forward"`):
-- a pair on the bow's forward-facing skin (`normal = FORWARD`), outboard of the pod: the forward
-  faces with the least and greatest x on the row of the pod (or, with no pod, the lowest row that
-  has forward faces), each in the plate **below** any window on that face. On the starter that is
-  the two shoulders, under their windows, at about cell y −0.4;
+- a pair on the bow: of the skin faces facing within 45° of forward (normal · forward ≥ 0.7), on
+  the pod's row (with no pod, the lowest row that has any), within 2.5 m of the frontmost, and not
+  the pod's own cell, the ones with the least and the greatest x. Each sits 0.3 m below any window
+  on its face. On the starter they are the nose corners, the wedges at (±2, 0, −3), outboard of the
+  shoulders;
 - **aim:** forward, 5° down, 3° toed out;
 - **cone:** 22°; **reach:** 220 m;
 - **fixture:** `forward_fixture`: a recessed round lamp in a bevelled bezel, lit when on.
@@ -375,11 +382,12 @@ A node under `Ship`, like `QuantumPlant`, alive across rebuilds.
 - **A lights panel:** two big buttons and no screen, built like the bridge computer's buttons (small
   `ReadoutPanel`s, quantum spec §14.1). Each is lit `SIGNAL_GO` when its group is on, and dim when
   off. They are labelled FLOOD and FWD in `Label3D`, style guide §2.8.
-- **Where:** on the **shoulder console desk nearest the helm on the starboard side**. If there
-  isn't one, on the other shoulder's desk; failing that, on the helm console's side. On the starter
-  that is the desk under the starboard shoulder window at (1, 0, −3): reachable standing, and in
-  view from the seat. `InteriorDressing` places it from the console's frame; the panel prop never
-  sees the grid.
+- **Where:** on a **shoulder's wall, beside its window on the side toward the pod, above the
+  desk**: the starboard shoulder nearest the helm first, else the port one. A shoulder where a
+  fixture stands (the bridge computer) is passed over. With no shoulder, there is no panel, and the
+  helm keys still work. On the starter it is the starboard shoulder at (1, 0, −3): reachable
+  standing, and in view from the seat. `InteriorDressing` places it from the wall's frame; the
+  panel prop never sees the grid.
 - **Sound:** a soft clunk, a new `Synth` builder, on the Ship bus. Outside, the lights make no
   sound (style guide §2.9).
 
@@ -389,21 +397,19 @@ A node under `Ship`, like `QuantumPlant`, alive across rebuilds.
 
 The cabin row (y = 0) keeps every cell. Everything below is added to or changed around it.
 
-- **A dorsal spine at y = 2:**
-  - `fairing_half` over x = −1..1, z = −1..2, which raises the middle of the roof by 1 m;
-  - `fairing_slope_long_low` / `_high` pairs down to the nose from z = −2, so the spine meets the
-    pod roof's lip (§5.2);
-  - a `fairing_slope` step down at the stern, over z = 3.
-- **Tapers:**
-  - `fairing_corner_out` at the spine's four corners;
-  - the nose's shoulders at (±2, 1, −3), today `rcs` blocks, stay RCS: their exhaust faces must
-    stay open (building-a-ship skill). The taper goes round them;
-  - the engine pods (x = ±3) get a `fairing_slope` on top at z = 1, so each pod rises from the
-    flank instead of standing as a box.
-- **A shallow keel at y = −1:** `fairing_half` under x = −1..1, z = −3..2, carrying the floods.
-  Its bow end is a `fairing_slope` under the pod.
-- **About 25 fairing cells and 7–8 t.** The exact cells are drawn in the plan, from renders of the
-  profile, and checked against the owner's red sketch.
+- **A dorsal spine at y = 2**, 1 m high:
+  - `fairing_half` over x = −1..1, z = −1..2 (12 cells);
+  - a `fairing_slope_long_low` ramp up to it at z = −2, facing the bow, so the spine rises out of
+    the roof's slope down to the pod (3 cells);
+  - the same ramp facing aft at z = 3, over the stern thruster bank (3 cells).
+- **The engine pods** (x = ±3) each get a `fairing_slope` on top at z = 1, rising toward the stern,
+  so each pod rises from the flank instead of standing as a box (2 cells).
+- **A keel at y = −1:** `fairing_half` turned over (orientation 2: the cell's upper half) under the
+  centreline, x = 0, z = −3..2 (6 cells).
+- **26 fairing cells, 7.8 t.** These are the first cells. The renders of the profile, checked
+  against the owner's red sketch, may move them, within the balance rules below.
+- The RCS stay where they are. Only the down-firing pair's exhaust faces are open today (building-a-
+  ship skill), and the reshape must keep them open.
 - **Balance:** the building-a-ship checklist, steps 4 and 5:
   - zero validator issues;
   - power with margin;
