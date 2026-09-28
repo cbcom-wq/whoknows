@@ -19,6 +19,7 @@ const PAINTING_FILES := [
 	"res://src/ship/hull/hull_props.gd",
 	"res://src/ship/hull/hull_materials.gd",
 	"res://src/ship/hull/hull_layout.gd",
+	"res://src/ship/hull/hull_dressing.gd",
 	"res://src/ship/interior/sliding_door.gd",
 	"res://src/ship/interior_builder.gd",
 	"res://src/items/item_looks.gd",

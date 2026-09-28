@@ -1,11 +1,15 @@
 class_name ExteriorBuilder
 extends Node3D
 
-## Reads a ShipGrid and produces the flying hull: one MultiMesh per block
-## type for rendering, one box collider per occupied cell for physics.
+## Reads a ShipGrid and produces the flying hull: a skin generated over the
+## grid (docs/superpowers/specs/2026-09-28-ship-exterior-design.md §3) --
+## HullLayout decides it, HullDressing draws it as a few merged meshes -- and
+## one collider per occupied cell.
 ##
-## This never references InteriorBuilder. Both are independent readers of
-## the same source of truth, which is what makes the parity test honest.
+## This never references InteriorBuilder. Both are independent readers of the
+## same source of truth, which is what makes the parity test honest. The skin
+## reads the interior's *layout*, which is pure data from the grid, so every
+## window outside matches one inside.
 
 ## Render layer for the ship's own hull -- layer 3, "own_hull". The canopy
 ## camera sits at the pilot's eye, inside the hull, and excludes this layer;
@@ -19,7 +23,11 @@ var _grid: ShipGrid
 var _catalog: BlockCatalog
 var _collider_coords: Array[Vector3i] = []
 var _colliders: Array[CollisionShape3D] = []
-var _multimeshes: Dictionary = {}   # StringName -> MultiMeshInstance3D
+var _layout: HullLayout
+var _skin: Node3D
+var _meshes: Array[Mesh] = []
+var _lenses: Dictionary = {}   # StringName group -> MeshInstance3D
+var _window_glow: ShaderMaterial
 var _alcoves: Dictionary = {}   # Vector3i -> AirlockAlcove
 
 func bind(grid: ShipGrid, catalog: BlockCatalog) -> void:
@@ -30,8 +38,32 @@ func rebuild() -> void:
 	_clear()
 	if _grid == null or _catalog == null:
 		return
+	var walkable := DeckGraph.build(_grid, _catalog).walkable_coords()
+	_layout = HullLayout.plan(_grid, _catalog, InteriorLayout.plan(_grid, _catalog, walkable))
 	_build_colliders()
-	_build_meshes()
+	_build_skin()
+
+## What the skin was made from, for the lights, the probe and tests.
+func layout() -> HullLayout:
+	return _layout
+
+## The hull's plating and trim, for the bridge computer's miniature (bridge
+## computer spec §7.1), which shares them rather than copying.
+func hull_meshes() -> Array[Mesh]:
+	return _meshes.duplicate()
+
+## Each light group's lens glow (spec §6.1), by group.
+func lenses() -> Dictionary:
+	return _lenses.duplicate()
+
+## The windows' glow material (spec §5.1): ShipLights sets its energy.
+func window_glow() -> ShaderMaterial:
+	return _window_glow
+
+## Where the lights go (spec §6.1).
+func light_mounts() -> Array[Dictionary]:
+	var none: Array[Dictionary] = []
+	return _layout.mounts.duplicate() if _layout != null else none
 
 func collider_coords() -> Array:
 	return _collider_coords.duplicate()
@@ -41,27 +73,17 @@ func collider_coords() -> Array:
 func alcoves() -> Dictionary:
 	return _alcoves.duplicate()
 
-## The hull's per-type MultiMeshes, for the bridge computer's miniature
-## (bridge computer spec §7.1), which shares them rather than copying.
-func multimeshes() -> Array[MultiMesh]:
-	var out: Array[MultiMesh] = []
-	for mmi: MultiMeshInstance3D in _multimeshes.values():
-		if is_instance_valid(mmi):
-			out.append(mmi.multimesh)
-	return out
-
-## Everything the hull draws, in its own frame: the cells its meshes fill.
-## From the grid rather than the MultiMeshes' AABBs, which only a renderer
-## can work out.
+## Everything the hull draws, in its own frame: the cells its skin covers.
+## From the grid rather than the meshes' AABBs, which only a renderer can work
+## out.
 func bounds() -> AABB:
 	var box := AABB()
 	var first := true
-	if _grid == null or _catalog == null:
+	if _grid == null:
 		return box
 	var half := Vector3.ONE * ShipGrid.CELL_SIZE * 0.5
 	for coord in _grid.coords():
-		var def := _catalog.get_def(_grid.get_block(coord).block_id)
-		if def == null or def.mesh == null or _is_alcove(coord):
+		if _is_alcove(coord):
 			continue
 		var cell := AABB(ShipGrid.cell_center(coord) - half, half * 2.0)
 		box = cell if first else box.merge(cell)
@@ -90,11 +112,14 @@ func _clear() -> void:
 			collider.free()
 	_colliders.clear()
 	_collider_coords.clear()
-	for mmi in _multimeshes.values():
-		if is_instance_valid(mmi):
-			remove_child(mmi)
-			mmi.free()
-	_multimeshes.clear()
+	if is_instance_valid(_skin):
+		remove_child(_skin)
+		_skin.free()
+	_skin = null
+	_meshes.clear()
+	_lenses = {}
+	_window_glow = null
+	_layout = null
 	for alcove: AirlockAlcove in _alcoves.values():
 		if not is_instance_valid(alcove):
 			continue
@@ -130,32 +155,11 @@ func _build_colliders() -> void:
 		_colliders.append(node)
 		_collider_coords.append(coord)
 
-func _build_meshes() -> void:
-	# Group cells by block type so each type draws in one instanced call.
-	var by_type: Dictionary = {}   # StringName -> Array[Transform3D]
-	for coord in _grid.coords():
-		var inst := _grid.get_block(coord)
-		var def := _catalog.get_def(inst.block_id)
-		if def == null or def.mesh == null or _is_alcove(coord):
-			continue
-		var xform := Transform3D(
-			BlockOrientation.basis_for(inst.orientation), ShipGrid.cell_center(coord)
-		)
-		if not by_type.has(inst.block_id):
-			by_type[inst.block_id] = []
-		by_type[inst.block_id].append(xform)
-
-	for block_id in by_type.keys():
-		var transforms: Array = by_type[block_id]
-		var mm := MultiMesh.new()
-		mm.transform_format = MultiMesh.TRANSFORM_3D
-		mm.mesh = _catalog.get_def(block_id).mesh
-		mm.instance_count = transforms.size()
-		for index in transforms.size():
-			mm.set_instance_transform(index, transforms[index])
-
-		var mmi := MultiMeshInstance3D.new()
-		mmi.multimesh = mm
-		mmi.layers = OWN_HULL_LAYER
-		add_child(mmi)
-		_multimeshes[block_id] = mmi
+func _build_skin() -> void:
+	_skin = Node3D.new()
+	_skin.name = "Skin"
+	add_child(_skin)
+	var made := HullDressing.build(_layout, _skin)
+	_meshes.assign(made["meshes"])
+	_lenses = made["lenses"]
+	_window_glow = made["window_glow"]

@@ -66,7 +66,7 @@ func test_rebuild_is_idempotent():
 ## asserts on what the body actually carries: a burst of rebuild() calls with
 ## no yield -- structurally identical to several cell_changed signals firing
 ## in the same frame from the shipyard editor -- must not leave old
-## CollisionShape3D/MultiMeshInstance3D nodes still parented (and, for
+## CollisionShape3D/Skin nodes still parented (and, for
 ## colliders, still physics-registered) alongside the freshly built ones.
 func test_rebuild_does_not_leave_stale_nodes_in_the_tree():
 	_put(Vector3i.ZERO, &"hull")
@@ -81,12 +81,8 @@ func test_rebuild_does_not_leave_stale_nodes_in_the_tree():
 	assert_eq(colliders_under_body, 1,
 		"stale colliders must be fully detached, not merely queued")
 
-	var meshes_under_builder := 0
-	for child in _builder.get_children():
-		if child is MultiMeshInstance3D:
-			meshes_under_builder += 1
-	assert_eq(meshes_under_builder, 1,
-		"stale mesh instances must be fully detached, not merely queued")
+	var skins := _builder.get_children().filter(func(c): return c.name == "Skin")
+	assert_eq(skins.size(), 1, "stale skins must be fully detached, not merely queued")
 
 func test_clearing_a_block_removes_its_collider():
 	_put(Vector3i(0, 0, 0), &"hull")
@@ -127,12 +123,20 @@ func test_parity_survives_random_mutation():
 func test_hull_meshes_are_drawn_on_the_own_hull_layer():
 	_put(Vector3i.ZERO, &"hull")
 	_builder.rebuild()
-	var drawn := 0
-	for child in _builder.get_children():
-		if child is MultiMeshInstance3D:
-			drawn += 1
-			assert_eq(child.layers, ExteriorBuilder.OWN_HULL_LAYER)
-	assert_eq(drawn, 1, "one MultiMesh for the one block type")
+	var drawn := _builder.find_children("*", "GeometryInstance3D", true, false)
+	assert_gt(drawn.size(), 0)
+	for g in drawn:
+		assert_eq(g.layers, ExteriorBuilder.OWN_HULL_LAYER, "%s" % g.name)
+	assert_gt(_builder.hull_meshes().size(), 0, "the plating and trim, for the miniature")
+
+## Ship exterior spec §3.3: the skin casts the sun's shadows, as the block
+## meshes did.
+func test_the_skin_casts_shadows():
+	_put(Vector3i.ZERO, &"hull")
+	_builder.rebuild()
+	for mi in _builder.get_node("Skin").find_children("*", "MeshInstance3D", true, false):
+		if mi.name == "DressingHull" or mi.name == "DressingSolid":
+			assert_eq(mi.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_ON, "%s" % mi.name)
 
 ## Airlock spec §7.2: an airlock that can cycle is an open alcove on the hull,
 ## a copy of the room inside, instead of a solid block.
@@ -162,11 +166,7 @@ func test_an_airlock_is_an_open_alcove():
 	for c in alcove.colliders:
 		assert_eq(c.get_parent(), _body, "on the hull body")
 	assert_true(_builder.collider_coords().has(Vector3i.ZERO), "the cell still has collision: parity holds")
-	var airlock_drawn := false
-	for child in _builder.get_children():
-		if child is MultiMeshInstance3D and child.multimesh.mesh == _cat.get_def(&"airlock").mesh:
-			airlock_drawn = true
-	assert_false(airlock_drawn, "the block's own mesh is not drawn over the alcove")
+	assert_false(_builder.layout().skin.has(Vector3i.ZERO), "the skin leaves the alcove's cell to the alcove")
 
 func test_an_inert_airlock_stays_a_solid_block():
 	_put(Vector3i(0, 0, 0), &"airlock")   # open on three sides: inert

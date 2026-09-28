@@ -42,4 +42,4 @@ func holo(volume: HoloVolume, ctx: ComputerContext, _delta: float) -> void:
 	volume.show_marks([])
 	volume.show_bracket(Vector3.ZERO, 0.0, false)
 	if not volume.miniature_shown() and ctx.exterior_builder != null:
-		volume.show_miniature(ctx.exterior_builder.multimeshes(), ctx.exterior_builder.bounds())
+		volume.show_miniature(ctx.exterior_builder.hull_meshes(), ctx.exterior_builder.bounds())

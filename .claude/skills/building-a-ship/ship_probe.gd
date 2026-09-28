@@ -49,6 +49,26 @@ func _fps(seconds: float) -> float:
 		frames += 1
 	return frames / ((Time.get_ticks_usec() - start) / 1e6)
 
+## The hull from outside (ship exterior spec §10): two quarters, the profile,
+## above and below, from a camera riding on the hull.
+func _hull_shots(ship: Ship, tag: String) -> void:
+	var cam := Camera3D.new()
+	cam.cull_mask = 1 | ExteriorBuilder.OWN_HULL_LAYER
+	cam.far = 5000.0
+	ship.exterior.add_child(cam)
+	var views := {
+		"bow_port": Vector3(-14, 6, -18), "stern_starboard": Vector3(14, 6, 18),
+		"profile": Vector3(-26, 1, 0), "above": Vector3(0, 28, 4), "below": Vector3(4, -22, 0),
+	}
+	for view: String in views:
+		var at: Vector3 = views[view]
+		var up := Vector3.UP if absf(at.normalized().y) < 0.9 else Vector3.FORWARD
+		cam.transform = Transform3D(Basis.looking_at(-at, up), at)
+		cam.current = true
+		await _shot("%s_%s" % [tag, view])
+	cam.current = false
+	cam.queue_free()
+
 func _run(scene: Node) -> void:
 	# A process frame or two first: the canopy camera is placed on the first.
 	await _process_frames(3)
@@ -110,6 +130,7 @@ func _run(scene: Node) -> void:
 		print("room    %s %s doorway %s" % [room["zone"], room["coords"], room["doorway"]])
 	print("pods    %s" % [layout.pods()])
 	print("locks   %s" % [layout.airlocks()])
+	await _hull_shots(ship, "hull")
 	# The maintenance droid (NPC foundation spec §14): its dock, and every job it
 	# must be able to reach on foot from there.
 	var crew := ship.crew_site
