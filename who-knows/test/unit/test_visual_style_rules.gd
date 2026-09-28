@@ -7,7 +7,8 @@ extends GutTest
 const SHADER_DIR := "res://data/materials/interior/"
 
 ## Code that paints: every colour must come from a palette -- InteriorPalette
-## inside, HullPalette for the hull's outside (the airlock's hatch face).
+## inside, HullPalette for the hull's outside (the airlock's hatch face),
+## SpacePalette for space: rocks, worlds and stars.
 ## InteriorKit is exempt -- it packs data (screen modes, glow energy) into
 ## vertex colours rather than choosing colours.
 const PAINTING_FILES := [
@@ -40,6 +41,14 @@ const PAINTING_FILES := [
 	"res://src/world/asteroid_detail.gd",
 	"res://src/world/asteroid_details.gd",
 	"res://src/world/puffs.gd",
+	"res://src/world/world_recipe.gd",
+	"res://src/world/system_recipe.gd",
+	"res://src/world/body_look.gd",
+	"res://src/world/body_proxy.gd",
+	"res://src/world/star_system.gd",
+	"res://src/world/ring_look.gd",
+	"res://src/world/belt_look.gd",
+	"res://src/world/space_dust.gd",
 	"res://src/flight/rcs_show.gd",
 	"res://src/ship/interior/readout_panel.gd",
 	"res://src/quantum/quantum_core.gd",

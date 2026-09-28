@@ -47,6 +47,9 @@ const _NO_SLOT := Transform3D(Basis(Vector3.ZERO, Vector3.ZERO, Vector3.ZERO), V
 @export var seed: int = 1337
 
 var universe: Universe
+## The system's belts, rings and bodies (the system skeleton spec §6), set
+## before start(); null streams an open field.
+var shapes: AsteroidShapes
 var recipe: AsteroidRecipe
 var bubble: AsteroidBubble
 ## Big rocks within reach, in detail (§18).
@@ -102,6 +105,7 @@ class _Job:
 	var cell: Vector3i
 	var world_seed: int
 	var start: UniversePoint
+	var shapes: AsteroidShapes
 	var task := -1
 	var done := false
 	var rocks: Array[AsteroidRock]
@@ -110,7 +114,7 @@ class _Job:
 
 	## On a worker thread: the cell's rocks, packed for its block.
 	func run() -> void:
-		rocks = AsteroidRecipe.new(world_seed, start).cell_rocks(tier, cell)
+		rocks = AsteroidRecipe.new(world_seed, start, shapes).cell_rocks(tier, cell)
 		var offset := AsteroidStream.offset_in_block(tier, cell)
 		var p0 := PackedFloat32Array()
 		var p1 := PackedFloat32Array()
@@ -193,7 +197,7 @@ func _ready() -> void:
 func start(u: Universe, start_point: UniversePoint = null) -> void:
 	universe = u
 	_start_point = start_point
-	recipe = AsteroidRecipe.new(seed, start_point)
+	recipe = AsteroidRecipe.new(seed, start_point, shapes)
 	_started = true
 	update(0.0, true)
 	# The big rock you start by is in detail before the first frame.
@@ -342,6 +346,27 @@ static func pack(buf: PackedFloat32Array, t: Transform3D, c: Color) -> PackedFlo
 		c.r, c.g, c.b, c.a]))
 	return buf
 
+## Writes instance `slot` into a MultiMesh buffer already sized for it, as
+## pack() lays it out, allocating nothing: for looks placed every tick.
+static func write(buf: PackedFloat32Array, slot: int, b: Basis, origin: Vector3, c: Color) -> void:
+	var i := slot * 16
+	buf[i] = b.x.x
+	buf[i + 1] = b.y.x
+	buf[i + 2] = b.z.x
+	buf[i + 3] = origin.x
+	buf[i + 4] = b.x.y
+	buf[i + 5] = b.y.y
+	buf[i + 6] = b.z.y
+	buf[i + 7] = origin.y
+	buf[i + 8] = b.x.z
+	buf[i + 9] = b.y.z
+	buf[i + 10] = b.z.z
+	buf[i + 11] = origin.z
+	buf[i + 12] = c.r
+	buf[i + 13] = c.g
+	buf[i + 14] = c.b
+	buf[i + 15] = c.a
+
 ## Instance `slot`'s transform in a MultiMesh buffer.
 static func unpack(buf: PackedFloat32Array, slot: int) -> Transform3D:
 	var i := slot * 16
@@ -470,6 +495,7 @@ func _submit(all_now: bool) -> void:
 		job.cell = cell
 		job.world_seed = seed
 		job.start = _start_point
+		job.shapes = shapes
 		job.task = WorkerThreadPool.add_task(job.run)
 		_jobs[_key(best_tier, cell)] = job
 

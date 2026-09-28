@@ -11,12 +11,14 @@ extends ComputerPage
 ## Every kind the sensors know is drawn in its own colour: rocks SKY, salvage
 ## QUANTUM, signs of life SIGNAL_GO (the HUD's green), and the course AMBER.
 
-const RANGES: Array[float] = [2000.0, 10000.0, 30000.0]
+const RANGES: Array[float] = [2000.0, 10000.0, 30000.0, 300000.0]
+## The last range is the whole system (the system skeleton spec §10).
+const SYSTEM_RANGE := 3
 const OPEN_AT := 1
 ## Contacts that get a stalk, nearest first; the selected one always does.
 const STALKS := 12
 ## What a course can be set to (spec §15): a big rock or a salvage cloud.
-const COURSE_KINDS: Array[StringName] = [&"rock", &"salvage"]
+const COURSE_KINDS: Array[StringName] = [&"rock", &"salvage", &"body"]
 ## Mark sizes, metres across in the holo (spec §5.2), tuned at the renders:
 ## the spec's first figures vanished at arm's length.
 const ROCK_MIN_NEAR := 0.012
@@ -26,6 +28,11 @@ const ROCK_MAX_MID := 0.03
 const ROCK_BIGGEST := 600.0
 const ROCK_FAR := 0.008
 const REGION_MIN := 0.02
+## A world's mark: sized by radius, but never lost nor overwhelming.
+const BODY_MIN := 0.012
+const BODY_MAX := 0.06
+## Each belt's ring of ticks on the system range.
+const BELT_TICKS := 48
 const PING_SIZE := 0.018
 ## A ping shrinks to this share of its size by its next refresh.
 const PING_SHRINK := 0.4
@@ -35,7 +42,7 @@ const BRACKET_GAP := 0.012
 ## How often the marks are placed afresh at each range, seconds; in between
 ## they are only turned with the ship (HoloVolume.set_turn). At 30 km there
 ## are hundreds, and a ship at 300 m/s moves a pip 2 mm a second there.
-const PLACE_EVERY: Array[float] = [0.0, 0.0, 0.5]
+const PLACE_EVERY: Array[float] = [0.0, 0.0, 0.5, 0.5]
 
 var range_index := OPEN_AT
 var selected: StringName = &""
@@ -52,6 +59,8 @@ func range_m() -> float:
 	return RANGES[range_index]
 
 func title() -> String:
+	if range_index == SYSTEM_RANGE:
+		return "MAP · SYSTEM"
 	return "MAP · %d KM" % roundi(range_m() / 1000.0)
 
 ## The colour a contact of `kind` is drawn in.
@@ -63,10 +72,13 @@ static func colour_for(kind: StringName) -> Color:
 			return InteriorPalette.QUANTUM
 		&"life":
 			return InteriorPalette.SIGNAL_GO
+		&"body":
+			return InteriorPalette.WORLD
 	return InteriorPalette.LIGHT_WARM
 
 ## What ◀ and ▶ step through: the contacts on this range, nearest first. The
-## far range shows big rocks only (§5.2). Worked out once a frame.
+## 30 km range shows big rocks and worlds only (§5.2), the system range worlds
+## only (the system skeleton spec §10). Worked out once a frame.
 func targets(ctx: ComputerContext) -> Array[Contact]:
 	var key := [Engine.get_process_frames(), range_index, ctx.sensors]
 	if key == _targets_key:
@@ -76,7 +88,9 @@ func targets(ctx: ComputerContext) -> Array[Contact]:
 	if ctx.sensors == null:
 		return _targets
 	for c in ctx.sensors.contacts(range_m()):
-		if range_index == RANGES.size() - 1 and c.kind != &"rock":
+		if range_index == SYSTEM_RANGE and c.kind != &"body":
+			continue
+		if range_index == SYSTEM_RANGE - 1 and c.kind != &"rock" and c.kind != &"body":
 			continue
 		_targets.append(c)
 	return _targets
@@ -121,7 +135,10 @@ func big_colour(ctx: ComputerContext) -> StringName:
 func prompt(button: StringName, ctx: ComputerContext) -> String:
 	match button:
 		&"range":
-			return "Range %d km" % roundi(RANGES[(range_index + 1) % RANGES.size()] / 1000.0)
+			var next := (range_index + 1) % RANGES.size()
+			if next == SYSTEM_RANGE:
+				return "Range system"
+			return "Range %d km" % roundi(RANGES[next] / 1000.0)
 		&"prev":
 			return "Previous target"
 		&"next":
@@ -157,7 +174,8 @@ func press(button: StringName, ctx: ComputerContext) -> void:
 func lines(ctx: ComputerContext) -> PackedStringArray:
 	var c := selected_contact(ctx)
 	if c == null:
-		return PackedStringArray(["", "NO CONTACTS"])
+		var where := ctx.sensors.whereabouts.text() if ctx.sensors != null and ctx.sensors.whereabouts != null else ""
+		return PackedStringArray([where, "NO CONTACTS"])
 	var action := ""
 	if ctx.sensors.course == c.id:
 		action = "COURSE SET"
@@ -206,6 +224,8 @@ func _place(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D) -> voi
 		if c.id == selected:
 			volume.show_bracket(at, size + BRACKET_GAP, true)
 			bracketed = true
+	if range_index == SYSTEM_RANGE:
+		_place_belts(volume, ctx, frame)
 	volume.end_marks()
 	if not bracketed:
 		volume.show_bracket(Vector3.ZERO, 0.0, false)
@@ -227,6 +247,8 @@ static func mark_shape(c: Contact, pinned: bool) -> StringName:
 ## material is shared and one mark cannot fade on its own.
 static func mark_size(c: Contact, range_m: float, time: float) -> float:
 	var scale := HoloVolume.RADIUS / range_m
+	if c.kind == &"body":
+		return clampf(c.radius * 2.0 * scale, BODY_MIN, BODY_MAX)
 	match c.precision:
 		Contact.PING:
 			var age := clampf((time - c.taken) / maxf(c.fresh_for, 0.001), 0.0, 1.0)
@@ -238,6 +260,19 @@ static func mark_size(c: Contact, range_m: float, time: float) -> float:
 	if range_m <= RANGES[1]:
 		return clampf(c.radius * 2.0 / ROCK_BIGGEST * ROCK_MAX_MID, ROCK_MIN_MID, ROCK_MAX_MID)
 	return ROCK_FAR
+
+## Each belt as a ring of ticks, on the system range.
+func _place_belts(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D) -> void:
+	var system := ctx.sensors.system if ctx.sensors != null else null
+	if system == null:
+		return
+	for belt in system.belts:
+		for k in BELT_TICKS:
+			var angle := TAU * k / BELT_TICKS
+			var point := belt.centre.plus(Vector3(cos(angle), 0.0, sin(angle)) * belt.radius)
+			var placed := HoloVolume.place(ctx.relative_in(frame, point), range_m())
+			if not placed["pinned"]:
+				volume.add_mark(&"tick", colour_for(&"rock"), placed["position"], TICK_SIZE)
 
 func save() -> Dictionary:
 	return {"range": range_index, "selected": String(selected)}

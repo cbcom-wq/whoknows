@@ -168,7 +168,7 @@ func test_set_space_puts_it_in_the_world_and_back_aboard():
 	item.set_space(true)
 	assert_true(item.in_space)
 	assert_eq(item.collision_layer, 32)
-	assert_eq(item.collision_mask, 1 | 4 | 32 | 64 | Npc.LAYER)
+	assert_eq(item.collision_mask, 1 | 4 | BodyProxy.LAYER | 32 | 64 | Npc.LAYER)
 	assert_eq(item.collision_mask, AsteroidBody.MASK, "the mask a rock has")
 	assert_gt(_looks(item).size(), 0, "the look was rebuilt")
 	for g in _looks(item):

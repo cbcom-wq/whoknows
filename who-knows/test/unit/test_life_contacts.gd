@@ -22,16 +22,27 @@ func _life() -> Array[Contact]:
 			out.append(c)
 	return out
 
+## The start's big rock: in a belt, others can be in detail too.
+func _start_rock() -> AsteroidDetail:
+	return _stream.details.nearest(_ship.exterior.global_position)
+
 func test_the_start_rocks_herds_are_sensed():
-	var cs := _life()
-	var detail: AsteroidDetail = _stream.details.live.values()[0]
+	var detail := _start_rock()
 	var herds := RockHerds.herds(detail.rock, detail.data, _stream.seed)
-	assert_eq(cs.size(), herds.size(), "one contact per herd")
-	for c in cs:
-		assert_true(String(c.id).begins_with("life:" + String(RockHerds.site_of(detail.rock))))
+	var site := "life:" + String(RockHerds.site_of(detail.rock))
+	var mine := _life().filter(func(c: Contact) -> bool: return String(c.id).begins_with(site))
+	assert_gt(herds.size(), 0, "the start rock has herds")
+	assert_eq(mine.size(), herds.size(), "one contact per herd")
+	# Every other sign of life is on another big rock held in detail.
+	var sites := {}
+	for d: AsteroidDetail in _stream.details.live.values():
+		sites["life:" + String(RockHerds.site_of(d.rock))] = true
+	for c in _life():
+		assert_true(sites.has(String(c.id).substr(0, String(c.id).rfind(":"))),
+			"%s is on a rock in detail" % c.id)
 
 func test_far_off_they_ping_and_near_they_are_regions():
-	var detail: AsteroidDetail = _stream.details.live.values()[0]
+	var detail := _start_rock()
 	var out := (_ship.exterior.global_position - detail.global_position).normalized()
 	_ship.exterior.global_position = detail.global_position + out * (detail.rock.radius + 2500.0)
 	_ship.sensors.refresh(10000.0)
@@ -46,7 +57,7 @@ func test_far_off_they_ping_and_near_they_are_regions():
 	assert_gt(regions, 0, "close by, regions")
 
 func test_an_awake_herd_is_inside_its_region():
-	var detail: AsteroidDetail = _stream.details.live.values()[0]
+	var detail := _start_rock()
 	var site := RockSite.new(detail, _stream.seed)
 	var at := site.frame() * site.start_pose(site.records[0], 0.0).origin
 	var out := (at - detail.global_position).normalized()

@@ -31,9 +31,10 @@ const COLLISION_MASK := 2 | 32 | Npc.LAYER
 ## Every avatar is in this group, so the things it walks through -- an
 ## airlock's doorways -- can find it.
 const GROUP := &"avatar"
-## exterior_hull | items | asteroids | npcs: on a spacewalk you bump along your
-## own hull, into rocks (asteroids spec §7.6) and into skitters.
-const SUIT_MASK := 1 | 32 | AsteroidBody.LAYER | Npc.LAYER
+## exterior_hull | terrain | items | asteroids | npcs: on a spacewalk you bump
+## along your own hull, off worlds' shells (the system skeleton spec §7.3),
+## into rocks (asteroids spec §7.6) and into skitters.
+const SUIT_MASK := 1 | BodyProxy.LAYER | 32 | AsteroidBody.LAYER | Npc.LAYER
 ## You and your suit, kilograms, for bumping into things in space.
 const SUIT_MASS := 120.0
 const BUMP_BOUNCE := 0.2

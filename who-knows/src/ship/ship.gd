@@ -84,7 +84,7 @@ func _ready() -> void:
 	exterior.angular_damp = 0.0
 	exterior.can_sleep = false
 	exterior.collision_layer = 1   # exterior_hull
-	exterior.collision_mask = 1 | AsteroidBody.LAYER | Npc.LAYER   # other hulls, rocks, NPCs
+	exterior.collision_mask = 1 | BodyProxy.LAYER | AsteroidBody.LAYER | Npc.LAYER   # other hulls, worlds, rocks, NPCs
 	# At boost the hull moves 5 m a tick: without this it passes through rubble.
 	exterior.continuous_cd = true
 	# Outside, so the floating origin moves it (asteroids spec §4.2).

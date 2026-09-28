@@ -23,6 +23,11 @@ controls.
 - the interior redesign's §7.5 (the starter's bridge);
 - the visual style guide.
 
+> **Amended 2026-09-28 (the system skeleton spec §10):** the map has a fourth range, SYSTEM
+> (300 km), showing the star, planets and moons (`BodyContacts`, kind `&"body"`, in
+> `InteriorPalette.WORLD`) and each belt as a ring of ticks. The 30 km range shows big rocks and
+> worlds. A course can be set to a world.
+
 ---
 
 ## 1. Why

@@ -214,7 +214,8 @@ percepts), then the site's `fill`:
   `ship.npc_director.live.values()[0]`; the exterior director is `root.exterior_npcs`. Stop a
   director (`set_physics_process(false)`) when setting intents by hand. To hold the felt gravity,
   stop `Ship/MotionCoupling` first. Move the hull with `exterior.global_position` stepwise to
-  wake herds; the start rock (`stream.details.live.values()[0]`) has two herds, 13 skitters.
+  wake herds. The start rock is `stream.details.nearest(ship.exterior.global_position)`: it lies
+  in a belt, so other big rocks can be in detail too (the system skeleton spec §6).
 - Physics frames run in real time: keep waits short (a 10 s walk is 10 s of suite time).
   `wait_process_frames` for overlays and looks.
 - Expected warnings and errors: `assert_engine_error(text)` / `assert_push_error(text)`.
