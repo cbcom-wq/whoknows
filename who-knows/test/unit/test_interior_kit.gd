@@ -114,3 +114,16 @@ func test_one_batch_comes_out_as_a_mesh_with_no_node():
 	var committed := _kit.commit()
 	assert_eq(committed.size(), 1, "only the solid batch is left to commit")
 	assert_null(_kit.mesh(InteriorKit.Batch.GLOW), "the batch was emptied")
+
+## Ship exterior spec §3.3: the hull builds with the kit, with the livery for
+## its plates and its own trim material.
+func test_a_batch_s_material_can_be_overridden_and_there_is_a_hull_batch():
+	var trim := StandardMaterial3D.new()
+	_kit.materials = {InteriorKit.Batch.SOLID: trim}
+	_kit.box(InteriorKit.Batch.SOLID, Transform3D.IDENTITY, Vector3.ONE, Color.WHITE)
+	_kit.box(InteriorKit.Batch.HULL, Transform3D.IDENTITY, Vector3.ONE, Color.WHITE)
+	var by_name := {}
+	for mi in _kit.commit():
+		by_name[String(mi.name)] = mi
+	assert_eq(by_name["DressingSolid"].material_override, trim)
+	assert_eq(by_name["DressingHull"].material_override, InteriorMaterials.props(), "the hull batch's default")

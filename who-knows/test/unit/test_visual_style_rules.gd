@@ -16,6 +16,9 @@ const PAINTING_FILES := [
 	"res://src/ship/interior/interior_dressing.gd",
 	"res://src/ship/interior/interior_materials.gd",
 	"res://src/ship/interior/interior_layout.gd",
+	"res://src/ship/hull/hull_props.gd",
+	"res://src/ship/hull/hull_materials.gd",
+	"res://src/ship/hull/hull_layout.gd",
 	"res://src/ship/interior/sliding_door.gd",
 	"res://src/ship/interior_builder.gd",
 	"res://src/items/item_looks.gd",
@@ -68,6 +71,8 @@ const PAINTING_FILES := [
 ## from blueprints, so these must work from a frame alone -- never the grid.
 const REUSABLE_FILES := [
 	"res://src/ship/interior/interior_props.gd",
+	"res://src/ship/hull/hull_props.gd",
+	"res://src/ship/hull/hull_materials.gd",
 	"res://src/ship/interior/interior_kit.gd",
 	"res://src/ship/interior/sliding_door.gd",
 	"res://src/items/item_looks.gd",

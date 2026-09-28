@@ -18,10 +18,12 @@ const GROUP := &"interior_dressing"
 
 ## One merged mesh per batch, each with its own material. PORTAL is window
 ## glass that shows the real view outside; its material is supplied by
-## whoever owns that view (InteriorDressing.portal_material).
-enum Batch { SOLID, GLOW, SCREEN, GLASS, PORTAL }
+## whoever owns that view (InteriorDressing.portal_material). HULL is the
+## hull's outside plating (ship exterior spec §3.3), whose builder gives it
+## the livery through `materials`.
+enum Batch { SOLID, GLOW, SCREEN, GLASS, PORTAL, HULL }
 const BATCH_NAMES := ["DressingSolid", "DressingGlow", "DressingScreens", "DressingGlass",
-	"DressingPortals"]
+	"DressingPortals", "DressingHull"]
 
 ## screen.gdshader's modes, carried in vertex colour red as mode / 4.
 enum Screen { BARS, WAVE, DOTS }
@@ -51,6 +53,9 @@ var layer := LAYER
 var light_mask := LAYER
 ## The PORTAL batch's material; null uses InteriorMaterials.portal_fallback().
 var portal_material: Material
+## Per-batch materials that replace the defaults at commit(): the hull builds
+## its plating in the livery and its trim a little glossier than a cabin's.
+var materials: Dictionary = {}   # Batch -> Material
 var _tools: Dictionary = {}   # Batch -> SurfaceTool
 
 func _init(root_node: Node3D, collision_body: CollisionObject3D = null,
@@ -256,13 +261,14 @@ func add_mesh(mesh: Mesh, material: Material, node_name: String) -> MeshInstance
 
 ## Commits every batch as one merged mesh with its material.
 func commit() -> Array[MeshInstance3D]:
-	var materials: Array[Material] = [InteriorMaterials.props(), InteriorMaterials.glow(),
+	var defaults: Array[Material] = [InteriorMaterials.props(), InteriorMaterials.glow(),
 		InteriorMaterials.screen(), InteriorMaterials.glass(),
-		portal_material if portal_material != null else InteriorMaterials.portal_fallback()]
+		portal_material if portal_material != null else InteriorMaterials.portal_fallback(),
+		InteriorMaterials.props()]
 	var out: Array[MeshInstance3D] = []
 	for batch: int in _tools:
 		var st: SurfaceTool = _tools[batch]
-		out.append(add_mesh(st.commit(), materials[batch], BATCH_NAMES[batch]))
+		out.append(add_mesh(st.commit(), materials.get(batch, defaults[batch]), BATCH_NAMES[batch]))
 	_tools.clear()
 	return out
 
