@@ -13,6 +13,10 @@ when saving exists"), asteroids §13 ("saving the universe position to disk").
 **Amends, once approved:** quantum energy §10.3 (the ledger is saved and no longer lasts only one
 session), and the building-a-ship skill (a ship's state has to round-trip, see §11).
 
+> **Amended 2026-09-28 (the system skeleton spec §11):** the world seed makes a star system;
+> `SaveGame.generators()` gains `"system"`, and `"asteroids"` is 2, so a save from before starts
+> over (§8.1).
+
 ---
 
 ## 1. Why

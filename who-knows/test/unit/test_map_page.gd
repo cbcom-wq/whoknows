@@ -45,7 +45,7 @@ func _add(id: StringName, precision: StringName, at: Vector3, radius := 0.0, km 
 	var c := Contact.new()
 	c.id = id
 	c.kind = kind if kind != &"" else (&"rock" if precision == Contact.EXACT else &"salvage")
-	c.label = {&"rock": "ROCK", &"salvage": "SALVAGE", &"life": "LIFE?"}[c.kind]
+	c.label = {&"rock": "ROCK", &"salvage": "SALVAGE", &"life": "LIFE?", &"body": "KORVA-7"}[c.kind]
 	c.point = _universe.to_universe(at)
 	c.precision = precision
 	c.radius = radius
@@ -55,7 +55,7 @@ func _add(id: StringName, precision: StringName, at: Vector3, radius := 0.0, km 
 	return c
 
 func _refresh() -> void:
-	_sensors.refresh(30000.0)
+	_sensors.refresh(300000.0)
 	_page.reselect(_ctx)
 
 func test_it_opens_at_ten_kilometres_and_range_cycles():
@@ -63,6 +63,9 @@ func test_it_opens_at_ten_kilometres_and_range_cycles():
 	assert_eq(_page.prompt(&"range", _ctx), "Range 30 km")
 	_page.press(&"range", _ctx)
 	assert_eq(_page.title(), "MAP · 30 KM")
+	assert_eq(_page.prompt(&"range", _ctx), "Range system")
+	_page.press(&"range", _ctx)
+	assert_eq(_page.title(), "MAP · SYSTEM")
 	_page.press(&"range", _ctx)
 	assert_eq(_page.title(), "MAP · 2 KM")
 	_page.press(&"range", _ctx)
@@ -245,3 +248,61 @@ func test_between_placements_at_30_km_the_marks_turn_with_the_ship():
 	_page.holo(_holo, _ctx, MapPage.PLACE_EVERY[2])
 	assert_true(_holo.turn().is_equal_approx(Basis.IDENTITY), "placed afresh")
 	assert_almost_eq(_holo.mark_transform(&"ball", 0).origin, shown, Vector3.ONE * 0.001)
+
+# --- the system range (the system skeleton spec §10) --------------------------
+
+func test_the_system_range_shows_worlds_only_and_30_km_rocks_and_worlds():
+	_add(&"rock:a", Contact.EXACT, Vector3(0, 0, -20000), 300.0)
+	_add(&"body:p1", Contact.EXACT, Vector3(0, 0, -25000), 900.0, 0, &"body")
+	_add(&"body:p2", Contact.EXACT, Vector3(0, 0, -150000), 1100.0, 0, &"body")
+	_add(&"salvage:b", Contact.PING, Vector3(0, 0, -4000), 0.0, 4)
+	_page.range_index = MapPage.SYSTEM_RANGE
+	_refresh()
+	var ids := _page.targets(_ctx).map(func(c: Contact) -> StringName: return c.id)
+	assert_eq(ids, [&"body:p1", &"body:p2"])
+	_page.range_index = MapPage.SYSTEM_RANGE - 1
+	_refresh()
+	ids = _page.targets(_ctx).map(func(c: Contact) -> StringName: return c.id)
+	assert_eq(ids, [&"rock:a", &"body:p1"])
+
+func test_a_course_can_be_set_to_a_world():
+	_add(&"body:p1", Contact.EXACT, Vector3(0, 0, -25000), 900.0, 0, &"body")
+	_page.range_index = MapPage.SYSTEM_RANGE
+	_refresh()
+	assert_eq(_page.big_colour(_ctx), &"go")
+	_page.press(&"big", _ctx)
+	assert_eq(_sensors.course, &"body:p1")
+
+func test_worlds_are_drawn_in_their_own_colour_and_never_lost():
+	assert_eq(MapPage.colour_for(&"body"), InteriorPalette.WORLD)
+	var c := Contact.new()
+	c.kind = &"body"
+	c.precision = Contact.EXACT
+	c.radius = 150.0
+	assert_eq(MapPage.mark_size(c, 300000.0, 0.0), MapPage.BODY_MIN)
+	c.radius = 3500.0
+	assert_between(MapPage.mark_size(c, 300000.0, 0.0), MapPage.BODY_MIN, MapPage.BODY_MAX)
+	c.radius = 1200.0
+	assert_eq(MapPage.mark_size(c, 2000.0, 0.0), MapPage.BODY_MAX)
+
+func test_the_system_range_draws_each_belt_as_a_ring_of_ticks():
+	_sensors.system = SystemRecipe.from_seed(1337)
+	_universe.origin = _sensors.system.entry()
+	_page.range_index = MapPage.SYSTEM_RANGE
+	_refresh()
+	_page.holo(_holo, _ctx, 1.0)
+	var ticks := _holo.mark_count(&"tick", InteriorPalette.SKY)
+	assert_gte(ticks, MapPage.BELT_TICKS * _sensors.system.belts.size() / 2, "most ticks fall inside the range")
+
+func test_with_nothing_selected_the_screen_says_where_you_are():
+	_sensors.system = SystemRecipe.from_seed(1337)
+	_universe.origin = _sensors.system.entry()
+	var w := Whereabouts.new()
+	add_child_autofree(w)
+	w.setup(_sensors.system, _universe)
+	_sensors.whereabouts = w
+	_page.range_index = 0
+	_refresh()
+	var lines := _page.lines(_ctx)
+	assert_eq(lines[1], "NO CONTACTS")
+	assert_true(lines[0].begins_with(_sensors.system.name), lines[0])

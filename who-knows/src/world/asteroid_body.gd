@@ -6,8 +6,8 @@ extends RigidBody3D
 ## then as heavy as it looks. Pooled: the bubble hands one node rock after rock.
 
 const LAYER := 64
-## The hull, the avatar, items and other rocks.
-const MASK := 1 | 4 | 32 | 64 | Npc.LAYER
+## The hull, the avatar, worlds' shells, items and other rocks.
+const MASK := 1 | 4 | BodyProxy.LAYER | 32 | 64 | Npc.LAYER
 ## Past this the solver gains nothing but trouble: a rock this heavy is a wall
 ## to anything that can hit it.
 const MASS_CAP := 1.0e8

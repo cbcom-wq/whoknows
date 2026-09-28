@@ -24,9 +24,10 @@ var _centre := Vector3i(2147483647, 2147483647, 2147483647)   # nothing read yet
 var _by_cell: Dictionary = {}   # Vector3i -> Contact, or null for a region with no big rock
 var _rocks: Array[Contact] = []   # the non-null values of _by_cell
 
-## `start` must be the stream's, so the recipe keeps the same bubble clear.
-func _init(world_seed: int, start: UniversePoint = null) -> void:
-	_recipe = AsteroidRecipe.new(world_seed, start)
+## `start` and `shapes` must be the stream's, so the recipe keeps the same
+## bubble clear and the rocks in the same belts.
+func _init(world_seed: int, start: UniversePoint = null, shapes: AsteroidShapes = null) -> void:
+	_recipe = AsteroidRecipe.new(world_seed, start, shapes)
 
 static func id_of(cell: Vector3i) -> StringName:
 	return StringName("%s%d,%d,%d" % [PREFIX, cell.x, cell.y, cell.z])

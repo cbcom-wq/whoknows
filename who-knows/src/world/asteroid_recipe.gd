@@ -16,13 +16,18 @@ extends RefCounted
 ## exactly one cell of every larger tier. A rock stays inside its own cell and
 ## clear of the rocks of the larger cells around it, so no two rocks ever
 ## overlap -- which matters, because overlapping bodies fly apart.
+##
+## In a star system (the system skeleton spec §6) the recipe is given the
+## system's AsteroidShapes: big rocks, and the swarms round them, lie only in
+## belts; rubble and mid-size rocks crowd into planets' rings; and no rock lies
+## in a star, planet or moon. Without shapes it is the open field it always was.
 
 enum Tier { RUBBLE, MID, GIANT }
 
 ## Bumped whenever a seed's rocks change: a save made by another version is
 ## put back at the start (docs/superpowers/specs/2026-09-26-saving-design.md
 ## §8.1).
-const VERSION := 1
+const VERSION := 2
 const TIERS := 3
 const NEST := 5
 ## Cell edge per tier, metres.
@@ -60,6 +65,15 @@ const NOISE_FREQUENCY := 0.05
 ## certain above HIGH. Tuned so groups are mostly 3 to 6 km apart.
 const GROUP_LOW := 0.42
 const GROUP_HIGH := 0.6
+## In a belt the noise is shaped more generously, so a belt's busy stretches
+## are nearly full and its gaps are long, not everywhere.
+const BELT_GROUP_LOW := 0.3
+const BELT_GROUP_HIGH := 0.5
+## In a ring, the chance a candidate is kept at the ring's heart, per tier:
+## never a giant.
+const RING_PEAK: Array[float] = [0.6, 0.6, 0.0]
+## Walking a belt for the start, a step this long along its centre circle.
+const BELT_WALK := 2500.0
 ## splitmix64's constants, as signed 64-bit ints.
 const _GOLDEN := -7046029254386353131
 const _MIX_1 := -4658895280553007687
@@ -68,13 +82,16 @@ const _MIX_2 := -7723592293110705685
 var world_seed: int
 ## The centre of the clear bubble at the start, or null for none.
 var start: UniversePoint
+## The system's belts, rings and bodies, or null for an open field.
+var shapes: AsteroidShapes
 
 var _noise: FastNoiseLite
 var _cache := {}
 
-func _init(p_seed: int, p_start: UniversePoint = null) -> void:
+func _init(p_seed: int, p_start: UniversePoint = null, p_shapes: AsteroidShapes = null) -> void:
 	world_seed = p_seed
 	start = p_start
+	shapes = p_shapes
 	_noise = FastNoiseLite.new()
 	_noise.seed = p_seed
 	_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
@@ -82,17 +99,26 @@ func _init(p_seed: int, p_start: UniversePoint = null) -> void:
 	_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
 	_noise.fractal_octaves = 3
 
-## The chance a group is at `u`, 0 to 1. The one place it is decided -- the
-## hook for keeping groups off worlds later.
+## The chance a group is at `u`, 0 to 1. The one place it is decided: in a
+## system, only in belts.
 func density_at(u: UniversePoint) -> float:
-	var n := _noise.get_noise_3d((u.x + u.fx) / 1000.0, (u.y + u.fy) / 1000.0, (u.z + u.fz) / 1000.0)
-	return smoothstep(GROUP_LOW, GROUP_HIGH, (n + 1.0) * 0.5)
+	var chance := _noise_chance(u)
+	return chance if shapes == null else chance * shapes.belt_profile(u)
 
-## The chance a region (a giant cell) holds a group: taken at its centre.
+## The noise's part of the chance, shaped for an open field or for belts.
+func _noise_chance(u: UniversePoint) -> float:
+	var n := _noise.get_noise_3d((u.x + u.fx) / 1000.0, (u.y + u.fy) / 1000.0, (u.z + u.fz) / 1000.0)
+	if shapes == null:
+		return smoothstep(GROUP_LOW, GROUP_HIGH, (n + 1.0) * 0.5)
+	return smoothstep(BELT_GROUP_LOW, BELT_GROUP_HIGH, (n + 1.0) * 0.5)
+
+## The chance a region (a giant cell) holds a group, before the belts: the
+## noise, taken at its centre. In a system the belt's own depth at the big
+## rock's place is applied too (cell_rocks).
 func group_chance(cell: Vector3i) -> float:
 	var size := CELL[Tier.GIANT]
 	var half := size / 2
-	return density_at(UniversePoint.at(cell.x * size + half, cell.y * size + half, cell.z * size + half))
+	return _noise_chance(UniversePoint.at(cell.x * size + half, cell.y * size + half, cell.z * size + half))
 
 ## The cell's rocks, in candidate order. Cached.
 func cell_rocks(tier: int, cell: Vector3i) -> Array[AsteroidRock]:
@@ -108,11 +134,17 @@ func cell_rocks(tier: int, cell: Vector3i) -> Array[AsteroidRock]:
 	var blockers := _blockers(tier, cell)
 	var chance := group_chance(cell) if tier == Tier.GIANT else 0.0
 	var bigs := _big_rocks_near(tier, cell) if tier != Tier.GIANT else []
+	var corner := cell_corner(tier, cell)
+	var rings := _rings_near(tier, corner, size)
 	var rocks: Array[AsteroidRock] = []
 	for i in MOST[tier]:
 		var local := Vector3(rng.randf_range(margin, size - margin), rng.randf_range(margin, size - margin),
 			rng.randf_range(margin, size - margin))
 		var keep := chance if tier == Tier.GIANT else _keep_chance(tier, local, bigs)
+		if tier == Tier.GIANT and shapes != null and keep > 0.0:
+			keep *= shapes.belt_profile(corner.plus(local))
+		for g: Array in rings:
+			keep = minf(keep + RING_PEAK[tier] * (g[0] as AsteroidShapes.Ring).profile_local(g[1] + local), 1.0)
 		if rng.randf() >= keep:
 			continue
 		# A kept candidate takes the same draws whether or not it fits, so one
@@ -183,6 +215,18 @@ func _blockers(tier: int, cell: Vector3i) -> Array:
 			out.append([offset + rock.local, rock.radius])
 	if start != null:
 		out.append([start.minus(corner), START_CLEAR])
+	if shapes != null:
+		out.append_array(shapes.blockers_near(corner, float(CELL[tier])))
+	return out
+
+## The rings that reach this cell, as [ring, this cell's corner from the
+## ring's centre]: none for giants, which never lie in a ring.
+func _rings_near(tier: int, corner: UniversePoint, size: float) -> Array:
+	var out := []
+	if shapes == null or RING_PEAK[tier] <= 0.0:
+		return out
+	for g in shapes.rings_near(corner, size):
+		out.append([g, corner.minus(g.centre)])
 	return out
 
 ## The big rocks whose halo reaches this cell: [centre from its corner,
@@ -260,7 +304,12 @@ static func mix(x: int) -> int:
 ## Where a flight starts (§17): START_STANDOFF off the surface of the first
 ## big rock along +z from the universe's origin, on its +z side, so it is dead
 ## ahead of a ship facing -z, with its swarm round it.
+##
+## In a system, the start is the first belt's first group instead, walking
+## round the belt from angle 0 (the system skeleton spec §4.4).
 func find_start() -> UniversePoint:
+	if shapes != null and not shapes.belts.is_empty():
+		return _find_start_in(shapes.belts[0])
 	for k in 4000:
 		var region := Vector3i(0, 0, k)
 		var rocks := cell_rocks(Tier.GIANT, region)
@@ -271,3 +320,27 @@ func find_start() -> UniversePoint:
 		return UniversePoint.at(at.x, at.y, at.z)
 	push_warning("AsteroidRecipe: no group found; starting at the universe's origin")
 	return UniversePoint.at(0, 0, 0)
+
+func _find_start_in(belt: AsteroidShapes.Belt) -> UniversePoint:
+	var across := belt.normal.cross(Vector3.RIGHT)
+	if across.length() < 0.1:
+		across = belt.normal.cross(Vector3.FORWARD)
+	across = across.normalized()
+	var sideways := belt.normal.cross(across)
+	var steps := ceili(TAU * belt.radius / BELT_WALK)
+	var seen := {}
+	for k in steps:
+		var angle := TAU * k / steps
+		var at := belt.centre.plus((across * cos(angle) + sideways * sin(angle)) * belt.radius)
+		var region := cell_of(Tier.GIANT, at)
+		if seen.has(region):
+			continue
+		seen[region] = true
+		var rocks := cell_rocks(Tier.GIANT, region)
+		if rocks.is_empty():
+			continue
+		var big := rocks[0]
+		var point := cell_corner(Tier.GIANT, region).plus(big.local + Vector3(0, 0, big.radius + START_STANDOFF))
+		return UniversePoint.at(point.x, point.y, point.z)
+	push_warning("AsteroidRecipe: no group in the belt; starting at its centre circle")
+	return belt.centre.plus(across * belt.radius)

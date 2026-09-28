@@ -20,8 +20,9 @@ func before_each():
 	await wait_physics_frames(5)
 	_director = _root.exterior_npcs
 
+## The start's big rock: in a belt, others can be in detail too.
 func _detail() -> AsteroidDetail:
-	return _stream.details.live.values()[0]
+	return _stream.details.nearest(_ship.exterior.global_position)
 
 ## A herd's place on the start rock, and the way out from the rock there.
 func _herd() -> Array:

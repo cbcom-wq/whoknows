@@ -10,6 +10,13 @@ ship-and-space item set)
 **Amends:** slice spec §3.3 (no floating origin); Planetfall §4.2, §6.4, §14 and §16; airlock
 spec §7.4; the visual style guide (§12 here)
 
+> **Amended 2026-09-28 (the system skeleton spec, `2026-09-27-system-skeleton-design.md` §6):**
+> the field lives in a star system now. Given the system's `AsteroidShapes`, `AsteroidRecipe`
+> puts big rocks and their swarms only in belts, crowds rings with rubble and mid-size rocks, and
+> keeps every rock out of stars, planets and moons; `density_at` (§5.2) is where that is decided.
+> The start (§5.6, §17) is the first belt's first group. `AsteroidRecipe.VERSION` is 2. Without
+> shapes the recipe is the open field below, unchanged.
+
 ---
 
 ## 1. Why

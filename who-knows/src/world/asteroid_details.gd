@@ -58,6 +58,15 @@ func step() -> void:
 		if not near.has(id) or not stream.is_loaded(AsteroidRecipe.Tier.GIANT, detail.rock.cell):
 			_take(id)
 
+## The live detail nearest `at`, in engine space, or null: in a belt more
+## than one big rock can be in detail at once.
+func nearest(at: Vector3) -> AsteroidDetail:
+	var best: AsteroidDetail = null
+	for d: AsteroidDetail in live.values():
+		if best == null or d.global_position.distance_to(at) < best.global_position.distance_to(at):
+			best = d
+	return best
+
 ## Waits for every build in flight.
 func finish() -> void:
 	for job: _Job in _jobs.values():

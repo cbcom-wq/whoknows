@@ -255,6 +255,17 @@ A second ship in the same scene needs its own `interior_slot`. The exterior hull
 in `Universe.EXTERIOR_SPACE` and `AsteroidStream.SPACE_ANCHOR`, because `Ship._ready` puts it
 there.
 
+**What the hull bumps into** (`Ship.exterior.collision_mask`): other hulls (1), worlds' shells
+(`BodyProxy.LAYER`, 8, layer 4 `terrain`), rocks (`AsteroidBody.LAYER`, 64) and NPCs
+(`Npc.LAYER`, 128): 201. A spacewalker's `Avatar.SUIT_MASK` and loose items outside
+(`Item.SPACE_MASK`) include the shells too (the system skeleton spec §7.3). A second ship's hull
+takes the same mask.
+
+**The world round a ship** is a star system (`docs/superpowers/specs/2026-09-27-system-skeleton-design.md`):
+`flight_test.gd` builds `SystemRecipe.from_seed(seed)`, gives the stream its belt and ring
+shapes, starts at `system.entry()`, and adds a `StarSystem` (proxies, belts, dust,
+`Whereabouts`) and `BodyContacts`. F7 / Shift+F7 hop the ship to the next or previous body.
+
 A flyable ship also needs a `PilotControls` node under the ship, with the paths shown in
 `flight_test.tscn`. It listens to `CameraDirector.piloting_changed`. While you sit, the HUD's
 vehicle is that node, not the `FlightComputer`:
@@ -303,6 +314,8 @@ Saved places outside are `UniversePoint`s (`SaveCodec.upoint`). The world's star
 - `docs/superpowers/specs/2026-09-23-cockpit-pod-design.md`: the pod, the chair, standing up.
 - `docs/superpowers/specs/2026-09-24-airlock-design.md`: the airlock.
 - `docs/superpowers/specs/2026-09-24-asteroids-design.md` §4: the floating origin.
+- `docs/superpowers/specs/2026-09-27-system-skeleton-design.md`: the star system a ship flies
+  in, the worlds it bumps off, and the debug hop.
 - `docs/superpowers/specs/2026-09-25-bridge-computer-design.md`: the holo table, the sensors'
   course, and (§18) what was built.
 - `docs/superpowers/specs/2026-09-25-flight-controls-design.md`: how the flight computer spends
