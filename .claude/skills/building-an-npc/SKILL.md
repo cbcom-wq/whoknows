@@ -170,6 +170,7 @@ Do these in order. Each names the check that proves it.
 | Colour literals in a look | `test_visual_style_rules.gd` fails | Palette constants only, also for defaults (`SpacePalette.UNTINTED`) |
 | A windowed probe loading `flight_test.tscn` with saving on | Saving is on outside `--headless` (saving spec §9), so a render script would load and overwrite the owner's real game | `scene.save_enabled = false` before `add_child`, as `test/probes/*.gd` do |
 | A Variant-typed `:=` | GDScript treats the warning as an error; the whole script fails to load | Type it: `var x: Variant = ...` |
+| Taking `stream.details.live.values()[0]` as the start rock | Once rocks moved into belts (system skeleton spec §6), a neighbour was in detail too and had no herds | `stream.details.nearest(ship.exterior.global_position)`; and count only its own site's contacts |
 
 ## Not built yet (plan for it; don't assume it works)
 

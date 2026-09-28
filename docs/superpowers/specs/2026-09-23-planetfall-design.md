@@ -11,6 +11,14 @@ and interior camera environment
 Slice 6; piloting HUD spec §4.3, §5, §6, §10; starter shuttle art direction §4 (`airlock`)
 **Amends:** slice spec §2, §3.3, §12 and the roadmap appendix; piloting HUD spec §10 (see §16)
 
+> **Amended 2026-09-28 (the system skeleton spec, `2026-09-27-system-skeleton-design.md`):**
+> worlds are placed by `SystemRecipe` in slots round a star, a few to 150 km out, not "a few km
+> apart" (§3); `WorldSeed`, `WorldRecipe` and `WorldNames` (§5.1, §5.2) are built, minus sites,
+> and the eight palettes (§5.3) are `SpacePalette.WORLDS`, pending the owner's approval from
+> renders. The sun (§7.4) shines from the system's star. Layer 4 is named `terrain`, and each
+> world is a faceted shell on it until this spec's terrain replaces it. The test area (§14)
+> becomes the system's entry.
+
 ---
 
 ## 1. Why this document exists

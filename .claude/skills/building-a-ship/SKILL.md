@@ -137,6 +137,7 @@ thrust.
 | Airlock with 0 or 2+ faces onto space | Inert: dressed as a plain room, never cycles | Exactly one open face; open deck through the inner hatch |
 | Two ships sharing `interior_slot` | Their interiors overlap at y=−5000 | One slot each (2 km apart on x) |
 | A node outside not in `EXTERIOR_SPACE` | Left behind by the 2 km origin shift | Join the group, or listen to `Universe.shifted` |
+| A collision mask pinned as a number in a test (`1 \| 64 \| Npc.LAYER`) | Adding the `terrain` layer for worlds' shells broke five tests at once | Build expected masks from the named layers (`BodyProxy.LAYER`, `AsteroidBody.LAYER`, `Npc.LAYER`), and check the hull meets worlds: the probe's `bumps` line |
 | A `#` comment in a `.tscn` | A silently dropped property or node, or a hung load | Comments in the `.gd`; read properties back at runtime |
 | "Tests pass, so it looks right" | Whiteout steam, a head in the lights, rocks for puffs | Render at eye height and send the owner the pictures |
 | RCS packed against other blocks | On the starter shuttle, 6 of 8 fire into a neighbour: yaw into pitch-down, pitch-up into the hull wedges, retros into pitch-up. Their puffs never show, and no validator rule catches it | Leave the face opposite each `rcs` block's push open to space; the probe flags `BLOCKED` |

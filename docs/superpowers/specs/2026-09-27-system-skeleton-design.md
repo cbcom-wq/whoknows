@@ -2,8 +2,8 @@
 
 **Date:** 2026-09-27
 **Status:** Piece 1 of the star systems design
-(`docs/superpowers/specs/2026-09-27-star-systems-design.md` §12). Written from that design's
-decisions; awaits the owner's review before planning. The open questions are in §15.
+(`docs/superpowers/specs/2026-09-27-star-systems-design.md` §12). Approved by the owner on
+2026-09-28, with the answers in §15.
 **Depends on:** `main` at `1d23261` (the floating origin, asteroids, saving, the bridge computer)
 **Builds early:** Planetfall §5 (`WorldSeed`, `WorldRecipe`, names and palettes), so Planetfall
 starts at its terrain
@@ -104,18 +104,19 @@ another. `SystemRecipe.VERSION := 1` is bumped when a seed's system changes.
 
 ### 4.1 The layout
 
-The star sits at the universe's origin. The system is a flattened disc in the xz plane, y up.
+The star sits at (0, 2.5 km, 0). The system is a flattened disc in the plane y = 2.5 km, y up: the
+middle of a layer of the asteroids' 5 km giant cells, so a belt lies inside one layer (§16).
 
 | Piece | Rule (first guesses, tuned by flying) |
 |---|---|
 | **Star** | Radius 2.5–4 km. One of the star palettes (§7.1). |
 | **Slots** | The first at 30 km (±10%); each next one ×1.18–1.30 further out; none past 150 km. That makes 7–10 slots. |
-| **Belts** | 1–2 slots become belts: never slot 0, never two side by side. |
+| **Belts** | 1–2 slots become belts: never slot 0, never two side by side, and only where both gaps to the neighbouring slots are at least 12 km (failing that, the roomiest slot). |
 | **Planets** | Every other slot: 5–9 planets. A seeded angle round the star, and a height off the plane of up to ±3% of its slot's radius. |
 | **Planet recipe** | `WorldRecipe.from_seed(WorldSeed.sub(seed, &"slot_<i>"), PLANET)`: Planetfall §5.2 as written (radius 300–1200 m, gravity 2–8 m/s², archetype, palette, atmosphere, name), minus sites, which Planetfall adds under its own sub-seed. |
 | **Moons** | 0–3 per planet, bigger planets more likely to have them. `WorldRecipe` with kind `MOON`: radius 120–400 m, gravity 1–4 m/s². Any direction from the planet (static, so no orbital plane); 6–14 km from its centre. |
 | **Rings** | A quarter of the planets of radius 600 m and up. Inner edge 1.6–2.0 R, 1–2.5 km wide, 40 m half-thick, tilted up to 30° from the disc. |
-| **Belts' shape** | A torus round the star at the slot's radius: 2–4 km radial half-width, 1–1.5 km half-thick. |
+| **Belts' shape** | A torus round the star at the slot's radius: 4–7 km radial half-width, 1.5–2 km half-thick. A planet beside a belt leaves it at least 3 km of half-width. |
 
 ### 4.2 Wells and neighbourhoods
 
@@ -187,7 +188,7 @@ as today, so tests of the recipe itself keep an open field to work with.
   only in belts. `GROUP_LOW`/`GROUP_HIGH` are retuned so a belt's core holds groups every 3–6 km,
   as the open field does now.
 - **Rings carry rubble and mid-size rocks, never giants.** `_keep_chance` gains a ring term:
-  `RING_PEAK[tier] × ring_profile(point)`, first guesses 0.5 for rubble and 0.15 for mid-size.
+  `RING_PEAK[tier] × ring_profile(point)`: 0.6 for rubble and for mid-size.
   The profile is 1 inside the ring's slab and eases off over its last 20%. Only rings whose
   bounds touch a cell are tested.
 - **The sprinkle stays everywhere,** so the odd rock still tumbles past in open space.
@@ -262,10 +263,10 @@ dozen conversions a frame.
 
 ### 7.5 Rings and belts from afar
 
-- **`RingLook`:** a `MultiMesh` of about 96 chunky slabs in the ring's annulus, in `SpacePalette`
+- **`RingLook`:** a `MultiMesh` of 128 chunky slabs, 150–300 m across, in the ring's annulus, in `SpacePalette`
   rock colours, a child of its planet's proxy so it scales with it. It fades out as the real ring
   rocks fade in, when the focus nears the ring. The fade distance is tuned by render.
-- **`BeltLook`:** a `MultiMesh` of about 160 slabs along the belt's centre circle. Each slab is
+- **`BeltLook`:** a `MultiMesh` of 160 slabs, 1.5–3 km across, along the belt's centre circle. Each slab is
   placed by the proxy rule on its own. Slabs within 25 km of the focus are hidden, because the
   belt's real giants show there. From across the system, a belt reads as a broken band.
 - Both are world-space members of `Universe.EXTERIOR_SPACE`, or children of one.
@@ -305,7 +306,7 @@ a second:
   position is the focus plus `(fleck − focus) mod 200 m`, centred, computed from the
   `UniversePoint`'s whole metres so it is exact at any distance. Flecks stay still while you move
   past them, and wrap to the far side as you leave them behind.
-- **Look:** chunky octahedra 0.15–0.4 m across, in `SpacePalette` rock colours, lit by the sun.
+- **Look:** chunky flecks 0.2–0.5 m across, in `SpacePalette` rock colours, lit by the sun.
   They shrink to nothing over the box's outer 20 m (per-instance scale), so the wrap never pops,
   and dither out within 3 m of the camera, so none sits on the canopy. No new shader.
 - **How much:** `visible_instance_count = COUNT × Whereabouts.dust()`. First guesses: 0.25 in open
@@ -336,7 +337,8 @@ It is seen through the canopy, in chase view and on a spacewalk, like everything
   - The second line reads the whereabouts when no contact is selected.
 - **The HUD** shows a course to a body as it shows any course: the diamond through the canopy, in
   chase view and on a spacewalk.
-- **The hop key (debug):** **F7** puts the ship at rest 3 km off the surface of the next body in
+- **The hop key (debug):** **F7** puts the ship at rest 3 km off the surface (nearer a small moon,
+  so you are in its neighbourhood) of the next body in
   order (star, then each planet and its moons), facing it. **Shift+F7** goes back. It is refused
   on a spacewalk and while the airlock is cycling. A hop is a teleport of the hull through
   `Universe`, so the origin follows and the rocks load before the next frame, as at the start.
@@ -390,7 +392,7 @@ seat through the canopy):
   - the same seed gives the same `describe()`;
   - over 500 seeds, every rule of §4.3 holds, slot counts and planet counts are in range, and
     empty slots are reported;
-  - the star is at the origin; the entry is 700 m off a big rock in the first belt.
+  - the star is at (0, 2.5 km, 0); the entry is 700 m off a big rock in the first belt.
 - **`test_asteroid_shapes.gd`:** belt and ring profiles at known points; bounds are
   conservative.
 - **`test_asteroid_recipe.gd`** (added):
@@ -445,10 +447,47 @@ new mask (CLAUDE.md).
 
 ---
 
-## 15. Open questions for the owner
+## 15. The owner's answers (2026-09-28)
 
-1. **Your current save will start over** (§11): the ship goes back to the start. Anything aboard
-   stays. Fine?
-2. **F7 / Shift+F7** for the debug hop: any keys you would rather use?
-3. **The star up close** stays a hard shell you bump off (umbrella §13 leaves heat to damage).
-   Fine for now?
+1. **The current save starts over** (§11): yes.
+2. **F7 / Shift+F7** for the debug hop: good.
+3. **The star up close** stays a hard shell you bump off: OK for now. Heat waits for damage.
+
+---
+
+## 16. What was built (2026-09-28)
+
+Built on `claude/universe-structure-scope-cmtzfk` in the order of §14. The numbers above are the
+built ones. Where the build differs from the first draft of this spec, and why:
+
+- **The disc sits at y = 2.5 km, not 0.** The asteroids' 5 km giant cells meet at y = 0, and a
+  big rock's centre stays 525 m inside its cell. A belt centred on a cell boundary left its big
+  rocks almost nowhere to go. Centred in a layer, it holds a group every 5 km or so along its
+  centre (`test_asteroid_recipe_system.gd`).
+- **Belts are fatter** (4–7 km half-width, 1.5–2 km half-thick). One big rock per 5 km cell is
+  the ceiling, so a belt needs about 25 km² of cross-section to hold a group every 5 km.
+- **Belts only where there is room.** The first rule (any slot but 0) left 155 empty slots in
+  500 seeds: inner slots are only 5–9 km apart, too close for a belt and a planet. With the 12 km
+  gap rule, 500 seeds give no empty slots, about 6.6 planets, 5.8 moons and 1.2 rings each.
+- **A big rock is kept by the belt's depth at its own place,** not at its cell's centre, which
+  can lie outside the belt when the rock is inside it.
+- **Rings hold 0.6 of rubble and mid-size candidates at their heart;** at the first guesses a
+  ring read as bare.
+- **Shade comes in broad patches** (a cellular noise over the sphere), the same at every detail.
+  The first build shaded triangle by triangle, and up close the 5,120-face look read as noise,
+  against style guide §3.5.
+- **Dust and belt slabs are worked out again only after the focus has moved** 20 m and 250 m.
+  Placing everything every tick cost 1.2 ms a physics tick at boost; now 0.25 ms at boost and
+  next to nothing at rest (measured headless on the build machine's CPU, seed 1337: 12 bodies, one
+  belt). Building the system's looks takes about 25 ms, once.
+- **`AsteroidDetails.nearest(at)`:** in a belt more than one big rock can be in detail at once,
+  so the NPC and life-sign tests find the start rock by distance, not as the first in the list.
+- **Loose items outside** bump off worlds' shells too: `Item.SPACE_MASK` gained the `terrain`
+  layer, as `AsteroidBody.MASK` did.
+- **The hop** stops nearer a small moon than 3 km, so it lands inside the moon's neighbourhood.
+- **No new scene edits:** `StarSystem` is built in code by `flight_test.gd`, and layer 4 is named
+  `terrain` in `project.godot`.
+
+Still to do: the owner's approval of the renders (§12), and then the style guide's section;
+frame rates measured on the GTX 960 (the renders here came from a software renderer); and the
+amendments §14 lists, noted at the head of each spec they touch.
