@@ -3,7 +3,8 @@
 **Date:** 2026-09-27
 **Status:** Piece 1 of the star systems design
 (`docs/superpowers/specs/2026-09-27-star-systems-design.md` §12). Approved by the owner on
-2026-09-28, with the answers in §15.
+2026-09-28, with the answers in §15. Built and merged to `main` the same day (`404ad69`); §16 is
+what was built and what is left.
 **Depends on:** `main` at `1d23261` (the floating origin, asteroids, saving, the bridge computer)
 **Builds early:** Planetfall §5 (`WorldSeed`, `WorldRecipe`, names and palettes), so Planetfall
 starts at its terrain
@@ -488,6 +489,42 @@ built ones. Where the build differs from the first draft of this spec, and why:
 - **No new scene edits:** `StarSystem` is built in code by `flight_test.gd`, and layer 4 is named
   `terrain` in `project.godot`.
 
-Still to do: the owner's approval of the renders (§12), and then the style guide's section;
-frame rates measured on the GTX 960 (the renders here came from a software renderer); and the
-amendments §14 lists, noted at the head of each spec they touch.
+The amendments §14 lists are noted at the head of each spec they touch.
+
+### 16.1 Left to do
+
+1. **The owner's play-test.** The owner will fly it before judging the look. Tune from what they
+   say (§16.2), render again (§16.3), and ask again.
+2. **The owner's approval of the renders** (§12): the star's glow, the eight world palettes,
+   ring and belt slabs, dust. Only then does the style guide gain its section, *Worlds and the
+   star from afar* (§12's four rules), with the guide, code and tests changing together
+   (CLAUDE.md).
+3. **Frame rates on the GTX 960**, aboard with the canopy view, in the worst case of §13.2, written
+   into the style guide's performance section. Nothing has been measured on a GPU yet.
+4. Then piece 2, **Planetfall** (`2026-09-23-planetfall-design.md`, amended at its head): its
+   §5 is already built; it replaces `BodyProxy`'s near look and shell with terrain, and adds the
+   gravity well (`SystemBody.well_radius` is already laid out for it).
+
+### 16.2 Where to tune
+
+| What | Where |
+|---|---|
+| Which system you fly | `seed` on the `AsteroidStream` node in `scenes/flight_test.tscn` (1337; a new game takes it, a save keeps its own). Seed 11 has a big ringed planet with moons. |
+| Star size, colour, brightness | `SystemRecipe.STAR_RADIUS`; `SpacePalette.STARS` (body, light, energy) |
+| Planet colours | `SpacePalette.WORLDS`; patterns in `BodyLook` (`PATTERN_SCALE`, `SHADE_SCALE`, `CRATERS`, `BANDS`) |
+| Layout: slots, belts, moons, rings | `SystemRecipe` constants (bump `SystemRecipe.VERSION` if a seed's system changes) |
+| How busy belts and rings are | `AsteroidRecipe.BELT_GROUP_LOW/HIGH`, `RING_PEAK` (bump `AsteroidRecipe.VERSION`) |
+| Belts and rings from afar | `BeltLook.SLAB_ACROSS/SLAB_THICK/SLABS`, fade `FADE_GONE/WHOLE`; `RingLook` the same |
+| Dust | `SpaceDust.SIZE/COUNT/BOX`; how much by place in `Whereabouts.DUST_OPEN/NEAR/THICK` |
+| When a world turns solid and detailed | `BodyProxy.NEAR_WITHIN`; `PROXY_AT` must stay between 25 and 30 km (§7.4) |
+| The hop | `HOP_OFF` in `scenes/flight_test.gd` |
+
+After changing a recipe constant, `test_system_recipe.gd` checks every rule of §4.3 over 500
+seeds, and `test_asteroid_recipe_system.gd` checks the belts and rings.
+
+### 16.3 Rendering it
+
+`test/probes/system_render.gd` renders the shots of §12 from the pilot's seat and in chase view,
+with saving off: `godot --path who-knows --resolution 1280x720 --script
+res://test/probes/system_render.gd -- <abs out dir> [seed]` (not headless). Its header says how
+to run it without a GPU.

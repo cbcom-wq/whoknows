@@ -5,6 +5,9 @@
 answered the same day (§13). This is an umbrella design: it sets the shape of the universe and
 splits it into pieces (§12), each of which gets its own spec → plan → build cycle. The numbers here
 are first guesses to be tuned by flying. Two questions stay open (§13).
+**Progress:** piece 1, the system skeleton, is built and merged to `main` (2026-09-28, `404ad69`;
+`2026-09-27-system-skeleton-design.md` §16). Next is the owner's play-test of it, then piece 2,
+Planetfall.
 **Depends on:** `main` at `1d23261` (the floating origin and asteroids, saving, the bridge computer)
 **Relates to:** asteroids spec §5.2 (`density_at`), §5.6 (the start), §13; Planetfall §3, §7, §14,
 §18 (*Many worlds*); saving spec §3; bridge computer spec §4; quantum energy spec §8
@@ -378,7 +381,7 @@ one: every step is flyable by itself.
 
 | # | Piece | Flyable result |
 |---|---|---|
-| 1 | **System skeleton:** `SystemRecipe`, `Whereabouts`, star and sun direction, body proxies, belts and rings through `density_at`, space dust, the map page learns bodies, the flight test starts in a system | Fly round a generated system of planets you can see but not land on |
+| 1 | **System skeleton** (built, 2026-09-28): `SystemRecipe`, `Whereabouts`, star and sun direction, body proxies, belts and rings through `density_at`, space dust, the map page learns bodies, the flight test starts in a system | Fly round a generated system of planets you can see but not land on |
 | 2 | **Planetfall,** built against the bodies of step 1 (Planetfall §20, amended) | Land on any of them |
 | 3 | **Cruise** | Cross the system in two minutes |
 | 4 | **Regions:** dust lanes and gas clouds first, then plasma zones | The space between has places in it |
