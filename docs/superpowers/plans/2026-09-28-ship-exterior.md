@@ -10,6 +10,12 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-28-ship-exterior-design.md`. Read it before starting. Also read `CLAUDE.md`, `docs/design/visual-style.md` and `.claude/skills/building-a-ship/SKILL.md`.
 
+**Builds on `main` at `dfd7b91`**, which includes the star-system skeleton (`docs/superpowers/specs/2026-09-27-system-skeleton-design.md`). What that means here:
+- `StarSystem` re-aims the scene's `DirectionalLight3D` from the star every physics tick, and sets its colour and energy from `SpacePalette.STARS`.
+- `SpaceDust` flecks drift round the focus, lit, never glowing: the lights will catch them.
+- The star is the one emissive thing outside, and **its glow was approved by the owner from renders**. Task 12's bloom must be shown to the owner against it.
+- **Saves store the ship's layout** (`Ship.to_dict()["layout"]`), so a resumed game keeps the ship it had, not the reshaped starter (Task 6, Step 5b).
+
 ## Global Constraints
 
 - Paths are relative to `who-knows/` unless they start with `docs/` or `.claude/`.
@@ -1872,6 +1878,14 @@ Power must be unchanged, because fairings draw nothing.
 
 Replace the "Real numbers for this exact grid" paragraph in `_starter_grid()`'s comments with the new figures: blocks, mass, centre of mass, inertia, `torque_budget`, `torque_imbalance`, thrust budgets and power. To get them, run the probe or a one-off `print` of `ShipStats.compute`.
 
+- [ ] **Step 5b: Saved games keep their own ship**
+
+A resumed game builds from its saved layout (`Ship.layout_of`), not `_starter_grid()`, so an existing save keeps the flat starter. Do what the spec's §7.1 says the owner decided:
+
+> **Open, for the owner, before this task:** migrate a saved starter to the reshaped one, or leave saves as they are and start a new game to see it.
+
+If migrating, use `SaveGame.migrate`, and bump the format the way that file already does. When a saved layout has no fairing cells and has exactly the old starter's cells, add the 26 fairing cells. Test two things: an old-starter save comes back with 26 fairings, and a save of any other ship is untouched.
+
 - [ ] **Step 6: Render and show the owner (checkpoint 2)**
 
 Run the probe as in Task 4, Step 8. Send the `probe_hull_*` renders and the probe's `feel` lines to the owner, with this caption:
@@ -3702,14 +3716,23 @@ In `_run`, after the first `_hull_shots`, add:
 
 Also measure fps seated with both groups on: after the existing `seated` shot, turn both on, `await _shot("seated_lit")` and print `fps`, then turn them off. Check the names `Contact.km`, `radius`, `point` and `RockContacts.KIND` against `src/sensors/` before running.
 
+- [ ] **Step 5b: Show the star with the bloom**
+
+The world environment's glow now blooms the star as well, and the star's glow was approved by the owner from renders (system skeleton spec §12). Add a probe shot that looks toward the star, with the bloom off and with it on. Find where `flight_test.gd` keeps its `StarSystem` and the star's `UniversePoint`. The owner judges it in Step 6.
+
+`StarSystem` re-aims the sun every physics tick from the star to the focus. After `_park_by_a_rock` moves the hull, wait a physics frame, then read `-sun.global_basis.z` again. The rock's night side is the side facing away from the star.
+
+The space dust (`SpaceDust`) is lit on layer 1, so the floods and forward lights should pick out flecks. Look for that in the renders: it is part of the "uncovering" the owner asked for.
+
 - [ ] **Step 6: Render both colours for the owner**
 
 Run the probe once with `HullPalette.WORK_LIGHT := WORK_LIGHT_WARM`. Then set it to `WORK_LIGHT_COOL`, run it again into a second directory, and set it back afterwards.
 
-Send the owner the `rock_*`, `lit_both_*` and `seated_lit` renders from both runs, side by side, with the fps lines. Ask:
+Send the owner the `rock_*`, `lit_both_*`, `seated_lit` and star renders from both runs, side by side, with the fps lines. Ask:
 1. warm white or cool white?
 2. is the outside dark enough, or too dark?
 3. how bright are the beams?
+4. is the star's glow still right with the bloom on?
 
 **Wait for the answers.**
 

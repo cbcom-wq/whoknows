@@ -2,8 +2,12 @@
 
 **Date:** 2026-09-28
 **Status:** Design approved section by section by the owner on 2026-09-28. Not built.
-**Depends on:** `main` at `1d23261`: quantum energy (the core, the machine, quantum cells, low
-power), the bridge computer (its miniature uses the hull's meshes), NPCs and saving.
+**Depends on:** `main` at `dfd7b91`:
+- quantum energy (the core, the machine, quantum cells, low power);
+- the bridge computer, whose miniature uses the hull's meshes;
+- NPCs and saving;
+- the star-system skeleton. It aims the sun from the star, and its space dust catches the lights.
+  The star's glow, approved from renders, must be re-shown with the outside's bloom (§6.3).
 **Governed by:** `docs/design/visual-style.md`, CLAUDE.md's floating-origin rule, the
 `building-a-ship` skill.
 **Amends, once built:**
@@ -367,6 +371,10 @@ A node under `Ship`, like `QuantumPlant`, alive across rebuilds.
 - It reads low power from the ship's `QuantumPlant` each frame, as the flight computer does.
 - **Saving:** a `lights` part, `{"floods": bool, "forward": bool}`. A save without it loads with
   both off.
+- **Saved ships:** a save stores the ship's layout (`Ship.to_dict()["layout"]`), and a resumed game
+  builds from it. So an existing save keeps the flat starter unless it is migrated. **Open, for
+  the owner:** migrate a saved starter to the reshaped one, or leave saves alone and start a new
+  game.
 
 ### 7.2 At the helm
 
