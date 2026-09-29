@@ -61,6 +61,9 @@ var store: QuantumStore
 var cores: Array[QuantumCore] = []
 var machines: Array[QuantumMachine] = []
 var flight_computer: FlightComputer
+## The warp drive, if the ship has one: the rings race while it spools and
+## travels (the warp spec §5.1).
+var warp: WarpDrive
 ## Where made items go: the ship's items (Ship.items).
 var items: Node3D
 ## What the machines can make from (Ship.item_catalog).
@@ -160,7 +163,8 @@ func _drive_cores() -> void:
 	var line_fraction := float(store.line()) / float(store.capacity)
 	for core in cores:
 		core.set_fill(fraction, line_fraction)
-	var state: StringName = &"boost" if _boosting() else (&"low_power" if store.is_low_power() else &"full")
+	var state: StringName = &"warp" if warp != null and warp.is_spinning() \
+		else (&"boost" if _boosting() else (&"low_power" if store.is_low_power() else &"full"))
 	if state != _last_state:
 		_last_state = state
 		for core in cores:
