@@ -113,3 +113,20 @@ func test_j_is_bound_to_the_warp():
 	assert_true(InputMap.has_action(&"warp"))
 	var keys := InputMap.action_get_events(&"warp").map(func(e: InputEvent) -> int: return (e as InputEventKey).physical_keycode)
 	assert_true(keys.has(KEY_J))
+
+func test_the_hud_has_the_warp_panel_and_body_brackets():
+	var panel: WarpPanel = _root.warp_panel
+	assert_not_null(panel)
+	assert_true(_root.get_node("HudRoot/Screen/Band/Row").is_ancestor_of(panel))
+	var markers: Array = _root.body_markers
+	assert_eq(markers.size(), 3, "one per view")
+	for m: CourseMarker in _root.course_markers:
+		assert_eq(m.warp, _ship.warp)
+
+func test_crossing_a_limit_toasts():
+	var t := _ready_above(WarpTarget.Kind.PLANET)
+	var panel: WarpPanel = _root.warp_panel
+	_put(t.point.plus(Vector3.UP * (t.limit - 500.0)), t.point)
+	assert_eq(panel.toast_label.text, "ENTERING %s" % t.name)
+	_put(t.point.plus(Vector3.UP * (t.limit + 20000.0)), t.point)
+	assert_true(panel.toast_label.text.begins_with("LEAVING %s" % t.name), panel.toast_label.text)

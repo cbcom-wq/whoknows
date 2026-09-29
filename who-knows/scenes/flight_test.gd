@@ -54,6 +54,10 @@ var contact_markers: Array[ContactMarker] = []
 ## The course on the HUD, one per view (bridge computer spec §6.1, §8).
 var course_markers: Array[CourseMarker] = []
 var course_chime: AudioStreamPlayer
+## The warp on the HUD (the warp spec §7.3): its panel in the band, and a
+## bracket per world, one per view.
+var warp_panel: WarpPanel
+var body_markers: Array[BodyMarker] = []
 ## Which body the debug hop last put you by (F7), in the system's order.
 var hop_index := -1
 ## The debug hop leaves you this far off a body's surface, or nearer a small
@@ -348,6 +352,26 @@ func _wire_warp() -> void:
 	_pilot.warp_pressed.connect(warp.engage)
 	warp.travel_started.connect(_on_warp_started)
 	warp.travel_ended.connect(_on_warp_ended)
+	warp_panel = WarpPanel.new()
+	warp_panel.name = "WarpPanel"
+	warp_panel.drive = warp
+	$HudRoot/Screen/Band/Row.add_child(warp_panel)
+	star_system.whereabouts.limit_entered.connect(_on_limit_entered)
+	star_system.whereabouts.limit_left.connect(_on_limit_left)
+	body_markers.clear()
+	for m in _mount_per_view(func() -> WorldMarker: return BodyMarker.new(), "Bodies"):
+		(m as BodyMarker).sensors = _ship.sensors
+		body_markers.append(m)
+	for m in course_markers:
+		m.warp = warp
+
+## A toast as you cross a warp limit (the warp spec §7.3).
+func _on_limit_entered(place: Whereabouts.Place) -> void:
+	warp_panel.toast("ENTERING %s" % place.name)
+
+func _on_limit_left(place: Whereabouts.Place) -> void:
+	var clear := star_system.whereabouts.warp_clear()
+	warp_panel.toast("LEAVING %s · WARP CLEAR" % place.name if clear else "LEAVING %s" % place.name)
 
 ## Why the warp must wait for the crew: &"crew" on a spacewalk, &"airlock"
 ## while one cycles, else &"".
