@@ -84,3 +84,14 @@ func test_the_materials_are_engine_materials():
 	var beam := HullMaterials.beam(HullPalette.WORK_LIGHT)
 	assert_eq(beam.blend_mode, BaseMaterial3D.BLEND_MODE_ADD)
 	assert_true(beam.proximity_fade_enabled)
+
+func test_windows_and_the_pod_shell_build_and_face_out():
+	HullProps.window_porthole(_kit, Transform3D.IDENTITY, 0.26)
+	HullProps.window_rect(_kit, InteriorKit.at(Vector3(3, 0, 0)), Vector2(1.1, 1.13))
+	HullProps.pod_shell(_kit, InteriorKit.at(Vector3(8, 0, 0)))
+	var made := _commit()
+	assert_true(made.has("DressingGlass"), "the glass")
+	assert_true(made.has("DressingGlow"), "the warm bands behind it")
+	assert_true(made.has("DressingHull"), "the pod's plating")
+	var shell: AABB = made["DressingHull"].get_aabb()
+	assert_gt(shell.end.y, InteriorProps.POD_ROOF, "the roof stands over the interior's")

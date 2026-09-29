@@ -44,7 +44,23 @@ static func build(layout: HullLayout, root: Node3D) -> Dictionary:
 				or mi.name == InteriorKit.BATCH_NAMES[InteriorKit.Batch.SOLID]:
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 			meshes.append(mi.mesh)
-	return {"meshes": meshes, "lenses": {}, "window_glow": null}
+	# Windows and pods (spec §5): their own kit, so their glow has its own
+	# material, which ShipLights dims with the ship.
+	var window_glow := HullMaterials.glow_instance(HullMaterials.WINDOW_ENERGY)
+	var glazing := _kit(root, "Windows")
+	glazing.materials = {InteriorKit.Batch.HULL: HullMaterials.livery(), InteriorKit.Batch.SOLID: HullMaterials.trim(),
+		InteriorKit.Batch.GLASS: HullMaterials.window_glass(), InteriorKit.Batch.GLOW: window_glow}
+	for w in layout.windows:
+		if w["round"]:
+			HullProps.window_porthole(glazing, w["frame"], w["size"].x * 0.5)
+		else:
+			HullProps.window_rect(glazing, w["frame"], w["size"])
+	for p in layout.pods:
+		HullProps.pod_shell(glazing, p["frame"])
+	for mi in glazing.commit():
+		if mi.name != InteriorKit.BATCH_NAMES[InteriorKit.Batch.GLOW]:
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	return {"meshes": meshes, "lenses": {}, "window_glow": window_glow}
 
 ## A kit on the hull's own layer, under a child of `root` named `kit_name`.
 static func _kit(root: Node3D, kit_name: String) -> InteriorKit:

@@ -122,3 +122,115 @@ static func running_strip(kit: InteriorKit, f: Transform3D, from: float, to: flo
 	var at := Vector3((from + to) * 0.5, -CHAMFER * 0.5, -CHAMFER * 0.5) + out * 0.012
 	kit.box(GLOW, f * Transform3D(basis, at), Vector3(maxf(to - from - 0.1, 0.05), RUNNING_WIDTH, 0.02),
 		InteriorKit.lit(HullPalette.RUNNING_LIGHT, 2.2))
+
+## A window frame's bar width.
+const FRAME := 0.1
+## Windows sit in front of the plating, which stands PLATE_PROUD proud: the glass
+## a little beyond it, or the plate would hide the glass.
+const GLASS_Z := PLATE_PROUD + 0.02
+## How far the pod shell stands outside the interior pod's outline.
+const POD_SKIN := 0.08
+## How far below the pod's floor its shell's belly goes.
+const POD_BELOW := 0.12
+## The pod roof's thickness and its lip beyond the walls.
+const POD_ROOF_THICK := 0.1
+const POD_LIP := 0.1
+
+static func _glass() -> Color:
+	return InteriorKit.solid(HullPalette.WINDOW_GLASS)
+
+static func _band() -> Color:
+	return InteriorKit.lit(HullPalette.WINDOW_LIGHT, InteriorMaterials.GLOW_ENERGY)
+
+## A porthole from outside (spec §5.1), in a skin frame at its centre: a
+## chunky trim ring, dark amber glass, and two warm bands behind it.
+static func window_porthole(kit: InteriorKit, f: Transform3D, radius: float) -> void:
+	kit.ring(SOLID, f, radius, radius + FRAME * 1.6, -0.02, GLASS_Z + 0.05, _trim())
+	kit.disc(GLASS, f * _at(Vector3(0, 0, GLASS_Z)), radius, _glass())
+	for y in [0.35 * radius, -0.2 * radius]:
+		var w := 2.0 * sqrt(radius * radius - y * y) * 0.8
+		kit.box(GLOW, f * _at(Vector3(0, y, GLASS_Z + 0.005)), Vector3(w, 0.04, 0.004), _band())
+
+## A rectangular window from outside, `size` across and up its face: a
+## bevelled trim frame, glass, and three warm bands.
+static func window_rect(kit: InteriorKit, f: Transform3D, size: Vector2) -> void:
+	var hx := size.x * 0.5
+	var hy := size.y * 0.5
+	var n := (f.basis * Vector3.BACK).normalized()
+	kit.quad(GLASS, f * Vector3(-hx, -hy, GLASS_Z), f * Vector3(hx, -hy, GLASS_Z), f * Vector3(hx, hy, GLASS_Z),
+		f * Vector3(-hx, hy, GLASS_Z), n, _glass())
+	for k in [-0.5, 0.05, 0.55]:
+		kit.box(GLOW, f * _at(Vector3(0, k * hy, GLASS_Z + 0.005)), Vector3(size.x * 0.86, 0.045, 0.004), _band())
+	for s in [-1.0, 1.0]:
+		kit.bevel_box(SOLID, f * _at(Vector3(s * (hx + FRAME * 0.5), 0, GLASS_Z * 0.5 + 0.03)),
+			Vector3(FRAME, size.y + FRAME * 2.0, GLASS_Z + 0.06), 0.02, _trim())
+		kit.bevel_box(SOLID, f * _at(Vector3(0, s * (hy + FRAME * 0.5), GLASS_Z * 0.5 + 0.03)),
+			Vector3(size.x, FRAME, GLASS_Z + 0.06), 0.02, _trim())
+
+## The interior pod's outline grown by POD_SKIN, as (x, z) in the pod frame.
+## The mouth's two ends stay on the canopy plane.
+static func _pod_outline(grow: float) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	var centre := Vector2(0, -0.9)
+	for p: Vector2 in InteriorProps.POD_OUTLINE:
+		if is_zero_approx(p.y):
+			out.append(p + Vector2(signf(p.x) * grow, 0))
+		else:
+			out.append(p + (p - centre).normalized() * grow)
+	return out
+
+static func _wall(kit: InteriorKit, batch: InteriorKit.Batch, f: Transform3D, a: Vector3, b: Vector3,
+		y0: float, y1: float, n: Vector3, colour: Color) -> void:
+	kit.quad(batch, f * (a + Vector3.UP * y0), f * (b + Vector3.UP * y0), f * (b + Vector3.UP * y1),
+		f * (a + Vector3.UP * y1), n, colour)
+
+## The cockpit pod from outside (spec §5.2), in the interior's pod frame:
+## origin at the mouth's floor centre on the canopy plane, -z out into the pod,
+## +x across, +y up. The interior pod grown by POD_SKIN: livery below the
+## sill, glass with warm bands to the glass top, a band to the roof, the jambs
+## solid, a roof with a lip, and a belly. The mouth is left open: the hull
+## closes it.
+static func pod_shell(kit: InteriorKit, f: Transform3D) -> void:
+	var outline := _pod_outline(POD_SKIN)
+	var low := -POD_BELOW
+	var sill := InteriorProps.POD_SILL
+	var glass_top := InteriorProps.POD_GLASS_TOP
+	var roof := InteriorProps.POD_ROOF + POD_ROOF_THICK
+	var last := outline.size() - 1
+	for i in last:
+		var p0 := outline[i]
+		var p1 := outline[i + 1]
+		var d := p1 - p0
+		var n := (f.basis * Vector3(d.y, 0, -d.x)).normalized()
+		var a := Vector3(p0.x, 0, p0.y)
+		var b := Vector3(p1.x, 0, p1.y)
+		if i == 0 or i == last - 1:
+			_wall(kit, HULL, f, a, b, low, roof, n, _plate_colour())
+			continue
+		_wall(kit, HULL, f, a, b, low, sill, n, _plate_colour())
+		_wall(kit, GLASS, f, a, b, sill, glass_top, n, _glass())
+		_wall(kit, HULL, f, a, b, glass_top, roof, n, _plate_colour())
+		var inset := (b - a).normalized() * 0.06
+		var out := f.basis.inverse() * n * 0.01
+		for k in [0.35, 0.7]:
+			var y := lerpf(sill, glass_top, k)
+			_wall(kit, GLOW, f, a + inset + out, b - inset + out, y - 0.025, y + 0.025, n, _band())
+	for i in range(1, last):
+		var p := outline[i]
+		kit.bevel_box(SOLID, f * _at(Vector3(p.x, (sill + glass_top) * 0.5, p.y)),
+			Vector3(0.08, glass_top - sill, 0.08), 0.02, _trim())
+	# The roof, with a lip beyond the walls, and the belly.
+	var lip := _pod_outline(POD_SKIN + POD_LIP)
+	var roof_centre := Vector3(0, roof, -0.9)
+	var floor_centre := Vector3(0, low, -0.9)
+	for i in last:
+		var r0 := Vector3(lip[i].x, roof, lip[i].y)
+		var r1 := Vector3(lip[i + 1].x, roof, lip[i + 1].y)
+		kit.tri(HULL, f * roof_centre, f * r0, f * r1, (f.basis * Vector3.UP).normalized(), _plate_colour())
+		var d := lip[i + 1] - lip[i]
+		var n := (f.basis * Vector3(d.y, 0, -d.x)).normalized()
+		_wall(kit, HULL, f, Vector3(lip[i].x, 0, lip[i].y), Vector3(lip[i + 1].x, 0, lip[i + 1].y),
+			roof - POD_ROOF_THICK, roof, n, _plate_colour())
+		var g0 := Vector3(outline[i].x, low, outline[i].y)
+		var g1 := Vector3(outline[i + 1].x, low, outline[i + 1].y)
+		kit.tri(HULL, f * floor_centre, f * g0, f * g1, (f.basis * Vector3.DOWN).normalized(), _plate_colour())

@@ -45,9 +45,140 @@ static func plan(grid: ShipGrid, _catalog: BlockCatalog, interior: InteriorLayou
 	for coord: Vector3i in grid.coords():
 		if AirlockSite.hatch_normal(grid, coord) != Vector3i.ZERO:
 			l._alcoves[coord] = true
+	if interior != null:
+		l._plan_pods(interior)
 	l._plan_skin()
 	l._plan_nozzles()
+	if interior != null:
+		l._plan_windows(interior)
+	l._mark_running()
 	return l
+
+func is_pod_cell(coord: Vector3i) -> bool:
+	return _pod_cells.has(coord)
+
+## Each cockpit pod (spec §5.2): the pod shell in the interior's own pod frame,
+## brought down from its storey into hull space. The skin leaves its canopy
+## cell to the shell.
+func _plan_pods(interior: InteriorLayout) -> void:
+	for pod in interior.pods():
+		var coord: Vector3i = pod["coord"]
+		var f := InteriorDressing.pod_frame(coord, pod["normal"])
+		f.origin.y -= InteriorBuilder.storey_offset(coord.y)
+		pods.append({"frame": f, "cell": coord + pod["normal"]})
+		_pod_cells[coord + pod["normal"]] = true
+
+## Every window inside gets one outside (spec §5.1): portholes, the
+## shoulders beside a pod, and a nose's windows.
+func _plan_windows(interior: InteriorLayout) -> void:
+	var r := InteriorProps.PORTHOLE_RADIUS
+	for face in interior.faces():
+		if face["kind"] != InteriorLayout.Kind.WALL or not face["porthole"]:
+			continue
+		wanted += 1
+		var coord: Vector3i = face["coord"]
+		var normal: Vector3i = face["normal"]
+		var skin_cell := coord
+		if _grid.has_block(coord + normal):
+			skin_cell = coord + normal
+			if _grid.has_block(coord + normal * 2):
+				unmatched.append({"coord": coord, "normal": normal})
+				continue
+		_window_on(skin_cell, coord, normal, InteriorProps.PORTHOLE_HEIGHT - r, InteriorProps.PORTHOLE_HEIGHT + r,
+			r * 2.0, true, 0.0)
+	for group in interior.canopy_groups():
+		var normal: Vector3i = group["normal"]
+		var group_pods: Array = group["pods"]
+		if group_pods.is_empty():
+			_nose_windows(group)
+			continue
+		for coord: Vector3i in group["coords"]:
+			if group_pods.has(coord):
+				continue
+			wanted += 1
+			_window_on(coord + normal, coord, normal, InteriorProps.SHOULDER_WINDOW_LOW,
+				InteriorProps.SHOULDER_WINDOW_HIGH, InteriorProps.SHOULDER_WINDOW_HALF * 2.0, false, 0.0)
+
+## A nose's windows (InteriorProps.NOSE_WINDOWS: across, height, half width,
+## half height), each on the canopy cell it falls across.
+func _nose_windows(group: Dictionary) -> void:
+	var normal: Vector3i = group["normal"]
+	var across := Vector3.UP.cross(-Vector3(normal))
+	var coords: Array = group["coords"]
+	var lo := INF
+	var hi := -INF
+	for c: Vector3i in coords:
+		var a := ShipGrid.cell_center(c).dot(across)
+		lo = minf(lo, a - HALF_CELL)
+		hi = maxf(hi, a + HALF_CELL)
+	for w: Vector4 in InteriorProps.NOSE_WINDOWS:
+		wanted += 1
+		var at := (lo + hi) * 0.5 + w.x
+		var placed := false
+		for c: Vector3i in coords:
+			var a := ShipGrid.cell_center(c).dot(across)
+			if absf(at - a) <= HALF_CELL:
+				_window_on(c + normal, c, normal, w.y - w.w, w.y + w.w, w.z * 2.0, false, at - a)
+				placed = true
+				break
+		if not placed:
+			unmatched.append({"coord": coords[0], "normal": normal})
+
+## One window on `skin_cell`'s face toward `normal`, between `lo` and `hi`
+## above `interior_cell`'s floor, `width` across, `shift` along the interior's
+## across from the face's centre line. The face may slope: the window's frame
+## lies in it, and its size runs up the slope.
+func _window_on(skin_cell: Vector3i, interior_cell: Vector3i, normal: Vector3i, lo: float, hi: float,
+		width: float, is_round: bool, shift: float) -> void:
+	var face := _outer_face(skin_cell, normal)
+	if face.is_empty():
+		unmatched.append({"coord": interior_cell, "normal": normal})
+		return
+	var n: Vector3 = face["normal"]
+	var up := (Vector3.UP - n * Vector3.UP.dot(n)).normalized()
+	var fl := InteriorBuilder.floor_y(interior_cell) - InteriorBuilder.storey_offset(interior_cell.y)
+	var mid := fl + (lo + hi) * 0.5
+	var p0: Vector3 = face["centre"]
+	var centre := p0 + up * ((mid - p0.y) / up.y) + Vector3.UP.cross(-Vector3(normal)) * shift
+	windows.append({"frame": Transform3D(Basis(up.cross(n), up, n), centre),
+		"size": Vector2(width, (hi - lo) / up.y), "round": is_round, "coord": skin_cell})
+
+## The skin face of `cell` that looks most along `normal`: a cube's own face,
+## or the shaped block's face nearest that way. Empty if none shows.
+func _outer_face(cell: Vector3i, normal: Vector3i) -> Dictionary:
+	if skin.has(cell):
+		if skin[cell].has(normal):
+			return {"centre": ShipGrid.cell_center(cell) + Vector3(normal) * HALF_CELL, "normal": Vector3(normal)}
+		return {}
+	var best := {}
+	var best_dot := 0.5
+	for fc in facets:
+		if fc["coord"] != cell:
+			continue
+		var n := facet_normal(fc)
+		var d := n.dot(Vector3(normal))
+		if d > best_dot:
+			best_dot = d
+			best = {"centre": facet_centre(fc), "normal": n}
+	return best
+
+## Cyan strips (spec §5.4): along the top chamfers, fore and aft, at the
+## highest roof, and up the bow's vertical chamfers.
+func _mark_running() -> void:
+	var top := -(1 << 30)
+	var bow := 1 << 30
+	for e in edges:
+		var ups: bool = e["a"] == Vector3i.UP or e["b"] == Vector3i.UP
+		if ups and absi(e["axis"].z) == 1:
+			top = maxi(top, e["coord"].y)
+		var fwd: bool = e["a"] == Vector3i.FORWARD or e["b"] == Vector3i.FORWARD
+		if fwd and absi(e["axis"].y) == 1:
+			bow = mini(bow, e["coord"].z)
+	for e in edges:
+		var ups: bool = e["a"] == Vector3i.UP or e["b"] == Vector3i.UP
+		var fwd: bool = e["a"] == Vector3i.FORWARD or e["b"] == Vector3i.FORWARD
+		e["running"] = (ups and absi(e["axis"].z) == 1 and e["coord"].y == top) \
+			or (fwd and absi(e["axis"].y) == 1 and e["coord"].z == bow)
 
 ## The skin frame of a face (spec §3.3): +z out of the hull, +y up the face,
 ## or toward the bow on a roof or belly, +x across.

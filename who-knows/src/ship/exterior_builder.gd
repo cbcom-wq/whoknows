@@ -148,7 +148,7 @@ func _build_colliders() -> void:
 			continue
 		var inst := _grid.get_block(coord)
 		var shape_name := HullShapes.shape_of(inst.block_id)
-		if shape_name == HullShapes.CUBE:
+		if shape_name == HullShapes.CUBE or _layout.is_pod_cell(coord):
 			_add_collider(body, _box_shape(), Transform3D(Basis.IDENTITY, ShipGrid.cell_center(coord)))
 		else:
 			# Shaped blocks (spec §3.4): their colliders are their shapes, in
