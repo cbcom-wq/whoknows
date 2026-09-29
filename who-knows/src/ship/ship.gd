@@ -273,6 +273,8 @@ func _rebuild_everything() -> void:
 	flight_computer.quantum = quantum.store
 	if lights != null:
 		lights.bind(exterior_builder.light_mounts(), exterior_builder.lenses(), exterior_builder.window_glow())
+		for panel in interior_builder.lights_panels():
+			panel.bind(lights)
 	_bind_computers()
 	if rcs_show != null:
 		rcs_show.rebuild(grid, catalog, stats.center_of_mass)

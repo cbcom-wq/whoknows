@@ -157,6 +157,7 @@ static func _cockpit(kit: InteriorKit, layout: InteriorLayout, group: Dictionary
 	var fixture_cells := {}
 	for fixture in layout.fixtures():
 		fixture_cells[fixture["coord"]] = true
+	var panel_at := _lights_panel_cell(group, fixture_cells)
 	for coord: Vector3i in group["coords"]:
 		if pods.has(coord):
 			var f := pod_frame(coord, normal)
@@ -170,6 +171,44 @@ static func _cockpit(kit: InteriorKit, layout: InteriorLayout, group: Dictionary
 			# takes the desk's place under the window.
 			InteriorProps.shoulder(kit, wall_frame(coord, normal),
 				face_variety({"coord": coord, "normal": normal}), not fixture_cells.has(coord))
+			if panel_at.has(coord):
+				_lights_panel(kit, coord, normal, pods[0])
+
+## The shoulder the lights panel goes on (ship exterior spec §7.3): the
+## starboard one first, then the nearer the helm. Never one where a fixture
+## stands. Empty with no shoulder to put it on.
+static func _lights_panel_cell(group: Dictionary, fixture_cells: Dictionary) -> Array[Vector3i]:
+	var pods: Array = group["pods"]
+	var across := Vector3.UP.cross(-Vector3(group["normal"] as Vector3i))
+	var helm: Vector3i = pods[0]
+	var best: Array[Vector3i] = []
+	var best_rank := Vector2(INF, INF)
+	for coord: Vector3i in group["coords"]:
+		if pods.has(coord) or fixture_cells.has(coord):
+			continue
+		var side := Vector3(coord - helm).dot(across)
+		var rank := Vector2(0.0 if side > 0.0 else 1.0, absf(side))
+		if rank < best_rank:
+			best_rank = rank
+			best = [coord]
+	return best
+
+## The lights panel on a shoulder's wall, beside its window on the side
+## toward the helm, above the desk.
+static func _lights_panel(kit: InteriorKit, coord: Vector3i, normal: Vector3i, helm: Vector3i) -> void:
+	var wall := wall_frame(coord, normal)
+	var toward := signf(Vector3(helm - coord).dot(wall.basis.x))
+	if toward == 0.0:
+		toward = 1.0
+	var f := wall * InteriorKit.at(Vector3(toward * InteriorProps.LIGHTS_PANEL_ACROSS,
+		InteriorProps.LIGHTS_PANEL_HEIGHT, -InteriorProps.WALL_THICKNESS * 0.5))
+	InteriorProps.lights_panel(kit, f)
+	var panel := LightsPanel.new()
+	panel.name = "LightsPanel_%d_%d_%d" % [coord.x, coord.y, coord.z]
+	panel.cell = coord
+	panel.transform = f
+	panel.setup(kit.layer)
+	kit.root.add_child(panel)
 
 ## The fixtures the dressing draws at their fixture frames (draws_fixture):
 ## the helm, the bridge computer's holo table, and the quantum core, which it

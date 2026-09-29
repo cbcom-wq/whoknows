@@ -11,7 +11,8 @@ extends SceneTree
 # The scene defaults to res://scenes/flight_test.tscn. It must hold a Ship at
 # Ship, with Interior/Avatar, Interior/PilotSeat and CameraDirector, as that
 # scene does. Writes <out>/probe_spawn.png, probe_seated.png and
-# probe_stood.png.
+# probe_stood.png; on a ship with a lights panel, probe_panel_off.png,
+# probe_panel_on.png and probe_panel_close.png too.
 #
 # A windowed run would save and load the owner's real game
 # (docs/superpowers/specs/2026-09-26-saving-design.md §9), so the probe turns
@@ -81,6 +82,32 @@ func _hull_shots(ship: Ship, tag: String, fill := true) -> void:
 	if light != null:
 		light.queue_free()
 	cam.queue_free()
+
+## The bridge's lights panel (ship exterior spec 7.3) at eye height: stood in
+## the cell behind the starboard shoulder, facing forward, with the floods and
+## forward lights off, then on. Skipped on a ship with no panel.
+func _panel_shots(ship: Ship, avatar: Avatar) -> void:
+	var panels := ship.interior_builder.lights_panels()
+	print("panel   %d lights panels%s" % [panels.size(), "" if panels.size() == 1 else "  <-- EXPECTED ONE"])
+	if panels.is_empty():
+		return
+	var cell := Vector3i(1, 0, -2)
+	var interior: Node3D = ship.get_node("Interior")
+	var feet := interior.global_transform * Vector3(ShipGrid.cell_center(cell).x, InteriorBuilder.floor_y(cell),
+		ShipGrid.cell_center(cell).z)
+	avatar.place(Transform3D(interior.global_transform.basis, feet))
+	avatar.set_head_pitch(0.0)
+	await _shot("panel_off")
+	ship.lights.toggle(ShipLights.FLOOD)
+	ship.lights.toggle(ShipLights.FORWARD)
+	await _shot("panel_on")
+	# Close up, a step to the panel's side of the shoulder cell, to read the labels.
+	var near := interior.global_transform * Vector3(ShipGrid.cell_center(cell).x - 0.5, InteriorBuilder.floor_y(cell),
+		ShipGrid.cell_center(cell).z - 2.3)
+	avatar.place(Transform3D(interior.global_transform.basis, near))
+	await _shot("panel_close")
+	ship.lights.toggle(ShipLights.FLOOD)
+	ship.lights.toggle(ShipLights.FORWARD)
 
 func _run(scene: Node) -> void:
 	# A process frame or two first: the canopy camera is placed on the first.
@@ -183,4 +210,5 @@ func _run(scene: Node) -> void:
 	Input.action_release("move_back")
 	var walked := from.distance_to(avatar.global_position)
 	print("walked  %.2f m in 1 s after standing%s" % [walked, "" if walked > 1.0 else "  <-- STUCK"])
+	await _panel_shots(ship, avatar)
 	quit()

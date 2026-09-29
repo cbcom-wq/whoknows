@@ -145,6 +145,14 @@ func computers() -> Array[ShipComputer]:
 			out.append(node as ShipComputer)
 	return out
 
+## The bridge's lights panels (ship exterior spec §7.3), for the ship to bind.
+func lights_panels() -> Array[LightsPanel]:
+	var out: Array[LightsPanel] = []
+	if is_instance_valid(_physics_body):
+		for node in _physics_body.find_children("*", "LightsPanel", true, false):
+			out.append(node as LightsPanel)
+	return out
+
 func walkable_coords() -> Array:
 	return _walkable.duplicate()
 
