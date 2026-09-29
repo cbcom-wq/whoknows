@@ -20,7 +20,7 @@ const BEAM_LAYER := 1
 ## Each group: its cone (full angle, degrees), reach (m), energy at full
 ## power, and whether it casts shadows. Energies are tuned at the renders.
 const SETTINGS := {
-	FLOOD: {"cone": 55.0, "reach": 40.0, "energy": 4.0, "shadows": false},
+	FLOOD: {"cone": 55.0, "reach": 40.0, "energy": 4.0, "shadows": true},
 	FORWARD: {"cone": 22.0, "reach": 220.0, "energy": 16.0, "shadows": true},
 }
 ## How much of its reach a beam is drawn along before it has faded out.

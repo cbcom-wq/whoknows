@@ -46,7 +46,7 @@ func test_one_spot_light_per_mount_aimed_along_it():
 	assert_almost_eq(-spot.global_basis.z, MOUNTS[2]["aim"].normalized(), Vector3.ONE * 0.001, "a spot shines along -z")
 	assert_eq(spot.light_cull_mask, 1 | ExteriorBuilder.OWN_HULL_LAYER, "never the interior")
 	assert_true(spot.shadow_enabled, "the forward lights cast shadows")
-	assert_false(_lights.spots(&"flood")[0].shadow_enabled)
+	assert_true(_lights.spots(&"flood")[0].shadow_enabled, "the floods cast shadows too; the spike found them free")
 	assert_almost_eq(spot.spot_angle, 11.0, 0.0001, "half the 22 deg cone")
 	assert_almost_eq(spot.spot_range, 220.0, 0.0001)
 	assert_eq(_lights.beam(&"forward").layers, ShipLights.BEAM_LAYER, "beams on the world's layer")

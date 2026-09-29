@@ -314,7 +314,7 @@ Every mount's aim must leave the hull: no ray from a lens along its aim hits a c
   (CLAUDE.md).
 - **Light mask:** `1 | OWN_HULL_LAYER`, the world and the ship's own hull. Never layer 2, the
   interior.
-- **Shadows:** on for the forward pair; off for floods until the spike (§6.4) says otherwise.
+- **Shadows:** on for the forward pair and for the floods. The floods were held back until the spike (§6.4) measured them; it found them free (151 fps seated by a rock against 150 without), so they are on (controller ruling, 2026-09-29, pending the owner's word).
 - **Colour:** `HullPalette.WORK_LIGHT`, chosen at the renders between a warm white and a cool white
   (§2, row 6). Both are defined for the renders, and the loser is deleted. *At the renders
   (2026-09-29): both were rendered (`renders-task12/warm`, `cool`, with side-by-sides). `WORK_LIGHT`
@@ -352,7 +352,7 @@ Every mount's aim must leave the hull: no ray from a lens along its aim hits a c
 - **Measured** at 1280 × 720 on the GTX 960 (2026-09-29): standing 410–463 fps; seated 180 fps;
   seated, both groups on, 172–173 fps; seated 60 m off a rock, both groups on, nose to its night
   side, the worst view, **150 fps**; the chase view there 295–297 fps, and 20 m over a rock
-  299–307 fps. All hold 120 fps with the flood shadows still off.
+  299–307 fps. All hold 120 fps (these runs were before the flood shadows went on; §6.4).
 
 ### 6.4 Beams, and a spike on real shafts
 
@@ -376,7 +376,12 @@ Every mount's aim must leave the hull: no ray from a lens along its aim hits a c
   - at 1280 × 720 on the reference GPU (GTX 960), counting the canopy view's second render;
   - **adopted** (in place of the cones or with them) only if the worst view holds 120 fps;
   - otherwise the cones stand, and the spike's code is thrown away.
-- The spike also measures flood shadows. They are turned on only if they fit the same budget.
+- The spike also measured flood shadows, to be turned on only if they fit the same budget.
+  *(Measured 2026-09-29: they fit, at no measurable cost. Seated nose-on 60 m off a rock with both
+  groups on, 151 fps against 150 without; belly-down 20 m over one, 167 against 168; chase 326 and
+  side 314 nose-on, 257–298 belly-down. Over flat ground the effect is subtle: boulders and the big
+  rock throw a longer, softer shadow across the lit pool. So `ShipLights.SETTINGS` has the flood
+  `"shadows"` true.)*
 
 ---
 
