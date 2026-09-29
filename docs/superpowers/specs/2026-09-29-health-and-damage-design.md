@@ -1,8 +1,8 @@
 # Health and damage — things that can be hurt, broken and lost
 
 **Date:** 2026-09-29
-**Status:** Draft. The owner answered all eleven questions (§2) on 2026-09-29. It waits on the
-owner's approval before a plan is written.
+**Status:** Approved by the owner on 2026-09-29, after answering all eleven questions (§2). The
+build plan is `docs/superpowers/plans/2026-09-29-health-and-damage.md`.
 **Depends on:** `main` at `dfd7b91`: the system skeleton, NPC foundation, saving, quantum energy,
 asteroids, hands and items.
 **Governed by:** `docs/design/visual-style.md` (damage looks come from the palettes, within the
