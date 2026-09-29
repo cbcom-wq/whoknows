@@ -137,6 +137,11 @@ func rebuild() -> void:
 	_compute_gravity()
 	_fill_felt_gravity()
 
+## The body every interior surface and dressing collider is on (layer 2),
+## rebuilt each rebuild(); null before the first.
+func geometry_body() -> StaticBody3D:
+	return _physics_body
+
 ## Every bridge computer the last rebuild dressed (bridge computer spec §10).
 func computers() -> Array[ShipComputer]:
 	var out: Array[ShipComputer] = []

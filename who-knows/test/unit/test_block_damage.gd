@@ -153,3 +153,14 @@ func test_remove_many_erases_all_with_one_signal():
 	assert_signal_emit_count(grid, "cell_changed", 1)
 	grid.remove_many([Vector3i(7, 7, 7)])
 	assert_signal_emit_count(grid, "cell_changed", 1, "nothing removed, nothing said")
+
+func test_apply_many_removes_everything_gone_with_one_signal():
+	var grid := _line()
+	_put(grid, Vector3i(0, 1, 0), &"hull")
+	watch_signals(grid)
+	var hull := _hp(&"hull")
+	var removed := BlockDamage.apply_many(grid, _catalog,
+		{Vector3i(3, 0, 0): hull * 2.0, Vector3i(0, 1, 0): hull * 2.0, Vector3i(2, 0, 0): hull * 0.6})
+	assert_eq(removed.size(), 2)
+	assert_signal_emit_count(grid, "cell_changed", 1)
+	assert_signal_emitted_with_parameters(grid, "block_staged", [Vector3i(2, 0, 0), BlockDamage.Stage.DAMAGED])

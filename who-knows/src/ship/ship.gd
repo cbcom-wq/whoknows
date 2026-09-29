@@ -5,6 +5,9 @@ extends Node3D
 ## source of truth; everything else here reacts to `cell_changed`.
 
 signal stats_changed(stats: ShipStats)
+## Blocks knocked off, and any piece cut off with them (health and damage spec
+## §4.5), already gone from the grid: for the burst and the shed plate.
+signal blocks_lost(coords: Array[Vector3i])
 
 const INTERIOR_WORLD_BASE := Vector3(0.0, -5000.0, 0.0)
 const SLOT_SPACING := 2000.0
@@ -17,6 +20,11 @@ const STRUCK_CALM := 5.0
 ## rock's surface.
 const BLAST_EVERY := 0.5
 const BLAST_REACH := 50.0
+## A crash (health and damage spec §5.2): nothing below CRASH_FROM m/s of
+## knock, then CRASH_K × (knock − CRASH_FROM)² on the struck cell and half that
+## on each face neighbour. First values for the feel pass.
+const CRASH_FROM := 2.0
+const CRASH_K := 12.0
 
 ## The exact ShaderMaterial `hull`/`hull_wedge` meshes reference (their .tres
 ## surfaces point at this same path, and Godot's resource cache guarantees a
@@ -50,6 +58,8 @@ var quantum: QuantumPlant
 
 ## Seconds since a rock last struck the hull.
 var since_struck := INF
+## When anything aboard last took damage (health and damage spec §10).
+var damage_log := DamageLog.new()
 
 var _stocked := false
 var _airlocks_root: Node
@@ -133,6 +143,9 @@ func _ready() -> void:
 	exterior.contact_monitor = true
 	exterior.max_contacts_reported = 8
 	exterior.body_entered.connect(_on_hull_struck)
+	# The hull is a scriptless RigidBody3D: hits reach it through meta
+	# (health and damage spec §3).
+	exterior.set_meta(&"receive_hit", _on_hull_hit)
 
 func _process(_delta: float) -> void:
 	# hull_livery.gdshader paints its stripe from ship-local height, but
@@ -160,6 +173,7 @@ func _update_hum() -> void:
 func _physics_process(delta: float) -> void:
 	_last_hull_velocity = exterior.linear_velocity
 	since_struck += delta
+	damage_log.tick(delta)
 	_blast_in -= delta
 	if _blast_in <= 0.0:
 		_blast_in = BLAST_EVERY
@@ -171,6 +185,83 @@ func _on_hull_struck(body: Node) -> void:
 		since_struck = 0.0
 		hull_struck(knock)
 	_jolt_rock(body, knock)
+	_crash(body, knock)
+
+## Crash damage (spec §5.2) on the cell the contact is on. Worked out now,
+## while the contact is reported, and dealt after the physics step: a removal
+## rebuilds the hull's colliders, which can't change while it is flushing.
+func _crash(body: Node, knock: float) -> void:
+	var amount := crash_damage(knock)
+	if amount <= 0.0:
+		return
+	var state := PhysicsServer3D.body_get_direct_state(exterior.get_rid())
+	if state == null:
+		return
+	for i in state.get_contact_count():
+		if state.get_contact_collider_object(i) != body:
+			continue
+		var at := exterior.to_local(state.get_contact_local_position(i))
+		var normal := exterior.global_basis.inverse() * state.get_contact_local_normal(i)
+		var cell := ShipCells.hull_cell(grid, exterior, state.get_contact_local_shape(i), at, normal)
+		if cell != ShipCells.NONE:
+			_deal_crash.call_deferred(cell, amount)
+		return
+
+func _deal_crash(cell: Vector3i, amount: float) -> void:
+	var hits := {cell: amount}
+	for n in grid.neighbours(cell):
+		if grid.has_block(n):
+			hits[n] = amount * 0.5
+	take_damage_many(hits)
+
+## hp a crash with this knock (the hull's change of speed, m/s) deals to the
+## cell it lands on.
+static func crash_damage(knock: float) -> float:
+	if knock <= CRASH_FROM:
+		return 0.0
+	return CRASH_K * (knock - CRASH_FROM) * (knock - CRASH_FROM)
+
+## A hit on the hull, in world space (a bolt from a spacewalk, a bite).
+func _on_hull_hit(hit: Hit) -> void:
+	var cell := ShipCells.hull_cell(grid, exterior, hit.shape, exterior.to_local(hit.position),
+		exterior.global_basis.inverse() * hit.normal)
+	take_damage(cell, hit.damage)
+
+## A hit on an interior surface: the block behind it (spec §5.1).
+func _on_interior_hit(hit: Hit) -> void:
+	var cell := ShipCells.interior_cell(grid, interior.to_local(hit.position),
+		interior.global_basis.inverse() * hit.normal)
+	take_damage(cell, hit.damage)
+
+## Deals `amount` to the block at `cell` (health and damage spec §4). Returns
+## what it knocked off.
+func take_damage(cell: Vector3i, amount: float) -> Array[Vector3i]:
+	return take_damage_many({cell: amount})
+
+## Deals every hit in `hits` (cell -> amount) together: one rebuild for all
+## that goes.
+func take_damage_many(hits: Dictionary) -> Array[Vector3i]:
+	var real := {}
+	for cell: Vector3i in hits:
+		if cell != ShipCells.NONE and hits[cell] > 0.0 and grid.has_block(cell):
+			real[cell] = hits[cell]
+	if real.is_empty():
+		var none: Array[Vector3i] = []
+		return none
+	damage_log.note()
+	var removed := BlockDamage.apply_many(grid, catalog, real)
+	if not removed.is_empty():
+		blocks_lost.emit(removed)
+	return removed
+
+## A block crossed a stage (spec §4.3): what it can do changed, and nothing
+## else did. The stats follow; no geometry is rebuilt.
+func _on_block_staged(_coord: Vector3i, _stage: int) -> void:
+	stats = ShipStats.compute(grid, catalog)
+	_apply_stats()
+	if quantum != null and quantum.store != null:
+		quantum.store.set_capacity(stats.quantum_capacity)
+	stats_changed.emit(stats)
 
 ## A strike carries through the rock it hit: anything living on it feels it
 ## (NPC foundation spec §6.1).
@@ -238,8 +329,10 @@ func set_grid(new_grid: ShipGrid, stock := true) -> void:
 		_stocked = true
 	if grid != null and grid.cell_changed.is_connected(_on_cell_changed):
 		grid.cell_changed.disconnect(_on_cell_changed)
+		grid.block_staged.disconnect(_on_block_staged)
 	grid = new_grid
 	grid.cell_changed.connect(_on_cell_changed)
+	grid.block_staged.connect(_on_block_staged)
 	exterior_builder.bind(grid, catalog)
 	interior_builder.bind(grid, catalog)
 	_rebuild_everything()
@@ -255,6 +348,7 @@ func _rebuild_everything() -> void:
 	var stowed := _stowed_items()
 	exterior_builder.rebuild()
 	interior_builder.rebuild()
+	interior_builder.geometry_body().set_meta(&"receive_hit", _on_interior_hit)
 	_bind_airlocks()
 	_reseat(stowed)
 	if not _stocked:
@@ -417,6 +511,9 @@ func _stock() -> void:
 func busy() -> String:
 	if since_struck < STRUCK_CALM:
 		return "hull struck"
+	var hurt := damage_log.busy()
+	if hurt != "":
+		return hurt
 	for airlock: Airlock in airlocks.values():
 		var why := airlock.busy()
 		if why != "":

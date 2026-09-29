@@ -119,6 +119,8 @@ func _build_colliders() -> void:
 			# Hollow, not gone: the alcove's floor, walls and hatches are this
 			# cell's collision now.
 			_alcoves[coord] = AirlockAlcove.build(self, body, _grid, _catalog, coord)
+			for collider in _alcoves[coord].colliders:
+				collider.set_meta(&"cell", coord)
 			_collider_coords.append(coord)
 			continue
 		var shape := BoxShape3D.new()
@@ -126,6 +128,8 @@ func _build_colliders() -> void:
 		var node := CollisionShape3D.new()
 		node.shape = shape
 		node.position = ShipGrid.cell_center(coord)
+		# Which block a hit on this shape damages (health and damage spec §5.1).
+		node.set_meta(&"cell", coord)
 		body.add_child(node)
 		_colliders.append(node)
 		_collider_coords.append(coord)

@@ -13,6 +13,8 @@ const SPEED := 45.0
 const LIFETIME := 1.5
 ## Newton-seconds given to whatever it hits.
 const PUSH := 6.0
+## hp a bolt takes from what it hits (health and damage spec §5.1).
+const DAMAGE := 10.0
 ## interior_geometry | items.
 const RAY_MASK := 2 | 32 | Npc.LAYER
 ## Chunky enough to read at the far end of a corridor: at 0.06 m thick it was
@@ -80,8 +82,11 @@ func impact(result: Dictionary) -> void:
 	if body != null and not body.freeze:
 		body.apply_impulse(direction * PUSH, point - body.global_position)
 		body.sleeping = false
-	if collider != null and collider.has_method(&"receive_hit"):
-		collider.receive_hit(Hit.make(point, normal, direction, direction * PUSH, source))
+	var hit := Hit.make(point, normal, direction, direction * PUSH, source)
+	hit.damage = DAMAGE
+	hit.kind = &"plasma"
+	hit.shape = int(result.get("shape", -1))
+	Hit.deliver(collider, hit)
 	_tell_npcs(point, collider)
 	ImpactFlash.spawn(get_parent(), point, normal, ImpactFlash.Kind.IMPACT)
 	struck.emit(point, collider)
