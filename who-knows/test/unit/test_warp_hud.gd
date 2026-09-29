@@ -62,3 +62,16 @@ func test_the_contact_marker_leaves_worlds_and_clusters_to_the_body_marker():
 	assert_false(ContactMarker.marks_kind(BodyContacts.CLUSTER))
 	assert_true(ContactMarker.marks_kind(BodyContacts.MOON))
 	assert_true(ContactMarker.marks_kind(&"life"))
+
+func test_labels_that_would_overlap_keep_only_the_nearer():
+	var marks: Array[Dictionary] = [
+		{"id": &"body:far", "position": Vector2(410, 300), "text": "FAR WORLD · 130 KM", "metres": 130000.0},
+		{"id": &"body:near", "position": Vector2(400, 300), "text": "NEAR WORLD · 20 KM", "metres": 20000.0},
+		{"id": &"body:apart", "position": Vector2(400, 500), "text": "APART · 40 KM", "metres": 40000.0},
+	]
+	var kept := BodyMarker.declutter(marks)
+	assert_eq(kept.size(), 3, "every bracket stays")
+	assert_eq(kept[0]["id"], &"body:near", "nearest first")
+	assert_eq(kept[0]["text"], "NEAR WORLD · 20 KM")
+	assert_eq(kept[1]["text"], "APART · 40 KM", "far enough apart to keep its label")
+	assert_eq(kept[2]["text"], "", "its label would lie on the nearer one's")

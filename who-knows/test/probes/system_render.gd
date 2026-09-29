@@ -15,7 +15,10 @@ extends SceneTree
 # Writes system_*.png: the start (ahead, and turned to the star), a ringed
 # planet from 25 km and 3 km, a moon by its planet, the belts from above the
 # system, the star from 40 km and 8 km, dust going past at boost in open space
-# and in a belt, and every world and star palette side by side.
+# and in a belt, and every world and star palette side by side. For the warp
+# (docs/superpowers/specs/2026-09-28-warp-design.md §10.2): a planet's debris
+# from its warp limit (seat and chase), a cluster from its limit, and a warp
+# lined up, spooling, mid-travel and just dropped out (system_warp_*_seat).
 
 var _out := ""
 var _root: Node
@@ -137,9 +140,67 @@ func _run() -> void:
 		_ship.exterior.linear_velocity = -_ship.exterior.global_basis.z * 300.0
 		await _frames(20)
 		await _shot("dust_%s_seat" % where[0])
+	# 8. A planet's debris from its warp limit, and a cluster from its limit
+	# (docs/superpowers/specs/2026-09-28-warp-design.md §10.2).
+	var planet := _system.planets()[0]
+	_put(planet.point.plus(_system.star.point.minus(planet.point).normalized() * planet.warp_limit), planet.point)
+	await _both("debris_from_limit")
+	if not _system.clusters.is_empty():
+		var c := _system.clusters[_system.clusters.size() - 1]
+		_put(c.point.plus(Vector3.UP * c.limit * 0.3 + Vector3.BACK * c.limit * 0.95), c.point)
+		await _shot("cluster_from_limit_seat")
+	# 9. A warp: lined up and ready, spooling, mid-travel, and just dropped out.
+	await _warp_shots()
 	# 7. Every palette side by side.
 	await _palettes()
 	quit()
+
+## A warp to the biggest planet it can reach, flown in along its debris disc
+## from 60 km out, stepped by hand so each stage can be caught: ready, half
+## spooled, mid-travel, just dropped out.
+func _warp_shots() -> void:
+	var drive := _ship.warp
+	drive.set_physics_process(false)
+	_ship.quantum.store.amount = _ship.quantum.store.capacity
+	var planets := _system.planets()
+	var order := range(planets.size())
+	order.sort_custom(func(a: int, b: int) -> bool: return planets[a].radius > planets[b].radius)
+	var ready := false
+	for k: int in order:
+		var t := _system.warp_target(planets[k].id)
+		var normal := _system.debris[k].normal
+		var flat := normal.cross(Vector3.RIGHT if absf(normal.dot(Vector3.RIGHT)) < 0.9 else Vector3.FORWARD).normalized()
+		for turn in 8:
+			var out := flat.rotated(normal, turn * TAU / 8.0)
+			_put(t.point.plus(out * (t.limit + 60000.0)), t.point)
+			drive.chart(t.id)
+			if drive.check().status == WarpPlan.Status.READY:
+				ready = true
+				break
+		if ready:
+			break
+	if not ready:
+		print("warp    no planet reachable from above for the warp shots")
+		drive.set_physics_process(true)
+		return
+	await _shot("warp_ready_seat")
+	drive.engage()
+	await _step(drive, WarpDrive.SPOOL * 0.6)
+	await _shot("warp_spooling_seat")
+	await _step(drive, WarpDrive.SPOOL * 0.4 + 8.0)
+	await _shot("warp_travel_seat")
+	await _step(drive, drive.time_left() + 0.1)
+	await _frames(20)
+	await _shot("warp_dropped_seat")
+	drive.set_physics_process(true)
+
+## Steps `drive` by hand for `seconds`, a frame drawn each tick.
+func _step(drive: WarpDrive, seconds: float) -> void:
+	var dt := 1.0 / 60.0
+	for i in ceili(seconds / dt):
+		drive.step(dt)
+		_root.star_system.streak = drive.streak()
+		await process_frame
 
 ## The eight world palettes and the star palettes, each on a proxy, in a row
 ## in front of the canopy, lit by the same sun.

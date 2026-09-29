@@ -40,9 +40,29 @@ func render(telemetry: VehicleTelemetry) -> void:
 			var p := cam.unproject_position(at)
 			if not view.has_point(p):
 				continue
-			marks.append({"id": c.id, "position": p,
+			marks.append({"id": c.id, "position": p, "metres": metres,
 				"text": "%s · %s" % [c.label, distance_text(metres)]})
+	marks = declutter(marks)
 	queue_redraw()
+
+## `marks` nearest first, each keeping its bracket, but a label that would lie
+## on a nearer one's dropped: from inside a belt every world sits on the same
+## strip of horizon, and the labels piled up (the renders, 2026-09-29).
+static func declutter(given: Array[Dictionary]) -> Array[Dictionary]:
+	var out := given.duplicate()
+	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["metres"] < b["metres"])
+	var taken: Array[Rect2] = []
+	for m in out:
+		var box := label_box(m["position"], m["text"])
+		if taken.any(func(r: Rect2) -> bool: return r.intersects(box)):
+			m["text"] = ""
+		else:
+			taken.append(box)
+	return out
+
+## Roughly where a label at a mark at `p` is drawn, for overlaps.
+static func label_box(p: Vector2, text: String) -> Rect2:
+	return Rect2(p + Vector2(BRACKET + 6.0, -LABEL_SIZE), Vector2(text.length() * LABEL_SIZE * 0.6, LABEL_SIZE * 1.4))
 
 static func distance_text(metres: float) -> String:
 	if metres >= 10000.0:
