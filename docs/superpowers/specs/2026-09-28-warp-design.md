@@ -83,10 +83,11 @@ point) and `limit` (m from the point).
 
 - **The star and every planet** are targets, with the ids they already have (`&"star"`, `&"p3"`).
 - **Belt clusters.** Each belt gets 3–6 clusters, drawn from `WorldSeed.sub(seed, &"clusters_<i>")`.
-  - Each lies on its belt's centre circle, at a seeded angle.
+  - Each lies on its belt's centre circle, at a seeded angle, except the first (below).
   - Clusters of one belt are at least `2 × limit` apart round it, so their limits never overlap.
-  - **The first cluster of the first belt is centred on the start's big rock**, so you begin at a
-    major body.
+  - **The first cluster of the first belt is centred on the start** (the entry, 700 m off its big
+    rock), so you begin at a major body. The start is found without the clusters' lift, so the
+    lift never moves it.
   - Ids `&"belt_0.c1"`; names from `WorldNames.cluster()`, for example *TRELL CLUSTER*.
   - **Denser inside:** within `CLUSTER_RADIUS` (4 km) of its centre, a cluster lifts the belt's
     group noise towards 1 (`AsteroidShapes.cluster_lift`), so it reads as a real cluster and not
@@ -162,7 +163,9 @@ returns a status, and for a ready or near-ready plan the distance, cost, duratio
 - **Blocking:** only star and planet limits block. Clusters and belts never do, since the warp
   passes over rocks without touching them (§5.2).
 - **Drop-out clearance:** the drop-out point is stepped back along the line in 100 m steps until it
-  is 300 m clear of every rock the recipe places there, so you never arrive inside a rock.
+  is 300 m clear of every big and mid-size rock the recipe places there and 30 m clear of rubble,
+  so you never arrive inside a rock. (Rubble's thin sprinkle leaves almost no point 300 m clear of
+  it.)
 
 ### 4.3 Blocked lines
 
@@ -216,7 +219,8 @@ marked in `CORAL`. You warp to the blocker first, or fly until the line is clear
 
 ### 5.4 Drop-out
 
-- At the drop-out point you are moving in at **120 m/s**, facing the target, with the assist on.
+- At the drop-out point you are moving in at **120 m/s**, facing the target. With the assist on,
+  the speed lock is set to 120 m/s, so the ship coasts in rather than braking.
 - **Rocks load before the next frame,** as for the F7 hop: `Universe.check()`, the star system
   placed, `Whereabouts.look()`, then `AsteroidStream.update(0.0, true)`.
 - The mask comes back, the dust shrinks to flecks, and `warp_drop` thumps.
@@ -304,13 +308,16 @@ WARP 302 QE · IN REACH
   during a warp its stage.
 - **The alignment ring:** while a warp is charted, the course diamond gains a ring 5° across. It
   turns `SIGNAL_GO` when you are lined up and ready.
-- **Toasts** from `Whereabouts` when you cross a limit: *LEAVING KORVA-7 · WARP CLEAR*,
-  *ENTERING KORVA-7*.
+- **Toasts** from `Whereabouts` when you cross a limit, shown for 3 s on the warp panel's second
+  line: *LEAVING KORVA-7 · WARP CLEAR* (or just *LEAVING KORVA-7* while another limit still holds
+  you), *ENTERING KORVA-7*.
 
 ### 7.4 Contacts
 
-`BodyContacts` gains one contact per cluster, kind `&"cluster"`, id `body:belt_0.c1`. The course
-kinds gain `&"cluster"`.
+`BodyContacts` gains one contact per cluster, kind `&"cluster"`, id `body:belt_0.c1`, and moons
+become kind `&"moon"`, so `&"body"` is exactly the star and the planets. The course kinds gain
+`&"moon"` and `&"cluster"`. The HUD's `ContactMarker` leaves bodies and clusters to `BodyMarker`;
+moons it still marks within 10 km, as now.
 
 ---
 
@@ -385,8 +392,8 @@ src/ui/
 
 - **`test_system_recipe.gd`:**
   - over 500 seeds, every planet's limit holds its neighbourhood;
-  - clusters lie on their belt, a belt's clusters' limits never overlap, and the first cluster
-    holds the start;
+  - clusters lie inside their belt, a belt's clusters' limits never overlap, and the first
+    cluster is centred on the start;
   - every debris disc lies outside its planet's well and inside its limit;
   - `describe()` lists clusters and limits.
 - **`test_asteroid_recipe_system.gd`:**
