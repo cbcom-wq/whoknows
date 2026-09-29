@@ -9,7 +9,9 @@ const LIVERY: ShaderMaterial = preload("res://data/materials/hull_livery.tres")
 ## The windows' glow at full power, as glow.gdshader's energy.
 const WINDOW_ENERGY := 2.4
 ## A beam's strength at the lens, before it fades along its length.
-const BEAM_ALPHA := 0.06
+const BEAM_ALPHA := 0.012
+## How much of that is left halfway along a beam (a stop in its fade).
+const BEAM_MID_ALPHA := 0.2
 
 static var _cache: Dictionary = {}
 
@@ -54,9 +56,14 @@ static func beam(colour: Color) -> StandardMaterial3D:
 		clear.a = 0.0
 		var full := colour
 		full.a = 1.0
+		# Alpha 0 / 0.2 / 1 at v 0 / 0.5 / 1: a shaft strong at the lens that
+		# is mostly gone by halfway, not a solid that stops at its far end.
+		var mid := colour
+		mid.a = BEAM_MID_ALPHA
 		var gradient := Gradient.new()
 		gradient.set_color(0, clear)
 		gradient.set_color(1, full)
+		gradient.add_point(0.5, mid)
 		var tex := GradientTexture2D.new()
 		tex.gradient = gradient
 		tex.fill_from = Vector2(0, 0)
@@ -71,7 +78,8 @@ static func beam(colour: Color) -> StandardMaterial3D:
 		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		m.cull_mode = BaseMaterial3D.CULL_DISABLED
+		# Outside faces only: both faces would add the shaft twice over.
+		m.cull_mode = BaseMaterial3D.CULL_BACK
 		m.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
 		m.proximity_fade_enabled = true
 		m.proximity_fade_distance = 4.0

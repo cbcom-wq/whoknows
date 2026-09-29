@@ -316,9 +316,16 @@ Every mount's aim must leave the hull: no ray from a lens along its aim hits a c
   interior.
 - **Shadows:** on for the forward pair; off for floods until the spike (§6.4) says otherwise.
 - **Colour:** `HullPalette.WORK_LIGHT`, chosen at the renders between a warm white and a cool white
-  (§2, row 6). Both are defined for the renders, and the loser is deleted.
+  (§2, row 6). Both are defined for the renders, and the loser is deleted. *At the renders
+  (2026-09-29): both were rendered (`renders-task12/warm`, `cool`, with side-by-sides). `WORK_LIGHT`
+  stays `WORK_LIGHT_WARM`, the default, and `WORK_LIGHT_COOL` stays defined until the owner picks;
+  nothing is deleted yet.*
 - **Energy:** tuned at the renders so that a rock face 150 m ahead is clearly lit by the forward
   pair against the darker ambient (§6.3), and the ground 20 m below is lit by the floods.
+  *At the renders the plan's defaults stood: floods 4, forward pair 16. Parked 60 m off a rock's
+  night side the pair lights two overlapping discs clearly, and 20 m over one the five floods leave
+  soft pools with the sun's ambient gone, with dust flecks lit in both. Nothing was blown out or
+  invisible, so `ShipLights.SETTINGS` did not change.*
 - **Tunnels:** the forward lights reach 220 m and cast shadows, so a tunnel's walls will light up
   ahead of you and fall into shadow behind the rim as you fly in. Nothing here needs to change
   when tunnels exist.
@@ -332,12 +339,32 @@ Every mount's aim must leave the hull: no ray from a lens along its aim hits a c
   strips bloom in the chase view and through the canopy. The interior keeps its own environment on
   its camera (style guide §2.3).
 - Both are renders-first decisions: the owner sees before and after.
+- **Built (2026-09-29):** `SpacePalette.AMBIENT` `#0b0d12` at `OUTSIDE_AMBIENT_ENERGY` 0.4 as a
+  colour source (was the sky), and glow on at `OUTSIDE_GLOW_INTENSITY` 0.6 and
+  `OUTSIDE_GLOW_BLOOM` 0.05, all in `flight_test.gd`'s `_set_outside_mood()`. These plan defaults
+  stood: the night side was near black and lit surfaces read as they did.
+- **One change from the plan:** `glow_blend_mode` is **Screen** (`OUTSIDE_GLOW_BLEND`). At the
+  engine's default (soft light) the bloom drew no visible halo at all round lenses and strips
+  against the dark, at these intensities, and up to 1.2, or with the threshold at 0.6; it was
+  invisible. With Screen a gentle halo shows round the strips, the lenses and the star.
+- **The star with the bloom** (`probe_star_bloom_off.png`, `probe_star_bloom_on.png`): the star is
+  still a clean disc, with a soft warm halo added and nothing else changed.
+- **Measured** at 1280 × 720 on the GTX 960 (2026-09-29): standing 410–463 fps; seated 180 fps;
+  seated, both groups on, 172–173 fps; seated 60 m off a rock, both groups on, nose to its night
+  side, the worst view, **150 fps**; the chase view there 295–297 fps, and 20 m over a rock
+  299–307 fps. All hold 120 fps with the flood shadows still off.
 
 ### 6.4 Beams, and a spike on real shafts
 
 - **Cones:** every light gets a faint cone mesh along its aim:
   - `StandardMaterial3D`, unshaded, additive blending, the light's colour at low alpha;
   - vertex alpha falling from the lens to nothing at 60% of the reach;
+    *(Tuned at the renders, 2026-09-29: the first cones read as flat, hard solids that swamped the
+    ship. `HullMaterials.BEAM_ALPHA` 0.06 → **0.012**; the fade gets a mid stop, alpha 0 / 0.2 / 1 at
+    v 0 / 0.5 / 1 (`BEAM_MID_ALPHA`), so it is strong at the lens and mostly gone by halfway;
+    the material culls back faces (was both), which also halves the additive sum, and no beam
+    vanished with the seat camera behind the lenses; and each beam mesh's `transparency` follows
+    `ShipLights.exterior_level`, so low power dims the shafts with the lamps.)*
   - **proximity fade**, so a beam softens where it meets rock instead of cutting a hard line;
   - **distance fade**, so it never clutters the chase view from far away;
   - on **render layer 1**, so the canopy shows your forward beams reaching out ahead.

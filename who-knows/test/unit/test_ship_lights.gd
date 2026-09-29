@@ -148,3 +148,20 @@ func test_l_and_k_toggle_the_lights_only_while_seated():
 	pilot.handle(_action(&"lights_flood"))
 	assert_false(_lights.floods, "L again turns them off")
 	pilot.free()
+
+## The beams dim with the lights, so low power does not leave a full-strength
+## shaft behind a half-strength lamp.
+func test_low_power_dims_the_beams_with_the_spots():
+	_lights.set_group(&"forward", true)
+	assert_eq(_lights.beam(&"forward").transparency, 0.0, "full power, full beam")
+	_lights.apply_power(true)
+	assert_almost_eq(_lights.beam(&"forward").transparency, 1.0 - ShipLights.LOW_POWER_LEVEL, 0.0001)
+	assert_almost_eq(_lights.beam(&"flood").transparency, 1.0 - ShipLights.LOW_POWER_LEVEL, 0.0001, "both groups")
+	assert_true(_lights.beam(&"forward").visible, "dimmer, not gone")
+	_lights.apply_power(false)
+	assert_eq(_lights.beam(&"forward").transparency, 0.0)
+
+func test_a_rebuild_in_low_power_keeps_the_beams_dim():
+	_lights.apply_power(true)
+	_bind()
+	assert_almost_eq(_lights.beam(&"forward").transparency, 1.0 - ShipLights.LOW_POWER_LEVEL, 0.0001)

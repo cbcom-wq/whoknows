@@ -6,6 +6,10 @@ extends RefCounted
 ## and the lavender crystal the rock sample aboard came from. Lit by the sun,
 ## so they sit mid-dark. Tuned by rendering.
 
+## What reaches a rock's night side (ship exterior spec §6.3): almost nothing,
+## so a ship's lights uncover it.
+const AMBIENT := Color("0b0d12")
+
 const ASH := Color(0.36, 0.34, 0.32)
 const UMBER := Color(0.33, 0.26, 0.21)
 const SLATE := Color(0.28, 0.28, 0.29)

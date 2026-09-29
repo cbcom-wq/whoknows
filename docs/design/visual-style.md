@@ -113,6 +113,11 @@ while no camera can see it. At 30 km, a fresh placing of its ~415 marks costs ab
 second, and the sensors' 30 km read about 3 ms four times a second; in between the marks are only
 turned with the ship.
 
+The ship's floods and forward lights and the outside's bloom (2026-09-29, 1280 × 720 on the GTX 960):
+seated with both groups on, 172 fps; seated 60 m off a rock's night side with both on, the worst
+view, 150 fps; the chase view there, 295 fps. The flood lights cast no shadows; the forward pair
+does.
+
 Measure after any change that adds lights, pieces, windows, particles or post-processing.
 
 ### 2.7 Windows show the real outside

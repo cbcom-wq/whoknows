@@ -135,6 +135,8 @@ func _apply() -> void:
 			spot.light_energy = s["energy"] * exterior_level
 		if _beams.has(group):
 			_beams[group].visible = on
+			# The shaft dims with its lamp; one shared material, so per instance.
+			_beams[group].transparency = 1.0 - exterior_level
 		var lens: MeshInstance3D = _lenses.get(group)
 		if is_instance_valid(lens) and lens.material_override is ShaderMaterial:
 			(lens.material_override as ShaderMaterial).set_shader_parameter(&"energy",

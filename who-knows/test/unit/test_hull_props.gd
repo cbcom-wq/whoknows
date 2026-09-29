@@ -95,3 +95,29 @@ func test_windows_and_the_pod_shell_build_and_face_out():
 	assert_true(made.has("DressingHull"), "the pod's plating")
 	var shell: AABB = made["DressingHull"].get_aabb()
 	assert_gt(shell.end.y, InteriorProps.POD_ROOF, "the roof stands over the interior's")
+
+## Spec §6.4: a beam fades from the lens (v = 1) to nothing at its far end
+## (v = 0), and the material's gradient is brighter as v rises.
+func test_a_beam_fades_from_the_lens_to_its_far_end():
+	HullProps.beam_cone(_kit, Transform3D.IDENTITY, 10.0, 3.0)
+	var made := _commit()
+	var arrays: Array = (made["DressingGlow"] as Mesh).surface_get_arrays(0)
+	var v: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var uv: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+	var near := 0
+	var far := 0
+	for i in v.size():
+		if v[i].z < 0.5:
+			near += 1
+			assert_almost_eq(uv[i].y, 1.0, 0.0001, "the lens end is v = 1")
+		else:
+			far += 1
+			assert_almost_eq(uv[i].y, 0.0, 0.0001, "the far end is v = 0")
+	assert_gt(near, 0)
+	assert_gt(far, 0)
+	var tex := HullMaterials.beam(HullPalette.WORK_LIGHT).albedo_texture as GradientTexture2D
+	assert_gt(tex.fill_to.y, tex.fill_from.y, "the gradient runs with v")
+	assert_almost_eq(tex.gradient.sample(0.0).a, 0.0, 0.0001, "v = 0 is clear")
+	assert_almost_eq(tex.gradient.sample(1.0).a, 1.0, 0.0001, "v = 1 is full")
+	assert_lt(tex.gradient.sample(0.25).a, tex.gradient.sample(0.5).a)
+	assert_lt(tex.gradient.sample(0.5).a, tex.gradient.sample(0.75).a, "brighter as v rises")

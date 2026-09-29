@@ -66,6 +66,17 @@ const HOP_INSIDE := 200.0
 ## so the chase view and the canopy feed keep the WorldEnvironment's look.
 const INTERIOR_ENVIRONMENT: Environment = preload("res://data/environments/ship_interior.tres")
 
+## The outside's mood (ship exterior spec §6.3): a near-black ambient, so the
+## sun's side of a rock reads as it did and its night side waits for your
+## lights, and a gentle bloom on lenses, windows and strips. Tuned at the
+## renders.
+const OUTSIDE_AMBIENT_ENERGY := 0.4
+const OUTSIDE_GLOW_INTENSITY := 0.6
+const OUTSIDE_GLOW_BLOOM := 0.05
+## Screen, not the engine's default soft light: soft light on a near-black
+## night draws no visible halo round a lens, however strong the light is.
+const OUTSIDE_GLOW_BLEND := Environment.GLOW_BLEND_MODE_SCREEN
+
 ## BlockOrientation values used below. `_FORWARDS` order is
 ## [FORWARD, BACK, LEFT, RIGHT, UP, DOWN]; o = (forward_index << 2) | roll.
 ## Roll never matters here because every use is either the identity roll
@@ -94,6 +105,7 @@ func _ready() -> void:
 		_ship.restore_aboard(ship_part)
 	_place_avatar_on_deck()
 	_set_interior_mood()
+	_set_outside_mood()
 	_wire_hud()
 	_wire_prompt()
 	_wire_hands()
@@ -107,6 +119,18 @@ func _ready() -> void:
 func _set_interior_mood() -> void:
 	var cam: Camera3D = $Ship/Interior/Avatar/Head/Camera3D
 	cam.environment = INTERIOR_ENVIRONMENT
+
+## The world environment is the outside's (the chase view and the canopy
+## feed): dark until a light reaches it, and lights bloom.
+func _set_outside_mood() -> void:
+	var env: Environment = $WorldEnvironment.environment
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = SpacePalette.AMBIENT
+	env.ambient_light_energy = OUTSIDE_AMBIENT_ENERGY
+	env.glow_enabled = true
+	env.glow_intensity = OUTSIDE_GLOW_INTENSITY
+	env.glow_bloom = OUTSIDE_GLOW_BLOOM
+	env.glow_blend_mode = OUTSIDE_GLOW_BLEND
 
 ## Shows what the avatar is looking at. Interactor has emitted this since it
 ## was written, with nothing listening: the seat was an invisible collider
