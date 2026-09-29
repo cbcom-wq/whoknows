@@ -12,3 +12,12 @@ extends RefCounted
 const PANEL_LINE := Color("9e9a8e")
 ## The cyan of the running lights and engine bells.
 const RUNNING_LIGHT := Color("7fd4ff")
+
+## Damage (docs/superpowers/specs/2026-09-29-health-and-damage-design.md §9):
+## what a damaged and a wrecked block's colours are multiplied by -- scorched
+## warm brown, then charred near-black -- per instance, so no new material.
+const UNHURT := Color("ffffff")
+const SCORCH := Color("9e8472")
+const CHAR := Color("4a3c34")
+## Sparks off a damaged block, and the burst when one is knocked off.
+const SPARK := Color("ffe2a8")

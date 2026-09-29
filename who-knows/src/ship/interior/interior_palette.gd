@@ -78,6 +78,16 @@ const QUANTUM_DEEP := Color("3a2f55")
 ## Salvage (quantum energy spec §10.5, §14.3): the pale lump of an ice chunk,
 ## and a wire coil's copper -- brighter and more orange than the BELT stripe.
 const ICE := Color("d6e7ee")
+## Damage (docs/superpowers/specs/2026-09-29-health-and-damage-design.md §9):
+## a damaged cell's dressing leans toward SCORCH, a wrecked one's toward CHAR.
+## Warm and dark, never black: the cabin stays dim and warm, only hurt.
+const SCORCH := Color("5b4435")
+const CHAR := Color("2e2520")
+## The repair torch (health and damage spec §8.1): a warm off-white body and a
+## gunmetal nozzle, with the ship's BELT band; WELD is its hot sparks and light.
+const TORCH_BODY := Color("e3d6bd")
+const TORCH_NOZZLE := Color("45484f")
+const WELD := Color("fff0c8")
 const COPPER := Color("cc7a3c")
 ## Crates, on shelves and as items: one of these, chosen by variety.
 const CRATES: Array[Color] = [AMBER, SKY, CORAL, OLIVE, TRIM]

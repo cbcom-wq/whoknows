@@ -98,3 +98,52 @@ func test_nothing_happens_to_an_empty_cell():
 	assert_eq(_ship.take_damage(ShipCells.NONE, 50.0), [])
 	assert_eq(_ship.take_damage(Vector3i(99, 99, 99), 50.0), [])
 	assert_eq(_ship.damage_log.busy(), "")
+
+# --- how it looks (spec §9) ---------------------------------------------------
+
+func test_the_hull_instance_takes_the_stage_colour():
+	var cell := _outer_hull()
+	var hp := float(_ship.catalog.get_def(&"hull").hp)
+	assert_eq(_ship.exterior_builder.instance_colour(cell), HullPalette.UNHURT)
+	_ship.take_damage(cell, hp * 0.6)
+	assert_eq(_ship.exterior_builder.instance_colour(cell), HullPalette.SCORCH)
+	_ship.take_damage(cell, hp * 0.5)
+	assert_eq(_ship.exterior_builder.instance_colour(cell), HullPalette.CHAR)
+
+func test_a_damaged_outer_block_spits_sparks_and_a_mended_one_stops():
+	var cell := _outer_hull()
+	var hp := float(_ship.catalog.get_def(&"hull").hp)
+	assert_eq(_ship.damage_show.spitting(), 0)
+	_ship.take_damage(cell, hp * 0.6)
+	assert_eq(_ship.damage_show.spitting(), 1)
+	BlockDamage.repair(_ship.grid, _ship.catalog, cell, hp)
+	assert_eq(_ship.damage_show.spitting(), 0)
+
+func test_a_stage_seen_from_inside_rebuilds_once_at_the_end_of_the_frame():
+	var wall := Vector3i.ZERO
+	for coord: Vector3i in _ship.grid.coords():
+		if _ship.interior_builder.shows(coord) and _ship.grid.get_block(coord).block_id == &"hull":
+			wall = coord
+			break
+	var body := _ship.interior_builder.geometry_body()
+	var hp := float(_ship.catalog.get_def(&"hull").hp)
+	_ship.take_damage(wall, hp * 0.6)
+	_ship.take_damage(wall, hp * 0.5)
+	assert_same(_ship.interior_builder.geometry_body(), body, "not yet")
+	await wait_physics_frames(2)
+	assert_ne(_ship.interior_builder.geometry_body(), body, "rebuilt")
+	assert_eq(_ship.interior_builder.wear_at(wall, Vector3i.ZERO), 2)
+
+func test_a_block_knocked_off_the_outside_sheds_a_plate_and_chunks():
+	var cell := _outer_hull()
+	var shed := []
+	_ship.plate_shed.connect(func(item: Item) -> void: shed.append(item))
+	_ship.take_damage(cell, 10_000.0)
+	assert_eq(shed.size(), 1)
+	var plate: Item = shed[0]
+	assert_eq(plate.definition.id, &"scrap_plate")
+	assert_true(plate.in_space)
+	assert_true(plate.is_in_group(Universe.EXTERIOR_SPACE))
+	var chunks := get_tree().get_nodes_in_group(Universe.EXTERIOR_SPACE).filter(
+		func(n): return n.name.begins_with("DamageChunk"))
+	assert_gt(chunks.size(), 0)

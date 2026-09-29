@@ -8,6 +8,10 @@ signal stats_changed(stats: ShipStats)
 ## Blocks knocked off, and any piece cut off with them (health and damage spec
 ## §4.5), already gone from the grid: for the burst and the shed plate.
 signal blocks_lost(coords: Array[Vector3i])
+## A block knocked off the outside shed a scrap plate (health and damage spec
+## §8.1): already outside, in space and in EXTERIOR_SPACE. The flight scene
+## makes it a stray.
+signal plate_shed(item: Item)
 
 const INTERIOR_WORLD_BASE := Vector3(0.0, -5000.0, 0.0)
 const SLOT_SPACING := 2000.0
@@ -25,6 +29,10 @@ const BLAST_REACH := 50.0
 ## on each face neighbour. First values for the feel pass.
 const CRASH_FROM := 2.0
 const CRASH_K := 12.0
+## What a block knocked off the outside sheds, how far out and how fast.
+const SHED_ITEM := &"scrap_plate"
+const SHED_OUT := 1.4
+const SHED_SPEED := 1.0
 
 ## The exact ShaderMaterial `hull`/`hull_wedge` meshes reference (their .tres
 ## surfaces point at this same path, and Godot's resource cache guarantees a
@@ -60,6 +68,9 @@ var quantum: QuantumPlant
 var since_struck := INF
 ## When anything aboard last took damage (health and damage spec §10).
 var damage_log := DamageLog.new()
+## Sparks, bursts and chunks on the hull (health and damage spec §9).
+var damage_show: DamageShow
+var _rebuild_queued := false
 
 var _stocked := false
 var _airlocks_root: Node
@@ -119,6 +130,10 @@ func _ready() -> void:
 	sensors = ShipSensors.new()
 	sensors.name = "Sensors"
 	add_child(sensors)
+	damage_show = DamageShow.new()
+	damage_show.name = "DamageShow"
+	exterior.add_child(damage_show)
+	damage_show.setup(exterior, outside)
 	rcs_show = RcsShow.new()
 	rcs_show.name = "RcsShow"
 	exterior.add_child(rcs_show)
@@ -251,12 +266,42 @@ func take_damage_many(hits: Dictionary) -> Array[Vector3i]:
 	damage_log.note()
 	var removed := BlockDamage.apply_many(grid, catalog, real)
 	if not removed.is_empty():
+		damage_show.lost(removed)
+		_shed_plate(removed)
 		blocks_lost.emit(removed)
 	return removed
 
+## One scrap plate from the first block knocked off, if it had a face onto
+## space: it drifts out from that face at SHED_SPEED (spec §8.1).
+func _shed_plate(removed: Array[Vector3i]) -> void:
+	var def := item_catalog.get_def(SHED_ITEM) if item_catalog != null else null
+	if def == null or outside == null or not exterior.is_inside_tree():
+		return
+	var cell := removed[0]
+	for n in ShipGrid.FACE_OFFSETS:
+		if grid.has_block(cell + n) or removed.has(cell + n):
+			continue
+		var item := Item.new()
+		item.setup(def, fposmod(float(hash(cell)) * 0.001, 1.0))
+		item.set_space(true)
+		outside.add_child(item, true)
+		item.add_to_group(Universe.EXTERIOR_SPACE)
+		var out := exterior.global_basis * Vector3(n)
+		item.global_position = exterior.to_global(ShipGrid.cell_center(cell) + Vector3(n) * SHED_OUT)
+		item.linear_velocity = exterior.linear_velocity + out * SHED_SPEED
+		item.set_loose()
+		plate_shed.emit(item)
+		return
+
 ## A block crossed a stage (spec §4.3): what it can do changed, and nothing
 ## else did. The stats follow; no geometry is rebuilt.
-func _on_block_staged(_coord: Vector3i, _stage: int) -> void:
+func _on_block_staged(coord: Vector3i, stage: int) -> void:
+	exterior_builder.set_stage(coord, stage)
+	damage_show.stage(grid, coord, stage)
+	if interior_builder.shows(coord):
+		# The dressing is merged meshes, so one cell can't be recoloured: the
+		# ship is rebuilt, once, at the end of the frame (as built, spec §4.3).
+		_queue_rebuild()
 	stats = ShipStats.compute(grid, catalog)
 	_apply_stats()
 	if quantum != null and quantum.store != null:
@@ -337,6 +382,17 @@ func set_grid(new_grid: ShipGrid, stock := true) -> void:
 	interior_builder.bind(grid, catalog)
 	_rebuild_everything()
 
+func _queue_rebuild() -> void:
+	if _rebuild_queued:
+		return
+	_rebuild_queued = true
+	_rebuild_queued_now.call_deferred()
+
+func _rebuild_queued_now() -> void:
+	if not _rebuild_queued:
+		return
+	_rebuild_everything()
+
 func _on_cell_changed(_coord: Vector3i) -> void:
 	# Slice 1 rebuilds wholesale on any change. At 150 blocks this is well
 	# under a frame. Incremental per-cell rebuild is a Slice 2 optimisation
@@ -344,6 +400,7 @@ func _on_cell_changed(_coord: Vector3i) -> void:
 	_rebuild_everything()
 
 func _rebuild_everything() -> void:
+	_rebuild_queued = false
 	_save_computers()
 	var stowed := _stowed_items()
 	exterior_builder.rebuild()
@@ -362,6 +419,8 @@ func _rebuild_everything() -> void:
 	if rcs_show != null:
 		rcs_show.rebuild(grid, catalog, stats.center_of_mass)
 	stats_changed.emit(stats)
+	if damage_show != null:
+		damage_show.sync(grid, catalog)
 	_set_anchor_radius()
 	_bind_crew()
 

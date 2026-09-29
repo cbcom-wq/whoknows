@@ -114,3 +114,34 @@ func test_one_batch_comes_out_as_a_mesh_with_no_node():
 	var committed := _kit.commit()
 	assert_eq(committed.size(), 1, "only the solid batch is left to commit")
 	assert_null(_kit.mesh(InteriorKit.Batch.GLOW), "the batch was emptied")
+
+# --- wear (health and damage spec §9) -----------------------------------------
+
+func _colours(batch: InteriorKit.Batch) -> PackedColorArray:
+	return _kit.mesh(batch).surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+
+func test_wear_darkens_solid_pieces_toward_scorch_then_char():
+	var base := InteriorKit.solid(InteriorPalette.WALL)
+	var got := []
+	for level in 3:
+		_kit.wear = level
+		_kit.box(InteriorKit.Batch.SOLID, Transform3D.IDENTITY, Vector3.ONE, base)
+	var colours := _colours(InteriorKit.Batch.SOLID)
+	var per_box := colours.size() / 3
+	var intact := colours[0]
+	var damaged := colours[per_box]
+	var wrecked := colours[per_box * 2]
+	# Vertex colours are stored at 8 bits a channel.
+	assert_almost_eq(Vector3(intact.r, intact.g, intact.b), Vector3(base.r, base.g, base.b), Vector3.ONE * 0.01, "as made")
+	assert_lt(damaged.get_luminance(), intact.get_luminance())
+	assert_lt(wrecked.get_luminance(), damaged.get_luminance())
+
+func test_a_wreck_s_glow_goes_dark():
+	_kit.wear = 2
+	_kit.box(InteriorKit.Batch.GLOW, Transform3D.IDENTITY, Vector3.ONE, InteriorKit.lit(InteriorPalette.LIGHT_WARM, 1.0))
+	for c in _colours(InteriorKit.Batch.GLOW):
+		assert_eq(Color(c.r, c.g, c.b), Color(0, 0, 0))
+
+func test_worn_keeps_a_palette_colour_as_made_and_its_alpha():
+	assert_eq(InteriorKit.worn(InteriorPalette.WALL, 0), InteriorPalette.WALL)
+	assert_eq(InteriorKit.worn(InteriorPalette.GLASS, 2).a, InteriorPalette.GLASS.a)

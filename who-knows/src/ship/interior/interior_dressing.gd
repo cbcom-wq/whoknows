@@ -34,7 +34,11 @@ const _HORIZONTAL: Array[Vector3i] = [
 
 ## Builds everything under one `Dressing` node inside `body`, so the builder's
 ## single remove_child() + free() clears it with the rest of the interior.
-static func build(layout: InteriorLayout, body: StaticBody3D, canopy_material: Material) -> Node3D:
+## `wear_of(coord, normal) -> int` says how worn the block a face or fixture
+## belongs to is (health and damage spec §9): 0 as made, 1 damaged, 2 wrecked.
+## Without one, everything is as made.
+static func build(layout: InteriorLayout, body: StaticBody3D, canopy_material: Material,
+		wear_of := Callable()) -> Node3D:
 	var root := Node3D.new()
 	root.name = "Dressing"
 	body.add_child(root)
@@ -45,7 +49,9 @@ static func build(layout: InteriorLayout, body: StaticBody3D, canopy_material: M
 		if fixture["id"] == QUANTUM_CORE_ID:
 			core_cells[fixture["coord"]] = true
 	for face in layout.faces():
+		kit.wear = wear_of.call(face["coord"], face["normal"]) if wear_of.is_valid() else 0
 		_dress(kit, face, core_cells)
+	kit.wear = 0
 	for group in layout.canopy_groups():
 		var pods: Array = group["pods"]
 		if pods.is_empty():
@@ -55,9 +61,11 @@ static func build(layout: InteriorLayout, body: StaticBody3D, canopy_material: M
 	# Cores first: each machine's conduit runs to one on its own storey.
 	var cores := {}   # Vector3i -> QuantumCore
 	for fixture in layout.fixtures():
+		kit.wear = wear_of.call(fixture["coord"], Vector3i.ZERO) if wear_of.is_valid() else 0
 		var core := _fixture(kit, layout, fixture)
 		if core != null:
 			cores[fixture["coord"]] = core
+	kit.wear = 0
 	for fixture in layout.fixtures():
 		if fixture["id"] == QUANTUM_MACHINE_ID:
 			_quantum_machine(kit, layout, fixture, cores)

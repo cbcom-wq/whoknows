@@ -236,6 +236,9 @@ func _wire_strays(saved: Dictionary) -> void:
 	strays.setup(_universe, _ship.item_catalog)
 	if not saved.is_empty():
 		strays.from_dict(saved)
+	# A plate shed by a block knocked off is a stray like any other
+	# (health and damage spec §8.1).
+	_ship.plate_shed.connect(func(item: Item) -> void: strays.adopt(item))
 
 ## A frame on the hull at the middle of the airlock's outer hatch, +z pointing
 ## out of it along the airlock's line: aft, on the starter.

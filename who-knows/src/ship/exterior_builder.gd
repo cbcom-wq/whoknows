@@ -20,6 +20,12 @@ var _catalog: BlockCatalog
 var _collider_coords: Array[Vector3i] = []
 var _colliders: Array[CollisionShape3D] = []
 var _multimeshes: Dictionary = {}   # StringName -> MultiMeshInstance3D
+## Where each cell's block is drawn: coord -> [block id, instance index,
+## colour], so a stage change recolours one instance (health and damage spec
+## §9). The colour is kept here too: a headless renderer keeps none.
+var _instances: Dictionary = {}
+## Each block mesh with its materials taking the instance colour, by mesh.
+static var _tintable: Dictionary = {}
 var _alcoves: Dictionary = {}   # Vector3i -> AirlockAlcove
 
 func bind(grid: ShipGrid, catalog: BlockCatalog) -> void:
@@ -35,6 +41,57 @@ func rebuild() -> void:
 
 func collider_coords() -> Array:
 	return _collider_coords.duplicate()
+
+## Recolours the block at `coord` for `stage`, a BlockDamage.Stage: no
+## rebuild, one instance's colour (health and damage spec §4.3, §9).
+func set_stage(coord: Vector3i, stage: int) -> void:
+	if not _instances.has(coord):
+		return
+	var at: Array = _instances[coord]
+	at[2] = stage_colour(stage)
+	var mmi: MultiMeshInstance3D = _multimeshes.get(at[0])
+	if is_instance_valid(mmi):
+		mmi.multimesh.set_instance_color(at[1], at[2])
+
+## What a block's colours are multiplied by at `stage`.
+static func stage_colour(stage: int) -> Color:
+	match stage:
+		BlockDamage.Stage.DAMAGED:
+			return HullPalette.SCORCH
+		BlockDamage.Stage.WRECKED, BlockDamage.Stage.GONE:
+			return HullPalette.CHAR
+	return HullPalette.UNHURT
+
+## The colour one instance is drawn with now, for tests.
+func instance_colour(coord: Vector3i) -> Color:
+	if not _instances.has(coord):
+		return HullPalette.UNHURT
+	return _instances[coord][2]
+
+## `mesh` with every StandardMaterial3D surface taking the instance colour as
+## a multiplier on its albedo. Built once per mesh. Shader surfaces (the hull
+## livery) are left as they are: they tint only if their shader reads COLOR.
+static func tintable(mesh: Mesh) -> Mesh:
+	if _tintable.has(mesh):
+		return _tintable[mesh]
+	var out: Mesh = mesh.duplicate()
+	if out is PrimitiveMesh:
+		var pm := out as PrimitiveMesh
+		pm.material = _tinted(pm.material)
+	else:
+		for i in out.get_surface_count():
+			var m := out.surface_get_material(i)
+			if m == null or m is StandardMaterial3D:
+				out.surface_set_material(i, _tinted(m))
+	_tintable[mesh] = out
+	return out
+
+static func _tinted(m: Material) -> Material:
+	if m != null and not (m is StandardMaterial3D):
+		return m
+	var t: StandardMaterial3D = (m as StandardMaterial3D).duplicate() if m != null else StandardMaterial3D.new()
+	t.vertex_color_use_as_albedo = true
+	return t
 
 ## Each airlock that can cycle is an open alcove here -- the hull's copy of
 ## its room (airlock spec §7.2) -- by cell.
@@ -95,6 +152,7 @@ func _clear() -> void:
 			remove_child(mmi)
 			mmi.free()
 	_multimeshes.clear()
+	_instances.clear()
 	for alcove: AirlockAlcove in _alcoves.values():
 		if not is_instance_valid(alcove):
 			continue
@@ -137,6 +195,7 @@ func _build_colliders() -> void:
 func _build_meshes() -> void:
 	# Group cells by block type so each type draws in one instanced call.
 	var by_type: Dictionary = {}   # StringName -> Array[Transform3D]
+	var colours: Dictionary = {}   # StringName -> Array[Color]
 	for coord in _grid.coords():
 		var inst := _grid.get_block(coord)
 		var def := _catalog.get_def(inst.block_id)
@@ -147,16 +206,22 @@ func _build_meshes() -> void:
 		)
 		if not by_type.has(inst.block_id):
 			by_type[inst.block_id] = []
+			colours[inst.block_id] = []
+		var colour := stage_colour(BlockDamage.stage_of(inst, def))
+		_instances[coord] = [inst.block_id, by_type[inst.block_id].size(), colour]
 		by_type[inst.block_id].append(xform)
+		colours[inst.block_id].append(colour)
 
 	for block_id in by_type.keys():
 		var transforms: Array = by_type[block_id]
 		var mm := MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
-		mm.mesh = _catalog.get_def(block_id).mesh
+		mm.use_colors = true
+		mm.mesh = tintable(_catalog.get_def(block_id).mesh)
 		mm.instance_count = transforms.size()
 		for index in transforms.size():
 			mm.set_instance_transform(index, transforms[index])
+			mm.set_instance_color(index, colours[block_id][index])
 
 		var mmi := MultiMeshInstance3D.new()
 		mmi.multimesh = mm
