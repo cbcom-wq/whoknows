@@ -13,6 +13,9 @@ extends Node
 @export var hull_path: NodePath
 @export var interior_path: NodePath
 
+## J, seated (the warp spec §4): the flight scene hands it to the warp drive.
+signal warp_pressed
+
 var stick := PilotStick.new()
 var seated := false
 ## Point mode (spec §4.2): the mouse moves a free pointer instead of the stick.
@@ -69,6 +72,8 @@ func handle(event: InputEvent) -> void:
 			_flight.set_heading(pointer_direction())
 	elif event.is_action_pressed(&"speed_lock"):
 		_flight.toggle_speed_lock()
+	elif event.is_action_pressed(&"warp"):
+		warp_pressed.emit()
 	elif event.is_action_pressed(&"toggle_assist"):
 		_flight.assist_enabled = not _flight.assist_enabled
 

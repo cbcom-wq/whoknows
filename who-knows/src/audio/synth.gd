@@ -12,6 +12,9 @@ extends RefCounted
 ## is ready, so nothing ever waits on it.
 
 const MIX_RATE := 22050
+## The warp's spool, seconds: WarpDrive.SPOOL, kept here so the two scripts do
+## not load each other.
+const WARP_SPOOL := 10.0
 const NAMES: Array[StringName] = [
 	&"hatch_motor", &"bolt_clunk", &"seal_thump", &"hiss_out", &"steam_in",
 	&"panel_beep", &"warning_chime", &"ship_hum", &"breath", &"thruster_puff", &"hull_thump",
@@ -320,7 +323,7 @@ static func _core_hum() -> PackedFloat32Array:
 ## climbing two octaves over the ten seconds, and a breath of air rising under
 ## them.
 static func _warp_spool() -> PackedFloat32Array:
-	var n := _len(WarpDrive.SPOOL)
+	var n := _len(WARP_SPOOL)
 	var air := _lowpass(_noise(n, 71), 900.0)
 	var x := PackedFloat32Array()
 	x.resize(n)
@@ -328,11 +331,11 @@ static func _warp_spool() -> PackedFloat32Array:
 	var b := 0.0
 	for i in n:
 		var t := float(i) / MIX_RATE
-		var f := lerpf(55.0, 220.0, pow(t / WarpDrive.SPOOL, 1.6))
+		var f := lerpf(55.0, 220.0, pow(t / WARP_SPOOL, 1.6))
 		a += TAU * f / MIX_RATE
 		b += TAU * f * 1.006 / MIX_RATE
-		x[i] = ((sin(a) + sin(b)) * 0.5 + air[i] * lerpf(0.1, 0.7, t / WarpDrive.SPOOL)) \
-			* _ramp(t, 0.5, WarpDrive.SPOOL, 0.3)
+		x[i] = ((sin(a) + sin(b)) * 0.5 + air[i] * lerpf(0.1, 0.7, t / WARP_SPOOL)) \
+			* _ramp(t, 0.5, WARP_SPOOL, 0.3)
 	return _gain(x, 0.4)
 
 ## At warp: a deep rush of filtered air over a low drone, looped.

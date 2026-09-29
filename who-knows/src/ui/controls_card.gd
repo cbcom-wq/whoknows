@@ -18,6 +18,7 @@ const ROWS := [
 	[[&"sprint", &"crouch"], "Up and down", " "],
 	[[&"boost"], "Boost", " "],
 	[[&"speed_lock"], "Lock speed", " "],
+	[[&"warp"], "Warp, when charted", " "],
 	[[&"point_mode", &"set_heading"], "Hold, click: set heading", " + "],
 	[[&"toggle_assist"], "Assist", " "],
 	[[&"cycle_camera"], "Camera", " "],

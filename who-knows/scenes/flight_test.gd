@@ -99,6 +99,7 @@ func _ready() -> void:
 	_wire_universe(saved)
 	_wire_npcs()
 	_wire_sensors()
+	_wire_warp()
 	_wire_saving()
 
 ## The interior camera is also the seated camera -- CameraDirector moves it
@@ -336,6 +337,41 @@ func _wire_course_chime() -> void:
 		course_chime.stream = s
 		course_chime.play())
 
+## The warp (docs/superpowers/specs/2026-09-28-warp-design.md §5): the drive
+## gets the system, where you are, the sensors for its course and the rocks
+## for clear arrivals; J at the helm engages it. While it travels the rocks and
+## salvage wait and the belts show whole; after, everything near is loaded
+## before the next frame, as the hop does.
+func _wire_warp() -> void:
+	var warp := _ship.warp
+	warp.bind(system, _universe, star_system.whereabouts, _ship.sensors, _stream.recipe, warp_busy)
+	_pilot.warp_pressed.connect(warp.engage)
+	warp.travel_started.connect(_on_warp_started)
+	warp.travel_ended.connect(_on_warp_ended)
+
+## Why the warp must wait for the crew: &"crew" on a spacewalk, &"airlock"
+## while one cycles, else &"".
+func warp_busy() -> StringName:
+	if _avatar.mode == Avatar.Mode.SUIT:
+		return &"crew"
+	for airlock: Airlock in _ship.airlocks.values():
+		if airlock.busy() != "":
+			return &"airlock"
+	return &""
+
+func _on_warp_started() -> void:
+	_stream.suspended = true
+	salvage.process_mode = Node.PROCESS_MODE_DISABLED
+	star_system.set_warp(true)
+
+func _on_warp_ended() -> void:
+	star_system.set_warp(false)
+	star_system.streak = Vector3.ZERO
+	star_system.place_all()
+	star_system.whereabouts.look()
+	salvage.process_mode = Node.PROCESS_MODE_INHERIT
+	_stream.resume()
+
 func _unhandled_key_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if key == null or not key.pressed or key.echo:
@@ -354,9 +390,11 @@ static func hop_off(b: SystemBody) -> float:
 ## off the surface of the next body in the system's order (star, then each
 ## planet and its moons), or the previous for `step` -1, on its sunward side
 ## and facing it. A system is 300 km across; this stands in for cruise until
-## cruise exists. Refused on a spacewalk and while an airlock cycles. True if
-## it hopped.
+## cruise exists. Refused on a spacewalk, while an airlock cycles, and while a
+## warp spools or travels. True if it hopped.
 func hop(step: int) -> bool:
+	if _ship.warp.is_spinning():
+		return false
 	if _avatar.mode == Avatar.Mode.SUIT:
 		return false
 	for airlock: Airlock in _ship.airlocks.values():
@@ -433,6 +471,8 @@ func _wire_saving() -> void:
 		_saved_tag.show_locked()
 
 func _physics_process(delta: float) -> void:
+	if star_system != null:
+		star_system.streak = _ship.warp.streak()
 	play_time += delta
 	if not save_enabled:
 		return
