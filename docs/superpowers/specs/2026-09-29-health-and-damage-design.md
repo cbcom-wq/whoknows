@@ -1,8 +1,8 @@
 # Health and damage — things that can be hurt, broken and lost
 
 **Date:** 2026-09-29
-**Status:** First draft. The owner answered four scoping questions (§2) on 2026-09-29. §13 lists
-the questions still open; nothing is built until they are answered.
+**Status:** Draft. The owner answered eight questions (§2) on 2026-09-29. §13 lists the three
+still open; nothing is built until the owner approves.
 **Depends on:** `main` at `dfd7b91`: the system skeleton, NPC foundation, saving, quantum energy,
 asteroids, hands and items.
 **Governed by:** `docs/design/visual-style.md` (damage looks come from the palettes, within the
@@ -45,11 +45,17 @@ The owner, 2026-09-29:
 | What happens when you run out of health? | **Downed, then rescued.** You black out and wake aboard, at a cost. No permadeath yet. |
 | What does a block become at 0 hp? | **Stages, then gone.** Intact → damaged (works worse, looks it) → wrecked (stops working, still there) → removed only by further damage. |
 | Which sources come first? | **The plasma pistol, crashes and creatures.** The environment (heat, vacuum, air) waits. |
+| How is a damaged ship mended? | **A handheld repair tool** that you carry to the damage (§8). The quantum machine doing it for QE was the first recommendation. |
+| Can your own pistol damage your own ship? | **Yes, inside and out.** |
+| Which creature can hurt you? | **Skitters, when hurt or cornered** (§5.4). No new predator yet. |
+| What does blacking out cost? | **50 QE from the ship's store, plus whatever you were holding** (§7.2). |
 
 What follows from them:
 
 - **The ship must be mendable.** With one save slot and no save-scumming, a ship that is only ever
-  worn down is lost slowly for good. This slice needs some repair (§13, question 1).
+  worn down is lost slowly for good. Repair is in this slice: the torch (§8).
+- **Mending is something you do with your hands.** Hull damage is outside, so repairing it means a
+  spacewalk with the torch. A crash costs time and suit charge as well as hp.
 - **"Crippled" becomes readable before there is anything to fight.** Crash into enough rocks and
   your ship limps. First Blood then only has to add the guns.
 - **Nothing can strand you.** This matches the suit's emergency cell (quantum energy §9): being
@@ -173,7 +179,7 @@ Every number here is a **first value for the feel pass**, not a promise.
 
 - A bolt carries **damage 10**, kind `&"plasma"`, as well as its existing push.
 - It damages what it hits: an NPC, you (another's bolt; your own bolts never hit you), your ship's
-  hull from outside, and the block behind an interior face from inside (§13, question 2).
+  hull from outside, and the block behind an interior face from inside (§2).
 - The hit block: exterior colliders are one `CollisionShape3D` per cell, and
   `ExteriorBuilder.collider_coords()` already maps shape index → coord. Inside, the cell is
   found from the hit point, stepped 5 cm back along the normal into the solid, turned into
@@ -200,7 +206,7 @@ Every number here is a **first value for the feel pass**, not a promise.
 ### 5.4 Creatures: skitters bite back
 
 Skitters graze and flee. None of the NPCs can hurt you yet. This spec gives the skitter one new
-behaviour (§13, question 3):
+behaviour (§2):
 
 - **`defend`**: when it is hurt, or when its fear is high and you are within 2 m with nowhere for it
   to scatter to, it turns, lunges and bites. A bite is **15 hp**, kind `&"bite"`, with a
@@ -223,8 +229,8 @@ behaviour (§13, question 3):
   `NpcDirector.amend(record)` returns null for a dead record, so it is never promoted again. The
   ledger is saved (§10).
 - **At 0, the droid is knocked out, not killed.** It drops, its lights go dead, and after **60 s**
-  it reboots at 25% health. A crew droid lost for good needs repair to exist first (§13,
-  question 5).
+  it reboots at 25% health, or at once if you weld it with the torch (§8.2). So a crew droid is
+  never lost for good (§13, question 1).
 
 ---
 
@@ -270,18 +276,46 @@ if you had just left the airlock. If the suit is dry, the emergency cell brings 
 
 ## 8. Repair
 
-**Not decided: §13, question 1.** The recommendation:
+The owner chose a handheld tool: you carry it to the damage and point it there.
 
-- **The quantum machine repairs the ship.** It already makes objects from QE. A new page on its
-  panel lists damaged, wrecked and gone blocks, with costs. A block's repair costs
-  `hp missing × 0.5 QE`, and a gone block costs its full hp × 0.5 plus 25 QE.
-- Repair happens over time: 20 hp/s for the whole ship, one block at a time, nearest the machine
-  first. It is an action, so the save gate waits.
-- A gone block is put back as it was in the blueprint the ship launched with. The ship
-  remembers that blueprint anyway (saving §6.2).
+### 8.1 The repair torch
 
-A handheld repair tool you carry to the damage is the alternative. It is more fun and more work,
-and suits Slice 3's corridors better.
+- **A new item, `repair_torch`**: a stubby welding torch, one-handed (`Grip.WIELD`),
+  `stow_class = &"tool"`, and `eva_tool = true` so it works on a spacewalk. The ship starts with
+  one in the tool closet, stocked like the pistol. Its look is built from the kit and coloured
+  from `InteriorPalette`: a warm off-white body, a gunmetal nozzle and a terracotta `BELT` band.
+- **Hold `use` to weld.** It reaches **2.5 m** from the eye. The block you aim at mends at
+  **25 hp/s**. A warm spark spray and a small practical light sit where the nozzle meets the
+  surface. The light is a warm `OmniLight3D` (range 1.5 m); outside, its sparks join
+  `Universe.HOLDS_SHIFT`.
+- **It costs suit charge:** 1 QE per 10 hp, drawn from the `SuitCell` you already charge at the
+  machine's plate. A hull block from wrecked to intact is about 20 QE. With the cell empty, the
+  torch splutters and does nothing. You can weld aboard with no suit on, drawing on the same cell.
+- **The prompt** shows what the aim is on and its state: *HULL BLOCK · WRECKED 12%*. Releasing
+  `use`, looking away or moving out of reach stops the weld.
+
+### 8.2 What it mends
+
+- **A damaged or wrecked block**, through `BlockDamage.repair(grid, coord, hp)`, the mirror of
+  damage. A stage crossed on the way up emits `block_staged`, just as on the way down.
+- **A gone block.** Aim at the empty cell, through the hole's edge from inside or at the gap from
+  outside. The torch rebuilds it from the blueprint the ship launched with, which the ship
+  already keeps (saving §6.2). It costs a flat **25 QE** and **3 s** of holding. The block comes
+  back **wrecked**, through `ShipGrid.set_block` and one rebuild, so it then has to be welded up.
+  The prompt reads *REBUILD THRUSTER · 25 QE*.
+- **The maintenance droid** (§6): welding a knocked-out droid brings it round at once, and welding
+  a hurt one mends it, at the same rate and cost.
+- **Not you, and not creatures.**
+
+### 8.3 How it plugs in
+
+- `ItemUse` gains `hold(item, aim, world, holder, delta) -> bool`, which does nothing by default.
+  `Grasp` calls it every physics frame while `use` is held, after the press has called `use()`
+  as today. The pistol ignores it, so nothing about the pistol changes.
+- The torch finds its target with one ray, mask `2 | 1 | Npc.LAYER`: interior geometry, the
+  exterior hull on a spacewalk, and NPCs. The cell comes from the hit the same way as for a bolt
+  (§5.1). That code is shared in `ShipCells.cell_at(ship, hit)`.
+- **While welding, saving waits** (*"welding"*), through the avatar's `busy()`.
 
 ---
 
@@ -309,8 +343,8 @@ this is called done.
 - **Added:** your `health.current`; the `NpcLedger` (dead records by id); each live record's
   `health`.
 - **The save gate** gains `DamageLog` as a source: *"took damage"* for 5 s after anything takes
-  damage, which is what saving §5 left room for. The avatar's `busy()` adds *"blacked out"*,
-  and the quantum machine's adds *"repairing"*.
+  damage, which is what saving §5 left room for. The avatar's `busy()` adds *"blacked out"* and
+  *"welding"*.
 
 ---
 
@@ -327,6 +361,9 @@ this is called done.
 - `test_ship_damage.gd`: the exterior shape index → cell; the interior hit point → cell, for
   every face direction; crash damage below and above the threshold.
 - `test_npc_death.gd`: a dead record is never promoted again, across a save round-trip.
+- `test_repair_torch.gd`: holding mends at 25 hp/s and draws 1 QE per 10 hp; an empty cell does
+  nothing; out of reach stops it; a gone block comes back wrecked for 25 QE after 3 s; the droid
+  is brought round; `Grasp` calls `hold` only while `use` is held.
 - `test_downed.gd`: aboard and outside; the item dropped; the QE paid; saving waits.
 - `test_ship_blueprint.gd` (extended): an old dictionary with `hp_values` reads as undamaged;
   damage round-trips.
@@ -339,7 +376,9 @@ this is called done.
   Show them to the owner.
 - Ram rocks at 3, 5 and 8 m/s and record what breaks. Tune `CRASH_K` until the owner is happy.
 - Get bitten on a rock, black out, and wake aboard.
-- Shoot the maintenance droid down, and watch it reboot.
+- Shoot the maintenance droid down, and watch it reboot. Then weld it round.
+- Wreck a thruster by ramming, go out on a spacewalk with the torch, and weld it back. Render the
+  torch in the hand and its sparks on the hull at eye height for the owner.
 
 ### 11.3 The skills
 
@@ -369,6 +408,10 @@ When this is built:
 | `src/npc/npc_ledger.gd` | new |
 | `src/npc/behaviours/defend.gd` | new |
 | `src/items/plasma_bolt.gd` | damage 10 |
+| `src/items/item_use.gd`, `src/avatar/grasp.gd` | `hold()`, called while `use` is held |
+| `src/items/repair_torch.gd`, `data/items/repair_torch.tres` | new: the torch's use and definition |
+| `src/items/item_looks.gd` | the torch's look |
+| `src/ship/ship_cells.gd` | new: `cell_at(ship, hit)`, shared by bolts and the torch |
 | `src/ui/…` | hull and CRIPPLED in the band; your health edge |
 | `src/ship/interior/interior_palette.gd`, `src/ship/hull_palette.gd` | `SCORCH`, `CHAR` |
 | `src/save/save_game.gd` | your health; the ledger |
@@ -380,12 +423,15 @@ When this is built:
 
 | # | Question | Recommendation |
 |---|---|---|
-| 1 | **How is the ship mended?** | **At the quantum machine, for QE** (§8). A repair tool is the alternative. |
-| 2 | **Can your own pistol damage your own ship?** | **Yes, from inside and out.** Nothing about it is special, and it's the easy way to test. The other option is that bolts only damage what isn't yours. |
-| 3 | **Which creature bites?** | **Skitters, but only when hurt or cornered** (§5.4). A new predator species is the alternative, and is bigger. |
-| 4 | **What does blacking out cost?** | **50 QE, plus whatever you were holding** (§7.2). |
-| 5 | **Does a downed droid come back?** | **Yes, after 60 s** (§6), until repair can mend it. |
-| 6 | **Can you be hurt at the helm?** | **No: the ship takes it** (§7.3). |
+Answered on 2026-09-29 and moved to §2: repair, your own pistol, the biter, and the cost of
+blacking out. These are still open, and the draft follows the recommendation until the owner
+says otherwise:
+
+| # | Question | Recommendation |
+|---|---|---|
+| 1 | **Does a downed droid come back by itself?** | **Yes, after 60 s,** or at once with the torch (§6). |
+| 2 | **Can you be hurt at the helm?** | **No: the ship takes it** (§7.3). |
+| 3 | **What does the torch draw on?** | **Your suit cell** (§8.1). Scrap plates as material are the alternative, and would give salvage a use. |
 
 ---
 
@@ -395,7 +441,7 @@ When this is built:
 - **Air and breaches:** pressure, decompression and patching holes.
 - **The environment:** the star's heat, hard landings (Planetfall), running out of air in a suit.
 - **Debris:** pieces that break off and fly on their own, and salvaging them.
-- **Medkits** and a medbay block.
+- **Medkits** (a `medkit` prop already exists, with no use yet) and a medbay block.
 - **Per-cell rebuilds,** if profiling shows the wholesale rebuild on "gone" costs too much.
 
 ## 15. Non-goals
@@ -411,4 +457,5 @@ anything.
 | A removal leaves you inside a wall or over nothing | §7.4; the avatar's `can_stand_at` is checked after every rebuild |
 | Damage looks drift toward realism (decals, grime) | Stage colours only, from the palettes; renders go to the owner (§11.2) |
 | The crash curve is wrong: harmless or brutal | `CRASH_K` and the threshold are tuned in the real scene, not in tests |
-| Wearing the ship down with one save slot and no repair | Repair is in scope (§8); only the method is open |
+| Wearing the ship down with one save slot | The torch mends anything, even a gone block (§8) |
+| Welding the hull outside is fiddly with the suit's drift | Reach is 2.5 m and the weld holds while the aim stays on the cell, not an exact point; tuned in the real scene |
