@@ -7,7 +7,7 @@ fix this file.
 ## Grid and blocks
 
 - **Cell:** a 2 m cube (`ShipGrid.CELL_SIZE`). `ShipGrid.set_block(coord, BlockInstance)`. A
-  `BlockInstance` has a `block_id`, an `orientation` (0..23) and `hp_current`.
+  `BlockInstance` has a `block_id`, an `orientation` (0..23) and `damage` (hp lost, 0 intact; health and damage spec §4.2).
 - **Catalog:** `BlockCatalog.load_from_dir("res://data/blocks")`, with one `BlockDefinition`
   `.tres` per block.
 - **Occupancy:**

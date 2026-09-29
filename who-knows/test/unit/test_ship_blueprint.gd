@@ -22,7 +22,7 @@ func _grid_with(cells: Array) -> ShipGrid:
 		var i := BlockInstance.new()
 		i.block_id = cell[1]
 		i.orientation = cell[2]
-		i.hp_current = cell[3]
+		i.damage = cell[3]
 		g.set_block(cell[0], i)
 	return g
 
@@ -42,7 +42,7 @@ func test_round_trip_preserves_every_cell():
 		assert_not_null(b, "cell %s missing after round trip" % coord)
 		assert_eq(b.block_id, a.block_id)
 		assert_eq(b.orientation, a.orientation)
-		assert_eq(b.hp_current, a.hp_current)
+		assert_eq(b.damage, a.damage)
 
 func test_round_trip_preserves_name_and_version():
 	var bp := ShipBlueprint.from_grid(ShipGrid.new(), "Kestrel")
@@ -88,3 +88,16 @@ func test_saves_and_loads_from_disk():
 		return
 	assert_eq(block.block_id, &"reactor")
 	assert_eq(block.orientation, 9)
+
+## Health and damage spec §4.2: the sixth slot of a saved cell is damage taken.
+## Every save before it holds 0 there, which reads as intact.
+func test_an_old_save_reads_as_undamaged():
+	var old := {"name": "Old", "format": 1, "cells": [[0, 0, 0, "hull", 0, 0], [1, 0, 0, "deck", 0, 0]]}
+	var grid := ShipBlueprint.from_dict(old).to_grid()
+	for coord in grid.coords():
+		assert_eq(grid.get_block(coord).damage, 0.0)
+
+func test_fractional_damage_round_trips():
+	var g := _grid_with([[Vector3i(0, 0, 0), &"hull", 0, 12.5]])
+	var back := ShipBlueprint.from_dict(ShipBlueprint.from_grid(g, "F").to_dict()).to_grid()
+	assert_eq(back.get_block(Vector3i.ZERO).damage, 12.5)

@@ -13,7 +13,8 @@ const CURRENT_FORMAT_VERSION := 1
 @export var coords: Array[Vector3i] = []
 @export var block_ids: Array[StringName] = []
 @export var orientations: Array[int] = []
-@export var hp_values: Array[int] = []
+## Damage taken per cell (health and damage spec §4.2); 0 is intact.
+@export var damage_values: Array[float] = []
 
 static func from_grid(grid: ShipGrid, name: String) -> ShipBlueprint:
 	var bp := ShipBlueprint.new()
@@ -27,7 +28,7 @@ static func from_grid(grid: ShipGrid, name: String) -> ShipBlueprint:
 		bp.coords.append(coord)
 		bp.block_ids.append(inst.block_id)
 		bp.orientations.append(inst.orientation)
-		bp.hp_values.append(inst.hp_current)
+		bp.damage_values.append(inst.damage)
 	return bp
 
 func to_grid() -> ShipGrid:
@@ -36,17 +37,19 @@ func to_grid() -> ShipGrid:
 		var inst := BlockInstance.new()
 		inst.block_id = block_ids[index]
 		inst.orientation = orientations[index]
-		inst.hp_current = hp_values[index]
+		inst.damage = damage_values[index]
 		grid.set_block(coords[index], inst)
 	return grid
 
 ## The blueprint as plain data for a save file (docs/superpowers/specs/
 ## 2026-09-26-saving-design.md §6.2): never a .tres, which can carry a script.
+## A cell's sixth slot was hp and always 0 before health and damage; it is
+## damage taken now, so every older save reads as intact.
 func to_dict() -> Dictionary:
 	var cells := []
 	for index in coords.size():
 		cells.append([coords[index].x, coords[index].y, coords[index].z, String(block_ids[index]),
-			orientations[index], hp_values[index]])
+			orientations[index], damage_values[index]])
 	return {"name": ship_name, "format": format_version, "cells": cells}
 
 static func from_dict(d: Dictionary) -> ShipBlueprint:
@@ -59,7 +62,7 @@ static func from_dict(d: Dictionary) -> ShipBlueprint:
 		bp.coords.append(Vector3i(int(cell[0]), int(cell[1]), int(cell[2])))
 		bp.block_ids.append(StringName(cell[3]))
 		bp.orientations.append(int(cell[4]))
-		bp.hp_values.append(int(cell[5]))
+		bp.damage_values.append(maxf(float(cell[5]), 0.0))
 	return bp
 
 static func _compare_coords(a: Vector3i, b: Vector3i) -> bool:
