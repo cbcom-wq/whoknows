@@ -256,3 +256,20 @@ static func forward_fixture(kit: InteriorKit, lens: InteriorKit, f: Transform3D)
 	kit.ring(SOLID, f, 0.2, 0.32, -0.08, 0.08, _trim())
 	kit.disc(SOLID, f * _at(Vector3(0, 0, 0.0)), 0.2, _dark())
 	lens.disc(GLOW, f * _at(Vector3(0, 0, 0.01)), 0.19, InteriorKit.lit(HullPalette.WORK_LIGHT, InteriorMaterials.GLOW_ENERGY))
+
+## How wide a beam is where it leaves the lens.
+const BEAM_NEAR := 0.15
+
+## A light's faint beam (spec §6.4), in a frame at the lens with +z along its
+## aim: an open cone `length` long, `radius` wide at its far end. Its UVs run
+## v = 1 at the lens to v = 0 at the far end, which HullMaterials.beam fades
+## along.
+static func beam_cone(kit: InteriorKit, f: Transform3D, length: float, radius: float) -> void:
+	var far := Vector3(0, 0, length)
+	for i in InteriorKit.SEGMENTS:
+		var a0 := TAU * float(i) / InteriorKit.SEGMENTS
+		var a1 := TAU * float(i + 1) / InteriorKit.SEGMENTS
+		var d0 := Vector3(cos(a0), sin(a0), 0)
+		var d1 := Vector3(cos(a1), sin(a1), 0)
+		kit.quad(GLOW, f * (d0 * BEAM_NEAR), f * (d1 * BEAM_NEAR), f * (d1 * radius + far), f * (d0 * radius + far),
+			(f.basis * (d0 + d1)).normalized(), InteriorKit.solid(HullPalette.WORK_LIGHT))

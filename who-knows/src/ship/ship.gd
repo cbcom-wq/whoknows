@@ -47,6 +47,9 @@ var rcs_show: RcsShow
 ## §8). At Ship/Quantum, alongside FlightComputer -- the two share the one
 ## QuantumStore instance below.
 var quantum: QuantumPlant
+## The work lights (ship exterior spec §6, §7). On the hull, so the floating
+## origin carries them; kept across rebuilds, like Airlocks.
+var lights: ShipLights
 
 ## Seconds since a rock last struck the hull.
 var since_struck := INF
@@ -119,6 +122,10 @@ func _ready() -> void:
 	quantum.items = items
 	quantum.item_catalog = item_catalog
 	add_child(quantum)
+	lights = ShipLights.new()
+	lights.name = "Lights"
+	lights.quantum = quantum
+	exterior.add_child(lights)
 	AudioBuses.ensure()
 	Synth.warm_up()
 	_hum = AudioStreamPlayer.new()
@@ -264,6 +271,8 @@ func _rebuild_everything() -> void:
 	_apply_stats()
 	quantum.bind(interior_builder.quantum_cores(), interior_builder.quantum_machines(), stats)
 	flight_computer.quantum = quantum.store
+	if lights != null:
+		lights.bind(exterior_builder.light_mounts(), exterior_builder.lenses(), exterior_builder.window_glow())
 	_bind_computers()
 	if rcs_show != null:
 		rcs_show.rebuild(grid, catalog, stats.center_of_mass)
@@ -431,7 +440,7 @@ func busy() -> String:
 	return ""
 
 ## The ship's part of a save: its layout, where it is in `universe` and how
-## it moves, its flight settings, its store, its airlocks and every item
+## it moves, its flight settings, its store, its lights, its airlocks and every item
 ## aboard that is not in someone's hand.
 func to_dict(universe: Universe) -> Dictionary:
 	var hull := exterior.global_transform
@@ -454,6 +463,7 @@ func to_dict(universe: Universe) -> Dictionary:
 		},
 		"flight": flight_computer.to_dict(),
 		"store": quantum.store.to_dict() if quantum.store != null else {},
+		"lights": lights.to_dict() if lights != null else {},
 		"airlocks": saved_airlocks,
 		"items": saved_items,
 	}
@@ -478,6 +488,8 @@ func restore_aboard(d: Dictionary) -> void:
 	flight_computer.from_dict(d.get("flight", {}))
 	if quantum.store != null:
 		quantum.store.from_dict(d.get("store", {}))
+	if lights != null:
+		lights.from_dict(d.get("lights", {}))
 	var saved_airlocks: Dictionary = d.get("airlocks", {})
 	for key: String in saved_airlocks:
 		var airlock: Airlock = airlocks.get(SaveCodec.to_cell(key))
