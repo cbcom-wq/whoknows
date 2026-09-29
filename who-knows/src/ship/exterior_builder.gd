@@ -146,14 +146,31 @@ func _build_colliders() -> void:
 			_alcoves[coord] = AirlockAlcove.build(self, body, _grid, _catalog, coord)
 			_collider_coords.append(coord)
 			continue
-		var shape := BoxShape3D.new()
-		shape.size = Vector3.ONE * ShipGrid.CELL_SIZE
-		var node := CollisionShape3D.new()
-		node.shape = shape
-		node.position = ShipGrid.cell_center(coord)
-		body.add_child(node)
-		_colliders.append(node)
+		var inst := _grid.get_block(coord)
+		var shape_name := HullShapes.shape_of(inst.block_id)
+		if shape_name == HullShapes.CUBE:
+			_add_collider(body, _box_shape(), Transform3D(Basis.IDENTITY, ShipGrid.cell_center(coord)))
+		else:
+			# Shaped blocks (spec §3.4): their colliders are their shapes, in
+			# convex pieces, so rocks and a spacewalker meet what is drawn.
+			var frame := HullLayout.cell_frame(coord, inst.orientation)
+			for part in HullShapes.collider_parts(shape_name):
+				var convex := ConvexPolygonShape3D.new()
+				convex.points = part
+				_add_collider(body, convex, frame)
 		_collider_coords.append(coord)
+
+func _box_shape() -> BoxShape3D:
+	var shape := BoxShape3D.new()
+	shape.size = Vector3.ONE * ShipGrid.CELL_SIZE
+	return shape
+
+func _add_collider(body: Node, shape: Shape3D, xform: Transform3D) -> void:
+	var node := CollisionShape3D.new()
+	node.shape = shape
+	node.transform = xform
+	body.add_child(node)
+	_colliders.append(node)
 
 func _build_skin() -> void:
 	_skin = Node3D.new()

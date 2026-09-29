@@ -5,16 +5,18 @@ var _cat: BlockCatalog
 func before_all():
 	_cat = BlockCatalog.load_from_dir("res://data/blocks")
 
-func test_all_twenty_three_blocks_load():
-	assert_eq(_cat.ids().size(), 23,
-		"21 minus retired reactor and battery, plus the three quantum blocks and the bridge computer")
+func test_all_twenty_nine_blocks_load():
+	assert_eq(_cat.ids().size(), 29,
+		"21 minus retired reactor and battery, plus the three quantum blocks, the bridge computer and the six fairings")
 
 func test_required_ids_exist():
 	for id in [&"hull", &"hull_wedge", &"armour", &"core",
 			&"thruster", &"rcs", &"grav_plating", &"deck",
 			&"bulkhead", &"door", &"pilot_seat", &"ladder", &"airlock", &"canopy",
 			&"bunk_room", &"galley", &"bathroom", &"closet", &"weapon_room",
-			&"quantum_core", &"quantum_machine", &"quantum_cell", &"computer"]:
+			&"quantum_core", &"quantum_machine", &"quantum_cell", &"computer",
+			&"fairing_slope", &"fairing_slope_long_low", &"fairing_slope_long_high",
+			&"fairing_corner_out", &"fairing_corner_in", &"fairing_half"]:
 		assert_true(_cat.has(id), "missing block definition: %s" % id)
 
 func test_reactor_and_battery_are_retired():
@@ -29,10 +31,13 @@ func test_every_block_has_positive_mass_and_hp():
 		assert_true(def.mass_t > 0.0, "%s has non-positive mass" % id)
 		assert_true(def.hp > 0, "%s has non-positive hp" % id)
 
+## Fairings carry no mesh of their own: the generated skin draws them from
+## their shape (ship exterior spec §4), so only the other blocks need one.
 func test_every_block_has_a_mesh_and_display_name():
 	for id in _cat.ids():
 		var def := _cat.get_def(id)
-		assert_not_null(def.mesh, "%s has no mesh" % id)
+		if not String(id).begins_with("fairing_"):
+			assert_not_null(def.mesh, "%s has no mesh" % id)
 		assert_ne(def.display_name, "", "%s has no display name" % id)
 
 func test_only_thrusters_produce_thrust():
@@ -123,3 +128,16 @@ func test_room_blocks_are_deck_with_a_purpose():
 		assert_eq(def.category, BlockDefinition.Category.INTERIOR)
 		assert_eq(def.mass_t, deck.mass_t, "%s weighs what deck weighs" % id)
 		assert_eq(def.power_draw, deck.power_draw, "%s draws what deck draws" % id)
+
+## Ship exterior spec §4: fairings are light shells, structure not armour.
+func test_fairings_are_light_structure():
+	for id in [&"fairing_slope", &"fairing_slope_long_low", &"fairing_slope_long_high",
+			&"fairing_corner_out", &"fairing_corner_in", &"fairing_half"]:
+		var def := _cat.get_def(id)
+		assert_not_null(def, "%s is in the catalog" % id)
+		assert_eq(def.occupancy, BlockDefinition.Occupancy.SOLID)
+		assert_eq(def.category, BlockDefinition.Category.STRUCTURE)
+		assert_almost_eq(def.mass_t, 0.3, 0.0001, "%s weighs 0.3 t" % id)
+		assert_eq(def.hp, 40)
+		assert_eq(def.power_draw, 0.0)
+		assert_eq(HullShapes.shape_of(id), HullShapes.BY_ID[id])

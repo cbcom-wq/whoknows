@@ -206,3 +206,20 @@ func test_rebuilds_leave_one_alcove():
 	_builder.rebuild()
 	assert_eq(_builder.find_children("*", "Node3D", true, false).filter(func(n): return n is AirlockAlcove).size(), 1)
 	assert_eq(_shapes(), once, "stale alcove colliders are freed")
+
+## Ship exterior spec §3.4: a shaped block's collider is its shape, in convex
+## pieces; a cube's is still a box.
+func test_a_shaped_block_gets_convex_colliders():
+	var slope := BlockDefinition.new()
+	slope.id = &"fairing_corner_in"
+	slope.mass_t = 0.3
+	_cat.register(slope)
+	_put(Vector3i(2, 0, 0), &"fairing_corner_in")
+	_put(Vector3i(0, 0, 0), &"hull")
+	_builder.rebuild()
+	var convex := _body.get_children().filter(func(c): return c is CollisionShape3D and c.shape is ConvexPolygonShape3D)
+	assert_eq(convex.size(), 2, "the inner corner is two slopes")
+	for c in convex:
+		assert_almost_eq(c.position, ShipGrid.cell_center(Vector3i(2, 0, 0)), Vector3.ONE * 0.0001)
+	assert_eq(_box_at(Vector3i.ZERO).size(), 1)
+	assert_eq(_builder.collider_coords().size(), 2, "one entry per cell, however many shapes")
