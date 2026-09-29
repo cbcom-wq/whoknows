@@ -90,6 +90,8 @@ func _ready() -> void:
 		push_error("FlightTest: the saved ship has no blocks; starting a new game")
 		resumed = false
 		saved = {}
+	if resumed:
+		_ship.launch_blueprint = Ship.launch_of(ship_part)
 	_ship.set_grid(layout if resumed else _starter_grid(), not resumed)
 	if resumed:
 		_ship.restore_aboard(ship_part)

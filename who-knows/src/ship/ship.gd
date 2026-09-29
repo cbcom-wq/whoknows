@@ -48,6 +48,11 @@ const HULL_LIVERY_MATERIAL: ShaderMaterial = preload("res://data/materials/hull_
 @export var outside_path: NodePath
 
 var grid: ShipGrid
+## The layout the ship launched with, nothing hurt (health and damage spec
+## §8.2): what the repair torch puts back where a block was knocked off. Set
+## by the first grid the ship is given, or by a save; a rebuild never
+## changes it.
+var launch_blueprint: ShipBlueprint
 var outside: Node3D
 var stats: ShipStats
 var catalog: BlockCatalog
@@ -407,6 +412,8 @@ func set_grid(new_grid: ShipGrid, stock := true) -> void:
 		grid.cell_changed.disconnect(_on_cell_changed)
 		grid.block_staged.disconnect(_on_block_staged)
 	grid = new_grid
+	if launch_blueprint == null:
+		launch_blueprint = unhurt(ShipBlueprint.from_grid(grid, String(name)))
 	grid.cell_changed.connect(_on_cell_changed)
 	grid.block_staged.connect(_on_block_staged)
 	exterior_builder.bind(grid, catalog)
@@ -633,6 +640,7 @@ func to_dict(universe: Universe) -> Dictionary:
 			saved_items.append(item.to_dict(frame))
 	return {
 		"layout": ShipBlueprint.from_grid(grid, String(name)).to_dict(),
+		"launch": launch_blueprint.to_dict() if launch_blueprint != null else {},
 		"hull": {
 			"at": SaveCodec.upoint(universe.to_universe(hull.origin)),
 			"turn": SaveCodec.basis(hull.basis),
@@ -644,6 +652,25 @@ func to_dict(universe: Universe) -> Dictionary:
 		"airlocks": saved_airlocks,
 		"items": saved_items,
 	}
+
+## `bp` with every block's damage cleared.
+static func unhurt(bp: ShipBlueprint) -> ShipBlueprint:
+	for i in bp.damage_values.size():
+		bp.damage_values[i] = 0.0
+	return bp
+
+## What the ship launched with at `cell`: [block id, orientation], or [] if
+## nothing was there.
+func launch_block(cell: Vector3i) -> Array:
+	if launch_blueprint == null:
+		return []
+	var i := launch_blueprint.coords.find(cell)
+	return [] if i < 0 else [launch_blueprint.block_ids[i], launch_blueprint.orientations[i]]
+
+## The launch layout a save kept, or, from a save before there was one, its
+## layout with nothing hurt.
+static func launch_of(d: Dictionary) -> ShipBlueprint:
+	return unhurt(ShipBlueprint.from_dict(d.get("launch", d.get("layout", {}))))
 
 ## The grid a saved ship was built from.
 static func layout_of(d: Dictionary) -> ShipGrid:
