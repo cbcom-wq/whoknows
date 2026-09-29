@@ -20,9 +20,10 @@ var bar_track: ColorRect
 var bar_fill: ColorRect
 var mode_label: Label
 var hold_label: Label
+var lights_label: Label
 
 func _ready() -> void:
-	custom_minimum_size = Vector2(320.0, 56.0)
+	custom_minimum_size = Vector2(320.0, 74.0)
 
 	speed_label = Label.new()
 	speed_label.text = "0"
@@ -70,6 +71,13 @@ func _ready() -> void:
 	hold_label.position = Vector2(170.0, 20.0)
 	add_child(hold_label)
 
+	lights_label = Label.new()
+	lights_label.text = ""
+	lights_label.add_theme_font_size_override("font_size", 11)
+	lights_label.add_theme_color_override("font_color", HudPalette.READOUT)
+	lights_label.position = Vector2(170.0, 56.0)
+	add_child(lights_label)
+
 func render(telemetry: VehicleTelemetry) -> void:
 	if telemetry == null:
 		return
@@ -101,3 +109,7 @@ func render(telemetry: VehicleTelemetry) -> void:
 	if telemetry.heading_hold:
 		holds.append("HDG HOLD")
 	hold_label.text = "   ".join(holds)
+
+	# The work lights (ship exterior spec §7.2).
+	lights_label.text = "FLOOD %s   FWD %s" % ["ON" if telemetry.floods_on else "OFF",
+		"ON" if telemetry.forward_on else "OFF"] if telemetry.has_lights else ""

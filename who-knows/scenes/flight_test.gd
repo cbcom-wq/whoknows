@@ -825,6 +825,7 @@ func _wire_hud() -> void:
 	# this: the HUD's fade-in and the seat transition it is timed against.
 	_hud.fade_in = CameraDirector.SIT_DURATION
 	_director.piloting_changed.connect(_on_piloting_changed)
+	_pilot.lights = _ship.lights
 	# On a spacewalk the suit is the vehicle the HUD reports (airlock spec
 	# §8.3): speed relative to the ship, and the way home.
 	_avatar.mode_changed.connect(_on_avatar_mode_changed)

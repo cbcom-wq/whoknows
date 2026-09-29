@@ -127,3 +127,24 @@ func test_the_flight_scene_s_ship_has_its_lights_on_the_hull():
 	assert_eq(ship.lights.spots(&"flood").size(), 5)
 	assert_eq(ship.lights.spots(&"forward").size(), 2)
 	assert_true(ship.to_dict(root.get_node("Universe")).has("lights"))
+
+func _action(name: StringName) -> InputEventAction:
+	var e := InputEventAction.new()
+	e.action = name
+	e.pressed = true
+	return e
+
+## Spec §7.2: L and K toggle the groups while you sit, and do nothing standing.
+func test_l_and_k_toggle_the_lights_only_while_seated():
+	var pilot := PilotControls.new()
+	pilot.lights = _lights
+	pilot.handle(_action(&"lights_flood"))
+	assert_false(_lights.floods, "standing: nothing")
+	pilot.seated = true
+	pilot.handle(_action(&"lights_flood"))
+	assert_true(_lights.floods)
+	pilot.handle(_action(&"lights_forward"))
+	assert_true(_lights.forward)
+	pilot.handle(_action(&"lights_flood"))
+	assert_false(_lights.floods, "L again turns them off")
+	pilot.free()

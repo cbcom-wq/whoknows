@@ -154,3 +154,14 @@ func test_velocity_panel_shows_no_holds_when_there_are_none():
 	var p := _velocity_panel()
 	p.render(_telemetry(45.0, 120.0, true, false))
 	assert_eq(p.hold_label.text, "")
+
+## Ship exterior spec §7.2: the HUD shows the lights while you fly.
+func test_the_velocity_panel_shows_the_lights():
+	var panel := _velocity_panel()
+	var t := VehicleTelemetry.new()
+	panel.render(t)
+	assert_eq(panel.lights_label.text, "", "a vehicle with no lights shows none")
+	t.has_lights = true
+	t.floods_on = true
+	panel.render(t)
+	assert_eq(panel.lights_label.text, "FLOOD ON   FWD OFF")

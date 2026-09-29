@@ -13,6 +13,7 @@ const REQUIRED_ACTIONS := [
 	&"use", &"throw", &"drop",
 	&"pitch_up", &"pitch_down", &"yaw_left", &"yaw_right",
 	&"point_mode", &"set_heading", &"speed_lock", &"toggle_controls",
+	&"lights_flood", &"lights_forward",
 ]
 
 func test_every_gameplay_action_is_registered():
@@ -88,3 +89,10 @@ func test_flight_controls_are_bound_where_the_card_says():
 func test_the_input_section_has_no_dictionary_style_bindings():
 	var text := FileAccess.get_file_as_string("res://project.godot")
 	assert_false(text.contains("\"type\":\"InputEventKey\""))
+
+## Ship exterior spec §7.2: the lights are on L and K.
+func test_the_lights_are_on_l_and_k():
+	var flood: InputEventKey = InputMap.action_get_events(&"lights_flood")[0]
+	var fwd: InputEventKey = InputMap.action_get_events(&"lights_forward")[0]
+	assert_eq(flood.physical_keycode, KEY_L)
+	assert_eq(fwd.physical_keycode, KEY_K)

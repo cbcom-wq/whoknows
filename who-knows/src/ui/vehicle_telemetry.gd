@@ -65,6 +65,11 @@ var energy_state: StringName = &""
 var tool_text: String = ""
 ## True while boost is held but refused: in low power (spec §8.2).
 var boost_refused: bool = false
+## The work lights (ship exterior spec §7.2), set by PilotControls: whether
+## this vehicle has any, and whether each group is on.
+var has_lights: bool = false
+var floods_on: bool = false
+var forward_on: bool = false
 
 ## Takes plain values rather than a body on purpose: it is the seam that lets
 ## every derivation here be tested headless, with no nodes and no physics
