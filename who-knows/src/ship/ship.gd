@@ -33,6 +33,8 @@ const CRASH_K := 12.0
 const SHED_ITEM := &"scrap_plate"
 const SHED_OUT := 1.4
 const SHED_SPEED := 1.0
+## Where you wake after blacking out, if the ship has one.
+const WAKE_ROOM := &"bunk_room"
 
 ## The exact ShaderMaterial `hull`/`hull_wedge` meshes reference (their .tres
 ## surfaces point at this same path, and Godot's resource cache guarantees a
@@ -292,6 +294,35 @@ func _shed_plate(removed: Array[Vector3i]) -> void:
 		item.set_loose()
 		plate_shed.emit(item)
 		return
+
+## Where you wake after blacking out (health and damage spec §7.2), best
+## first, in the world: the bunk room's cells, then the rest by how near they
+## are to it (or to the core, with no bunk room); never the airlock. The
+## caller takes the first you fit: a bunk room is mostly bunks, so that is
+## often the cell at its door.
+func wake_spots() -> Array[Transform3D]:
+	var layout := interior_builder.layout()
+	var core := Vector3.ZERO
+	for coord: Vector3i in grid.coords():
+		if grid.get_block(coord).block_id == BlockDamage.CORE:
+			core = Vector3(coord)
+	var bunks: Array[Vector3i] = []
+	var rest: Array[Vector3i] = []
+	for cell: Vector3i in interior_builder.walkable_coords():
+		var zone := layout.zone_at(cell) if layout != null else &""
+		if zone == InteriorLayout.AIRLOCK_ZONE:
+			continue
+		if zone == WAKE_ROOM:
+			bunks.append(cell)
+		else:
+			rest.append(cell)
+	var near := Vector3(bunks[0]) if not bunks.is_empty() else core
+	rest.sort_custom(func(a: Vector3i, b: Vector3i) -> bool:
+		return Vector3(a).distance_to(near) < Vector3(b).distance_to(near))
+	var out: Array[Transform3D] = []
+	for cell in bunks + rest:
+		out.append(interior.global_transform * Transform3D(Basis.IDENTITY, DeckPaths.floor_point(cell)))
+	return out
 
 ## A block crossed a stage (spec §4.3): what it can do changed, and nothing
 ## else did. The stats follow; no geometry is rebuilt.

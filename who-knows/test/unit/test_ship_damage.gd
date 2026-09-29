@@ -147,3 +147,44 @@ func test_a_block_knocked_off_the_outside_sheds_a_plate_and_chunks():
 	var chunks := get_tree().get_nodes_in_group(Universe.EXTERIOR_SPACE).filter(
 		func(n): return n.name.begins_with("DamageChunk"))
 	assert_gt(chunks.size(), 0)
+
+# --- you, aboard (spec §7) -----------------------------------------------------
+
+func test_you_wake_in_the_bunk_room_first():
+	var spots := _ship.wake_spots()
+	assert_gt(spots.size(), 0)
+	var local := _ship.interior.to_local(spots[0].origin + Vector3.UP * 0.1)
+	var cell := ShipCells.interior_cell_at(local)
+	assert_eq(_ship.interior_builder.layout().zone_at(cell), Ship.WAKE_ROOM)
+
+func test_a_blackout_aboard_wakes_you_in_the_bunk_room_and_costs_the_ship():
+	var avatar: Avatar = _ship.get_node("Interior/Avatar")
+	var store: QuantumStore = _ship.quantum.store
+	store.credit(200, &"test")
+	var before := store.amount
+	avatar.take_damage(500.0)
+	for i in roundi((Downed.FADE + Downed.BLACK + Downed.WAKE + 0.5) / 0.1):
+		avatar._process(0.1)
+	assert_null(avatar.downed)
+	assert_eq(store.amount, before - Avatar.RESCUE_COST)
+	# In the bunk room, or the nearest free cell to it: it is mostly bunks.
+	var cell := ShipCells.interior_cell_at(_ship.interior.to_local(avatar.global_position + Vector3.UP * 0.1))
+	var layout := _ship.interior_builder.layout()
+	var nearest := INF
+	for c: Vector3i in _ship.interior_builder.walkable_coords():
+		if layout.zone_at(c) == Ship.WAKE_ROOM:
+			nearest = minf(nearest, Vector3(c).distance_to(Vector3(cell)))
+	assert_lt(nearest, 1.5, "woke at %s" % cell)
+
+func test_a_hole_under_you_puts_you_outside():
+	var avatar: Avatar = _ship.get_node("Interior/Avatar")
+	var walk: Array = _ship.interior_builder.walkable_coords()
+	var cell: Vector3i = Vector3i.ZERO
+	for c: Vector3i in walk:
+		if _ship.grid.get_block(c).block_id == &"deck":
+			cell = c
+			break
+	avatar.place(_ship.interior.global_transform * Transform3D(Basis.IDENTITY, DeckPaths.floor_point(cell)))
+	_ship.take_damage(cell, 100_000.0)
+	assert_false(_ship.grid.has_block(cell))
+	assert_eq(avatar.mode, Avatar.Mode.SUIT)

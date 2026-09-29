@@ -48,7 +48,35 @@ const BUMP_CALM := 5.0
 
 enum Mode { PLATING, SUIT }
 
+## Health and damage (docs/superpowers/specs/
+## 2026-09-29-health-and-damage-design.md §5.3, §7).
+const MAX_HEALTH := 100.0
+const HEAL_AFTER := 10.0
+const HEAL_RATE := 5.0
+## Hurt below this: the view's edge stays warm red.
+const LOW_HEALTH := 30.0
+## Striking a rock or a creature faster than EVA_HURT_FROM m/s on a spacewalk
+## takes EVA_HURT_K hp for every m/s over.
+const EVA_HURT_FROM := 4.0
+const EVA_HURT_K := 10.0
+## Waking after blacking out, and what the ship pays for it.
+const WAKE_HEALTH := 50.0
+const RESCUE_COST := 50
+## Close enough to home, on a spacewalk, to wake.
+const HOME_REACHED := 3.0
+## How far the head rolls when you are hit, radians, easing back over
+## JOLT_BACK seconds.
+const JOLT := 0.05
+const JOLT_BACK := 0.25
+
 signal mode_changed(mode: Mode)
+## You took `amount` from the way `from` (a world direction, or zero).
+signal hurt(amount: float, from: Vector3)
+## You blacked out, and woke (health and damage spec §7.2).
+signal downed_changed(is_down: bool)
+## What you held as you blacked out, let go where you fell. `outside` when it
+## fell on a spacewalk: it is in space now, for the flight scene to adopt.
+signal let_fall(item: Item, outside: bool)
 
 var mode: Mode = Mode.PLATING
 ## The suit's assist (Z on a spacewalk): holds you still relative to `hull`.
@@ -83,6 +111,19 @@ var interactor: Interactor
 ## Seconds since you last bumped a rock on a spacewalk.
 var since_bumped := INF
 
+## How hurt you are (health and damage spec §7.1).
+var health := Health.make(MAX_HEALTH, HEAL_AFTER, HEAL_RATE)
+## While blacked out, the blackout's timing; null when awake.
+var downed: Downed
+## True while you sit at the helm: the ship takes hits then, not you (§7.3).
+var seated_source: Callable
+## Puts you aboard, somewhere safe, when you wake (§7.2). Given you.
+var rescue: Callable
+## What waking costs, paid by the ship (§7.2): returns what it took.
+var rescue_cost: Callable
+var _jolt := 0.0
+var _hurt_sound: AudioStreamPlayer
+
 var _control_enabled: bool = true
 var _yaw: float = 0.0
 var _pitch: float = 0.0
@@ -116,6 +157,11 @@ func _ready() -> void:
 	sounds.name = "SuitSounds"
 	add_child(sounds)
 	sounds.bind(self)
+	health.emptied.connect(_black_out)
+	_hurt_sound = AudioStreamPlayer.new()
+	_hurt_sound.name = "HurtSound"
+	_hurt_sound.volume_db = -8.0
+	add_child(_hurt_sound)
 
 ## The actor contract Item talks to.
 func take_item(item: Item) -> void:
@@ -145,6 +191,8 @@ func can_stand_at(pose: Transform3D) -> bool:
 ## after coming aboard, a dry suit's emergency cell bringing you home, a rock
 ## bumped less than BUMP_CALM ago, or your hands busy.
 func busy() -> String:
+	if downed != null:
+		return "blacked out"
 	if _righting_t < RIGHTING_TIME:
 		return "coming aboard"
 	if mode == Mode.SUIT and suit_cell.is_dry():
@@ -203,6 +251,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			rotation.y = _yaw
 
 func _physics_process(delta: float) -> void:
+	if downed != null:
+		_downed_physics(delta)
+		return
 	if not _control_enabled:
 		# Parked — seated, or handed off to something else. Integrate
 		# nothing: otherwise the body keeps accumulating gravity and
@@ -236,6 +287,96 @@ func _physics_process(delta: float) -> void:
 func _process(delta: float) -> void:
 	tick_righting(delta)
 	since_bumped += delta
+	health.tick(delta)
+	_jolt = move_toward(_jolt, 0.0, JOLT / JOLT_BACK * delta)
+	head.rotation.z = _jolt
+	if downed != null:
+		downed.tick(delta, mode == Mode.PLATING or _home_reached())
+
+# --- being hurt (health and damage spec §5.3, §7) ------------------------------
+
+## A hit on you: a bolt, a bite. Seated, the ship takes it; blacked out,
+## nothing more happens to you.
+func receive_hit(hit: Hit) -> void:
+	if is_seated() or downed != null:
+		return
+	velocity += hit.impulse / SUIT_MASS
+	take_damage(hit.damage, hit.direction)
+
+## Takes `amount` hp, from the way `from` points (world, or zero).
+func take_damage(amount: float, from := Vector3.ZERO) -> float:
+	if downed != null or amount <= 0.0:
+		return 0.0
+	var taken := health.take(amount)
+	if taken > 0.0:
+		# A roll away from where it came from, and a thump you feel.
+		var side := (global_basis.inverse() * from).x if from != Vector3.ZERO else 1.0
+		_jolt = -JOLT * signf(side if side != 0.0 else 1.0)
+		var thump := Synth.sound(&"hull_thump")
+		if thump != null and _hurt_sound != null and _hurt_sound.is_inside_tree():
+			_hurt_sound.stream = thump
+			_hurt_sound.play()
+		hurt.emit(taken, from)
+	return taken
+
+func is_seated() -> bool:
+	return seated_source.is_valid() and bool(seated_source.call())
+
+func is_low() -> bool:
+	return health.current < LOW_HEALTH
+
+## Health emptied: let go of what you hold, lose control, and fade out.
+func _black_out() -> void:
+	if downed != null:
+		return
+	var outside := mode == Mode.SUIT
+	var into: Node3D = get_parent() as Node3D if outside else grasp.world_root
+	var item := grasp.let_fall(into)
+	if item != null:
+		if outside:
+			item.set_space(true)
+		let_fall.emit(item, outside)
+	set_control_enabled(false)
+	downed = Downed.new()
+	downed.stepped.connect(_on_downed_step)
+	downed_changed.emit(true)
+
+func _on_downed_step(step: Downed.Step) -> void:
+	match step:
+		Downed.Step.WAKING:
+			if rescue.is_valid():
+				rescue.call(self)
+			health.current = WAKE_HEALTH
+			health.since_hurt = 0.0
+			if rescue_cost.is_valid():
+				rescue_cost.call(RESCUE_COST)
+		Downed.Step.DONE:
+			downed = null
+			set_control_enabled(true)
+			downed_changed.emit(false)
+
+## Blacked out: aboard you lie where you fell; outside, the suit's emergency
+## cell brings you home, as when it runs dry (quantum energy spec §9).
+func _downed_physics(delta: float) -> void:
+	if mode != Mode.SUIT:
+		velocity = Vector3.ZERO
+		return
+	var v_ref := hull.linear_velocity if is_instance_valid(hull) else Vector3.ZERO
+	velocity = Suit.home_step(velocity, v_ref, _to_home(), delta)
+	var before := velocity
+	move_and_slide()
+	velocity = bump(before, velocity, _slide_hits())
+
+func _home_reached() -> bool:
+	var to_home := _to_home()
+	return to_home == Vector3.ZERO or to_home.length() < HOME_REACHED
+
+func _slide_hits() -> Array:
+	var hits := []
+	for i in get_slide_collision_count():
+		var hit := get_slide_collision(i)
+		hits.append([hit.get_collider(), hit.get_normal(), hit.get_position()])
+	return hits
 
 ## Sprinting aboard is loud enough for NPCs to hear (NPC foundation spec
 ## §6.1): a footfall every FOOTFALL_EVERY seconds.
@@ -434,6 +575,8 @@ func bump(before: Vector3, slid: Vector3, hits: Array) -> Vector3:
 		if closing <= 0.0:
 			continue
 		since_bumped = 0.0
+		if closing > EVA_HURT_FROM:
+			take_damage(EVA_HURT_K * (closing - EVA_HURT_FROM), -n)
 		var m := SUIT_MASS * other_mass / (SUIT_MASS + other_mass)
 		var j := (1.0 + BUMP_BOUNCE) * m * closing
 		if body != null:

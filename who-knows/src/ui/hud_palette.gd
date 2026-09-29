@@ -28,6 +28,11 @@ const SALVAGE := Color("c3a8ff")
 ## readout's own cyan, and the same amber the bridge computer's holo gives it.
 const COURSE := Color("ffb45a")
 
+## Being hurt (health and damage spec §7.1): the warm red at the view's edge,
+## and the black you fade into when you black out.
+const HURT := Color("c8452e")
+const BLACKOUT := Color("050404")
+
 ## The colour for a sensor contact of `kind`; the readout's for any other.
 static func for_kind(kind: StringName) -> Color:
 	match kind:

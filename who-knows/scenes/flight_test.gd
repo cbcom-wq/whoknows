@@ -96,6 +96,7 @@ func _ready() -> void:
 	_wire_hud()
 	_wire_prompt()
 	_wire_hands()
+	_wire_hurt()
 	_wire_universe(saved)
 	_wire_npcs()
 	_wire_sensors()
@@ -135,6 +136,55 @@ func _wire_prompt() -> void:
 
 func _show_prompt() -> void:
 	_prompt.text = _grasp_prompt if _grasp_prompt != "" else _interact_prompt
+
+## Health and damage (docs/superpowers/specs/
+## 2026-09-29-health-and-damage-design.md §7): the view's red edge and the
+## blackout; the helm keeping you from harm; waking aboard at the ship's
+## cost; what you drop outside adrift as a stray; and a hole under you
+## putting you outside. Wired here so src/avatar never learns about Ship.
+func _wire_hurt() -> void:
+	var edge := HurtEdge.new()
+	edge.name = "HurtEdge"
+	$Prompt.add_child(edge)
+	$Prompt.move_child(edge, 0)
+	edge.bind(_avatar)
+	_avatar.seated_source = func() -> bool: return _director.is_seated
+	_avatar.rescue = _rescue
+	_avatar.rescue_cost = func(n: int) -> int:
+		return _ship.quantum.store.drain(n, &"rescue") if _ship.quantum.store != null else 0
+	_avatar.let_fall.connect(func(item: Item, outside: bool) -> void:
+		if outside and strays != null:
+			strays.adopt(item))
+	_ship.blocks_lost.connect(_on_blocks_lost)
+
+## Puts a blacked-out `avatar` aboard where it fits first (§7.2).
+func _rescue(avatar: Avatar) -> void:
+	for pose in _ship.wake_spots():
+		if not avatar.can_stand_at(pose) and avatar.mode == Avatar.Mode.PLATING:
+			continue
+		if avatar.mode == Avatar.Mode.SUIT:
+			avatar.enter_plating(_ship.interior, pose, 0.0, Vector3.ZERO, Quaternion.IDENTITY)
+		else:
+			avatar.place(pose)
+		return
+
+## A hole where you stand puts you outside, moving as you were (§7.4).
+func _on_blocks_lost(_coords: Array[Vector3i]) -> void:
+	if _avatar.mode != Avatar.Mode.PLATING or _avatar.get_parent() != _ship.interior:
+		return
+	var local := _ship.interior.to_local(_avatar.global_position + _avatar.global_basis.y * 0.1)
+	var cell := ShipCells.interior_cell_at(local)
+	if _ship.grid.has_block(cell):
+		return
+	var world := Threshold.to_world(_ship.interior.global_transform, _ship.exterior.global_transform,
+		_avatar.global_transform, InteriorBuilder.storey_offset(cell.y))
+	var v := Threshold.carry_velocity_out(_ship.exterior.linear_velocity, _ship.exterior.global_basis,
+		_avatar.velocity)
+	_avatar.enter_suit(_ship.outside, world, v, _ship.exterior)
+	for airlock: Airlock in _ship.airlocks.values():
+		_avatar.beacon_source = airlock.beacon
+		_avatar.home_source = airlock.home
+		break
 
 ## Hands and items (docs/superpowers/specs/2026-09-23-hands-and-items-design.md
 ## §7, §8, §10): what you let go of lands aboard this ship, and the reticle

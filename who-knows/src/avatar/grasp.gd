@@ -92,6 +92,21 @@ func set_enabled(on: bool) -> void:
 			_release()
 			changed.emit()
 
+## Lets go of whatever is held, where it is, into `into` rather than
+## world_root, suspended or not: blacking out (health and damage spec §7.2).
+## Returns the item, or null.
+func let_fall(into: Node3D) -> Item:
+	if item == null:
+		return null
+	var it := item
+	var was := world_root
+	if into != null:
+		world_root = into
+	_release()
+	world_root = was
+	changed.emit()
+	return it
+
 func _active() -> bool:
 	return enabled and not suspended
 
