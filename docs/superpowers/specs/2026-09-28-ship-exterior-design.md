@@ -372,9 +372,7 @@ A node under `Ship`, like `QuantumPlant`, alive across rebuilds.
 - **Saving:** a `lights` part, `{"floods": bool, "forward": bool}`. A save without it loads with
   both off.
 - **Saved ships:** a save stores the ship's layout (`Ship.to_dict()["layout"]`), and a resumed game
-  builds from it. So an existing save keeps the flat starter unless it is migrated. **Open, for
-  the owner:** migrate a saved starter to the reshaped one, or leave saves alone and start a new
-  game.
+  builds from it. So an existing save keeps the flat starter unless it is migrated. **Decided (controller ruling, 2026-09-28, pending the owner's word):** saves are left alone; start a new game to fly the reshaped starter. Migrating a saved starter is a small follow-up if the owner wants it.
 
 ### 7.2 At the helm
 
@@ -416,6 +414,9 @@ The cabin row (y = 0) keeps every cell. Everything below is added to or changed 
   centreline, x = 0, z = −3..2 (6 cells).
 - **26 fairing cells, 7.8 t.** These are the first cells. The renders of the profile, checked
   against the owner's red sketch, may move them, within the balance rules below.
+  Measured (Task 6): 110 blocks, 104,700 kg, centre of mass y 1.207 to 1.301; torque imbalance
+  4.9% of pitch authority (was 0.4%), 0.3% of yaw, 0% of roll; power unchanged. The spine's z = 2
+  row and a wider keel stay in reserve as trims if the profile changes.
 - The RCS stay where they are. Only the down-firing pair's exhaust faces are open today (building-a-
   ship skill), and the reshape must keep them open.
 - **Balance:** the building-a-ship checklist, steps 4 and 5:

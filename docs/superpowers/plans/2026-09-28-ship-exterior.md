@@ -1882,7 +1882,7 @@ Replace the "Real numbers for this exact grid" paragraph in `_starter_grid()`'s 
 
 A resumed game builds from its saved layout (`Ship.layout_of`), not `_starter_grid()`, so an existing save keeps the flat starter. Do what the spec's §7.1 says the owner decided:
 
-> **Open, for the owner, before this task:** migrate a saved starter to the reshaped one, or leave saves as they are and start a new game to see it.
+> **Decided (controller ruling, 2026-09-28, pending the owner's word):** saves are left alone; start a new game to fly the reshaped starter. Migrating a saved starter is a small follow-up if the owner wants it.
 
 If migrating, use `SaveGame.migrate`, and bump the format the way that file already does. When a saved layout has no fairing cells and has exactly the old starter's cells, add the 26 fairing cells. Test two things: an old-starter save comes back with 26 fairings, and a save of any other ship is untouched.
 

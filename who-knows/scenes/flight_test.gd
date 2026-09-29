@@ -79,6 +79,7 @@ const O_RCS_PORT := 8        ## LEFT: thrust along -X
 const O_RCS_STARBOARD := 12  ## RIGHT: thrust along +X
 const O_RCS_UP := 16         ## UP: thrust along +Y
 const O_RCS_DOWN := 20       ## DOWN: thrust along -Y
+const O_KEEL := 2        ## FORWARD rolled 180 deg: a half block's upper half, hung under a cell
 
 func _ready() -> void:
 	var saved := _read_save()
@@ -724,24 +725,47 @@ func _starter_grid() -> ShipGrid:
 	#
 	# Real numbers for this exact grid (via ShipStats/ShipValidator,
 	# res://data/blocks catalog), with the quantum core, the machine and the
-	# bridge computer aboard and the reactors replaced by quantum cells
-	# (quantum energy spec §5.4; bridge computer spec §3.2):
-	# 84 blocks, 96,900 kg, center_of_mass = (0.004, 1.207, 0.124),
-	# torque_budget = (3061920, 2030960, 2198143),
-	# torque_imbalance = (11146, -6192, 0),
+	# bridge computer aboard, the reactors replaced by quantum cells (quantum
+	# energy spec §5.4; bridge computer spec §3.2) and the 26 fairings of the
+	# shape below (ship exterior spec §8):
+	# 110 blocks, 104,700 kg, center_of_mass = (0.004, 1.301, 0.160),
+	# inertia = (2065526, 2865503, 1175422),
+	# torque_budget = (3080229, 2040115, 2174785),
+	# torque_imbalance = (151289, -5731, 0): pitch 4.9%, yaw 0.3%, roll 0%
+	# of authority,
 	# thrust_budget forward/reverse/lateral/vertical = 1500/500/500/1000 kN,
 	# power_gen = 36.0 MW (all from the quantum core), power_draw = 31.3 MW,
 	# quantum_capacity = 1200 QE, zero validation issues, can_launch = true.
-	# Handling under assist is essentially unchanged from the pre-quantum
-	# grid (see task-1-report.md): pitch and roll assist still reach their
-	# target rates within about a second, and a full burn barely pitches the
-	# ship. See task-15-report.md for the original pre-quantum derivation.
+	# The fairings add 7.8 t and no power draw. Before them the ship was
+	# 96,900 kg with the centre of mass at y = 1.207 and pitch imbalance of
+	# 11,146 N*m (0.4%): 6.0 t of spine and fins sit above the cabin and only
+	# the 1.8 t keel below it, so the centre of mass rose 9 cm. Handling under
+	# assist is a little slower: torque_budget / inertia is pitch 1.49, yaw
+	# 0.71, roll 1.85 rad/s^2 (1.60 / 0.74 / 2.05 before), and forward,
+	# reverse and lateral thrust per tonne fall from 15.5 / 5.2 / 5.2 to
+	# 14.3 / 4.8 / 4.8 m/s^2. A full burn still holds the nose. See
+	# task-1-report.md and task-15-report.md for the earlier derivations.
 	_put(g, Vector3i(-1, 1, -4), &"rcs", O_RCS_STARBOARD)
 	_put(g, Vector3i(1, 1, -4), &"rcs", O_RCS_PORT)
 	_put(g, Vector3i(-2, 1, -3), &"rcs", O_RCS_UP)
 	_put(g, Vector3i(2, 1, -3), &"rcs", O_RCS_UP)
 	_put(g, Vector3i(-2, 1, -4), &"rcs", O_RCS_DOWN)
 	_put(g, Vector3i(2, 1, -4), &"rcs", O_RCS_DOWN)
+
+	# --- The shape (ship exterior spec §8): fairings, 0.3 t each, all outside
+	# the cabin row, so nothing inside moves. A dorsal spine a metre high,
+	# ramped up out of the roof toward the bow and down again over the stern
+	# bank; a fin rising aft on each engine pod; and a keel under the
+	# centreline for the floods to hang from.
+	for x in [-1, 0, 1]:
+		for z in [-1, 0, 1, 2]:
+			_put(g, Vector3i(x, 2, z), &"fairing_half")
+		_put(g, Vector3i(x, 2, -2), &"fairing_slope_long_low", O_FORWARD)
+		_put(g, Vector3i(x, 2, 3), &"fairing_slope_long_low", O_STERN)
+	for x in [-3, 3]:
+		_put(g, Vector3i(x, 1, 1), &"fairing_slope", O_FORWARD)
+	for z in [-3, -2, -1, 0, 1, 2]:
+		_put(g, Vector3i(0, -1, z), &"fairing_half", O_KEEL)
 
 	return g
 

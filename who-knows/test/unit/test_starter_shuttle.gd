@@ -91,14 +91,17 @@ func test_the_starter_shuttle_still_launches():
 ## spec §5.4; bridge computer spec §3.2). Pinned from ShipStats itself --
 ## Godot is the truth -- rather than hand-derived. The computer's table
 ## replaced a deck cell, which weighed 0.4 t and drew 0.1 MW: net, 100 kg
-## lighter and 0.2 MW more drawn.
+## lighter and 0.2 MW more drawn. The 26 fairings of the reshape (ship exterior
+## spec §8) then added 7.8 t of unpowered mass above and below the cabin: the
+## centre of mass rose 9 cm, and pitch imbalance went from 0.4% to 4.9% of
+## authority, inside the 5% rule.
 func test_the_starter_shuttle_is_pinned_with_the_quantum_core_machine_and_computer():
-	assert_eq(_grid.coords().size(), 84, "84 blocks")
+	assert_eq(_grid.coords().size(), 110, "110 blocks")
 	var s := ShipStats.compute(_grid, _cat)
-	assert_almost_eq(s.total_mass_kg, 96_900.0, 1.0)
-	assert_almost_eq(s.center_of_mass, Vector3(0.004, 1.207, 0.124), Vector3.ONE * 0.001)
-	assert_almost_eq(s.torque_imbalance, Vector3(11146, -6192, 0), Vector3.ONE * 1.0)
-	assert_almost_eq(s.torque_budget, Vector3(3_061_920, 2_030_960, 2_198_143), Vector3.ONE * 1.0)
+	assert_almost_eq(s.total_mass_kg, 104_700.0, 1.0)
+	assert_almost_eq(s.center_of_mass, Vector3(0.004, 1.301, 0.160), Vector3.ONE * 0.001)
+	assert_almost_eq(s.torque_imbalance, Vector3(151289, -5731, 0), Vector3.ONE * 1.0)
+	assert_almost_eq(s.torque_budget, Vector3(3_080_229, 2_040_115, 2_174_785), Vector3.ONE * 1.0)
 	assert_almost_eq(s.power_gen, 36.0, 0.05)
 	assert_almost_eq(s.power_draw, 31.3, 0.05)
 	assert_eq(s.quantum_capacity, 1200)
@@ -158,3 +161,43 @@ func test_the_old_stock_is_where_it_was():
 	assert_eq(stock.get(&"plasma_pistol", 0), 2)
 	assert_eq(stock.get(&"mug", 0), 2)
 	assert_eq(stock.get(&"crate", 0), 1)
+
+
+const FAIRINGS := [&"fairing_slope", &"fairing_slope_long_low", &"fairing_slope_long_high",
+	&"fairing_corner_out", &"fairing_corner_in", &"fairing_half"]
+
+## Ship exterior spec §8: the shape is fairings, all outside the cabin row.
+func test_the_shape_is_fairings_outside_the_cabin():
+	var n := 0
+	var mass := 0.0
+	for coord: Vector3i in _grid.coords():
+		var id := _grid.get_block(coord).block_id
+		if FAIRINGS.has(id):
+			n += 1
+			mass += _cat.get_def(id).mass_t
+			assert_ne(coord.y, 0, "no fairing in the cabin row: %s" % coord)
+	assert_eq(n, 26)
+	assert_almost_eq(mass, 7.8, 0.0001)
+
+## The building-a-ship reference's test for a new ship (reference.md).
+func test_the_reshaped_starter_flies():
+	var s := ShipStats.compute(_grid, _cat)
+	assert_eq(ShipValidator.validate(_grid, _cat).size(), 0, "zero issues, warnings included")
+	assert_gt(s.power_gen, s.power_draw * 1.1, "power with margin")
+	assert_gt(s.thrust_budget[&"reverse"], 0.0, "it can brake")
+	for axis in 3:
+		assert_gt(s.torque_budget[axis], 0.0, "authority both ways on axis %d" % axis)
+		assert_lt(absf(s.torque_imbalance[axis]), s.torque_budget[axis] * 0.05, "no fight under burn on axis %d" % axis)
+
+## The reshape must not block any RCS exhaust: today only the down-firing
+## pair's faces are open (building-a-ship skill), and they must stay open.
+func test_the_reshape_keeps_the_open_rcs_open():
+	var open := 0
+	for coord: Vector3i in _grid.coords():
+		var inst := _grid.get_block(coord)
+		if inst.block_id != &"rcs":
+			continue
+		var out := BlockOrientation.basis_for(inst.orientation) * Vector3.BACK
+		if not _grid.has_block(coord + Vector3i(out.round())):
+			open += 1
+	assert_eq(open, 2)

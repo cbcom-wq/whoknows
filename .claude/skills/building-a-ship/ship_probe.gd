@@ -50,12 +50,23 @@ func _fps(seconds: float) -> float:
 	return frames / ((Time.get_ticks_usec() - start) / 1e6)
 
 ## The hull from outside (ship exterior spec §10): two quarters, the profile,
-## above and below, from a camera riding on the hull.
-func _hull_shots(ship: Ship, tag: String) -> void:
+## above and below, from a camera riding on the hull. While `fill` is true a
+## soft directional light rides with the camera, a little off its axis so faces
+## read as different tones: an unlit hull renders near-black and says nothing
+## about shape. Pass false to judge the ship's own lights against the dark.
+func _hull_shots(ship: Ship, tag: String, fill := true) -> void:
 	var cam := Camera3D.new()
 	cam.cull_mask = 1 | ExteriorBuilder.OWN_HULL_LAYER
 	cam.far = 5000.0
 	ship.exterior.add_child(cam)
+	var light: DirectionalLight3D = null
+	if fill:
+		light = DirectionalLight3D.new()
+		light.light_cull_mask = 1 | ExteriorBuilder.OWN_HULL_LAYER
+		light.light_energy = 1.4
+		light.shadow_enabled = false
+		light.rotation_degrees = Vector3(-22, 28, 0)
+		cam.add_child(light)
 	var views := {
 		"bow_port": Vector3(-14, 6, -18), "stern_starboard": Vector3(14, 6, 18),
 		"profile": Vector3(-26, 1, 0), "above": Vector3(0, 28, 4), "below": Vector3(4, -22, 0),
@@ -67,6 +78,8 @@ func _hull_shots(ship: Ship, tag: String) -> void:
 		cam.current = true
 		await _shot("%s_%s" % [tag, view])
 	cam.current = false
+	if light != null:
+		light.queue_free()
 	cam.queue_free()
 
 func _run(scene: Node) -> void:
