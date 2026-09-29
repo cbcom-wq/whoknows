@@ -122,3 +122,14 @@ func test_the_ledger_round_trips():
 	assert_eq(back.health_of(&"b", 40.0), 12.0)
 	assert_eq(back.health_of(&"c", 40.0), 40.0, "full is not remembered")
 	assert_eq(back.dead_count(), 1)
+
+func test_a_bite_hurts_and_shoves_you_when_you_are_close():
+	var npc := _live(&"creature")
+	var avatar: Avatar = load("res://scenes/avatar.tscn").instantiate()
+	add_child_autofree(avatar)
+	avatar.global_position = npc.global_position + Vector3(0.8, 0, 0)
+	assert_true(npc.bite())
+	assert_eq(avatar.health.current, Avatar.MAX_HEALTH - Npc.BITE_DAMAGE)
+	assert_gt(avatar.velocity.x, 0.0, "shoved away")
+	avatar.global_position = npc.global_position + Vector3(5, 0, 0)
+	assert_false(npc.bite(), "out of reach")

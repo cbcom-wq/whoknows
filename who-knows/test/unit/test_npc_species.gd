@@ -74,7 +74,9 @@ func test_the_skitter_reads_back_as_authored():
 	assert_eq(s.need_start[&"hunger"], Vector2(0.2, 0.6))
 	assert_eq(s.need_start[&"rest"], Vector2(0, 0.4))
 	assert_eq(s.behaviours, [&"graze", &"wander", &"stay_with_herd", &"freeze", &"scatter", &"hide",
-		&"investigate", &"rest", &"drawn_to_flare"] as Array[StringName])
+		&"investigate", &"rest", &"drawn_to_flare", &"defend"] as Array[StringName])
+	assert_eq(s.behaviour_weights, {&"defend": 1.2})
+	assert_almost_eq(s.max_health, 40.0, 0.0001)
 	assert_almost_eq(s.fear_of_player, 0.5, 0.0001)
 	assert_almost_eq(s.curiosity_about_player, 0.4, 0.0001)
 	assert_eq(s.population, &"rock_herds")

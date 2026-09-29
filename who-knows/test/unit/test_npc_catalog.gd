@@ -89,3 +89,8 @@ func test_the_two_species_read_back():
 	assert_eq(_catalog.get_def(&"maintenance_droid").max_health, 60.0)
 	assert_eq(_catalog.get_def(&"maintenance_droid").knocked_out_for, 60.0, "the droid is knocked out")
 	assert_eq(_catalog.get_def(&"maintenance_droid").wake_health, 0.25)
+
+func test_the_skitter_bites_back():
+	var sk := _catalog.get_def(&"skitter")
+	assert_has(sk.behaviours, &"defend")
+	assert_eq(float(sk.behaviour_weights.get(&"defend", 1.0)), 1.2, "over scatter's touch when you are near")

@@ -74,6 +74,11 @@ const CORPSE_SHRINK := 1.0
 const SLUMP := deg_to_rad(70.0)
 const FLINCH := 0.8
 const FLINCH_FOR := 0.15
+## A bite (health and damage spec §5.4): its hp, its shove, N·s, and how far
+## from the middle of it you can be and still be bitten, m.
+const BITE_DAMAGE := 15.0
+const BITE_PUSH := 40.0
+const BITE_REACH := 1.6
 
 ## How hurt it is. Made from its species on setup; its director gives it the
 ## ledger's value for its record.
@@ -273,7 +278,10 @@ func think(time: float, dt: float) -> void:
 	ctx.grounded = active.grounded() if active != null else true
 	perception.sense(self, ctx, bus as StimulusBus, time)
 	site.fill(ctx, self)
+	ctx.extra[&"hurt_ago"] = health.since_hurt if health != null else INF
 	intent = brain.think(ctx)
+	if intent.action == &"bite":
+		bite()
 	last_context = ctx
 	if look != null and look.has_method(&"act"):
 		look.call(&"act", intent.action)
@@ -300,6 +308,27 @@ func take_damage(amount: float) -> float:
 		_flinch_left = FLINCH_FOR
 		_pose_look()
 	return taken
+
+## Bites whoever is within BITE_REACH (the defend behaviour asks for it):
+## a hit that hurts and shoves them away. Returns whether it landed.
+func bite() -> bool:
+	if not is_inside_tree():
+		return false
+	var avatar := get_tree().get_first_node_in_group(Avatar.GROUP) as Node3D
+	if avatar == null:
+		return false
+	var middle := global_position + global_basis.y * species.height * 0.5
+	var to := avatar.global_position - middle
+	if to.length() > BITE_REACH:
+		return false
+	var dir := to.normalized() if to.length() > 0.01 else -global_basis.z
+	var hit := Hit.make(avatar.global_position, -dir, dir, dir * BITE_PUSH, self)
+	hit.damage = BITE_DAMAGE
+	hit.kind = &"bite"
+	Hit.deliver(avatar, hit)
+	if look != null and look.has_method(&"act"):
+		look.call(&"act", &"bite")
+	return true
 
 func is_dead() -> bool:
 	return down and species != null and species.knocked_out_for <= 0.0
