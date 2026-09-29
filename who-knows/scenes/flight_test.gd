@@ -50,6 +50,8 @@ var _saved_tag: SavedTag
 var npc_debug: NpcDebug
 var npc_bus: StimulusBus
 var exterior_npcs: NpcDirector
+## The dead and the wounded, for every director (health and damage spec §6).
+var npc_ledger := NpcLedger.new()
 var contact_markers: Array[ContactMarker] = []
 ## The course on the HUD, one per view (bridge computer spec §6.1, §8).
 var course_markers: Array[CourseMarker] = []
@@ -323,6 +325,8 @@ func _wire_npcs() -> void:
 	exterior_npcs.bus = npc_bus
 	exterior_npcs.cameras = [$Ship/Exterior/ChaseCamera as Camera3D, $Ship/Canopy/CanopyCam as Camera3D, _avatar.camera]
 	exterior_npcs.sources = [RockHerdSource.new(_stream)]
+	exterior_npcs.ledger = npc_ledger
+	_ship.npc_director.ledger = npc_ledger
 	add_child(exterior_npcs)
 	npc_debug = NpcDebug.new()
 	npc_debug.name = "NpcDebug"

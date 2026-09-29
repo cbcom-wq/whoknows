@@ -74,3 +74,18 @@ func test_bodies_and_senses_are_sane():
 		if sp.live_radius > 0.0:
 			assert_true(sp.fade.x > 0.0 and sp.fade.x < sp.fade.y, "%s fades in: whole within x, gone past y" % id)
 			assert_lt(sp.fade.y, sp.live_radius, "%s wakes beyond where it can be seen" % id)
+
+## Health and damage spec §6: every species can be hurt, and says whether it
+## dies or is knocked out.
+func test_every_species_has_health():
+	for id in _catalog.ids():
+		var sp := _catalog.get_def(id)
+		assert_gt(sp.max_health, 0.0, "%s can be hurt" % id)
+		assert_between(sp.wake_health, 0.0, 1.0, "%s gets up with a share of its health" % id)
+
+func test_the_two_species_read_back():
+	assert_eq(_catalog.get_def(&"skitter").max_health, 40.0)
+	assert_eq(_catalog.get_def(&"skitter").knocked_out_for, 0.0, "a skitter dies")
+	assert_eq(_catalog.get_def(&"maintenance_droid").max_health, 60.0)
+	assert_eq(_catalog.get_def(&"maintenance_droid").knocked_out_for, 60.0, "the droid is knocked out")
+	assert_eq(_catalog.get_def(&"maintenance_droid").wake_health, 0.25)
