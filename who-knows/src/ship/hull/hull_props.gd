@@ -234,3 +234,9 @@ static func pod_shell(kit: InteriorKit, f: Transform3D) -> void:
 		var g0 := Vector3(outline[i].x, low, outline[i].y)
 		var g1 := Vector3(outline[i + 1].x, low, outline[i + 1].y)
 		kit.tri(HULL, f * floor_centre, f * g0, f * g1, (f.basis * Vector3.DOWN).normalized(), _plate_colour())
+	# The fans close across the mouth, as the interior pod's do: only the
+	# vertical mouth wall stays open.
+	kit.tri(HULL, f * roof_centre, f * Vector3(lip[last].x, roof, lip[last].y), f * Vector3(lip[0].x, roof, lip[0].y),
+		(f.basis * Vector3.UP).normalized(), _plate_colour())
+	kit.tri(HULL, f * floor_centre, f * Vector3(outline[last].x, low, outline[last].y),
+		f * Vector3(outline[0].x, low, outline[0].y), (f.basis * Vector3.DOWN).normalized(), _plate_colour())
