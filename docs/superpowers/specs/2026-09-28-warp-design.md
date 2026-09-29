@@ -2,7 +2,9 @@
 
 **Date:** 2026-09-28
 **Status:** Designed with the owner on 2026-09-28, after their play-test of the system skeleton.
-§2 is agreed; the numbers are first guesses, to be tuned by flying.
+§2 is agreed; the numbers are first guesses, to be tuned by flying. **Built** on
+`star-systems-warp` (2026-09-29); §13 is what was built. The owner has not yet flown it or seen
+its renders.
 **Piece 3 of the star systems design** (`2026-09-27-star-systems-design.md` §12). It **replaces
 quantum cruise** (§7 there). Jumps between stars (piece 6) are unchanged.
 **Depends on:** `main` at `dfd7b91` (the system skeleton)
@@ -470,3 +472,38 @@ then Planetfall.
 
 Changing a recipe constant needs `SystemRecipe.VERSION` or `AsteroidRecipe.VERSION` bumped, as in
 the skeleton spec §16.2.
+
+---
+
+## 13. What was built (2026-09-29)
+
+Built on `star-systems-warp` in the order of §11 (plan: `docs/superpowers/plans/2026-09-28-warp.md`).
+The numbers above are the built ones. Where the build differs from this spec's first draft, and why:
+
+- **Cluster 1 is centred on the start** (the entry, 700 m off its big rock), not on the rock,
+  whose centre can lie outside the belt. The start is found without the clusters' lift, so the
+  lift never moves it.
+- **Arrival clearance is per tier:** 300 m from mid-size and big rocks, 30 m from rubble. Rubble's
+  thin sprinkle leaves almost no point 300 m clear of it.
+- **At drop-out the speed lock is set to 120 m/s** when the assist is on. Otherwise the assist
+  cancels the velocity nobody asked for and brakes you to rest at the limit.
+- **Moons are contacts of their own kind** (`&"moon"`), so `&"body"` is exactly the star and the
+  planets. The HUD's contact marker leaves bodies and clusters to `BodyMarker`, which also skips a
+  target you are inside (cluster 1 surrounds the start).
+- **Limits have their own signals,** `Whereabouts.limit_entered` and `limit_left`, not `entered`
+  and `left`, whose listeners count the places on the location line.
+- **The physics bubble keeps its few bodies while suspended.** The hull touches nothing at warp,
+  and they are let go by distance when the stream resumes.
+- **Typical trips:** over 200 seeds, 4,136 trips between the star and planets average **30.9 s**
+  of travel (plus the 10 s spool).
+- **Tests:** 1,421 before, about 1,480 after, all passing. `test_warp_scene.gd` warps in the real
+  flight scene by stepping the drive by hand.
+
+### 13.1 Left to do
+
+1. **Renders for the owner** (§10.2, with the skeleton spec's §12 set; the skeleton spec §16.3 says
+   how), then the owner's play-test. Tune from §12.
+2. **The owner's approval of the look,** then the style guide's *Worlds and the star from afar*
+   (skeleton spec §12), including the rule that dust streaks only at warp.
+3. **Frame rates on the GTX 960** (skeleton spec §13.2), and one warp's worst frame.
+4. Then **Planetfall.**

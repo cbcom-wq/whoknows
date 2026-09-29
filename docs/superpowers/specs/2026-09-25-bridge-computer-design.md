@@ -27,6 +27,12 @@ controls.
 > (300 km), showing the star, planets and moons (`BodyContacts`, kind `&"body"`, in
 > `InteriorPalette.WORLD`) and each belt as a ring of ticks. The 30 km range shows big rocks and
 > worlds. A course can be set to a world.
+>
+> **Amended 2026-09-29 (the warp spec §7, `2026-09-28-warp-design.md`):** the SYSTEM range asks
+> for the whole system (400 km) and is drawn round the star out to 180 km, like an orrery: the
+> ship's pip and heading, scale rings every 50 km, worlds by class, lit when your QE reaches
+> them and dim (`HOLO_DIM`) when not, each warp target's limit, and the charted warp's line. Its
+> big button charts a warp. Moons are kind `&"moon"`, clusters `&"cluster"`.
 
 ---
 

@@ -65,6 +65,9 @@ func _run(scene: Node) -> void:
 	var s := ShipStats.compute(ship.grid, ship.catalog)
 	print("mass    %.1f t, centre of mass %s" % [s.total_mass_kg / 1000.0, s.center_of_mass])
 	print("power   %.1f MW made, %.1f MW drawn" % [s.power_gen, s.power_draw])
+	var reach_km := (s.quantum_capacity - WarpPlan.WARP_BASE) / WarpPlan.WARP_PER_KM
+	print("warp    reach %.0f km on a full store (%d QE); drive %s" % [reach_km, s.quantum_capacity,
+		"yes" if ship.warp != null else "MISSING"])
 	var mask := ship.exterior.collision_mask
 	var wants := 1 | BodyProxy.LAYER | AsteroidBody.LAYER | Npc.LAYER
 	print("bumps   hull mask %d: hulls, worlds, rocks, NPCs %s" % [mask, "yes" if (mask & wants) == wants else "MISSING"])

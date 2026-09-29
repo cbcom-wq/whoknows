@@ -494,7 +494,9 @@ The amendments §14 lists are noted at the head of each spec they touch.
 ### 16.1 Left to do
 
 1. **The owner's play-test.** The owner will fly it before judging the look. Tune from what they
-   say (§16.2), render again (§16.3), and ask again.
+   say (§16.2), render again (§16.3), and ask again. *Done 2026-09-28:* too much empty space and
+   no sense of where things are. That became the warp (`2026-09-28-warp-design.md`), built
+   2026-09-29, whose renders join this section's.
 2. **The owner's approval of the renders** (§12): the star's glow, the eight world palettes,
    ring and belt slabs, dust. Only then does the style guide gain its section, *Worlds and the
    star from afar* (§12's four rules), with the guide, code and tests changing together
