@@ -9,7 +9,8 @@ extends MultiMeshInstance3D
 ## They shrink to nothing over the box's outer edge, so the wrap never pops,
 ## and dither out close to the camera, so none sits on the canopy. Lit by the
 ## sun, in rock colours; never glowing. How many show is `density`, which
-## Whereabouts sets from where you are.
+## Whereabouts sets from where you are. At warp the flecks stretch into streaks
+## along the ship's velocity (the warp spec §5.2): the only streaks in space.
 ##
 ## The floating origin (CLAUDE.md): a member of Universe.EXTERIOR_SPACE whose
 ## parent never moves. Flecks are worked out from the focus's UniversePoint,
@@ -31,6 +32,10 @@ const SEED := 0x5D057
 ## The flecks are worked out again once the focus is this far from where
 ## they last were: the box drifts at most this far off centre.
 const REWORK_AFTER := 20.0
+## At warp each fleck stretches along `streak` (the warp spec §5.2), up to
+## this many metres, against a fleck of about STREAK_BASE across.
+const STREAK_MAX := 40.0
+const STREAK_BASE := 0.35
 
 ## The share of COUNT drawn, 0 to 1.
 var density := 0.25:
@@ -38,6 +43,13 @@ var density := 0.25:
 		density = clampf(value, 0.0, 1.0)
 		if multimesh != null:
 			multimesh.visible_instance_count = roundi(COUNT * density)
+## Metres to stretch every fleck along, from the warp; zero for none. A
+## change reworks the flecks on the next place().
+var streak := Vector3.ZERO:
+	set(value):
+		if value != streak:
+			streak = value
+			_anchor = null
 
 ## Each fleck's place in the box, its turn and size, and its colour.
 var _homes := PackedVector3Array()
@@ -97,15 +109,31 @@ func place(universe: Universe, focus: UniversePoint) -> void:
 		return
 	_anchor = focus
 	global_transform = Transform3D(Basis.IDENTITY, universe.to_engine(focus))
+	var s := streak.limit_length(STREAK_MAX)
+	var pull := Basis.IDENTITY if s.is_zero_approx() else stretch(s.normalized(), 1.0 + s.length() / STREAK_BASE)
 	for i in COUNT:
 		var rel := offset(_homes[i], focus)
-		AsteroidStream.write(_buf, i, _shapes[i] * edge_scale(rel), rel, _colours[i])
+		AsteroidStream.write(_buf, i, pull * _shapes[i] * edge_scale(rel), rel, _colours[i])
 	multimesh.buffer = _buf
 
 ## Where fleck `i` is drawn, from the node: for tests.
 func fleck(i: int) -> Vector3:
 	var k := i * 16
 	return Vector3(_buf[k + 3], _buf[k + 7], _buf[k + 11])
+
+## The basis fleck `i` is drawn with, read back from AsteroidStream.write's
+## rows: for tests.
+func fleck_basis(i: int) -> Basis:
+	var k := i * 16
+	return Basis(Vector3(_buf[k], _buf[k + 4], _buf[k + 8]), Vector3(_buf[k + 1], _buf[k + 5], _buf[k + 9]),
+		Vector3(_buf[k + 2], _buf[k + 6], _buf[k + 10]))
+
+## Stretches by `k` along the unit `dir` only: I + (k - 1) dir dirT.
+static func stretch(dir: Vector3, k: float) -> Basis:
+	var a := k - 1.0
+	return Basis(Vector3(1.0 + a * dir.x * dir.x, a * dir.y * dir.x, a * dir.z * dir.x),
+		Vector3(a * dir.x * dir.y, 1.0 + a * dir.y * dir.y, a * dir.z * dir.y),
+		Vector3(a * dir.x * dir.z, a * dir.y * dir.z, 1.0 + a * dir.z * dir.z))
 
 ## Rock colour times each fleck's instance colour, dithering out close in.
 static func material() -> StandardMaterial3D:
