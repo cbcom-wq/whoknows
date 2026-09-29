@@ -1,7 +1,9 @@
 # Ship exterior — a hull that matches its interior, and lights to see by
 
 **Date:** 2026-09-28
-**Status:** Design approved section by section by the owner on 2026-09-28. Not built.
+**Status:** Built 2026-09-29 on branch `ship-exterior`. Design approved section by section by the
+owner on 2026-09-28. Where the build differs from the text, §12 wins; the choices made without the
+owner's word are listed there too, and await it.
 **Depends on:** `main` at `dfd7b91`:
 - quantum energy (the core, the machine, quantum cells, low power);
 - the bridge computer, whose miniature uses the hull's meshes;
@@ -14,7 +16,8 @@
 - the starter shuttle art direction (`2026-08-23-starter-shuttle-art-direction.md`) §2 and §3:
   the starter's envelope and its cells above and below the cabin;
 - the bridge computer spec §7 and §3 of its miniature (`multimeshes()` becomes `hull_meshes()`);
-- the visual style guide: a new §3.6, additions to §4 and §5 (§9 here);
+- the visual style guide: a new §3.8 (this text first called it §3.6, which the NPCs and the
+  bridge computer had already taken), additions to §4 and §5 (§9 here);
 - the `building-a-ship` skill.
 
 ---
@@ -376,6 +379,15 @@ Every mount's aim must leave the hull: no ray from a lens along its aim hits a c
   - at 1280 × 720 on the reference GPU (GTX 960), counting the canopy view's second render;
   - **adopted** (in place of the cones or with them) only if the worst view holds 120 fps;
   - otherwise the cones stand, and the spike's code is thrown away.
+  - *(Measured 2026-09-29, GTX 960, 1280 × 720, both groups on. Fog volumes at density 0.02–0.1
+    over the forward and flood spots: the worst view, seated nose-on 60 m off a rock, held 132–142
+    fps against 150 without (a steady-state re-check: 135–143 against 151), a cost of 6–10%; belly
+    down 20 m over a rock, 155–160 against 168; the chase views 250–282 against about 300. The
+    cost is the froxel pass and does not follow the density. The shafts are soft and read as light
+    in dust, with no hard edge; the five floods merge into one warm column. Density 0.05 was the
+    best balance, 0.1 washed out the ground pools. The brief's cone orientation was turned the
+    wrong way round and needs flipping. It holds the budget by 12–20 fps, which is thin, and it
+    is a replacement for the cones, not an addition. Not adopted: §12.1, item 7.)*
 - The spike also measured flood shadows, to be turned on only if they fit the same budget.
   *(Measured 2026-09-29: they fit, at no measurable cost. Seated nose-on 60 m off a rock with both
   groups on, 151 fps against 150 without; belly-down 20 m over one, 167 against 168; chase 326 and
@@ -466,7 +478,7 @@ The cabin row (y = 0) keeps every cell. Everything below is added to or changed 
 
 ## 9. The style guide
 
-A new **§3.6, "The hull's outside"**, records:
+A new **§3.8, "The hull's outside"** (first planned as §3.6), records:
 - the skin: plates, the 0.4 m chamfer, corner facets, the panel line from the plate gap;
 - fairings, and that a taper is a block;
 - the rule that windows match the interior, and what window glass looks like from outside;
@@ -474,7 +486,7 @@ A new **§3.6, "The hull's outside"**, records:
 - the darker outside and the bloom outside.
 
 Also:
-- **§4, "Anything on the hull's outside",** points to §3.6.
+- **§4, "Anything on the hull's outside",** points to §3.8.
 - **§5:** `hull_props.gd` joins the grid-blind list. `hull_layout.gd`, `hull_dressing.gd`,
   `hull_props.gd` and `ship_lights.gd` join the no-colour-literal list.
 - **§2.5 is unchanged:** no new shader.
@@ -503,7 +515,7 @@ TDD throughout. New tests:
   - each hull window's centre height equals its interior window's;
   - the pod shell's outline and heights are `InteriorProps`' constants.
 - **`test_hull_lights.gd`:**
-  - the starter has 6 flood mounts and 2 forward mounts;
+  - the starter has 5 flood mounts and 2 forward mounts (§6.1);
   - every aim leaves the hull (§6.1);
   - floods tilt outward; forward lights point within 10° of −z;
   - every `SpotLight3D` has light mask `1 | OWN_HULL_LAYER` and is a child of the hull body.
@@ -545,3 +557,79 @@ Each step is shippable and rendered for the owner.
 6. **The records:** the style guide (§9), the starter art direction, the bridge computer spec's
    miniature, and the `building-a-ship` skill (checklist, *Mistakes already made*, `reference.md`,
    `ship_probe.gd`).
+
+---
+
+## 12. As built: where the build differs from this text
+
+Built task by task on `ship-exterior` (2026-09-28 to 2026-09-29). The full suite passed at each
+step. Where this section and the text above disagree, this section wins.
+
+### 12.1 Choices made without the owner's word
+
+The owner was not asked at these points, so a controller made the call, gave the reason, and
+recorded what to change if it is wrong. **All of them await the owner's word.**
+
+1. **No save migration.** A resumed game keeps the ship it saved, the flat starter; only a new
+   game gets the reshaped one (§7.1). Leaving saves alone risks no player data and is the
+   smallest change. If wrong: one small follow-up adding a `SaveGame` migrate step.
+2. **The render checkpoints did not wait.** Renders were sent to the owner at each look-rule
+   checkpoint and the build went on, so the owner's feedback becomes follow-up tuning and not a
+   gate. If wrong: rework of constants and cells after the owner looks.
+3. **Warm light, with cool kept.** `WORK_LIGHT` is the warm white (`WORK_LIGHT_WARM`), closer to
+   the style guide. `WORK_LIGHT_COOL` is not deleted, and the owner still picks (§2, row 6). If
+   wrong: one constant flips and the loser goes.
+4. **A fill light in the probe's hull views,** on for shape checks and off for judging the ship's
+   own lights. Unlit hull renders are near black. If wrong: a probe-only helper nobody wanted.
+5. **The pod shell's roof and belly are closed across its mouth.** Only the vertical mouth is
+   left open (§5.2), for the hull to close; the roof and belly triangles at the mouth were not
+   closed by anything, and a render showed the hole. If wrong: two extra triangles hidden inside
+   the hull.
+6. **The starter has 5 floods, not 6** (§6.1). The bow corner floods sit on wedge facets at
+   z = −5.667, the keel span is 11.67 m, and the rule gives `floor(11.67 / 6)` = 1 keel flood.
+   The rule was the authority and the number an estimate. If wrong: `FLOOD_SPACING` or the rule
+   changes to get a second keel flood.
+7. **Volumetric shafts are not adopted** (§6.4). The spike held 120 fps (the worst view fell from
+   about 150 to 132–142), but the margin is thin and the look, a merged soft glow, is a taste
+   call. The owner has the renders and the numbers, and this is a ready follow-up. If wrong: one
+   task (fog in the outside environment, a `FogVolume` per beam in `ShipLights.bind`, the cones
+   removed).
+8. **The floods cast shadows** (§6.2, §6.4). The spike found them free. If wrong: flip
+   `SETTINGS`' flood `"shadows"` back.
+
+### 12.2 Where the build differs from the design
+
+- **The style guide section is §3.8,** not §3.6.
+- **`hull_meshes()` returns `Array[Mesh]`,** the plating and trim, not `Array[MeshInstance3D]`
+  (§3.4). `ExteriorBuilder` also gained `layout()`, `lenses()`, `window_glow()` and
+  `light_mounts()` for the lights, the probe and the tests.
+- **Fairings have no `mesh`,** as §4 says, and `test_block_data.gd`'s "every block has a mesh"
+  skips ids that start `fairing_`.
+- **Window glass stands in front of the plate** (`HullProps.GLASS_Z`, 0.07 m). The first build put
+  it at 0.02 m, and the plate, 0.05 m proud, hid it: portholes showed as bare rings.
+- **Beams and bloom were tuned at the renders** (§6.3, §6.4): `BEAM_ALPHA` 0.012 with a mid fade
+  stop and back faces culled, the beams dimming with the lamps, and the bloom in Screen blend.
+- **The port forward light sits at y = −0.06,** not 0: the bridge computer's porthole is above
+  it, and the spec's rule puts it 0.3 m below any window.
+- **The lights panel's reach test** stands in the shoulder's own cell, 1.3 m from the buttons.
+  The panel is on the front wall, about 3.1 m from the cell behind the shoulder, past the
+  Interactor's 2.5 m.
+- **A new sound,** `light_switch` (0.12 s), and its line in `test_synth`'s table.
+- **Fairings cost the starter its balance headroom.** Pitch imbalance went from 0.36% to 4.91% of
+  authority (the rule is 5%), and the feel is slower on every axis. Measured: 110 blocks,
+  104,700 kg, pitch / yaw / roll 1.49 / 0.71 / 1.85 rad/s² (was 1.60 / 0.74 / 2.05), forward 14.3,
+  brake and side 4.8, vertical 9.6 m/s². The spine's z = 2 row and a wider keel stay in reserve
+  as trims.
+- **Frame time,** measured after the last change (1280 × 720, GTX 960): the worst view, seated
+  60 m off a rock's night side with both groups on and shadowed, holds 143–150 fps over two runs (§6.3).
+
+### 12.3 Left for the owner's eye
+
+Seen in the renders and not judged by anyone but the builders:
+- two small silhouette notches at the spine's aft end and at a pod fin's tip, both real
+  geometry you see space through;
+- the bloom judged on the night side only, not sunlit;
+- the beams' hard edges, which `StandardMaterial3D` cannot soften without the fog shafts;
+- the beams' low-power dimming, tested by property and never rendered;
+- the HUD band, 18 px taller, which may overlap the "SAVE LOCKED" tag by about 14 px;
+- the lights panel, tight against its wall pillar, its labels legible only at arm's length.

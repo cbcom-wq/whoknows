@@ -331,6 +331,13 @@ The HUD marker fades out over 0.5 s.
 
 ### 7.1 The miniature
 
+> **Amended** by docs/superpowers/specs/2026-09-28-ship-exterior-design.md §3.4 (built 2026-09-29):
+> the hull is no longer one `MultiMesh` per block type but a generated skin, a few merged meshes.
+> `ExteriorBuilder.multimeshes()` became `hull_meshes() -> Array[Mesh]` (the skin's plating and
+> trim). The miniature is one `MeshInstance3D` per mesh, **sharing those `Mesh` resources**, and
+> `HoloVolume.show_miniature` takes `Array[Mesh]`. Everything else below stands: the layer, the
+> holo material, the size, the turn, and following rebuilds.
+
 - **Your ship, from its own hull.** `ExteriorBuilder` draws the hull as one `MultiMesh` per block
   type. The miniature is one `MultiMeshInstance3D` per block type **sharing those same `MultiMesh`
   resources**, not copies, under one scaled node in the holo:
@@ -448,7 +455,8 @@ data/blocks/computer.tres
 - `interior_layout.gd`: `QUIET_FIXTURES` gains `computer`;
 - `interior_builder.gd`: `computers()`;
 - `ship.gd`: binds each computer after a rebuild;
-- `exterior_builder.gd`: `multimeshes() -> Array[MultiMesh]`, for the miniature;
+- `exterior_builder.gd`: `multimeshes() -> Array[MultiMesh]`, for the miniature (now
+  `hull_meshes() -> Array[Mesh]`, §7.1);
 - `salvage_marker.gd`: skips the course's cloud;
 - `synth.gd`: five sounds;
 - `flight_test.gd`: the starter's computer, `RockContacts` registered, the course marker;

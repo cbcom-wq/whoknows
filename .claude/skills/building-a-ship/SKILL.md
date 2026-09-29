@@ -9,7 +9,8 @@ description: Use when designing, adding or changing a ship blueprint in the who-
 
 A ship is **one `ShipGrid` of 2 m blocks**. Everything else is generated from it and must never
 be hand-placed: the hull, colliders, interior walls, rooms and doorways, the cockpit pod, the
-airlock rooms and hatches, the stow points, and the flight stats. Building a ship means choosing
+airlock rooms and hatches, the stow points, the flight stats, and the hull's skin, windows and
+lights. Building a ship means choosing
 blocks and orientations, then **proving** the generated result launches, flies, can be walked
 and looks right. Green tests prove structure, not looks or feel.
 
@@ -25,8 +26,10 @@ orientation codes, numbers, APIs).
 Do these in order. Each one names the check that proves it.
 
 1. **Lay out the decks.** −Z is the bow, +X starboard, +Y up. The proven pattern is y=0 a
-   walkable cabin and y=+1 a solid equipment deck (core, reactors, grav plating). The roof stays
-   flat.
+   walkable cabin and y=+1 a solid equipment deck (core, reactors, grav plating). **Shape the
+   outside with fairings, outside the cabin row** (`fairing_*`, 0.3 t each: a spine above, a keel
+   below, fins on the pods, ramps at the ends); the skin chamfers every other convex edge for
+   free. The cabin row keeps its full blocks, so nothing inside moves.
 2. **Place what the player needs:**
    - exactly one `core`, with every block face-connected to it;
    - one `pilot_seat` looking straight at a `canopy` block, which makes a cockpit pod. Keep the
@@ -65,7 +68,8 @@ Do these in order. Each one names the check that proves it.
    - no zero component in `torque_budget`;
    - `thrust_budget[&"reverse"] > 0`;
    - `torque_imbalance` within a few % of `torque_budget` on each axis. Fix it by moving mass or
-     thrust, not by weakening the RCS;
+     thrust, not by weakening the RCS. Fairings above the thrust line count: the reshaped
+     starter's spine and fins put pitch at **4.91% of the 5% limit**, so leave headroom;
    - the feel numbers (`torque_budget / inertia`, and each thrust budget divided by mass) are
      what you meant. The probe prints them.
 
@@ -80,27 +84,43 @@ Do these in order. Each one names the check that proves it.
      `CameraDirector`, `Exterior` and `Interior`), and the HUD's vehicle set to that node while
      seated. It adds the stick and pointer to the flight computer's telemetry. `Ship` makes the
      `RcsShow` puffs and sounds itself;
+   - `Ship` makes its own `ShipLights` and rebinds it after every rebuild; **the scene sets
+     `PilotControls.lights`** (`_pilot.lights = _ship.lights`, as `flight_test.gd` does in
+     `_wire_hud`), or L and K do nothing and the HUD shows no lights. The bridge's lights panel
+     comes from the interior by itself, on a shoulder's wall;
    - anything outside the hull goes in `Universe.EXTERIOR_SPACE` (CLAUDE.md);
    - **a ship's state round-trips through the save** (`docs/superpowers/specs/
      2026-09-26-saving-design.md`). A block with state of its own (a fixture, a store, a door that
      can be left open) needs a `to_dict`/`from_dict` gathered by `Ship.to_dict`, a busy source in
      `Ship.busy()` if it has actions that run over time, and a line in
-     `test_save_scene.gd`'s round-trip. The probe prints `save ... round-trips`.
-7. **Run the full suite** (`who-knows/run_tests.ps1`). Add ship-specific tests: launches, stats,
-   rooms, and the pod and airlock present.
+     `test_save_scene.gd`'s round-trip. The probe prints `save ... round-trips`. The lights are
+     a `lights` part (`{"floods", "forward"}`); a save without one loads with both off.
+7. **Run the full suite** (`who-knows/run_tests.ps1`). It takes **about 8 minutes**, longer than a
+   single command's timeout: run it in the background, logged to a file, and wait for the end. Add
+   ship-specific tests: launches, stats, rooms, and the pod and airlock present.
 8. **Probe the real scene:** run `ship_probe.gd` (in this folder) **without** `--headless`. It
    prints:
-   - the validator, the stats, and the feel numbers;
+   - the validator, the stats, the `balance` line (each axis's imbalance as a share of authority,
+     flagged `OVER 5%`), and the feel numbers;
    - any `rcs` whose exhaust is `BLOCKED`;
    - rooms, pods and airlocks;
+   - **the hull:** `skin` (plates, chamfers, corners, facets, nozzles), `windows N outside for N
+     inside` (with `UNMATCHED` naming any inside window that has no place outside), and `lights  5
+     floods, 2 forward` on the starter (the four belly corners and one on the keel, and a forward
+     pair); `panel` says whether the bridge has its lights panel;
    - the droid's dock and its jobs, flagging any `UNREACHABLE`;
    - fps.
 
-   It also sits, stands and walks, and flags `STUCK`.
+   It also sits, stands and walks, and flags `STUCK`. Look for `SHADER ERROR` too: headless never
+   compiles shaders.
 9. **Render and show the owner:** eye-height (1.6 m) views of the bridge, the seated view, the
    corridor, each room and the exterior, plus an outside view with each RCS axis firing (every
    block's puffs should show). Cycle the airlock both ways, look out of the windows, and hold
-   ≥120 fps at 1280×720.
+   ≥120 fps at 1280×720. **The hull views** (the probe writes them): two quarters (bow port,
+   stern starboard), the profile, above and below, fill-lit to judge the shape and **dark with the floods, the forward
+   lights and both on** to judge the lights; and the ship **by a big rock's night side**, nose on
+   with the seat's view and belly down over it. The worst view is seated by the rock with both
+   groups on; the starter holds 143–150 fps there.
 10. **Fly it:** a steady turn on the arrow keys, a clicked heading 120° away, and a speed-locked
     turn at cruise. Compare them with the feel numbers you meant.
 
@@ -113,14 +133,20 @@ is the blueprint's budgets, so the grid decides the feel:
 
 | Feel | Comes from | Starter shuttle |
 |---|---|---|
-| How fast a turn starts and stops | `torque_budget / inertia`, per axis | 1.74 / 0.79 / 2.05 rad/s² (pitch / yaw / roll) |
-| A clicked heading swinging on | the weaker of pitch and yaw above | 120° in 3.1 s |
-| Travel swinging onto the nose after a turn | `thrust_budget[&"lateral"]` (and `vertical`) / mass | 5.4 m/s²: 100 m/s sideways takes about 18 s |
-| Braking; a speed lock slowing down | `reverse` / mass | 5.4 m/s² |
-| Accelerating; a speed lock catching up | `forward` / mass | 16.3 m/s² |
+| How fast a turn starts and stops | `torque_budget / inertia`, per axis | 1.49 / 0.71 / 1.85 rad/s² (pitch / yaw / roll) |
+| A clicked heading swinging on | the weaker of pitch and yaw above | 120° in 3.1 s on the flat starter; not re-measured on the reshaped one, a little slower |
+| Travel swinging onto the nose after a turn | `thrust_budget[&"lateral"]` (and `vertical`) / mass | side 4.8 m/s², vertical 9.6: 100 m/s sideways takes about 21 s |
+| Braking; a speed lock slowing down | `reverse` / mass | 4.8 m/s² |
+| Accelerating; a speed lock catching up | `forward` / mass | 14.3 m/s² |
 | Thrusters the player sees | each `rcs` block's exhaust face open and in view | 6 of 8 blocked (only the pitch-down pair shows); none in the pilot's view |
 
-A ship that slides for 18 s after a hard turn at speed is not a controls bug. It needs more side
+The figures are the **reshaped starter's** (110 blocks, 104.7 t; the spine, fins and keel added
+7.8 t). Before the reshape it was 1.60 / 0.74 / 2.05 rad/s², 15.5 forward, 5.2 brake and side and
+10.3 vertical; this table had said 1.74 / 0.79 / 2.05 and 5.4 since well before that, and was
+already stale. Weight added outside the thrust line slows every axis, so re-measure with the
+probe after any fairing.
+
+A ship that slides for 20 s after a hard turn at speed is not a controls bug. It needs more side
 thrust.
 
 ## Mistakes already made (don't repeat)
@@ -150,11 +176,37 @@ thrust.
 | A fixture beside two others on a bridge | The bridge computer in the port back corner, with the core and the machine, cut the droid off from the whole front of the bridge: helm, core, portholes, the table itself | Keep a way round on foot. `DeckPaths` now squeezes past the corner between two quiet fixtures; a new fixture that is not quiet gets no such step, so check the probe's `UNREACHABLE` line |
 | A quiet fixture where the consoles are | Its own walls go plain, so a fixture at the glass or beside the helm would take the bridge's consoles with it, and the shoulder's desk would stand 5 cm from it | `InteriorLayout._handed_consoles` hands the console straight back to the last open cell's same wall; the shoulder drops its desk in front of a fixture. Render the corner it went to |
 | An off-centre retro counted as steering | It would light up for yaw, but `ShipStats` never counts pure fore-and-aft thrust as authority | Steer with blocks that push across the hull; retros only brake |
+| A fairing in the cabin row | The interior sees a solid cell and builds a whole wall against it, but a slope or a half leaves the outside open, and a porthole outside lands on a slope or above a 1 m block | Fairings go above and below the cabin and at its ends. The cabin row keeps full blocks. Check the probe's `windows` line |
+| A window inside with none outside | `HullLayout.unmatched` is not empty (the probe prints `UNMATCHED`). The walk out from a porthole wall stops at one solid cell, so **two solid cells** between the room and space leave the window nowhere to go. A covered face or a slope turned away fails too | One solid cell (or none) between a porthole's room and space. Every interior window must have one outside: `test_hull_windows.gd` |
+| An RCS exhaust closed by a fairing | The puffs are born inside the fairing and never show, exactly as with any block. Fairings are solid | Keep each `rcs` block's exhaust face open. The starter's `BLOCKED` count stays at 6 of 8; it must not rise |
+| "Balance by weakening RCS", again, for the spine | The reshape put 6.0 t of spine and fins above the thrust line and 1.8 t of keel below, lifting the centre of mass 9 cm: pitch imbalance went from 0.36% to **4.91% of the 5% limit** | Trim by moving fairings, never the RCS. The spine's z = 2 row (three cells) or a wider keel are the trims held in reserve. Watch the `balance` line |
+| Window glass flush with the cell face | It was buried behind plates that stand `PLATE_PROUD` (0.05 m) proud: portholes showed as bare rings on white plate | Glass and bands go in front of the plate (`HullProps.GLASS_Z`). Render a window close up before calling it done |
+| `-1 << 30` or a multi-line lambda in GDScript 4.5 | Both are parse errors, and a parse error in `hull_layout.gd` made `plan` "nonexistent" with a message far from the cause | Write `-(1 << 30)`, and keep a `filter(func(f): ...)` lambda on one line |
+| Two `InteriorKit.commit()`s under one parent | The second commit's meshes are renamed by Godot (`DressingHull2`) and a lookup by batch name fails | Give each kit its own node, as `HullDressing` does (`Skin/Hull`, `Windows`, `Lens_flood`...) |
+| Judging the hull's shape from an unlit render | The sun lights some faces and the ambient is nearly black, so an unlit hull is a black silhouette and a hole looks like shadow | The probe's `_hull_shots` has a fill light for shape checks and none for judging the ship's lights; use both |
+| Additive beams at alpha 0.06 | Each cone rendered as a flat, hard-edged tan solid that hid the ship, and overlapping cones stacked | `HullMaterials.BEAM_ALPHA` 0.012, a mid fade stop, back faces culled. Judge them against a dark sky, not a bare hull |
+| Bloom left at the engine's default blend | The outside's glow drew no halo at all round lenses and strips, at any intensity | `glow_blend_mode` Screen (`OUTSIDE_GLOW_BLEND` in `flight_test.gd`) |
+| A new sound not in `test_synth`'s list | `test_synth` pins `Synth.NAMES.size()` against its `LENGTHS` table and each sound's length, so the full suite fails on one line | Add the sound and its length to `LENGTHS` in the same change |
+| A reach test with the eye where the brief said | The lights panel is on the shoulder's front wall, about 3.1 m from the cell behind, past the Interactor's 2.5 m; the test failed | Stand the test's eye in the shoulder's own cell (1.3 m from the panel) and remember the desk is 0.4 m deep |
+| Running a test or the probe from the main checkout | `run_tests.ps1` resolves from the current directory, so a shell that started in another tree ran that tree's code and reported a pass | Check the directory before every command when working in a worktree |
+| A new `class_name` without `--import` and its `.uid` | Tests fail to find the class, and the generated `.uid` is not committed | Run `--import`, then commit the `.uid` files (the repo tracks them) |
 
 ## Not built yet (plan for it; don't assume it works)
 
 - **Multi-storey interiors.** A `ladder` passes the validator, but every walkable cell still gets
   a solid floor and ceiling, so you can't climb.
 - **The bubble canopy** pod variant.
+- **Light blocks** placed by hand. The generator places every light; a shipyard that wants its own
+  comes with its own spec.
+- **Volumetric light shafts.** Measured, not adopted: fog with a `FogVolume` in each beam cost
+  6-10% in the worst view (132-142 fps against 150) and merged the floods into one soft column.
+  A ready follow-up if the owner wants it: `ShipLights.bind` makes a `FogVolume` per beam (cone
+  turned so it widens away from the lamp), the cones go, fog goes on in `_set_outside_mood` with
+  a 150 m length. See the ship exterior spec §6.4 and the Task 13 report.
+- **Asteroid tunnels.** None exist; the forward lights (220 m, shadowed) are sized for them.
+- **Migrating a saved starter.** A resumed game keeps its saved layout, the flat starter; only a
+  new game gets the reshaped one.
+- **Dust kicked up by the floods** near a surface, and a rendered low-power frame of the beams
+  (their dimming is tested by property only).
 - **The shipyard** (blueprints are built in code for now). Blueprints save with
   `ShipBlueprint.from_grid(grid, name)`, sorted and diffable.

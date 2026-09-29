@@ -1,6 +1,6 @@
 # Ship building reference
 
-The facts behind `SKILL.md`, checked against the code on 2026-09-27. Paths are relative to
+The facts behind `SKILL.md`, checked against the code on 2026-09-29. Paths are relative to
 `who-knows/` unless they start with `docs/`. If a name here no longer exists, trust the code and
 fix this file.
 
@@ -26,9 +26,15 @@ fix this file.
 | grav_plating | solid | 1.5 | | 1.5 | | `grav_radius` 6 m |
 | battery | solid | 2.0 | | | | |
 | hull | solid | 1.0 | | | | |
-| hull_wedge | solid | 0.6 | | | | chamfer set by orientation roll |
+| hull_wedge | solid | 0.6 | | | | chamfer set by orientation roll; the same wedge as `fairing_slope` |
 | armour | solid | 3.0 | | | | |
-| canopy | solid | 0.5 | | | | the interior face onto it is glass |
+| canopy | solid | 0.5 | | | | the interior face onto it is glass, or a pod; outside it is a wedge, and the interior decides what it looks like (below) |
+| fairing_slope | solid | 0.3 | | | | structure, 40 hp, no mesh (the skin draws it): a full diagonal wedge, high at the back |
+| fairing_slope_long_low | solid | 0.3 | | | | the lower half of a two-cell ramp, 0 to 1 m across the cell |
+| fairing_slope_long_high | solid | 0.3 | | | | the upper half: a 1 m block with a 1 to 2 m ramp on top |
+| fairing_corner_out | solid | 0.3 | | | | a quarter pyramid, an outer corner |
+| fairing_corner_in | solid | 0.3 | | | | an inner corner, two slopes (not convex) |
+| fairing_half | solid | 0.3 | | | | the bottom half of a cell, a 2 × 1 × 2 m box |
 | bulkhead | solid | 0.8 | | | | |
 | deck | deck | 0.4 | | 0.1 | | open bridge or corridor |
 | bunk_room, galley, bathroom, closet, weapon_room | deck | 0.4 | | 0.1 | | rooms (`InteriorLayout.ROOM_IDS`) |
@@ -41,6 +47,10 @@ fix this file.
 Room blocks weigh and draw exactly what `deck` does, so swapping deck for rooms never moves the
 balance. `test_starter_shuttle.gd` holds this.
 
+The six fairings are STRUCTURE at 0.3 t against 1.0 t for `hull`, so reshaping a blueprint moves
+its balance only a little. They have no `mesh` of their own: `test_block_data.gd`'s "every block
+has a mesh" skips ids that start `fairing_`. Their orientation works as `hull_wedge`'s does.
+
 ## Orientation codes
 
 `o = (forward_index << 2) | roll`. The forwards are `[FORWARD(-Z), BACK(+Z), LEFT(-X), RIGHT(+X),
@@ -50,6 +60,7 @@ UP(+Y), DOWN(-Y)]` (`BlockOrientation`). A thruster's force on the ship acts alo
 |---|---|---|
 | 0 | `O_FORWARD` | pushes the ship bow-ward (main engines at the stern); canopy and wedge slope up-forward |
 | 1 / 3 | `O_STARBOARD_FWD` / `O_PORT_FWD` | forward, rolled: `hull_wedge` chamfer to +X / −X |
+| 2 | `O_KEEL` | forward rolled 180°: a `fairing_half`'s upper half, hung under a cell (the starter's keel) |
 | 4 | `O_STERN` | pushes aft: a **retro** RCS; `hull_wedge` tail taper |
 | 8 / 12 | `O_RCS_PORT` / `O_RCS_STARBOARD` | lateral −X / +X |
 | 16 / 20 | `O_RCS_UP` / `O_RCS_DOWN` | vertical +Y / −Y |
@@ -80,14 +91,22 @@ issues.
   - the centre of mass comes from block masses at cell centres;
   - a thrust line away from it (up/down or sideways) gives `torque_imbalance`;
   - a lone thruster in one direction gives zero authority on its axis.
-- **The starter shuttle:**
-  - 84 blocks, 92.3 t, centre of mass (0, 1.27, 0.33);
+- **The starter shuttle** (reshaped by the ship exterior spec, 2026-09-29; Godot's figures):
+  - 110 blocks (84 and 26 fairings), 104,700 kg, centre of mass (0.004, 1.301, 0.160);
+  - inertia (2,065,526, 2,865,503, 1,175,422);
   - thrust 1500 forward, 500 reverse, 500 lateral and 1000 vertical kN;
-  - authority (3.16, 2.08, 2.18) MN·m against an imbalance of (0.10, 0, 0) MN·m;
-  - 36.0 MW made, 30.8 MW drawn.
+  - authority (3,080,229, 2,040,115, 2,174,785) N·m against an imbalance under burn of
+    (151,289, −5,731, 0): pitch **4.91%**, yaw 0.28%, roll 0% of authority (the rule is 5%);
+  - 36.0 MW made (all from the quantum core), 31.3 MW drawn, 1200 QE, zero validator issues.
 - **The starter's feel:**
-  - turn acceleration 1.74 / 0.79 / 2.05 rad/s² (pitch, yaw, roll);
-  - side 5.4, vertical 10.8, brake 5.4 and forward 16.3 m/s².
+  - turn acceleration 1.49 / 0.71 / 1.85 rad/s² (pitch, yaw, roll);
+  - forward 14.3, brake 4.8, side 4.8 and vertical 9.6 m/s². 100 m/s sideways gone in 21 s;
+  - `rcs` exhaust BLOCKED on 6 of 8, as it was before the reshape.
+- **Before the reshape** (84 blocks): 96,900 kg, centre of mass (0.004, 1.207, 0.124), pitch
+  imbalance 0.36%, feel 1.60 / 0.74 / 2.05 rad/s², 15.5 / 5.2 / 5.2 / 10.3 m/s². This file and
+  `SKILL.md` had carried older figures still (1.74 / 0.79, 5.4, 16.3); they were stale. The
+  reshape's 26 fairings add 7.8 t and no power. 6.0 t of it is above the cabin and 1.8 t below,
+  which lifted the centre of mass 9 cm.
 - **Handling (flight controls, 2026-09-25):**
   - arrow keys give a steady 60°/s;
   - a clicked heading 120° away settles in 3.1 s, overshooting 1.2°;
@@ -206,15 +225,127 @@ every rebuild. Any blueprint gets its crew from its own layout:
 - **At runtime:** the dressing builds a `ShipComputer` per table
   (`InteriorBuilder.computers()`); `Ship` binds each to a `ComputerContext` (its sensors, store,
   stats, hull, exterior builder) after every rebuild and keeps its page, range and selection by
-  cell across one. The status page's miniature shares `ExteriorBuilder.multimeshes()`, sized by
+  cell across one. The status page's miniature shares `ExteriorBuilder.hull_meshes()` (the skin's
+  plating and trim, an `Array[Mesh]`; `multimeshes()` is gone), sized by
   `ExteriorBuilder.bounds()`, so any blueprint gets its own model.
 - **The sensors** (`Ship.sensors`): `RockContacts` (big rocks to 30 km) and `LifeContacts` are
   registered by the flight scene. One course per ship: `set_course(id)`, `clear_course()`,
   `course_contact()`, `check_course()` at 4 Hz, signals `course_changed` and `course_arrived`;
   it arrives inside a region or within `ARRIVE_ROCK` (1 km) of a big rock's surface.
-- **On the starter** (Godot's figures, 2026-09-27): 84 blocks, 96,900 kg, centre of mass
+- **On the starter** (Godot's figures, 2026-09-27, the flat hull; the reshaped starter's are
+  under *Flight balance* and *The hull's outside*): 84 blocks, 96,900 kg, centre of mass
   (0.004, 1.207, 0.124), torque imbalance (11,146, −6,192, 0) N·m, 31.3 MW drawn of 36.0; the
   droid reaches all 12 of its jobs.
+
+## The hull's outside (ship exterior spec, `docs/superpowers/specs/2026-09-28-ship-exterior-design.md`)
+
+The hull's outside is generated from the grid and the interior's layout, like the interior. The
+pieces, all under `src/ship/` unless stated:
+
+- **`HullShapes`** (`hull/hull_shapes.gd`, static, pure). The shapes a block can have, block-local
+  (a cell spans −1..1 m, the block facing FORWARD): `CUBE`, `SLOPE`, `SLOPE_LONG_LOW`,
+  `SLOPE_LONG_HIGH`, `CORNER_OUT`, `CORNER_IN`, `HALF`.
+  - `BY_ID` maps every non-cube block id to its shape: `hull_wedge` and `canopy` to `SLOPE`, and
+    each fairing to its own.
+  - `shape_of(id)`, `points(shape)`, `faces(shape)` (records `{points, normal, side, full}`; it
+    returns the shared cache, so **never mutate it**), `covers(shape, orientation, hull_normal)`
+    (does it fill that whole cell face), `contains(shape, p)` (an unknown shape counts as a cube)
+    and `collider_parts(shape)` (the convex pieces; `CORNER_IN` is two slopes).
+- **`HullLayout.plan(grid, catalog, interior)`** (`hull/hull_layout.gd`, pure `RefCounted`,
+  deterministic; touches no nodes). Its arrays, and their keys:
+
+  | Array | Keys | What |
+  |---|---|---|
+  | `plates` | `coord, normal, lo, hi` | a plate per exposed cube face; `lo`/`hi` are its corners (Vector2 in the face frame), cut back by the chamfer on each side that has one |
+  | `edges` | `coord, a, b, axis, ends, running` | a chamfer on a convex edge; `running` marks a cyan strip |
+  | `corners` | `coord, sign` | a facet where three chamfers meet |
+  | `facets` | `coord, shape, orientation, face` | an exposed face of a shaped block |
+  | `nozzles` | `coord, normal, kind` | a bell (`thruster`) or pod (`rcs`) on the exhaust face, if open |
+  | `windows` | `frame, size, round, coord` | a window outside, its skin frame and size |
+  | `pods` | `frame, cell` | a cockpit pod's shell, in the interior's pod frame, brought to hull space |
+  | `mounts` | `group, position, normal, aim` | a light's place; `group` is `&"flood"` or `&"forward"` |
+  | `unmatched` | `coord, normal` | an inside window with no place outside: empty on any ship you give the player |
+
+  Also `wanted` (how many inside windows there are), `skin` (`Vector3i` to the open faces of each
+  cube), `shape_at(coord)`, `inside(p)` and `is_pod_cell(coord)`. The `ALCOVE` cells (an airlock
+  that can cycle) are `AirlockAlcove`'s, and the skin leaves them.
+  - **Static frames:** `face_basis(n)`, `face_frame(coord, n)` (+z out of the hull, +y up the face
+    or toward the bow on a roof or belly), `edge_frame(e)`, `edge_span(e)`, `corner_frame(c)`,
+    `cell_frame(coord, orientation)`, `facet_face`, `facet_points`, `facet_normal`, `facet_centre`.
+  - **Numbers:** `CHAMFER` 0.4 m, `FLOOD_TILT_DEG` 25, `FLOOD_SPACING` 6 m, `BELLY_BAND` 1.5 m,
+    `FORWARD_MIN_DOT` 0.7, `FORWARD_BOW_BAND` 2.5 m, `FORWARD_BELOW_WINDOW` 0.3 m,
+    `FORWARD_DROP_DEG` 5, `FORWARD_TOE_DEG` 3.
+- **`HullProps`** (`hull/hull_props.gd`) builds from `(kit, frame, ...)` and never sees the grid:
+  `plate`, `chamfer_strip`, `corner_facet`, `facet`, `thruster_bell`, `rcs_pod`, `running_strip`,
+  `window_porthole`, `window_rect`, `pod_shell`, `flood_fixture`, `forward_fixture`, `beam_cone`.
+  - **Numbers:** `PLATE_PROUD` 0.05 m, `PLATE_BEVEL` 0.04, `PLATE_GAP` 0.04, `RUNNING_WIDTH` 0.06,
+    `FRAME` 0.1, `GLASS_Z` 0.07 (glass and bands stand in front of a proud plate), `POD_SKIN` 0.08,
+    `POD_BELOW` 0.12, `POD_ROOF_THICK` 0.1, `POD_LIP` 0.1, `BEAM_NEAR` 0.15.
+  - Plates go in the kit's `HULL` batch (the livery), trim and seams in `SOLID`, anything lit in
+    `GLOW`, glass in its own batch material.
+- **`HullMaterials`** (`hull/hull_materials.gd`): `livery()`, `trim()`, `window_glass()`,
+  `glow_instance(energy)` (a glow material of its own, so its energy moves alone), `beam(colour)`;
+  `WINDOW_ENERGY` 2.4, `BEAM_ALPHA` 0.012, `BEAM_MID_ALPHA` 0.2. **`HullPalette`** gains `PLATE`,
+  `TRIM`, `WINDOW_GLASS`, `WINDOW_LIGHT`, `WORK_LIGHT` (= `WORK_LIGHT_WARM`, `#ffe9cc`),
+  `WORK_LIGHT_COOL` (`#e4eeff`, kept until the owner picks) and `NOZZLE_DARK`.
+- **`HullDressing.build(layout, root)`** (`hull/hull_dressing.gd`) returns
+  `{"meshes": Array[Mesh], "lenses": {group: MeshInstance3D}, "window_glow": ShaderMaterial}`. The
+  meshes are the plating and trim (for the miniature). Each kit is under its own child of `root`
+  (`Skin/Hull/DressingHull`, `DressingSolid`; `Windows`; `Lens_flood`, `Lens_forward`) so its
+  merged meshes keep their names. All on `ExteriorBuilder.OWN_HULL_LAYER` (4), light mask
+  `1 | 4`.
+- **`ExteriorBuilder` accessors:** `layout()` (the `HullLayout`), `hull_meshes()`, `lenses()`,
+  `window_glow()`, `light_mounts()`, `bounds()`, `alcoves()`, `collider_coords()`. Colliders are
+  a box per cube cell, and one `ConvexPolygonShape3D` per `HullShapes.collider_parts` piece for
+  a shaped block, under `HullLayout.cell_frame`. A pod's canopy cell keeps a box.
+  `multimeshes()` and the per-block `MultiMesh`es are gone.
+- **`ShipLights`** (`ship_lights.gd`, `Ship.lights`, at `Ship/Exterior/Lights`, so the floating
+  origin carries it):
+  - state `floods`, `forward`; signal `changed`; `interior_level` and `exterior_level` (1, or 0.5
+    in low power, from `apply_power(low)` each frame off the ship's `QuantumPlant`);
+  - `bind(mounts, lenses, window_glow)` after each rebuild remakes one `SpotLight3D` and one
+    beam per mount; `toggle(group)`, `set_group`, `is_on`, `spots(group)`, `beam(group)`;
+  - `to_dict()` / `from_dict(d)`: the save's `lights` part, `{"floods": bool, "forward": bool}`;
+    missing means both off. Both start off;
+  - `SETTINGS`: floods cone 55°, reach 40 m, energy 4, **shadows on**; forward cone 22°, reach
+    220 m, energy 16, shadows on. `LIGHT_MASK` `1 | 4`, `BEAM_LAYER` 1, `BEAM_FRACTION` 0.6,
+    `LOW_POWER_LEVEL` 0.5. A spot's `spot_angle` is half the cone;
+  - the beams' `transparency` follows `exterior_level`; the lenses' glow energy and the windows'
+    follow their levels.
+- **At the helm:** `lights_flood` on **L**, `lights_forward` on **K** (`project.godot`).
+  `PilotControls.lights` (set by the scene) toggles while seated only, and adds `has_lights`,
+  `floods_on`, `forward_on` to the telemetry; `VelocityPanel.lights_label` reads `FLOOD ON   FWD
+  OFF`; the controls card lists *Floods* and *Forward lights*.
+- **On the bridge:** `LightsPanel` (`lights_panel.gd`), two `ReadoutPanel` buttons FLOOD and FWD,
+  lit `&"go"` while on, built by `InteriorDressing` on a shoulder's wall (the starboard one first,
+  then the nearer the helm; never a fixture's) and bound by `Ship`. `InteriorBuilder.lights_panels()`
+  lists them. Its click is `Synth`'s `&"light_switch"` (0.12 s). No shoulder means no panel; the
+  helm keys still work.
+- **The outside's mood** (`flight_test.gd` `_set_outside_mood()`): `SpacePalette.AMBIENT`
+  (`#0b0d12`) as a colour source at `OUTSIDE_AMBIENT_ENERGY` 0.4; glow on at
+  `OUTSIDE_GLOW_INTENSITY` 0.6, `OUTSIDE_GLOW_BLOOM` 0.05, blend `OUTSIDE_GLOW_BLEND` (Screen).
+  The interior camera keeps `ship_interior.tres`.
+- **The starter's exterior** (Godot's figures, 2026-09-29):
+  - **blocks:** 84 and 26 fairings: a spine of `fairing_half` at y = 2, x −1..1, z −1..2 (12), a
+    `fairing_slope_long_low` ramp forward at z = −2 (`O_FORWARD`) and aft at z = 3 (`O_STERN`),
+    three cells each; a `fairing_slope` fin on each engine pod at (±3, 1, 1); a keel of
+    `fairing_half` `O_KEEL` at x = 0, y = −1, z −3..2 (6);
+  - **totals:** 110 blocks, 104,700 kg, centre of mass (0.004, 1.301, 0.160), inertia
+    (2,065,526, 2,865,503, 1,175,422); budgets and imbalance under *Flight balance*, pitch at
+    4.91% of 5%; feel 1.49 / 0.71 / 1.85 rad/s², forward 14.3, brake and side 4.8, vertical 9.6 m/s²;
+  - **the probe's lines:** `skin    110 plates, 78 chamfers, 18 corners, 140 facets, 9 nozzles`;
+    `windows 8 outside for 8 inside` (6 portholes, 2 shoulder windows); `lights  5 floods, 2
+    forward`;
+  - **mounts, in hull space:** floods at (−3.667, −1, −5.667), (3.667, −1, −5.667), (−6, −1, 6),
+    (6, −1, 6) and the keel's (0, −2, 0), tilted 25° outward; forward lights at (−4, −0.06, −6)
+    and (4, 0, −6), aimed 5° down and 3° out. **5 floods, not the plan's 6:** the bow corner floods
+    sit on wedge facets at z = −5.667, so the keel span is 11.67 m and `floor(11.67 / 6)` is one.
+    The port forward light hangs 0.06 m lower because the computer's porthole is above it.
+- **Measured** (GTX 960, 1280 × 720, both groups on, shadows on): standing 438, seated 181, seated
+  with lights 173, seated 60 m off a rock's night side **143–150** (the worst, two runs), chase there
+  298–302, 20 m over a rock belly down 273–286 fps.
+- **Not adopted:** volumetric shafts (fog with a `FogVolume` per beam, cone turned so it widens
+  away from the lamp, fog length about 150 m). Worst view 132–142 fps against 150.
 
 ## Thrusters you see and hear (`RcsShow`, `src/flight/rcs_show.gd`)
 
@@ -281,12 +412,16 @@ What a ship contributes:
 
 | API | Does |
 |---|---|
-| `Ship.to_dict(universe)` | layout (`ShipBlueprint.to_dict`), hull place and motion, `FlightComputer.to_dict`, `QuantumStore.to_dict`, each `Airlock.to_dict`, every item aboard (`Item.to_dict`) |
+| `Ship.to_dict(universe)` | layout (`ShipBlueprint.to_dict`), hull place and motion, `FlightComputer.to_dict`, `QuantumStore.to_dict`, each `Airlock.to_dict`, `ShipLights.to_dict` (`lights`), every item aboard (`Item.to_dict`) |
 | `Ship.layout_of(d)` → `ShipGrid` | the grid a save was built from |
 | `Ship.set_grid(grid, false)` | builds without stocking the shelves: a loaded game brings its own items |
 | `Ship.restore_hull(d, universe)` / `restore_aboard(d)` / `restore_item(d)` | puts it all back; an item whose stow point is gone comes loose |
 | `Ship.busy()` | why a save must wait: hull struck (`STRUCK_CALM` 5 s), airlock cycling, machine working, charging suit, bolt in flight |
 | `flight_test.gd` `save_enabled`, `save_path` | set before `add_child`; saving is off under `--headless` |
+
+A save stores the ship's **layout**, so a resumed game keeps the ship it saved: saves made before
+the ship exterior keep the flat starter, and only a new game gets the reshaped one (no migration,
+2026-09-28).
 
 Saved places outside are `UniversePoint`s (`SaveCodec.upoint`). The world's start comes from
 `AsteroidRecipe.find_start()` again, so keep it a pure function of the seed.
@@ -297,7 +432,8 @@ Saved places outside are `UniversePoint`s (`SaveCodec.upoint`). The world's star
 - **After adding a `class_name`:** `<godot> --headless --path who-knows --import`.
 - **Probe:** `<godot> --path who-knows --resolution 1280x720 --script <abs>/ship_probe.gd --
   <abs out dir>`. Use absolute paths, and don't pass `--headless`: headless never renders or
-  compiles shaders.
+  compiles shaders. In a worktree, give the worktree's copy of the script.
+- **The full suite** takes about 8 minutes: run it in the background, logged to a file.
 - **Godot:** `D:\Godot_v4.5.1-stable_mono_win64\Godot_v4.5.1-stable_mono_win64\Godot_v4.5.1-stable_mono_win64_console.exe`.
 - **Testing a real scene in GUT:**
   - load `res://scenes/flight_test.tscn` and `add_child_autofree`;
@@ -313,6 +449,8 @@ Saved places outside are `UniversePoint`s (`SaveCodec.upoint`). The world's star
 - `docs/superpowers/specs/2026-09-23-ship-interior-redesign-design.md`: rooms, walls, doorways.
 - `docs/superpowers/specs/2026-09-23-cockpit-pod-design.md`: the pod, the chair, standing up.
 - `docs/superpowers/specs/2026-09-24-airlock-design.md`: the airlock.
+- `docs/superpowers/specs/2026-09-28-ship-exterior-design.md`: the skin, fairings, windows that
+  match the interior, the lights, and (last section) what the build did differently.
 - `docs/superpowers/specs/2026-09-24-asteroids-design.md` §4: the floating origin.
 - `docs/superpowers/specs/2026-09-27-system-skeleton-design.md`: the star system a ship flies
   in, the worlds it bumps off, and the debug hop.

@@ -15,7 +15,8 @@ extends SceneTree
 # probe_panel_on.png and probe_panel_close.png too. On a ship with lights it
 # also writes probe_lit_{floods,forward,both}_* (the hull against the dark),
 # probe_star_bloom_{off,on}, probe_seated_lit, and, parked beside a rock's
-# night side, probe_seated_rock_{dark,lit} and probe_rock_*.
+# night side, probe_seated_rock_{dark,lit} and probe_rock_*. Every ship gets
+# probe_hull_* (the skin, fill-lit) and prints skin, windows and lights lines.
 #
 # A windowed run would save and load the owner's real game
 # (docs/superpowers/specs/2026-09-26-saving-design.md §9), so the probe turns
@@ -227,6 +228,13 @@ func _run(scene: Node) -> void:
 		s.thrust_budget[&"reverse"] / 1000.0, s.thrust_budget[&"lateral"] / 1000.0,
 		s.thrust_budget[&"vertical"] / 1000.0])
 	print("torque  authority %s, imbalance under burn %s" % [s.torque_budget, s.torque_imbalance])
+	# The 5% rule (SKILL.md step 5): the reshaped starter's pitch sits at 4.91%,
+	# so a little more mass above the thrust line breaks it.
+	var share := Vector3(absf(s.torque_imbalance.x) / maxf(s.torque_budget.x, 1.0),
+		absf(s.torque_imbalance.y) / maxf(s.torque_budget.y, 1.0),
+		absf(s.torque_imbalance.z) / maxf(s.torque_budget.z, 1.0)) * 100.0
+	print("balance imbalance %% of authority pitch %.2f yaw %.2f roll %.2f%s" % [share.x, share.y, share.z,
+		"" if maxf(share.x, maxf(share.y, share.z)) <= 5.0 else "  <-- OVER 5%"])
 	# The feel: assist is the same for every ship, so these decide how it flies.
 	var kg := maxf(s.total_mass_kg, 1.0)
 	var side: float = s.thrust_budget[&"lateral"] / kg
@@ -265,6 +273,15 @@ func _run(scene: Node) -> void:
 		print("room    %s %s doorway %s" % [room["zone"], room["coords"], room["doorway"]])
 	print("pods    %s" % [layout.pods()])
 	print("locks   %s" % [layout.airlocks()])
+	# The skin (ship exterior spec §3): every interior window must have one outside
+	# and none may be UNMATCHED; the lights are the generator's, 5 floods and 2
+	# forward on the starter.
+	var hull := ship.exterior_builder.layout()
+	print("skin    %d plates, %d chamfers, %d corners, %d facets, %d nozzles" % [hull.plates.size(),
+		hull.edges.size(), hull.corners.size(), hull.facets.size(), hull.nozzles.size()])
+	print("windows %d outside for %d inside%s" % [hull.windows.size(), hull.wanted,
+		"" if hull.unmatched.is_empty() else "  <-- UNMATCHED %s" % [hull.unmatched]])
+	print("lights  %d floods, %d forward" % [ship.lights.spots(&"flood").size(), ship.lights.spots(&"forward").size()])
 	await _hull_shots(ship, "hull")
 	var has_lights := ship.lights != null and not ship.lights.spots(ShipLights.FLOOD).is_empty()
 	if has_lights:
