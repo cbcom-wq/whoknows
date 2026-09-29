@@ -273,17 +273,28 @@ func test_a_course_can_be_set_to_a_world():
 	_page.press(&"big", _ctx)
 	assert_eq(_sensors.course, &"body:p1")
 
-func test_worlds_are_drawn_in_their_own_colour_and_never_lost():
+func test_worlds_are_drawn_in_their_own_colour_by_class_on_the_system_range():
 	assert_eq(MapPage.colour_for(&"body"), InteriorPalette.WORLD)
+	assert_eq(MapPage.colour_for(&"moon"), InteriorPalette.WORLD)
+	assert_eq(MapPage.colour_for(&"cluster"), InteriorPalette.SKY)
 	var c := Contact.new()
 	c.kind = &"body"
 	c.precision = Contact.EXACT
-	c.radius = 150.0
-	assert_eq(MapPage.mark_size(c, 300000.0, 0.0), MapPage.BODY_MIN)
-	c.radius = 3500.0
-	assert_between(MapPage.mark_size(c, 300000.0, 0.0), MapPage.BODY_MIN, MapPage.BODY_MAX)
+	c.id = &"body:p1"
+	for r in [[150.0, &"small"], [700.0, &"medium"], [1100.0, &"large"]]:
+		c.radius = r[0]
+		assert_eq(MapPage.size_class(c), r[1])
+		assert_eq(MapPage.mark_size(c, MapPage.RANGES[MapPage.SYSTEM_RANGE], 0.0), MapPage.CLASS_SIZE[r[1]])
+	c.id = &"body:star"
+	c.radius = 3000.0
+	assert_eq(MapPage.size_class(c), &"star")
+	c.kind = &"cluster"
+	c.id = &"body:belt_0.c1"
+	assert_eq(MapPage.size_class(c), &"cluster")
+	c.kind = &"body"
+	c.id = &"body:p1"
 	c.radius = 1200.0
-	assert_eq(MapPage.mark_size(c, 2000.0, 0.0), MapPage.BODY_MAX)
+	assert_eq(MapPage.mark_size(c, 2000.0, 0.0), MapPage.BODY_MAX, "near ranges keep true size, clamped")
 
 func test_the_system_range_draws_each_belt_as_a_ring_of_ticks():
 	_sensors.system = SystemRecipe.from_seed(1337)
@@ -306,3 +317,79 @@ func test_with_nothing_selected_the_screen_says_where_you_are():
 	var lines := _page.lines(_ctx)
 	assert_eq(lines[1], "NO CONTACTS")
 	assert_true(lines[0].begins_with(_sensors.system.name), lines[0])
+
+# --- the system range with a warp drive (the warp spec §7) ---------------------
+
+var _drive: WarpDrive
+
+func _with_system() -> SystemRecipe:
+	var s := SystemRecipe.from_seed(1337)
+	_sensors.system = s
+	_sensors.add_source(BodyContacts.new(s))
+	_universe.origin = s.entry()
+	_drive = WarpDrive.new()
+	add_child_autofree(_drive)
+	_drive.set_physics_process(false)
+	_drive.hull = null
+	_drive.bind(s, _universe, null, _sensors, null, Callable())
+	_ctx.warp = _drive
+	_ctx.store = QuantumStore.new(1200, 600)
+	_page.range_index = MapPage.SYSTEM_RANGE
+	_refresh()
+	return s
+
+func test_the_system_range_steps_through_warp_targets_only():
+	var s := _with_system()
+	var ids := _page.targets(_ctx).map(func(c: Contact) -> StringName: return c.id)
+	for t in s.warp_targets():
+		assert_true(ids.has(t.contact_id()), "%s" % t.id)
+	for b in s.bodies:
+		if b.kind == SystemBody.Kind.MOON:
+			assert_false(ids.has(BodyContacts.id_of(b)), "moons are not targets")
+
+func test_the_system_range_is_centred_on_the_star():
+	var s := _with_system()
+	var frame := _ctx.map_frame()
+	assert_true(_page.holo_position(_ctx, frame, s.star.point).is_equal_approx(Vector3.ZERO))
+	var ship := _page.holo_position(_ctx, frame, s.entry())
+	assert_almost_eq(ship.length(), s.entry().minus(s.star.point).length() * HoloVolume.RADIUS / MapPage.SYSTEM_REACH, 0.001)
+
+func test_targets_beyond_your_qe_are_dim():
+	_with_system()
+	_page.holo(_holo, _ctx, 1.0)
+	assert_gt(_holo.mark_count(&"ball", InteriorPalette.WORLD), 0, "some in reach on 600 QE")
+	assert_gt(_holo.mark_count(&"ball", InteriorPalette.HOLO_DIM), 0, "some beyond it")
+	_ctx.store = QuantumStore.new(5000, 5000)
+	_page.holo(_holo, _ctx, 1.0)
+	assert_eq(_holo.mark_count(&"ball", InteriorPalette.HOLO_DIM), 0, "a big store reaches everything")
+
+func test_scale_rings_and_limit_rings_are_drawn():
+	_with_system()
+	_page.holo(_holo, _ctx, 1.0)
+	assert_gt(_holo.mark_count(&"tick", InteriorPalette.HOLO_DIM), MapPage.SCALE_TICKS)
+
+func test_the_big_button_charts_and_clears_a_warp():
+	var s := _with_system()
+	var planet := s.planets()[s.planets().size() - 1]
+	_page.selected = StringName("body:" + String(planet.id))
+	assert_eq(_page.prompt(&"big", _ctx), "Chart warp")
+	_page.press(&"big", _ctx)
+	assert_eq(_drive.charted, planet.id)
+	assert_eq(_sensors.course, StringName("body:" + String(planet.id)))
+	assert_eq(_page.prompt(&"big", _ctx), "Clear warp")
+	assert_eq(_page.lines(_ctx)[2], "WARP CHARTED")
+	_page.press(&"big", _ctx)
+	assert_eq(_drive.charted, &"")
+	assert_eq(_sensors.course, &"")
+
+func test_the_screen_gives_size_distance_time_and_cost():
+	var s := _with_system()
+	var planet := s.planets()[0]
+	_page.selected = StringName("body:" + String(planet.id))
+	var lines := _page.lines(_ctx)
+	assert_eq(lines.size(), 3)
+	assert_true(lines[0].begins_with(planet.name + " · PLANET · "), lines[0])
+	assert_true(lines[0].ends_with(" KM ACROSS"), lines[0])
+	assert_true(lines[1].contains(" MIN FLYING"), lines[1])
+	assert_true(lines[2].begins_with("WARP ") or lines[2].begins_with("NEED ") or lines[2].begins_with("FLY")
+		or lines[2].begins_with("BLOCKED"), lines[2])
