@@ -2409,9 +2409,9 @@ func _starter() -> ShipGrid:
 func _group(l: HullLayout, group: StringName) -> Array:
 	return l.mounts.filter(func(m): return m["group"] == group)
 
-func test_the_starter_has_six_floods_and_two_forward_lights():
+func test_the_starter_has_five_floods_and_two_forward_lights():
 	var l := _plan(_starter())
-	assert_eq(_group(l, HullLayout.FLOOD).size(), 6, "four belly corners and two on the keel")
+	assert_eq(_group(l, HullLayout.FLOOD).size(), 5, "four belly corners and one on the keel")
 	assert_eq(_group(l, HullLayout.FORWARD).size(), 2)
 
 func test_every_light_shines_clear_of_the_hull():
@@ -2429,7 +2429,7 @@ func test_floods_look_down_and_out():
 		var aim: Vector3 = m["aim"]
 		assert_almost_eq(rad_to_deg(aim.angle_to(Vector3.DOWN)), 25.0, 0.5, "tilted 25 deg out")
 	var keel := _group(l, HullLayout.FLOOD).filter(func(m): return is_zero_approx(m["position"].x))
-	assert_eq(keel.size(), 2)
+	assert_eq(keel.size(), 1)
 	for m in keel:
 		assert_almost_eq(m["aim"].x, 0.0, 0.0001, "a keel flood tilts fore or aft, not sideways")
 
@@ -2853,7 +2853,7 @@ func test_the_flight_scene_s_ship_has_its_lights_on_the_hull():
 	var ship: Ship = root.get_node("Ship")
 	assert_true(ship.lights is ShipLights)
 	assert_eq(ship.lights.get_parent(), ship.exterior, "carried by the floating origin with the hull")
-	assert_eq(ship.lights.spots(&"flood").size(), 6)
+	assert_eq(ship.lights.spots(&"flood").size(), 5)
 	assert_eq(ship.lights.spots(&"forward").size(), 2)
 	assert_true(ship.to_dict(root.get_node("Universe")).has("lights"))
 ```
@@ -3856,7 +3856,7 @@ In `reference.md`:
 - add a section "**The hull's outside**" with:
   - `HullShapes`, `HullLayout`'s records and their keys, `HullDressing.build`'s result, the `ExteriorBuilder` accessors, `ShipLights`' API and `SETTINGS`, the save part, L and K;
   - the starter's new figures: blocks, mass, centre of mass, inertia, budgets, imbalance, feel;
-  - its mounts: 6 floods and 2 forward.
+  - its mounts: 5 floods and 2 forward.
 
 In `ship_probe.gd`, make sure it prints:
 
@@ -3880,7 +3880,7 @@ In `ship_probe.gd`, make sure it prints:
 Run: `who-knows/run_tests.ps1`, then the probe without `--headless`.
 Expected:
 - all tests pass;
-- the probe prints `windows N outside for N inside` with no `UNMATCHED`, `lights  6 floods, 2 forward`, no `BLOCKED` beyond the known ones, no `STUCK`, and no `SHADER ERROR`;
+- the probe prints `windows N outside for N inside` with no `UNMATCHED`, `lights  5 floods, 2 forward`, no `BLOCKED` beyond the known ones, no `STUCK`, and no `SHADER ERROR`;
 - every fps line is at least 120.
 
 Send the final renders to the owner.

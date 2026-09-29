@@ -292,7 +292,7 @@ unit vector in hull space.
 - **The belly** is every downward skin face within 1.5 m of the lowest, so the keel does not pull
   every flood to the centreline. Keel floods: `floor(span / 6 m)` of them, evenly spaced between
   the bow and stern corner floods.
-- On the reshaped starter: **6** floods (four corners and two on the keel).
+- On the reshaped starter: **5** floods (four corners and one on the keel: the corner floods are 11.67 m apart fore and aft, and `floor(11.67 / 6)` is 1).
 
 **Forward lights** (`group = &"forward"`):
 - a pair on the bow: of the skin faces facing within 45° of forward (normal · forward ≥ 0.7), on

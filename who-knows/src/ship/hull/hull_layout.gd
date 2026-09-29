@@ -18,6 +18,22 @@ extends RefCounted
 const ALCOVE := &"alcove"
 const CHAMFER := HullProps.CHAMFER
 const HALF_CELL := ShipGrid.CELL_SIZE * 0.5
+## Light groups (spec §6).
+const FLOOD := &"flood"
+const FORWARD := &"forward"
+## Floods: tilt out from the belly's centre, keel spacing, how far above the
+## lowest a downward face still counts as belly (so a keel does not pull every
+## flood onto the centreline).
+const FLOOD_TILT_DEG := 25.0
+const FLOOD_SPACING := 6.0
+const BELLY_BAND := 1.5
+## Forward lights: how nearly forward a face must look (normal . forward), how
+## close to the bow, how far below a window, and the aim's drop and toe-out.
+const FORWARD_MIN_DOT := 0.7
+const FORWARD_BOW_BAND := 2.5
+const FORWARD_BELOW_WINDOW := 0.3
+const FORWARD_DROP_DEG := 5.0
+const FORWARD_TOE_DEG := 3.0
 
 var plates: Array[Dictionary] = []
 var edges: Array[Dictionary] = []
@@ -51,6 +67,7 @@ static func plan(grid: ShipGrid, _catalog: BlockCatalog, interior: InteriorLayou
 	l._plan_nozzles()
 	if interior != null:
 		l._plan_windows(interior)
+	l._plan_mounts()
 	l._mark_running()
 	return l
 
@@ -161,6 +178,133 @@ func _outer_face(cell: Vector3i, normal: Vector3i) -> Dictionary:
 			best_dot = d
 			best = {"centre": facet_centre(fc), "normal": n}
 	return best
+
+## Every face of the skin that shows: {centre, normal, coord}, in hull space.
+func _open_faces() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var cubes := skin.keys()
+	cubes.sort()
+	for coord: Vector3i in cubes:
+		for n: Vector3i in ShipGrid.FACE_OFFSETS:
+			if skin[coord].has(n):
+				out.append({"centre": ShipGrid.cell_center(coord) + Vector3(n) * HALF_CELL, "normal": Vector3(n),
+					"coord": coord})
+	for fc in facets:
+		out.append({"centre": facet_centre(fc), "normal": facet_normal(fc), "coord": fc["coord"]})
+	return out
+
+func _plan_mounts() -> void:
+	var faces := _open_faces()
+	_plan_floods(faces.filter(func(f): return f["normal"].dot(Vector3.DOWN) > 0.99))
+	_plan_forward(faces)
+
+## Floods (spec §6.1): one at each corner of the belly, then along the keel
+## every FLOOD_SPACING between the bow and stern corners.
+func _plan_floods(down: Array) -> void:
+	if down.is_empty():
+		return
+	var lowest := INF
+	for f in down:
+		lowest = minf(lowest, f["centre"].y)
+	var belly := down.filter(func(f): return f["centre"].y <= lowest + BELLY_BAND)
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	for f in belly:
+		var c: Vector3 = f["centre"]
+		lo = Vector2(minf(lo.x, c.x), minf(lo.y, c.z))
+		hi = Vector2(maxf(hi.x, c.x), maxf(hi.y, c.z))
+	var middle := (lo + hi) * 0.5
+	var chosen: Array[Vector3] = []
+	for corner in [Vector2(lo.x, lo.y), Vector2(hi.x, lo.y), Vector2(lo.x, hi.y), Vector2(hi.x, hi.y)]:
+		var best: Vector3 = belly[0]["centre"]
+		var best_d := INF
+		for f in belly:
+			var c: Vector3 = f["centre"]
+			var d := Vector2(c.x, c.z).distance_to(corner)
+			if d < best_d - 0.001 or (absf(d - best_d) <= 0.001 and _before(c, best)):
+				best = c
+				best_d = d
+		if not chosen.has(best):
+			chosen.append(best)
+	for c in chosen:
+		_add_flood(c, Vector3(c.x - middle.x, 0, c.z - middle.y))
+	var fore := INF
+	var aft := -INF
+	for c in chosen:
+		fore = minf(fore, c.z)
+		aft = maxf(aft, c.z)
+	var keel_x := INF
+	for f in belly:
+		keel_x = minf(keel_x, absf(f["centre"].x))
+	var keel := belly.filter(func(f): return is_equal_approx(absf(f["centre"].x), keel_x))
+	var count := floori((aft - fore) / FLOOD_SPACING)
+	for i in count:
+		var z := fore + (aft - fore) * float(i + 1) / float(count + 1)
+		var best: Vector3 = keel[0]["centre"]
+		for f in keel:
+			var c: Vector3 = f["centre"]
+			if absf(c.z - z) < absf(best.z - z) - 0.001:
+				best = c
+		if not chosen.has(best):
+			chosen.append(best)
+			_add_flood(best, Vector3(0, 0, signf(best.z - middle.y)))
+
+func _add_flood(at: Vector3, out: Vector3) -> void:
+	var t := deg_to_rad(FLOOD_TILT_DEG)
+	var aim := Vector3.DOWN
+	if out.length() > 0.01:
+		aim = (Vector3.DOWN * cos(t) + out.normalized() * sin(t)).normalized()
+	mounts.append({"group": FLOOD, "position": at, "normal": Vector3.DOWN, "aim": aim})
+
+## Ties go toward the centreline, then the bow.
+static func _before(a: Vector3, b: Vector3) -> bool:
+	if not is_equal_approx(absf(a.x), absf(b.x)):
+		return absf(a.x) < absf(b.x)
+	return a.z < b.z
+
+## Forward lights (spec §6.1): of the faces looking within 45 deg of forward,
+## on the pod's row (or the lowest row with any), near the bow, and not the
+## pod's cell, the outermost to port and starboard.
+func _plan_forward(faces: Array[Dictionary]) -> void:
+	var fwd := faces.filter(func(f): return f["normal"].dot(Vector3.FORWARD) >= FORWARD_MIN_DOT and not _pod_cells.has(f["coord"]))
+	if fwd.is_empty():
+		return
+	var row: int = pods[0]["cell"].y if not pods.is_empty() else 1 << 30
+	if pods.is_empty():
+		for f in fwd:
+			row = mini(row, f["coord"].y)
+	fwd = fwd.filter(func(f): return f["coord"].y == row)
+	if fwd.is_empty():
+		return
+	var front := INF
+	for f in fwd:
+		front = minf(front, f["centre"].z)
+	fwd = fwd.filter(func(f): return f["centre"].z <= front + FORWARD_BOW_BAND)
+	var port: Dictionary = fwd[0]
+	var starboard: Dictionary = fwd[0]
+	for f in fwd:
+		if f["centre"].x < port["centre"].x - 0.001:
+			port = f
+		if f["centre"].x > starboard["centre"].x + 0.001:
+			starboard = f
+	_add_forward(port)
+	if starboard != port:
+		_add_forward(starboard)
+
+func _add_forward(face: Dictionary) -> void:
+	var n: Vector3 = face["normal"]
+	var centre: Vector3 = face["centre"]
+	var up := (Vector3.UP - n * Vector3.UP.dot(n)).normalized()
+	var y := centre.y
+	for w in windows:
+		if w["coord"] == face["coord"]:
+			var wf: Transform3D = w["frame"]
+			y = minf(y, wf.origin.y - w["size"].y * 0.5 * wf.basis.y.y - FORWARD_BELOW_WINDOW)
+	var at := centre + up * ((y - centre.y) / up.y)
+	var drop := deg_to_rad(FORWARD_DROP_DEG)
+	var side := signf(centre.x) if not is_zero_approx(centre.x) else 1.0
+	var aim := Vector3(0, -sin(drop), -cos(drop)).rotated(Vector3.UP, -side * deg_to_rad(FORWARD_TOE_DEG))
+	mounts.append({"group": FORWARD, "position": at, "normal": n, "aim": aim.normalized()})
 
 ## Cyan strips (spec §5.4): along the top chamfers, fore and aft, at the
 ## highest roof, and up the bow's vertical chamfers.

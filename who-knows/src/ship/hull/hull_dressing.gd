@@ -38,12 +38,33 @@ static func build(layout: HullLayout, root: Node3D) -> Dictionary:
 			HullProps.thruster_bell(skin, f)
 		else:
 			HullProps.rcs_pod(skin, f)
+	# Light fixtures (spec §6.1): housings on the skin, each group's lenses in
+	# a kit of their own, so each group's glow material dims alone.
+	var lens_kits := {}
+	for m in layout.mounts:
+		var group: StringName = m["group"]
+		if not lens_kits.has(group):
+			var lk := _kit(root, "Lens_%s" % group)
+			lk.materials = {InteriorKit.Batch.GLOW: HullMaterials.glow_instance(0.0)}
+			lens_kits[group] = lk
+		var aim: Vector3 = m["aim"]
+		var up := Vector3.FORWARD if absf(aim.dot(Vector3.UP)) > 0.9 else Vector3.UP
+		var f := Transform3D(Basis.looking_at(-aim, up), m["position"])
+		if group == HullLayout.FLOOD:
+			HullProps.flood_fixture(skin, lens_kits[group], f)
+		else:
+			HullProps.forward_fixture(skin, lens_kits[group], f)
 	var meshes: Array[Mesh] = []
 	for mi in skin.commit():
 		if mi.name == InteriorKit.BATCH_NAMES[InteriorKit.Batch.HULL] \
 				or mi.name == InteriorKit.BATCH_NAMES[InteriorKit.Batch.SOLID]:
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 			meshes.append(mi.mesh)
+	var lenses := {}
+	for group: StringName in lens_kits:
+		var lens: MeshInstance3D = lens_kits[group].commit()[0]
+		lens.name = "Lens"
+		lenses[group] = lens
 	# Windows and pods (spec §5): their own kit, so their glow has its own
 	# material, which ShipLights dims with the ship.
 	var window_glow := HullMaterials.glow_instance(HullMaterials.WINDOW_ENERGY)
@@ -60,7 +81,7 @@ static func build(layout: HullLayout, root: Node3D) -> Dictionary:
 	for mi in glazing.commit():
 		if mi.name != InteriorKit.BATCH_NAMES[InteriorKit.Batch.GLOW]:
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-	return {"meshes": meshes, "lenses": {}, "window_glow": window_glow}
+	return {"meshes": meshes, "lenses": lenses, "window_glow": window_glow}
 
 ## A kit on the hull's own layer, under a child of `root` named `kit_name`.
 static func _kit(root: Node3D, kit_name: String) -> InteriorKit:

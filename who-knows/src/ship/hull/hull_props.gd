@@ -240,3 +240,19 @@ static func pod_shell(kit: InteriorKit, f: Transform3D) -> void:
 		(f.basis * Vector3.UP).normalized(), _plate_colour())
 	kit.tri(HULL, f * floor_centre, f * Vector3(outline[last].x, low, outline[last].y),
 		f * Vector3(outline[0].x, low, outline[0].y), (f.basis * Vector3.DOWN).normalized(), _plate_colour())
+
+## A flood's housing and lens (spec §6.1), in a frame at its mount with +z
+## along its aim: a chunky bevelled box and a round lens. The lens goes in
+## `lens`'s glow, whose material ShipLights turns up and down.
+static func flood_fixture(kit: InteriorKit, lens: InteriorKit, f: Transform3D) -> void:
+	kit.bevel_box(SOLID, f * _at(Vector3(0, 0, 0.1)), Vector3(0.56, 0.56, 0.32), 0.06, _trim())
+	kit.ring(SOLID, f * _at(Vector3(0, 0, 0.26)), 0.2, 0.26, 0.0, 0.06, _trim())
+	kit.disc(SOLID, f * _at(Vector3(0, 0, 0.265)), 0.2, _dark())
+	lens.disc(GLOW, f * _at(Vector3(0, 0, 0.27)), 0.2, InteriorKit.lit(HullPalette.WORK_LIGHT, InteriorMaterials.GLOW_ENERGY))
+
+## A forward light (spec §6.1): a recessed lamp in a round bezel, in a frame
+## at its mount with +z along its aim.
+static func forward_fixture(kit: InteriorKit, lens: InteriorKit, f: Transform3D) -> void:
+	kit.ring(SOLID, f, 0.2, 0.32, -0.08, 0.08, _trim())
+	kit.disc(SOLID, f * _at(Vector3(0, 0, 0.0)), 0.2, _dark())
+	lens.disc(GLOW, f * _at(Vector3(0, 0, 0.01)), 0.19, InteriorKit.lit(HullPalette.WORK_LIGHT, InteriorMaterials.GLOW_ENERGY))
