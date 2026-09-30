@@ -29,8 +29,9 @@ const SALVAGE := Color("c3a8ff")
 const COURSE := Color("ffb45a")
 
 ## Ready to go (docs/superpowers/specs/2026-09-28-warp-design.md §7.3): the
-## warp panel's WARP READY and the alignment ring when you are lined up. The
-## interior's SIGNAL_GO green.
+## warp panel's WARP READY and the alignment ring when you are lined up; and
+## the work lights' FLOOD and FWD when on (ship exterior spec §7.2), as the
+## bridge's lights panel glows. The interior's SIGNAL_GO green.
 const GO := Color("8fd6a0")
 
 ## The colour for a sensor contact of `kind`; the readout's for any other.

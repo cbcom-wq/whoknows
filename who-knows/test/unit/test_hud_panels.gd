@@ -160,8 +160,17 @@ func test_the_velocity_panel_shows_the_lights():
 	var panel := _velocity_panel()
 	var t := VehicleTelemetry.new()
 	panel.render(t)
-	assert_eq(panel.lights_label.text, "", "a vehicle with no lights shows none")
+	assert_eq(panel.flood_label.text + panel.forward_label.text, "", "a vehicle with no lights shows none")
 	t.has_lights = true
 	t.floods_on = true
 	panel.render(t)
-	assert_eq(panel.lights_label.text, "FLOOD ON   FWD OFF")
+	assert_eq(panel.flood_label.text, "FLOOD ON")
+	assert_eq(panel.forward_label.text, "FWD OFF")
+	# Lit when on (spec §7.2), in the bridge panel's green; dim when off.
+	assert_eq(panel.flood_label.get_theme_color(&"font_color"), HudPalette.GO, "FLOOD lit")
+	assert_eq(panel.forward_label.get_theme_color(&"font_color"), HudPalette.DIM, "FWD dim")
+	t.floods_on = false
+	t.forward_on = true
+	panel.render(t)
+	assert_eq(panel.flood_label.get_theme_color(&"font_color"), HudPalette.DIM, "FLOOD dim")
+	assert_eq(panel.forward_label.get_theme_color(&"font_color"), HudPalette.GO, "FWD lit")
