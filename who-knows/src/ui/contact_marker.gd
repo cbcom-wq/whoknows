@@ -59,9 +59,10 @@ func render(telemetry: VehicleTelemetry) -> void:
 ## through the canopy, and the bridge computer's map is where they are named
 ## (bridge computer spec §8). Not the star, planets or clusters: BodyMarker
 ## brackets those (docs/superpowers/specs/2026-09-28-warp-design.md §7.3).
-## Moons it still marks, near.
+## Nor worlds, moons or clusters: they are warp targets, and BodyMarker brackets them.
 static func marks_kind(kind: StringName) -> bool:
-	return kind != RockContacts.KIND and kind != BodyContacts.KIND and kind != BodyContacts.CLUSTER
+	return kind != RockContacts.KIND and kind != BodyContacts.KIND and kind != BodyContacts.CLUSTER \
+		and kind != BodyContacts.MOON
 
 ## How contact `c` is drawn through `cam`: empty when it is not drawn at all.
 func mark_for(c: Contact, cam: Camera3D, focus: UniversePoint, time: float, view: Vector2) -> Dictionary:

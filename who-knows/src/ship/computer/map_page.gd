@@ -3,28 +3,29 @@ extends ComputerPage
 
 ## The map (docs/superpowers/specs/2026-09-25-bridge-computer-design.md §5):
 ## what the ship's sensors know, shrunk into the holo and turned with the
-## ship, at 2, 10 or 30 km. ◀ and ▶ pick a contact, nearest first; the big
+## ship, at 2, 10, 50 or 500 km. ◀ and ▶ pick a contact, nearest first; the big
 ## button sets or clears the course (§6) to a big rock or salvage. It shows
 ## only what the sensors report: a ping where the ping says, a region as its
 ## sphere, never the thing's true place.
 ##
 ## On the SYSTEM range (docs/superpowers/specs/2026-09-28-warp-design.md §7)
 ## it is drawn round the star, like an orrery: the ship's pip and heading,
-## scale rings every 50 km, worlds by class, lit when your QE reaches them,
+## scale rings every 2,500 km, worlds by class, lit when your QE reaches them,
 ## each target's warp limit, and the charted warp's line; the big button
 ## charts a warp.
 ##
 ## Every kind the sensors know is drawn in its own colour: rocks SKY, salvage
 ## QUANTUM, signs of life SIGNAL_GO (the HUD's green), and the course AMBER.
 
-const RANGES: Array[float] = [2000.0, 10000.0, 30000.0, 400000.0]
+const RANGES: Array[float] = [2000.0, 10000.0, 50000.0, 500000.0, 20000000.0]
 ## The last range is the whole system (the system skeleton spec §10): it asks
 ## the sensors for all of it, and is drawn round the star out to SYSTEM_REACH
-## (the warp spec §7.1).
-const SYSTEM_RANGE := 3
-const SYSTEM_REACH := 180000.0
+## (the warp spec §7.1). 500 km holds a planet and its moons (the world scale
+## spec §3.5).
+const SYSTEM_RANGE := 4
+const SYSTEM_REACH := 9000000.0
 ## Rings of faint ticks round the ship, every SCALE_RING out to the rim.
-const SCALE_RING := 50000.0
+const SCALE_RING := 2500000.0
 const SCALE_TICKS := 32
 ## Each warp target's limit, as a ring of faint ticks.
 const LIMIT_TICKS := 24
@@ -34,13 +35,13 @@ const SHIP_PIP := 0.014
 const HEADING_TICK := 0.025
 ## Mark sizes by class on the system range (the warp spec §7.1).
 const CLASS_SIZE := {&"star": 0.06, &"large": 0.04, &"medium": 0.03, &"small": 0.02, &"cluster": 0.01}
-## A planet this big is large; this big, medium.
-const LARGE := 900.0
-const MEDIUM := 600.0
+## A planet this big is large; this big, medium (the world scale spec §3.1).
+const LARGE := 45000.0
+const MEDIUM := 30000.0
 ## A cluster is drawn as a clump of three balls this far apart.
 const CLUMP := 0.008
 const MOON_SIZE := 0.012
-const TARGET_KINDS: Array[StringName] = [&"body", &"cluster"]
+const TARGET_KINDS: Array[StringName] = [&"body", &"moon", &"cluster"]
 const OPEN_AT := 1
 ## Contacts that get a stalk, nearest first; the selected one always does.
 const STALKS := 12
@@ -67,9 +68,9 @@ const PIN_SIZE := 0.016
 const TICK_SIZE := 0.01
 const BRACKET_GAP := 0.012
 ## How often the marks are placed afresh at each range, seconds; in between
-## they are only turned with the ship (HoloVolume.set_turn). At 30 km there
+## they are only turned with the ship (HoloVolume.set_turn). At 50 km there
 ## are hundreds, and a ship at 300 m/s moves a pip 2 mm a second there.
-const PLACE_EVERY: Array[float] = [0.0, 0.0, 0.5, 0.5]
+const PLACE_EVERY: Array[float] = [0.0, 0.0, 0.5, 0.5, 0.5]
 
 var range_index := OPEN_AT
 var selected: StringName = &""
@@ -106,7 +107,7 @@ static func colour_for(kind: StringName) -> Color:
 	return InteriorPalette.LIGHT_WARM
 
 ## What ◀ and ▶ step through: the contacts on this range, nearest first. The
-## 30 km range shows big rocks and worlds only (§5.2), the system range worlds
+## 50 and 500 km ranges show big rocks and worlds only (§5.2), the system range worlds
 ## only (the system skeleton spec §10). Worked out once a frame.
 func targets(ctx: ComputerContext) -> Array[Contact]:
 	var key := [Engine.get_process_frames(), range_index, ctx.sensors]
@@ -119,7 +120,7 @@ func targets(ctx: ComputerContext) -> Array[Contact]:
 	for c in ctx.sensors.contacts(range_m()):
 		if range_index == SYSTEM_RANGE and not TARGET_KINDS.has(c.kind):
 			continue
-		if range_index == SYSTEM_RANGE - 1 and not [&"rock", &"body", &"moon", &"cluster"].has(c.kind):
+		if range_index >= 2 and range_index < SYSTEM_RANGE and not [&"rock", &"body", &"moon", &"cluster"].has(c.kind):
 			continue
 		_targets.append(c)
 	return _targets
@@ -275,7 +276,6 @@ func _place(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D) -> voi
 			bracketed = true
 	if range_index == SYSTEM_RANGE:
 		_place_belts(volume, ctx, frame)
-		_place_moons(volume, ctx, frame)
 		_place_ship(volume, ctx, frame)
 		_place_limits(volume, ctx, frame, list)
 		_place_chart(volume, ctx, frame)
@@ -368,17 +368,6 @@ func _reach_colour(ctx: ComputerContext, c: Contact) -> Color:
 	var travel := t.point.minus(focus).length() - t.limit
 	return lit if WarpPlan.cost_of(travel) <= ctx.store.amount else InteriorPalette.HOLO_DIM
 
-## Moons, beside their planets: shown, never targets.
-func _place_moons(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D) -> void:
-	if ctx.sensors == null:
-		return
-	for c: Contact in ctx.sensors.contacts(range_m()):
-		if c.kind != &"moon":
-			continue
-		var placed := _placed(ctx, frame, c.point)
-		if not placed["pinned"]:
-			volume.add_mark(&"ball", InteriorPalette.WORLD, placed["position"], MOON_SIZE)
-
 ## The ship's pip and heading, and scale rings round it every SCALE_RING.
 func _place_ship(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D) -> void:
 	var focus := ctx.sensors.focus_point() if ctx.sensors != null else null
@@ -442,14 +431,16 @@ func warp_lines(ctx: ComputerContext, t: WarpTarget) -> PackedStringArray:
 	var what := ""
 	match t.kind:
 		WarpTarget.Kind.STAR:
-			what = "STAR · %.1f KM ACROSS" % (t.radius * 2.0 / 1000.0)
+			what = "STAR · %d KM ACROSS" % roundi(t.radius * 2.0 / 1000.0)
 		WarpTarget.Kind.CLUSTER:
 			what = "BELT · %d KM ACROSS" % roundi(t.radius * 2.0 / 1000.0)
+		WarpTarget.Kind.MOON:
+			what = "MOON · %d KM ACROSS" % roundi(t.radius * 2.0 / 1000.0)
 		_:
 			var cls := String(size_class_of_radius(t.radius)).to_upper()
-			what = "PLANET · %s · %.1f KM ACROSS" % [cls, t.radius * 2.0 / 1000.0]
+			what = "PLANET · %s · %d KM ACROSS" % [cls, roundi(t.radius * 2.0 / 1000.0)]
 	var travel := d - t.limit
-	var how := "%d KM · %d MIN FLYING" % [roundi(d / 1000.0), maxi(1, roundi(d / FlightComputer.CRUISE_LIMIT_MPS / 60.0))]
+	var how := "%d KM · %s" % [roundi(d / 1000.0), flying_text(d)]
 	if travel >= WarpPlan.MIN_TRAVEL:
 		how += " · %d S WARP" % roundi(WarpDrive.SPOOL + WarpProfile.new(travel).duration)
 	var cost := ""
@@ -469,6 +460,15 @@ func warp_lines(ctx: ComputerContext, t: WarpTarget) -> PackedStringArray:
 			_:
 				cost = "WARP %d QE · IN REACH" % p.cost
 	return PackedStringArray(["%s · %s" % [t.name, what], how, cost])
+
+## How long `metres` takes at the cruise ceiling: minutes, or hours past 90
+## minutes -- most trips at the world scale are hours of flying, which is
+## why you warp.
+static func flying_text(metres: float) -> String:
+	var minutes := metres / FlightComputer.CRUISE_LIMIT_MPS / 60.0
+	if minutes > 90.0:
+		return "%d H FLYING" % roundi(minutes / 60.0)
+	return "%d MIN FLYING" % maxi(1, roundi(minutes))
 
 func save() -> Dictionary:
 	return {"range": range_index, "selected": String(selected)}
