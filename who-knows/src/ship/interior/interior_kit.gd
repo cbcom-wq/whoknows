@@ -57,12 +57,42 @@ var portal_material: Material
 ## its plating in the livery and its trim a little glossier than a cabin's.
 var materials: Dictionary = {}   # Batch -> Material
 var _tools: Dictionary = {}   # Batch -> SurfaceTool
+## How worn what is built now looks (health and damage spec §9): 0 as made,
+## 1 damaged (solid colours lean toward SCORCH), 2 wrecked (toward CHAR, and
+## its glow goes dark). A builder sets it around the pieces of a hurt cell.
+var wear := 0
+
+## How far each wear leans toward its colour.
+const WEAR_MIX := [0.0, 0.35, 0.7]
 
 func _init(root_node: Node3D, collision_body: CollisionObject3D = null,
 		portal: Material = null) -> void:
 	root = root_node
 	body = collision_body
 	portal_material = portal
+
+## `color` (a palette colour, sRGB) as it looks at `level` of wear: for flat
+## materials, which take palette colours as they are.
+static func worn(color: Color, level: int) -> Color:
+	if level <= 0:
+		return color
+	var to: Color = InteriorPalette.CHAR if level >= 2 else InteriorPalette.SCORCH
+	var out := color.lerp(to, WEAR_MIX[mini(level, 2)])
+	out.a = color.a
+	return out
+
+## A vertex colour at the kit's wear: solid pieces darken; a wreck's glow and
+## screens go dark. Glass and portals are the view, and stay as they are.
+func _worn(batch: Batch, color: Color) -> Color:
+	match batch:
+		Batch.SOLID:
+			var to: Color = solid(InteriorPalette.CHAR if wear >= 2 else InteriorPalette.SCORCH)
+			var out := color.lerp(to, WEAR_MIX[mini(wear, 2)])
+			out.a = color.a
+			return out
+		Batch.GLOW:
+			return Color(0, 0, 0, color.a) if wear >= 2 else color
+	return color
 
 ## A translation-only frame, for placing a piece inside a prop's frame.
 static func at(offset: Vector3) -> Transform3D:
@@ -93,6 +123,8 @@ func tri(batch: Batch, a: Vector3, b: Vector3, c: Vector3, normal: Vector3, colo
 		var tu := ub
 		ub = uc
 		uc = tu
+	if wear > 0:
+		color = _worn(batch, color)
 	var st := _tool(batch)
 	for v in [[a, ua], [b, ub], [c, uc]]:
 		st.set_normal(normal)

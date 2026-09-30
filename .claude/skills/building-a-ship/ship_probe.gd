@@ -221,6 +221,21 @@ func _run(scene: Node) -> void:
 	var s := ShipStats.compute(ship.grid, ship.catalog)
 	print("mass    %.1f t, centre of mass %s" % [s.total_mass_kg / 1000.0, s.center_of_mass])
 	print("power   %.1f MW made, %.1f MW drawn" % [s.power_gen, s.power_draw])
+	# Damage (health and damage spec §4): what it can take, whether it is
+	# crippled before anything hits it, and the most one block's loss cuts off.
+	var total_hp := 0
+	var worst_cut := 0
+	for coord: Vector3i in ship.grid.coords():
+		var def := ship.catalog.get_def(ship.grid.get_block(coord).block_id)
+		if def == null:
+			continue
+		total_hp += def.hp
+		if not BlockDamage.KEEP.has(def.id):
+			var cut := BlockDamage.cut_off(ship.grid, [coord] as Array[Vector3i]).size()
+			worst_cut = maxi(worst_cut, cut)
+	print("damage  intact hp %d, crippled as built %s, one loss cuts off at most %d%s" % [total_hp,
+		"no" if not s.crippled else "YES: " + s.crippled_reason, worst_cut,
+		"" if worst_cut <= 2 else "  <-- FRAGILE"])
 	var reach_km := (s.quantum_capacity - WarpPlan.WARP_BASE) / WarpPlan.WARP_PER_KM
 	print("warp    reach %.0f km on a full store (%d QE); drive %s" % [reach_km, s.quantum_capacity,
 		"yes" if ship.warp != null else "MISSING"])

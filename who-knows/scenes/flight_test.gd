@@ -50,6 +50,8 @@ var _saved_tag: SavedTag
 var npc_debug: NpcDebug
 var npc_bus: StimulusBus
 var exterior_npcs: NpcDirector
+## The dead and the wounded, for every director (health and damage spec §6).
+var npc_ledger := NpcLedger.new()
 var contact_markers: Array[ContactMarker] = []
 ## The course on the HUD, one per view (bridge computer spec §6.1, §8).
 var course_markers: Array[CourseMarker] = []
@@ -104,6 +106,9 @@ func _ready() -> void:
 		push_error("FlightTest: the saved ship has no blocks; starting a new game")
 		resumed = false
 		saved = {}
+	if resumed:
+		_ship.launch_blueprint = Ship.launch_of(ship_part)
+		npc_ledger.from_dict(saved.get("npcs", {}))
 	_ship.set_grid(layout if resumed else _starter_grid(), not resumed)
 	if resumed:
 		_ship.restore_aboard(ship_part)
@@ -113,6 +118,7 @@ func _ready() -> void:
 	_wire_hud()
 	_wire_prompt()
 	_wire_hands()
+	_wire_hurt()
 	_wire_universe(saved)
 	_wire_npcs()
 	_wire_sensors()
@@ -165,6 +171,55 @@ func _wire_prompt() -> void:
 
 func _show_prompt() -> void:
 	_prompt.text = _grasp_prompt if _grasp_prompt != "" else _interact_prompt
+
+## Health and damage (docs/superpowers/specs/
+## 2026-09-29-health-and-damage-design.md §7): the view's red edge and the
+## blackout; the helm keeping you from harm; waking aboard at the ship's
+## cost; what you drop outside adrift as a stray; and a hole under you
+## putting you outside. Wired here so src/avatar never learns about Ship.
+func _wire_hurt() -> void:
+	var edge := HurtEdge.new()
+	edge.name = "HurtEdge"
+	$Prompt.add_child(edge)
+	$Prompt.move_child(edge, 0)
+	edge.bind(_avatar)
+	_avatar.seated_source = func() -> bool: return _director.is_seated
+	_avatar.rescue = _rescue
+	_avatar.rescue_cost = func(n: int) -> int:
+		return _ship.quantum.store.drain(n, &"rescue") if _ship.quantum.store != null else 0
+	_avatar.let_fall.connect(func(item: Item, outside: bool) -> void:
+		if outside and strays != null:
+			strays.adopt(item))
+	_ship.blocks_lost.connect(_on_blocks_lost)
+
+## Puts a blacked-out `avatar` aboard where it fits first (§7.2).
+func _rescue(avatar: Avatar) -> void:
+	for pose in _ship.wake_spots():
+		if not avatar.can_stand_at(pose) and avatar.mode == Avatar.Mode.PLATING:
+			continue
+		if avatar.mode == Avatar.Mode.SUIT:
+			avatar.enter_plating(_ship.interior, pose, 0.0, Vector3.ZERO, Quaternion.IDENTITY)
+		else:
+			avatar.place(pose)
+		return
+
+## A hole where you stand puts you outside, moving as you were (§7.4).
+func _on_blocks_lost(_coords: Array[Vector3i]) -> void:
+	if _avatar.mode != Avatar.Mode.PLATING or _avatar.get_parent() != _ship.interior:
+		return
+	var local := _ship.interior.to_local(_avatar.global_position + _avatar.global_basis.y * 0.1)
+	var cell := ShipCells.interior_cell_at(local)
+	if _ship.grid.has_block(cell):
+		return
+	var world := Threshold.to_world(_ship.interior.global_transform, _ship.exterior.global_transform,
+		_avatar.global_transform, InteriorBuilder.storey_offset(cell.y))
+	var v := Threshold.carry_velocity_out(_ship.exterior.linear_velocity, _ship.exterior.global_basis,
+		_avatar.velocity)
+	_avatar.enter_suit(_ship.outside, world, v, _ship.exterior)
+	for airlock: Airlock in _ship.airlocks.values():
+		_avatar.beacon_source = airlock.beacon
+		_avatar.home_source = airlock.home
+		break
 
 ## Hands and items (docs/superpowers/specs/2026-09-23-hands-and-items-design.md
 ## §7, §8, §10): what you let go of lands aboard this ship, and the reticle
@@ -266,6 +321,9 @@ func _wire_strays(saved: Dictionary) -> void:
 	strays.setup(_universe, _ship.item_catalog)
 	if not saved.is_empty():
 		strays.from_dict(saved)
+	# A plate shed by a block knocked off is a stray like any other
+	# (health and damage spec §8.1).
+	_ship.plate_shed.connect(func(item: Item) -> void: strays.adopt(item))
 
 ## A frame on the hull at the middle of the airlock's outer hatch, +z pointing
 ## out of it along the airlock's line: aft, on the starter.
@@ -300,6 +358,11 @@ func _wire_npcs() -> void:
 	exterior_npcs.bus = npc_bus
 	exterior_npcs.cameras = [$Ship/Exterior/ChaseCamera as Camera3D, $Ship/Canopy/CanopyCam as Camera3D, _avatar.camera]
 	exterior_npcs.sources = [RockHerdSource.new(_stream)]
+	exterior_npcs.ledger = npc_ledger
+	_ship.npc_director.ledger = npc_ledger
+	# The crew woke with the ship, before it had the ledger.
+	for npc: Npc in _ship.npc_director.live_npcs():
+		npc.health.current = npc_ledger.health_of(npc.record.id, npc.health.max)
 	add_child(exterior_npcs)
 	npc_debug = NpcDebug.new()
 	npc_debug.name = "NpcDebug"
@@ -558,7 +621,19 @@ func capture() -> Dictionary:
 		"avatar": _capture_you(),
 		"salvage": salvage.to_dict(),
 		"strays": strays.to_dict(),
+		"npcs": _capture_npcs(),
 	}
+
+## The dead, and the health of every NPC awake now and asleep (health and
+## damage spec §10): the awake ones are written into the ledger first.
+func _capture_npcs() -> Dictionary:
+	for director: NpcDirector in [_ship.npc_director, exterior_npcs]:
+		if director == null:
+			continue
+		for npc: Npc in director.live_npcs():
+			if npc.health != null and not npc.is_dead():
+				npc_ledger.set_health(npc.record.id, npc.health.current, npc.health.max)
+	return npc_ledger.to_dict()
 
 ## You: walking, seated or on a spacewalk, where, which way, your suit and
 ## what is in your hand (§6.3).
@@ -567,6 +642,7 @@ func _capture_you() -> Dictionary:
 		"suit": _avatar.suit_cell.to_dict(),
 		"suit_assist": _avatar.suit_assist,
 		"pitch": _avatar.head_pitch(),
+		"health": _avatar.health.to_dict(),
 	}
 	if _avatar.mode == Avatar.Mode.SUIT:
 		d["mode"] = "suit"
@@ -607,6 +683,7 @@ func _restore_places(saved: Dictionary) -> void:
 func _restore_you(d: Dictionary, outside_too: bool) -> void:
 	_avatar.suit_cell.from_dict(d.get("suit", {}))
 	_avatar.suit_assist = bool(d.get("suit_assist", true))
+	_avatar.health.from_dict(d.get("health", {}))
 	var mode := String(d.get("mode", "walking"))
 	if mode != "suit":
 		var pose := _ship.interior.global_transform * SaveCodec.to_transform(d.get("place"))
@@ -909,6 +986,11 @@ func _wire_hud() -> void:
 	# discovered as one of HudRoot's descendants.
 	_hud.register_element(_cockpit_marker)
 	_hud.register_element(_heading_cockpit)
+	# The hull (health and damage spec §11), in the band beside the store.
+	var hull := HullPanel.new()
+	hull.name = "HullPanel"
+	$HudRoot/Screen/Band/Row.add_child(hull)
+	_hud.register_element(hull)
 	# The bootstrap is the one place that legitimately knows both halves of
 	# this: the HUD's fade-in and the seat transition it is timed against.
 	_hud.fade_in = CameraDirector.SIT_DURATION

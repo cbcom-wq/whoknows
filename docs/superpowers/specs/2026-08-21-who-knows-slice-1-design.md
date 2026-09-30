@@ -396,6 +396,11 @@ Build a ship from the catalogue with live stats and validation. Save it, load it
 
 ## Appendix — roadmap, Slices 2 to 6
 
+> **Amended 2026-09-29:** `docs/superpowers/specs/2026-09-29-health-and-damage-design.md` splits
+> Slice 2 in two. **Damage** comes first and on its own: block stages, crippled, you and NPCs
+> hurt, downed and rescued, and the repair torch. **First Blood** below then adds turrets,
+> weapons, shields and the enemy on top of it.
+
 **Slice 2 — First Blood.** Turret MOUNT blocks, projectile and beam weapons, block-level damage calling the existing mutation API, shields, and a **crippled** state when thrust or power drops below a threshold. One scripted enemy. Proves combat is readable and that crippling feels earned rather than arbitrary.
 
 **Slice 3 — Boarding Party.** Docking and hull breaching, the interior-slot stitching described in §3.1, a loadout locker, droid squad AI following the player through corridors, FPS gunplay, and capture on reaching the enemy Ship Core. Captured droids convert; surviving humans become prisoners occupying cargo mass. This is the game.

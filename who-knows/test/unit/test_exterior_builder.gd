@@ -223,3 +223,9 @@ func test_a_shaped_block_gets_convex_colliders():
 		assert_almost_eq(c.position, ShipGrid.cell_center(Vector3i(2, 0, 0)), Vector3.ONE * 0.0001)
 	assert_eq(_box_at(Vector3i.ZERO).size(), 1)
 	assert_eq(_builder.collider_coords().size(), 2, "one entry per cell, however many shapes")
+
+## Health and damage spec §9 (the owner's approval, 2026-09-30): the livery
+## takes each block's damage tint, so hull and hull_wedge look hurt too.
+func test_the_livery_takes_the_damage_tint():
+	var shader: Shader = load("res://data/materials/hull_livery.gdshader")
+	assert_string_contains(shader.code, "* COLOR.rgb")

@@ -13,6 +13,21 @@ extends Node3D
 func use(_item: Item, _aim: Transform3D, _world: Node3D, _holder: CollisionObject3D) -> bool:
 	return false
 
+## Held down (health and damage spec §8.3): called every physics tick while
+## `use` is held, after use() on the press. Returns true while it is doing
+## something. This base does nothing, so a press-only item needs nothing.
+func hold(_item: Item, _aim: Transform3D, _world: Node3D, _holder: CollisionObject3D, _delta: float) -> bool:
+	return false
+
+## What the item says about what it is aimed at while held, for the prompt,
+## or "" (the torch: what it would mend, and its feed).
+func aim_text(_item: Item, _aim: Transform3D, _holder: CollisionObject3D) -> String:
+	return ""
+
+## Why a save must wait while it is in use, or "" (saving spec §5).
+func busy() -> String:
+	return ""
+
 ## A word the prompt shows after the item's name -- "on", "burning" -- or "".
 func status() -> String:
 	return ""

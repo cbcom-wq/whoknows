@@ -28,6 +28,9 @@ var _skin: Node3D
 var _meshes: Array[Mesh] = []
 var _lenses: Dictionary = {}   # StringName group -> MeshInstance3D
 var _window_glow: ShaderMaterial
+## Each cell's damage tint (health and damage spec §9): coord -> the colour
+## its skin is multiplied by, from its stage.
+var _colours: Dictionary = {}
 var _alcoves: Dictionary = {}   # Vector3i -> AirlockAlcove
 
 func bind(grid: ShipGrid, catalog: BlockCatalog) -> void:
@@ -68,6 +71,26 @@ func light_mounts() -> Array[Dictionary]:
 
 func collider_coords() -> Array:
 	return _collider_coords.duplicate()
+
+## The block at `coord` is at `stage` now, a BlockDamage.Stage (health and
+## damage spec §4.3, §9): its colour is recorded, with no rebuild.
+func set_stage(coord: Vector3i, stage: int) -> void:
+	if _grid == null or not _grid.has_block(coord):
+		return
+	_colours[coord] = stage_colour(stage)
+
+## What a block's colours are multiplied by at `stage`.
+static func stage_colour(stage: int) -> Color:
+	match stage:
+		BlockDamage.Stage.DAMAGED:
+			return HullPalette.SCORCH
+		BlockDamage.Stage.WRECKED, BlockDamage.Stage.GONE:
+			return HullPalette.CHAR
+	return HullPalette.UNHURT
+
+## The colour the cell at `coord` is drawn with now, for tests.
+func instance_colour(coord: Vector3i) -> Color:
+	return _colours.get(coord, HullPalette.UNHURT)
 
 ## Each airlock that can cycle is an open alcove here -- the hull's copy of
 ## its room (airlock spec §7.2) -- by cell.
@@ -121,6 +144,7 @@ func _clear() -> void:
 	_lenses = {}
 	_window_glow = null
 	_layout = null
+	_colours.clear()
 	for alcove: AirlockAlcove in _alcoves.values():
 		if not is_instance_valid(alcove):
 			continue
@@ -145,12 +169,14 @@ func _build_colliders() -> void:
 			# Hollow, not gone: the alcove's floor, walls and hatches are this
 			# cell's collision now.
 			_alcoves[coord] = AirlockAlcove.build(self, body, _grid, _catalog, coord)
+			for collider in _alcoves[coord].colliders:
+				collider.set_meta(&"cell", coord)
 			_collider_coords.append(coord)
 			continue
 		var inst := _grid.get_block(coord)
 		var shape_name := HullShapes.shape_of(inst.block_id)
 		if shape_name == HullShapes.CUBE or _layout.is_pod_cell(coord):
-			_add_collider(body, _box_shape(), Transform3D(Basis.IDENTITY, ShipGrid.cell_center(coord)))
+			_add_collider(body, _box_shape(), Transform3D(Basis.IDENTITY, ShipGrid.cell_center(coord)), coord)
 		else:
 			# Shaped blocks (spec §3.4): their colliders are their shapes, in
 			# convex pieces, so rocks and a spacewalker meet what is drawn.
@@ -158,7 +184,7 @@ func _build_colliders() -> void:
 			for part in HullShapes.collider_parts(shape_name):
 				var convex := ConvexPolygonShape3D.new()
 				convex.points = part
-				_add_collider(body, convex, frame)
+				_add_collider(body, convex, frame, coord)
 		_collider_coords.append(coord)
 
 func _box_shape() -> BoxShape3D:
@@ -166,10 +192,13 @@ func _box_shape() -> BoxShape3D:
 	shape.size = Vector3.ONE * ShipGrid.CELL_SIZE
 	return shape
 
-func _add_collider(body: Node, shape: Shape3D, xform: Transform3D) -> void:
+func _add_collider(body: Node, shape: Shape3D, xform: Transform3D, coord: Vector3i) -> void:
 	var node := CollisionShape3D.new()
 	node.shape = shape
 	node.transform = xform
+	# Which block a hit on this shape damages (health and damage spec §5.1):
+	# a shaped block has several shapes, so a shape index is not a cell.
+	node.set_meta(&"cell", coord)
 	body.add_child(node)
 	_colliders.append(node)
 
@@ -177,6 +206,9 @@ func _build_skin() -> void:
 	_skin = Node3D.new()
 	_skin.name = "Skin"
 	add_child(_skin)
+	for coord in _grid.coords():
+		var inst := _grid.get_block(coord)
+		_colours[coord] = stage_colour(BlockDamage.stage_of(inst, _catalog.get_def(inst.block_id)))
 	var made := HullDressing.build(_layout, _skin)
 	_meshes.assign(made["meshes"])
 	_lenses = made["lenses"]

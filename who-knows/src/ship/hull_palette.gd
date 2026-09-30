@@ -29,3 +29,12 @@ const WORK_LIGHT_COOL := Color("e4eeff")
 const WORK_LIGHT := WORK_LIGHT_WARM
 ## The dark throat of a bell or a nozzle, and a lens that is off.
 const NOZZLE_DARK := Color("2a2a2e")
+
+## Damage (docs/superpowers/specs/2026-09-29-health-and-damage-design.md §9):
+## what a damaged and a wrecked block's colours are multiplied by -- scorched
+## warm brown, then charred near-black -- per instance, so no new material.
+const UNHURT := Color("ffffff")
+const SCORCH := Color("9e8472")
+const CHAR := Color("4a3c34")
+## Sparks off a damaged block, and the burst when one is knocked off.
+const SPARK := Color("ffe2a8")

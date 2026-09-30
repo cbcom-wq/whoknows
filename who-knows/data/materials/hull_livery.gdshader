@@ -41,7 +41,11 @@ void fragment() {
 	// Ascending edges (unlike the reverse order) keep this within spec --
 	// GLSL leaves smoothstep(edge0 >= edge1, ...) undefined.
 	float out_of_band = smoothstep(band_half_width_m - 0.05, band_half_width_m, dist);
-	ALBEDO = mix(livery_colour.rgb, hull_colour.rgb, out_of_band);
+	// COLOR carries each block's damage tint (health and damage spec §9): the
+	// hull MultiMeshes set one colour per instance, and Godot folds it into
+	// COLOR. These meshes have no vertex colours of their own, so undamaged
+	// blocks (and the alcove's plates) multiply by white and look as before.
+	ALBEDO = mix(livery_colour.rgb, hull_colour.rgb, out_of_band) * COLOR.rgb;
 	ROUGHNESS = roughness_value;
 	METALLIC = 0.0;
 }

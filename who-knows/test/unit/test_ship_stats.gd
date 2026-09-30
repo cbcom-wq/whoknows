@@ -177,3 +177,75 @@ func test_main_engines_do_not_count_as_attitude_authority():
 	_put(Vector3i(0, -1, 2), &"thruster", 4)
 	var s := ShipStats.compute(_grid, _cat)
 	assert_almost_eq(s.torque_budget, Vector3.ZERO, Vector3.ONE * 1.0)
+
+# --- stages and crippled (health and damage spec §4.4) ------------------------
+
+func _hurt(coord: Vector3i, share: float) -> void:
+	_grid.get_block(coord).damage = _cat.get_def(_grid.get_block(coord).block_id).hp * share
+
+func test_a_damaged_thruster_gives_half_and_a_wrecked_one_none():
+	_put(Vector3i(0, 0, 0), &"thruster")
+	_put(Vector3i(1, 0, 0), &"thruster")
+	_hurt(Vector3i(0, 0, 0), 0.6)
+	_hurt(Vector3i(1, 0, 0), 1.1)
+	var s := ShipStats.compute(_grid, _cat)
+	assert_almost_eq(s.thrust_budget[&"forward"], 50_000.0, 1.0)
+	assert_almost_eq(s.intact_forward, 200_000.0, 1.0, "as if nothing were hurt")
+
+func test_stage_never_changes_mass():
+	_put(Vector3i(0, 0, 0), &"heavy")
+	_hurt(Vector3i(0, 0, 0), 1.2)
+	assert_almost_eq(ShipStats.compute(_grid, _cat).total_mass_kg, 9000.0, 0.001)
+
+func test_power_follows_stage():
+	_put(Vector3i(0, 0, 0), &"reactor")
+	_hurt(Vector3i(0, 0, 0), 0.5)
+	assert_almost_eq(ShipStats.compute(_grid, _cat).power_gen, 4.0, 0.001)
+
+func test_intact_torque_ignores_damage():
+	_put(Vector3i(0, 0, 0), &"heavy")
+	_put(Vector3i(0, 0, -4), &"thruster", 16)
+	_put(Vector3i(1, 0, -4), &"thruster", 20)
+	_hurt(Vector3i(1, 0, -4), 1.0)
+	var s := ShipStats.compute(_grid, _cat)
+	assert_almost_eq(s.torque_budget.x, 0.0, 1.0, "the wrecked one can't push back")
+	assert_almost_eq(s.intact_torque.x, 654_545.0, 1_000.0)
+
+func test_not_crippled_as_built():
+	_put(Vector3i(0, 0, 0), &"heavy")
+	_put(Vector3i(0, 0, 1), &"thruster")
+	var s := ShipStats.compute(_grid, _cat)
+	assert_false(s.crippled)
+	assert_eq(s.crippled_reason, "")
+
+func test_crippled_without_forward_thrust():
+	_put(Vector3i(0, 0, 0), &"heavy")
+	for x in 4:
+		_put(Vector3i(x, 0, 1), &"thruster")
+	for x in 3:
+		_hurt(Vector3i(x, 0, 1), 1.0)
+	var s := ShipStats.compute(_grid, _cat)
+	assert_false(s.crippled, "25% left is not below 25%")
+	_hurt(Vector3i(3, 0, 1), 0.5)
+	s = ShipStats.compute(_grid, _cat)
+	assert_true(s.crippled)
+	assert_eq(s.crippled_reason, "no thrust")
+
+func test_crippled_when_it_cannot_turn():
+	_put(Vector3i(0, 0, 0), &"heavy")
+	_put(Vector3i(0, 0, -4), &"thruster", 16)
+	_put(Vector3i(1, 0, -4), &"thruster", 20)
+	_hurt(Vector3i(0, 0, -4), 1.0)
+	var s := ShipStats.compute(_grid, _cat)
+	assert_true(s.crippled)
+	assert_eq(s.crippled_reason, "can't turn")
+
+func test_crippled_with_every_quantum_core_wrecked():
+	var core := _def(&"quantum_core")
+	_cat.register(core)
+	_put(Vector3i(0, 0, 0), &"quantum_core")
+	assert_false(ShipStats.compute(_grid, _cat).crippled)
+	_hurt(Vector3i(0, 0, 0), 1.0)
+	var s := ShipStats.compute(_grid, _cat)
+	assert_true(s.crippled)
+	assert_eq(s.crippled_reason, "no power")
