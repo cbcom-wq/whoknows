@@ -124,12 +124,18 @@ Rejected for rendering:
 
 | | Today | Now | Where |
 |---|---|---|---|
-| Travel time | 18 s + 1 s per 5 km | **18 s + 1 s per 250 km** | `WarpProfile.PACE` |
-| Cost | 40 QE + 4 QE per km | **40 QE + 0.08 QE per km** | `WarpPlan.WARP_PER_KM` |
+| Travel time | 18 s + 1 s per 5 km | **18 s + 1 s per 350 km** | `WarpProfile.PACE` |
+| Cost | 40 QE + 4 QE per km | **40 QE + 1 QE per 12.5 km** (0.08 QE per km) | `WarpPlan.WARP_M_PER_QE`, replacing `WARP_PER_KM` |
 | Too close to warp | target's limit under 5 km away | unchanged | `WarpPlan.MIN_TRAVEL` |
 
-- A typical trip (3,000 km) still takes about 30 s and costs about 280 QE; across the system
-  (12,500 km) about 68 s and 1,040 QE. The starter's 600 QE still reaches about 7,000 km.
+- Distances between centres grow about 50 times, but limits only about 8 times, so the median
+  trip's travel grows to about 4,600 km. At 1 s per 350 km that is about 31 s, as today (1 s per
+  250 km would make it 37 s). It costs about 410 QE; across the system (12,500 km) takes about
+  54 s and 1,040 QE. The starter's 600 QE reaches about 7,000 km, about half the system, as today.
+- The cost is written as metres per QE so it stays exact: 0.08 is not exact in floating point,
+  and `ceili` of 240.00000000000003 is 241.
+- `test_warp_profile.gd`'s 200-seed average (25–35 s) is the check; if it misses, `PACE` is tuned,
+  not the test.
 - Peak warp speed rises to around 200 km/s. The floating origin then shifts every physics tick
   (every 3 km or so). Rocks are already suspended during a warp and proxies are placed every tick
   anyway, so it should hold; the live checks measure it (§8.3).
@@ -142,7 +148,7 @@ Rocks keep their sizes and densities; the shapes that hold them grow so they rea
 | Shape | Today | Now | Where |
 |---|---|---|---|
 | Belt half-width | 4–7 km | **20–40 km** | `SystemRecipe.BELT_HALF_WIDTH`, `BELT_MIN_HALF_WIDTH` 15 km |
-| Belt half-thickness | 1.5–2 km | **5–10 km** | `BELT_HALF_THICKNESS` |
+| Belt half-thickness | 1.5–2 km | **unchanged:** a belt must lie inside one 5 km layer of giant cells (`SystemRecipe.PLANE_Y`) | `BELT_HALF_THICKNESS` |
 | Belt gap between slots | 12 km | **300 km** | `BELT_GAP` |
 | Ring inner edge | 1.6–2.0 radii | unchanged, so rings may lie inside a well as before | `RING_INNER` |
 | Ring width | 1–2.5 km | **10–30 km** | `RING_WIDTH` |
@@ -220,9 +226,11 @@ func altitude_of(local: Vector3) -> float    # body-local point's height above t
   nodes `(face, depth, ix, iy)`. Every node's chunk is **16 × 16 quads** plus a skirt.
 - **Depth per body:** the smallest `D` with a leaf quad of 2 m or less,
   `D = ceil(log2(π·R / (2 · 16 · 2.0)))`: 12 for a 60 km planet, 10 at 15 km, 8 for a 4 km moon.
-- **Split** a node when the focus is within 2.5× its edge of its bounding sphere; merge beyond 3×.
-  Each level costs about the same number of chunks, so a 60 km world is about twice Planetfall's
-  old worst case, not fifty times.
+- **Split** a node when the focus is within 1.5× its edge of its bounding sphere; merge beyond
+  1.8×. Each level costs about the same number of chunks, about 21 at 1.5× (about 58 at
+  Planetfall's 2.5×, which over 12 levels is about 700 chunks built). At 1.5× a quad is about
+  2.4° across at the split distance: chunky, which is the style. A 60 km world is then about
+  250 chunks built, before horizon culling, and about a third of them in view.
 - **Horizon culling:** a node wholly below the focus's horizon (its bounding sphere, lifted by the
   world's relief, behind the sphere of radius `R − relief`) is neither built nor drawn. Low down,
   that removes most of the coarse ones.
@@ -291,8 +299,10 @@ Inside a well, with the assist on:
 
 - **The limit is 120 m/s plus 1 m/s for every 40 m of altitude, capped at 1,500 m/s.** At full
   speed you are always about 40 s or more from the ground.
-- **It eases back to 120 m/s over the top fifth of the well,** so you leave into the debris at the
-  speed the rocks outside stream for, and are never clamped hard at the edge.
+- **It eases back to 120 m/s over the top tenth of the well,** so you leave into the debris at the
+  speed the rocks outside stream for, and are never clamped hard at the edge. (Over the top fifth,
+  the largest world's limit would peak at 1,320 m/s and the cap would never be reached; over the
+  top tenth it peaks at about 1,470.)
 - **Boost is unchanged:** it multiplies thrust, so you reach the limit sooner, and it never raises
   the limit (with the assist on, `FlightComputer` clamps speed to the limit today as well).
 - **Altitude** is `WorldTerrain.altitude_of` for the body whose well you are in, from
@@ -425,7 +435,7 @@ exists, while they are cheap to change.
 | Mountains | `WorldRecipe.RELIEF`, `RELIEF_MAX` |
 | Wells | `WorldRecipe.WELL_RADII` |
 | Spacing | `SystemRecipe.FIRST_SLOT`, `SLOT_RATIO`, `LAST_SLOT`, `MOON_NEAR`, `MOON_FAR`, the `*_ROOM`s, `CLEAR` |
-| Warp time and cost | `WarpProfile.PACE`, `WarpPlan.WARP_PER_KM` |
+| Warp time and cost | `WarpProfile.PACE`, `WarpPlan.WARP_M_PER_QE` |
 | When the surface takes over | `BodyProxy.SURFACE_AT`, `PROXY_AT`; the cameras' far plane |
 | Detail and its cost | `WorldSurface` split and merge factors, chunk quads, finest quad size |
 | The speed limit | its per-metre rate, cap and easing band |
