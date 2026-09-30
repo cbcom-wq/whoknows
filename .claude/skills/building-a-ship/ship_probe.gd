@@ -16,7 +16,7 @@ extends SceneTree
 # also writes probe_lit_{floods,forward,both}_* (the hull against the dark),
 # probe_star_bloom_{off,on}, probe_seated_lit, and, parked beside a rock's
 # night side, probe_seated_rock_{dark,lit} and probe_rock_*. Every ship gets
-# probe_hull_* (the skin, fill-lit) and prints skin, windows and lights lines.
+# probe_hull_* (the skin, fill-lit) and prints skin, windows, lights and tint lines.
 #
 # A windowed run would save and load the owner's real game
 # (docs/superpowers/specs/2026-09-26-saving-design.md §9), so the probe turns
@@ -300,6 +300,20 @@ func _run(scene: Node) -> void:
 	print("windows %d outside for %d inside%s" % [hull.windows.size(), hull.wanted,
 		"" if hull.unmatched.is_empty() else "  <-- UNMATCHED %s" % [hull.unmatched]])
 	print("lights  %d floods, %d forward" % [ship.lights.spots(&"flood").size(), ship.lights.spots(&"forward").size()])
+	# The damage tint (health and damage spec §9): every tinted skin vertex is
+	# one cell's, so a hurt block never leaves a piece of itself clean.
+	var owned := {}   # ArrayMesh -> vertices claimed
+	var cells := 0
+	for coord: Vector3i in ship.grid.coords():
+		var spans := ship.exterior_builder.skin_spans(coord)
+		cells += int(not spans.is_empty())
+		for span: Array in spans:
+			owned[span[0]] = owned.get(span[0], 0) + span[2] - span[1]
+	var unowned := 0
+	for mesh: ArrayMesh in owned:
+		unowned += mesh.surface_get_array_len(0) - owned[mesh]
+	print("tint    %d cells in %d meshes%s" % [cells, owned.size(),
+		"" if unowned == 0 else "  <-- %d VERTICES WITHOUT A CELL" % unowned])
 	await _hull_shots(ship, "hull")
 	var has_lights := ship.lights != null and not ship.lights.spots(ShipLights.FLOOD).is_empty()
 	if has_lights:

@@ -58,7 +58,10 @@ Do these in order. Each one names the check that proves it.
      half the ship off one cell (the probe's `damage` line counts the blocks one loss would cut
      off at worst);
    - the ship must not be **crippled as built** (forward thrust, every turning axis and a
-     working `quantum_core`): the probe's `damage` line says so.
+     working `quantum_core`): the probe's `damage` line says so;
+   - **damage shows on the skin:** a hurt cell's plating, trim and glass are multiplied by its
+     stage colour (`ExteriorBuilder.set_stage`, in place). A new hull piece must be marked to its
+     cell in `HullDressing` (`reference.md`), or it stays clean when its block is scorched.
 4. **Propulsion:**
    - main `thruster`s oriented FORWARD (`o=0`), at the stern;
    - `rcs` in **opposed pairs** on every axis: pitch, yaw and roll both ways;
@@ -122,7 +125,8 @@ Do these in order. Each one names the check that proves it.
    - **the hull:** `skin` (plates, chamfers, corners, facets, nozzles), `windows N outside for N
      inside` (with `UNMATCHED` naming any inside window that has no place outside), and `lights  5
      floods, 2 forward` on the starter (the four belly corners and one on the keel, and a forward
-     pair); `panel` says whether the bridge has its lights panel;
+     pair); `panel` says whether the bridge has its lights panel; `tint` counts the cells the
+     damage tint reaches and flags `VERTICES WITHOUT A CELL`;
    - the droid's dock and its jobs, flagging any `UNREACHABLE`;
    - fps.
 
@@ -194,6 +198,8 @@ thrust.
 | `BlockInstance.hp_current`, never set | Every placed block sat at 0 hp from Slice 1 on; read as hp left, every ship would have been a wreck the day damage arrived | Blocks store **damage taken** (`damage`, 0 intact); older saves read as intact with no migration |
 | Giving the hull a method it can't have | The hull `RigidBody3D` and the interior's code-made `StaticBody3D` have no script, so `receive_hit` could not live on them | `Hit.deliver(collider, hit)` calls a `&"receive_hit"` Callable in meta; hull colliders carry their cell in meta `&"cell"` (alcoves add several colliders for one cell, so shape index ≠ coord) |
 | Raycasting a body built this frame | The torch's tests hit nothing: a new body joins the physics space on the next physics frame | Wait a physics frame (`await wait_physics_frames(2)`) before querying what a rebuild made |
+| The plating's vertex colour after main's livery took `COLOR` | The skin wrote `HullPalette.PLATE` into its `HULL` batch, which the livery ignored until the damage merge made it multiply by `COLOR.rgb`: every plate would have darkened by the plate colour | The plating's vertex colour is the cell's stage colour, `UNHURT` (white) when whole; `test_an_unhurt_cell_s_plating_is_white_so_the_livery_is_as_painted` |
+| Re-dressing the skin for one stage | Rebuilding the skin from the layout costs 53 ms on the starter, and would replace the lens meshes and window glow `ShipLights` holds | `set_stage` recolours the cell's vertex runs in arrays kept from the dressing and re-adds the touched surfaces once at the end of the frame (~1.5 ms). Never read a mesh's arrays back to do it: that stalls on the GPU (5–25 ms) |
 | Recolouring one interior cell | The dressing is a few merged meshes, so there is no one cell's mesh to tint | A stage seen from inside rebuilds the ship once, deferred (`Ship._queue_rebuild`); it costs ~140 ms on the dev Xeon |
 | Letting go of a warp at 120 m/s with the assist on | The assist cancels velocity nobody asked for, so the ship braked to rest at the warp limit instead of coasting in | `WarpDrive` sets the speed lock to 120 m/s at drop-out; anything else that hands the hull a velocity with the assist on must do the same |
 | Letting the rest of the ship behave normally at warp | Found in the final review: you could cycle the airlock and step out mid-warp (stranded kilometres behind), the RCS kept its last command and puffed the whole way, and motion coupling read the frozen hull's placing as a 12 m/s² shove | Anything that acts on the hull's motion or lets someone outside asks `warp.is_spinning()` / `travelling()` first: `Airlock.warping()`, `FlightComputer`'s early return, `MotionCoupling._warp()` |

@@ -622,6 +622,19 @@ recorded what to change if it is wrong. **All of them await the owner's word.**
   as trims.
 - **Frame time,** measured after the last change (1280 × 720, GTX 960): the worst view, seated
   60 m off a rock's night side with both groups on and shadowed, holds 143–150 fps over two runs (§6.3).
+- **Damage tints the skin, not MultiMesh instances** (merged with health and damage, 2026-09-30;
+  that spec's §9 and §17.5). Main tinted each block's `MultiMesh` instance; the skin has none, so
+  every skin piece belongs to one cell (plates, chamfers and corners their record's `coord`,
+  facets, nozzles and windows theirs, a pod shell its `cell`, a light fixture its mount's new
+  `coord`), and `HullDressing` notes each cell's runs of vertices in the plating, trim and glass.
+  The plating's vertex colour is the stage colour, `HullPalette.UNHURT` (white) when whole, which
+  the livery now multiplies; trim and glass are their palette colour times it. Glows, lenses and
+  beams are lights and stay lit, so a wreck's "emissives off" is not drawn outside yet.
+  `set_stage` recolours one cell in arrays kept from the dressing and re-adds the touched
+  surfaces to the same meshes once at the end of the frame: 1.3–1.9 ms on the starter, five
+  stages in one frame 1.4 ms, where re-dressing the skin took 53 ms. Main's API
+  (`set_stage`, `stage_colour`, `instance_colour`) and the `&"cell"` meta on every collider stay;
+  `tintable()` went with the `MultiMesh`es. The airlock alcove is not tinted, as on main.
 
 ### 12.3 Left for the owner's eye
 

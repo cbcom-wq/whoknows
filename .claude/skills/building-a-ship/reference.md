@@ -264,7 +264,7 @@ pieces, all under `src/ship/` unless stated:
   | `nozzles` | `coord, normal, kind` | a bell (`thruster`) or pod (`rcs`) on the exhaust face, if open |
   | `windows` | `frame, size, round, coord` | a window outside, its skin frame and size |
   | `pods` | `frame, cell` | a cockpit pod's shell, in the interior's pod frame, brought to hull space |
-  | `mounts` | `group, position, normal, aim` | a light's place; `group` is `&"flood"` or `&"forward"` |
+  | `mounts` | `group, position, normal, aim, coord` | a light's place, on the cell `coord`; `group` is `&"flood"` or `&"forward"` |
   | `unmatched` | `coord, normal` | an inside window with no place outside: empty on any ship you give the player |
 
   Also `wanted` (how many inside windows there are), `skin` (`Vector3i` to the open faces of each
@@ -283,23 +283,33 @@ pieces, all under `src/ship/` unless stated:
     `FRAME` 0.1, `GLASS_Z` 0.07 (glass and bands stand in front of a proud plate), `POD_SKIN` 0.08,
     `POD_BELOW` 0.12, `POD_ROOF_THICK` 0.1, `POD_LIP` 0.1, `BEAM_NEAR` 0.15.
   - Plates go in the kit's `HULL` batch (the livery), trim and seams in `SOLID`, anything lit in
-    `GLOW`, glass in its own batch material.
+    `GLOW`, glass in its own batch material. **The plating's vertex colour is
+    `HullPalette.UNHURT` (white)**: the livery multiplies its albedo by it, and the damage tint
+    replaces it. Never give `HULL` a palette colour, or every plate darkens by it.
 - **`HullMaterials`** (`hull/hull_materials.gd`): `livery()`, `trim()`, `window_glass()`,
   `glow_instance(energy)` (a glow material of its own, so its energy moves alone), `beam(colour)`;
   `WINDOW_ENERGY` 2.4, `BEAM_ALPHA` 0.012, `BEAM_MID_ALPHA` 0.2. **`HullPalette`** gains `PLATE`,
   `TRIM`, `WINDOW_GLASS`, `WINDOW_LIGHT`, `WORK_LIGHT` (= `WORK_LIGHT_WARM`, `#ffe9cc`),
   `WORK_LIGHT_COOL` (`#e4eeff`, kept until the owner picks) and `NOZZLE_DARK`.
 - **`HullDressing.build(layout, root)`** (`hull/hull_dressing.gd`) returns
-  `{"meshes": Array[Mesh], "lenses": {group: MeshInstance3D}, "window_glow": ShaderMaterial}`. The
-  meshes are the plating and trim (for the miniature). Each kit is under its own child of `root`
+  `{"meshes": Array[Mesh], "lenses": {group: MeshInstance3D}, "window_glow": ShaderMaterial,
+  "spans": {coord: [[ArrayMesh, from, to], ...]}, "surfaces": {ArrayMesh: arrays}}`. The meshes
+  are the plating and trim (for the miniature). `spans` are each cell's runs of vertices in the
+  `TINTED` batches (`HULL`, `SOLID`, `GLASS` of `Skin/Hull` and `Windows`), noted with
+  `InteriorKit.vertex_count(batch)` around each piece; `surfaces` are those meshes' arrays, kept
+  by `InteriorKit.keep_arrays`. **Every piece belongs to one cell:** plates, chamfers and corners
+  their record's `coord`, facets, nozzles and windows theirs, a pod shell its `cell`, a light
+  fixture its mount's `coord`. A new piece must be marked the same way (`_counts`, then `_mark`),
+  or damage won't tint it; `test_every_tinted_skin_vertex_belongs_to_one_cell` fails. Each kit is under its own child of `root`
   (`Skin/Hull/DressingHull`, `DressingSolid`; `Windows`; `Lens_flood`, `Lens_forward`) so its
   merged meshes keep their names. All on `ExteriorBuilder.OWN_HULL_LAYER` (4), light mask
   `1 | 4`.
 - **`ExteriorBuilder` accessors:** `layout()` (the `HullLayout`), `hull_meshes()`, `lenses()`,
   `window_glow()`, `light_mounts()`, `bounds()`, `alcoves()`, `collider_coords()`. Colliders are
   a box per cube cell, and one `ConvexPolygonShape3D` per `HullShapes.collider_parts` piece for
-  a shaped block, under `HullLayout.cell_frame`. A pod's canopy cell keeps a box.
-  `multimeshes()` and the per-block `MultiMesh`es are gone.
+  a shaped block, under `HullLayout.cell_frame`. A pod's canopy cell keeps a box. **Every
+  collider carries meta `&"cell"`**: each convex part of a shaped block, and each of an alcove's.
+  `multimeshes()`, `tintable()` and the per-block `MultiMesh`es are gone.
 - **`ShipLights`** (`ship_lights.gd`, `Ship.lights`, at `Ship/Exterior/Lights`, so the floating
   origin carries it):
   - state `floods`, `forward`; signal `changed`; `interior_level` and `exterior_level` (1, or 0.5
@@ -336,7 +346,7 @@ pieces, all under `src/ship/` unless stated:
     4.91% of 5%; feel 1.49 / 0.71 / 1.85 rad/s², forward 14.3, brake and side 4.8, vertical 9.6 m/s²;
   - **the probe's lines:** `skin    110 plates, 78 chamfers, 18 corners, 140 facets, 9 nozzles`;
     `windows 8 outside for 8 inside` (6 portholes, 2 shoulder windows); `lights  5 floods, 2
-    forward`;
+    forward`; `tint    88 cells in 5 meshes` (the other 22 cells are all inside, or the alcove);
   - **mounts, in hull space:** floods at (−3.667, −1, −5.667), (3.667, −1, −5.667), (−6, −1, 6),
     (6, −1, 6) and the keel's (0, −2, 0), tilted 25° outward; forward lights at (−4, −0.06, −6)
     and (4, 0, −6), aimed 5° down and 3° out. **5 floods, not the plan's 6:** the bow corner floods
@@ -444,7 +454,7 @@ Saved places outside are `UniversePoint`s (`SaveCodec.upoint`). The world's star
 | `Ship.launch_blueprint`, `launch_block(cell)`, `launch_of(d)` | the layout it launched with, nothing hurt, saved as `"launch"`; what the torch rebuilds |
 | `Ship.cell_hit`, `missing_cell_along`, `repair_cell`, `rebuild_cell`, `cell_label`, `hull_whole()` | the repair torch's side, and HULL % in the band |
 | `Ship.wake_spots()` | where you wake after blacking out: the bunk room's cells first |
-| `ExteriorBuilder.set_stage(coord, stage)`, `stage_colour(stage)` | per-instance `HullPalette.UNHURT` / `SCORCH` / `CHAR` |
+| `ExteriorBuilder.set_stage(coord, stage)`, `stage_colour(stage)`, `instance_colour(coord)`, `skin_spans(coord)` | the cell's skin multiplied by `HullPalette.UNHURT` (white) / `SCORCH` / `CHAR`: the plating's vertex colour is the stage colour, trim and glass their colour times it; glows, lenses and beams stay lit. In place: the cell's vertices are recoloured in the kept arrays and the touched surfaces re-added to the same `ArrayMesh`es once at the end of the frame. On the starter (GTX 960 box) `set_stage` 0.03–0.08 ms, the upload 1.3–1.9 ms, five stages in one frame 1.4 ms; re-dressing the skin would be 53 ms. The alcove is not tinted |
 | `InteriorKit.wear`, `InteriorBuilder.wear_at(coord, normal)`, `shows(coord)` | interior dressing leans toward `InteriorPalette.SCORCH` / `CHAR`; a wreck's glow goes dark |
 
 Measured on the starter (crash probe, `test/probes/crash_probe.gd`): 3 m/s nose-on hurts 3
