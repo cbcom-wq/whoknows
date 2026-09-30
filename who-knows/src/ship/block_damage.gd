@@ -71,7 +71,7 @@ static func apply_many(grid: ShipGrid, catalog: BlockCatalog, hits: Dictionary) 
 	if gone.is_empty():
 		return gone
 	var removed: Array[Vector3i] = gone.duplicate()
-	removed.append_array(_cut_off(grid, gone))
+	removed.append_array(cut_off(grid, gone))
 	grid.remove_many(removed)
 	return removed
 
@@ -103,7 +103,7 @@ static func rebuild(grid: ShipGrid, catalog: BlockCatalog, coord: Vector3i, bloc
 
 ## The blocks that would no longer reach the core once every cell in `gone`
 ## is removed. None when the grid has no core: nothing to be cut off from.
-static func _cut_off(grid: ShipGrid, gone: Array[Vector3i]) -> Array[Vector3i]:
+static func cut_off(grid: ShipGrid, gone: Array[Vector3i]) -> Array[Vector3i]:
 	var out: Array[Vector3i] = []
 	var core = null
 	for coord in grid.coords():

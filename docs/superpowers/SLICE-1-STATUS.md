@@ -1,8 +1,8 @@
 # Slice 1 — status and handoff
 
-**Last updated:** 2026-09-27
+**Last updated:** 2026-09-30
 **Branch history:** `design/slice-1` (Tasks 1–12, merged) → `feat/slice-1-builders` (Tasks 13–15)
-**Suite:** 1,352 tests, green (2026-09-27, main with saving and the bridge computer)
+**Suite:** 1,530 tests, green (2026-09-30, `claude/health-and-damage-design`: health and damage)
 
 Governing documents:
 
@@ -64,6 +64,17 @@ scenery any more.
   - sets a course to a big rock (salvage once quantum energy's Task 10 registers it), which an
     amber marker on the HUD follows on every view, clearing on arrival with a chime;
   - shows the ship in miniature, from its own hull, with its store, power and suit.
+- **Health and damage** (docs/superpowers/specs/2026-09-29-health-and-damage-design.md, §17 as
+  built):
+  - blocks go damaged, wrecked and gone under plasma bolts and crashes, and the ship limps
+    crippled;
+  - you are hurt, black out and wake aboard at 50 QE;
+  - skitters die and bite back; the droid is knocked out;
+  - a repair torch fed with scrap plates mends the hull, even on a spacewalk;
+  - HULL % and CRIPPLED show in the band.
+  
+  Open: the hull livery shader doesn't take the damage tint yet (owner's call), and a rebuild
+  costs ~140 ms.
 
 Derived stats for the starter shuttle (2026-09-27, with the quantum fixtures and the bridge
 computer): 96,900 kg, torque imbalance 11,146 / −6,192 N·m (0.36% / 0.3% of pitch / yaw

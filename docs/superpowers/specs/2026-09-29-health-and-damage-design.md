@@ -1,8 +1,10 @@
 # Health and damage — things that can be hurt, broken and lost
 
 **Date:** 2026-09-29
-**Status:** Approved by the owner on 2026-09-29, after answering all eleven questions (§2). The
-build plan is `docs/superpowers/plans/2026-09-29-health-and-damage.md`.
+**Status:** Approved by the owner on 2026-09-29, after answering all eleven questions (§2), and
+built on `claude/health-and-damage-design` from the plan
+`docs/superpowers/plans/2026-09-29-health-and-damage.md`. §17 records where the build differs.
+One question is open: the hull livery shader (§17, item 5).
 **Depends on:** `main` at `dfd7b91`: the system skeleton, NPC foundation, saving, quantum energy,
 asteroids, hands and items.
 **Governed by:** `docs/design/visual-style.md` (damage looks come from the palettes, within the
@@ -487,3 +489,55 @@ anything.
 | The crash curve is wrong: harmless or brutal | `CRASH_K` and the threshold are tuned in the real scene, not in tests |
 | Wearing the ship down with one save slot | The torch mends anything, even a gone block (§8) |
 | Welding the hull outside is fiddly with the suit's drift | Reach is 2.5 m and the weld holds while the aim stays on the cell, not an exact point; tuned in the real scene |
+
+---
+
+## 17. How the build differs
+
+Built 2026-09-29 to 30: the suite went from 1,421 tests to 1,530, all green, headless.
+
+1. **Damage is a float,** not an int (§4.2). The torch mends about 0.4 hp a frame, which an int
+   would round away. The save keeps its positional cell arrays: the sixth slot, always 0 before,
+   is now damage taken, so there is no key to rename. `ShipBlueprint.damage_values` replaces
+   `hp_values`.
+2. **Every airlock is kept** (§4.5), not only the one you came in by: the ship doesn't know which
+   that was, and a starter has one.
+3. **How hits find a block.** The hull and the interior are scriptless bodies, so they take hits
+   through a `&"receive_hit"` Callable in meta (`Hit.deliver`). Each hull collider carries its
+   cell in meta `&"cell"`: an airlock alcove adds several colliders for one cell, so a shape
+   index is not a coord. Crash contacts come from the hull's direct physics state, and their
+   damage is dealt after the physics step, because a removal rebuilds colliders.
+4. **The interior can't recolour one cell** (§4.3, §9): its dressing is a few merged meshes. A
+   stage change on a block you can see from inside rebuilds the ship once, at the end of the
+   frame. That costs about **140 ms** headless on the 2.8 GHz dev Xeon, the same as any removal:
+   a hitch. Per-cell rebuilds stay in §14.
+5. **Open: the hull livery.** `hull` and `hull_wedge` use `hull_livery.gdshader`, which ignores
+   the instance colour, so those blocks don't look damaged from outside. Every other block does.
+   The fix is one line in that shader (`ALBEDO *= COLOR.rgb`), and waits on the owner.
+6. **Waking** (§7.2). The bunk room is mostly bunks, so you wake at the free cell nearest it.
+   Outside, the suit brings you home during the black and you wake there too, not inside the
+   airlock: the airlock may be open to space.
+7. **Feel** (§7.1). The thump reuses `hull_thump`, and the head rolls 0.05 rad from the side the
+   hit came from. There is no breathing below 30 hp yet. The wake line *YOU BLACKED OUT · 50 QE*
+   is drawn by the same overlay as the red edge (`HurtEdge`).
+8. **NPC health lives in `NpcLedger`,** not on `NpcRecord` (§6): recipes make records afresh on
+   every review. Looks aren't changed per species: `Npc` poses the look itself (a squash, a
+   70° slump, on its back). The droid's eye doesn't go dark.
+9. **Cornered** (§5.4) is fear above 0.7 with you within 2 m; the site isn't asked whether there
+   is somewhere to scatter to. `defend` is weighted 1.2, so when you are close it wins over
+   `scatter`'s touch.
+10. **The torch works outside** because items gain `works_outside` (§8.1): hands are suspended on
+    a spacewalk, and "any wielded item already works outside" was wrong. Taking, dropping and
+    throwing still wait until you are aboard. What you hold goes outside drawn for outside.
+11. **The torch's place.** Every stow point was full, and a test pins everything in the hands and
+    items spec's set as aboard, so the torch takes the second flare's place in the weapon room
+    rather than the spanner's, and **the ship starts with no plates**. A full torch holds three
+    plates' worth. Plates come from salvage and the quantum machine, and from blocks knocked off.
+12. **Not tuned yet.** `CRASH_K` and `CRASH_FROM` are the first values. On the starter, nose-on
+    into a wall (`test/probes/crash_probe.gd`): 3 m/s hurts three blocks a little; 5 m/s knocks
+    one off and damages three; 8 m/s knocks four off. Nothing crippled it.
+13. **Renders** so far are software GL (Mesa llvmpipe, the compatibility renderer), flatter than
+    the owner's GPU: the interior at each stage (`test/probes/damage_render.gd`) and the torch
+    in hand and welding (`test/probes/torch_render.gd`). Outside, at the sun's back, the hull
+    was too dark to judge.
+

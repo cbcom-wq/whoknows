@@ -88,22 +88,26 @@ Do these in order. Each names the check that proves it.
    `test_visual_style_rules.gd`. Outside: distance fade reversed (min = `fade.y`, max =
    `fade.x`), render layer 1. Inside: the interior kit, layer 2, glow batch, no light of its own.
    Proof: `test_npc_looks.gd`-style tests (triangle budget, palette, layer, fade, parts move).
-8. **Sound** (inside only): new `Synth` builders, `species.move_sound` for a loop, behaviours set
+8. **Health:** `max_health` in the species (the catalogue test checks it is above 0), and
+   whether it dies (`knocked_out_for` 0) or is knocked out and gets up. A creature that fights
+   back lists a reflex like `defend` and asks the body for the bite with an intent action; the
+   mind never delivers a hit itself. Proof: `test_npc_death.gd`-style tests with a fake source.
+9. **Sound** (inside only): new `Synth` builders, `species.move_sound` for a loop, behaviours set
    `ctx.voice`. Proof: `test_synth.gd` lengths.
-9. **Run the whole suite.** Masks and the floating-origin coverage test catch a lot.
-10. **Real-scene tests:** it wakes where it should, unseen (outside: beyond its fade from every
+10. **Run the whole suite.** Masks and the floating-origin coverage test catch a lot.
+11. **Real-scene tests:** it wakes where it should, unseen (outside: beyond its fade from every
     camera); sleeps when you leave; holds its place through `Universe.shift`; reacts to the
     player in the scene (as `test_droid_scene.gd`, `test_exterior_npcs.gd`). Add it to
     `test_floating_origin_scene.gd` if it lives outside.
-11. **Frame time:** adapt `test/probes/npc_probe.gd` to fill its director to `max_live` and
+12. **Frame time:** adapt `test/probes/npc_probe.gd` to fill its director to `max_live` and
     time all NPC work over 600 frames. Budget: **1 ms** for everything (spec §16). Report the
     machine. If over, see *Mistakes* (resting, LOD, no slides, caches).
-12. **Render and show the owner** with a script like `test/probes/droid_render.gd` /
+13. **Render and show the owner** with a script like `test/probes/droid_render.gd` /
     `skitter_render.gd`: inside at eye height (1.6 m), outside from a spacewalk, lamp on and off,
     and each reaction caught mid-act. Print the counts (how many froze, scattered). Green tests
     prove structure, not looks: the droid read as part of the walls and the skitter as a spider
     until they were rendered.
-13. **Update this skill and the spec's *As built*** in the same branch: new checks here, new
+14. **Update this skill and the spec's *As built*** in the same branch: new checks here, new
     lessons in *Mistakes*, new numbers and APIs in `reference.md`.
 
 ## Recipes
@@ -169,20 +173,24 @@ Do these in order. Each names the check that proves it.
 | `push_warning`/`push_error` in a test | GUT fails the test on an unexpected engine error | `assert_engine_error(...)` / `assert_push_error(...)` for expected ones |
 | Colour literals in a look | `test_visual_style_rules.gd` fails | Palette constants only, also for defaults (`SpacePalette.UNTINTED`) |
 | A windowed probe loading `flight_test.tscn` with saving on | Saving is on outside `--headless` (saving spec §9), so a render script would load and overwrite the owner's real game | `scene.save_enabled = false` before `add_child`, as `test/probes/*.gd` do |
+| Health on the record | Recipes make records afresh on every review, so a wound set on an `NpcRecord` was gone next review | Keep what must stick in `NpcLedger`, read in `amend` and `promote` |
+| Reposing the look without its scale | The look is scaled to the species' size when built; setting its transform dropped that | `Npc._look_scale`, kept by every pose; lift a body on its back by its height |
 | A Variant-typed `:=` | GDScript treats the warning as an error; the whole script fails to load | Type it: `var x: Variant = ...` |
 | Taking `stream.details.live.values()[0]` as the start rock | Once rocks moved into belts (system skeleton spec §6), a neighbour was in detail too and had no herds | `stream.details.nearest(ship.exterior.global_position)`; and count only its own site's contacts |
 
 ## Not built yet (plan for it; don't assume it works)
 
-- **Memory across loads.** Nothing is remembered when an NPC sleeps; `NpcDirector.amend(record)`
-  is where a ledger of changes plugs in.
-- **Damage and death** (Slice 2). `Npc.receive_hit` only shoves and touches.
+- **Memory beyond health.** `NpcLedger` keeps the dead and the wounds of the sleeping (through
+  `NpcDirector.amend`); nothing else about an NPC is remembered when it sleeps.
+- **A dead droid, and repairs by others.** The droid is only ever knocked out; the repair torch
+  brings it round.
 - **Local avoidance.** A walker does not path round people: a droid heading through you steps
   aside (`give_way`) and tries again. A player standing still in a doorway blocks it.
 - **Ladders and upper storeys for walkers.** `DeckPaths` joins one storey only.
 - **Interactions** beyond the seam; the hose; carrying an NPC.
 - **Sound outside** (never, by the style guide) and **sensors** (`LifeContacts` for the bridge
   computer).
-- **Hostile NPCs and combat**, `GroundWalker` (worlds), `ShipPilot` (wingmen).
+- **Hunters and combat** beyond `defend` (which only bites back), `GroundWalker` (worlds),
+  `ShipPilot` (wingmen).
 - **The frame budget on the target PC.** Measured 1.2 ms for 32 + the droid on a shared 2.1 GHz
   Xeon; unmeasured on the GTX 960 machine.
