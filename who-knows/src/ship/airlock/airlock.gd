@@ -81,6 +81,8 @@ func bind(new_room: AirlockRoom, new_alcove: AirlockAlcove = null) -> void:
 ## What pressing panel `role` would do now, or "": the cycle's prompt, unless
 ## the room panel is refusing to let an empty suit out.
 func prompt(role: StringName) -> String:
+	if warping():
+		return "Not during a warp"
 	if role == &"room" and must_charge():
 		return "Charge suit first"
 	return cycle.prompt(role)
@@ -95,6 +97,13 @@ func must_charge() -> bool:
 	var avatar := _avatar()
 	return avatar != null and _ship != null and avatar.get_parent() == _ship.interior \
 		and avatar.suit_cell.charge < SuitCell.GO_OUT_MIN
+
+## True while the ship's warp drive spools or travels
+## (docs/superpowers/specs/2026-09-28-warp-design.md §5): no panel works and
+## nobody crosses the outer hatch, or they would be left behind, kilometres
+## off.
+func warping() -> bool:
+	return _ship != null and _ship.warp != null and _ship.warp.is_spinning()
 
 ## What a save keeps (saving spec §6.6): a save is only taken at rest, so the
 ## pressure and which hatch stands open are the whole of it.
@@ -190,7 +199,7 @@ static func _body_points(avatar: Avatar, to_local: Transform3D) -> Array:
 ## out into the world onto a spacewalk, or back into the room aboard.
 func _watch_threshold() -> void:
 	var avatar := _avatar()
-	if avatar == null or _ship == null or not is_instance_valid(alcove) or cycle.outer_open < 1.0:
+	if avatar == null or _ship == null or not is_instance_valid(alcove) or cycle.outer_open < 1.0 or warping():
 		return
 	var hull := _ship.exterior
 	var interior := _ship.interior
@@ -318,7 +327,7 @@ func _on_pressed(role: StringName) -> void:
 		if panel.role == role and _players.has(&"panel"):
 			var beep: AudioStreamPlayer3D = _players[&"panel"]
 			beep.global_position = panel.global_position
-	if role == &"room" and must_charge():
+	if warping() or (role == &"room" and must_charge()):
 		cue.emit(&"refused", AirlockCycle.Door.NONE)
 		_play(&"panel", &"warning_chime")
 		return

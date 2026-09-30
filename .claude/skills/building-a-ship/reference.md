@@ -281,7 +281,7 @@ What a ship contributes:
 
 | API | Does |
 |---|---|
-| `Ship.to_dict(universe)` | layout (`ShipBlueprint.to_dict`), hull place and motion, `FlightComputer.to_dict`, `QuantumStore.to_dict`, each `Airlock.to_dict`, every item aboard (`Item.to_dict`) |
+| `Ship.to_dict(universe)` | layout (`ShipBlueprint.to_dict`), hull place and motion (during a warp, the drop-out point, moving in), `FlightComputer.to_dict`, `QuantumStore.to_dict`, `WarpDrive.to_dict` (the chart), each `Airlock.to_dict`, every item aboard (`Item.to_dict`) |
 | `Ship.layout_of(d)` → `ShipGrid` | the grid a save was built from |
 | `Ship.set_grid(grid, false)` | builds without stocking the shelves: a loaded game brings its own items |
 | `Ship.restore_hull(d, universe)` / `restore_aboard(d)` / `restore_item(d)` | puts it all back; an item whose stow point is gone comes loose |
@@ -312,6 +312,34 @@ Saved places outside are `UniversePoint`s (`SaveCodec.upoint`). The world's star
 
 Measured on the starter (crash probe, `test/probes/crash_probe.gd`): 3 m/s nose-on hurts 3
 blocks a little; 5 m/s knocks one off and damages 3; 8 m/s knocks 4 off. Not crippled by any.
+
+## The warp (`docs/superpowers/specs/2026-09-28-warp-design.md`)
+
+`WarpDrive` at `Ship/Warp`, built by `Ship._ready`; `flight_test.gd` binds it
+(`warp.bind(system, universe, whereabouts, sensors, stream.recipe, warp_busy)`) and connects
+`PilotControls.warp_pressed` (J) to `engage()`.
+
+| Number | Value | Where |
+|---|---|---|
+| Spool | 10 s; aborts past 10° off the line | `WarpDrive.SPOOL`, `ABORT_ANGLE` |
+| Lined up | within 5° | `WarpPlan.ALIGN` |
+| Shortest warp | 5 km of travel | `WarpPlan.MIN_TRAVEL` |
+| Cost | 40 QE + 4 QE per km, rounded up | `WarpPlan.WARP_BASE`, `WARP_PER_KM` |
+| Travel | 18 s + 1 s per 5 km; 4 s ramps; 120 m/s at both ends | `WarpProfile.BASE_TIME`, `PACE`, `RAMP`, `EDGE_SPEED` |
+| Warp limit | a body's well (a cluster's 4 km) + 14 km | `SystemRecipe.WARP_CLEAR`, `CLUSTER_RADIUS` |
+| Arrival clear of rocks | 300 m of mid and big rocks, 30 m of rubble | `WarpPlan.ROCK_CLEAR` |
+
+| API | Does |
+|---|---|
+| `chart(id)` / `clear_chart()` | a warp target by id; sets and clears the course with it |
+| `check() -> WarpPlan` | status (`READY`, `ALIGN`, `INSIDE`, `BLOCKED`, `NO_QE` ...), cost, drop-out; `plan.text()` is the HUD's line |
+| `engage()` | J: starts the spool when `READY`, aborts it while spooling |
+| `travelling()`, `is_spinning()`, `velocity()`, `streak()`, `time_left()` | for the flight computer, the core, the dust and the HUD |
+| `arrival()` | where a save made mid-warp puts the hull |
+| signals `travel_started`, `travel_ended`, `aborted(why)`, `stage_changed` | the flight scene suspends and resumes the rocks, salvage and looks on the first two |
+
+While travelling, `FlightComputer` ignores the pilot and reports the warp's velocity; the hull is
+frozen kinematic with layer and mask 0; `QuantumPlant` runs the cores at `&"warp"`.
 
 ## Commands
 

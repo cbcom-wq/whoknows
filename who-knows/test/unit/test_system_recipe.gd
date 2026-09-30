@@ -100,3 +100,76 @@ func test_a_planet_s_world_comes_from_its_slot():
 		var i := String(p.id).substr(1).to_int()
 		assert_eq(p.recipe.seed, WorldSeed.sub(5, StringName("slot_%d" % i)))
 		assert_eq(p.name, p.recipe.name)
+
+# --- warp targets, limits, clusters and debris (the warp spec §3) -------------
+
+func test_warp_limits_reach_past_each_body_s_edge_and_hold_its_moons():
+	for k in 200:
+		var s := SystemRecipe.from_seed(k * 7919 + 3)
+		var broken := s.problems()
+		assert_eq(broken.size(), 0, "seed %d: %s" % [s.seed, ", ".join(broken)])
+		for t in s.warp_targets():
+			assert_gte(t.limit, t.edge + SystemRecipe.WARP_CLEAR - 0.01, "%s" % t.id)
+		for p in s.planets():
+			for m in s.moons_of(p):
+				assert_lte(m.point.minus(p.point).length() + m.neighbourhood, p.warp_limit, "%s" % m.id)
+
+func test_targets_are_the_star_then_the_planets_then_the_clusters():
+	var s := SystemRecipe.from_seed(1337)
+	var targets := s.warp_targets()
+	assert_eq(targets[0].id, &"star")
+	assert_eq(targets[0].kind, WarpTarget.Kind.STAR)
+	assert_eq(targets[0].edge, s.star.well_radius)
+	var planets := s.planets()
+	for i in planets.size():
+		assert_eq(targets[i + 1].id, planets[i].id)
+		assert_eq(targets[i + 1].kind, WarpTarget.Kind.PLANET)
+		assert_eq(targets[i + 1].limit, planets[i].warp_limit)
+	for i in s.clusters.size():
+		assert_eq(targets[planets.size() + 1 + i], s.clusters[i])
+	assert_eq(targets.size(), 1 + planets.size() + s.clusters.size())
+	for t in targets:
+		assert_eq(s.warp_target(t.id), t)
+		assert_eq(t.contact_id(), StringName("body:" + String(t.id)))
+
+func test_clusters_lie_in_their_belts_apart_and_the_first_is_the_start():
+	var with_belts := 0
+	for k in 200:
+		var s := SystemRecipe.from_seed(k * 104729 + 11)
+		if s.belts.is_empty():
+			assert_eq(s.clusters.size(), 0)
+			continue
+		with_belts += 1
+		assert_eq(s.clusters[0].id, &"belt_0.c1")
+		assert_true(s.clusters[0].point.is_equal_approx(s.entry()), "seed %d: the first cluster is the start" % s.seed)
+		var per_belt := {}
+		for i in s.clusters.size():
+			var c := s.clusters[i]
+			assert_eq(c.kind, WarpTarget.Kind.CLUSTER)
+			assert_eq(c.limit, SystemRecipe.CLUSTER_RADIUS + SystemRecipe.WARP_CLEAR)
+			assert_true(c.name.ends_with(" CLUSTER"), c.name)
+			if i > 0:
+				assert_gt(s.belts[c.belt].profile(c.point), 0.0, "seed %d: %s lies in its belt" % [s.seed, c.id])
+			per_belt[c.belt] = per_belt.get(c.belt, 0) + 1
+		for n: int in per_belt.values():
+			assert_lte(n, SystemRecipe.CLUSTERS.y)
+	assert_gt(with_belts, 180)
+
+func test_every_planet_has_a_debris_disc_from_its_well_to_inside_its_limit():
+	var s := SystemRecipe.from_seed(11)
+	var planets := s.planets()
+	assert_eq(s.debris.size(), planets.size())
+	for k in planets.size():
+		var p := planets[k]
+		var d := s.debris[k]
+		assert_true(d.centre.is_equal_approx(p.point))
+		assert_eq(d.inner, p.well_radius)
+		assert_eq(d.outer, p.warp_limit - SystemRecipe.DEBRIS_INSIDE)
+		assert_eq(d.half_thickness, SystemRecipe.DEBRIS_HALF_THICKNESS)
+		if p.ring != null:
+			assert_true(d.normal.is_equal_approx(p.ring.normal), "a ringed planet's debris follows its ring")
+		assert_lte(d.normal.angle_to(Vector3.UP), SystemRecipe.RING_TILT + 0.001)
+
+func test_the_versions_moved_on():
+	assert_eq(SystemRecipe.VERSION, 2)
+	assert_eq(AsteroidRecipe.VERSION, 3)

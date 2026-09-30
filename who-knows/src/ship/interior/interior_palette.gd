@@ -65,6 +65,10 @@ const SIGNAL_GO := Color("8fd6a0")
 ## A star, planet or moon on the bridge computer's map (the system skeleton
 ## spec §10): apart from rocks, salvage, life and the course.
 const WORLD := Color("e89ab0")
+## The holo's faint marks (docs/superpowers/specs/2026-09-28-warp-design.md
+## §7.1): scale rings, warp limits, and worlds your QE cannot reach yet.
+## Picked at render.
+const HOLO_DIM := Color("5e5270")
 const STEAM := Color("f2ece2")
 ## Quantum energy (docs/superpowers/specs/2026-09-24-quantum-energy-design.md
 ## §2 row 11, §14.3): QUANTUM, a soft luminous violet, is the colour of QE --

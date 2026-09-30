@@ -18,6 +18,9 @@ var proxies: Array[BodyProxy] = []
 var belts: Array[BeltLook] = []
 var dust: SpaceDust
 var whereabouts: Whereabouts
+## The warp's streak for the dust (the warp spec §5.2), set every tick by
+## whoever drives the warp; zero when there is none.
+var streak := Vector3.ZERO
 
 var _bodies: Node3D
 var _by_id := {}
@@ -67,10 +70,16 @@ func place_all() -> void:
 		p.place(universe, focus)
 	for b in belts:
 		b.place(universe, focus)
-	dust.density = whereabouts.dust()
+	dust.density = 1.0 if not streak.is_zero_approx() else whereabouts.dust()
+	dust.streak = streak
 	dust.place(universe, focus)
 	if sun != null:
 		aim_sun(sun, recipe.star.point, focus)
+
+## The belts' look while a warp carries you: every slab whole (§5.2).
+func set_warp(on: bool) -> void:
+	for b in belts:
+		b.set_whole(on)
 
 ## Points `light` from the star at `star` towards `focus` (§7.6).
 static func aim_sun(light: DirectionalLight3D, star: UniversePoint, focus: UniversePoint) -> void:

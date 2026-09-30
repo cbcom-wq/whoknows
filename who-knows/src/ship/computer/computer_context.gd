@@ -11,6 +11,8 @@ var store: QuantumStore
 var stats: ShipStats
 var hull: Node3D
 var exterior_builder: ExteriorBuilder
+## The warp drive, for the map's SYSTEM range (the warp spec §7); null in tests.
+var warp: WarpDrive
 ## Whoever last pressed one of the table's buttons.
 var operator: Node
 var time := 0.0

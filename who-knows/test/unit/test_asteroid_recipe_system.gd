@@ -78,7 +78,11 @@ func test_rings_are_crowded_with_rubble_and_never_giants():
 	var found: Array = _ringed()
 	var sys: SystemRecipe = found[0]
 	var planet: SystemBody = found[1]
-	var recipe := AsteroidRecipe.new(sys.seed, null, sys.asteroid_shapes())
+	# The ring alone: the planet's orbital debris (the warp spec §3.3) scatters
+	# rubble round the slab too, which is not what this counts.
+	var shapes := sys.asteroid_shapes()
+	shapes.debris.clear()
+	var recipe := AsteroidRecipe.new(sys.seed, null, shapes)
 	var inside := 0
 	var total := 0
 	for k in 6:
@@ -125,3 +129,59 @@ func test_the_flight_starts_by_the_first_belt_s_first_group():
 
 func test_the_same_system_gives_the_same_start():
 	assert_true(_system.entry().is_equal_approx(SystemRecipe.from_seed(1337).entry()))
+
+# --- debris and clusters (the warp spec §3.1, §3.3) ---------------------------
+
+func test_debris_crowds_a_planet_s_disc():
+	var p := _system.planets()[0]
+	var d := _system.debris[0]
+	var bare_shapes := _system.asteroid_shapes()
+	bare_shapes.debris.clear()
+	var bare := AsteroidRecipe.new(_system.seed, null, bare_shapes)
+	var across := d.normal.cross(Vector3.RIGHT)
+	if across.length() < 0.1:
+		across = d.normal.cross(Vector3.FORWARD)
+	across = across.normalized()
+	var with_debris := 0
+	var without := 0
+	for k in 12:
+		var r := lerpf(d.inner + 800.0, d.outer - 3000.0, k / 11.0)
+		var at := d.centre.plus(across.rotated(d.normal, k * 0.5) * r)
+		var cell := AsteroidRecipe.cell_of(T.RUBBLE, at)
+		with_debris += _recipe.cell_rocks(T.RUBBLE, cell).size()
+		without += bare.cell_rocks(T.RUBBLE, cell).size()
+		assert_eq(_recipe.cell_rocks(T.GIANT, AsteroidRecipe.cell_of(T.GIANT, at)).size(),
+			bare.cell_rocks(T.GIANT, AsteroidRecipe.cell_of(T.GIANT, at)).size(), "debris adds no big rock")
+	gut.p("debris round %s: %d rubble in 12 cells, %d without" % [p.id, with_debris, without])
+	assert_gt(with_debris, maxi(without * 3, 12))
+
+func test_no_debris_lies_in_a_well():
+	var planets := _system.planets()
+	for k in planets.size():
+		var p := planets[k]
+		var d := _system.debris[k]
+		for j in 8:
+			var dir := Vector3(sin(j * 1.3), cos(j * 2.1), sin(j * 0.7)).normalized()
+			assert_eq(d.profile(p.point.plus(dir * p.well_radius * 0.95)), 0.0, "%s's well" % p.id)
+		for b in _system.bodies:
+			if b != p and b.point.minus(p.point).length() < d.outer + d.half_thickness + b.well_radius:
+				assert_eq(d.profile(b.point), 0.0, "%s's well, in %s's debris" % [b.id, p.id])
+
+func test_a_cluster_lifts_the_chance_of_groups_round_it():
+	var c := _system.clusters[1] if _system.clusters.size() > 1 else _system.clusters[0]
+	var lifted := AsteroidRecipe.new(_system.seed, null, _system.asteroid_shapes())
+	var flat := AsteroidRecipe.new(_system.seed, null, _system.asteroid_shapes(false))
+	var more := 0
+	for dx in range(-1, 2):
+		for dz in range(-1, 2):
+			var cell := AsteroidRecipe.cell_of(T.GIANT, c.point) + Vector3i(dx, 0, dz)
+			var a := lifted.group_chance(cell)
+			var b := flat.group_chance(cell)
+			assert_gte(a, b - 1e-6, "a lift never lowers the chance")
+			if a > b + 0.01:
+				more += 1
+	assert_gt(more, 0, "the cluster at %s lifted nothing" % c.id)
+
+func test_the_start_ignores_the_clusters_lift():
+	var flat := AsteroidRecipe.new(_system.seed, null, _system.asteroid_shapes(false))
+	assert_true(_system.entry().is_equal_approx(flat.find_start()))

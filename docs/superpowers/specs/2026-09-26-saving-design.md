@@ -4,6 +4,9 @@
 **Status:** The owner answered the three design questions (§2) on 2026-09-26 and asked for it to be
 built the same day. Built on `claude/game-saving-gfabv1`; §15 records where the build differs
 from the first draft.
+**Amended 2026-09-29 (the warp spec §5.5, `2026-09-28-warp-design.md`):** during a warp the hull is
+saved at the drop-out point, moving in, with the warp paid for; the ship part gains
+`warp: {charted}`. `SystemRecipe.VERSION` 2 and `AsteroidRecipe.VERSION` 3 start old saves over.
 **Depends on:** `main` at `ae32d48`, which has the floating origin, asteroids, the airlock,
 hands and items, flight controls, and quantum energy through salvage.
 **Governed by:** CLAUDE.md's floating-origin rule. A position that must survive a shift is a

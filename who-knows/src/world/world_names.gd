@@ -33,3 +33,8 @@ static func star(rng: RandomNumberGenerator) -> String:
 ## The `k`th moon of `planet`, from 0.
 static func moon(planet: String, k: int) -> String:
 	return "%s %s" % [planet, MOON_LETTERS[k]]
+
+## A belt cluster's name: syllables and CLUSTER, as in TRELL CLUSTER (the warp
+## spec §3.1).
+static func cluster(rng: RandomNumberGenerator) -> String:
+	return "%s CLUSTER" % syllables(rng)

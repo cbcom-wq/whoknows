@@ -32,6 +32,10 @@ const COURSE := Color("ffb45a")
 ## and the black you fade into when you black out.
 const HURT := Color("c8452e")
 const BLACKOUT := Color("050404")
+## Ready to go (docs/superpowers/specs/2026-09-28-warp-design.md §7.3): the
+## warp panel's WARP READY and the alignment ring when you are lined up. The
+## interior's SIGNAL_GO green.
+const GO := Color("8fd6a0")
 
 ## The colour for a sensor contact of `kind`; the readout's for any other.
 static func for_kind(kind: StringName) -> Color:

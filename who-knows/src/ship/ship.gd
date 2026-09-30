@@ -73,6 +73,10 @@ var rcs_show: RcsShow
 ## §8). At Ship/Quantum, alongside FlightComputer -- the two share the one
 ## QuantumStore instance below.
 var quantum: QuantumPlant
+## The warp drive (docs/superpowers/specs/2026-09-28-warp-design.md §5), at
+## Ship/Warp. The flight scene binds it to the system; the ship only builds it
+## and saves its chart.
+var warp: WarpDrive
 
 ## Seconds since a rock last struck the hull.
 var since_struck := INF
@@ -154,6 +158,14 @@ func _ready() -> void:
 	quantum.items = items
 	quantum.item_catalog = item_catalog
 	add_child(quantum)
+	warp = WarpDrive.new()
+	warp.name = "Warp"
+	warp.hull = exterior
+	warp.plant = quantum
+	warp.flight_computer = flight_computer
+	add_child(warp)
+	flight_computer.warp = warp
+	quantum.warp = warp
 	AudioBuses.ensure()
 	Synth.warm_up()
 	_hum = AudioStreamPlayer.new()
@@ -569,6 +581,7 @@ func _bind_computers() -> void:
 		context.stats = stats
 		context.hull = exterior
 		context.exterior_builder = exterior_builder
+		context.warp = warp
 		c.bind(context)
 		if _computer_state.has(c.cell):
 			c.restore(_computer_state[c.cell])
@@ -717,9 +730,14 @@ func busy() -> String:
 
 ## The ship's part of a save: its layout, where it is in `universe` and how
 ## it moves, its flight settings, its store, its airlocks and every item
-## aboard that is not in someone's hand.
+## aboard that is not in someone's hand. During a warp the hull is saved at the
+## drop-out point, moving in (the warp spec §5.5).
 func to_dict(universe: Universe) -> Dictionary:
 	var hull := exterior.global_transform
+	var place := warp.arrival() if warp != null else {}
+	var hull_at: UniversePoint = place.get("at", universe.to_universe(hull.origin))
+	var hull_turn: Basis = place.get("turn", hull.basis)
+	var hull_v: Vector3 = place.get("v", exterior.linear_velocity)
 	var saved_airlocks := {}
 	for at: Vector3i in airlocks:
 		saved_airlocks[SaveCodec.cell_key(at)] = airlocks[at].to_dict()
@@ -733,11 +751,12 @@ func to_dict(universe: Universe) -> Dictionary:
 		"layout": ShipBlueprint.from_grid(grid, String(name)).to_dict(),
 		"launch": launch_blueprint.to_dict() if launch_blueprint != null else {},
 		"hull": {
-			"at": SaveCodec.upoint(universe.to_universe(hull.origin)),
-			"turn": SaveCodec.basis(hull.basis),
-			"v": SaveCodec.vec3(exterior.linear_velocity),
-			"w": SaveCodec.vec3(exterior.angular_velocity),
+			"at": SaveCodec.upoint(hull_at),
+			"turn": SaveCodec.basis(hull_turn),
+			"v": SaveCodec.vec3(hull_v),
+			"w": SaveCodec.vec3(Vector3.ZERO if not place.is_empty() else exterior.angular_velocity),
 		},
+		"warp": warp.to_dict() if warp != null else {},
 		"flight": flight_computer.to_dict(),
 		"store": quantum.store.to_dict() if quantum.store != null else {},
 		"airlocks": saved_airlocks,
@@ -783,6 +802,7 @@ func restore_aboard(d: Dictionary) -> void:
 	flight_computer.from_dict(d.get("flight", {}))
 	if quantum.store != null:
 		quantum.store.from_dict(d.get("store", {}))
+	warp.from_dict(d.get("warp", {}))
 	var saved_airlocks: Dictionary = d.get("airlocks", {})
 	for key: String in saved_airlocks:
 		var airlock: Airlock = airlocks.get(SaveCodec.to_cell(key))

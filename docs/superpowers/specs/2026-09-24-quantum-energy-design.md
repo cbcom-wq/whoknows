@@ -581,6 +581,7 @@ A crossing mid-sequence reverses from where it has got to, so the lights never j
 
 | Spender | Slice | Shape |
 |---|---|---|
+| Warp (built 2026-09-29) | — | 40 QE + 4 QE per km, spent as the ship leaves (`2026-09-28-warp-design.md` §6) |
 | Quantum jump | 5 | Cost grows with distance and ship mass; the jump layer between systems |
 | Shields | 2 | Absorb hits by spending QE. A drained ship drops into low power: half its authority, no boost. Slice 2 decides whether damage can also put a core out, which would be the crippled state (slice roadmap). |
 | Turret weapons | 2 | Per shot, from the store; off in low power |

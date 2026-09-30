@@ -94,7 +94,13 @@ Do these in order. Each one names the check that proves it.
      2026-09-26-saving-design.md`). A block with state of its own (a fixture, a store, a door that
      can be left open) needs a `to_dict`/`from_dict` gathered by `Ship.to_dict`, a busy source in
      `Ship.busy()` if it has actions that run over time, and a line in
-     `test_save_scene.gd`'s round-trip. The probe prints `save ... round-trips`.
+     `test_save_scene.gd`'s round-trip. The probe prints `save ... round-trips`;
+   - **the warp** (`Ship/Warp`, a `WarpDrive`; `docs/superpowers/specs/2026-09-28-warp-design.md`):
+     every ship gets one, and the flight scene binds it (`_wire_warp`). While it travels it
+     freezes the hull kinematic and clears its layer and mask, restoring them at drop-out. Anything
+     that sets the hull's `collision_layer`, `collision_mask` or `freeze` must check
+     `warp.travelling()` first. How far a ship can warp is set by its store; the probe prints
+     `warp    reach ...`.
 8. **Run the full suite** (`who-knows/run_tests.ps1`). Add ship-specific tests: launches, stats,
    rooms, and the pod and airlock present.
 9. **Probe the real scene:** run `ship_probe.gd` (in this folder) **without** `--headless`. It
@@ -128,6 +134,7 @@ is the blueprint's budgets, so the grid decides the feel:
 | Braking; a speed lock slowing down | `reverse` / mass | 5.4 m/s² |
 | Accelerating; a speed lock catching up | `forward` / mass | 16.3 m/s² |
 | Thrusters the player sees | each `rcs` block's exhaust face open and in view | 6 of 8 blocked (only the pitch-down pair shows); none in the pilot's view |
+| Warp reach on a full store | `(quantum_capacity − WarpPlan.WARP_BASE) / WarpPlan.WARP_PER_KM` km | 290 km on 1,200 QE (140 km on its starting 600) |
 
 A ship that slides for 18 s after a hard turn at speed is not a controls bug. It needs more side
 thrust.
@@ -162,6 +169,9 @@ thrust.
 | Giving the hull a method it can't have | The hull `RigidBody3D` and the interior's code-made `StaticBody3D` have no script, so `receive_hit` could not live on them | `Hit.deliver(collider, hit)` calls a `&"receive_hit"` Callable in meta; hull colliders carry their cell in meta `&"cell"` (alcoves add several colliders for one cell, so shape index ≠ coord) |
 | Raycasting a body built this frame | The torch's tests hit nothing: a new body joins the physics space on the next physics frame | Wait a physics frame (`await wait_physics_frames(2)`) before querying what a rebuild made |
 | Recolouring one interior cell | The dressing is a few merged meshes, so there is no one cell's mesh to tint | A stage seen from inside rebuilds the ship once, deferred (`Ship._queue_rebuild`); it costs ~140 ms on the dev Xeon |
+| Letting go of a warp at 120 m/s with the assist on | The assist cancels velocity nobody asked for, so the ship braked to rest at the warp limit instead of coasting in | `WarpDrive` sets the speed lock to 120 m/s at drop-out; anything else that hands the hull a velocity with the assist on must do the same |
+| Letting the rest of the ship behave normally at warp | Found in the final review: you could cycle the airlock and step out mid-warp (stranded kilometres behind), the RCS kept its last command and puffed the whole way, and motion coupling read the frozen hull's placing as a 12 m/s² shove | Anything that acts on the hull's motion or lets someone outside asks `warp.is_spinning()` / `travelling()` first: `Airlock.warping()`, `FlightComputer`'s early return, `MotionCoupling._warp()` |
+| A test script that types a local from the untyped `_root.system` and loops its `warp_targets()` | Godot 4.5.1 segfaulted at exit (ObjectDB leak, GUT's own scripts included) though every test passed | Hold the system in a typed member set in `before_each`, as `test_warp_drive.gd` does; watch the run's exit code, not only its pass count |
 | An off-centre retro counted as steering | It would light up for yaw, but `ShipStats` never counts pure fore-and-aft thrust as authority | Steer with blocks that push across the hull; retros only brake |
 
 ## Not built yet (plan for it; don't assume it works)

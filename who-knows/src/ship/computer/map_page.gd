@@ -8,17 +8,44 @@ extends ComputerPage
 ## only what the sensors report: a ping where the ping says, a region as its
 ## sphere, never the thing's true place.
 ##
+## On the SYSTEM range (docs/superpowers/specs/2026-09-28-warp-design.md §7)
+## it is drawn round the star, like an orrery: the ship's pip and heading,
+## scale rings every 50 km, worlds by class, lit when your QE reaches them,
+## each target's warp limit, and the charted warp's line; the big button
+## charts a warp.
+##
 ## Every kind the sensors know is drawn in its own colour: rocks SKY, salvage
 ## QUANTUM, signs of life SIGNAL_GO (the HUD's green), and the course AMBER.
 
-const RANGES: Array[float] = [2000.0, 10000.0, 30000.0, 300000.0]
-## The last range is the whole system (the system skeleton spec §10).
+const RANGES: Array[float] = [2000.0, 10000.0, 30000.0, 400000.0]
+## The last range is the whole system (the system skeleton spec §10): it asks
+## the sensors for all of it, and is drawn round the star out to SYSTEM_REACH
+## (the warp spec §7.1).
 const SYSTEM_RANGE := 3
+const SYSTEM_REACH := 180000.0
+## Rings of faint ticks round the ship, every SCALE_RING out to the rim.
+const SCALE_RING := 50000.0
+const SCALE_TICKS := 32
+## Each warp target's limit, as a ring of faint ticks.
+const LIMIT_TICKS := 24
+## The charted warp's line.
+const LINE_TICKS := 24
+const SHIP_PIP := 0.014
+const HEADING_TICK := 0.025
+## Mark sizes by class on the system range (the warp spec §7.1).
+const CLASS_SIZE := {&"star": 0.06, &"large": 0.04, &"medium": 0.03, &"small": 0.02, &"cluster": 0.01}
+## A planet this big is large; this big, medium.
+const LARGE := 900.0
+const MEDIUM := 600.0
+## A cluster is drawn as a clump of three balls this far apart.
+const CLUMP := 0.008
+const MOON_SIZE := 0.012
+const TARGET_KINDS: Array[StringName] = [&"body", &"cluster"]
 const OPEN_AT := 1
 ## Contacts that get a stalk, nearest first; the selected one always does.
 const STALKS := 12
 ## What a course can be set to (spec §15): a big rock or a salvage cloud.
-const COURSE_KINDS: Array[StringName] = [&"rock", &"salvage", &"body"]
+const COURSE_KINDS: Array[StringName] = [&"rock", &"salvage", &"body", &"moon", &"cluster"]
 ## Mark sizes, metres across in the holo (spec §5.2), tuned at the renders:
 ## the spec's first figures vanished at arm's length.
 const ROCK_MIN_NEAR := 0.012
@@ -72,8 +99,10 @@ static func colour_for(kind: StringName) -> Color:
 			return InteriorPalette.QUANTUM
 		&"life":
 			return InteriorPalette.SIGNAL_GO
-		&"body":
+		&"body", &"moon":
 			return InteriorPalette.WORLD
+		&"cluster":
+			return InteriorPalette.SKY
 	return InteriorPalette.LIGHT_WARM
 
 ## What ◀ and ▶ step through: the contacts on this range, nearest first. The
@@ -88,9 +117,9 @@ func targets(ctx: ComputerContext) -> Array[Contact]:
 	if ctx.sensors == null:
 		return _targets
 	for c in ctx.sensors.contacts(range_m()):
-		if range_index == SYSTEM_RANGE and c.kind != &"body":
+		if range_index == SYSTEM_RANGE and not TARGET_KINDS.has(c.kind):
 			continue
-		if range_index == SYSTEM_RANGE - 1 and c.kind != &"rock" and c.kind != &"body":
+		if range_index == SYSTEM_RANGE - 1 and not [&"rock", &"body", &"moon", &"cluster"].has(c.kind):
 			continue
 		_targets.append(c)
 	return _targets
@@ -128,6 +157,9 @@ func lit(ctx: ComputerContext) -> Array[StringName]:
 	return out
 
 func big_colour(ctx: ComputerContext) -> StringName:
+	var t := _warp_target(ctx)
+	if t != null:
+		return &"amber" if ctx.warp.charted == t.id else &"go"
 	if not _can_steer(ctx):
 		return &"dark"
 	return &"amber" if ctx.sensors.course == selected else &"go"
@@ -144,6 +176,9 @@ func prompt(button: StringName, ctx: ComputerContext) -> String:
 		&"next":
 			return "Next target"
 		&"big":
+			var t := _warp_target(ctx)
+			if t != null:
+				return "Clear warp" if ctx.warp.charted == t.id else "Chart warp"
 			return "Clear course" if ctx.sensors.course == selected else "Set course"
 	return ""
 
@@ -164,6 +199,13 @@ func press(button: StringName, ctx: ComputerContext) -> void:
 			selected = list[posmod(at + step, list.size())].id if at >= 0 else list[0].id
 			ctx.sensors.forget_arrival()
 		&"big":
+			var t := _warp_target(ctx)
+			if t != null:
+				if ctx.warp.charted == t.id:
+					ctx.warp.clear_chart()
+				else:
+					ctx.warp.chart(t.id)
+				return
 			if not _can_steer(ctx):
 				return
 			if ctx.sensors.course == selected:
@@ -176,6 +218,9 @@ func lines(ctx: ComputerContext) -> PackedStringArray:
 	if c == null:
 		var where := ctx.sensors.whereabouts.text() if ctx.sensors != null and ctx.sensors.whereabouts != null else ""
 		return PackedStringArray([where, "NO CONTACTS"])
+	var t := _warp_target(ctx)
+	if t != null:
+		return warp_lines(ctx, t)
 	var action := ""
 	if ctx.sensors.course == c.id:
 		action = "COURSE SET"
@@ -212,12 +257,16 @@ func _place(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D) -> voi
 	volume.begin_marks()
 	for i in list.size():
 		var c: Contact = list[i]
-		var placed := HoloVolume.place(ctx.relative_in(frame, c.point), range_m())
+		var placed := _placed(ctx, frame, c.point)
 		var at: Vector3 = placed["position"]
 		var pinned: bool = placed["pinned"]
 		var size := PIN_SIZE if pinned else mark_size(c, range_m(), time)
-		var colour := InteriorPalette.AMBER if course != null and c.id == course.id else colour_for(c.kind)
-		volume.add_mark(mark_shape(c, pinned), colour, at, size)
+		var colour := InteriorPalette.AMBER if course != null and c.id == course.id else _reach_colour(ctx, c)
+		if range_index == SYSTEM_RANGE and c.kind == &"cluster" and not pinned:
+			for o in [Vector3(-CLUMP, 0, 0), Vector3(CLUMP, 0, 0), Vector3(0, 0, CLUMP)]:
+				volume.add_mark(&"ball", colour, at + o, size)
+		else:
+			volume.add_mark(mark_shape(c, pinned), colour, at, size)
 		if not pinned and (i < STALKS or c.id == selected):
 			volume.add_mark(&"stalk", InteriorPalette.LIGHT_WARM, at, 0.0)
 			volume.add_mark(&"tick", InteriorPalette.LIGHT_WARM, Vector3(at.x, 0.0, at.z), TICK_SIZE)
@@ -226,6 +275,10 @@ func _place(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D) -> voi
 			bracketed = true
 	if range_index == SYSTEM_RANGE:
 		_place_belts(volume, ctx, frame)
+		_place_moons(volume, ctx, frame)
+		_place_ship(volume, ctx, frame)
+		_place_limits(volume, ctx, frame, list)
+		_place_chart(volume, ctx, frame)
 	volume.end_marks()
 	if not bracketed:
 		volume.show_bracket(Vector3.ZERO, 0.0, false)
@@ -247,7 +300,9 @@ static func mark_shape(c: Contact, pinned: bool) -> StringName:
 ## material is shared and one mark cannot fade on its own.
 static func mark_size(c: Contact, range_m: float, time: float) -> float:
 	var scale := HoloVolume.RADIUS / range_m
-	if c.kind == &"body":
+	if c.kind == &"body" or c.kind == &"moon" or c.kind == &"cluster":
+		if range_m >= RANGES[SYSTEM_RANGE]:
+			return MOON_SIZE if c.kind == &"moon" else CLASS_SIZE[size_class(c)]
 		return clampf(c.radius * 2.0 * scale, BODY_MIN, BODY_MAX)
 	match c.precision:
 		Contact.PING:
@@ -270,9 +325,150 @@ func _place_belts(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D) 
 		for k in BELT_TICKS:
 			var angle := TAU * k / BELT_TICKS
 			var point := belt.centre.plus(Vector3(cos(angle), 0.0, sin(angle)) * belt.radius)
-			var placed := HoloVolume.place(ctx.relative_in(frame, point), range_m())
+			var placed := _placed(ctx, frame, point)
 			if not placed["pinned"]:
 				volume.add_mark(&"tick", colour_for(&"rock"), placed["position"], TICK_SIZE)
+
+## A world's class, for its mark and the screen (the warp spec §7.1).
+static func size_class(c: Contact) -> StringName:
+	if c.kind == &"cluster":
+		return &"cluster"
+	if c.id == &"body:star":
+		return &"star"
+	return size_class_of_radius(c.radius)
+
+static func size_class_of_radius(radius: float) -> StringName:
+	if radius >= LARGE:
+		return &"large"
+	if radius >= MEDIUM:
+		return &"medium"
+	return &"small"
+
+## Where `point` sits in the holo: on the system range round the star, else
+## round the ship.
+func holo_position(ctx: ComputerContext, frame: Transform3D, point: UniversePoint) -> Vector3:
+	return _placed(ctx, frame, point)["position"]
+
+func _placed(ctx: ComputerContext, frame: Transform3D, point: UniversePoint) -> Dictionary:
+	var system := ctx.sensors.system if ctx.sensors != null else null
+	if range_index == SYSTEM_RANGE and system != null:
+		return HoloVolume.place(ctx.relative_in(frame, point) - ctx.relative_in(frame, system.star.point), SYSTEM_REACH)
+	return HoloVolume.place(ctx.relative_in(frame, point), range_m())
+
+## Lit in the kind's colour if your QE reaches it, dim if not (the warp spec
+## §7.1). Off the system range, or without a drive, always lit.
+func _reach_colour(ctx: ComputerContext, c: Contact) -> Color:
+	var lit := colour_for(c.kind)
+	if range_index != SYSTEM_RANGE or ctx.warp == null or ctx.store == null or ctx.sensors == null:
+		return lit
+	var t := ctx.warp.target_for(c.id)
+	var focus := ctx.sensors.focus_point()
+	if t == null or focus == null:
+		return lit
+	var travel := t.point.minus(focus).length() - t.limit
+	return lit if WarpPlan.cost_of(travel) <= ctx.store.amount else InteriorPalette.HOLO_DIM
+
+## Moons, beside their planets: shown, never targets.
+func _place_moons(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D) -> void:
+	if ctx.sensors == null:
+		return
+	for c: Contact in ctx.sensors.contacts(range_m()):
+		if c.kind != &"moon":
+			continue
+		var placed := _placed(ctx, frame, c.point)
+		if not placed["pinned"]:
+			volume.add_mark(&"ball", InteriorPalette.WORLD, placed["position"], MOON_SIZE)
+
+## The ship's pip and heading, and scale rings round it every SCALE_RING.
+func _place_ship(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D) -> void:
+	var focus := ctx.sensors.focus_point() if ctx.sensors != null else null
+	if focus == null:
+		return
+	var pip: Vector3 = _placed(ctx, frame, focus)["position"]
+	volume.add_mark(&"ball", InteriorPalette.LIGHT_WARM, pip, SHIP_PIP)
+	volume.add_mark(&"tick", InteriorPalette.LIGHT_WARM, pip + Vector3(0, 0, -HEADING_TICK), TICK_SIZE)
+	var r := SCALE_RING
+	while r <= SYSTEM_REACH * 2.0:
+		for k in SCALE_TICKS:
+			var a := TAU * k / SCALE_TICKS
+			var placed := _placed(ctx, frame, focus.plus(frame.basis.inverse() * Vector3(cos(a), 0.0, sin(a)) * r))
+			if not placed["pinned"]:
+				volume.add_mark(&"tick", InteriorPalette.HOLO_DIM, placed["position"], TICK_SIZE)
+		r += SCALE_RING
+
+## Each target's warp limit as a ring of ticks; the blocker's in CORAL.
+func _place_limits(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D, list: Array[Contact]) -> void:
+	if ctx.warp == null:
+		return
+	var blocker: WarpTarget = ctx.warp.plan.blocker if ctx.warp.plan.status == WarpPlan.Status.BLOCKED else null
+	for c in list:
+		var t := ctx.warp.target_for(c.id)
+		if t == null:
+			continue
+		var colour := InteriorPalette.CORAL if t == blocker else InteriorPalette.HOLO_DIM
+		for k in LIMIT_TICKS:
+			var a := TAU * k / LIMIT_TICKS
+			var placed := _placed(ctx, frame, t.point.plus(frame.basis.inverse() * Vector3(cos(a), 0.0, sin(a)) * t.limit))
+			if not placed["pinned"]:
+				volume.add_mark(&"tick", colour, placed["position"], TICK_SIZE)
+
+## The charted warp's line, from the ship to the drop-out point.
+func _place_chart(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D) -> void:
+	if ctx.warp == null or ctx.warp.target() == null or ctx.sensors == null:
+		return
+	var focus := ctx.sensors.focus_point()
+	var t := ctx.warp.target()
+	if focus == null:
+		return
+	var line := t.point.minus(focus)
+	var drop := focus.plus(line.normalized() * maxf(line.length() - t.limit, 0.0))
+	for k in LINE_TICKS:
+		var placed := _placed(ctx, frame, focus.plus(drop.minus(focus) * (float(k) + 0.5) / LINE_TICKS))
+		if not placed["pinned"]:
+			volume.add_mark(&"tick", InteriorPalette.AMBER, placed["position"], TICK_SIZE)
+
+## The warp target selected on the system range, if there is a drive.
+func _warp_target(ctx: ComputerContext) -> WarpTarget:
+	if range_index != SYSTEM_RANGE or ctx.warp == null:
+		return null
+	var c := selected_contact(ctx)
+	return ctx.warp.target_for(c.id) if c != null else null
+
+## The selected warp target's three lines (the warp spec §7.2): what and how
+## big; how far, by flying and by warp; and what a warp there costs.
+func warp_lines(ctx: ComputerContext, t: WarpTarget) -> PackedStringArray:
+	var focus := ctx.sensors.focus_point()
+	var d := t.point.minus(focus).length() if focus != null else 0.0
+	var what := ""
+	match t.kind:
+		WarpTarget.Kind.STAR:
+			what = "STAR · %.1f KM ACROSS" % (t.radius * 2.0 / 1000.0)
+		WarpTarget.Kind.CLUSTER:
+			what = "BELT · %d KM ACROSS" % roundi(t.radius * 2.0 / 1000.0)
+		_:
+			var cls := String(size_class_of_radius(t.radius)).to_upper()
+			what = "PLANET · %s · %.1f KM ACROSS" % [cls, t.radius * 2.0 / 1000.0]
+	var travel := d - t.limit
+	var how := "%d KM · %d MIN FLYING" % [roundi(d / 1000.0), maxi(1, roundi(d / FlightComputer.CRUISE_LIMIT_MPS / 60.0))]
+	if travel >= WarpPlan.MIN_TRAVEL:
+		how += " · %d S WARP" % roundi(WarpDrive.SPOOL + WarpProfile.new(travel).duration)
+	var cost := ""
+	if ctx.warp.charted == t.id:
+		cost = "WARP CHARTED"
+	else:
+		var p := WarpPlan.check(focus, Vector3.FORWARD, t, ctx.warp.system.warp_targets(), [], ctx.store)
+		match p.status:
+			WarpPlan.Status.CLOSE:
+				cost = "FLY · TOO CLOSE TO WARP"
+			WarpPlan.Status.BLOCKED:
+				cost = "BLOCKED BY %s" % p.blocker.name
+			WarpPlan.Status.LOW_POWER:
+				cost = "WARP · LOW POWER"
+			WarpPlan.Status.NO_QE:
+				cost = "NEED %d QE · STORE %d" % [p.cost, ctx.store.amount]
+			_:
+				cost = "WARP %d QE · IN REACH" % p.cost
+	return PackedStringArray(["%s · %s" % [t.name, what], how, cost])
 
 func save() -> Dictionary:
 	return {"range": range_index, "selected": String(selected)}
