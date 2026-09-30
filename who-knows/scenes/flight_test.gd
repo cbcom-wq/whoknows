@@ -92,6 +92,7 @@ func _ready() -> void:
 		saved = {}
 	if resumed:
 		_ship.launch_blueprint = Ship.launch_of(ship_part)
+		npc_ledger.from_dict(saved.get("npcs", {}))
 	_ship.set_grid(layout if resumed else _starter_grid(), not resumed)
 	if resumed:
 		_ship.restore_aboard(ship_part)
@@ -329,6 +330,9 @@ func _wire_npcs() -> void:
 	exterior_npcs.sources = [RockHerdSource.new(_stream)]
 	exterior_npcs.ledger = npc_ledger
 	_ship.npc_director.ledger = npc_ledger
+	# The crew woke with the ship, before it had the ledger.
+	for npc: Npc in _ship.npc_director.live_npcs():
+		npc.health.current = npc_ledger.health_of(npc.record.id, npc.health.max)
 	add_child(exterior_npcs)
 	npc_debug = NpcDebug.new()
 	npc_debug.name = "NpcDebug"
@@ -528,7 +532,19 @@ func capture() -> Dictionary:
 		"avatar": _capture_you(),
 		"salvage": salvage.to_dict(),
 		"strays": strays.to_dict(),
+		"npcs": _capture_npcs(),
 	}
+
+## The dead, and the health of every NPC awake now and asleep (health and
+## damage spec §10): the awake ones are written into the ledger first.
+func _capture_npcs() -> Dictionary:
+	for director: NpcDirector in [_ship.npc_director, exterior_npcs]:
+		if director == null:
+			continue
+		for npc: Npc in director.live_npcs():
+			if npc.health != null and not npc.is_dead():
+				npc_ledger.set_health(npc.record.id, npc.health.current, npc.health.max)
+	return npc_ledger.to_dict()
 
 ## You: walking, seated or on a spacewalk, where, which way, your suit and
 ## what is in your hand (§6.3).
@@ -537,6 +553,7 @@ func _capture_you() -> Dictionary:
 		"suit": _avatar.suit_cell.to_dict(),
 		"suit_assist": _avatar.suit_assist,
 		"pitch": _avatar.head_pitch(),
+		"health": _avatar.health.to_dict(),
 	}
 	if _avatar.mode == Avatar.Mode.SUIT:
 		d["mode"] = "suit"
@@ -577,6 +594,7 @@ func _restore_places(saved: Dictionary) -> void:
 func _restore_you(d: Dictionary, outside_too: bool) -> void:
 	_avatar.suit_cell.from_dict(d.get("suit", {}))
 	_avatar.suit_assist = bool(d.get("suit_assist", true))
+	_avatar.health.from_dict(d.get("health", {}))
 	var mode := String(d.get("mode", "walking"))
 	if mode != "suit":
 		var pose := _ship.interior.global_transform * SaveCodec.to_transform(d.get("place"))
@@ -856,6 +874,11 @@ func _wire_hud() -> void:
 	# discovered as one of HudRoot's descendants.
 	_hud.register_element(_cockpit_marker)
 	_hud.register_element(_heading_cockpit)
+	# The hull (health and damage spec §11), in the band beside the store.
+	var hull := HullPanel.new()
+	hull.name = "HullPanel"
+	$HudRoot/Screen/Band/Row.add_child(hull)
+	_hud.register_element(hull)
 	# The bootstrap is the one place that legitimately knows both halves of
 	# this: the HUD's fade-in and the seat transition it is timed against.
 	_hud.fade_in = CameraDirector.SIT_DURATION

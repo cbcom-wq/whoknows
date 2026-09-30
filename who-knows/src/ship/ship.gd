@@ -173,6 +173,8 @@ func _ready() -> void:
 	exterior.set_meta(&"receive_hit", _on_hull_hit)
 	exterior.set_meta(&"ship", self)
 	add_to_group(GROUP)
+	flight_computer.hull_status = func() -> Array:
+		return [hull_whole(), stats.crippled_reason if stats != null else ""]
 
 func _process(_delta: float) -> void:
 	# hull_livery.gdshader paints its stripe from ship-local height, but
@@ -320,6 +322,23 @@ func cell_label(cell: Vector3i) -> String:
 	var stage: String = BlockDamage.Stage.keys()[BlockDamage.stage_of(inst, def)]
 	var left := clampf(1.0 - inst.damage / float(def.hp), 0.0, 1.0)
 	return "%s · %s %d%%" % [def.display_name.to_upper(), stage, roundi(left * 100.0)]
+
+## How whole the hull is, 0..1, against the layout it launched with (health
+## and damage spec §11): every block's damage, capped at its hp, and a block
+## knocked off counts as all of it.
+func hull_whole() -> float:
+	if launch_blueprint == null:
+		return 1.0
+	var total := 0.0
+	var lost := 0.0
+	for i in launch_blueprint.coords.size():
+		var def := catalog.get_def(launch_blueprint.block_ids[i])
+		if def == null:
+			continue
+		total += def.hp
+		var inst := grid.get_block(launch_blueprint.coords[i])
+		lost += def.hp if inst == null else minf(inst.damage, def.hp)
+	return 1.0 - lost / total if total > 0.0 else 1.0
 
 ## How much the block at `cell` has to mend, hp.
 func damage_at(cell: Vector3i) -> float:

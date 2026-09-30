@@ -65,6 +65,12 @@ var energy_state: StringName = &""
 var tool_text: String = ""
 ## True while boost is held but refused: in low power (spec §8.2).
 var boost_refused: bool = false
+## The ship's hull (health and damage spec §4.4, §11): whether there is one to
+## report, how whole it is (0..1 of what it launched with), and why it is
+## crippled ("no thrust", "can't turn", "no power") or "".
+var has_hull: bool = false
+var hull: float = 1.0
+var crippled_reason: String = ""
 
 ## Takes plain values rather than a body on purpose: it is the seam that lets
 ## every derivation here be tested headless, with no nodes and no physics

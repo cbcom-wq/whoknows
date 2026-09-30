@@ -66,6 +66,7 @@ const PAINTING_FILES := [
 	"res://src/ship/damage_show.gd",
 	"res://src/items/repair_torch.gd",
 	"res://src/ui/hurt_edge.gd",
+	"res://src/ui/hull_panel.gd",
 ]
 
 ## The reusable asset library and what it builds with. Ships are generated

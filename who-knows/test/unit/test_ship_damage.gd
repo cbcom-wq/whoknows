@@ -188,3 +188,22 @@ func test_a_hole_under_you_puts_you_outside():
 	_ship.take_damage(cell, 100_000.0)
 	assert_false(_ship.grid.has_block(cell))
 	assert_eq(avatar.mode, Avatar.Mode.SUIT)
+
+# --- the band (spec §11) --------------------------------------------------------
+
+func test_the_hull_reads_whole_then_less_and_reaches_the_band():
+	assert_eq(_ship.hull_whole(), 1.0)
+	var t: VehicleTelemetry = _ship.flight_computer.build_telemetry()
+	assert_true(t.has_hull)
+	assert_eq(t.hull, 1.0)
+	assert_eq(t.crippled_reason, "")
+	var cell := _outer_hull()
+	_ship.take_damage(cell, 10_000.0)
+	assert_lt(_ship.hull_whole(), 1.0, "a knocked-off block counts as all lost")
+	assert_lt(_ship.flight_computer.build_telemetry().hull, 1.0)
+
+func test_crippled_reaches_the_band():
+	for coord: Vector3i in _ship.grid.coords():
+		if _ship.grid.get_block(coord).block_id == &"thruster":
+			_ship.take_damage(coord, float(_ship.catalog.get_def(&"thruster").hp) * 1.2)
+	assert_eq(_ship.flight_computer.build_telemetry().crippled_reason, "no thrust")
