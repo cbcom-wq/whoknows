@@ -494,6 +494,11 @@ The numbers above are the built ones. Where the build differs from this spec's f
   and `left`, whose listeners count the places on the location line.
 - **The physics bubble keeps its few bodies while suspended.** The hull touches nothing at warp,
   and they are let go by distance when the stream resumes.
+- **Nothing leaves, fires or is felt during a warp** (the final review): airlock panels refuse
+  and nobody crosses the outer hatch while the drive spins, and an idle outer hatch left open
+  holds the warp (*WARP · AIRLOCK CYCLING*). The flight computer zeroes its commands, so the RCS
+  never puffs along the way. Motion coupling feels nothing while travelling: the frozen hull's
+  placing, origin shifts included, would otherwise shove you at the 12 m/s² cap.
 - **Typical trips:** over 200 seeds, 4,136 trips between the star and planets average **30.9 s**
   of travel (plus the 10 s spool).
 - **Tests:** 1,421 before, about 1,480 after, all passing. `test_warp_scene.gd` warps in the real
