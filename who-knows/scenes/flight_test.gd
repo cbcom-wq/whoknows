@@ -272,9 +272,10 @@ func _wire_universe(saved: Dictionary) -> void:
 	_wire_star_system()
 	_wire_salvage(saved if same_world else {}, _same_generator(saved, "salvage"))
 	_wire_strays(saved.get("strays", {}) if same_world else {})
-	# Godot's cameras stop drawing at 4 km; big rocks show from 25 km.
+	# Godot's cameras stop drawing at 4 km; a world's horizon is 100 km off
+	# and every proxy sits at 350 km (the world scale spec §5.2).
 	for cam: Camera3D in [$Ship/Exterior/ChaseCamera, $Ship/Canopy/CanopyCam, _avatar.camera]:
-		cam.far = AsteroidStream.VIEW_FAR
+		cam.far = BodyProxy.VIEW_FAR
 	# The sun's shadows stopped at 100 m, so nothing on a big rock cast one.
 	$DirectionalLight3D.directional_shadow_max_distance = AsteroidStream.SHADOW_REACH
 	_avatar.mode_changed.connect(
@@ -501,8 +502,7 @@ static func hop_off(b: SystemBody) -> float:
 ## The debug hop (the system skeleton spec §10): puts the ship at rest HOP_OFF
 ## off the surface of the next body in the system's order (star, then each
 ## planet and its moons), or the previous for `step` -1, on its sunward side
-## and facing it. A system is 300 km across; this stands in for cruise until
-## cruise exists. Refused on a spacewalk, while an airlock cycles, and while a
+## and facing it. A system is 15,000 km across; this is the debug way round it. Refused on a spacewalk, while an airlock cycles, and while a
 ## warp spools or travels. True if it hopped.
 func hop(step: int) -> bool:
 	if _ship.warp.is_spinning():

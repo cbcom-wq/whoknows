@@ -2,7 +2,7 @@ class_name BodyProxy
 extends Node3D
 
 ## One star, planet or moon as you see it (the system skeleton spec §7): at
-## its true place and size when within PROXY_AT of the focus, and beyond that
+## at its true place and size when within PROXY_AT of the focus, and beyond that
 ## along the same direction at PROXY_AT, scaled so its angular size is exact.
 ## From the cockpit it looks just as the real thing would, and no camera needs
 ## to see further than the rocks already make it.
@@ -15,9 +15,14 @@ extends Node3D
 ## parent never moves, placed afresh every physics tick from its
 ## UniversePoint.
 
-## Beyond the giant rocks' fade (25 km) and inside the cameras' far plane
-## (30 km): nothing drawn is ever farther than a proxy, so nothing sorts wrong.
-const PROXY_AT := 28000.0
+## The cameras' far plane outside (the world scale spec §5.2): the horizon of
+## a 60 km world seen from its warp limit is about 120 km away, and every
+## proxy sits inside it. Godot 4.5's Forward+ draws with reversed depth, so
+## this far costs no precision up close.
+const VIEW_FAR := 400000.0
+## Beyond the giant rocks' fade and inside VIEW_FAR: a body farther than this
+## is drawn here, along its true direction, scaled to its true angular size.
+const PROXY_AT := 350000.0
 ## Physics layer 4, `terrain` (Planetfall §4.2).
 const LAYER := 8
 ## Within this of its surface, a body is drawn in detail and is solid.

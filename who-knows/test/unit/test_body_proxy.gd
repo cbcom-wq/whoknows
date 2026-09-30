@@ -1,8 +1,8 @@
 extends GutTest
 
 ## A star, planet or moon as you see it (the system skeleton spec §7.4): its
-## true place and size within 28 km; beyond, along the same direction at
-## 28 km, scaled so its angular size is exact. Solid up close, on `terrain`.
+## true place and size within PROXY_AT; beyond, along the same direction at
+## PROXY_AT, scaled so its angular size is exact. Solid up close, on `terrain`.
 
 var _universe: Universe
 var _system: SystemRecipe
@@ -35,8 +35,8 @@ func test_near_it_is_where_it_is_at_full_size():
 
 func test_far_off_it_keeps_its_direction_and_angular_size():
 	var b := _planet()
-	var focus := UniversePoint.at(-90000, 2500, 40000)
-	_universe.origin = UniversePoint.at(-90000, 2000, 41000)
+	var focus := b.point.plus(Vector3(-900000, 2500, 400000))
+	_universe.origin = focus.plus(Vector3(0, -500, 1000))
 	var eye := _universe.to_engine(focus)
 	var at := BodyProxy.placement(b.point, focus, _universe)
 	var pos: Vector3 = at[0]
@@ -47,7 +47,7 @@ func test_far_off_it_keeps_its_direction_and_angular_size():
 	var true_angle := asin(b.radius / b.point.minus(focus).length())
 	assert_almost_eq(_angle(pos, b.radius * s, eye), true_angle, 1e-6)
 
-func test_the_two_rules_meet_at_28_km():
+func test_the_two_rules_meet_at_proxy_at():
 	var b := _planet()
 	var focus := b.point.plus(Vector3(BodyProxy.PROXY_AT + 0.001, 0, 0))
 	var inside := b.point.plus(Vector3(BodyProxy.PROXY_AT - 0.001, 0, 0))
@@ -59,7 +59,7 @@ func test_the_two_rules_meet_at_28_km():
 func test_a_shift_changes_nothing_you_see():
 	var b := _planet()
 	var p := _proxy(b)
-	var focus := b.point.plus(Vector3(3000, 4000, 60000))
+	var focus := b.point.plus(Vector3(3000, 4000, 600000))
 	_universe.origin = UniversePoint.at(focus.x, focus.y, focus.z)
 	p.place(_universe, focus)
 	var before := p.global_position - _universe.to_engine(focus)

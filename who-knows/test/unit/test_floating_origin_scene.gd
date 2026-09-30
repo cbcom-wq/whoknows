@@ -154,6 +154,12 @@ func test_the_cameras_outside_see_as_far_as_rocks_are_drawn():
 	for path in ["Ship/Exterior/ChaseCamera", "Ship/Canopy/CanopyCam"]:
 		assert_gte((_root.get_node(path) as Camera3D).far, far, path)
 	assert_gte(_avatar.camera.far, far, "on a spacewalk")
+	# The world scale spec §5.2: far enough for the horizon of the world
+	# you are over, and past every proxy.
+	assert_gt(BodyProxy.VIEW_FAR, BodyProxy.PROXY_AT)
+	for path in ["Ship/Exterior/ChaseCamera", "Ship/Canopy/CanopyCam"]:
+		assert_eq((_root.get_node(path) as Camera3D).far, BodyProxy.VIEW_FAR, path)
+	assert_eq(_avatar.camera.far, BodyProxy.VIEW_FAR, "on a spacewalk")
 
 func test_the_sun_throws_shadows_far_enough_to_shape_a_big_rock():
 	var sun: DirectionalLight3D = _root.get_node("DirectionalLight3D")
