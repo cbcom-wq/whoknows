@@ -104,21 +104,45 @@ func test_rings_are_crowded_with_rubble_and_never_giants():
 	assert_gt(float(inside), total * 0.8)
 
 func test_no_rock_lies_inside_a_body():
+	# Rocks crowd a planet's debris disc from its well outwards and its ring
+	# from 1.6 radii: so look there, round each disc's plane from just above the
+	# ground to past the well's edge and across the ring, and at the cells beside
+	# each sample.
 	var found: Array = _ringed()
 	var sys: SystemRecipe = found[0]
 	var recipe := AsteroidRecipe.new(sys.seed, null, sys.asteroid_shapes())
+	var examined := 0
 	var inside := 0
-	for b in sys.bodies:
-		for tier in [T.RUBBLE, T.MID]:
-			for k in 6:
-				var dir := Vector3(sin(k * 1.7), cos(k * 2.3), sin(k * 0.9)).normalized()
-				var cell := AsteroidRecipe.cell_of(tier, b.point.plus(dir * b.radius))
-				for rock in recipe.cell_rocks(tier, cell):
-					var p := AsteroidRecipe.cell_corner(tier, cell).plus(rock.local)
-					if p.minus(b.point).length() <= b.radius * 1.1 + rock.radius - 0.01:
-						inside += 1
-	# Counted, so the test asserts even when a world's well leaves no rock near
-	# its surface to look at.
+	var planets := sys.planets()
+	for k in planets.size():
+		var planet := planets[k]
+		var disc := sys.debris[k]
+		var across := disc.normal.cross(Vector3.RIGHT)
+		if across.length() < 0.1:
+			across = disc.normal.cross(Vector3.FORWARD)
+		across = across.normalized()
+		var sideways := disc.normal.cross(across)
+		var reaches := [planet.radius * 1.05, planet.radius * 1.3, planet.well_radius, planet.well_radius * 1.05,
+			planet.well_radius * 1.2]
+		if planet.ring != null:
+			reaches.append_array([planet.ring.inner, (planet.ring.inner + planet.ring.outer) * 0.5])
+		for reach: float in reaches:
+			for j in 16:
+				var angle := TAU * j / 16.0
+				var at := planet.point.plus((across * cos(angle) + sideways * sin(angle)) * reach)
+				for tier in [T.RUBBLE, T.MID]:
+					var centre := AsteroidRecipe.cell_of(tier, at)
+					for dx in range(-1, 2):
+						for dz in range(-1, 2):
+							var cell := centre + Vector3i(dx, 0, dz)
+							for rock in recipe.cell_rocks(tier, cell):
+								var p := AsteroidRecipe.cell_corner(tier, cell).plus(rock.local)
+								for b in sys.bodies:
+									examined += 1
+									if p.minus(b.point).length() <= b.radius * 1.1 + rock.radius - 0.01:
+										inside += 1
+	gut.p("%d rock-and-body pairs examined" % examined)
+	assert_gt(examined, 0, "no rock near any body to examine")
 	assert_eq(inside, 0, "rocks inside a body")
 
 func test_the_flight_starts_by_the_first_belt_s_first_group():
