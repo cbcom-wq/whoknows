@@ -79,3 +79,47 @@ func test_the_node_says_once_when_you_come_and_go():
 	w.look()
 	assert_signal_emit_count(w, "left", 1)
 	assert_eq(w.dust(), Whereabouts.DUST_OPEN)
+
+# --- warp limits (the warp spec §8) -------------------------------------------
+
+func _has(places: Array[Whereabouts.Place], id: StringName) -> bool:
+	return places.any(func(p: Whereabouts.Place) -> bool: return p.id == id)
+
+func test_a_limit_is_entered_at_its_edge_and_left_beyond_it():
+	var s := SystemRecipe.from_seed(1337)
+	var p := s.planets()[0]
+	var id := StringName("limit_%s" % p.id)
+	var up := Vector3.UP
+	assert_true(_has(Whereabouts.limits_at(s, p.point.plus(up * (p.warp_limit - 10.0))), id))
+	assert_false(_has(Whereabouts.limits_at(s, p.point.plus(up * (p.warp_limit + 50.0))), id))
+	assert_true(_has(Whereabouts.limits_at(s, p.point.plus(up * (p.warp_limit + 50.0)), {id: true}), id),
+		"left only HYSTERESIS beyond")
+
+func test_warp_clear_the_limit_signals_and_the_line_unchanged():
+	var s := SystemRecipe.from_seed(1337)
+	var p := s.planets()[0]
+	var universe := Universe.new()
+	add_child_autofree(universe)
+	var focus := Node3D.new()
+	add_child_autofree(focus)
+	universe.set_focus(focus)
+	universe.origin = p.point.plus(Vector3.UP * (p.warp_limit - 1000.0))
+	var w := Whereabouts.new()
+	add_child_autofree(w)
+	w.setup(s, universe)
+	assert_false(w.warp_clear())
+	assert_eq(w.limits(), [p.id] as Array[StringName])
+	assert_false(w.text().contains("limit"), "limits stay off the line")
+	var left := []
+	w.limit_left.connect(func(q: Whereabouts.Place) -> void: left.append(q.id))
+	universe.origin = s.star.point.plus(Vector3.UP * 100000.0)
+	w.look()
+	assert_true(w.warp_clear())
+	assert_true(left.has(StringName("limit_%s" % p.id)))
+	w.look()
+	assert_eq(left.count(StringName("limit_%s" % p.id)), 1, "once")
+
+func test_the_start_is_inside_its_cluster_s_limit():
+	var s := SystemRecipe.from_seed(1337)
+	var ids := Whereabouts.limits_at(s, s.entry()).map(func(q: Whereabouts.Place) -> StringName: return q.id)
+	assert_true(ids.has(&"limit_belt_0.c1"), "a new game begins by a major body")

@@ -56,6 +56,9 @@ var commanded_torque_local := Vector3.ZERO
 ## a ship whose plant has not bound one yet flies exactly as before the
 ## quantum system existed.
 var quantum: QuantumStore = null
+## The ship's warp drive, or null. While it travels it flies the hull, and
+## this ignores the pilot (the warp spec §5.2).
+var warp: WarpDrive = null
 ## True while boost is actually applying this tick: held, with translation
 ## input, at full power (spec §8.2). QuantumPlant polls this exactly as
 ## RcsShow polls commanded_force_local, to run the core's ring speed.
@@ -148,6 +151,14 @@ func from_dict(d: Dictionary) -> void:
 	_boost = bool(d.get("boost", false))
 
 func _physics_process(delta: float) -> void:
+	if warp != null and warp.travelling():
+		# Nothing fires: stale commands would keep the RCS puffing, and its
+		# particles holding back the origin's shift, the whole way.
+		boosting = false
+		boost_refused = false
+		commanded_force_local = Vector3.ZERO
+		commanded_torque_local = Vector3.ZERO
+		return
 	_apply_translation(delta)
 	_apply_rotation(delta)
 
@@ -303,7 +314,7 @@ func build_telemetry() -> VehicleTelemetry:
 	var t := VehicleTelemetry.from_state(
 		_hull.global_transform.basis,
 		_hull.global_position,
-		_hull.linear_velocity,
+		warp.velocity() if warp != null and warp.travelling() else _hull.linear_velocity,
 		_hull.angular_velocity,
 		assist_enabled,
 		boosting,

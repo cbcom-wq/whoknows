@@ -20,14 +20,16 @@ extends RefCounted
 ## In a star system (the system skeleton spec §6) the recipe is given the
 ## system's AsteroidShapes: big rocks, and the swarms round them, lie only in
 ## belts; rubble and mid-size rocks crowd into planets' rings; and no rock lies
-## in a star, planet or moon. Without shapes it is the open field it always was.
+## in a star, planet or moon. Planets gain a disc of orbital debris, and belt
+## clusters crowd their stretch of a belt (the warp spec §3). Without shapes it
+## is the open field it always was.
 
 enum Tier { RUBBLE, MID, GIANT }
 
 ## Bumped whenever a seed's rocks change: a save made by another version is
 ## put back at the start (docs/superpowers/specs/2026-09-26-saving-design.md
 ## §8.1).
-const VERSION := 2
+const VERSION := 3
 const TIERS := 3
 const NEST := 5
 ## Cell edge per tier, metres.
@@ -72,6 +74,9 @@ const BELT_GROUP_HIGH := 0.5
 ## In a ring, the chance a candidate is kept at the ring's heart, per tier:
 ## never a giant.
 const RING_PEAK: Array[float] = [0.6, 0.6, 0.0]
+## In a planet's orbital debris, the chance a candidate is kept at the disc's
+## heart, per tier: sparse, and never a giant (the warp spec §3.3).
+const DEBRIS_PEAK: Array[float] = [0.12, 0.08, 0.0]
 ## Walking a belt for the start, a step this long along its centre circle.
 const BELT_WALK := 2500.0
 ## splitmix64's constants, as signed 64-bit ints.
@@ -110,7 +115,9 @@ func _noise_chance(u: UniversePoint) -> float:
 	var n := _noise.get_noise_3d((u.x + u.fx) / 1000.0, (u.y + u.fy) / 1000.0, (u.z + u.fz) / 1000.0)
 	if shapes == null:
 		return smoothstep(GROUP_LOW, GROUP_HIGH, (n + 1.0) * 0.5)
-	return smoothstep(BELT_GROUP_LOW, BELT_GROUP_HIGH, (n + 1.0) * 0.5)
+	var belt := smoothstep(BELT_GROUP_LOW, BELT_GROUP_HIGH, (n + 1.0) * 0.5)
+	# A belt cluster crowds its stretch of the belt (the warp spec §3.1).
+	return lerpf(belt, 1.0, shapes.cluster_lift(u))
 
 ## The chance a region (a giant cell) holds a group, before the belts: the
 ## noise, taken at its centre. In a system the belt's own depth at the big
@@ -136,6 +143,7 @@ func cell_rocks(tier: int, cell: Vector3i) -> Array[AsteroidRock]:
 	var bigs := _big_rocks_near(tier, cell) if tier != Tier.GIANT else []
 	var corner := cell_corner(tier, cell)
 	var rings := _rings_near(tier, corner, size)
+	var debris := _debris_near(tier, corner, size)
 	var rocks: Array[AsteroidRock] = []
 	for i in MOST[tier]:
 		var local := Vector3(rng.randf_range(margin, size - margin), rng.randf_range(margin, size - margin),
@@ -145,6 +153,8 @@ func cell_rocks(tier: int, cell: Vector3i) -> Array[AsteroidRock]:
 			keep *= shapes.belt_profile(corner.plus(local))
 		for g: Array in rings:
 			keep = minf(keep + RING_PEAK[tier] * (g[0] as AsteroidShapes.Ring).profile_local(g[1] + local), 1.0)
+		for g: Array in debris:
+			keep = minf(keep + DEBRIS_PEAK[tier] * (g[0] as AsteroidShapes.Debris).profile_local(g[1] + local), 1.0)
 		if rng.randf() >= keep:
 			continue
 		# A kept candidate takes the same draws whether or not it fits, so one
@@ -227,6 +237,16 @@ func _rings_near(tier: int, corner: UniversePoint, size: float) -> Array:
 		return out
 	for g in shapes.rings_near(corner, size):
 		out.append([g, corner.minus(g.centre)])
+	return out
+
+## The debris discs that reach this cell, as [disc, this cell's corner from
+## the disc's centre]: none for giants.
+func _debris_near(tier: int, corner: UniversePoint, size: float) -> Array:
+	var out := []
+	if shapes == null or DEBRIS_PEAK[tier] <= 0.0:
+		return out
+	for d in shapes.debris_near(corner, size):
+		out.append([d, corner.minus(d.centre)])
 	return out
 
 ## The big rocks whose halo reaches this cell: [centre from its corner,

@@ -23,6 +23,8 @@ const RATES := {
 	&"full": Vector2(0.25, 0.5),
 	&"boost": Vector2(0.75, 2.0),
 	&"low_power": Vector2(0.05, 0.2),
+	## Spooling and at warp (the warp spec §5.1): racing past boost.
+	&"warp": Vector2(1.5, 4.0),
 }
 ## How long power restored takes to spin the rings back up to full, the heart
 ## flaring meanwhile (spec §8.3).
@@ -105,7 +107,8 @@ func set_fill(fraction: float, line_fraction: float) -> void:
 		for key: StringName in _bars[i]:
 			_bars[i][key].visible = key == look
 
-## &"full", &"boost", &"low_power" or &"restoring" (spec §6.2). Restoring
+## &"full", &"boost", &"low_power", &"warp" or &"restoring" (spec §6.2; the
+## warp spec §5.1). Restoring
 ## spins up from wherever the rings are to full power over RESTORE_TIME, then
 ## settles into &"full" by itself.
 func set_state(new_state: StringName) -> void:

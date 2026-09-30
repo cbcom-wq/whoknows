@@ -16,10 +16,14 @@ extends RefCounted
 ## inside its planet's, moons are clear of each other's wells and of their
 ## planet's ring, and belts are clear of every neighbourhood. `problems()`
 ## checks them.
+##
+## It also lists the warp targets (docs/superpowers/specs/2026-09-28-warp-design.md
+## §3): the star, the planets and the belts' clusters, each with a warp limit,
+## and a disc of orbital debris round every planet.
 
 ## Bumped whenever a seed's system changes: a save made by another version
 ## starts over (saving spec §8.1).
-const VERSION := 1
+const VERSION := 2
 
 ## The height of the system's disc, and of the star's centre.
 const PLANE_Y := 2500
@@ -70,6 +74,20 @@ const BELT_MIN_HALF_WIDTH := 3000.0
 ## A belt goes only where both gaps to its neighbouring slots are this wide:
 ## room for its narrowest self and the biggest moonless planet beside it.
 const BELT_GAP := 12000.0
+## A warp may start this far past a body's edge (the warp spec §3.2): about
+## two minutes of flying at 120 m/s.
+const WARP_CLEAR := 14000.0
+## A belt cluster's reach from its centre (§3.1).
+const CLUSTER_RADIUS := 4000.0
+## Clusters per belt, and tries at a seeded angle for each.
+const CLUSTERS := Vector2i(3, 6)
+const CLUSTER_TRIES := 24
+## Orbital debris (§3.3): a disc from a planet's well to this far inside its
+## warp limit, this thick, tilted up to this much off the system's plane when
+## there is no ring to follow.
+const DEBRIS_INSIDE := 1000.0
+const DEBRIS_HALF_THICKNESS := 3000.0
+const DEBRIS_TILT := deg_to_rad(20.0)
 
 var seed: int
 var name: String
@@ -85,8 +103,15 @@ var belt_slots: PackedInt32Array = []
 var empty_slots: PackedInt32Array = []
 ## Why each empty slot is empty, in the same order.
 var empty_why: PackedStringArray = []
+## The belts' clusters, belt by belt (the warp spec §3.1).
+var clusters: Array[WarpTarget] = []
+## One debris disc per planet, in planets() order (§3.3).
+var debris: Array[AsteroidShapes.Debris] = []
 
 var _by_id := {}
+var _entry: UniversePoint
+var _targets: Array[WarpTarget] = []
+var _target_by_id := {}
 
 static func from_seed(p_seed: int) -> SystemRecipe:
 	var s := SystemRecipe.new()
@@ -98,6 +123,9 @@ static func from_seed(p_seed: int) -> SystemRecipe:
 			s._make_planet(i)
 	for i in s.belt_slots:
 		s._make_belt(i)
+	s._make_debris()
+	s._make_clusters()
+	s._make_targets()
 	return s
 
 func body(id: StringName) -> SystemBody:
@@ -119,15 +147,20 @@ func moons_of(planet: SystemBody) -> Array[SystemBody]:
 			out.append(b)
 	return out
 
-## Where the flight starts, and where jumps will arrive (§4.4): 700 m off the
-## first belt's first group.
+## Where the flight starts, and where jumps between stars will arrive (§4.4):
+## 700 m off the first belt's first group. Found without the clusters' lift,
+## since the first cluster is centred here (the warp spec §3.1).
 func entry() -> UniversePoint:
-	return AsteroidRecipe.new(seed, null, asteroid_shapes()).find_start()
+	if _entry == null:
+		_entry = AsteroidRecipe.new(seed, null, asteroid_shapes(false)).find_start()
+	return _entry
 
-## Where the rocks are, for AsteroidRecipe (§6).
-func asteroid_shapes() -> AsteroidShapes:
+## Where the rocks are, for AsteroidRecipe (§6; the warp spec §3): belts,
+## rings, debris and bodies, and the clusters unless `with_clusters` is false.
+func asteroid_shapes(with_clusters := true) -> AsteroidShapes:
 	var shapes := AsteroidShapes.new()
 	shapes.belts = belts.duplicate()
+	shapes.debris = debris.duplicate()
 	for b in bodies:
 		if b.ring != null:
 			shapes.rings.append(b.ring)
@@ -135,7 +168,21 @@ func asteroid_shapes() -> AsteroidShapes:
 		blocker.centre = b.point
 		blocker.radius = b.radius
 		shapes.blockers.append(blocker)
+	if with_clusters:
+		for c in clusters:
+			var lift := AsteroidShapes.Cluster.new()
+			lift.centre = c.point
+			lift.radius = c.radius
+			shapes.clusters.append(lift)
 	return shapes
+
+## Every place a warp can take you (the warp spec §3.1): the star, the planets
+## in slot order, then the clusters.
+func warp_targets() -> Array[WarpTarget]:
+	return _targets
+
+func warp_target(id: StringName) -> WarpTarget:
+	return _target_by_id.get(id)
 
 ## Every broken rule of §4.3, as text; empty when all hold.
 func problems() -> PackedStringArray:
@@ -167,6 +214,19 @@ func problems() -> PackedStringArray:
 		for b in tops:
 			if _belt_room(belts[k], b) < maxf(belts[k].half_width, belts[k].half_thickness) - 0.01:
 				out.append("belt %d crosses %s" % [k, b.id])
+	for b in tops:
+		if b.warp_limit < b.neighbourhood + CLEAR - 0.01:
+			out.append("%s's warp limit is inside its neighbourhood" % b.id)
+	for i in clusters.size():
+		for j in range(i + 1, clusters.size()):
+			var a := clusters[i]
+			var c := clusters[j]
+			if a.belt == c.belt and a.point.minus(c.point).length() < a.limit + c.limit - 0.01:
+				out.append("%s and %s are too close" % [a.id, c.id])
+	var ps := planets()
+	for k in debris.size():
+		if debris[k].inner < ps[k].well_radius - 0.01 or debris[k].outer > ps[k].warp_limit - DEBRIS_INSIDE + 0.01:
+			out.append("%s's debris leaves its place" % ps[k].id)
 	return out
 
 ## The system as plain text, for tests and for the owner.
@@ -178,10 +238,15 @@ func describe() -> String:
 			b.id, b.name, b.radius, u.x / 1000.0, u.y / 1000.0, u.z / 1000.0, b.neighbourhood / 1000.0]
 		if b.ring != null:
 			line += "  ring %.1f-%.1f km" % [b.ring.inner / 1000.0, b.ring.outer / 1000.0]
+		if b.warp_limit > 0.0:
+			line += "  limit %.1f km" % (b.warp_limit / 1000.0)
 		lines.append(line)
 	for k in belts.size():
 		var belt := belts[k]
 		lines.append("  belt %d  %.1f km, half-width %.1f km" % [k, belt.radius / 1000.0, belt.half_width / 1000.0])
+	for c in clusters:
+		lines.append("  %-9s %-16s at (%.1f, %.1f, %.1f) km  limit %.1f km" % [c.id, c.name,
+			c.point.x / 1000.0, c.point.y / 1000.0, c.point.z / 1000.0, c.limit / 1000.0])
 	for k in empty_slots.size():
 		lines.append("  slot %d empty: %s" % [empty_slots[k], empty_why[k]])
 	return "\n".join(lines)
@@ -198,6 +263,7 @@ func _make_star() -> void:
 	star.point = UniversePoint.at(0, PLANE_Y, 0)
 	star.well_radius = star.radius * WorldRecipe.WELL_RADII
 	star.neighbourhood = star.well_radius + STAR_ROOM
+	star.warp_limit = star.well_radius + WARP_CLEAR
 	name = star.name
 	_add(star)
 
@@ -273,6 +339,7 @@ func _make_planet(i: int) -> void:
 		_leave_empty(i, "no clear angle")
 		return
 	p.point = at
+	p.warp_limit = maxf(p.well_radius + WARP_CLEAR, p.neighbourhood + CLEAR)
 	if p.ring != null:
 		p.ring.centre = p.point
 	_add(p)
@@ -371,6 +438,86 @@ func _make_belt(i: int) -> void:
 	if belt.half_width < BELT_MIN_HALF_WIDTH:
 		return
 	belts.append(belt)
+
+## A debris disc round every planet (the warp spec §3.3), in its ring's plane
+## or a seeded one, with a hole at every other body's well it reaches.
+func _make_debris() -> void:
+	for p in planets():
+		var d := AsteroidShapes.Debris.new()
+		d.centre = p.point
+		d.inner = p.well_radius
+		d.outer = p.warp_limit - DEBRIS_INSIDE
+		d.half_thickness = DEBRIS_HALF_THICKNESS
+		if p.ring != null:
+			d.normal = p.ring.normal
+		else:
+			var rng := WorldSeed.rng(seed, StringName("debris_%s" % p.id))
+			var axis := Vector3(rng.randf_range(-1.0, 1.0), 0.0, rng.randf_range(-1.0, 1.0))
+			if axis.is_zero_approx():
+				axis = Vector3.RIGHT
+			d.normal = Vector3.UP.rotated(axis.normalized(), rng.randf_range(0.0, DEBRIS_TILT))
+		for b in bodies:
+			if b == p:
+				continue
+			var off := b.point.minus(p.point)
+			if off.length() - b.well_radius < d.outer + d.half_thickness:
+				d.holes.append([off, b.well_radius])
+		debris.append(d)
+
+## 3-6 clusters on each belt (the warp spec §3.1), their limits apart. The
+## first belt's first is centred on the start.
+func _make_clusters() -> void:
+	var limit := CLUSTER_RADIUS + WARP_CLEAR
+	for k in belts.size():
+		var belt := belts[k]
+		var rng := WorldSeed.rng(seed, StringName("clusters_%d" % k))
+		var want := rng.randi_range(CLUSTERS.x, CLUSTERS.y)
+		var across := belt.normal.cross(Vector3.RIGHT)
+		if across.length() < 0.1:
+			across = belt.normal.cross(Vector3.FORWARD)
+		across = across.normalized()
+		var sideways := belt.normal.cross(across)
+		var mine: Array[WarpTarget] = []
+		if k == 0:
+			mine.append(_cluster(k, 1, entry(), rng))
+		for t in CLUSTER_TRIES * want:
+			if mine.size() >= want:
+				break
+			var angle := rng.randf() * TAU
+			var at := belt.centre.plus((across * cos(angle) + sideways * sin(angle)) * belt.radius)
+			if mine.any(func(c: WarpTarget) -> bool: return c.point.minus(at).length() < 2.0 * limit):
+				continue
+			mine.append(_cluster(k, mine.size() + 1, at, rng))
+		clusters.append_array(mine)
+
+func _cluster(belt: int, k: int, at: UniversePoint, rng: RandomNumberGenerator) -> WarpTarget:
+	var c := WarpTarget.new()
+	c.id = StringName("belt_%d.c%d" % [belt, k])
+	c.kind = WarpTarget.Kind.CLUSTER
+	c.name = WorldNames.cluster(rng)
+	c.point = at
+	c.radius = CLUSTER_RADIUS
+	c.edge = CLUSTER_RADIUS
+	c.limit = CLUSTER_RADIUS + WARP_CLEAR
+	c.belt = belt
+	return c
+
+func _make_targets() -> void:
+	for b in bodies:
+		if b.kind == SystemBody.Kind.MOON:
+			continue
+		var t := WarpTarget.new()
+		t.id = b.id
+		t.kind = WarpTarget.Kind.STAR if b.kind == SystemBody.Kind.STAR else WarpTarget.Kind.PLANET
+		t.name = b.name
+		t.point = b.point
+		t.radius = b.radius
+		t.edge = b.well_radius
+		t.limit = b.warp_limit
+		_targets.append(t)
+	_targets.append_array(clusters)
+	for t in _targets:
+		_target_by_id[t.id] = t
 
 ## How far a belt's cross-section may reach from its centre circle and stay
 ## CLEAR of `b`'s neighbourhood.

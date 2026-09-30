@@ -65,3 +65,41 @@ func test_belt_profile_takes_the_deepest_belt():
 	s.belts.append(_belt())
 	assert_eq(s.belt_profile(UniversePoint.at(60000, 0, 0)), 1.0)
 	assert_eq(s.belt_profile(UniversePoint.at(30000, 0, 0)), 0.0)
+
+# --- debris and clusters (the warp spec §3.1, §3.3) ---------------------------
+
+func _disc() -> AsteroidShapes.Debris:
+	var d := AsteroidShapes.Debris.new()
+	d.centre = UniversePoint.at(0, 0, 0)
+	d.inner = 1000.0
+	d.outer = 15000.0
+	d.half_thickness = 3000.0
+	d.holes = [[Vector3(8000, 0, 0), 900.0]]
+	return d
+
+func test_a_debris_disc_is_empty_in_its_well_and_holes_and_full_mid_disc():
+	var d := _disc()
+	assert_eq(d.profile(UniversePoint.at(500, 0, 0)), 0.0, "in the well")
+	assert_eq(d.profile(UniversePoint.at(0, 2000, 0)), 0.0, "straight above the planet: still the well")
+	assert_eq(d.profile(UniversePoint.at(8000, 0, 300)), 0.0, "in a moon's well")
+	assert_almost_eq(d.profile(UniversePoint.at(0, 0, 5000)), 1.0, 1e-6, "mid-disc")
+	assert_eq(d.profile(UniversePoint.at(0, 0, 16000)), 0.0, "beyond its outer edge")
+	assert_eq(d.profile(UniversePoint.at(0, 3500, 5000)), 0.0, "above the disc")
+	assert_between(d.profile(UniversePoint.at(0, 0, 13000)), 0.01, 0.99, "easing off outward")
+
+func test_discs_near_a_cell_are_found_by_a_conservative_bound():
+	var shapes := AsteroidShapes.new()
+	shapes.debris.append(_disc())
+	assert_eq(shapes.debris_near(UniversePoint.at(14000, 0, 0), 200.0).size(), 1)
+	assert_eq(shapes.debris_near(UniversePoint.at(0, 0, 40000), 200.0).size(), 0)
+
+func test_a_cluster_lifts_most_at_its_heart_and_none_past_its_reach():
+	var shapes := AsteroidShapes.new()
+	var c := AsteroidShapes.Cluster.new()
+	c.centre = UniversePoint.at(0, 0, 0)
+	c.radius = 4000.0
+	shapes.clusters.append(c)
+	assert_almost_eq(shapes.cluster_lift(UniversePoint.at(0, 0, 0)), AsteroidShapes.CLUSTER_LIFT, 1e-6)
+	assert_almost_eq(shapes.cluster_lift(UniversePoint.at(1500, 0, 0)), AsteroidShapes.CLUSTER_LIFT, 1e-6)
+	assert_eq(shapes.cluster_lift(UniversePoint.at(4100, 0, 0)), 0.0)
+	assert_eq(AsteroidShapes.new().cluster_lift(UniversePoint.at(0, 0, 0)), 0.0, "no clusters, no lift")
