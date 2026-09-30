@@ -31,6 +31,17 @@ var _window_glow: ShaderMaterial
 ## Each cell's damage tint (health and damage spec §9): coord -> the colour
 ## its skin is multiplied by, from its stage.
 var _colours: Dictionary = {}
+## Which vertices each cell's skin pieces are (HullDressing.build's `spans`):
+## coord -> [[ArrayMesh, first vertex, end vertex], ...].
+var _spans: Dictionary = {}
+## Each skin mesh a tint can touch: ArrayMesh -> [its surface arrays, its
+## colours as dressed], kept from the dressing (a read-back stalls on the
+## GPU), so a stage recolours one cell's vertices and uploads the arrays
+## again without dressing anything.
+var _surfaces: Dictionary = {}
+## Skin meshes recoloured since the last upload: ArrayMesh -> true. They go up
+## once at the end of the frame, however many stages changed in it.
+var _stale: Dictionary = {}
 var _alcoves: Dictionary = {}   # Vector3i -> AirlockAlcove
 
 func bind(grid: ShipGrid, catalog: BlockCatalog) -> void:
@@ -73,11 +84,20 @@ func collider_coords() -> Array:
 	return _collider_coords.duplicate()
 
 ## The block at `coord` is at `stage` now, a BlockDamage.Stage (health and
-## damage spec §4.3, §9): its colour is recorded, with no rebuild.
+## damage spec §4.3, §9): its skin pieces take the stage's colour in place,
+## drawn from the end of this frame. Nothing is dressed or rebuilt; colliders
+## and alcoves are left alone.
 func set_stage(coord: Vector3i, stage: int) -> void:
-	if _grid == null or not _grid.has_block(coord):
+	if not _colours.has(coord):
 		return
-	_colours[coord] = stage_colour(stage)
+	var colour := stage_colour(stage)
+	if _colours[coord] == colour:
+		return
+	_colours[coord] = colour
+	var waiting := not _stale.is_empty()
+	_stale.merge(_tint(coord, colour))
+	if not waiting and not _stale.is_empty():
+		_upload_stale.call_deferred()
 
 ## What a block's colours are multiplied by at `stage`.
 static func stage_colour(stage: int) -> Color:
@@ -91,6 +111,40 @@ static func stage_colour(stage: int) -> Color:
 ## The colour the cell at `coord` is drawn with now, for tests.
 func instance_colour(coord: Vector3i) -> Color:
 	return _colours.get(coord, HullPalette.UNHURT)
+
+## Which vertices the cell at `coord` is in the skin: [[ArrayMesh, first
+## vertex, end vertex], ...], for tests and the probe.
+func skin_spans(coord: Vector3i) -> Array:
+	return _spans.get(coord, []).duplicate()
+
+## Multiplies the colours `coord`'s pieces were dressed with by `colour`, in
+## the cached arrays. Returns the meshes it changed, to upload.
+func _tint(coord: Vector3i, colour: Color) -> Dictionary:
+	var changed := {}
+	for span: Array in _spans.get(coord, []):
+		var mesh: ArrayMesh = span[0]
+		var surface: Array = _surfaces[mesh]
+		var dressed: PackedColorArray = surface[1]
+		var colours: PackedColorArray = surface[0][Mesh.ARRAY_COLOR]
+		for i in range(span[1], span[2]):
+			colours[i] = dressed[i] * colour
+		surface[0][Mesh.ARRAY_COLOR] = colours
+		changed[mesh] = true
+	return changed
+
+## Puts each changed mesh's arrays back: the same ArrayMesh, so what shares it
+## (the bridge computer's miniature) sees the tint too. About a millisecond for
+## the starter's plating (reference.md).
+func _upload(meshes: Dictionary) -> void:
+	for mesh: ArrayMesh in meshes:
+		if _surfaces.has(mesh):   # not dropped by a rebuild since
+			mesh.clear_surfaces()
+			mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _surfaces[mesh][0])
+
+func _upload_stale() -> void:
+	var meshes := _stale
+	_stale = {}
+	_upload(meshes)
 
 ## Each airlock that can cycle is an open alcove here -- the hull's copy of
 ## its room (airlock spec §7.2) -- by cell.
@@ -145,6 +199,9 @@ func _clear() -> void:
 	_window_glow = null
 	_layout = null
 	_colours.clear()
+	_spans = {}
+	_surfaces.clear()
+	_stale = {}
 	for alcove: AirlockAlcove in _alcoves.values():
 		if not is_instance_valid(alcove):
 			continue
@@ -206,10 +263,21 @@ func _build_skin() -> void:
 	_skin = Node3D.new()
 	_skin.name = "Skin"
 	add_child(_skin)
-	for coord in _grid.coords():
-		var inst := _grid.get_block(coord)
-		_colours[coord] = stage_colour(BlockDamage.stage_of(inst, _catalog.get_def(inst.block_id)))
 	var made := HullDressing.build(_layout, _skin)
 	_meshes.assign(made["meshes"])
 	_lenses = made["lenses"]
 	_window_glow = made["window_glow"]
+	_spans = made["spans"]
+	for mesh: ArrayMesh in made["surfaces"]:
+		var arrays: Array = made["surfaces"][mesh]
+		_surfaces[mesh] = [arrays, (arrays[Mesh.ARRAY_COLOR] as PackedColorArray).duplicate()]
+	# Dressed as made, then each hurt cell tinted (health and damage spec §9):
+	# a ship loaded or rebuilt with damage shows it.
+	var changed := {}
+	for coord in _grid.coords():
+		var inst := _grid.get_block(coord)
+		var colour := stage_colour(BlockDamage.stage_of(inst, _catalog.get_def(inst.block_id)))
+		_colours[coord] = colour
+		if colour != HullPalette.UNHURT:
+			changed.merge(_tint(coord, colour))
+	_upload(changed)
