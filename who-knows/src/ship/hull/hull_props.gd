@@ -28,8 +28,11 @@ const RUNNING_WIDTH := 0.06
 static func _at(offset: Vector3) -> Transform3D:
 	return InteriorKit.at(offset)
 
+## The plating's vertex colour. The livery paints the plate and multiplies by
+## this, which ExteriorBuilder turns into the cell's damage tint (health and
+## damage spec §9): white, so an unhurt plate is as the livery paints it.
 static func _plate_colour() -> Color:
-	return InteriorKit.solid(HullPalette.PLATE)
+	return HullPalette.UNHURT
 
 static func _seam() -> Color:
 	return InteriorKit.solid(HullPalette.PANEL_LINE)

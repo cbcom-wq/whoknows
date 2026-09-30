@@ -57,6 +57,13 @@ var portal_material: Material
 ## its plating in the livery and its trim a little glossier than a cabin's.
 var materials: Dictionary = {}   # Batch -> Material
 var _tools: Dictionary = {}   # Batch -> SurfaceTool
+var _counts: Dictionary = {}   # Batch -> vertices added so far
+## Whether commit() keeps each batch's surface arrays in `arrays`, for a
+## builder that recolours vertices in place later (the hull's damage tint):
+## reading them back from a committed mesh stalls on the GPU.
+var keep_arrays := false
+## The last commit()'s surface arrays by Batch, when keep_arrays.
+var arrays: Dictionary = {}
 ## How worn what is built now looks (health and damage spec §9): 0 as made,
 ## 1 damaged (solid colours lean toward SCORCH), 2 wrecked (toward CHAR, and
 ## its glow goes dark). A builder sets it around the pieces of a hurt cell.
@@ -126,11 +133,19 @@ func tri(batch: Batch, a: Vector3, b: Vector3, c: Vector3, normal: Vector3, colo
 	if wear > 0:
 		color = _worn(batch, color)
 	var st := _tool(batch)
+	_counts[batch] = _counts.get(batch, 0) + 3
 	for v in [[a, ua], [b, ub], [c, uc]]:
 		st.set_normal(normal)
 		st.set_color(color)
 		st.set_uv(v[1])
 		st.add_vertex(v[0])
+
+## How many vertices `batch` holds so far. Its mesh keeps them in the order
+## they were added (nothing is indexed), so a builder can note which run of
+## vertices a piece is and recolour it later (the hull's damage tint, health
+## and damage spec §9).
+func vertex_count(batch: Batch) -> int:
+	return _counts.get(batch, 0)
 
 ## A quad a-b-c-d, in order round its edge. UVs run (0,1) at a round to (0,0)
 ## at d, so a screen quad given bottom-left first reads upright.
@@ -298,10 +313,20 @@ func commit() -> Array[MeshInstance3D]:
 		portal_material if portal_material != null else InteriorMaterials.portal_fallback(),
 		InteriorMaterials.props()]
 	var out: Array[MeshInstance3D] = []
+	arrays = {}
 	for batch: int in _tools:
 		var st: SurfaceTool = _tools[batch]
-		out.append(add_mesh(st.commit(), materials.get(batch, defaults[batch]), BATCH_NAMES[batch]))
+		var committed: ArrayMesh
+		if keep_arrays:
+			# What SurfaceTool.commit() does, keeping the arrays on the way.
+			arrays[batch] = st.commit_to_arrays()
+			committed = ArrayMesh.new()
+			committed.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays[batch])
+		else:
+			committed = st.commit()
+		out.append(add_mesh(committed, materials.get(batch, defaults[batch]), BATCH_NAMES[batch]))
 	_tools.clear()
+	_counts.clear()
 	return out
 
 ## One batch as a mesh, with no node: for pieces something else instances,
@@ -312,6 +337,7 @@ func mesh(batch: Batch) -> ArrayMesh:
 		return null
 	var st: SurfaceTool = _tools[batch]
 	_tools.erase(batch)
+	_counts.erase(batch)
 	return st.commit()
 
 func _tool(batch: Batch) -> SurfaceTool:

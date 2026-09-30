@@ -207,6 +207,9 @@ func _plan_floods(down: Array) -> void:
 	for f in down:
 		lowest = minf(lowest, f["centre"].y)
 	var belly := down.filter(func(f): return f["centre"].y <= lowest + BELLY_BAND)
+	var cell_of := {}   # a belly face's centre -> its cell
+	for f in belly:
+		cell_of[f["centre"]] = f["coord"]
 	var lo := Vector2(INF, INF)
 	var hi := Vector2(-INF, -INF)
 	for f in belly:
@@ -227,7 +230,7 @@ func _plan_floods(down: Array) -> void:
 		if not chosen.has(best):
 			chosen.append(best)
 	for c in chosen:
-		_add_flood(c, Vector3(c.x - middle.x, 0, c.z - middle.y))
+		_add_flood(c, Vector3(c.x - middle.x, 0, c.z - middle.y), cell_of[c])
 	var fore := INF
 	var aft := -INF
 	for c in chosen:
@@ -247,14 +250,14 @@ func _plan_floods(down: Array) -> void:
 				best = c
 		if not chosen.has(best):
 			chosen.append(best)
-			_add_flood(best, Vector3(0, 0, signf(best.z - middle.y)))
+			_add_flood(best, Vector3(0, 0, signf(best.z - middle.y)), cell_of[best])
 
-func _add_flood(at: Vector3, out: Vector3) -> void:
+func _add_flood(at: Vector3, out: Vector3, coord: Vector3i) -> void:
 	var t := deg_to_rad(FLOOD_TILT_DEG)
 	var aim := Vector3.DOWN
 	if out.length() > 0.01:
 		aim = (Vector3.DOWN * cos(t) + out.normalized() * sin(t)).normalized()
-	mounts.append({"group": FLOOD, "position": at, "normal": Vector3.DOWN, "aim": aim})
+	mounts.append({"group": FLOOD, "position": at, "normal": Vector3.DOWN, "aim": aim, "coord": coord})
 
 ## Ties go toward the centreline, then the bow.
 static func _before(a: Vector3, b: Vector3) -> bool:
@@ -304,7 +307,8 @@ func _add_forward(face: Dictionary) -> void:
 	var drop := deg_to_rad(FORWARD_DROP_DEG)
 	var side := signf(centre.x) if not is_zero_approx(centre.x) else 1.0
 	var aim := Vector3(0, -sin(drop), -cos(drop)).rotated(Vector3.UP, -side * deg_to_rad(FORWARD_TOE_DEG))
-	mounts.append({"group": FORWARD, "position": at, "normal": n, "aim": aim.normalized()})
+	mounts.append({"group": FORWARD, "position": at, "normal": n, "aim": aim.normalized(),
+		"coord": face["coord"]})
 
 ## Cyan strips (spec §5.4): along the top chamfers, fore and aft, at the
 ## highest roof, and up the bow's vertical chamfers.
