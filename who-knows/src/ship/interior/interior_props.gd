@@ -744,8 +744,12 @@ static func holo_table(kit: InteriorKit, f: Transform3D, _variety: float) -> voi
 	var console := f * holo_table_console()
 	kit.bevel_box(SOLID, console * _at(Vector3(0, 0, -0.03)), Vector3(0.8, 0.3, 0.06), 0.02, trim)
 	# Solid where you'd walk into it; nothing reaches the holo above 1.05 m.
+	# The console's collider is the console itself, in its own tilted frame and
+	# no farther out than its face: the buttons stand proud of it, where the
+	# Interactor's ray can land on them. An upright box round the console once
+	# swallowed all five, and the table could not be used.
 	kit.collider(f * _at(Vector3(0, 0.475, 0)), Vector3(1.0, 0.95, 1.0))
-	kit.collider(f * _at(Vector3(0, 0.97, -0.55)), Vector3(0.8, 0.14, 0.2))
+	kit.collider(console * _at(Vector3(0, 0, -0.03)), Vector3(0.8, 0.3, 0.06))
 
 ## The rim console's frame in the table's fixture frame: origin on its face,
 ## +z out toward the operator's eyes, +x to the operator's right (fixture -x,

@@ -717,7 +717,7 @@ func test_a_computer_gets_its_table_where_its_frame_says():
 	assert_almost_eq(table[0].position, Vector3(0, floor_y + 0.475, 0), Vector3.ONE * 0.0001,
 		"at its cell's floor centre")
 	var lip := _dressing_colliders().filter(
-		func(c): return (c.shape as BoxShape3D).size.is_equal_approx(Vector3(0.8, 0.14, 0.2)))
+		func(c): return (c.shape as BoxShape3D).size.is_equal_approx(Vector3(0.8, 0.3, 0.06)))
 	assert_eq(lip.size(), 1)
 	assert_gt(lip[0].position.x, 0.4, "the console is on the +x side, toward its operator")
 

@@ -44,7 +44,8 @@ Do these in order. Each one names the check that proves it.
      Jobs it cannot reach are dropped; the probe prints the dock and names them `UNREACHABLE`.
    - **a `computer`** (optional) for the bridge computer's holo table, a quiet fixture: put the
      cell its frame faces (its operator's spot) on walkable deck, within the Interactor's 2.5 m of
-     its buttons, and face it so the operator looks out of a window (the owner's wish, 2026-09-27:
+     its buttons (and with nothing solid between that eye and them:
+     `test_looking_at_a_button_from_its_operator_s_spot_finds_the_button`), and face it so the operator looks out of a window (the owner's wish, 2026-09-27:
      on the starter, the port front corner, facing aft). A console it displaces moves aft. The
      probe prints each table and where you stand to use it.
 3. **Propulsion:**
@@ -158,6 +159,7 @@ thrust.
 | A quiet fixture where the consoles are | Its own walls go plain, so a fixture at the glass or beside the helm would take the bridge's consoles with it, and the shoulder's desk would stand 5 cm from it | `InteriorLayout._handed_consoles` hands the console straight back to the last open cell's same wall; the shoulder drops its desk in front of a fixture. Render the corner it went to |
 | Letting go of a warp at 120 m/s with the assist on | The assist cancels velocity nobody asked for, so the ship braked to rest at the warp limit instead of coasting in | `WarpDrive` sets the speed lock to 120 m/s at drop-out; anything else that hands the hull a velocity with the assist on must do the same |
 | Letting the rest of the ship behave normally at warp | Found in the final review: you could cycle the airlock and step out mid-warp (stranded kilometres behind), the RCS kept its last command and puffed the whole way, and motion coupling read the frozen hull's placing as a 12 m/s² shove | Anything that acts on the hull's motion or lets someone outside asks `warp.is_spinning()` / `travelling()` first: `Airlock.warping()`, `FlightComputer`'s early return, `MotionCoupling._warp()` |
+| An upright collider round a tilted console | The holo table's console lip was a box round the whole console, so it enclosed all five buttons: the Interactor's ray hit the table, every prompt was empty, and the computer could not be used at all in play. Its tests pressed the buttons in code and only measured distance | Give a tilted part its collider in its own frame, no farther out than its face, so its buttons stand proud of it. Test an interactable by casting the Interactor's ray at it from where you stand, not by distance |
 | A test script that types a local from the untyped `_root.system` and loops its `warp_targets()` | Godot 4.5.1 segfaulted at exit (ObjectDB leak, GUT's own scripts included) though every test passed | Hold the system in a typed member set in `before_each`, as `test_warp_drive.gd` does; watch the run's exit code, not only its pass count |
 | An off-centre retro counted as steering | It would light up for yaw, but `ShipStats` never counts pure fore-and-aft thrust as authority | Steer with blocks that push across the hull; retros only brake |
 

@@ -44,6 +44,20 @@ func test_its_buttons_are_within_reach_of_its_operator_s_spot():
 		var panel: ReadoutPanel = _computer().panels[button]
 		assert_lt(eye.distance_to(panel.global_position), 2.5, "%s within the Interactor's 2.5 m" % button)
 
+## Being in reach is not enough: the Interactor's ray, looking at a button from
+## where its operator stands, must land on that button and not on the table.
+func test_looking_at_a_button_from_its_operator_s_spot_finds_the_button():
+	await wait_physics_frames(2)
+	var spot := DeckPaths.floor_point(Vector3i(-1, 0, -2))
+	var eye := _ship.interior.global_transform * (spot + Vector3(0, 1.6, 0))
+	var space := _ship.interior.get_world_3d().direct_space_state
+	for button in ShipComputer.BUTTONS:
+		var panel: ReadoutPanel = _computer().panels[button]
+		var query := PhysicsRayQueryParameters3D.create(eye, panel.global_position, Interactor.MASK)
+		query.collide_with_areas = true
+		var hit := space.intersect_ray(query)
+		assert_eq(hit.get("collider"), panel, "looking at %s finds it, not %s" % [button, hit.get("collider")])
+
 ## Spec §7.1: the status page's miniature shares the hull's own MultiMeshes.
 func test_the_miniature_is_the_hull_s_own_meshes():
 	var c := _computer()

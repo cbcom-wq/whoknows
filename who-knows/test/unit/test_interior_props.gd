@@ -500,8 +500,9 @@ func test_nothing_solid_stands_in_the_holo():
 	var c := InteriorProps.HOLO_VOLUME_CENTRE
 	var volume := AABB(Vector3(-0.5, c - 0.3, -0.5), Vector3(1.0, 0.6, 1.0))
 	for shape: CollisionShape3D in _colliders():
+		# The console's collider is tilted with the console: bound it as placed.
 		var half := (shape.shape as BoxShape3D).size * 0.5
-		var box := AABB(shape.position - half, half * 2.0)
+		var box := shape.transform * AABB(-half, half * 2.0)
 		assert_false(box.intersects(volume), "a collider reaches into the holo")
 
 func test_the_console_faces_its_operator_and_its_buttons_run_left_to_right():
