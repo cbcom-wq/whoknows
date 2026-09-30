@@ -409,6 +409,9 @@ func enter_suit(outside: Node3D, pose: Transform3D, start_velocity: Vector3, shi
 	if interactor != null:
 		interactor.set_mask(Interactor.SUIT_MASK)
 	grasp.suspended = true
+	# What you hold comes out with you, drawn for outside.
+	if grasp.item != null:
+		grasp.item.set_space(true)
 	_set_render_layer(1, 1 | ExteriorBuilder.OWN_HULL_LAYER)
 	_righting_t = RIGHTING_TIME
 	camera.quaternion = Quaternion.IDENTITY
@@ -438,6 +441,8 @@ func enter_plating(interior: Node3D, pose: Transform3D, pitch: float, start_velo
 	if interactor != null:
 		interactor.set_mask(Interactor.MASK)
 	grasp.suspended = false
+	if grasp.item != null:
+		grasp.item.set_space(false)
 	_set_render_layer(InteriorKit.LAYER, InteriorKit.LAYER)
 	_righting_from = righting
 	_righting_t = 0.0

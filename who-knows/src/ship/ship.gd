@@ -14,6 +14,9 @@ signal blocks_lost(coords: Array[Vector3i])
 signal plate_shed(item: Item)
 
 const INTERIOR_WORLD_BASE := Vector3(0.0, -5000.0, 0.0)
+## Every ship is in this group, for things that must find one without being
+## given it (the repair torch aimed at a hole).
+const GROUP := &"ships"
 const SLOT_SPACING := 2000.0
 ## How close a rebuilt stow point must be to where a stowed item's point was
 ## for the item to stay stowed through the rebuild.
@@ -168,6 +171,8 @@ func _ready() -> void:
 	# The hull is a scriptless RigidBody3D: hits reach it through meta
 	# (health and damage spec §3).
 	exterior.set_meta(&"receive_hit", _on_hull_hit)
+	exterior.set_meta(&"ship", self)
+	add_to_group(GROUP)
 
 func _process(_delta: float) -> void:
 	# hull_livery.gdshader paints its stripe from ship-local height, but
@@ -254,6 +259,72 @@ func _on_interior_hit(hit: Hit) -> void:
 	var cell := ShipCells.interior_cell(grid, interior.to_local(hit.position),
 		interior.global_basis.inverse() * hit.normal)
 	take_damage(cell, hit.damage)
+
+# --- mending (health and damage spec §8) -----------------------------------------
+
+## The cell of this ship a ray hit on `collider` landed on (world point and
+## normal), or ShipCells.NONE: the hull or the interior, as for damage.
+func cell_hit(collider: Object, shape: int, at: Vector3, normal: Vector3) -> Vector3i:
+	if collider == exterior:
+		return ShipCells.hull_cell(grid, exterior, shape, exterior.to_local(at),
+			exterior.global_basis.inverse() * normal)
+	if collider == interior_builder.geometry_body():
+		return ShipCells.interior_cell(grid, interior.to_local(at), interior.global_basis.inverse() * normal)
+	return ShipCells.NONE
+
+## The first cell along a ray (world, `reach` m) that has no block now but had
+## one at launch, beside a block that is still there: a hole the torch can
+## rebuild. Looked for from outside (the hull's frame) and aboard (the
+## interior's), a quarter metre at a time. ShipCells.NONE if there is none.
+func missing_cell_along(from: Vector3, dir: Vector3, reach: float) -> Vector3i:
+	var steps := ceili(reach / 0.25)
+	for i in range(1, steps + 1):
+		var p := from + dir * (reach * i / steps)
+		for cell in [Vector3i((exterior.to_local(p) / ShipGrid.CELL_SIZE).round()),
+				ShipCells.interior_cell_at(interior.to_local(p))]:
+			if _rebuildable(cell):
+				return cell
+	return ShipCells.NONE
+
+func _rebuildable(cell: Vector3i) -> bool:
+	if grid.has_block(cell) or launch_block(cell).is_empty():
+		return false
+	for n in ShipGrid.FACE_OFFSETS:
+		if grid.has_block(cell + n):
+			return true
+	return false
+
+## Mends up to `hp` of the block at `cell`; returns what it used.
+func repair_cell(cell: Vector3i, hp: float) -> float:
+	return BlockDamage.repair(grid, catalog, cell, hp)
+
+## Puts back, wrecked, what the ship launched with at `cell` (§8.2).
+func rebuild_cell(cell: Vector3i) -> bool:
+	if not _rebuildable(cell):
+		return false
+	var was := launch_block(cell)
+	BlockDamage.rebuild(grid, catalog, cell, was[0], was[1])
+	return true
+
+## What the torch's prompt says of the block at `cell`: its name and state,
+## as "HULL BLOCK · WRECKED 0%", or of a hole, "REBUILD THRUSTER".
+func cell_label(cell: Vector3i) -> String:
+	var inst := grid.get_block(cell)
+	if inst == null:
+		var was := launch_block(cell)
+		var gone := catalog.get_def(was[0]) if not was.is_empty() else null
+		return "REBUILD %s" % gone.display_name.to_upper() if gone != null else ""
+	var def := catalog.get_def(inst.block_id)
+	if def == null:
+		return ""
+	var stage: String = BlockDamage.Stage.keys()[BlockDamage.stage_of(inst, def)]
+	var left := clampf(1.0 - inst.damage / float(def.hp), 0.0, 1.0)
+	return "%s · %s %d%%" % [def.display_name.to_upper(), stage, roundi(left * 100.0)]
+
+## How much the block at `cell` has to mend, hp.
+func damage_at(cell: Vector3i) -> float:
+	var inst := grid.get_block(cell)
+	return inst.damage if inst != null else 0.0
 
 ## Deals `amount` to the block at `cell` (health and damage spec §4). Returns
 ## what it knocked off.
@@ -444,6 +515,7 @@ func _rebuild_everything() -> void:
 	exterior_builder.rebuild()
 	interior_builder.rebuild()
 	interior_builder.geometry_body().set_meta(&"receive_hit", _on_interior_hit)
+	interior_builder.geometry_body().set_meta(&"ship", self)
 	_bind_airlocks()
 	_reseat(stowed)
 	if not _stocked:

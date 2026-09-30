@@ -169,10 +169,26 @@ func test_the_salvage_set_stows_and_sits_in_the_hand_as_authored():
 		assert_almost_eq(def.grip_point, want[1], Vector3.ONE * 0.0001, "%s's grip point" % id)
 		assert_almost_eq(def.hold_rotation, want[2], Vector3.ONE * 0.0001, "%s's hold rotation" % id)
 
-## The sixteen aboard and the six salvage kinds (ruling R4: the hose nozzle
-## makes it 23).
-func test_the_catalogue_has_22_kinds():
-	assert_eq(_cat.ids().size(), 22)
+## The sixteen aboard, the six salvage kinds and the repair torch (health and
+## damage spec §8.1). Ruling R4: the hose nozzle will make it 24.
+func test_the_catalogue_has_23_kinds():
+	assert_eq(_cat.ids().size(), 23)
+
+## Health and damage spec §8.1, read back from its .tres.
+func test_the_repair_torch():
+	var t := _cat.get_def(&"repair_torch")
+	assert_not_null(t)
+	assert_eq(t.display_name, "Repair torch")
+	assert_eq(t.grip, ItemDefinition.Grip.WIELD)
+	assert_eq(t.stow_class, &"tool")
+	assert_eq(t.look, &"repair_torch")
+	assert_eq(t.use, RepairTorch)
+	assert_eq(t.quantum_value, 60)
+	assert_false(t.eva_tool, "makeable: a lost torch can be made again")
+	assert_true(t.works_outside, "the hull is outside")
+	assert_almost_eq(t.size, Vector3(0.07, 0.09, 0.28), Vector3.ONE * 0.0001)
+	assert_almost_eq(t.grip_point, Vector3(0, -0.02, 0.085), Vector3.ONE * 0.0001)
+	assert_almost_eq(t.use_point, Vector3(0, 0.012, -0.14), Vector3.ONE * 0.0001)
 
 func test_no_starter_item_is_an_eva_tool():
 	for id in _cat.ids():

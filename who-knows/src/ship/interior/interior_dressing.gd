@@ -475,7 +475,9 @@ static func _room_piece(kit: InteriorKit, f: Transform3D, face: Dictionary, vari
 				_stow(kit, f, InteriorProps.weapon_rack_spots(), {&"sidearm": &"plasma_pistol"})
 			else:
 				InteriorProps.ammo_crates(kit, f, variety)
-				_stow(kit, f, InteriorProps.ammo_crates_spots(), {&"tool": &"flare"})
+				# A flare, and the repair torch (health and damage spec §8.1) in
+				# the second flare's place: everything else aboard stays.
+				_stow(kit, f, InteriorProps.ammo_crates_spots(), {&"tool": [&"flare", &"repair_torch"]})
 	if porthole:
 		InteriorProps.porthole(kit, f)
 

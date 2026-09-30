@@ -58,6 +58,8 @@ var enabled := true
 var suspended := false
 ## Use and throw need the reticle, so they work only in first person.
 var first_person := true
+## True while the held item's hold() is doing something.
+var holding := false
 var wield_socket: Node3D
 var carry_socket: Node3D
 ## Where released items go.
@@ -81,7 +83,16 @@ func busy() -> String:
 		return "throwing"
 	if not _releasing.is_empty():
 		return "letting go"
+	if item != null and is_instance_valid(item) and item.use_node != null:
+		return item.use_node.busy()
 	return ""
+
+## Whether the held item can be used now: wielded, in your own view, and
+## aboard, or out on a spacewalk if it works there (health and damage spec
+## §8.3).
+func can_use() -> bool:
+	return enabled and first_person and mode == Mode.WIELDING and item != null \
+		and (not suspended or item.definition.works_outside)
 
 func set_enabled(on: bool) -> void:
 	enabled = on
@@ -140,7 +151,7 @@ func take(candidate: Item) -> bool:
 	return true
 
 func use() -> bool:
-	if not _active() or not first_person or mode != Mode.WIELDING:
+	if not can_use():
 		return false
 	if not item.use(aim(), world_root, _body):
 		return false
@@ -215,11 +226,14 @@ func stow_target() -> StowPoint:
 	return best
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not _active() or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+	if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		return
 	if event.is_action_pressed(&"use"):
 		use()
-	elif event.is_action_pressed(&"throw"):
+		return
+	if not _active():
+		return
+	if event.is_action_pressed(&"throw"):
 		begin_throw()
 	elif event.is_action_released(&"throw"):
 		finish_throw()
@@ -236,7 +250,15 @@ func _physics_process(delta: float) -> void:
 		changed.emit()
 	if charge >= 0.0:
 		charge = minf(charge + delta / CHARGE_TIME, 1.0)
+	holding = hold_now(delta, Input.is_action_pressed(&"use") and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED)
 	_update_prompt()
+
+## The held item's hold() while `use` is `pressed` (health and damage spec
+## §8.3). Returns whether it did anything.
+func hold_now(delta: float, pressed: bool) -> bool:
+	if not pressed or not can_use() or item.use_node == null:
+		return false
+	return item.use_node.hold(item, aim(), world_root, _body, delta)
 
 ## Lets go: the item goes back into the world loose, at a point a ray from the
 ## eye proves is clear of walls, still ignoring its holder until the two no
@@ -307,6 +329,8 @@ func _ignore(it: Item, on: bool) -> void:
 
 func _update_prompt() -> void:
 	var text := STOW_PROMPT if _active() and stow_target() != null else ""
+	if text == "" and can_use() and item.use_node != null:
+		text = item.use_node.aim_text(item, aim(), _body)
 	if text != _prompt:
 		_prompt = text
 		prompt_changed.emit(text)

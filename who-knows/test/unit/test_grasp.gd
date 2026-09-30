@@ -273,3 +273,42 @@ func test_a_hold_angle_turns_a_carried_item_about_its_centre():
 	_grasp.take(item)
 	assert_true(item.basis.is_equal_approx(Basis.from_euler(Vector3(deg_to_rad(-35.0), 0, 0))))
 	assert_almost_eq(item.position, Vector3(0, 0, -item.definition.size.z * 0.5), Vector3.ONE * 0.0001)
+
+# --- holding use (health and damage spec §8.3) --------------------------------
+
+class HoldCounter extends ItemUse:
+	var holds := 0
+	func hold(_item: Item, _aim: Transform3D, _world: Node3D, _holder: CollisionObject3D, _delta: float) -> bool:
+		holds += 1
+		return true
+
+func _wielded(works_outside := false) -> Item:
+	var item := _item(ItemDefinition.Grip.WIELD, 1.0)
+	item.definition.works_outside = works_outside
+	item.use_node = HoldCounter.new()
+	item.add_child(item.use_node)
+	assert_true(_grasp.take(item))
+	return item
+
+func test_hold_is_called_only_while_use_is_held():
+	var item := _wielded()
+	var use := item.use_node as HoldCounter
+	assert_false(_grasp.hold_now(0.1, false))
+	assert_true(_grasp.hold_now(0.1, true))
+	assert_true(_grasp.hold_now(0.1, true))
+	assert_eq(use.holds, 2)
+
+func test_a_carried_thing_is_never_held_down():
+	var item := _item(ItemDefinition.Grip.CARRY, 4.0)
+	item.use_node = HoldCounter.new()
+	item.add_child(item.use_node)
+	assert_true(_grasp.take(item))
+	assert_false(_grasp.hold_now(0.1, true))
+	assert_eq((item.use_node as HoldCounter).holds, 0)
+
+func test_on_a_spacewalk_only_what_works_outside_can_be_used():
+	var item := _wielded(false)
+	_grasp.suspended = true
+	assert_false(_grasp.can_use())
+	item.definition.works_outside = true
+	assert_true(_grasp.can_use())
