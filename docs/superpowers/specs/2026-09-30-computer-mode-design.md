@@ -101,8 +101,8 @@ Every row was decided by the owner on 2026-09-29/30, as recommended.
 
 `InteriorProps.holo_table_station_eye() -> Transform3D`, in the table's fixture frame: on the
 operator's side (−z), **0.9 m back from the holo's centre and 0.5 m above it** (1.85 m up),
-looking at the holo's centre, which is about 29° down. From there the 1.0 m holo fills about
-two-thirds of the height of the default view. Props still never see the grid.
+looking at the holo's centre, which is about 29° down, from 1.03 m away. From there the 1.0 m
+holo fills most of the default view, with room at its edges for the overlay. Props still never see the grid.
 
 While in the mode the camera orbits the holo's centre at that distance (§4.4). The eye is where it
 starts, and where R returns it.
@@ -126,8 +126,8 @@ every event it uses as handled, so neither the avatar nor anything else sees it.
 - **Esc.** Everywhere else, Esc releases the mouse (`Avatar._unhandled_input`). In the mode it
   means *leave*. The avatar leaves Esc, and its click-to-recapture, alone while the director
   `is_at_station`.
-- **The pilot HUD** is hidden while you are in. It is already faded out on foot; the mode keeps it
-  so.
+- **The HUD** stays out of the way: the pilot HUD is already faded out on foot, and the on-foot
+  reticle and interaction prompt hide while you are in.
 
 ### 3.4 Getting out
 
@@ -205,8 +205,9 @@ Only in the mode:
   the ship's turn: `HoloVolume.set_turn(ship_turn * Basis(UP, spin))`. The table stays level, and
   no mark is ever tilted out of the cylinder.
 - **A vertical drag moves the camera,** not the holo. It orbits the holo's centre at the eye's
-  distance, with elevation from 10° to 80°, 0.3° a pixel. Horizontal drag never moves the camera,
-  so the room does not swing round you.
+  distance, with elevation from 10° to 75°, 0.3° a pixel. At 75° the camera is 2.34 m up, under
+  the 2.5 m ceiling (`InteriorProps.HEADROOM`) and its lights. Horizontal drag never moves the
+  camera, so the room does not swing round you.
 - **R** returns the spin to 0 and the elevation to the eye's.
 - **Leaving** clears the spin.
 
@@ -406,8 +407,8 @@ F at the table ─► ComputerStation.interact ─► CameraDirector.use_station
 ## 9. Skills and docs to update in the same branch
 
 - **`building-a-ship`:**
-  - checklist: a `computer` needs room at its eye (1.85 m up, 0.9 m behind the holo's centre)
-    clear of the ceiling and walls;
+  - checklist: a `computer` needs room at its eye (1.85 m up, 0.9 m behind the holo's centre, and
+    up to 2.34 m while orbiting) clear of the ceiling and walls;
   - `reference.md`: the eye, the scale bounds and bands, and the pick radius;
   - `ship_probe.gd`: prints each station's eye, and whether it is clear.
 - **The bridge computer spec** and **the warp spec:** amendment notes at the top.
