@@ -47,7 +47,16 @@ Do these in order. Each one names the check that proves it.
      its buttons, and face it so the operator looks out of a window (the owner's wish, 2026-09-27:
      on the starter, the port front corner, facing aft). A console it displaces moves aft. The
      probe prints each table and where you stand to use it.
-3. **Propulsion:**
+3. **Damage** (`docs/superpowers/specs/2026-09-29-health-and-damage-design.md`):
+   - every block needs a sensible `hp` in its `.tres`: damage is taken against it, and a block
+     goes damaged at half, wrecked at all of it and is knocked off at one and a half;
+   - `core`, `pilot_seat` and every `airlock` are **kept**: wrecked, never knocked off;
+   - a block knocked off takes with it every block no longer joined to the core, so don't hang
+     half the ship off one cell (the probe's `damage` line counts the blocks one loss would cut
+     off at worst);
+   - the ship must not be **crippled as built** (forward thrust, every turning axis and a
+     working `quantum_core`): the probe's `damage` line says so.
+4. **Propulsion:**
    - main `thruster`s oriented FORWARD (`o=0`), at the stern;
    - `rcs` in **opposed pairs** on every axis: pitch, yaw and roll both ways;
    - a **retro pair** (BACK, `o=4`) so the ship can brake;
@@ -58,9 +67,9 @@ Do these in order. Each one names the check that proves it.
      another block, or its puffs are born inside that block and never show;
    - if the pilot should *see* the thrusters fire, some `rcs` in view of the pod or a window.
      Otherwise they are only heard from the seat.
-4. **Validate:** `ShipValidator.validate(grid, catalog)` returns **zero issues**. Warnings count:
+5. **Validate:** `ShipValidator.validate(grid, catalog)` returns **zero issues**. Warnings count:
    a ship you give the player must not greet them with a brownout or a dead airlock.
-5. **Balance:** read `ShipStats.compute(grid, catalog)`:
+6. **Balance:** read `ShipStats.compute(grid, catalog)`:
    - `power_gen > power_draw`, with margin;
    - no zero component in `torque_budget`;
    - `thrust_budget[&"reverse"] > 0`;
@@ -71,7 +80,7 @@ Do these in order. Each one names the check that proves it.
 
    Pin all of this in a test (`reference.md` has one). The starter's numbers live only in its
    comments, so nothing would catch it drifting.
-6. **Wire the scene:**
+7. **Wire the scene:**
    - `Ship.set_grid(grid)` or `load_blueprint(bp)`;
    - a unique `interior_slot` per ship in a scene;
    - the `PilotSeat` transform from `InteriorDressing.fixture_frame(layout, seat)`;
@@ -92,9 +101,9 @@ Do these in order. Each one names the check that proves it.
      that sets the hull's `collision_layer`, `collision_mask` or `freeze` must check
      `warp.travelling()` first. How far a ship can warp is set by its store; the probe prints
      `warp    reach ...`.
-7. **Run the full suite** (`who-knows/run_tests.ps1`). Add ship-specific tests: launches, stats,
+8. **Run the full suite** (`who-knows/run_tests.ps1`). Add ship-specific tests: launches, stats,
    rooms, and the pod and airlock present.
-8. **Probe the real scene:** run `ship_probe.gd` (in this folder) **without** `--headless`. It
+9. **Probe the real scene:** run `ship_probe.gd` (in this folder) **without** `--headless`. It
    prints:
    - the validator, the stats, and the feel numbers;
    - any `rcs` whose exhaust is `BLOCKED`;
@@ -103,11 +112,11 @@ Do these in order. Each one names the check that proves it.
    - fps.
 
    It also sits, stands and walks, and flags `STUCK`.
-9. **Render and show the owner:** eye-height (1.6 m) views of the bridge, the seated view, the
+10. **Render and show the owner:** eye-height (1.6 m) views of the bridge, the seated view, the
    corridor, each room and the exterior, plus an outside view with each RCS axis firing (every
    block's puffs should show). Cycle the airlock both ways, look out of the windows, and hold
    ≥120 fps at 1280×720.
-10. **Fly it:** a steady turn on the arrow keys, a clicked heading 120° away, and a speed-locked
+11. **Fly it:** a steady turn on the arrow keys, a clicked heading 120° away, and a speed-locked
     turn at cruise. Compare them with the feel numbers you meant.
 
 ## What the blueprint decides about flying
@@ -156,12 +165,22 @@ thrust.
 | "The table adds 300 kg" | The bridge computer's spec pinned the starter at +300 kg and +0.3 MW, but the table replaced a 0.4 t deck cell drawing 0.1 MW: the ship came out 100 kg lighter, and the yaw imbalance the spec said it would ease doubled (still 0.3% of authority) | A block that replaces another changes the figures by the difference. Read the new ones from `ShipStats` (the probe), never add a block's own mass to the old total |
 | A fixture beside two others on a bridge | The bridge computer in the port back corner, with the core and the machine, cut the droid off from the whole front of the bridge: helm, core, portholes, the table itself | Keep a way round on foot. `DeckPaths` now squeezes past the corner between two quiet fixtures; a new fixture that is not quiet gets no such step, so check the probe's `UNREACHABLE` line |
 | A quiet fixture where the consoles are | Its own walls go plain, so a fixture at the glass or beside the helm would take the bridge's consoles with it, and the shoulder's desk would stand 5 cm from it | `InteriorLayout._handed_consoles` hands the console straight back to the last open cell's same wall; the shoulder drops its desk in front of a fixture. Render the corner it went to |
+| `BlockInstance.hp_current`, never set | Every placed block sat at 0 hp from Slice 1 on; read as hp left, every ship would have been a wreck the day damage arrived | Blocks store **damage taken** (`damage`, 0 intact); older saves read as intact with no migration |
+| Giving the hull a method it can't have | The hull `RigidBody3D` and the interior's code-made `StaticBody3D` have no script, so `receive_hit` could not live on them | `Hit.deliver(collider, hit)` calls a `&"receive_hit"` Callable in meta; hull colliders carry their cell in meta `&"cell"` (alcoves add several colliders for one cell, so shape index ≠ coord) |
+| Raycasting a body built this frame | The torch's tests hit nothing: a new body joins the physics space on the next physics frame | Wait a physics frame (`await wait_physics_frames(2)`) before querying what a rebuild made |
+| Recolouring one interior cell | The dressing is a few merged meshes, so there is no one cell's mesh to tint | A stage seen from inside rebuilds the ship once, deferred (`Ship._queue_rebuild`); it costs ~140 ms on the dev Xeon |
 | Letting go of a warp at 120 m/s with the assist on | The assist cancels velocity nobody asked for, so the ship braked to rest at the warp limit instead of coasting in | `WarpDrive` sets the speed lock to 120 m/s at drop-out; anything else that hands the hull a velocity with the assist on must do the same |
 | Letting the rest of the ship behave normally at warp | Found in the final review: you could cycle the airlock and step out mid-warp (stranded kilometres behind), the RCS kept its last command and puffed the whole way, and motion coupling read the frozen hull's placing as a 12 m/s² shove | Anything that acts on the hull's motion or lets someone outside asks `warp.is_spinning()` / `travelling()` first: `Airlock.warping()`, `FlightComputer`'s early return, `MotionCoupling._warp()` |
 | A test script that types a local from the untyped `_root.system` and loops its `warp_targets()` | Godot 4.5.1 segfaulted at exit (ObjectDB leak, GUT's own scripts included) though every test passed | Hold the system in a typed member set in `before_each`, as `test_warp_drive.gd` does; watch the run's exit code, not only its pass count |
 | An off-centre retro counted as steering | It would light up for yaw, but `ShipStats` never counts pure fore-and-aft thrust as authority | Steer with blocks that push across the hull; retros only brake |
 
 ## Not built yet (plan for it; don't assume it works)
+
+- **Per-cell rebuilds.** Any removal, and any stage seen from inside, rebuilds the whole ship:
+  ~140 ms headless on a 2.8 GHz Xeon for the starter. Fine for now; a hitch in a big fight.
+- **Hull tint on `hull` / `hull_wedge`.** Their livery shader ignores the instance colour, so
+  they don't look damaged from outside until the owner approves `ALBEDO *= COLOR.rgb`.
+- **Debris and breaches.** A piece cut off vanishes in a burst; a hole has no air to lose.
 
 - **Multi-storey interiors.** A `ladder` passes the validator, but every walkable cell still gets
   a solid floor and ceiling, so you can't climb.

@@ -56,6 +56,9 @@ var commanded_torque_local := Vector3.ZERO
 ## a ship whose plant has not bound one yet flies exactly as before the
 ## quantum system existed.
 var quantum: QuantumStore = null
+## The hull's state for the band (health and damage spec §11): returns
+## [how whole it is, 0..1; why it is crippled, or ""]. Given by Ship.
+var hull_status: Callable
 ## The ship's warp drive, or null. While it travels it flies the hull, and
 ## this ignores the pilot (the warp spec §5.2).
 var warp: WarpDrive = null
@@ -334,5 +337,10 @@ func build_telemetry() -> VehicleTelemetry:
 	else:
 		t.energy_state = &"full"
 	t.boost_refused = boost_refused
+	if hull_status.is_valid():
+		var status: Array = hull_status.call()
+		t.has_hull = true
+		t.hull = status[0]
+		t.crippled_reason = status[1]
 	t.tool_text = "BOOST −%d/S" % roundi(QuantumValues.BOOST_COST) if boosting else ""
 	return t

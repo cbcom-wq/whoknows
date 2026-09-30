@@ -42,3 +42,7 @@ enum Grip {
 ## An EVA tool (the hose nozzle, spec §11): never converted or made, however
 ## it fills quantum_value (spec §4.2's table).
 @export var eva_tool: bool = false
+## Can be used on a spacewalk, where hands are otherwise suspended (health and
+## damage spec §8.1): the repair torch. Taking, dropping and throwing still
+## wait until you are back aboard.
+@export var works_outside: bool = false

@@ -35,13 +35,27 @@ trust the code and fix this file.
 | Senses | `sight_range`, `sight_cone_deg` (whole cone), `dark_sight` (share, outside), `near_sense` | 8, 140, 1.0, 3 | 40, 220, 0.33, 2 |
 | | `feels_vibration`, `hears`, `feels_shake` (0–1), `light_response` (−1 flees … +1 drawn) | 0, 1, 1, 0 | 1, 0, 0, −1 |
 | Needs | `needs` (rise/s), `need_start` (`Vector2` range) | duty .02, charge .004, curiosity .01, fear 0 | hunger .006, company .01, curiosity .008, rest .003, fear 0 |
-| Mind | `behaviours`, `behaviour_weights` (missing = 1) | 8 behaviours | 9 behaviours |
+| Mind | `behaviours`, `behaviour_weights` (missing = 1) | 8 behaviours | 10 behaviours; `defend` 1.2 |
+| Health | `max_health`, `knocked_out_for` (s; 0 = it dies), `wake_health` (share) | 60, 60, 0.25 | 40, 0, — |
 | Disposition | `fear_of_player`, `curiosity_about_player` | 0.1, 0.6 | 0.5, 0.4 |
 | World | `population`, `live_radius` (0 = site-wide), `fade` (whole within x, gone past y) | `ship_crew`, 0, (0, 0) | `rock_herds`, 350, (250, 300) |
 | | `interactions` | empty | empty |
 
 The body's collider is a capsule sized from these: upright if `size ≤ height × 1.3`, lying along
 local z otherwise. Origin at the feet; up is local +y; forward is −z.
+
+## Health and death (`docs/superpowers/specs/2026-09-29-health-and-damage-design.md` §6)
+
+| API | Does |
+|---|---|
+| `Npc.health` (`Health`), `take_damage(hp)`, `receive_hit(hit)` | a hit touches, shoves, takes `hit.damage`, raises fear by the share lost, squashes the look for `FLINCH_FOR` 0.15 s |
+| `Npc.down`, `is_dead()`, `revive(fraction)` | at 0 hp: dead (on its back, `CORPSE_FOR` 20 s, shrinks over the last 1 s, demoted) or knocked out (slumped `SLUMP` 70°, up after `knocked_out_for` at `wake_health`, or at once by `revive`) |
+| `Npc.bite()`, `BITE_DAMAGE` 15, `BITE_PUSH` 40 N·s, `BITE_REACH` 1.6 m | the body's bite, asked for by an intent with action `&"bite"` |
+| `NpcLedger` (`mark_dead`, `is_dead`, `set_health`, `health_of`, `to_dict`) | one per game (`flight_test.npc_ledger`), given to every director; `NpcDirector.amend` returns null for the dead; `demote` writes wounds; `promote` reads them. Saved as `"npcs"` |
+| `ctx.extra[&"hurt_ago"]` | seconds since it was last hurt, for a behaviour to read |
+| `behaviours/defend.gd` | the template for an NPC that fights back: a reflex scored from `hurt_ago`, fear and the player's distance, `Intent.go(player, 1.0, &"lunge"/&"bite")`, given up past 6 m or when calm; weight it over `scatter` |
+
+NPCs heal `HEAL_RATE` 0.1 hp/s after `HEAL_AFTER` 10 s, only while live.
 
 ## Contracts
 

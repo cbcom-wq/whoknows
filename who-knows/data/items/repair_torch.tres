@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/items/item_definition.gd" id="1_def"]
+[ext_resource type="Script" path="res://src/items/repair_torch.gd" id="2_use"]
+
+[resource]
+script = ExtResource("1_def")
+id = &"repair_torch"
+display_name = "Repair torch"
+mass_kg = 1.8
+size = Vector3(0.07, 0.09, 0.28)
+grip = 0
+stow_class = &"tool"
+look = &"repair_torch"
+use = ExtResource("2_use")
+grip_point = Vector3(0, -0.02, 0.085)
+use_point = Vector3(0, 0.012, -0.14)
+quantum_value = 60
+works_outside = true

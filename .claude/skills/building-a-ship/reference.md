@@ -7,7 +7,7 @@ fix this file.
 ## Grid and blocks
 
 - **Cell:** a 2 m cube (`ShipGrid.CELL_SIZE`). `ShipGrid.set_block(coord, BlockInstance)`. A
-  `BlockInstance` has a `block_id`, an `orientation` (0..23) and `hp_current`.
+  `BlockInstance` has a `block_id`, an `orientation` (0..23) and `damage` (hp lost, 0 intact; health and damage spec §4.2).
 - **Catalog:** `BlockCatalog.load_from_dir("res://data/blocks")`, with one `BlockDefinition`
   `.tres` per block.
 - **Occupancy:**
@@ -290,6 +290,28 @@ What a ship contributes:
 
 Saved places outside are `UniversePoint`s (`SaveCodec.upoint`). The world's start comes from
 `AsteroidRecipe.find_start()` again, so keep it a pure function of the seed.
+
+## Damage (`docs/superpowers/specs/2026-09-29-health-and-damage-design.md`)
+
+| API | Does |
+|---|---|
+| `BlockInstance.damage` | hp lost; 0 intact. Only `BlockDamage` writes it |
+| `BlockDamage.stage_of(inst, def)`, `stage_at(damage, hp)` | `INTACT` < 0.5 hp, `DAMAGED` < 1.0, `WRECKED` < 1.5, `GONE`; `output_of(stage)` 1, 0.5, 0, 0 |
+| `BlockDamage.apply(grid, catalog, coord, hp)` / `apply_many(grid, catalog, {coord: hp})` | deals damage; `grid.block_staged(coord, stage)` on a stage change; removes the gone and anything cut off from the core in one `ShipGrid.remove_many` (one rebuild); returns what went |
+| `BlockDamage.repair(...)`, `rebuild(grid, catalog, coord, id, orientation)` | mends; puts a block back at `WRECKED_AT` × hp |
+| `BlockDamage.KEEP` | `core`, `pilot_seat`, `airlock`: never knocked off |
+| `ShipStats.intact_forward`, `intact_torque`, `crippled`, `crippled_reason` | crippled below 25% of intact forward thrust or any intact turning axis, or with no working `quantum_core` |
+| `ShipCells.hull_cell(grid, body, shape, p, n)`, `interior_cell(grid, p, n)`, `interior_cell_at(p)` | which block a hit lands on: a hull collider's meta `&"cell"`; the block 0.35 m behind an interior face, else the one in front |
+| `Ship.take_damage(cell, hp)`, `take_damage_many`, `crash_damage(knock)` | crashes: nothing below `CRASH_FROM` 2 m/s of knock, then `CRASH_K` 12 × (knock − 2)² on the struck cell and half on its neighbours, dealt after the physics step |
+| `Ship.blocks_lost(coords)`, `plate_shed(item)` | a burst and chunks (`DamageShow`); one `scrap_plate` from a block with a face onto space, adopted as a stray |
+| `Ship.launch_blueprint`, `launch_block(cell)`, `launch_of(d)` | the layout it launched with, nothing hurt, saved as `"launch"`; what the torch rebuilds |
+| `Ship.cell_hit`, `missing_cell_along`, `repair_cell`, `rebuild_cell`, `cell_label`, `hull_whole()` | the repair torch's side, and HULL % in the band |
+| `Ship.wake_spots()` | where you wake after blacking out: the bunk room's cells first |
+| `ExteriorBuilder.set_stage(coord, stage)`, `stage_colour(stage)` | per-instance `HullPalette.UNHURT` / `SCORCH` / `CHAR` |
+| `InteriorKit.wear`, `InteriorBuilder.wear_at(coord, normal)`, `shows(coord)` | interior dressing leans toward `InteriorPalette.SCORCH` / `CHAR`; a wreck's glow goes dark |
+
+Measured on the starter (crash probe, `test/probes/crash_probe.gd`): 3 m/s nose-on hurts 3
+blocks a little; 5 m/s knocks one off and damages 3; 8 m/s knocks 4 off. Not crippled by any.
 
 ## The warp (`docs/superpowers/specs/2026-09-28-warp-design.md`)
 

@@ -24,6 +24,13 @@ extends Resource
 @export var look: StringName
 ## A Synth sound that loops while it moves, aboard only; &"" for none.
 @export var move_sound: StringName
+@export_group("Health")
+## hp (health and damage spec §6).
+@export var max_health := 20.0
+## Seconds it lies knocked out at 0 hp before it gets up; 0 means it dies.
+@export var knocked_out_for := 0.0
+## The share of max_health it gets up with.
+@export var wake_health := 0.25
 @export_group("Senses")
 @export var sight_range := 20.0
 @export var sight_cone_deg := 180.0

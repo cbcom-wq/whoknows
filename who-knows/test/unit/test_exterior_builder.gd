@@ -164,7 +164,7 @@ func test_an_airlock_is_an_open_alcove():
 	assert_true(_builder.collider_coords().has(Vector3i.ZERO), "the cell still has collision: parity holds")
 	var airlock_drawn := false
 	for child in _builder.get_children():
-		if child is MultiMeshInstance3D and child.multimesh.mesh == _cat.get_def(&"airlock").mesh:
+		if child is MultiMeshInstance3D and child.multimesh.mesh == ExteriorBuilder.tintable(_cat.get_def(&"airlock").mesh):
 			airlock_drawn = true
 	assert_false(airlock_drawn, "the block's own mesh is not drawn over the alcove")
 
