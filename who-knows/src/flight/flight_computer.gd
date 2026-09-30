@@ -152,8 +152,12 @@ func from_dict(d: Dictionary) -> void:
 
 func _physics_process(delta: float) -> void:
 	if warp != null and warp.travelling():
+		# Nothing fires: stale commands would keep the RCS puffing, and its
+		# particles holding back the origin's shift, the whole way.
 		boosting = false
 		boost_refused = false
+		commanded_force_local = Vector3.ZERO
+		commanded_torque_local = Vector3.ZERO
 		return
 	_apply_translation(delta)
 	_apply_rotation(delta)

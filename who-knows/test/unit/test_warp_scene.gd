@@ -130,3 +130,50 @@ func test_crossing_a_limit_toasts():
 	assert_eq(panel.toast_label.text, "ENTERING %s" % t.name)
 	_put(t.point.plus(Vector3.UP * (t.limit + 20000.0)), t.point)
 	assert_true(panel.toast_label.text.begins_with("LEAVING %s" % t.name), panel.toast_label.text)
+
+# --- the final review's fixes -------------------------------------------------
+
+func test_no_airlock_opens_during_a_warp():
+	_ready_above(WarpTarget.Kind.PLANET)
+	_ship.warp.engage()
+	_run(WarpDrive.SPOOL + 1.0)
+	assert_true(_ship.warp.travelling())
+	for airlock: Airlock in _ship.airlocks.values():
+		assert_eq(airlock.prompt(&"room"), "Not during a warp")
+		airlock._on_pressed(&"room")
+		airlock.tick(0.5)
+		assert_eq(airlock.cycle.stage, AirlockCycle.Stage.IDLE, "the room panel refuses")
+
+func test_an_open_outer_hatch_holds_the_warp():
+	_ready_above(WarpTarget.Kind.PLANET)
+	for airlock: Airlock in _ship.airlocks.values():
+		airlock.cycle.restore_idle(0.0, AirlockCycle.Door.OUTER)
+	assert_eq(_ship.warp.check().status, WarpPlan.Status.AIRLOCK)
+
+func test_the_thrusters_rest_and_nothing_is_felt_during_a_warp():
+	_ready_above(WarpTarget.Kind.PLANET)
+	var fc := _ship.flight_computer
+	fc.set_pilot_input(Vector3(1, 0, 0), Vector3.ZERO, false)
+	await wait_physics_frames(2)
+	assert_ne(fc.commanded_force_local, Vector3.ZERO, "pushing sideways before the warp")
+	_ship.warp.engage()
+	_run(WarpDrive.SPOOL + 0.05)
+	assert_true(_ship.warp.travelling())
+	_ship.warp.set_physics_process(true)
+	var avatar: Avatar = _ship.get_node("Interior/Avatar")
+	var worst := 0.0
+	for i in 90:
+		await wait_physics_frames(1)
+		worst = maxf(worst, avatar.external_accel.length())
+	assert_eq(fc.commanded_force_local, Vector3.ZERO, "no thrust while the drive flies the hull")
+	assert_eq(fc.commanded_torque_local, Vector3.ZERO)
+	# Let go of the stick, so a burn after the drop-out is not counted.
+	fc.set_pilot_input(Vector3.ZERO, Vector3.ZERO, false)
+	_ship.warp.set_physics_process(false)
+	_run(_ship.warp.time_left() - 1.0)
+	_ship.warp.set_physics_process(true)
+	for i in 120:
+		await wait_physics_frames(1)
+		worst = maxf(worst, avatar.external_accel.length())
+	assert_false(_ship.warp.travelling(), "dropped out")
+	assert_lt(worst, 0.5, "the warp is not felt aboard, nor its ends")

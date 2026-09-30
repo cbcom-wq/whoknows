@@ -374,12 +374,12 @@ func _on_limit_left(place: Whereabouts.Place) -> void:
 	warp_panel.toast("LEAVING %s · WARP CLEAR" % place.name if clear else "LEAVING %s" % place.name)
 
 ## Why the warp must wait for the crew: &"crew" on a spacewalk, &"airlock"
-## while one cycles, else &"".
+## while one cycles or stands open to space, else &"".
 func warp_busy() -> StringName:
 	if _avatar.mode == Avatar.Mode.SUIT:
 		return &"crew"
 	for airlock: Airlock in _ship.airlocks.values():
-		if airlock.busy() != "":
+		if airlock.busy() != "" or airlock.cycle.open_side() == AirlockCycle.Door.OUTER:
 			return &"airlock"
 	return &""
 
