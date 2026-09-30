@@ -236,7 +236,7 @@ func _run(scene: Node) -> void:
 	print("damage  intact hp %d, crippled as built %s, one loss cuts off at most %d%s" % [total_hp,
 		"no" if not s.crippled else "YES: " + s.crippled_reason, worst_cut,
 		"" if worst_cut <= 2 else "  <-- FRAGILE"])
-	var reach_km := (s.quantum_capacity - WarpPlan.WARP_BASE) / WarpPlan.WARP_PER_KM
+	var reach_km := (s.quantum_capacity - WarpPlan.WARP_BASE) * WarpPlan.WARP_M_PER_QE / 1000.0
 	print("warp    reach %.0f km on a full store (%d QE); drive %s" % [reach_km, s.quantum_capacity,
 		"yes" if ship.warp != null else "MISSING"])
 	var mask := ship.exterior.collision_mask

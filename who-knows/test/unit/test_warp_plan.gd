@@ -6,6 +6,7 @@ var _star: WarpTarget
 var _near: WarpTarget
 var _far: WarpTarget
 var _cluster: WarpTarget
+var _distant: WarpTarget
 var _targets: Array[WarpTarget] = []
 var _store: QuantumStore
 
@@ -25,7 +26,8 @@ func before_each():
 	_near = _target(&"p1", WarpTarget.Kind.PLANET, Vector3(0, 0, -60000), 16000.0)
 	_far = _target(&"p2", WarpTarget.Kind.PLANET, Vector3(0, 0, -200000), 16000.0)
 	_cluster = _target(&"belt_0.c1", WarpTarget.Kind.CLUSTER, Vector3(60000, 0, -60000), 18000.0)
-	_targets = [_star, _near, _far, _cluster]
+	_distant = _target(&"p9", WarpTarget.Kind.PLANET, Vector3(0, 0, -8000000), 150000.0)
+	_targets = [_star, _near, _far, _cluster, _distant]
 	_store = QuantumStore.new(1200, 1200)
 
 ## From 100 km east of p1, along the line through the cluster, nose on p1.
@@ -44,8 +46,8 @@ func test_ready_with_the_cost_the_time_and_the_drop_out_point():
 	var p := _check(_from(), Vector3.LEFT, _near)
 	assert_eq(p.status, WarpPlan.Status.READY, p.text())
 	assert_almost_eq(p.distance, 84000.0, 0.01)
-	assert_eq(p.cost, 40 + 336)
-	assert_almost_eq(p.duration, 18.0 + 84000.0 / 5000.0, 1e-6)
+	assert_eq(p.cost, 40 + 7, "84 km is 6.72 lots of 12.5 km, rounded up")
+	assert_almost_eq(p.duration, 18.0 + 84000.0 / 350000.0, 1e-6)
 	assert_true(p.drop.is_equal_approx(UniversePoint.at(16000, 0, -60000)))
 	assert_true(p.direction.is_equal_approx(Vector3.LEFT))
 	assert_false(p.into_low_power)
@@ -83,14 +85,18 @@ func test_low_power_and_too_little_qe_are_refused():
 	_store.amount = 100
 	assert_eq(_check(_from(), Vector3.LEFT, _near).status, WarpPlan.Status.LOW_POWER)
 	_store.amount = 200
-	var p := _check(_from(), Vector3.LEFT, _near)
-	assert_eq(p.status, WarpPlan.Status.NO_QE)
-	assert_eq(p.text(), "WARP · NEED 376 QE")
+	var nose := UniversePoint.at(0, 0, -8000000).minus(_from()).normalized()
+	var p := _check(_from(), nose, _distant)
+	assert_eq(p.status, WarpPlan.Status.NO_QE, p.text())
+	assert_gt(p.cost, 600, "7,800 km of travel")
+	assert_eq(p.cost, WarpPlan.cost_of(p.distance))
+	assert_eq(p.text(), "WARP · NEED %d QE" % p.cost)
 
 func test_a_warp_into_low_power_warns_but_goes():
-	_store.amount = 450
-	var p := _check(_from(), Vector3.LEFT, _near)
-	assert_eq(p.status, WarpPlan.Status.READY)
+	var nose := UniversePoint.at(0, 0, -8000000).minus(_from()).normalized()
+	_store.amount = WarpPlan.cost_of(_check(_from(), nose, _distant).distance) + 20
+	var p := _check(_from(), nose, _distant)
+	assert_eq(p.status, WarpPlan.Status.READY, p.text())
 	assert_true(p.into_low_power)
 	assert_eq(p.text(), "WARP READY · J · → LOW POWER")
 
@@ -102,11 +108,18 @@ func test_the_nose_must_be_on_the_line():
 	var nearly := Vector3.LEFT.rotated(Vector3.UP, deg_to_rad(4.0))
 	assert_eq(_check(_from(), nearly, _near).status, WarpPlan.Status.READY, "4° is lined up")
 
-func test_the_cost_rounds_up_per_kilometre():
+func test_the_cost_is_one_qe_per_12_5_km_rounded_up_and_exact():
 	assert_eq(WarpPlan.cost_of(0.0), 40)
 	assert_eq(WarpPlan.cost_of(1.0), 41)
-	assert_eq(WarpPlan.cost_of(60000.0), 280)
-	assert_eq(WarpPlan.cost_of(250000.0), 1040)
+	assert_eq(WarpPlan.cost_of(3000000.0), 280, "exactly 240 lots: 0.08 per km would round to 241")
+	assert_eq(WarpPlan.cost_of(12500000.0), 1040)
+
+func test_a_moon_s_limit_blocks_like_a_planet_s():
+	var moon := _target(&"p1.m1", WarpTarget.Kind.MOON, Vector3(0, 0, 300000), 30000.0)
+	_targets.append(moon)
+	var p := _check(UniversePoint.at(0, 0, 500000), Vector3.FORWARD, _far)
+	assert_eq(p.status, WarpPlan.Status.BLOCKED)
+	assert_eq(p.blocker, moon)
 
 func test_a_drop_out_inside_a_rock_is_stepped_back_clear():
 	var recipe := AsteroidRecipe.new(1337)
