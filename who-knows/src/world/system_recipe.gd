@@ -18,25 +18,27 @@ extends RefCounted
 ## checks them.
 ##
 ## It also lists the warp targets (docs/superpowers/specs/2026-09-28-warp-design.md
-## §3): the star, the planets and the belts' clusters, each with a warp limit,
-## and a disc of orbital debris round every planet.
+## §3; docs/superpowers/specs/2026-09-30-world-scale-design.md §3.3): the star,
+## the planets, the moons and the belts' clusters, each with a warp limit, and
+## a disc of orbital debris round every planet. A moon lies wholly outside its
+## planet's limit: at this scale it is a warp, not a flight, away.
 
 ## Bumped whenever a seed's system changes: a save made by another version
 ## starts over (saving spec §8.1).
-const VERSION := 2
+const VERSION := 3
 
 ## The height of the system's disc, and of the star's centre.
 const PLANE_Y := 2500
 
-const STAR_RADIUS := Vector2(2500.0, 4000.0)
+const STAR_RADIUS := Vector2(200000.0, 300000.0)
 ## The star's neighbourhood reaches this far past its well.
-const STAR_ROOM := 4000.0
+const STAR_ROOM := 40000.0
 ## The first slot, give or take FIRST_SLOT_JITTER; each next one this many
 ## times further out; none past LAST_SLOT; never more than MOST_SLOTS.
-const FIRST_SLOT := 30000.0
+const FIRST_SLOT := 1500000.0
 const FIRST_SLOT_JITTER := 0.1
 const SLOT_RATIO := Vector2(1.18, 1.30)
-const LAST_SLOT := 150000.0
+const LAST_SLOT := 7500000.0
 const MOST_SLOTS := 10
 ## A planet sits up to this share of its slot's radius off the disc.
 const TILT := 0.03
@@ -44,37 +46,38 @@ const TILT := 0.03
 ## before leaving the slot empty.
 const PLACE_TRIES := 32
 ## A planet's neighbourhood reaches at least this far past its well.
-const PLANET_ROOM := 2000.0
+const PLANET_ROOM := 20000.0
 ## Everything keeps this far from whatever it must be clear of.
-const CLEAR := 1000.0
+const CLEAR := 5000.0
 ## A moon's neighbourhood reaches this far past its well.
-const MOON_ROOM := 500.0
+const MOON_ROOM := 5000.0
 const MOST_MOONS := 3
 ## A moon is this far from its planet's centre, at most.
-const MOON_FAR := 14000.0
-## ... and at least this far.
-const MOON_NEAR := 6000.0
+const MOON_FAR := 400000.0
+## ... and at least this far, and always clear of its planet's limit.
+const MOON_NEAR := 180000.0
 const MOON_TRIES := 16
 ## Rings: on planets this big, this often.
-const RING_MIN_RADIUS := 600.0
+const RING_MIN_RADIUS := 30000.0
 const RING_CHANCE := 0.25
 const RING_INNER := Vector2(1.6, 2.0)
-const RING_WIDTH := Vector2(1000.0, 2500.0)
-const RING_HALF_THICKNESS := 40.0
+const RING_WIDTH := Vector2(10000.0, 30000.0)
+const RING_HALF_THICKNESS := 100.0
 const RING_TILT := deg_to_rad(30.0)
 ## Belts: this many, never slot 0, never side by side.
 const BELTS := Vector2i(1, 2)
-## A belt's cross-section. One big rock per 5 km cell at most, so a belt needs
-## about 25 km2 of cross-section to hold a group every 5 km along it.
-const BELT_HALF_WIDTH := Vector2(4000.0, 7000.0)
+## A belt's cross-section. It is wide at this scale so it reads as a band,
+## but no thicker than before: it must lie inside one 5 km layer of giant
+## cells, where its big rocks can sit.
+const BELT_HALF_WIDTH := Vector2(20000.0, 40000.0)
 const BELT_HALF_THICKNESS := Vector2(1500.0, 2000.0)
 ## A belt squeezed below this half-width is dropped; planets beside a belt
 ## leave it at least this.
-const BELT_MIN_HALF_WIDTH := 3000.0
+const BELT_MIN_HALF_WIDTH := 15000.0
 ## A belt goes only where both gaps to its neighbouring slots are this wide:
 ## room for its narrowest self and the biggest moonless planet beside it.
-const BELT_GAP := 12000.0
-## A warp may start this far past a body's edge (the warp spec §3.2): about
+const BELT_GAP := 300000.0
+## A warp may start this far past a body's well (the warp spec §3.2): about
 ## two minutes of flying at 120 m/s.
 const WARP_CLEAR := 14000.0
 ## A belt cluster's reach from its centre (§3.1).
@@ -177,7 +180,7 @@ func asteroid_shapes(with_clusters := true) -> AsteroidShapes:
 	return shapes
 
 ## Every place a warp can take you (the warp spec §3.1): the star, the planets
-## in slot order, then the clusters.
+## in slot order, the moons, then the clusters.
 func warp_targets() -> Array[WarpTarget]:
 	return _targets
 
@@ -205,6 +208,8 @@ func problems() -> PackedStringArray:
 				out.append("%s is in %s's well" % [m.id, p.id])
 			if p.ring != null and d - m.well_radius < p.ring.outer + CLEAR:
 				out.append("%s is in %s's ring" % [m.id, p.id])
+			if d - m.warp_limit < p.warp_limit + CLEAR - 0.01:
+				out.append("%s is inside %s's limit" % [m.id, p.id])
 		for i in moons.size():
 			for j in range(i + 1, moons.size()):
 				var gap := moons[i].point.minus(moons[j].point).length()
@@ -215,8 +220,10 @@ func problems() -> PackedStringArray:
 			if _belt_room(belts[k], b) < maxf(belts[k].half_width, belts[k].half_thickness) - 0.01:
 				out.append("belt %d crosses %s" % [k, b.id])
 	for b in tops:
-		if b.warp_limit < b.neighbourhood + CLEAR - 0.01:
-			out.append("%s's warp limit is inside its neighbourhood" % b.id)
+		if b.warp_limit < b.well_radius + WARP_CLEAR - 0.01:
+			out.append("%s's warp limit is inside its well" % b.id)
+		if b.ring != null and b.warp_limit < b.ring.outer + CLEAR - 0.01:
+			out.append("%s's ring pokes out of its warp limit" % b.id)
 	for i in clusters.size():
 		for j in range(i + 1, clusters.size()):
 			var a := clusters[i]
@@ -324,6 +331,7 @@ func _make_planet(i: int) -> void:
 		if bare > room:
 			_leave_empty(i, "no room beside a belt")
 			return
+	p.warp_limit = _planet_limit(p)
 	var moons := _make_moons(i, p, room)
 	p.neighbourhood = bare
 	for m in moons:
@@ -339,7 +347,6 @@ func _make_planet(i: int) -> void:
 		_leave_empty(i, "no clear angle")
 		return
 	p.point = at
-	p.warp_limit = maxf(p.well_radius + WARP_CLEAR, p.neighbourhood + CLEAR)
 	if p.ring != null:
 		p.ring.centre = p.point
 	_add(p)
@@ -365,6 +372,15 @@ func _find_place(rng: RandomNumberGenerator, radius: float, room: float) -> Vari
 		if clear:
 			return at
 	return null
+
+## A planet's warp limit (the world scale spec §3.3): its well plus
+## WARP_CLEAR, and past its ring. Not its neighbourhood: that holds its moons,
+## which lie outside the limit with limits of their own.
+static func _planet_limit(p: SystemBody) -> float:
+	var limit := p.well_radius + WARP_CLEAR
+	if p.ring != null:
+		limit = maxf(limit, p.ring.outer + CLEAR)
+	return limit
 
 func _make_ring(i: int, p: SystemBody) -> AsteroidShapes.Ring:
 	var rng := WorldSeed.rng(seed, StringName("ring_%d" % i))
@@ -398,7 +414,10 @@ func _make_moons(i: int, p: SystemBody, room: float) -> Array:
 		m.radius = m.recipe.radius_m
 		m.well_radius = m.recipe.well_radius()
 		m.neighbourhood = m.well_radius + MOON_ROOM
-		var near := maxf(MOON_NEAR, p.well_radius + m.well_radius + CLEAR)
+		m.warp_limit = m.well_radius + WARP_CLEAR
+		# Wholly outside its planet's limit (§3.3), which already holds the
+		# planet's ring.
+		var near := maxf(MOON_NEAR, p.warp_limit + m.warp_limit + CLEAR)
 		if p.ring != null:
 			near = maxf(near, p.ring.outer + m.well_radius + CLEAR)
 		var far := minf(MOON_FAR, room - m.neighbourhood - MOON_ROOM)
@@ -503,18 +522,25 @@ func _cluster(belt: int, k: int, at: UniversePoint, rng: RandomNumberGenerator) 
 	return c
 
 func _make_targets() -> void:
-	for b in bodies:
-		if b.kind == SystemBody.Kind.MOON:
-			continue
-		var t := WarpTarget.new()
-		t.id = b.id
-		t.kind = WarpTarget.Kind.STAR if b.kind == SystemBody.Kind.STAR else WarpTarget.Kind.PLANET
-		t.name = b.name
-		t.point = b.point
-		t.radius = b.radius
-		t.edge = b.well_radius
-		t.limit = b.warp_limit
-		_targets.append(t)
+	var kinds := {
+		SystemBody.Kind.STAR: WarpTarget.Kind.STAR,
+		SystemBody.Kind.PLANET: WarpTarget.Kind.PLANET,
+		SystemBody.Kind.MOON: WarpTarget.Kind.MOON,
+	}
+	# The star, the planets, then the moons (the world scale spec §3.3).
+	for kind in [SystemBody.Kind.STAR, SystemBody.Kind.PLANET, SystemBody.Kind.MOON]:
+		for b in bodies:
+			if b.kind != kind:
+				continue
+			var t := WarpTarget.new()
+			t.id = b.id
+			t.kind = kinds[kind]
+			t.name = b.name
+			t.point = b.point
+			t.radius = b.radius
+			t.edge = b.well_radius
+			t.limit = b.warp_limit
+			_targets.append(t)
 	_targets.append_array(clusters)
 	for t in _targets:
 		_target_by_id[t.id] = t

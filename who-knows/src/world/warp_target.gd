@@ -2,10 +2,12 @@ class_name WarpTarget
 extends RefCounted
 
 ## One place a warp can take you (docs/superpowers/specs/2026-09-28-warp-design.md
-## §3.1): the star, a planet or a belt cluster, as data. SystemRecipe makes
-## these; WarpPlan, Whereabouts, the map and the HUD read them.
+## §3.1; the world scale spec §3.3): the star, a planet, a moon or a belt
+## cluster, as data. SystemRecipe makes these; WarpPlan, Whereabouts, the map
+## and the HUD read them.
 
-enum Kind { STAR, PLANET, CLUSTER }
+## MOON comes last so no saved value moves.
+enum Kind { STAR, PLANET, CLUSTER, MOON }
 
 ## Stable within a system: &"star", &"p3", &"belt_0.c1".
 var id: StringName
