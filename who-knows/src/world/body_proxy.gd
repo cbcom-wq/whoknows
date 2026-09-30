@@ -15,14 +15,17 @@ extends Node3D
 ## parent never moves, placed afresh every physics tick from its
 ## UniversePoint.
 
-## The cameras' far plane outside (the world scale spec §5.2): the horizon of
-## a 60 km world seen from its warp limit is about 120 km away, and every
-## proxy sits inside it. Godot 4.5's Forward+ draws with reversed depth, so
-## this far costs no precision up close.
-const VIEW_FAR := 400000.0
 ## Beyond the giant rocks' fade and inside VIEW_FAR: a body farther than this
 ## is drawn here, along its true direction, scaled to its true angular size.
 const PROXY_AT := 350000.0
+## The cameras' far plane outside (the world scale spec §5.2). It must hold
+## every proxy whole: its centre at PROXY_AT plus its drawn radius, which just
+## past PROXY_AT is nearly the body's true one, at most the star's full radius
+## (a proxy poking past the far plane is clipped away almost entirely). It
+## must also hold a world's horizon, about 120 km from its warp limit.
+## Godot 4.5's Forward+ draws with reversed depth, so this far costs no
+## precision up close.
+const VIEW_FAR := PROXY_AT + SystemRecipe.STAR_RADIUS.y + 50000.0
 ## Physics layer 4, `terrain` (Planetfall §4.2).
 const LAYER := 8
 ## Within this of its surface, a body is drawn in detail and is solid.

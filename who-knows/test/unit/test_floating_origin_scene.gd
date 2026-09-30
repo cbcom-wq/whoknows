@@ -157,6 +157,7 @@ func test_the_cameras_outside_see_as_far_as_rocks_are_drawn():
 	# The world scale spec §5.2: far enough for the horizon of the world
 	# you are over, and past every proxy.
 	assert_gt(BodyProxy.VIEW_FAR, BodyProxy.PROXY_AT)
+	assert_gte(BodyProxy.VIEW_FAR, BodyProxy.PROXY_AT + SystemRecipe.STAR_RADIUS.y, "every proxy is drawn whole, the star's too")
 	for path in ["Ship/Exterior/ChaseCamera", "Ship/Canopy/CanopyCam"]:
 		assert_eq((_root.get_node(path) as Camera3D).far, BodyProxy.VIEW_FAR, path)
 	assert_eq(_avatar.camera.far, BodyProxy.VIEW_FAR, "on a spacewalk")
