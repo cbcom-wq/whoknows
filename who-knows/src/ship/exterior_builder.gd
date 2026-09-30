@@ -47,8 +47,9 @@ func rebuild() -> void:
 func layout() -> HullLayout:
 	return _layout
 
-## The hull's plating and trim, for the bridge computer's miniature (bridge
-## computer spec §7.1), which shares them rather than copying.
+## The hull's plating, trim and glazing (the pod shell included; no glows),
+## for the bridge computer's miniature (bridge computer spec §7.1), which
+## shares them rather than copying.
 func hull_meshes() -> Array[Mesh]:
 	return _meshes.duplicate()
 

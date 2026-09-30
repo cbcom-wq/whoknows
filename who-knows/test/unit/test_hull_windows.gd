@@ -92,3 +92,22 @@ func test_running_strips_mark_the_top_edges():
 			and e["coord"].y == top
 		var bow: bool = absi(e["axis"].y) == 1 and (e["a"] == Vector3i.FORWARD or e["b"] == Vector3i.FORWARD)
 		assert_true(along_top or bow, "a running strip on the top edges or the bow")
+
+## The bridge computer's miniature is drawn from hull_meshes(): the glazing's
+## plating (the pod shell's, in the Windows kit's HULL batch) must be among
+## them, or the holo has a notch where the cockpit is.
+func test_the_miniature_gets_the_glazing_s_plating():
+	var body := RigidBody3D.new()
+	var builder := ExteriorBuilder.new()
+	add_child_autofree(body)
+	body.add_child(builder)
+	builder.body_path = builder.get_path_to(body)
+	builder.bind(_starter(), _cat)
+	builder.rebuild()
+	var glazing_hull: MeshInstance3D = builder.get_node("Skin/Windows/%s" % InteriorKit.BATCH_NAMES[InteriorKit.Batch.HULL])
+	assert_not_null(glazing_hull, "the pod shell's plating")
+	var meshes := builder.hull_meshes()
+	assert_true(meshes.has(glazing_hull.mesh), "the pod shell is in the miniature")
+	var glow: MeshInstance3D = builder.get_node_or_null("Skin/Windows/%s" % InteriorKit.BATCH_NAMES[InteriorKit.Batch.GLOW])
+	if glow != null:
+		assert_false(meshes.has(glow.mesh), "the windows' glow is not")

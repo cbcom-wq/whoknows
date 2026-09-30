@@ -9,8 +9,9 @@ extends RefCounted
 ## Each kit gets a child node of `root`, so their merged meshes keep their
 ## batch names: Skin/Hull/DressingHull is the plating, and so on.
 
-## Builds everything under `root`. Returns the plating and trim meshes (for
-## the miniature), each light group's lens glow, and the windows' glow material.
+## Builds everything under `root`. Returns the plating, trim and glazing meshes
+## (for the miniature; every batch but the glows), each light group's lens glow,
+## and the windows' glow material.
 static func build(layout: HullLayout, root: Node3D) -> Dictionary:
 	var skin := _kit(root, "Hull")
 	skin.materials = {InteriorKit.Batch.HULL: HullMaterials.livery(), InteriorKit.Batch.SOLID: HullMaterials.trim()}
@@ -81,6 +82,8 @@ static func build(layout: HullLayout, root: Node3D) -> Dictionary:
 	for mi in glazing.commit():
 		if mi.name != InteriorKit.BATCH_NAMES[InteriorKit.Batch.GLOW]:
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+			# The miniature too: without the pod shell it has a notch at the cockpit.
+			meshes.append(mi.mesh)
 	return {"meshes": meshes, "lenses": lenses, "window_glow": window_glow}
 
 ## A kit on the hull's own layer, under a child of `root` named `kit_name`.
