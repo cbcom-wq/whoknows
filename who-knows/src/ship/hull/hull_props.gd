@@ -107,12 +107,18 @@ static func thruster_bell(kit: InteriorKit, f: Transform3D) -> void:
 	kit.disc(SOLID, f * _at(Vector3(0, 0, 0.06)), 0.62, _dark())
 	kit.annulus(GLOW, f * _at(Vector3(0, 0, 0.08)), 0.3, 0.42, InteriorKit.lit(HullPalette.RUNNING_LIGHT, 1.4))
 
+## How far an RCS pod's bevelled block stands proud of its exhaust face.
+const RCS_POD_BODY := 0.2
+## How far the whole pod stands proud, to its nozzle ring's mouth. RcsShow's
+## puffs leave from there, so they never start inside the pod.
+const RCS_POD_DEPTH := 0.34
+
 ## An RCS block's pod on its exhaust face: a bevelled block with one round
 ## nozzle, where RcsShow's puffs come from.
 static func rcs_pod(kit: InteriorKit, f: Transform3D) -> void:
-	kit.bevel_box(SOLID, f * _at(Vector3(0, 0, 0.1)), Vector3(0.9, 0.9, 0.2), 0.06, _trim())
-	kit.ring(SOLID, f * _at(Vector3(0, 0, 0.2)), 0.16, 0.26, 0.0, 0.14, _trim())
-	kit.disc(SOLID, f * _at(Vector3(0, 0, 0.21)), 0.16, _dark())
+	kit.bevel_box(SOLID, f * _at(Vector3(0, 0, RCS_POD_BODY * 0.5)), Vector3(0.9, 0.9, RCS_POD_BODY), 0.06, _trim())
+	kit.ring(SOLID, f * _at(Vector3(0, 0, RCS_POD_BODY)), 0.16, 0.26, 0.0, RCS_POD_DEPTH - RCS_POD_BODY, _trim())
+	kit.disc(SOLID, f * _at(Vector3(0, 0, RCS_POD_BODY + 0.01)), 0.16, _dark())
 
 ## A cyan running strip along the middle of a chamfer (spec §5.4), in the
 ## chamfer's edge frame, from `from` to `to`. Glow only: it lights nothing.

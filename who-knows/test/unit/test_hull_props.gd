@@ -73,6 +73,14 @@ func test_bells_pods_and_strips_build_in_a_bare_frame():
 	assert_true(made.has("DressingSolid"))
 	assert_true(made.has("DressingGlow"), "the bell's ring and the strip glow")
 
+## RcsShow puffs from the nozzle ring's mouth, so the pod must end there.
+func test_the_rcs_pod_stands_its_depth_proud():
+	HullProps.rcs_pod(_kit, Transform3D.IDENTITY)
+	var made := _commit()
+	var box: AABB = (made["DressingSolid"] as Mesh).get_aabb()
+	assert_almost_eq(box.end.z, HullProps.RCS_POD_DEPTH, 0.001)
+	assert_almost_eq(box.position.z, 0.0, 0.001, "from the face out")
+
 func test_the_materials_are_engine_materials():
 	assert_true(HullMaterials.trim() is StandardMaterial3D)
 	assert_true(HullMaterials.window_glass() is StandardMaterial3D)

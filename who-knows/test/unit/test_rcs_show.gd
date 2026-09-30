@@ -78,11 +78,14 @@ func test_half_a_command_fires_half_as_hard():
 	assert_almost_eq(_amount(Vector3(_stats.torque_budget.x * 0.5, 0, 0), Vector3i(-2, 1, -3)),
 		0.5, 0.01)
 
+## Out of the pod's nozzle ring, which stands HullProps.RCS_POD_DEPTH proud of
+## the face opposite the push (ship exterior spec §3.3), not inside the pod.
 func test_the_exhaust_leaves_the_face_opposite_the_push():
 	for b in _blocks:
 		var centre := ShipGrid.cell_center(b["coord"])
 		var push: Vector3 = (b["force"] as Vector3).normalized()
-		assert_almost_eq(b["nozzle"], centre - push * ShipGrid.CELL_SIZE * 0.5, Vector3.ONE * 0.001)
+		assert_almost_eq(b["nozzle"], centre - push * (ShipGrid.CELL_SIZE * 0.5 + HullProps.RCS_POD_DEPTH),
+			Vector3.ONE * 0.001)
 
 func test_a_block_puffs_once_as_it_starts_firing():
 	assert_eq(RcsShow.puff_step(0.5, true, 1.0), [true, false])

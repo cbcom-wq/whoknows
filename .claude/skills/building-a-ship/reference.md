@@ -354,7 +354,8 @@ blueprint gets it for free.
 
 - **Which blocks:** every block with id `rcs` (`RcsShow.BLOCK_ID`). A new small-thruster block
   type needs adding there. Main `thruster`s have no plume yet.
-- **Where it puffs:** the nozzle is the face opposite the push, `cell_center − f̂ × 1 m`. It is
+- **Where it puffs:** the nozzle is the mouth of the pod on the face opposite the push,
+  `cell_center − f̂ × (1 m + HullProps.RCS_POD_DEPTH)` (0.34 m, so puffs never start inside the pod). It is
   one world-space `GPUParticles3D`:
   - in `Universe.HOLDS_SHIFT`;
   - on render layer 1, so windows show it;
