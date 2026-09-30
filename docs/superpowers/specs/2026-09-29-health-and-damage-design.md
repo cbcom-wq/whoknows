@@ -3,8 +3,8 @@
 **Date:** 2026-09-29
 **Status:** Approved by the owner on 2026-09-29, after answering all eleven questions (§2), and
 built on `claude/health-and-damage-design` from the plan
-`docs/superpowers/plans/2026-09-29-health-and-damage.md`. §17 records where the build differs.
-One question is open: the hull livery shader (§17, item 5).
+`docs/superpowers/plans/2026-09-29-health-and-damage.md`, and merged. §17 records where the
+build differs.
 **Depends on:** `main` at `dfd7b91`: the system skeleton, NPC foundation, saving, quantum energy,
 asteroids, hands and items.
 **Governed by:** `docs/design/visual-style.md` (damage looks come from the palettes, within the
@@ -511,9 +511,11 @@ Built 2026-09-29 to 30: the suite went from 1,421 tests to 1,530, all green, hea
    stage change on a block you can see from inside rebuilds the ship once, at the end of the
    frame. That costs about **140 ms** headless on the 2.8 GHz dev Xeon, the same as any removal:
    a hitch. Per-cell rebuilds stay in §14.
-5. **Open: the hull livery.** `hull` and `hull_wedge` use `hull_livery.gdshader`, which ignores
-   the instance colour, so those blocks don't look damaged from outside. Every other block does.
-   The fix is one line in that shader (`ALBEDO *= COLOR.rgb`), and waits on the owner.
+5. **The hull livery takes the tint.** `hull` and `hull_wedge` use `hull_livery.gdshader`, which
+   ignored the instance colour, so those blocks didn't look damaged from outside. The owner
+   approved the one-line fix on 2026-09-30: its albedo is multiplied by `COLOR.rgb`. The livery's
+   meshes and the airlock alcove's plates have no vertex colours, so undamaged, they look as
+   before.
 6. **Waking** (§7.2). The bunk room is mostly bunks, so you wake at the free cell nearest it.
    Outside, the suit brings you home during the black and you wake there too, not inside the
    airlock: the airlock may be open to space.

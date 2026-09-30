@@ -206,3 +206,9 @@ func test_rebuilds_leave_one_alcove():
 	_builder.rebuild()
 	assert_eq(_builder.find_children("*", "Node3D", true, false).filter(func(n): return n is AirlockAlcove).size(), 1)
 	assert_eq(_shapes(), once, "stale alcove colliders are freed")
+
+## Health and damage spec §9 (the owner's approval, 2026-09-30): the livery
+## takes each block's damage tint, so hull and hull_wedge look hurt too.
+func test_the_livery_takes_the_damage_tint():
+	var shader: Shader = load("res://data/materials/hull_livery.gdshader")
+	assert_string_contains(shader.code, "* COLOR.rgb")

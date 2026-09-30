@@ -178,8 +178,6 @@ thrust.
 
 - **Per-cell rebuilds.** Any removal, and any stage seen from inside, rebuilds the whole ship:
   ~140 ms headless on a 2.8 GHz Xeon for the starter. Fine for now; a hitch in a big fight.
-- **Hull tint on `hull` / `hull_wedge`.** Their livery shader ignores the instance colour, so
-  they don't look damaged from outside until the owner approves `ALBEDO *= COLOR.rgb`.
 - **Debris and breaches.** A piece cut off vanishes in a burst; a hole has no air to lose.
 
 - **Multi-storey interiors.** A `ladder` passes the validator, but every walkable cell still gets

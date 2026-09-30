@@ -86,13 +86,6 @@ func _run(scene: Node) -> void:
 	await _shot("inside")
 
 	# 2. Outside, through the chase camera: three blocks in a row on top.
-	if OS.get_cmdline_user_args().has("--livery-tint"):
-		# Render-only preview of the change the owner is asked about: the
-		# livery shader multiplying by the instance colour. Never on disk.
-		var shader: Shader = Ship.HULL_LIVERY_MATERIAL.shader
-		shader.code = shader.code.replace("ALBEDO = mix(livery_colour.rgb, hull_colour.rgb, out_of_band);",
-			"ALBEDO = mix(livery_colour.rgb, hull_colour.rgb, out_of_band) * COLOR.rgb;")
-		print("livery tint preview on")
 	var face := Vector3i(0, 1, 0)
 	var flank: Array[Vector3i] = []
 	var top := -99
