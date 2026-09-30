@@ -158,3 +158,27 @@ func test_a_wreck_s_glow_goes_dark():
 func test_worn_keeps_a_palette_colour_as_made_and_its_alpha():
 	assert_eq(InteriorKit.worn(InteriorPalette.WALL, 0), InteriorPalette.WALL)
 	assert_eq(InteriorKit.worn(InteriorPalette.GLASS, 2).a, InteriorPalette.GLASS.a)
+
+# --- recolouring in place (ship exterior, health and damage spec §9) ------------
+
+func test_vertex_count_is_what_a_batch_holds_in_order():
+	assert_eq(_kit.vertex_count(InteriorKit.Batch.HULL), 0)
+	_kit.box(InteriorKit.Batch.HULL, Transform3D.IDENTITY, Vector3.ONE, Color.WHITE)
+	assert_eq(_kit.vertex_count(InteriorKit.Batch.HULL), 36, "6 faces, 2 triangles each")
+	assert_eq(_kit.vertex_count(InteriorKit.Batch.SOLID), 0, "per batch")
+	_kit.tri(InteriorKit.Batch.HULL, Vector3.ZERO, Vector3.RIGHT, Vector3.UP, Vector3.BACK, Color.RED)
+	var committed := _kit.commit()
+	var colours: PackedColorArray = committed[0].mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+	assert_eq(colours.size(), 39)
+	assert_eq(colours[36], Color.RED, "the mesh keeps the order pieces were added in")
+	assert_eq(_kit.vertex_count(InteriorKit.Batch.HULL), 0, "commit empties it")
+
+func test_keep_arrays_keeps_each_batch_s_arrays_from_commit():
+	_kit.box(InteriorKit.Batch.SOLID, Transform3D.IDENTITY, Vector3.ONE, Color.WHITE)
+	_kit.commit()
+	assert_true(_kit.arrays.is_empty(), "not unless asked")
+	_kit.keep_arrays = true
+	_kit.box(InteriorKit.Batch.SOLID, Transform3D.IDENTITY, Vector3.ONE, Color.WHITE)
+	var mesh: ArrayMesh = _kit.commit()[0].mesh
+	var kept: Array = _kit.arrays[InteriorKit.Batch.SOLID]
+	assert_eq((kept[Mesh.ARRAY_VERTEX] as PackedVector3Array).size(), mesh.surface_get_array_len(0))

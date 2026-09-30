@@ -229,3 +229,92 @@ func test_a_shaped_block_gets_convex_colliders():
 func test_the_livery_takes_the_damage_tint():
 	var shader: Shader = load("res://data/materials/hull_livery.gdshader")
 	assert_string_contains(shader.code, "* COLOR.rgb")
+
+# --- the damage tint on the skin (health and damage spec §9) -------------------
+
+## The colours of `coord`'s pieces in the Skin/Hull mesh of `batch`.
+func _span_colours(coord: Vector3i, batch: InteriorKit.Batch) -> PackedColorArray:
+	var mesh: ArrayMesh = (_builder.get_node("Skin/Hull/" + InteriorKit.BATCH_NAMES[batch]) as MeshInstance3D).mesh
+	var colours: PackedColorArray = mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+	var out := PackedColorArray()
+	for span: Array in _builder.skin_spans(coord):
+		if span[0] == mesh:
+			for i in range(span[1], span[2]):
+				out.append(colours[i])
+	return out
+
+## Vertex colours are stored at 8 bits a channel.
+func _assert_all_near(colours: PackedColorArray, want: Color, what: String) -> void:
+	assert_gt(colours.size(), 0, what + ": the cell has pieces there")
+	for c in colours:
+		if absf(c.r - want.r) > 0.01 or absf(c.g - want.g) > 0.01 or absf(c.b - want.b) > 0.01:
+			fail_test("%s: %s, not %s" % [what, c, want])
+			return
+	pass_test(what)
+
+func _two_hulls() -> void:
+	_put(Vector3i(0, 0, 0), &"hull")
+	_put(Vector3i(1, 0, 0), &"hull")
+
+func test_an_unhurt_cell_s_plating_is_white_so_the_livery_is_as_painted():
+	_two_hulls()
+	_builder.rebuild()
+	assert_eq(_builder.instance_colour(Vector3i.ZERO), HullPalette.UNHURT)
+	assert_eq(HullPalette.UNHURT, Color.WHITE, "the livery multiplies by it")
+	_assert_all_near(_span_colours(Vector3i.ZERO, InteriorKit.Batch.HULL), HullPalette.UNHURT, "plating")
+
+func test_a_hurt_cell_s_skin_carries_its_stage_colour():
+	_two_hulls()
+	_builder.rebuild()
+	var dressed := _span_colours(Vector3i(1, 0, 0), InteriorKit.Batch.SOLID)
+	_grid.get_block(Vector3i(1, 0, 0)).damage = _cat.get_def(&"hull").hp * 0.6
+	_builder.rebuild()
+	assert_eq(_builder.instance_colour(Vector3i(1, 0, 0)), HullPalette.SCORCH)
+	_assert_all_near(_span_colours(Vector3i(1, 0, 0), InteriorKit.Batch.HULL), HullPalette.SCORCH, "plating")
+	var solid := _span_colours(Vector3i(1, 0, 0), InteriorKit.Batch.SOLID)
+	assert_eq(solid.size(), dressed.size())
+	for i in solid.size():
+		var want := dressed[i] * HullPalette.SCORCH
+		if absf(solid[i].r - want.r) > 0.01 or absf(solid[i].b - want.b) > 0.01:
+			fail_test("trim vertex %d: %s, not %s" % [i, solid[i], want])
+			return
+	_assert_all_near(_span_colours(Vector3i.ZERO, InteriorKit.Batch.HULL), HullPalette.UNHURT, "the neighbour")
+
+func test_set_stage_recolours_one_cell_in_place():
+	_two_hulls()
+	_builder.rebuild()
+	var skin := _builder.get_node("Skin")
+	var mesh: Mesh = (_builder.get_node("Skin/Hull/DressingHull") as MeshInstance3D).mesh
+	var colliders := _body.get_children().filter(func(c): return c is CollisionShape3D)
+	_builder.set_stage(Vector3i(1, 0, 0), BlockDamage.Stage.WRECKED)
+	assert_eq(_builder.instance_colour(Vector3i(1, 0, 0)), HullPalette.CHAR)
+	await wait_process_frames(2)
+	assert_same(_builder.get_node("Skin"), skin, "the skin is not dressed again")
+	assert_same((_builder.get_node("Skin/Hull/DressingHull") as MeshInstance3D).mesh, mesh,
+		"the same mesh, so the miniature sharing it sees the tint")
+	assert_eq(_body.get_children().filter(func(c): return c is CollisionShape3D), colliders, "no collider is rebuilt")
+	_assert_all_near(_span_colours(Vector3i(1, 0, 0), InteriorKit.Batch.HULL), HullPalette.CHAR, "wrecked")
+	_assert_all_near(_span_colours(Vector3i.ZERO, InteriorKit.Batch.HULL), HullPalette.UNHURT, "the neighbour")
+	_builder.set_stage(Vector3i(1, 0, 0), BlockDamage.Stage.INTACT)
+	await wait_process_frames(2)
+	_assert_all_near(_span_colours(Vector3i(1, 0, 0), InteriorKit.Batch.HULL), HullPalette.UNHURT, "mended")
+
+func test_every_collider_carries_its_cell():
+	var slope := BlockDefinition.new()
+	slope.id = &"fairing_corner_in"
+	slope.mass_t = 0.3
+	_cat.register(slope)
+	_airlock_off_a_deck()
+	_put(Vector3i(2, 0, 0), &"fairing_corner_in")
+	_builder.rebuild()
+	# The hull body's own shapes: what a hit or the torch's ray finds (ShipCells).
+	# The alcove panel's Area3D has one of its own, for the hand, not for hits.
+	var shapes := _body.get_children().filter(func(c): return c is CollisionShape3D)
+	var cells := {}   # Vector3i -> how many shapes say so
+	for c: CollisionShape3D in shapes:
+		assert_true(c.has_meta(&"cell"), "%s has its cell" % c.name)
+		var cell: Vector3i = c.get_meta(&"cell", Vector3i(99, 99, 99))
+		cells[cell] = cells.get(cell, 0) + 1
+	assert_eq(cells.get(Vector3i(2, 0, 0), 0), 2, "both convex parts of the inner corner")
+	assert_gt(cells.get(Vector3i.ZERO, 0), 1, "the alcove's colliders")
+	assert_eq(cells.get(Vector3i(1, 0, 0), 0), 1, "a cube's box")

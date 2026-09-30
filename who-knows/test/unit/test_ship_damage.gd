@@ -110,6 +110,82 @@ func test_the_hull_instance_takes_the_stage_colour():
 	_ship.take_damage(cell, hp * 0.5)
 	assert_eq(_ship.exterior_builder.instance_colour(cell), HullPalette.CHAR)
 
+## The colours `cell`'s pieces are drawn with now in Skin/<kit>/<batch>.
+func _skin_colours(cell: Vector3i, kit: String, batch: InteriorKit.Batch) -> PackedColorArray:
+	var eb := _ship.exterior_builder
+	var mesh: ArrayMesh = (eb.get_node("Skin/%s/%s" % [kit, InteriorKit.BATCH_NAMES[batch]]) as MeshInstance3D).mesh
+	var colours: PackedColorArray = mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+	var out := PackedColorArray()
+	for span: Array in eb.skin_spans(cell):
+		if span[0] == mesh:
+			for i in range(span[1], span[2]):
+				out.append(colours[i])
+	return out
+
+func _all_near(colours: PackedColorArray, want: Color) -> bool:
+	for c in colours:
+		# Vertex colours are stored at 8 bits a channel.
+		if absf(c.r - want.r) > 0.01 or absf(c.g - want.g) > 0.01 or absf(c.b - want.b) > 0.01:
+			return false
+	return not colours.is_empty()
+
+## The tint reaches every piece: each vertex of every tinted skin mesh is one
+## cell's, the light fixtures' housings included.
+func test_every_tinted_skin_vertex_belongs_to_one_cell():
+	var eb := _ship.exterior_builder
+	var owners := {}   # ArrayMesh -> PackedInt32Array, how many cells claim each vertex
+	for kit in ["Hull", "Windows"]:
+		for batch in HullDressing.TINTED:
+			var mi := eb.get_node_or_null("Skin/%s/%s" % [kit, InteriorKit.BATCH_NAMES[batch]]) as MeshInstance3D
+			if mi != null:
+				var counts := PackedInt32Array()
+				counts.resize((mi.mesh as ArrayMesh).surface_get_array_len(0))
+				owners[mi.mesh] = counts
+	assert_eq(owners.size(), 5, "the plating and trim, and the windows' plating, trim and glass")
+	for cell: Vector3i in _ship.grid.coords():
+		for span: Array in eb.skin_spans(cell):
+			var counts: PackedInt32Array = owners[span[0]]
+			for i in range(span[1], span[2]):
+				counts[i] += 1
+			owners[span[0]] = counts
+	for mesh: ArrayMesh in owners:
+		var counts: PackedInt32Array = owners[mesh]
+		var unowned := 0
+		var shared := 0
+		for n in counts:
+			unowned += int(n == 0)
+			shared += int(n > 1)
+		assert_eq([unowned, shared], [0, 0], "%d vertices: none without a cell, none in two" % counts.size())
+
+func test_every_light_mount_is_on_its_cell():
+	var eb := _ship.exterior_builder
+	assert_gt(eb.light_mounts().size(), 0)
+	for m in eb.light_mounts():
+		var cell: Vector3i = m["coord"]
+		assert_true(_ship.grid.has_block(cell), "%s is a block" % cell)
+		var d: Vector3 = (m["position"] as Vector3) - ShipGrid.cell_center(cell)
+		assert_lte(maxf(absf(d.x), maxf(absf(d.y), absf(d.z))), ShipGrid.CELL_SIZE * 0.5 + 0.01,
+			"the mount at %s sits on %s" % [m["position"], cell])
+
+## The livery multiplies by the plating's vertex colour (spec §17.5): an
+## unhurt plate's is white, a hurt one's its stage colour.
+func test_a_hurt_cell_s_plating_takes_its_stage_colour_and_the_rest_stay_white():
+	var cell := _outer_hull()
+	var other := Vector3i.ZERO
+	for coord: Vector3i in _ship.grid.coords():
+		if coord != cell and not _skin_colours(coord, "Hull", InteriorKit.Batch.HULL).is_empty():
+			other = coord
+			break
+	assert_true(_all_near(_skin_colours(cell, "Hull", InteriorKit.Batch.HULL), HullPalette.UNHURT), "as built")
+	var hp := float(_ship.catalog.get_def(&"hull").hp)
+	_ship.take_damage(cell, hp * 0.6)
+	await wait_process_frames(3)
+	assert_true(_all_near(_skin_colours(cell, "Hull", InteriorKit.Batch.HULL), HullPalette.SCORCH), "scorched")
+	assert_true(_all_near(_skin_colours(other, "Hull", InteriorKit.Batch.HULL), HullPalette.UNHURT), "%s untouched" % other)
+	_ship.take_damage(cell, hp * 0.5)
+	await wait_process_frames(3)
+	assert_true(_all_near(_skin_colours(cell, "Hull", InteriorKit.Batch.HULL), HullPalette.CHAR), "charred")
+
 func test_a_damaged_outer_block_spits_sparks_and_a_mended_one_stops():
 	var cell := _outer_hull()
 	var hp := float(_ship.catalog.get_def(&"hull").hp)
