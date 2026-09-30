@@ -94,7 +94,13 @@ Do these in order. Each one names the check that proves it.
      can be left open) needs a `to_dict`/`from_dict` gathered by `Ship.to_dict`, a busy source in
      `Ship.busy()` if it has actions that run over time, and a line in
      `test_save_scene.gd`'s round-trip. The probe prints `save ... round-trips`. The lights are
-     a `lights` part (`{"floods", "forward"}`); a save without one loads with both off.
+     a `lights` part (`{"floods", "forward"}`); a save without one loads with both off;
+   - **the warp** (`Ship/Warp`, a `WarpDrive`; `docs/superpowers/specs/2026-09-28-warp-design.md`):
+     every ship gets one, and the flight scene binds it (`_wire_warp`). While it travels it
+     freezes the hull kinematic and clears its layer and mask, restoring them at drop-out. Anything
+     that sets the hull's `collision_layer`, `collision_mask` or `freeze` must check
+     `warp.travelling()` first. How far a ship can warp is set by its store; the probe prints
+     `warp    reach ...`.
 7. **Run the full suite** (`who-knows/run_tests.ps1`). It takes **about 8 minutes**, longer than a
    single command's timeout: run it in the background, logged to a file, and wait for the end. Add
    ship-specific tests: launches, stats, rooms, and the pod and airlock present.
@@ -139,6 +145,7 @@ is the blueprint's budgets, so the grid decides the feel:
 | Braking; a speed lock slowing down | `reverse` / mass | 4.8 m/s² |
 | Accelerating; a speed lock catching up | `forward` / mass | 14.3 m/s² |
 | Thrusters the player sees | each `rcs` block's exhaust face open and in view | 6 of 8 blocked (only the pitch-down pair shows); none in the pilot's view |
+| Warp reach on a full store | `(quantum_capacity − WarpPlan.WARP_BASE) / WarpPlan.WARP_PER_KM` km | 290 km on 1,200 QE (140 km on its starting 600) |
 
 The figures are the **reshaped starter's** (110 blocks, 104.7 t; the spine, fins and keel added
 7.8 t). Before the reshape it was 1.60 / 0.74 / 2.05 rad/s², 15.5 forward, 5.2 brake and side and
@@ -175,6 +182,9 @@ thrust.
 | "The table adds 300 kg" | The bridge computer's spec pinned the starter at +300 kg and +0.3 MW, but the table replaced a 0.4 t deck cell drawing 0.1 MW: the ship came out 100 kg lighter, and the yaw imbalance the spec said it would ease doubled (still 0.3% of authority) | A block that replaces another changes the figures by the difference. Read the new ones from `ShipStats` (the probe), never add a block's own mass to the old total |
 | A fixture beside two others on a bridge | The bridge computer in the port back corner, with the core and the machine, cut the droid off from the whole front of the bridge: helm, core, portholes, the table itself | Keep a way round on foot. `DeckPaths` now squeezes past the corner between two quiet fixtures; a new fixture that is not quiet gets no such step, so check the probe's `UNREACHABLE` line |
 | A quiet fixture where the consoles are | Its own walls go plain, so a fixture at the glass or beside the helm would take the bridge's consoles with it, and the shoulder's desk would stand 5 cm from it | `InteriorLayout._handed_consoles` hands the console straight back to the last open cell's same wall; the shoulder drops its desk in front of a fixture. Render the corner it went to |
+| Letting go of a warp at 120 m/s with the assist on | The assist cancels velocity nobody asked for, so the ship braked to rest at the warp limit instead of coasting in | `WarpDrive` sets the speed lock to 120 m/s at drop-out; anything else that hands the hull a velocity with the assist on must do the same |
+| Letting the rest of the ship behave normally at warp | Found in the final review: you could cycle the airlock and step out mid-warp (stranded kilometres behind), the RCS kept its last command and puffed the whole way, and motion coupling read the frozen hull's placing as a 12 m/s² shove | Anything that acts on the hull's motion or lets someone outside asks `warp.is_spinning()` / `travelling()` first: `Airlock.warping()`, `FlightComputer`'s early return, `MotionCoupling._warp()` |
+| A test script that types a local from the untyped `_root.system` and loops its `warp_targets()` | Godot 4.5.1 segfaulted at exit (ObjectDB leak, GUT's own scripts included) though every test passed | Hold the system in a typed member set in `before_each`, as `test_warp_drive.gd` does; watch the run's exit code, not only its pass count |
 | An off-centre retro counted as steering | It would light up for yaw, but `ShipStats` never counts pure fore-and-aft thrust as authority | Steer with blocks that push across the hull; retros only brake |
 | A fairing in the cabin row | The interior sees a solid cell and builds a whole wall against it, but a slope or a half leaves the outside open, and a porthole outside lands on a slope or above a 1 m block | Fairings go above and below the cabin and at its ends. The cabin row keeps full blocks. Check the probe's `windows` line |
 | A window inside with none outside | `HullLayout.unmatched` is not empty (the probe prints `UNMATCHED`). The walk out from a porthole wall stops at one solid cell, so **two solid cells** between the room and space leave the window nowhere to go. A covered face or a slope turned away fails too | One solid cell (or none) between a porthole's room and space. Every interior window must have one outside: `test_hull_windows.gd` |

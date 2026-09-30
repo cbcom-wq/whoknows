@@ -9,11 +9,20 @@ extends Node
 ##
 ## You enter a place at its edge and leave it HYSTERESIS beyond, so nothing
 ## flickers along a border.
+##
+## It also knows which warp limits you are within
+## (docs/superpowers/specs/2026-09-28-warp-design.md §8), apart from here():
+## they are not places on the location line, but WarpPlan and the HUD's
+## toasts ask about them.
 
 signal entered(place: Place)
 signal left(place: Place)
+## Crossing a warp limit (the warp spec §8): kept apart from entered and left,
+## which are the places on the location line.
+signal limit_entered(place: Place)
+signal limit_left(place: Place)
 
-enum Kind { SYSTEM, BELT, NEAR, RING }
+enum Kind { SYSTEM, BELT, NEAR, RING, LIMIT }
 
 ## One place you can be.
 class Place:
@@ -43,6 +52,7 @@ var recipe: SystemRecipe
 var universe: Universe
 
 var _here: Array[Place] = []
+var _limits: Array[Place] = []
 var _since := INF
 
 func setup(p_recipe: SystemRecipe, p_universe: Universe) -> void:
@@ -63,6 +73,18 @@ func here() -> Array[Place]:
 ## True while you are in the place called `id`.
 func is_in(id: StringName) -> bool:
 	return _here.any(func(p: Place) -> bool: return p.id == id)
+
+## The warp targets whose limits you are within, by target id (the warp spec
+## §8).
+func limits() -> Array[StringName]:
+	var out: Array[StringName] = []
+	for p in _limits:
+		out.append(StringName(String(p.id).trim_prefix("limit_")))
+	return out
+
+## True when no warp limit holds you: a warp may start here.
+func warp_clear() -> bool:
+	return _limits.is_empty()
 
 ## Where you are, outermost first: KESTREL › near KORVA-7 › in the ring.
 func text() -> String:
@@ -97,11 +119,36 @@ func look() -> void:
 	for p in now:
 		if not before.any(func(q: Place) -> bool: return q.id == p.id):
 			entered.emit(p)
+	var limits_before := _limits
+	_limits = limits_at(recipe, universe.to_universe(universe.focus.global_position), _limit_ids())
+	for p in limits_before:
+		if not _limits.any(func(q: Place) -> bool: return q.id == p.id):
+			limit_left.emit(p)
+	for p in _limits:
+		if not limits_before.any(func(q: Place) -> bool: return q.id == p.id):
+			limit_entered.emit(p)
 
 func _ids() -> Dictionary:
 	var out := {}
 	for p in _here:
 		out[p.id] = true
+	return out
+
+func _limit_ids() -> Dictionary:
+	var out := {}
+	for p in _limits:
+		out[p.id] = true
+	return out
+
+## The warp limits `u` is within in `system`, each a LIMIT place named after
+## its target. `inside` holds the ids you were already in.
+static func limits_at(system: SystemRecipe, u: UniversePoint, inside: Dictionary = {}) -> Array[Place]:
+	var out: Array[Place] = []
+	for t in system.warp_targets():
+		var id := StringName("limit_%s" % t.id)
+		var margin := HYSTERESIS if inside.has(id) else 0.0
+		if u.minus(t.point).length() <= t.limit + margin:
+			out.append(Place.new(Kind.LIMIT, id, t.name))
 	return out
 
 ## Where `u` is in `system`, innermost first. `inside` holds the ids of the

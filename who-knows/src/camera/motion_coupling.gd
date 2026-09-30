@@ -45,6 +45,18 @@ func _physics_process(delta: float) -> void:
 	if delta <= 0.0:
 		return
 
+	# At warp (docs/superpowers/specs/2026-09-28-warp-design.md §5.2) nothing
+	# is felt aboard: the frozen hull's velocity is only its placing, origin
+	# shifts included. The warp's own velocity is kept, so the drop-out, at
+	# the same 120 m/s, is no jolt either.
+	var warp := _warp()
+	if warp != null and warp.travelling():
+		_last_velocity = warp.velocity()
+		_last_shove = Vector3.ZERO
+		drive_felt_gravity(Vector3.ZERO)
+		if _avatar.mode == Avatar.Mode.PLATING:
+			_avatar.external_accel = Vector3.ZERO
+		return
 	var velocity := _hull.linear_velocity
 	var accel_world := (velocity - _last_velocity) / delta
 	_last_velocity = velocity
@@ -69,6 +81,11 @@ func _physics_process(delta: float) -> void:
 	if _avatar.mode == Avatar.Mode.PLATING:
 		_avatar.external_accel = shove
 		_apply_shake(accel_local, delta)
+
+## The ship's warp drive, when this couples a ship's hull.
+func _warp() -> WarpDrive:
+	var ship := get_parent() as Ship
+	return ship.warp if ship != null else null
 
 ## The shove you actually feel: capped.
 static func felt(shove: Vector3) -> Vector3:

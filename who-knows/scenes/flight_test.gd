@@ -54,6 +54,10 @@ var contact_markers: Array[ContactMarker] = []
 ## The course on the HUD, one per view (bridge computer spec §6.1, §8).
 var course_markers: Array[CourseMarker] = []
 var course_chime: AudioStreamPlayer
+## The warp on the HUD (the warp spec §7.3): its panel in the band, and a
+## bracket per world, one per view.
+var warp_panel: WarpPanel
+var body_markers: Array[BodyMarker] = []
 ## Which body the debug hop last put you by (F7), in the system's order.
 var hop_index := -1
 ## The debug hop leaves you this far off a body's surface, or nearer a small
@@ -112,6 +116,7 @@ func _ready() -> void:
 	_wire_universe(saved)
 	_wire_npcs()
 	_wire_sensors()
+	_wire_warp()
 	_wire_saving()
 
 ## The interior camera is also the seated camera -- CameraDirector moves it
@@ -361,6 +366,61 @@ func _wire_course_chime() -> void:
 		course_chime.stream = s
 		course_chime.play())
 
+## The warp (docs/superpowers/specs/2026-09-28-warp-design.md §5): the drive
+## gets the system, where you are, the sensors for its course and the rocks
+## for clear arrivals; J at the helm engages it. While it travels the rocks and
+## salvage wait and the belts show whole; after, everything near is loaded
+## before the next frame, as the hop does.
+func _wire_warp() -> void:
+	var warp := _ship.warp
+	warp.bind(system, _universe, star_system.whereabouts, _ship.sensors, _stream.recipe, warp_busy)
+	_pilot.warp_pressed.connect(warp.engage)
+	warp.travel_started.connect(_on_warp_started)
+	warp.travel_ended.connect(_on_warp_ended)
+	warp_panel = WarpPanel.new()
+	warp_panel.name = "WarpPanel"
+	warp_panel.drive = warp
+	$HudRoot/Screen/Band/Row.add_child(warp_panel)
+	star_system.whereabouts.limit_entered.connect(_on_limit_entered)
+	star_system.whereabouts.limit_left.connect(_on_limit_left)
+	body_markers.clear()
+	for m in _mount_per_view(func() -> WorldMarker: return BodyMarker.new(), "Bodies"):
+		(m as BodyMarker).sensors = _ship.sensors
+		body_markers.append(m)
+	for m in course_markers:
+		m.warp = warp
+
+## A toast as you cross a warp limit (the warp spec §7.3).
+func _on_limit_entered(place: Whereabouts.Place) -> void:
+	warp_panel.toast("ENTERING %s" % place.name)
+
+func _on_limit_left(place: Whereabouts.Place) -> void:
+	var clear := star_system.whereabouts.warp_clear()
+	warp_panel.toast("LEAVING %s · WARP CLEAR" % place.name if clear else "LEAVING %s" % place.name)
+
+## Why the warp must wait for the crew: &"crew" on a spacewalk, &"airlock"
+## while one cycles or stands open to space, else &"".
+func warp_busy() -> StringName:
+	if _avatar.mode == Avatar.Mode.SUIT:
+		return &"crew"
+	for airlock: Airlock in _ship.airlocks.values():
+		if airlock.busy() != "" or airlock.cycle.open_side() == AirlockCycle.Door.OUTER:
+			return &"airlock"
+	return &""
+
+func _on_warp_started() -> void:
+	_stream.suspended = true
+	salvage.process_mode = Node.PROCESS_MODE_DISABLED
+	star_system.set_warp(true)
+
+func _on_warp_ended() -> void:
+	star_system.set_warp(false)
+	star_system.streak = Vector3.ZERO
+	star_system.place_all()
+	star_system.whereabouts.look()
+	salvage.process_mode = Node.PROCESS_MODE_INHERIT
+	_stream.resume()
+
 func _unhandled_key_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if key == null or not key.pressed or key.echo:
@@ -379,9 +439,11 @@ static func hop_off(b: SystemBody) -> float:
 ## off the surface of the next body in the system's order (star, then each
 ## planet and its moons), or the previous for `step` -1, on its sunward side
 ## and facing it. A system is 300 km across; this stands in for cruise until
-## cruise exists. Refused on a spacewalk and while an airlock cycles. True if
-## it hopped.
+## cruise exists. Refused on a spacewalk, while an airlock cycles, and while a
+## warp spools or travels. True if it hopped.
 func hop(step: int) -> bool:
+	if _ship.warp.is_spinning():
+		return false
 	if _avatar.mode == Avatar.Mode.SUIT:
 		return false
 	for airlock: Airlock in _ship.airlocks.values():
@@ -458,6 +520,8 @@ func _wire_saving() -> void:
 		_saved_tag.show_locked()
 
 func _physics_process(delta: float) -> void:
+	if star_system != null:
+		star_system.streak = _ship.warp.streak()
 	play_time += delta
 	if not save_enabled:
 		return

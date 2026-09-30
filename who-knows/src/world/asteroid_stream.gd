@@ -57,6 +57,15 @@ var details: AsteroidDetails
 ## Cells finished after their rocks could already have been seen. Stays 0.
 var late_cells := 0
 var late_by_tier: Array[int] = [0, 0, 0]
+## True while a warp carries the focus faster than anything could load (the
+## warp spec §5.2): no rock is drawn and nothing loads or wakes. resume()
+## brings everything near back at once, as start() does.
+var suspended := false:
+	set(value):
+		suspended = value
+		for holder in [_pictures, get_node_or_null(^"Details")]:
+			if holder != null:
+				(holder as Node3D).visible = not value
 
 var _pictures: Node3D
 var _started := false
@@ -205,6 +214,17 @@ func start(u: Universe, start_point: UniversePoint = null) -> void:
 	details.finish()
 	details.step()
 
+## Ends a suspension: everything wanted where the focus is now is loaded and
+## drawn, and the big rock by you is in detail, before this returns.
+func resume() -> void:
+	suspended = false
+	if not _started:
+		return
+	update(0.0, true)
+	details.step()
+	details.finish()
+	details.step()
+
 func _exit_tree() -> void:
 	finish_jobs()
 	if details != null:
@@ -213,12 +233,12 @@ func _exit_tree() -> void:
 		bubble.clear()
 
 func _process(delta: float) -> void:
-	if _started:
+	if _started and not suspended:
 		update(delta)
 		details.step()
 
 func _physics_process(delta: float) -> void:
-	if _started:
+	if _started and not suspended:
 		bubble.step(delta)
 
 ## One streaming step: what is wanted, what finished, what to redraw.

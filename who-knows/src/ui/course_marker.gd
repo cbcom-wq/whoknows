@@ -25,6 +25,12 @@ var marker_at := Vector2.ZERO
 var ring_px := MIN_RING
 var text := ""
 var alpha := 1.0
+## The warp drive, or null (docs/superpowers/specs/2026-09-28-warp-design.md
+## §7.3): while a warp is charted to the course, a ring ALIGN wide sits round
+## it, GO once you are lined up and ready.
+var warp: WarpDrive
+var align_px := 0.0
+var align_go := false
 
 var _fading := 0.0
 
@@ -68,6 +74,11 @@ func _follow(cam: Camera3D, c: Contact) -> void:
 		ring_px = maxf(MIN_RING, edge.distance_to(marker_at))
 	text = "COURSE " + ContactText.distance(c, metres)
 	shown = true
+	align_px = 0.0
+	var t: WarpTarget = warp.target() if warp != null else null
+	if t != null and c.id == t.contact_id() and mode == VelocityMarker.Mode.ON_FRAME:
+		align_px = size.y * 0.5 * tan(WarpPlan.ALIGN) / tan(deg_to_rad(cam.fov) * 0.5)
+		align_go = warp.plan.status == WarpPlan.Status.READY
 
 func _draw() -> void:
 	if not shown:
@@ -86,6 +97,9 @@ func _draw() -> void:
 				_caret(colour)
 			_:
 				_diamond(colour)
+	if align_px > 0.0 and mode == VelocityMarker.Mode.ON_FRAME:
+		draw_arc(marker_at, align_px, 0.0, TAU, 48, Color(HudPalette.GO if align_go else HudPalette.COURSE, a),
+			LINE_WIDTH * 0.75, true)
 	var at := marker_at + Vector2(reach + 6.0, 4.0)
 	if at.x > size.x - 130.0:
 		at.x = marker_at.x - reach - 120.0

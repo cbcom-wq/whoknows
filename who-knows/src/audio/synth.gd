@@ -12,16 +12,20 @@ extends RefCounted
 ## is ready, so nothing ever waits on it.
 
 const MIX_RATE := 22050
+## The warp's spool, seconds: WarpDrive.SPOOL, kept here so the two scripts do
+## not load each other.
+const WARP_SPOOL := 10.0
 const NAMES: Array[StringName] = [
 	&"hatch_motor", &"bolt_clunk", &"seal_thump", &"hiss_out", &"steam_in",
 	&"panel_beep", &"warning_chime", &"ship_hum", &"breath", &"thruster_puff", &"hull_thump",
 	&"rcs_puff", &"core_hum", &"convert", &"materialize", &"charge", &"droid_whir", &"droid_chirp",
 	&"droid_beep", &"holo_hum", &"page", &"course_set", &"course_clear", &"course_arrived",
+	&"warp_spool", &"warp_travel", &"warp_drop",
 	&"light_switch",
 ]
 ## Sounds that play as seamless loops.
 const LOOPED: Array[StringName] = [&"ship_hum", &"breath", &"thruster_puff", &"core_hum", &"charge", &"droid_whir",
-	&"holo_hum"]
+	&"holo_hum", &"warp_travel"]
 
 static var _cache: Dictionary = {}
 static var _mutex := Mutex.new()
@@ -110,6 +114,12 @@ static func build(sound_name: StringName) -> AudioStreamWAV:
 			x = _tones([880.0, 660.0], 0.3, 0.2)
 		&"course_arrived":
 			x = _tones([1047.0], 0.6, 0.2)
+		&"warp_spool":
+			x = _warp_spool()
+		&"warp_travel":
+			x = _warp_travel()
+		&"warp_drop":
+			x = _warp_drop()
 		_:
 			push_error("Synth: no sound called %s" % sound_name)
 			return null
@@ -323,6 +333,50 @@ static func _core_hum() -> PackedFloat32Array:
 		x[i] = sin(TAU * 110.0 * t) + sin(TAU * 110.5 * t) \
 			+ 0.3 * (sin(TAU * 220.0 * t) + sin(TAU * 221.0 * t))
 	return _gain(x, 0.22)
+
+## The warp spooling (the warp spec §5.1): the core's two beating tones
+## climbing two octaves over the ten seconds, and a breath of air rising under
+## them.
+static func _warp_spool() -> PackedFloat32Array:
+	var n := _len(WARP_SPOOL)
+	var air := _lowpass(_noise(n, 71), 900.0)
+	var x := PackedFloat32Array()
+	x.resize(n)
+	var a := 0.0
+	var b := 0.0
+	for i in n:
+		var t := float(i) / MIX_RATE
+		var f := lerpf(55.0, 220.0, pow(t / WARP_SPOOL, 1.6))
+		a += TAU * f / MIX_RATE
+		b += TAU * f * 1.006 / MIX_RATE
+		x[i] = ((sin(a) + sin(b)) * 0.5 + air[i] * lerpf(0.1, 0.7, t / WARP_SPOOL)) \
+			* _ramp(t, 0.5, WARP_SPOOL, 0.3)
+	return _gain(x, 0.4)
+
+## At warp: a deep rush of filtered air over a low drone, looped.
+static func _warp_travel() -> PackedFloat32Array:
+	var n := _len(4.0)
+	var over := _len(0.5)
+	var rush := _lowpass(_noise(n + over, 73), 420.0)
+	var x := PackedFloat32Array()
+	x.resize(n + over)
+	for i in n + over:
+		var t := float(i) / MIX_RATE
+		x[i] = rush[i] * 1.6 + 0.35 * sin(TAU * 41.0 * t) + 0.2 * sin(TAU * 61.5 * t)
+	return _gain(_loopable(x, n), 0.35)
+
+## Dropping out: a soft deep thump and the rush falling away.
+static func _warp_drop() -> PackedFloat32Array:
+	var n := _len(1.6)
+	var rush := _lowpass(_noise(n, 79), 500.0)
+	var x := PackedFloat32Array()
+	x.resize(n)
+	var phase := 0.0
+	for i in n:
+		var t := float(i) / MIX_RATE
+		phase += TAU * lerpf(70.0, 32.0, minf(t / 0.5, 1.0)) / MIX_RATE
+		x[i] = sin(phase) * exp(-t / 0.3) + rush[i] * exp(-t / 0.5) * 1.5
+	return _gain(x, 0.6)
 
 ## Converting (spec §13): a rising shimmer -- filtered noise swept up and a
 ## sine gliding up an octave and more over the convert's 1.2 s -- ending in a

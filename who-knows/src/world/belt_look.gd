@@ -24,6 +24,10 @@ const SPREAD := 0.7
 const FADE_GONE := 22000.0
 const FADE_WHOLE := 26000.0
 const REWORK_AFTER := 250.0
+## At warp no giant loads to take a slab's place, so every slab shows (the
+## warp spec §5.2): only one right on the canopy dithers out.
+const WHOLE_GONE := 40.0
+const WHOLE_NEAR := 120.0
 
 var belt: AsteroidShapes.Belt
 ## Each slab's place in the universe, its turn and size, and its colour.
@@ -35,6 +39,7 @@ var _buf := PackedFloat32Array()
 var _anchor: UniversePoint
 
 static var _material: StandardMaterial3D
+static var _whole_material: StandardMaterial3D
 
 func setup(p_belt: AsteroidShapes.Belt, seed: int) -> void:
 	belt = p_belt
@@ -79,6 +84,23 @@ func place(universe: Universe, focus: UniversePoint) -> void:
 		var s := 1.0 if d <= BodyProxy.PROXY_AT else BodyProxy.PROXY_AT / d
 		AsteroidStream.write(_buf, i, shapes[i] * s, off * s, colours[i])
 	multimesh.buffer = _buf
+
+## Every slab shown, near or far, while a warp carries you; the giants' own
+## fade otherwise.
+func set_whole(on: bool) -> void:
+	material_override = whole_material() if on else material()
+	rework()
+
+## Forgets where the slabs were placed, so the next place() does it.
+func rework() -> void:
+	_anchor = null
+
+static func whole_material() -> StandardMaterial3D:
+	if _whole_material == null:
+		_whole_material = material().duplicate()
+		_whole_material.distance_fade_min_distance = WHOLE_GONE
+		_whole_material.distance_fade_max_distance = WHOLE_NEAR
+	return _whole_material
 
 ## Rock colour times each slab's instance colour, dithering out close in.
 static func material() -> StandardMaterial3D:

@@ -94,7 +94,11 @@ Do these in order. Each names the check that proves it.
 10. **Real-scene tests:** it wakes where it should, unseen (outside: beyond its fade from every
     camera); sleeps when you leave; holds its place through `Universe.shift`; reacts to the
     player in the scene (as `test_droid_scene.gd`, `test_exterior_npcs.gd`). Add it to
-    `test_floating_origin_scene.gd` if it lives outside.
+    `test_floating_origin_scene.gd` if it lives outside. **Outside, survive a warp**
+    (`docs/superpowers/specs/2026-09-28-warp-design.md` §5.2): while the ship warps,
+    `AsteroidStream.suspended` hides the rock details exterior NPCs live on and nothing loads; they
+    are left behind and freed by distance. A population must not assume its rocks stay loaded
+    under a moving focus.
 11. **Frame time:** adapt `test/probes/npc_probe.gd` to fill its director to `max_live` and
     time all NPC work over 600 frames. Budget: **1 ms** for everything (spec §16). Report the
     machine. If over, see *Mistakes* (resting, LOD, no slides, caches).
