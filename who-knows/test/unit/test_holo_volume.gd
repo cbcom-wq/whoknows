@@ -93,24 +93,19 @@ func test_everything_is_on_the_interior_layer_and_nothing_collides():
 		assert_eq((n as GeometryInstance3D).layers, InteriorKit.LAYER, str(n.name))
 	assert_eq(_holo.find_children("*", "CollisionObject3D", true, false).size(), 0, "you can put your hand in it")
 
-## Spec §7.1: the miniature shares the hull's MultiMeshes rather than copying
-## them, and is sized so its longest side is 0.8 m.
+## Spec §7.1: the miniature shares the hull's meshes rather than copying them,
+## and is sized so its longest side is 0.8 m.
 func test_the_miniature_shares_the_meshes_it_is_given():
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.mesh = BoxMesh.new()
-	mm.instance_count = 2
-	mm.set_instance_transform(0, Transform3D(Basis.IDENTITY, Vector3(0, 0, -4)))
-	mm.set_instance_transform(1, Transform3D(Basis.IDENTITY, Vector3(0, 0, 4)))
-	var meshes: Array[MultiMesh] = [mm]
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3(1, 1, 9)
+	var meshes: Array[Mesh] = [mesh]
 	var bounds := AABB(Vector3(-0.5, -0.5, -4.5), Vector3(1, 1, 9))
 	_holo.show_miniature(meshes, bounds)
 	assert_true(_holo.miniature_shown())
-	assert_eq(_holo.miniature_meshes()[0], mm, "the same resource, not a copy")
-	var drawn := _holo.find_children("*", "MultiMeshInstance3D", true, false).filter(
-		func(n): return n.multimesh == mm)
+	assert_eq(_holo.miniature_meshes()[0], mesh, "the same resource, not a copy")
+	var drawn := _holo.find_children("*", "MeshInstance3D", true, false).filter(func(n): return n.mesh == mesh)
 	assert_eq(drawn.size(), 1)
-	var inst: MultiMeshInstance3D = drawn[0]
+	var inst: MeshInstance3D = drawn[0]
 	assert_eq(inst.material_override, InteriorMaterials.holo())
 	assert_eq(inst.layers, InteriorKit.LAYER)
 	var longest: float = bounds.size.z * (inst.get_parent() as Node3D).scale.z
@@ -119,5 +114,4 @@ func test_the_miniature_shares_the_meshes_it_is_given():
 	assert_almost_eq((inst.get_parent().get_parent() as Node3D).rotation.y, HoloVolume.SPIN, 0.0001, "it turns")
 	_holo.clear_miniature()
 	assert_false(_holo.miniature_shown())
-	assert_eq(_holo.find_children("*", "MultiMeshInstance3D", true, false).filter(
-		func(n): return n.multimesh == mm).size(), 0)
+	assert_eq(_holo.find_children("*", "MeshInstance3D", true, false).filter(func(n): return n.mesh == mesh).size(), 0)

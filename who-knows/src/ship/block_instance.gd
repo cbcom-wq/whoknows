@@ -7,11 +7,13 @@ extends Resource
 
 @export var block_id: StringName
 @export var orientation: int = 0     ## 0..23, see BlockOrientation
-@export var hp_current: int = 0
+## hp lost; 0 is intact (health and damage spec §4.2). Only BlockDamage
+## writes it.
+@export var damage: float = 0.0
 
 func duplicate_instance() -> BlockInstance:
 	var copy := BlockInstance.new()
 	copy.block_id = block_id
 	copy.orientation = orientation
-	copy.hp_current = hp_current
+	copy.damage = damage
 	return copy

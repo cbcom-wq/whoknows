@@ -50,6 +50,8 @@ var _saved_tag: SavedTag
 var npc_debug: NpcDebug
 var npc_bus: StimulusBus
 var exterior_npcs: NpcDirector
+## The dead and the wounded, for every director (health and damage spec §6).
+var npc_ledger := NpcLedger.new()
 var contact_markers: Array[ContactMarker] = []
 ## The course on the HUD, one per view (bridge computer spec §6.1, §8).
 var course_markers: Array[CourseMarker] = []
@@ -70,6 +72,17 @@ const HOP_INSIDE := 200.0
 ## so the chase view and the canopy feed keep the WorldEnvironment's look.
 const INTERIOR_ENVIRONMENT: Environment = preload("res://data/environments/ship_interior.tres")
 
+## The outside's mood (ship exterior spec §6.3): a near-black ambient, so the
+## sun's side of a rock reads as it did and its night side waits for your
+## lights, and a gentle bloom on lenses, windows and strips. Tuned at the
+## renders.
+const OUTSIDE_AMBIENT_ENERGY := 0.4
+const OUTSIDE_GLOW_INTENSITY := 0.6
+const OUTSIDE_GLOW_BLOOM := 0.05
+## Screen, not the engine's default soft light: soft light on a near-black
+## night draws no visible halo round a lens, however strong the light is.
+const OUTSIDE_GLOW_BLEND := Environment.GLOW_BLEND_MODE_SCREEN
+
 ## BlockOrientation values used below. `_FORWARDS` order is
 ## [FORWARD, BACK, LEFT, RIGHT, UP, DOWN]; o = (forward_index << 2) | roll.
 ## Roll never matters here because every use is either the identity roll
@@ -83,6 +96,7 @@ const O_RCS_PORT := 8        ## LEFT: thrust along -X
 const O_RCS_STARBOARD := 12  ## RIGHT: thrust along +X
 const O_RCS_UP := 16         ## UP: thrust along +Y
 const O_RCS_DOWN := 20       ## DOWN: thrust along -Y
+const O_KEEL := 2        ## FORWARD rolled 180 deg: a half block's upper half, hung under a cell
 
 func _ready() -> void:
 	var saved := _read_save()
@@ -92,14 +106,19 @@ func _ready() -> void:
 		push_error("FlightTest: the saved ship has no blocks; starting a new game")
 		resumed = false
 		saved = {}
+	if resumed:
+		_ship.launch_blueprint = Ship.launch_of(ship_part)
+		npc_ledger.from_dict(saved.get("npcs", {}))
 	_ship.set_grid(layout if resumed else _starter_grid(), not resumed)
 	if resumed:
 		_ship.restore_aboard(ship_part)
 	_place_avatar_on_deck()
 	_set_interior_mood()
+	_set_outside_mood()
 	_wire_hud()
 	_wire_prompt()
 	_wire_hands()
+	_wire_hurt()
 	_wire_universe(saved)
 	_wire_npcs()
 	_wire_sensors()
@@ -111,6 +130,18 @@ func _ready() -> void:
 func _set_interior_mood() -> void:
 	var cam: Camera3D = $Ship/Interior/Avatar/Head/Camera3D
 	cam.environment = INTERIOR_ENVIRONMENT
+
+## The world environment is the outside's (the chase view and the canopy
+## feed): dark until a light reaches it, and lights bloom.
+func _set_outside_mood() -> void:
+	var env: Environment = $WorldEnvironment.environment
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = SpacePalette.AMBIENT
+	env.ambient_light_energy = OUTSIDE_AMBIENT_ENERGY
+	env.glow_enabled = true
+	env.glow_intensity = OUTSIDE_GLOW_INTENSITY
+	env.glow_bloom = OUTSIDE_GLOW_BLOOM
+	env.glow_blend_mode = OUTSIDE_GLOW_BLEND
 
 ## Shows what the avatar is looking at. Interactor has emitted this since it
 ## was written, with nothing listening: the seat was an invisible collider
@@ -140,6 +171,55 @@ func _wire_prompt() -> void:
 
 func _show_prompt() -> void:
 	_prompt.text = _grasp_prompt if _grasp_prompt != "" else _interact_prompt
+
+## Health and damage (docs/superpowers/specs/
+## 2026-09-29-health-and-damage-design.md §7): the view's red edge and the
+## blackout; the helm keeping you from harm; waking aboard at the ship's
+## cost; what you drop outside adrift as a stray; and a hole under you
+## putting you outside. Wired here so src/avatar never learns about Ship.
+func _wire_hurt() -> void:
+	var edge := HurtEdge.new()
+	edge.name = "HurtEdge"
+	$Prompt.add_child(edge)
+	$Prompt.move_child(edge, 0)
+	edge.bind(_avatar)
+	_avatar.seated_source = func() -> bool: return _director.is_seated
+	_avatar.rescue = _rescue
+	_avatar.rescue_cost = func(n: int) -> int:
+		return _ship.quantum.store.drain(n, &"rescue") if _ship.quantum.store != null else 0
+	_avatar.let_fall.connect(func(item: Item, outside: bool) -> void:
+		if outside and strays != null:
+			strays.adopt(item))
+	_ship.blocks_lost.connect(_on_blocks_lost)
+
+## Puts a blacked-out `avatar` aboard where it fits first (§7.2).
+func _rescue(avatar: Avatar) -> void:
+	for pose in _ship.wake_spots():
+		if not avatar.can_stand_at(pose) and avatar.mode == Avatar.Mode.PLATING:
+			continue
+		if avatar.mode == Avatar.Mode.SUIT:
+			avatar.enter_plating(_ship.interior, pose, 0.0, Vector3.ZERO, Quaternion.IDENTITY)
+		else:
+			avatar.place(pose)
+		return
+
+## A hole where you stand puts you outside, moving as you were (§7.4).
+func _on_blocks_lost(_coords: Array[Vector3i]) -> void:
+	if _avatar.mode != Avatar.Mode.PLATING or _avatar.get_parent() != _ship.interior:
+		return
+	var local := _ship.interior.to_local(_avatar.global_position + _avatar.global_basis.y * 0.1)
+	var cell := ShipCells.interior_cell_at(local)
+	if _ship.grid.has_block(cell):
+		return
+	var world := Threshold.to_world(_ship.interior.global_transform, _ship.exterior.global_transform,
+		_avatar.global_transform, InteriorBuilder.storey_offset(cell.y))
+	var v := Threshold.carry_velocity_out(_ship.exterior.linear_velocity, _ship.exterior.global_basis,
+		_avatar.velocity)
+	_avatar.enter_suit(_ship.outside, world, v, _ship.exterior)
+	for airlock: Airlock in _ship.airlocks.values():
+		_avatar.beacon_source = airlock.beacon
+		_avatar.home_source = airlock.home
+		break
 
 ## Hands and items (docs/superpowers/specs/2026-09-23-hands-and-items-design.md
 ## §7, §8, §10): what you let go of lands aboard this ship, and the reticle
@@ -241,6 +321,9 @@ func _wire_strays(saved: Dictionary) -> void:
 	strays.setup(_universe, _ship.item_catalog)
 	if not saved.is_empty():
 		strays.from_dict(saved)
+	# A plate shed by a block knocked off is a stray like any other
+	# (health and damage spec §8.1).
+	_ship.plate_shed.connect(func(item: Item) -> void: strays.adopt(item))
 
 ## A frame on the hull at the middle of the airlock's outer hatch, +z pointing
 ## out of it along the airlock's line: aft, on the starter.
@@ -275,6 +358,11 @@ func _wire_npcs() -> void:
 	exterior_npcs.bus = npc_bus
 	exterior_npcs.cameras = [$Ship/Exterior/ChaseCamera as Camera3D, $Ship/Canopy/CanopyCam as Camera3D, _avatar.camera]
 	exterior_npcs.sources = [RockHerdSource.new(_stream)]
+	exterior_npcs.ledger = npc_ledger
+	_ship.npc_director.ledger = npc_ledger
+	# The crew woke with the ship, before it had the ledger.
+	for npc: Npc in _ship.npc_director.live_npcs():
+		npc.health.current = npc_ledger.health_of(npc.record.id, npc.health.max)
 	add_child(exterior_npcs)
 	npc_debug = NpcDebug.new()
 	npc_debug.name = "NpcDebug"
@@ -533,7 +621,19 @@ func capture() -> Dictionary:
 		"avatar": _capture_you(),
 		"salvage": salvage.to_dict(),
 		"strays": strays.to_dict(),
+		"npcs": _capture_npcs(),
 	}
+
+## The dead, and the health of every NPC awake now and asleep (health and
+## damage spec §10): the awake ones are written into the ledger first.
+func _capture_npcs() -> Dictionary:
+	for director: NpcDirector in [_ship.npc_director, exterior_npcs]:
+		if director == null:
+			continue
+		for npc: Npc in director.live_npcs():
+			if npc.health != null and not npc.is_dead():
+				npc_ledger.set_health(npc.record.id, npc.health.current, npc.health.max)
+	return npc_ledger.to_dict()
 
 ## You: walking, seated or on a spacewalk, where, which way, your suit and
 ## what is in your hand (§6.3).
@@ -542,6 +642,7 @@ func _capture_you() -> Dictionary:
 		"suit": _avatar.suit_cell.to_dict(),
 		"suit_assist": _avatar.suit_assist,
 		"pitch": _avatar.head_pitch(),
+		"health": _avatar.health.to_dict(),
 	}
 	if _avatar.mode == Avatar.Mode.SUIT:
 		d["mode"] = "suit"
@@ -582,6 +683,7 @@ func _restore_places(saved: Dictionary) -> void:
 func _restore_you(d: Dictionary, outside_too: bool) -> void:
 	_avatar.suit_cell.from_dict(d.get("suit", {}))
 	_avatar.suit_assist = bool(d.get("suit_assist", true))
+	_avatar.health.from_dict(d.get("health", {}))
 	var mode := String(d.get("mode", "walking"))
 	if mode != "suit":
 		var pose := _ship.interior.global_transform * SaveCodec.to_transform(d.get("place"))
@@ -788,24 +890,47 @@ func _starter_grid() -> ShipGrid:
 	#
 	# Real numbers for this exact grid (via ShipStats/ShipValidator,
 	# res://data/blocks catalog), with the quantum core, the machine and the
-	# bridge computer aboard and the reactors replaced by quantum cells
-	# (quantum energy spec §5.4; bridge computer spec §3.2):
-	# 84 blocks, 96,900 kg, center_of_mass = (0.004, 1.207, 0.124),
-	# torque_budget = (3061920, 2030960, 2198143),
-	# torque_imbalance = (11146, -6192, 0),
+	# bridge computer aboard, the reactors replaced by quantum cells (quantum
+	# energy spec §5.4; bridge computer spec §3.2) and the 26 fairings of the
+	# shape below (ship exterior spec §8):
+	# 110 blocks, 104,700 kg, center_of_mass = (0.004, 1.301, 0.160),
+	# inertia = (2065526, 2865503, 1175422),
+	# torque_budget = (3080229, 2040115, 2174785),
+	# torque_imbalance = (151289, -5731, 0): pitch 4.9%, yaw 0.3%, roll 0%
+	# of authority,
 	# thrust_budget forward/reverse/lateral/vertical = 1500/500/500/1000 kN,
 	# power_gen = 36.0 MW (all from the quantum core), power_draw = 31.3 MW,
 	# quantum_capacity = 1200 QE, zero validation issues, can_launch = true.
-	# Handling under assist is essentially unchanged from the pre-quantum
-	# grid (see task-1-report.md): pitch and roll assist still reach their
-	# target rates within about a second, and a full burn barely pitches the
-	# ship. See task-15-report.md for the original pre-quantum derivation.
+	# The fairings add 7.8 t and no power draw. Before them the ship was
+	# 96,900 kg with the centre of mass at y = 1.207 and pitch imbalance of
+	# 11,146 N*m (0.4%): 6.0 t of spine and fins sit above the cabin and only
+	# the 1.8 t keel below it, so the centre of mass rose 9 cm. Handling under
+	# assist is a little slower: torque_budget / inertia is pitch 1.49, yaw
+	# 0.71, roll 1.85 rad/s^2 (1.60 / 0.74 / 2.05 before), and forward,
+	# reverse and lateral thrust per tonne fall from 15.5 / 5.2 / 5.2 to
+	# 14.3 / 4.8 / 4.8 m/s^2. A full burn still holds the nose. See
+	# task-1-report.md and task-15-report.md for the earlier derivations.
 	_put(g, Vector3i(-1, 1, -4), &"rcs", O_RCS_STARBOARD)
 	_put(g, Vector3i(1, 1, -4), &"rcs", O_RCS_PORT)
 	_put(g, Vector3i(-2, 1, -3), &"rcs", O_RCS_UP)
 	_put(g, Vector3i(2, 1, -3), &"rcs", O_RCS_UP)
 	_put(g, Vector3i(-2, 1, -4), &"rcs", O_RCS_DOWN)
 	_put(g, Vector3i(2, 1, -4), &"rcs", O_RCS_DOWN)
+
+	# --- The shape (ship exterior spec §8): fairings, 0.3 t each, all outside
+	# the cabin row, so nothing inside moves. A dorsal spine a metre high,
+	# ramped up out of the roof toward the bow and down again over the stern
+	# bank; a fin rising aft on each engine pod; and a keel under the
+	# centreline for the floods to hang from.
+	for x in [-1, 0, 1]:
+		for z in [-1, 0, 1, 2]:
+			_put(g, Vector3i(x, 2, z), &"fairing_half")
+		_put(g, Vector3i(x, 2, -2), &"fairing_slope_long_low", O_FORWARD)
+		_put(g, Vector3i(x, 2, 3), &"fairing_slope_long_low", O_STERN)
+	for x in [-3, 3]:
+		_put(g, Vector3i(x, 1, 1), &"fairing_slope", O_FORWARD)
+	for z in [-3, -2, -1, 0, 1, 2]:
+		_put(g, Vector3i(0, -1, z), &"fairing_half", O_KEEL)
 
 	return g
 
@@ -861,10 +986,16 @@ func _wire_hud() -> void:
 	# discovered as one of HudRoot's descendants.
 	_hud.register_element(_cockpit_marker)
 	_hud.register_element(_heading_cockpit)
+	# The hull (health and damage spec §11), in the band beside the store.
+	var hull := HullPanel.new()
+	hull.name = "HullPanel"
+	$HudRoot/Screen/Band/Row.add_child(hull)
+	_hud.register_element(hull)
 	# The bootstrap is the one place that legitimately knows both halves of
 	# this: the HUD's fade-in and the seat transition it is timed against.
 	_hud.fade_in = CameraDirector.SIT_DURATION
 	_director.piloting_changed.connect(_on_piloting_changed)
+	_pilot.lights = _ship.lights
 	# On a spacewalk the suit is the vehicle the HUD reports (airlock spec
 	# §8.3): speed relative to the ship, and the way home.
 	_avatar.mode_changed.connect(_on_avatar_mode_changed)

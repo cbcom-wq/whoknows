@@ -23,6 +23,9 @@ var pointing := false
 ## The pointer's offset from the centre of view, in fractions of the
 ## viewport's height, +y down.
 var pointer := Vector2.ZERO
+## The ship's work lights (ship exterior spec §7.2), set by the flight scene:
+## L and K switch them while you sit.
+var lights: ShipLights
 
 @onready var _flight: FlightComputer = get_node(flight_computer_path)
 @onready var _hull: Node3D = get_node(hull_path)
@@ -72,6 +75,12 @@ func handle(event: InputEvent) -> void:
 			_flight.set_heading(pointer_direction())
 	elif event.is_action_pressed(&"speed_lock"):
 		_flight.toggle_speed_lock()
+	elif event.is_action_pressed(&"lights_flood"):
+		if lights != null:
+			lights.toggle(ShipLights.FLOOD)
+	elif event.is_action_pressed(&"lights_forward"):
+		if lights != null:
+			lights.toggle(ShipLights.FORWARD)
 	elif event.is_action_pressed(&"warp"):
 		warp_pressed.emit()
 	elif event.is_action_pressed(&"toggle_assist"):
@@ -121,6 +130,10 @@ func build_telemetry() -> VehicleTelemetry:
 	t.stick_deadzone = PilotStick.DEADZONE
 	t.pointing = pointing
 	t.pointer = pointer
+	if lights != null:
+		t.has_lights = true
+		t.floods_on = lights.floods
+		t.forward_on = lights.forward
 	return t
 
 func _view_size() -> Vector2:

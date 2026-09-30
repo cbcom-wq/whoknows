@@ -11,7 +11,12 @@ extends SceneTree
 # The scene defaults to res://scenes/flight_test.tscn. It must hold a Ship at
 # Ship, with Interior/Avatar, Interior/PilotSeat and CameraDirector, as that
 # scene does. Writes <out>/probe_spawn.png, probe_seated.png and
-# probe_stood.png.
+# probe_stood.png; on a ship with a lights panel, probe_panel_off.png,
+# probe_panel_on.png and probe_panel_close.png too. On a ship with lights it
+# also writes probe_lit_{floods,forward,both}_* (the hull against the dark),
+# probe_star_bloom_{off,on}, probe_seated_lit, and, parked beside a rock's
+# night side, probe_seated_rock_{dark,lit} and probe_rock_*. Every ship gets
+# probe_hull_* (the skin, fill-lit) and prints skin, windows, lights and tint lines.
 #
 # A windowed run would save and load the owner's real game
 # (docs/superpowers/specs/2026-09-26-saving-design.md §9), so the probe turns
@@ -49,6 +54,157 @@ func _fps(seconds: float) -> float:
 		frames += 1
 	return frames / ((Time.get_ticks_usec() - start) / 1e6)
 
+## The hull from outside (ship exterior spec §10): two quarters, the profile,
+## above and below, from a camera riding on the hull. While `fill` is true a
+## soft directional light rides with the camera, a little off its axis so faces
+## read as different tones: an unlit hull renders near-black and says nothing
+## about shape. Pass false to judge the ship's own lights against the dark.
+func _hull_shots(ship: Ship, tag: String, fill := true) -> void:
+	var cam := Camera3D.new()
+	cam.cull_mask = 1 | ExteriorBuilder.OWN_HULL_LAYER
+	cam.far = 5000.0
+	ship.exterior.add_child(cam)
+	var light: DirectionalLight3D = null
+	if fill:
+		light = DirectionalLight3D.new()
+		light.light_cull_mask = 1 | ExteriorBuilder.OWN_HULL_LAYER
+		light.light_energy = 1.4
+		light.shadow_enabled = false
+		light.rotation_degrees = Vector3(-22, 28, 0)
+		cam.add_child(light)
+	var views := {
+		"bow_port": Vector3(-14, 6, -18), "stern_starboard": Vector3(14, 6, 18),
+		"profile": Vector3(-26, 1, 0), "above": Vector3(0, 28, 4), "below": Vector3(4, -22, 0),
+	}
+	for view: String in views:
+		var at: Vector3 = views[view]
+		var up := Vector3.UP if absf(at.normalized().y) < 0.9 else Vector3.FORWARD
+		cam.transform = Transform3D(Basis.looking_at(-at, up), at)
+		cam.current = true
+		await _shot("%s_%s" % [tag, view])
+	cam.current = false
+	if light != null:
+		light.queue_free()
+	cam.queue_free()
+
+## The star as the flight scene draws it, straight ahead of a camera riding on
+## the hull, with the world environment's bloom off and then on (ship exterior
+## spec 6.3: the star's glow was approved before the bloom existed).
+func _star_shots(scene: Node, ship: Ship) -> void:
+	var star_system: StarSystem = scene.get("star_system")
+	var env_node: WorldEnvironment = scene.get_node_or_null("WorldEnvironment")
+	if star_system == null or env_node == null:
+		return
+	var universe: Universe = scene.get_node("Universe")
+	var focus := universe.to_universe(universe.focus.global_position)
+	var toward := star_system.recipe.star.point.minus(focus).normalized()
+	var cam := Camera3D.new()
+	cam.cull_mask = 1 | ExteriorBuilder.OWN_HULL_LAYER
+	cam.far = AsteroidStream.VIEW_FAR
+	ship.exterior.add_child(cam)
+	cam.global_transform = Transform3D(Basis.looking_at(toward, Vector3.UP if absf(toward.y) < 0.9 else Vector3.RIGHT),
+		ship.exterior.global_position + toward * 12.0)
+	cam.current = true
+	var env: Environment = env_node.environment
+	var was := env.glow_enabled
+	for on in [false, true]:
+		env.glow_enabled = on
+		await _shot("star_bloom_%s" % ("on" if on else "off"))
+	env.glow_enabled = was
+	cam.current = false
+	cam.queue_free()
+
+## Parks the hull `gap` m off the nearest big rock's night side, still. With
+## `belly_down` it hangs belly to the rock (for the floods); otherwise nose on
+## to it (for the forward lights). The surface is found by a ray, not the
+## rock's bounding radius, which is looser than the mesh. Returns false when no
+## big rock is in sensor range (ship exterior spec 10).
+func _park_by_a_rock(scene: Node, ship: Ship, gap: float, belly_down := false) -> bool:
+	var universe: Universe = scene.get_node("Universe")
+	var best: Contact = null
+	for c in ship.sensors.contacts(RockContacts.RANGE):
+		if c.kind == RockContacts.KIND:
+			best = c
+			break
+	if best == null:
+		return false
+	var sun: DirectionalLight3D = scene.get_node("DirectionalLight3D")
+	var light_goes := -sun.global_basis.z
+	var rock := universe.to_engine(best.point)
+	var at := rock + light_goes * (best.radius + gap)
+	ship.exterior.linear_velocity = Vector3.ZERO
+	ship.exterior.angular_velocity = Vector3.ZERO
+	ship.exterior.global_transform = Transform3D(Basis.looking_at(rock - at, Vector3.UP), at)
+	# Let the stream build the rock's body there, then find its real surface.
+	await _process_frames(90)
+	await physics_frame
+	var space := ship.exterior.get_world_3d().direct_space_state
+	var from := rock + light_goes * (best.radius * 1.5 + 200.0)
+	var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(from, rock, AsteroidBody.LAYER))
+	var surface := best.radius
+	if hit.is_empty():
+		print("rock    no surface hit; using the bounding radius %.0f m" % best.radius)
+	else:
+		surface = (hit["position"] as Vector3).distance_to(rock)
+		print("rock    radius %.0f m, surface found %.0f m out on the night side" % [best.radius, surface])
+	at = rock + light_goes * (surface + gap)
+	var dir := (rock - at).normalized()
+	var look := Basis.looking_at(dir, Vector3.UP if absf(dir.y) < 0.9 else Vector3.RIGHT)
+	var basis := look if not belly_down else Basis(look.x, look.z, -look.y)
+	ship.exterior.global_transform = Transform3D(basis, at)
+	await _process_frames(30)
+	return true
+
+## The hull against a rock, from a camera riding on it. `views` maps a name to
+## [where the camera is, what it looks at], in hull space.
+## With `fps_label`, the frame rate from the last view is printed under it.
+func _rock_shots(ship: Ship, tag: String, views: Dictionary, fps_label := "") -> void:
+	var cam := Camera3D.new()
+	cam.cull_mask = 1 | ExteriorBuilder.OWN_HULL_LAYER
+	cam.far = 5000.0
+	ship.exterior.add_child(cam)
+	for view: String in views:
+		var v: Array = views[view]
+		var at: Vector3 = v[0]
+		var target: Vector3 = v[1]
+		cam.transform = Transform3D(Basis.looking_at(target - at, Vector3.UP), at)
+		cam.current = true
+		await _shot("%s_%s" % [tag, view])
+	if fps_label != "":
+		print("fps     %.0f %s" % [await _fps(2.0), fps_label])
+	cam.current = false
+	cam.queue_free()
+
+func _lights(ship: Ship, floods: bool, forward: bool) -> void:
+	ship.lights.set_group(ShipLights.FLOOD, floods)
+	ship.lights.set_group(ShipLights.FORWARD, forward)
+
+## The bridge's lights panel (ship exterior spec 7.3) at eye height: stood in
+## the cell behind the starboard shoulder, facing forward, with the floods and
+## forward lights off, then on. Skipped on a ship with no panel.
+func _panel_shots(ship: Ship, avatar: Avatar) -> void:
+	var panels := ship.interior_builder.lights_panels()
+	print("panel   %d lights panels%s" % [panels.size(), "" if panels.size() == 1 else "  <-- EXPECTED ONE"])
+	if panels.is_empty():
+		return
+	var cell := Vector3i(1, 0, -2)
+	var interior: Node3D = ship.get_node("Interior")
+	var feet := interior.global_transform * Vector3(ShipGrid.cell_center(cell).x, InteriorBuilder.floor_y(cell),
+		ShipGrid.cell_center(cell).z)
+	avatar.place(Transform3D(interior.global_transform.basis, feet))
+	avatar.set_head_pitch(0.0)
+	await _shot("panel_off")
+	ship.lights.toggle(ShipLights.FLOOD)
+	ship.lights.toggle(ShipLights.FORWARD)
+	await _shot("panel_on")
+	# Close up, a step to the panel's side of the shoulder cell, to read the labels.
+	var near := interior.global_transform * Vector3(ShipGrid.cell_center(cell).x - 0.5, InteriorBuilder.floor_y(cell),
+		ShipGrid.cell_center(cell).z - 2.3)
+	avatar.place(Transform3D(interior.global_transform.basis, near))
+	await _shot("panel_close")
+	ship.lights.toggle(ShipLights.FLOOD)
+	ship.lights.toggle(ShipLights.FORWARD)
+
 func _run(scene: Node) -> void:
 	# A process frame or two first: the canopy camera is placed on the first.
 	await _process_frames(3)
@@ -65,6 +221,21 @@ func _run(scene: Node) -> void:
 	var s := ShipStats.compute(ship.grid, ship.catalog)
 	print("mass    %.1f t, centre of mass %s" % [s.total_mass_kg / 1000.0, s.center_of_mass])
 	print("power   %.1f MW made, %.1f MW drawn" % [s.power_gen, s.power_draw])
+	# Damage (health and damage spec §4): what it can take, whether it is
+	# crippled before anything hits it, and the most one block's loss cuts off.
+	var total_hp := 0
+	var worst_cut := 0
+	for coord: Vector3i in ship.grid.coords():
+		var def := ship.catalog.get_def(ship.grid.get_block(coord).block_id)
+		if def == null:
+			continue
+		total_hp += def.hp
+		if not BlockDamage.KEEP.has(def.id):
+			var cut := BlockDamage.cut_off(ship.grid, [coord] as Array[Vector3i]).size()
+			worst_cut = maxi(worst_cut, cut)
+	print("damage  intact hp %d, crippled as built %s, one loss cuts off at most %d%s" % [total_hp,
+		"no" if not s.crippled else "YES: " + s.crippled_reason, worst_cut,
+		"" if worst_cut <= 2 else "  <-- FRAGILE"])
 	var reach_km := (s.quantum_capacity - WarpPlan.WARP_BASE) / WarpPlan.WARP_PER_KM
 	print("warp    reach %.0f km on a full store (%d QE); drive %s" % [reach_km, s.quantum_capacity,
 		"yes" if ship.warp != null else "MISSING"])
@@ -75,6 +246,13 @@ func _run(scene: Node) -> void:
 		s.thrust_budget[&"reverse"] / 1000.0, s.thrust_budget[&"lateral"] / 1000.0,
 		s.thrust_budget[&"vertical"] / 1000.0])
 	print("torque  authority %s, imbalance under burn %s" % [s.torque_budget, s.torque_imbalance])
+	# The 5% rule (SKILL.md step 5): the reshaped starter's pitch sits at 4.91%,
+	# so a little more mass above the thrust line breaks it.
+	var share := Vector3(absf(s.torque_imbalance.x) / maxf(s.torque_budget.x, 1.0),
+		absf(s.torque_imbalance.y) / maxf(s.torque_budget.y, 1.0),
+		absf(s.torque_imbalance.z) / maxf(s.torque_budget.z, 1.0)) * 100.0
+	print("balance imbalance %% of authority pitch %.2f yaw %.2f roll %.2f%s" % [share.x, share.y, share.z,
+		"" if maxf(share.x, maxf(share.y, share.z)) <= 5.0 else "  <-- OVER 5%"])
 	# The feel: assist is the same for every ship, so these decide how it flies.
 	var kg := maxf(s.total_mass_kg, 1.0)
 	var side: float = s.thrust_budget[&"lateral"] / kg
@@ -113,6 +291,38 @@ func _run(scene: Node) -> void:
 		print("room    %s %s doorway %s" % [room["zone"], room["coords"], room["doorway"]])
 	print("pods    %s" % [layout.pods()])
 	print("locks   %s" % [layout.airlocks()])
+	# The skin (ship exterior spec §3): every interior window must have one outside
+	# and none may be UNMATCHED; the lights are the generator's, 5 floods and 2
+	# forward on the starter.
+	var hull := ship.exterior_builder.layout()
+	print("skin    %d plates, %d chamfers, %d corners, %d facets, %d nozzles" % [hull.plates.size(),
+		hull.edges.size(), hull.corners.size(), hull.facets.size(), hull.nozzles.size()])
+	print("windows %d outside for %d inside%s" % [hull.windows.size(), hull.wanted,
+		"" if hull.unmatched.is_empty() else "  <-- UNMATCHED %s" % [hull.unmatched]])
+	print("lights  %d floods, %d forward" % [ship.lights.spots(&"flood").size(), ship.lights.spots(&"forward").size()])
+	# The damage tint (health and damage spec §9): every tinted skin vertex is
+	# one cell's, so a hurt block never leaves a piece of itself clean.
+	var owned := {}   # ArrayMesh -> vertices claimed
+	var cells := 0
+	for coord: Vector3i in ship.grid.coords():
+		var spans := ship.exterior_builder.skin_spans(coord)
+		cells += int(not spans.is_empty())
+		for span: Array in spans:
+			owned[span[0]] = owned.get(span[0], 0) + span[2] - span[1]
+	var unowned := 0
+	for mesh: ArrayMesh in owned:
+		unowned += mesh.surface_get_array_len(0) - owned[mesh]
+	print("tint    %d cells in %d meshes%s" % [cells, owned.size(),
+		"" if unowned == 0 else "  <-- %d VERTICES WITHOUT A CELL" % unowned])
+	await _hull_shots(ship, "hull")
+	var has_lights := ship.lights != null and not ship.lights.spots(ShipLights.FLOOD).is_empty()
+	if has_lights:
+		# No fill light: it would falsify the dark the lamps are judged against.
+		for lit in [["floods", true, false], ["forward", false, true], ["both", true, true]]:
+			_lights(ship, lit[1], lit[2])
+			await _hull_shots(ship, "lit_%s" % lit[0], false)
+		_lights(ship, false, false)
+		await _star_shots(scene, ship)
 	# The maintenance droid (NPC foundation spec §14): its dock, and every job it
 	# must be able to reach on foot from there.
 	var crew := ship.crew_site
@@ -139,6 +349,38 @@ func _run(scene: Node) -> void:
 	await director.transition_finished
 	await _shot("seated")
 	print("fps     %.0f seated" % await _fps(2.0))
+	if has_lights:
+		_lights(ship, true, true)
+		await _shot("seated_lit")
+		print("fps     %.0f seated, both light groups on" % await _fps(2.0))
+		_lights(ship, false, false)
+		# The worst view: seated, both groups on, nose to a big rock's night side.
+		if await _park_by_a_rock(scene, ship, 60.0):
+			await _shot("seated_rock_dark")
+			_lights(ship, true, true)
+			await _shot("seated_rock_lit")
+			print("fps     %.0f seated by a rock, both groups on" % await _fps(2.0))
+			_lights(ship, false, false)
+			var rock_views := {
+				"chase": [Vector3(3, 4, 16), Vector3(0, 0, -40)],
+				"side": [Vector3(-22, 2, 4), Vector3(0, -1, -30)],
+			}
+			for lit in [["dark", false, false], ["forward", false, true], ["both", true, true]]:
+				_lights(ship, lit[1], lit[2])
+				await _rock_shots(ship, "rock_nose_%s" % lit[0], rock_views,
+					"chase view 60 m off a rock, both groups on" if lit[0] == "both" else "")
+			# Belly to the ground, 20 m off it: what the floods are for.
+			_lights(ship, false, false)
+			if await _park_by_a_rock(scene, ship, 20.0, true):
+				var belly_views := {
+					"side": [Vector3(-16, 2, 10), Vector3(0, -12, -2)],
+					"low": [Vector3(0, -8, 14), Vector3(0, -14, -10)],
+				}
+				for lit in [["dark", false, false], ["floods", true, false], ["both", true, true]]:
+					_lights(ship, lit[1], lit[2])
+					await _rock_shots(ship, "rock_belly_%s" % lit[0], belly_views,
+						"chase view 20 m over a rock, both groups on" if lit[0] == "both" else "")
+			_lights(ship, false, false)
 
 	director.stand()
 	await director.transition_finished
@@ -152,4 +394,5 @@ func _run(scene: Node) -> void:
 	Input.action_release("move_back")
 	var walked := from.distance_to(avatar.global_position)
 	print("walked  %.2f m in 1 s after standing%s" % [walked, "" if walked > 1.0 else "  <-- STUCK"])
+	await _panel_shots(ship, avatar)
 	quit()

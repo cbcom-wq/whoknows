@@ -53,6 +53,11 @@ versus roughly 0.7 : 1) because a 2 m cell forces a 2 m cabin and there is no ha
 That is accepted — flatter reads sleeker against starfield, which is what §11 of the slice spec
 asks exteriors to do.
 
+> **Amended** by docs/superpowers/specs/2026-09-28-ship-exterior-design.md (built 2026-09-29): the
+> envelope is no longer a flat 4 m slab. Over the spine and the keel the hull is three cells tall
+> (6 m: a keel under the centreline at y = −1, a dorsal spine at y = 2), and the pods carry fins.
+> Beam and length are unchanged. What follows describes the flat hull the cabin still sits in.
+
 Two decks, and they do different jobs:
 
 - **y = 0 — the cabin.** One open walkable volume, bow to stern. This is the whole interior.
@@ -65,6 +70,17 @@ Two decks, and they do different jobs:
 ## 3. The starter blueprint
 
 Replaces `_starter_grid()` in Task 15 Step 5. Read the tables as plan views, bow at the top.
+
+> **Amended** by docs/superpowers/specs/2026-09-28-ship-exterior-design.md §8 (built 2026-09-29):
+> the cabin row (y = 0) keeps every cell. Twenty-six fairing cells are added outside it, which
+> make the starter 110 blocks and 104.7 t, and the tables below no longer show the whole ship:
+> - **the fairing cells:** a spine of `fairing_half` at y = 2 over x = −1..1, z = −1..2, with a
+>   `fairing_slope_long_low` ramp up out of the roof's slope at z = −2 and another down over the
+>   stern bank at z = 3; a `fairing_slope` fin on each engine pod at (±3, 1, 1); and a keel of
+>   `fairing_half`, turned over, at x = 0, y = −1, z = −3..2;
+> - **the hull's skin** is generated over every cell (chamfered edges, plates, windows that
+>   match the interior), so the `hull_wedge` and `canopy` blocks' own meshes are no longer drawn;
+> - §3.4's "near 80 blocks" is now 110, and its balance holds at 4.91% of pitch authority.
 
 ### 3.1 y = 0 — cabin
 

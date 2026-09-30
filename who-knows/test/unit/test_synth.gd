@@ -10,6 +10,7 @@ const LENGTHS := {
 	&"charge": 1.0, &"droid_whir": 1.0, &"droid_chirp": 0.14, &"droid_beep": 0.2,
 	&"holo_hum": 2.0, &"page": 0.08, &"course_set": 0.3, &"course_clear": 0.3, &"course_arrived": 0.6,
 	&"warp_spool": 10.0, &"warp_travel": 4.0, &"warp_drop": 1.6,
+	&"light_switch": 0.12,
 }
 
 func test_every_sound_builds_at_its_length():

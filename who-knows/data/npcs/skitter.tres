@@ -11,6 +11,7 @@ height = 0.6
 width = 0.75
 mass = 90.0
 top_speed = 4.0
+max_health = 40.0
 locomotors = Array[StringName]([&"surface_crawler", &"zero_g_drift"])
 look = &"skitter"
 sight_range = 40.0
@@ -35,8 +36,10 @@ need_start = {
 &"hunger": Vector2(0.2, 0.6),
 &"rest": Vector2(0, 0.4)
 }
-behaviours = Array[StringName]([&"graze", &"wander", &"stay_with_herd", &"freeze", &"scatter", &"hide", &"investigate", &"rest", &"drawn_to_flare"])
-behaviour_weights = {}
+behaviours = Array[StringName]([&"graze", &"wander", &"stay_with_herd", &"freeze", &"scatter", &"hide", &"investigate", &"rest", &"drawn_to_flare", &"defend"])
+behaviour_weights = {
+&"defend": 1.2
+}
 fear_of_player = 0.5
 curiosity_about_player = 0.4
 population = &"rock_herds"

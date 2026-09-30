@@ -114,3 +114,71 @@ func test_one_batch_comes_out_as_a_mesh_with_no_node():
 	var committed := _kit.commit()
 	assert_eq(committed.size(), 1, "only the solid batch is left to commit")
 	assert_null(_kit.mesh(InteriorKit.Batch.GLOW), "the batch was emptied")
+
+## Ship exterior spec §3.3: the hull builds with the kit, with the livery for
+## its plates and its own trim material.
+func test_a_batch_s_material_can_be_overridden_and_there_is_a_hull_batch():
+	var trim := StandardMaterial3D.new()
+	_kit.materials = {InteriorKit.Batch.SOLID: trim}
+	_kit.box(InteriorKit.Batch.SOLID, Transform3D.IDENTITY, Vector3.ONE, Color.WHITE)
+	_kit.box(InteriorKit.Batch.HULL, Transform3D.IDENTITY, Vector3.ONE, Color.WHITE)
+	var by_name := {}
+	for mi in _kit.commit():
+		by_name[String(mi.name)] = mi
+	assert_eq(by_name["DressingSolid"].material_override, trim)
+	assert_eq(by_name["DressingHull"].material_override, InteriorMaterials.props(), "the hull batch's default")
+
+# --- wear (health and damage spec §9) -----------------------------------------
+
+func _colours(batch: InteriorKit.Batch) -> PackedColorArray:
+	return _kit.mesh(batch).surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+
+func test_wear_darkens_solid_pieces_toward_scorch_then_char():
+	var base := InteriorKit.solid(InteriorPalette.WALL)
+	var got := []
+	for level in 3:
+		_kit.wear = level
+		_kit.box(InteriorKit.Batch.SOLID, Transform3D.IDENTITY, Vector3.ONE, base)
+	var colours := _colours(InteriorKit.Batch.SOLID)
+	var per_box := colours.size() / 3
+	var intact := colours[0]
+	var damaged := colours[per_box]
+	var wrecked := colours[per_box * 2]
+	# Vertex colours are stored at 8 bits a channel.
+	assert_almost_eq(Vector3(intact.r, intact.g, intact.b), Vector3(base.r, base.g, base.b), Vector3.ONE * 0.01, "as made")
+	assert_lt(damaged.get_luminance(), intact.get_luminance())
+	assert_lt(wrecked.get_luminance(), damaged.get_luminance())
+
+func test_a_wreck_s_glow_goes_dark():
+	_kit.wear = 2
+	_kit.box(InteriorKit.Batch.GLOW, Transform3D.IDENTITY, Vector3.ONE, InteriorKit.lit(InteriorPalette.LIGHT_WARM, 1.0))
+	for c in _colours(InteriorKit.Batch.GLOW):
+		assert_eq(Color(c.r, c.g, c.b), Color(0, 0, 0))
+
+func test_worn_keeps_a_palette_colour_as_made_and_its_alpha():
+	assert_eq(InteriorKit.worn(InteriorPalette.WALL, 0), InteriorPalette.WALL)
+	assert_eq(InteriorKit.worn(InteriorPalette.GLASS, 2).a, InteriorPalette.GLASS.a)
+
+# --- recolouring in place (ship exterior, health and damage spec §9) ------------
+
+func test_vertex_count_is_what_a_batch_holds_in_order():
+	assert_eq(_kit.vertex_count(InteriorKit.Batch.HULL), 0)
+	_kit.box(InteriorKit.Batch.HULL, Transform3D.IDENTITY, Vector3.ONE, Color.WHITE)
+	assert_eq(_kit.vertex_count(InteriorKit.Batch.HULL), 36, "6 faces, 2 triangles each")
+	assert_eq(_kit.vertex_count(InteriorKit.Batch.SOLID), 0, "per batch")
+	_kit.tri(InteriorKit.Batch.HULL, Vector3.ZERO, Vector3.RIGHT, Vector3.UP, Vector3.BACK, Color.RED)
+	var committed := _kit.commit()
+	var colours: PackedColorArray = committed[0].mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+	assert_eq(colours.size(), 39)
+	assert_eq(colours[36], Color.RED, "the mesh keeps the order pieces were added in")
+	assert_eq(_kit.vertex_count(InteriorKit.Batch.HULL), 0, "commit empties it")
+
+func test_keep_arrays_keeps_each_batch_s_arrays_from_commit():
+	_kit.box(InteriorKit.Batch.SOLID, Transform3D.IDENTITY, Vector3.ONE, Color.WHITE)
+	_kit.commit()
+	assert_true(_kit.arrays.is_empty(), "not unless asked")
+	_kit.keep_arrays = true
+	_kit.box(InteriorKit.Batch.SOLID, Transform3D.IDENTITY, Vector3.ONE, Color.WHITE)
+	var mesh: ArrayMesh = _kit.commit()[0].mesh
+	var kept: Array = _kit.arrays[InteriorKit.Batch.SOLID]
+	assert_eq((kept[Mesh.ARRAY_VERTEX] as PackedVector3Array).size(), mesh.surface_get_array_len(0))

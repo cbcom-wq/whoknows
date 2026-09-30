@@ -1276,3 +1276,29 @@ static func _lit(color: Color, energy: float, blink_phase := 1.0) -> Color:
 static func _mode(i: int) -> InteriorKit.Screen:
 	var modes := [InteriorKit.Screen.BARS, InteriorKit.Screen.WAVE, InteriorKit.Screen.DOTS]
 	return modes[posmod(i, 3)]
+
+## The lights panel (ship exterior spec §7.3): where it goes on a shoulder
+## wall (across toward the pod, and height, in the wall's frame), its plate,
+## and its two buttons.
+const LIGHTS_PANEL_ACROSS := 0.82
+const LIGHTS_PANEL_HEIGHT := 1.45
+const LIGHTS_PANEL_SIZE := Vector2(0.34, 0.66)
+const LIGHTS_PANEL_DEPTH := 0.04
+const LIGHTS_BUTTON := Vector3(0.24, 0.16, 0.05)
+
+## The panel's plate, in a frame on the wall's surface, +z out into the room:
+## trim, with a screen-black strip over each button for its label.
+static func lights_panel(kit: InteriorKit, f: Transform3D) -> void:
+	kit.bevel_box(SOLID, f * _at(Vector3(0, 0, LIGHTS_PANEL_DEPTH * 0.5)),
+		Vector3(LIGHTS_PANEL_SIZE.x, LIGHTS_PANEL_SIZE.y, LIGHTS_PANEL_DEPTH), 0.02, _c(InteriorPalette.TRIM))
+	for label in lights_panel_labels():
+		kit.box(SOLID, f * label * _at(Vector3(0, 0, -0.003)), Vector3(0.26, 0.07, 0.004),
+			_c(InteriorPalette.SCREEN_BACK))
+
+## The FLOOD button, then the FWD one, in the panel's frame.
+static func lights_panel_buttons() -> Array[Transform3D]:
+	return [_at(Vector3(0, 0.12, LIGHTS_PANEL_DEPTH)), _at(Vector3(0, -0.2, LIGHTS_PANEL_DEPTH))]
+
+## Where each button's label reads, just above it.
+static func lights_panel_labels() -> Array[Transform3D]:
+	return [_at(Vector3(0, 0.26, LIGHTS_PANEL_DEPTH + 0.006)), _at(Vector3(0, -0.06, LIGHTS_PANEL_DEPTH + 0.006))]

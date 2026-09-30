@@ -240,3 +240,71 @@ func test_a_newer_save_is_left_alone_and_the_game_starts_new():
 	assert_eq(int(SaveGame._parse(PATH)["format"]), SaveGame.FORMAT + 1)
 	assert_push_error("newer than this game")
 	_drop(a)
+
+## Health and damage spec §4.2, §8.2: damage and holes are kept, and so is the
+## layout the ship launched with, which a rebuild puts back from.
+func test_damage_and_the_launch_layout_round_trip():
+	var a := _scene()
+	var ship: Ship = a.get_node("Ship")
+	var hurt := Vector3i.ZERO
+	var gone := Vector3i.ZERO
+	var found := 0
+	for coord: Vector3i in ship.grid.coords():
+		if ship.grid.get_block(coord).block_id == &"hull" and not ship.grid.has_block(coord + Vector3i(1, 0, 0)):
+			if found == 0:
+				hurt = coord
+			else:
+				gone = coord
+			found += 1
+			if found == 2:
+				break
+	assert_eq(found, 2)
+	ship.take_damage(hurt, 90.0)
+	ship.take_damage(gone, 10_000.0)
+	assert_false(ship.grid.has_block(gone))
+	ship.damage_log.since = DamageLog.CALM
+	assert_true(a.save_now(), "saved")
+	_drop(a)
+
+	var b := _scene()
+	assert_true(b.resumed)
+	var ship_b: Ship = b.get_node("Ship")
+	assert_eq(ship_b.grid.get_block(hurt).damage, 90.0, "the damage is kept")
+	assert_false(ship_b.grid.has_block(gone), "and the hole")
+	assert_eq(ship_b.launch_block(gone), [&"hull", 0], "the launch layout still has it")
+	assert_eq(ship_b.launch_blueprint.damage_values.max(), 0.0, "nothing hurt in it")
+	_drop(b)
+
+func test_an_older_save_launches_from_its_own_layout():
+	var d := {"layout": {"name": "Old", "format": 1, "cells": [[0, 0, 0, "core", 0, 0], [1, 0, 0, "hull", 4, 30]]}}
+	var bp := Ship.launch_of(d)
+	assert_eq(bp.coords, [Vector3i(0, 0, 0), Vector3i(1, 0, 0)] as Array[Vector3i])
+	assert_eq(bp.damage_values.max(), 0.0)
+
+## Health and damage spec §10: your health, the dead and the wounded are kept.
+func test_health_and_the_ledger_round_trip():
+	var a := _scene()
+	var avatar: Avatar = a.get_node("Ship/Interior/Avatar")
+	var ship: Ship = a.get_node("Ship")
+	avatar.take_damage(35.0)
+	ship.npc_director.review()
+	var droid: Npc = ship.npc_director.live.values()[0]
+	droid.take_damage(20.0)
+	a.npc_ledger.mark_dead(&"skitter:somewhere:0:1")
+	ship.damage_log.since = DamageLog.CALM
+	avatar.health.since_hurt = 0.0
+	assert_true(a.save_now(), "saved")
+	var droid_id := droid.record.id
+	_drop(a)
+
+	var b := _scene()
+	assert_true(b.resumed)
+	var avatar_b: Avatar = b.get_node("Ship/Interior/Avatar")
+	var ship_b: Ship = b.get_node("Ship")
+	assert_almost_eq(avatar_b.health.current, 65.0, 0.01)
+	assert_true(b.npc_ledger.is_dead(&"skitter:somewhere:0:1"))
+	ship_b.npc_director.review()
+	var droid_b: Npc = ship_b.npc_director.live.get(droid_id)
+	assert_not_null(droid_b)
+	assert_almost_eq(droid_b.health.current, droid_b.health.max - 20.0, 0.01)
+	_drop(b)

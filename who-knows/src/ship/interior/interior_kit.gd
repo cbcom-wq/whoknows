@@ -18,10 +18,12 @@ const GROUP := &"interior_dressing"
 
 ## One merged mesh per batch, each with its own material. PORTAL is window
 ## glass that shows the real view outside; its material is supplied by
-## whoever owns that view (InteriorDressing.portal_material).
-enum Batch { SOLID, GLOW, SCREEN, GLASS, PORTAL }
+## whoever owns that view (InteriorDressing.portal_material). HULL is the
+## hull's outside plating (ship exterior spec §3.3), whose builder gives it
+## the livery through `materials`.
+enum Batch { SOLID, GLOW, SCREEN, GLASS, PORTAL, HULL }
 const BATCH_NAMES := ["DressingSolid", "DressingGlow", "DressingScreens", "DressingGlass",
-	"DressingPortals"]
+	"DressingPortals", "DressingHull"]
 
 ## screen.gdshader's modes, carried in vertex colour red as mode / 4.
 enum Screen { BARS, WAVE, DOTS }
@@ -51,13 +53,53 @@ var layer := LAYER
 var light_mask := LAYER
 ## The PORTAL batch's material; null uses InteriorMaterials.portal_fallback().
 var portal_material: Material
+## Per-batch materials that replace the defaults at commit(): the hull builds
+## its plating in the livery and its trim a little glossier than a cabin's.
+var materials: Dictionary = {}   # Batch -> Material
 var _tools: Dictionary = {}   # Batch -> SurfaceTool
+var _counts: Dictionary = {}   # Batch -> vertices added so far
+## Whether commit() keeps each batch's surface arrays in `arrays`, for a
+## builder that recolours vertices in place later (the hull's damage tint):
+## reading them back from a committed mesh stalls on the GPU.
+var keep_arrays := false
+## The last commit()'s surface arrays by Batch, when keep_arrays.
+var arrays: Dictionary = {}
+## How worn what is built now looks (health and damage spec §9): 0 as made,
+## 1 damaged (solid colours lean toward SCORCH), 2 wrecked (toward CHAR, and
+## its glow goes dark). A builder sets it around the pieces of a hurt cell.
+var wear := 0
+
+## How far each wear leans toward its colour.
+const WEAR_MIX := [0.0, 0.35, 0.7]
 
 func _init(root_node: Node3D, collision_body: CollisionObject3D = null,
 		portal: Material = null) -> void:
 	root = root_node
 	body = collision_body
 	portal_material = portal
+
+## `color` (a palette colour, sRGB) as it looks at `level` of wear: for flat
+## materials, which take palette colours as they are.
+static func worn(color: Color, level: int) -> Color:
+	if level <= 0:
+		return color
+	var to: Color = InteriorPalette.CHAR if level >= 2 else InteriorPalette.SCORCH
+	var out := color.lerp(to, WEAR_MIX[mini(level, 2)])
+	out.a = color.a
+	return out
+
+## A vertex colour at the kit's wear: solid pieces darken; a wreck's glow and
+## screens go dark. Glass and portals are the view, and stay as they are.
+func _worn(batch: Batch, color: Color) -> Color:
+	match batch:
+		Batch.SOLID:
+			var to: Color = solid(InteriorPalette.CHAR if wear >= 2 else InteriorPalette.SCORCH)
+			var out := color.lerp(to, WEAR_MIX[mini(wear, 2)])
+			out.a = color.a
+			return out
+		Batch.GLOW:
+			return Color(0, 0, 0, color.a) if wear >= 2 else color
+	return color
 
 ## A translation-only frame, for placing a piece inside a prop's frame.
 static func at(offset: Vector3) -> Transform3D:
@@ -88,12 +130,22 @@ func tri(batch: Batch, a: Vector3, b: Vector3, c: Vector3, normal: Vector3, colo
 		var tu := ub
 		ub = uc
 		uc = tu
+	if wear > 0:
+		color = _worn(batch, color)
 	var st := _tool(batch)
+	_counts[batch] = _counts.get(batch, 0) + 3
 	for v in [[a, ua], [b, ub], [c, uc]]:
 		st.set_normal(normal)
 		st.set_color(color)
 		st.set_uv(v[1])
 		st.add_vertex(v[0])
+
+## How many vertices `batch` holds so far. Its mesh keeps them in the order
+## they were added (nothing is indexed), so a builder can note which run of
+## vertices a piece is and recolour it later (the hull's damage tint, health
+## and damage spec §9).
+func vertex_count(batch: Batch) -> int:
+	return _counts.get(batch, 0)
 
 ## A quad a-b-c-d, in order round its edge. UVs run (0,1) at a round to (0,0)
 ## at d, so a screen quad given bottom-left first reads upright.
@@ -256,14 +308,25 @@ func add_mesh(mesh: Mesh, material: Material, node_name: String) -> MeshInstance
 
 ## Commits every batch as one merged mesh with its material.
 func commit() -> Array[MeshInstance3D]:
-	var materials: Array[Material] = [InteriorMaterials.props(), InteriorMaterials.glow(),
+	var defaults: Array[Material] = [InteriorMaterials.props(), InteriorMaterials.glow(),
 		InteriorMaterials.screen(), InteriorMaterials.glass(),
-		portal_material if portal_material != null else InteriorMaterials.portal_fallback()]
+		portal_material if portal_material != null else InteriorMaterials.portal_fallback(),
+		InteriorMaterials.props()]
 	var out: Array[MeshInstance3D] = []
+	arrays = {}
 	for batch: int in _tools:
 		var st: SurfaceTool = _tools[batch]
-		out.append(add_mesh(st.commit(), materials[batch], BATCH_NAMES[batch]))
+		var committed: ArrayMesh
+		if keep_arrays:
+			# What SurfaceTool.commit() does, keeping the arrays on the way.
+			arrays[batch] = st.commit_to_arrays()
+			committed = ArrayMesh.new()
+			committed.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays[batch])
+		else:
+			committed = st.commit()
+		out.append(add_mesh(committed, materials.get(batch, defaults[batch]), BATCH_NAMES[batch]))
 	_tools.clear()
+	_counts.clear()
 	return out
 
 ## One batch as a mesh, with no node: for pieces something else instances,
@@ -274,6 +337,7 @@ func mesh(batch: Batch) -> ArrayMesh:
 		return null
 	var st: SurfaceTool = _tools[batch]
 	_tools.erase(batch)
+	_counts.erase(batch)
 	return st.commit()
 
 func _tool(batch: Batch) -> SurfaceTool:

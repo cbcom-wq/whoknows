@@ -8,9 +8,17 @@ extends RefCounted
 ## exterior collision, interior geometry, navmesh, stats — rebuilds off
 ## `cell_changed`. Code that mutates cells any other way lets the
 ## exterior and interior drift apart, which is the one failure mode that
-## can quietly rot this architecture.
+## can quietly rot this architecture. `remove_many` is the same choke point
+## for a burst of removals: one signal, so one rebuild.
+##
+## Damage changes a BlockInstance in place, never a cell; crossing a stage is
+## told through `block_staged` (health and damage spec §4.3), which rebuilds
+## nothing.
 
 signal cell_changed(coord: Vector3i)
+## A block's damage crossed into `stage`, a BlockDamage.Stage. Emitted by
+## BlockDamage through note_staged().
+signal block_staged(coord: Vector3i, stage: int)
 
 const CELL_SIZE := 2.0
 
@@ -38,6 +46,19 @@ func clear_block(coord: Vector3i) -> void:
 		return
 	_cells.erase(coord)
 	cell_changed.emit(coord)
+
+## Empties every cell in `coords` that holds a block, then emits cell_changed
+## once, with the first: blocks knocked off together cost one rebuild.
+func remove_many(coords: Array) -> void:
+	var first = null
+	for coord in coords:
+		if _cells.erase(coord) and first == null:
+			first = coord
+	if first != null:
+		cell_changed.emit(first)
+
+func note_staged(coord: Vector3i, stage: int) -> void:
+	block_staged.emit(coord, stage)
 
 func get_block(coord: Vector3i) -> BlockInstance:
 	return _cells.get(coord, null)

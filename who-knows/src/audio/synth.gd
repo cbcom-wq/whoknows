@@ -21,6 +21,7 @@ const NAMES: Array[StringName] = [
 	&"rcs_puff", &"core_hum", &"convert", &"materialize", &"charge", &"droid_whir", &"droid_chirp",
 	&"droid_beep", &"holo_hum", &"page", &"course_set", &"course_clear", &"course_arrived",
 	&"warp_spool", &"warp_travel", &"warp_drop",
+	&"light_switch",
 ]
 ## Sounds that play as seamless loops.
 const LOOPED: Array[StringName] = [&"ship_hum", &"breath", &"thruster_puff", &"core_hum", &"charge", &"droid_whir",
@@ -67,6 +68,8 @@ static func build(sound_name: StringName) -> AudioStreamWAV:
 			x = _hatch_motor()
 		&"bolt_clunk":
 			x = _bolt_clunk()
+		&"light_switch":
+			x = _light_switch()
 		&"seal_thump":
 			x = _seal_thump()
 		&"hull_thump":
@@ -136,6 +139,18 @@ static func _hatch_motor() -> PackedFloat32Array:
 		var tone := sin(phase) + 0.5 * sin(2.0 * phase) + 0.25 * sin(3.0 * phase)
 		x[i] = (tone * 0.5 + x[i] * 0.6) * _ramp(t, 0.08, 0.9, 0.15)
 	return _gain(_lowpass(x, 1200.0), 0.45)
+
+## A light switch (ship exterior spec §7.3): a short soft click with a low
+## knock under it.
+static func _light_switch() -> PackedFloat32Array:
+	var n := _len(0.12)
+	var click := _highpass(_noise(n, 41), 1500.0)
+	var x := PackedFloat32Array()
+	x.resize(n)
+	for i in n:
+		var t := float(i) / MIX_RATE
+		x[i] = click[i] * exp(-t / 0.003) * 0.6 + sin(TAU * 140.0 * t) * exp(-t / 0.025) * 0.5
+	return _gain(x, 0.5)
 
 ## A bolt driving home: a dropping thump, a click and a short ring.
 static func _bolt_clunk() -> PackedFloat32Array:

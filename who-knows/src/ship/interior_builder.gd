@@ -133,9 +133,43 @@ func rebuild() -> void:
 
 	_build_structure()
 	_build_fixtures()
-	InteriorDressing.build(_layout, _physics_body, canopy_material)
+	InteriorDressing.build(_layout, _physics_body, canopy_material, wear_at)
 	_compute_gravity()
 	_fill_felt_gravity()
+
+## How worn the block a face looks onto is (health and damage spec §9), as
+## InteriorKit.wear: the block behind it (a wall's hull, the hull under a
+## floor), or, with none there, the cell's own (a deck, a fixture).
+func wear_at(coord: Vector3i, normal: Vector3i) -> int:
+	if _grid == null or _catalog == null:
+		return 0
+	var cell := coord + normal
+	if normal == Vector3i.ZERO or not _grid.has_block(cell):
+		cell = coord
+	var inst := _grid.get_block(cell)
+	if inst == null:
+		return 0
+	match BlockDamage.stage_of(inst, _catalog.get_def(inst.block_id)):
+		BlockDamage.Stage.DAMAGED:
+			return 1
+		BlockDamage.Stage.WRECKED, BlockDamage.Stage.GONE:
+			return 2
+	return 0
+
+## Whether anything aboard shows `coord`'s block: it is walkable, or next to
+## a cell that is. A stage change anywhere else is only seen from outside.
+func shows(coord: Vector3i) -> bool:
+	if _walkable.has(coord):
+		return true
+	for n in ShipGrid.FACE_OFFSETS:
+		if _walkable.has(coord + n):
+			return true
+	return false
+
+## The body every interior surface and dressing collider is on (layer 2),
+## rebuilt each rebuild(); null before the first.
+func geometry_body() -> StaticBody3D:
+	return _physics_body
 
 ## Every bridge computer the last rebuild dressed (bridge computer spec §10).
 func computers() -> Array[ShipComputer]:
@@ -143,6 +177,14 @@ func computers() -> Array[ShipComputer]:
 	if is_instance_valid(_physics_body):
 		for node in _physics_body.find_children("*", "ShipComputer", true, false):
 			out.append(node as ShipComputer)
+	return out
+
+## The bridge's lights panels (ship exterior spec §7.3), for the ship to bind.
+func lights_panels() -> Array[LightsPanel]:
+	var out: Array[LightsPanel] = []
+	if is_instance_valid(_physics_body):
+		for node in _physics_body.find_children("*", "LightsPanel", true, false):
+			out.append(node as LightsPanel)
 	return out
 
 func walkable_coords() -> Array:
@@ -252,12 +294,15 @@ func _build_structure() -> void:
 		# Walls sit half a cell out; slabs sit half a storey up or down.
 		var at := interior_center(coord) + Vector3(normal) * Vector3(
 			ShipGrid.CELL_SIZE * 0.5, STOREY_HEIGHT * 0.5, ShipGrid.CELL_SIZE * 0.5)
+		var wear := wear_at(coord, normal)
 		match face["kind"]:
 			InteriorLayout.Kind.FLOOR:
-				_add_box(_physics_body, _SLAB, at, InteriorMaterials.flat(_floor_colour(face["zone"])))
+				_add_box(_physics_body, _SLAB, at,
+					InteriorMaterials.flat(InteriorKit.worn(_floor_colour(face["zone"]), wear)))
 			InteriorLayout.Kind.CEILING:
 				at.y = ceiling_y(coord, face["zone"]) + FLOOR_THICKNESS * 0.5
-				_add_box(_physics_body, _SLAB, at, InteriorMaterials.flat(InteriorPalette.CEILING))
+				_add_box(_physics_body, _SLAB, at,
+					InteriorMaterials.flat(InteriorKit.worn(InteriorPalette.CEILING, wear)))
 			InteriorLayout.Kind.WALL:
 				if not face["owner"]:
 					continue   # the cell on the other side builds this partition
@@ -265,10 +310,10 @@ func _build_structure() -> void:
 					_add_opening(at, normal, InteriorProps.HATCH_HEIGHT)   # the airlock's outer hatch
 				elif face["porthole"]:
 					_walls.append(_add_collider(_physics_body, _wall_size(normal), at))
-					_add_porthole_wall(at, normal)
+					_add_porthole_wall(at, normal, wear)
 				else:
 					_walls.append(_add_box(_physics_body, _wall_size(normal), at,
-						InteriorMaterials.flat(InteriorPalette.WALL)))
+						InteriorMaterials.flat(InteriorKit.worn(InteriorPalette.WALL, wear))))
 			InteriorLayout.Kind.DOORWAY:
 				if face["owner"]:
 					_add_doorway(at, normal,
@@ -292,8 +337,8 @@ static func _wall_size(normal: Vector3i) -> Vector3:
 ## A porthole wall's picture: four boxes round a square opening, centred where
 ## InteriorProps.porthole puts its frame. Only the picture has a hole -- the
 ## collider beside it is a whole wall, so a porthole is glass, never a way out.
-func _add_porthole_wall(at: Vector3, normal: Vector3i) -> void:
-	var material := InteriorMaterials.flat(InteriorPalette.WALL)
+func _add_porthole_wall(at: Vector3, normal: Vector3i, wear := 0) -> void:
+	var material := InteriorMaterials.flat(InteriorKit.worn(InteriorPalette.WALL, wear))
 	var along := Vector3(absi(normal.z), 0, absi(normal.x))
 	var thick := Vector3(absi(normal.x), 0, absi(normal.z)) * FLOOR_THICKNESS
 	var s := InteriorProps.PORTHOLE_OPENING

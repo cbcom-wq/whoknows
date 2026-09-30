@@ -69,7 +69,7 @@ func test_a_blueprint_round_trips_as_plain_data():
 		var b := BlockInstance.new()
 		b.block_id = &"hull"
 		b.orientation = 5
-		b.hp_current = 17
+		b.damage = 17.0
 		grid.set_block(at, b)
 	var bp := ShipBlueprint.from_grid(grid, "Test")
 	var back := ShipBlueprint.from_dict(_json(bp.to_dict()))
@@ -77,7 +77,7 @@ func test_a_blueprint_round_trips_as_plain_data():
 	assert_eq(back.coords, bp.coords)
 	assert_eq(back.block_ids, bp.block_ids)
 	assert_eq(back.orientations, bp.orientations)
-	assert_eq(back.hp_values, bp.hp_values)
+	assert_eq(back.damage_values, bp.damage_values)
 	assert_eq(back.to_grid().coords().size(), 3)
 
 func test_the_flight_settings_round_trip():

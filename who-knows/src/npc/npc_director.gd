@@ -30,6 +30,9 @@ var catalog: NpcCatalog
 ## The space's stimulus bus, handed to every NPC it makes live.
 var bus: Node
 var sources: Array = []
+## The dead and the wounded, shared by every director of a game (health and
+## damage spec §6). Null remembers nothing.
+var ledger: NpcLedger
 ## Bodies whose nearness makes NPCs live (outside).
 var anchor_group: StringName = AsteroidStream.SPACE_ANCHOR
 ## The cameras that could see an NPC being demoted (outside).
@@ -116,10 +119,11 @@ func review() -> void:
 	else:
 		_review_by_distance(wanted)
 
-## A record on its way to being made live. The one place a ledger of changes
-## (a death, a tamed creature) will plug in (spec §4.5); nothing is remembered
-## yet, so it passes every record through unchanged.
+## A record on its way to being made live (spec §4.5): null if the ledger
+## says it died, so it never wakes again.
 func amend(record: NpcRecord) -> NpcRecord:
+	if ledger != null and ledger.is_dead(record.id):
+		return null
 	return record
 
 func _review_by_site(wanted: Dictionary) -> void:
@@ -214,6 +218,8 @@ func promote(record: NpcRecord, site: NpcSite) -> Npc:
 	npc.bus = bus
 	holder.add_child(npc)
 	npc.setup(record, species, site, rule == Rule.BY_SITE, site.start_pose(record, time))
+	if ledger != null:
+		npc.health.current = ledger.health_of(record.id, species.max_health)
 	npc.think_group = group_of(record, 1 << 20)
 	live[record.id] = npc
 	if record.herd >= 0:
@@ -232,6 +238,8 @@ func demote(npc: Npc) -> void:
 		live.erase(npc.record.id)
 	if not is_instance_valid(npc):
 		return
+	if ledger != null and npc.record != null and npc.health != null and not npc.is_dead():
+		ledger.set_health(npc.record.id, npc.health.current, npc.health.max)
 	if npc.record != null and npc.record.herd >= 0:
 		var herd: Array = _herds.get(_herd_key(npc), [])
 		herd.erase(npc)

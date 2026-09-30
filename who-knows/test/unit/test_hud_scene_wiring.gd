@@ -324,3 +324,16 @@ func test_the_cockpit_heading_marker_is_fed_by_the_hud():
 
 func test_the_controls_card_is_on_the_screen():
 	assert_true(_root.get_node_or_null("HudRoot/Screen/ControlsCard") is ControlsCard)
+
+## Ship exterior spec §6.3: outside is dark until a light reaches it, and
+## lights bloom. The interior keeps its own environment on its camera.
+func test_the_outside_is_dark_and_blooms():
+	var env: Environment = _root.get_node("WorldEnvironment").environment
+	assert_eq(env.ambient_light_source, Environment.AMBIENT_SOURCE_COLOR)
+	assert_eq(env.ambient_light_color, SpacePalette.AMBIENT)
+	assert_almost_eq(env.ambient_light_energy, _root.OUTSIDE_AMBIENT_ENERGY, 0.0001)
+	assert_true(env.glow_enabled)
+	assert_almost_eq(env.glow_intensity, _root.OUTSIDE_GLOW_INTENSITY, 0.0001)
+	assert_eq(env.glow_blend_mode, Environment.GLOW_BLEND_MODE_SCREEN, "soft light draws no halo on black")
+	var cam: Camera3D = _root.get_node("Ship/Interior/Avatar/Head/Camera3D")
+	assert_ne(cam.environment, env, "the interior's mood stays its own")

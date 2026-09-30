@@ -50,7 +50,7 @@ var _bracket_size := 0.0
 var _pivot: Node3D
 ## The marks and the bracket, turned as a whole by set_turn.
 var _marks_root: Node3D
-var _mini_meshes: Array[MultiMesh] = []
+var _mini_meshes: Array[Mesh] = []
 var _time := 0.0
 
 ## Builds the chevron, the edge ring and the bracket. Call once, before it
@@ -195,7 +195,7 @@ func map_frame_shown() -> bool:
 
 ## The ship in miniature (spec §7.1), from `meshes` shared as they are, and
 ## `bounds`, everything they draw in their own frame.
-func show_miniature(meshes: Array[MultiMesh], bounds: AABB) -> void:
+func show_miniature(meshes: Array[Mesh], bounds: AABB) -> void:
 	clear_miniature()
 	var longest := maxf(bounds.size.x, maxf(bounds.size.y, bounds.size.z))
 	if meshes.is_empty() or longest <= 0.0:
@@ -205,13 +205,13 @@ func show_miniature(meshes: Array[MultiMesh], bounds: AABB) -> void:
 	var s := MINIATURE_SIZE / longest
 	model.transform = Transform3D(Basis.from_scale(Vector3.ONE * s), -bounds.get_center() * s)
 	_pivot.add_child(model)
-	for mm in meshes:
-		var mmi := MultiMeshInstance3D.new()
-		mmi.multimesh = mm
-		mmi.material_override = InteriorMaterials.holo()
-		mmi.layers = layer
-		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		model.add_child(mmi)
+	for mesh in meshes:
+		var mi := MeshInstance3D.new()
+		mi.mesh = mesh
+		mi.material_override = InteriorMaterials.holo()
+		mi.layers = layer
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		model.add_child(mi)
 	_mini_meshes = meshes.duplicate()
 
 func clear_miniature() -> void:
@@ -225,7 +225,7 @@ func clear_miniature() -> void:
 func miniature_shown() -> bool:
 	return not _mini_meshes.is_empty()
 
-func miniature_meshes() -> Array[MultiMesh]:
+func miniature_meshes() -> Array[Mesh]:
 	return _mini_meshes
 
 func _process(delta: float) -> void:

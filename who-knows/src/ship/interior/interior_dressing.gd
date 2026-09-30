@@ -34,7 +34,11 @@ const _HORIZONTAL: Array[Vector3i] = [
 
 ## Builds everything under one `Dressing` node inside `body`, so the builder's
 ## single remove_child() + free() clears it with the rest of the interior.
-static func build(layout: InteriorLayout, body: StaticBody3D, canopy_material: Material) -> Node3D:
+## `wear_of(coord, normal) -> int` says how worn the block a face or fixture
+## belongs to is (health and damage spec §9): 0 as made, 1 damaged, 2 wrecked.
+## Without one, everything is as made.
+static func build(layout: InteriorLayout, body: StaticBody3D, canopy_material: Material,
+		wear_of := Callable()) -> Node3D:
 	var root := Node3D.new()
 	root.name = "Dressing"
 	body.add_child(root)
@@ -45,7 +49,9 @@ static func build(layout: InteriorLayout, body: StaticBody3D, canopy_material: M
 		if fixture["id"] == QUANTUM_CORE_ID:
 			core_cells[fixture["coord"]] = true
 	for face in layout.faces():
+		kit.wear = wear_of.call(face["coord"], face["normal"]) if wear_of.is_valid() else 0
 		_dress(kit, face, core_cells)
+	kit.wear = 0
 	for group in layout.canopy_groups():
 		var pods: Array = group["pods"]
 		if pods.is_empty():
@@ -55,9 +61,11 @@ static func build(layout: InteriorLayout, body: StaticBody3D, canopy_material: M
 	# Cores first: each machine's conduit runs to one on its own storey.
 	var cores := {}   # Vector3i -> QuantumCore
 	for fixture in layout.fixtures():
+		kit.wear = wear_of.call(fixture["coord"], Vector3i.ZERO) if wear_of.is_valid() else 0
 		var core := _fixture(kit, layout, fixture)
 		if core != null:
 			cores[fixture["coord"]] = core
+	kit.wear = 0
 	for fixture in layout.fixtures():
 		if fixture["id"] == QUANTUM_MACHINE_ID:
 			_quantum_machine(kit, layout, fixture, cores)
@@ -157,6 +165,7 @@ static func _cockpit(kit: InteriorKit, layout: InteriorLayout, group: Dictionary
 	var fixture_cells := {}
 	for fixture in layout.fixtures():
 		fixture_cells[fixture["coord"]] = true
+	var panel_at := _lights_panel_cell(group, fixture_cells)
 	for coord: Vector3i in group["coords"]:
 		if pods.has(coord):
 			var f := pod_frame(coord, normal)
@@ -170,6 +179,44 @@ static func _cockpit(kit: InteriorKit, layout: InteriorLayout, group: Dictionary
 			# takes the desk's place under the window.
 			InteriorProps.shoulder(kit, wall_frame(coord, normal),
 				face_variety({"coord": coord, "normal": normal}), not fixture_cells.has(coord))
+			if panel_at.has(coord):
+				_lights_panel(kit, coord, normal, pods[0])
+
+## The shoulder the lights panel goes on (ship exterior spec §7.3): the
+## starboard one first, then the nearer the helm. Never one where a fixture
+## stands. Empty with no shoulder to put it on.
+static func _lights_panel_cell(group: Dictionary, fixture_cells: Dictionary) -> Array[Vector3i]:
+	var pods: Array = group["pods"]
+	var across := Vector3.UP.cross(-Vector3(group["normal"] as Vector3i))
+	var helm: Vector3i = pods[0]
+	var best: Array[Vector3i] = []
+	var best_rank := Vector2(INF, INF)
+	for coord: Vector3i in group["coords"]:
+		if pods.has(coord) or fixture_cells.has(coord):
+			continue
+		var side := Vector3(coord - helm).dot(across)
+		var rank := Vector2(0.0 if side > 0.0 else 1.0, absf(side))
+		if rank < best_rank:
+			best_rank = rank
+			best = [coord]
+	return best
+
+## The lights panel on a shoulder's wall, beside its window on the side
+## toward the helm, above the desk.
+static func _lights_panel(kit: InteriorKit, coord: Vector3i, normal: Vector3i, helm: Vector3i) -> void:
+	var wall := wall_frame(coord, normal)
+	var toward := signf(Vector3(helm - coord).dot(wall.basis.x))
+	if toward == 0.0:
+		toward = 1.0
+	var f := wall * InteriorKit.at(Vector3(toward * InteriorProps.LIGHTS_PANEL_ACROSS,
+		InteriorProps.LIGHTS_PANEL_HEIGHT, -InteriorProps.WALL_THICKNESS * 0.5))
+	InteriorProps.lights_panel(kit, f)
+	var panel := LightsPanel.new()
+	panel.name = "LightsPanel_%d_%d_%d" % [coord.x, coord.y, coord.z]
+	panel.cell = coord
+	panel.transform = f
+	panel.setup(kit.layer)
+	kit.root.add_child(panel)
 
 ## The fixtures the dressing draws at their fixture frames (draws_fixture):
 ## the helm, the bridge computer's holo table, and the quantum core, which it
@@ -467,7 +514,9 @@ static func _room_piece(kit: InteriorKit, f: Transform3D, face: Dictionary, vari
 				_stow(kit, f, InteriorProps.weapon_rack_spots(), {&"sidearm": &"plasma_pistol"})
 			else:
 				InteriorProps.ammo_crates(kit, f, variety)
-				_stow(kit, f, InteriorProps.ammo_crates_spots(), {&"tool": &"flare"})
+				# A flare, and the repair torch (health and damage spec §8.1) in
+				# the second flare's place: everything else aboard stays.
+				_stow(kit, f, InteriorProps.ammo_crates_spots(), {&"tool": [&"flare", &"repair_torch"]})
 	if porthole:
 		InteriorProps.porthole(kit, f)
 

@@ -17,7 +17,8 @@ const GLOW := InteriorKit.Batch.GLOW
 const LOOKS: Array[StringName] = [&"plasma_pistol", &"mug", &"canister", &"crate",
 	&"toolbox", &"spare_helmet", &"power_cell", &"o2_tank", &"spanner", &"spare_module", &"medkit",
 	&"ration_tin", &"rock_sample", &"hand_lamp", &"flare", &"datapad",
-	&"rock_chunk", &"ice_chunk", &"scrap_plate", &"wire_coil", &"broken_module", &"quantum_shard"]
+	&"rock_chunk", &"ice_chunk", &"scrap_plate", &"wire_coil", &"broken_module", &"quantum_shard",
+	&"repair_torch"]
 ## Salvage (quantum energy spec §10.5): the looks that glint outside.
 const GLINTS: Array[StringName] = [&"rock_chunk", &"ice_chunk", &"scrap_plate", &"wire_coil",
 	&"broken_module", &"quantum_shard"]
@@ -70,6 +71,8 @@ static func build(kit: InteriorKit, look: StringName, size: Vector3, variety: fl
 			o2_tank(kit, size)
 		&"spanner":
 			spanner(kit, size)
+		&"repair_torch":
+			repair_torch(kit, size)
 		&"spare_module":
 			spare_module(kit, size)
 		&"medkit":
@@ -226,6 +229,21 @@ static func spanner(kit: InteriorKit, size: Vector3) -> void:
 	kit.annulus(SOLID, k * Transform3D(down, Vector3(0, -0.006, 0.12)), 0.011, 0.026, gun)
 	kit.tube_x(SOLID, k * Transform3D(_ALONG_Y, Vector3(0, 0, 0.12)), 0.026, 0.012, gun)
 	kit.box(SOLID, k * _at(Vector3(0, 0, 0.04)), Vector3(0.028, 0.014, 0.05), _c(InteriorPalette.BELT))
+
+## The repair torch (health and damage spec §8.1): a stubby warm off-white
+## body with the ship's BELT band, a gunmetal grip under it, a gunmetal nozzle
+## out along -z, and an amber feed light on top. Designed at 0.07 x 0.09 x 0.28.
+static func repair_torch(kit: InteriorKit, size: Vector3) -> void:
+	var k := _scale(size, Vector3(0.07, 0.09, 0.28))
+	var body := _c(InteriorPalette.TORCH_BODY)
+	var nozzle := _c(InteriorPalette.TORCH_NOZZLE)
+	var up := Basis(Vector3.RIGHT, -PI * 0.5)
+	kit.bevel_box(SOLID, k * _at(Vector3(0, 0.012, 0.045)), Vector3(0.062, 0.05, 0.15), 0.01, body)
+	kit.box(SOLID, k * _at(Vector3(0, 0.012, 0.075)), Vector3(0.066, 0.054, 0.022), _c(InteriorPalette.BELT))
+	kit.bevel_box(SOLID, k * _at(Vector3(0, -0.02, 0.085)), Vector3(0.03, 0.045, 0.036), 0.006, nozzle)
+	kit.bevel_box(SOLID, k * _at(Vector3(0, 0.012, -0.04)), Vector3(0.036, 0.034, 0.03), 0.006, nozzle)
+	kit.tube_between(SOLID, k * Vector3(0, 0.012, -0.055), k * Vector3(0, 0.012, -0.13), 0.009, nozzle)
+	kit.disc(GLOW, k * Transform3D(up, Vector3(0, 0.0375, 0.02)), 0.007, _lit(InteriorPalette.AMBER, 1.8))
 
 ## A spare module: an olive circuit board with gunmetal chips, a trim edge
 ## connector and two lit indicator dots. Designed at 0.18 x 0.03 x 0.12.

@@ -2,7 +2,8 @@
 
 **Status:** Living document. Owner-approved 2026-09-23, after the ship interior redesign; extended
 2026-09-24 for the cockpit pod and portal windows (owner-approved design, `docs/superpowers/specs/2026-09-23-cockpit-pod-design.md`),
-and for the airlock, its sound and the first spacewalk (owner-approved design, `docs/superpowers/specs/2026-09-24-airlock-design.md`).
+and for the airlock, its sound and the first spacewalk (owner-approved design, `docs/superpowers/specs/2026-09-24-airlock-design.md`);
+extended 2026-09-28 for the ship's exterior (owner-approved design, `docs/superpowers/specs/2026-09-28-ship-exterior-design.md`).
 **Authority:** This is the standing rulebook for how the game looks, and interiors most of all.
 Feature specs apply these rules; they do not override them. **To change a rule, get the owner's
 approval first and update this document in the same change.** Code, a spec and this guide
@@ -112,6 +113,29 @@ The bridge computer's holo (2026-09-27, measured headless on the build machine's
 while no camera can see it. At 30 km, a fresh placing of its ~415 marks costs about 4 ms twice a
 second, and the sensors' 30 km read about 3 ms four times a second; in between the marks are only
 turned with the ship.
+
+The ship's exterior (2026-09-29, 1280 × 720 on the GTX 960, the probe's own runs). With the skin,
+the windows, the floods and forward lights and the outside's bloom, both light groups casting
+shadows:
+- standing at the spawn: 438 fps; seated: 181 fps;
+- seated with both groups on: 173 fps;
+- seated 60 m off a rock's night side, nose on, both groups on, the worst view (the canopy's second
+  render looks out at the lit rock): **143–150 fps** over two runs;
+- the chase view there, from the hull's own camera: 302 fps;
+- the chase view 20 m over a rock, belly down, both groups on: 273–286 fps.
+
+The figures above are the first run; a second, the same day, gave 462, 172, 164, 143, 298 and 286.
+
+Task 12 measured the same views before the floods cast shadows (172, 150, 295 and 299–307 fps), and
+the worst view did not move. The floods' shadows were measured on their own in a spike: 151 fps in
+the worst view against 150 without, and 167 against 168 belly down. The chase view over a rock is
+the one that reads lower with them on, and it is nowhere near the budget.
+
+**Real light shafts were measured and not adopted** (volumetric fog with a `FogVolume` in every
+beam, the same spike, GTX 960): the worst view fell from about 150 to 132–142 fps, a cost of
+6–10%, and the flood shafts merged into one soft column. It holds 120, thinly, and the look is a
+taste call, so the cones stand and the owner has the renders and the numbers (ship exterior spec
+§6.4).
 
 Measure after any change that adds lights, pieces, windows, particles or post-processing.
 
@@ -347,9 +371,57 @@ The ship's computer (`docs/superpowers/specs/2026-09-25-bridge-computer-design.m
 - **Sized to read at arm's length.** The spec's first pip sizes (6–20 mm) and glow vanished at
   1.6 m eye height; pips are now 8–30 mm, the holo's glow energy 2.0, and the bracket's corners
   7 mm whatever they close round.
-- **The miniature ship** on the status page shares the hull's own MultiMeshes in
+- **The miniature ship** on the status page shares the hull's own merged meshes (the skin's
+  plating and trim, and the windows and pod shell; every batch but the glows) in
   `InteriorMaterials.holo()`: `LIGHT_WARM`, lit and emissive, opaque. An unshaded one read as a
-  flat cream silhouette; lit, its blocks separate.
+  flat cream silhouette; lit, its plates, chamfers and panel lines separate.
+
+### 3.8 The hull's outside
+
+The ship's skin, windows and lights (`docs/superpowers/specs/2026-09-28-ship-exterior-design.md`),
+rendered in the real scene and sent to the owner on 2026-09-29. The hull is generated like the
+interior, and it is the same ship: every rule below is there so the outside reads what the inside
+made.
+
+- **The skin is generated over the grid, as the interior is.** `HullLayout` decides it (pure
+  data), `HullDressing` maps each record to a `HullProps` builder, and `InteriorKit` draws it on
+  the own-hull layer (`ExteriorBuilder.OWN_HULL_LAYER`, light mask `1 | OWN_HULL_LAYER`), one
+  merged mesh per material. Numbers:
+  - a **plate** on every exposed face, standing `PLATE_PROUD` 0.05 m off a seam and `PLATE_GAP`
+    0.04 m from its neighbours, with a `PLATE_BEVEL` of 0.04 m: the gap is the panel line;
+  - a **0.4 m chamfer** (`CHAMFER`) on every convex edge, a strip 0.57 m across;
+  - a **facet** where three chamfers meet;
+  - **no chamfer into a concave corner**, or beside a shaped block's slope: the slope already
+    turns the corner. The airlock's cell is left to `AirlockAlcove`, and the chamfers stop short;
+  - plates and strips wear the hull livery, so the stripe runs across the whole skin.
+- **Fairings are how a ship tapers.** Six light shapes, 0.3 t each, one block per taper:
+  `fairing_slope`, its two long halves, an outer and an inner corner, and `fairing_half`.
+  `hull_wedge` and `canopy` are the same wedge as `fairing_slope`. Shaped blocks collide as they
+  are drawn. A blueprint tapers with a block, never a bespoke mesh.
+- **Windows match the interior.** Every interior window has one outside, at the same height, and
+  nothing outside is a window that isn't one inside; the layout reads the interior's own layout,
+  so the two cannot disagree. From outside the glass is `WINDOW_GLASS`, dark amber, with two or
+  three soft `LIGHT_WARM` bands on it (5 mm proud of the glass, `GLASS_Z + 0.005`, so the dark
+  glass never hides them), in a chunky `TRIM` frame. The bands are the ship's
+  glow, one energy for every window, and low power halves it. The glass stands clear of the
+  plate (`HullProps.GLASS_Z`): a plate is 0.05 m proud and would hide glass flush with the cell
+  face. A pod's canopy face is the **pod shell**, built from the interior pod's own numbers; the
+  shoulders on either side are plate with a window.
+- **Running strips are cyan and glow only:** `RUNNING_LIGHT`, 0.06 m wide, along the spine's top
+  chamfers and up the nose's. They light nothing.
+- **Lights are the generator's.** Floods under and around the belly and a forward pair at the
+  bow, at mounts `HullLayout` picks, each with a fixture (a housing and lens, or a recessed lamp
+  in a bezel). No block places one. `WORK_LIGHT`, a warm white, is the colour (`WORK_LIGHT_COOL`
+  is kept, unpicked). Both groups cast shadows. They light the world and the hull and **never the
+  interior** (mask `1 | OWN_HULL_LAYER`, never layer 2), and they work in low power at half
+  strength.
+- **Beams are faint.** An additive cone of the light's colour, `BEAM_ALPHA` 0.012, fading from the
+  lens to nothing (strong at the lens, mostly gone by halfway), softening where it meets rock,
+  gone with distance, dimming with the lamp. No hard solids: a beam that reads as a wedge is too
+  strong.
+- **Outside is dark, so the lights uncover things.** `SpacePalette.AMBIENT` on the world
+  environment, and a gentle bloom (`glow` on, Screen blend) so lenses, windows and strips halo
+  against it. The interior keeps its own environment on its camera (§2.3).
 
 ## 4. Adding something new
 
@@ -373,8 +445,11 @@ The ship's computer (`docs/superpowers/specs/2026-09-25-bridge-computer-design.m
 **A new window:** put its glass in the `PORTAL` batch (§2.7) and give the wall behind it a hole.
 Glass on its own is not a way out: keep the wall's collider whole.
 
-**Anything on the hull's outside:** colours from `HullPalette`, or the hull's livery material;
-the own-hull render layer; `InteriorKit` can build there (`layer`, `light_mask`).
+**Anything on the hull's outside:** see §3.8. Colours from `HullPalette`, or the hull's livery
+material; the own-hull render layer; `InteriorKit` can build there (`layer`, `light_mask`).
+
+**A new hull prop:** in `HullProps`, from a kit and a frame; colours from `HullPalette`; tested in a
+bare frame in `test_hull_props.gd`. `HullDressing` is the one place that decides where it goes.
 
 **Thruster puffs** (`RcsShow`, flight controls spec §6): the same chunky, flat-lit puff as the
 airlock's burst (`Puffs`), world-space and holding the origin's shift, on render layer 1 so
@@ -412,14 +487,16 @@ shader.
 
 `test/unit/test_visual_style_rules.gd` fails the build if:
 
-- a colour literal appears in interior, item, hand, airlock, asteroid or NPC-look code other than
-  the palettes (`InteriorPalette`, `HullPalette` for the hull's outside, `SpacePalette` for rocks
-  and skitters; `InteriorKit` is exempt: it packs data into vertex colours);
+- a colour literal appears in interior, hull, item, hand, airlock, asteroid or NPC-look code other
+  than the palettes (`InteriorPalette`, `HullPalette` for the hull's outside, `SpacePalette` for
+  rocks and skitters; `InteriorKit` is exempt: it packs data into vertex colours). The hull's
+  files are `hull_props.gd`, `hull_materials.gd`, `hull_layout.gd` and `hull_dressing.gd`, and
+  the lights' are `ship_lights.gd` and `lights_panel.gd`;
 - `interior_props.gd`, `interior_kit.gd`, `sliding_door.gd`, `item_looks.gd`, `item.gd`,
   `glove.gd`, `hands.gd`, `airlock_hatch.gd`, `airlock_panel.gd`, `airlock_show.gd`,
-  `npc_looks.gd`, `droid_look.gd`, `holo_volume.gd` or `ship_computer.gd` reference the grid, the
-  layout, the builder or the dressing (the bridge computer's `map_page.gd` is held to the palette
-  too);
+  `npc_looks.gd`, `droid_look.gd`, `holo_volume.gd`, `ship_computer.gd`, `hull_props.gd` or
+  `hull_materials.gd` reference the grid, the layout, the builder or the dressing (the bridge
+  computer's `map_page.gd` is held to the palette too);
 - the set of interior shaders changes.
 
 Other interior tests pin the rest: render layer 2 and cull mask 2, no interior shadows, colliders
@@ -443,6 +520,9 @@ A green test suite proves the structure, not the look. For visual work:
   to the owner.
 - **Look out of the windows** from the seat and from standing: what they show must line up with
   the world outside.
+- **Render the hull from outside** (§3.8): two quarters (bow port, stern starboard), the profile, above and below, with a
+  fill light to judge shape and without it to judge the ship's own lights; then over a big rock's
+  night side with the floods, the forward lights, both and neither. `ship_probe.gd` does all of it.
 - **Cross the airlock's threshold both ways** and render just before and just after: the two
   frames should match.
 - **Read scene and resource edits back at runtime** (CLAUDE.md: a clean load proves nothing for

@@ -31,6 +31,19 @@ var power_draw: float = 0.0
 ## QE the ship's quantum cells can hold, summed like power.
 var quantum_capacity: int = 0
 
+## Health and damage spec §4.4: what the ship had with nothing hurt, so that
+## "crippled" measures what was lost, whatever the design.
+var intact_forward: float = 0.0
+var intact_torque: Vector3 = Vector3.ZERO
+## Below CRIPPLED_BELOW of its intact forward thrust or of any turning axis it
+## had, or with no working quantum core. It still flies on what is left.
+var crippled := false
+## "no thrust", "can't turn" or "no power"; "" when not crippled.
+var crippled_reason := ""
+
+const CRIPPLED_BELOW := 0.25
+const QUANTUM_CORE := &"quantum_core"
+
 static func compute(grid: ShipGrid, catalog: BlockCatalog) -> ShipStats:
 	var s := ShipStats.new()
 	var entries := _gather(grid, catalog)
@@ -39,9 +52,12 @@ static func compute(grid: ShipGrid, catalog: BlockCatalog) -> ShipStats:
 	s._accumulate_power(entries)
 	s._accumulate_thrust(entries)
 	s._accumulate_quantum(entries)
+	s._judge_crippled(entries)
 	return s
 
-## Returns [{def, coord, center, force}] once so each pass can reuse it.
+## Returns [{def, coord, center, force, output}] once so each pass can reuse
+## it. `output` is the block's share of its function by stage (spec §4.1);
+## `force` is at full output, and the passes scale it.
 static func _gather(grid: ShipGrid, catalog: BlockCatalog) -> Array:
 	var out: Array = []
 	for coord in grid.coords():
@@ -58,6 +74,7 @@ static func _gather(grid: ShipGrid, catalog: BlockCatalog) -> Array:
 			"coord": coord,
 			"center": ShipGrid.cell_center(coord),
 			"force": force,
+			"output": BlockDamage.output_of(BlockDamage.stage_of(inst, def)),
 		})
 	return out
 
@@ -84,36 +101,49 @@ func _accumulate_inertia(entries: Array) -> void:
 
 func _accumulate_power(entries: Array) -> void:
 	for e in entries:
-		power_gen += e["def"].power_gen
-		power_draw += e["def"].power_draw
+		power_gen += e["def"].power_gen * e["output"]
+		power_draw += e["def"].power_draw * e["output"]
 
 func _accumulate_quantum(entries: Array) -> void:
 	for e in entries:
-		quantum_capacity += e["def"].quantum_capacity
+		quantum_capacity += roundi(e["def"].quantum_capacity * e["output"])
 
 func _accumulate_thrust(entries: Array) -> void:
+	var intact := _thrust(entries, false)
+	intact_forward = intact[0][&"forward"]
+	intact_torque = intact[2]
+	var now := _thrust(entries, true)
+	thrust_budget = now[0]
+	torque_imbalance = now[1]
+	torque_budget = now[2]
+
+## [thrust_budget, torque_imbalance, torque_budget], with each block at its
+## stage's output when `staged`, or all at full.
+func _thrust(entries: Array, staged: bool) -> Array:
+	var budget := {&"forward": 0.0, &"reverse": 0.0, &"lateral": 0.0, &"vertical": 0.0}
+	var imbalance := Vector3.ZERO
 	# Attitude authority, accumulated per axis and per direction so the two
 	# can be compared at the end. See torque_budget above.
 	var nose_up := Vector3.ZERO
 	var nose_down := Vector3.ZERO
 
 	for e in entries:
-		var f: Vector3 = e["force"]
+		var f: Vector3 = e["force"] * (e["output"] if staged else 1.0)
 		if f.is_zero_approx():
 			continue
 		# Bin the force magnitude into the axis it mostly pushes along.
 		if f.z < 0.0:
-			thrust_budget[&"forward"] += absf(f.z)
+			budget[&"forward"] += absf(f.z)
 		else:
-			thrust_budget[&"reverse"] += absf(f.z)
-		thrust_budget[&"lateral"] += absf(f.x)
-		thrust_budget[&"vertical"] += absf(f.y)
+			budget[&"reverse"] += absf(f.z)
+		budget[&"lateral"] += absf(f.x)
+		budget[&"vertical"] += absf(f.y)
 
 		var r: Vector3 = e["center"] - center_of_mass
 
 		# Torque about the centre of mass from a full forward burn.
 		if f.z < 0.0:
-			torque_imbalance += r.cross(f)
+			imbalance += r.cross(f)
 
 		if is_zero_approx(f.x) and is_zero_approx(f.y):
 			continue   # a main engine: thrust, not steering
@@ -121,8 +151,29 @@ func _accumulate_thrust(entries: Array) -> void:
 		nose_up += Vector3(maxf(torque.x, 0.0), maxf(torque.y, 0.0), maxf(torque.z, 0.0))
 		nose_down += Vector3(-minf(torque.x, 0.0), -minf(torque.y, 0.0), -minf(torque.z, 0.0))
 
-	torque_budget = Vector3(
+	var authority := Vector3(
 		minf(nose_up.x, nose_down.x),
 		minf(nose_up.y, nose_down.y),
 		minf(nose_up.z, nose_down.z)
 	)
+	return [budget, imbalance, authority]
+
+## Spec §4.4. An axis the ship never had authority on can't be lost; a ship
+## with no quantum core at all (a test hull) isn't short of one.
+func _judge_crippled(entries: Array) -> void:
+	if intact_forward > 0.0 and thrust_budget[&"forward"] < intact_forward * CRIPPLED_BELOW:
+		crippled_reason = "no thrust"
+	for axis in 3:
+		if crippled_reason == "" and intact_torque[axis] > 0.0 \
+				and torque_budget[axis] < intact_torque[axis] * CRIPPLED_BELOW:
+			crippled_reason = "can't turn"
+	var cores := 0
+	var working := 0
+	for e in entries:
+		if e["def"].id == QUANTUM_CORE:
+			cores += 1
+			if e["output"] > 0.0:
+				working += 1
+	if crippled_reason == "" and cores > 0 and working == 0:
+		crippled_reason = "no power"
+	crippled = crippled_reason != ""

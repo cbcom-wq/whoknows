@@ -5,8 +5,18 @@ extends Node3D
 ## source of truth; everything else here reacts to `cell_changed`.
 
 signal stats_changed(stats: ShipStats)
+## Blocks knocked off, and any piece cut off with them (health and damage spec
+## §4.5), already gone from the grid: for the burst and the shed plate.
+signal blocks_lost(coords: Array[Vector3i])
+## A block knocked off the outside shed a scrap plate (health and damage spec
+## §8.1): already outside, in space and in EXTERIOR_SPACE. The flight scene
+## makes it a stray.
+signal plate_shed(item: Item)
 
 const INTERIOR_WORLD_BASE := Vector3(0.0, -5000.0, 0.0)
+## Every ship is in this group, for things that must find one without being
+## given it (the repair torch aimed at a hole).
+const GROUP := &"ships"
 const SLOT_SPACING := 2000.0
 ## How close a rebuilt stow point must be to where a stowed item's point was
 ## for the item to stay stowed through the rebuild.
@@ -17,6 +27,17 @@ const STRUCK_CALM := 5.0
 ## rock's surface.
 const BLAST_EVERY := 0.5
 const BLAST_REACH := 50.0
+## A crash (health and damage spec §5.2): nothing below CRASH_FROM m/s of
+## knock, then CRASH_K × (knock − CRASH_FROM)² on the struck cell and half that
+## on each face neighbour. First values for the feel pass.
+const CRASH_FROM := 2.0
+const CRASH_K := 12.0
+## What a block knocked off the outside sheds, how far out and how fast.
+const SHED_ITEM := &"scrap_plate"
+const SHED_OUT := 1.4
+const SHED_SPEED := 1.0
+## Where you wake after blacking out, if the ship has one.
+const WAKE_ROOM := &"bunk_room"
 
 ## The exact ShaderMaterial `hull`/`hull_wedge` meshes reference (their .tres
 ## surfaces point at this same path, and Godot's resource cache guarantees a
@@ -30,6 +51,11 @@ const HULL_LIVERY_MATERIAL: ShaderMaterial = preload("res://data/materials/hull_
 @export var outside_path: NodePath
 
 var grid: ShipGrid
+## The layout the ship launched with, nothing hurt (health and damage spec
+## §8.2): what the repair torch puts back where a block was knocked off. Set
+## by the first grid the ship is given, or by a save; a rebuild never
+## changes it.
+var launch_blueprint: ShipBlueprint
 var outside: Node3D
 var stats: ShipStats
 var catalog: BlockCatalog
@@ -47,6 +73,9 @@ var rcs_show: RcsShow
 ## §8). At Ship/Quantum, alongside FlightComputer -- the two share the one
 ## QuantumStore instance below.
 var quantum: QuantumPlant
+## The work lights (ship exterior spec §6, §7). On the hull, so the floating
+## origin carries them; kept across rebuilds, like Airlocks.
+var lights: ShipLights
 ## The warp drive (docs/superpowers/specs/2026-09-28-warp-design.md §5), at
 ## Ship/Warp. The flight scene binds it to the system; the ship only builds it
 ## and saves its chart.
@@ -54,6 +83,11 @@ var warp: WarpDrive
 
 ## Seconds since a rock last struck the hull.
 var since_struck := INF
+## When anything aboard last took damage (health and damage spec §10).
+var damage_log := DamageLog.new()
+## Sparks, bursts and chunks on the hull (health and damage spec §9).
+var damage_show: DamageShow
+var _rebuild_queued := false
 
 var _stocked := false
 var _airlocks_root: Node
@@ -113,6 +147,10 @@ func _ready() -> void:
 	sensors = ShipSensors.new()
 	sensors.name = "Sensors"
 	add_child(sensors)
+	damage_show = DamageShow.new()
+	damage_show.name = "DamageShow"
+	exterior.add_child(damage_show)
+	damage_show.setup(exterior, outside)
 	rcs_show = RcsShow.new()
 	rcs_show.name = "RcsShow"
 	exterior.add_child(rcs_show)
@@ -123,6 +161,10 @@ func _ready() -> void:
 	quantum.items = items
 	quantum.item_catalog = item_catalog
 	add_child(quantum)
+	lights = ShipLights.new()
+	lights.name = "Lights"
+	lights.quantum = quantum
+	exterior.add_child(lights)
 	warp = WarpDrive.new()
 	warp.name = "Warp"
 	warp.hull = exterior
@@ -145,16 +187,24 @@ func _ready() -> void:
 	exterior.contact_monitor = true
 	exterior.max_contacts_reported = 8
 	exterior.body_entered.connect(_on_hull_struck)
+	# The hull is a scriptless RigidBody3D: hits reach it through meta
+	# (health and damage spec §3).
+	exterior.set_meta(&"receive_hit", _on_hull_hit)
+	exterior.set_meta(&"ship", self)
+	add_to_group(GROUP)
+	flight_computer.hull_status = func() -> Array:
+		return [hull_whole(), stats.crippled_reason if stats != null else ""]
 
 func _process(_delta: float) -> void:
-	# hull_livery.gdshader paints its stripe from ship-local height, but
-	# MultiMesh's MODEL_MATRIX is model-to-*world* -- it carries the hull
-	# RigidBody3D's own rotation along with each block's per-instance
-	# transform. Pushing the hull's inverse transform every frame lets the
-	# shader cancel that rotation (`hull_inverse * MODEL_MATRIX`) before
-	# testing height, so the stripe stays fixed on the hull under roll and
-	# pitch instead of swimming across it. See hull_livery.gdshader's header
-	# comment for the full derivation.
+	# hull_livery.gdshader paints its stripe from ship-local height, but the
+	# skin's merged plating meshes (HullDressing: the Hull and Windows kits'
+	# HULL batches, built in hull space) are drawn with a MODEL_MATRIX that is
+	# model-to-*world* -- it carries the hull RigidBody3D's own rotation.
+	# Pushing the hull's inverse transform every frame lets the shader cancel
+	# that rotation (`hull_inverse * MODEL_MATRIX`) before testing height, so
+	# the stripe stays fixed on the hull under roll and pitch instead of
+	# swimming across it. See hull_livery.gdshader's header comment for the
+	# full derivation.
 	HULL_LIVERY_MATERIAL.set_shader_parameter(&"hull_inverse", exterior.global_transform.affine_inverse())
 	_update_hum()
 
@@ -172,6 +222,7 @@ func _update_hum() -> void:
 func _physics_process(delta: float) -> void:
 	_last_hull_velocity = exterior.linear_velocity
 	since_struck += delta
+	damage_log.tick(delta)
 	_blast_in -= delta
 	if _blast_in <= 0.0:
 		_blast_in = BLAST_EVERY
@@ -183,6 +234,225 @@ func _on_hull_struck(body: Node) -> void:
 		since_struck = 0.0
 		hull_struck(knock)
 	_jolt_rock(body, knock)
+	_crash(body, knock)
+
+## Crash damage (spec §5.2) on the cell the contact is on. Worked out now,
+## while the contact is reported, and dealt after the physics step: a removal
+## rebuilds the hull's colliders, which can't change while it is flushing.
+func _crash(body: Node, knock: float) -> void:
+	var amount := crash_damage(knock)
+	if amount <= 0.0:
+		return
+	var state := PhysicsServer3D.body_get_direct_state(exterior.get_rid())
+	if state == null:
+		return
+	for i in state.get_contact_count():
+		if state.get_contact_collider_object(i) != body:
+			continue
+		var at := exterior.to_local(state.get_contact_local_position(i))
+		var normal := exterior.global_basis.inverse() * state.get_contact_local_normal(i)
+		var cell := ShipCells.hull_cell(grid, exterior, state.get_contact_local_shape(i), at, normal)
+		if cell != ShipCells.NONE:
+			_deal_crash.call_deferred(cell, amount)
+		return
+
+func _deal_crash(cell: Vector3i, amount: float) -> void:
+	var hits := {cell: amount}
+	for n in grid.neighbours(cell):
+		if grid.has_block(n):
+			hits[n] = amount * 0.5
+	take_damage_many(hits)
+
+## hp a crash with this knock (the hull's change of speed, m/s) deals to the
+## cell it lands on.
+static func crash_damage(knock: float) -> float:
+	if knock <= CRASH_FROM:
+		return 0.0
+	return CRASH_K * (knock - CRASH_FROM) * (knock - CRASH_FROM)
+
+## A hit on the hull, in world space (a bolt from a spacewalk, a bite).
+func _on_hull_hit(hit: Hit) -> void:
+	var cell := ShipCells.hull_cell(grid, exterior, hit.shape, exterior.to_local(hit.position),
+		exterior.global_basis.inverse() * hit.normal)
+	take_damage(cell, hit.damage)
+
+## A hit on an interior surface: the block behind it (spec §5.1).
+func _on_interior_hit(hit: Hit) -> void:
+	var cell := ShipCells.interior_cell(grid, interior.to_local(hit.position),
+		interior.global_basis.inverse() * hit.normal)
+	take_damage(cell, hit.damage)
+
+# --- mending (health and damage spec §8) -----------------------------------------
+
+## The cell of this ship a ray hit on `collider` landed on (world point and
+## normal), or ShipCells.NONE: the hull or the interior, as for damage.
+func cell_hit(collider: Object, shape: int, at: Vector3, normal: Vector3) -> Vector3i:
+	if collider == exterior:
+		return ShipCells.hull_cell(grid, exterior, shape, exterior.to_local(at),
+			exterior.global_basis.inverse() * normal)
+	if collider == interior_builder.geometry_body():
+		return ShipCells.interior_cell(grid, interior.to_local(at), interior.global_basis.inverse() * normal)
+	return ShipCells.NONE
+
+## The first cell along a ray (world, `reach` m) that has no block now but had
+## one at launch, beside a block that is still there: a hole the torch can
+## rebuild. Looked for from outside (the hull's frame) and aboard (the
+## interior's), a quarter metre at a time. ShipCells.NONE if there is none.
+func missing_cell_along(from: Vector3, dir: Vector3, reach: float) -> Vector3i:
+	var steps := ceili(reach / 0.25)
+	for i in range(1, steps + 1):
+		var p := from + dir * (reach * i / steps)
+		for cell in [Vector3i((exterior.to_local(p) / ShipGrid.CELL_SIZE).round()),
+				ShipCells.interior_cell_at(interior.to_local(p))]:
+			if _rebuildable(cell):
+				return cell
+	return ShipCells.NONE
+
+func _rebuildable(cell: Vector3i) -> bool:
+	if grid.has_block(cell) or launch_block(cell).is_empty():
+		return false
+	for n in ShipGrid.FACE_OFFSETS:
+		if grid.has_block(cell + n):
+			return true
+	return false
+
+## Mends up to `hp` of the block at `cell`; returns what it used.
+func repair_cell(cell: Vector3i, hp: float) -> float:
+	return BlockDamage.repair(grid, catalog, cell, hp)
+
+## Puts back, wrecked, what the ship launched with at `cell` (§8.2).
+func rebuild_cell(cell: Vector3i) -> bool:
+	if not _rebuildable(cell):
+		return false
+	var was := launch_block(cell)
+	BlockDamage.rebuild(grid, catalog, cell, was[0], was[1])
+	return true
+
+## What the torch's prompt says of the block at `cell`: its name and state,
+## as "HULL BLOCK · WRECKED 0%", or of a hole, "REBUILD THRUSTER".
+func cell_label(cell: Vector3i) -> String:
+	var inst := grid.get_block(cell)
+	if inst == null:
+		var was := launch_block(cell)
+		var gone := catalog.get_def(was[0]) if not was.is_empty() else null
+		return "REBUILD %s" % gone.display_name.to_upper() if gone != null else ""
+	var def := catalog.get_def(inst.block_id)
+	if def == null:
+		return ""
+	var stage: String = BlockDamage.Stage.keys()[BlockDamage.stage_of(inst, def)]
+	var left := clampf(1.0 - inst.damage / float(def.hp), 0.0, 1.0)
+	return "%s · %s %d%%" % [def.display_name.to_upper(), stage, roundi(left * 100.0)]
+
+## How whole the hull is, 0..1, against the layout it launched with (health
+## and damage spec §11): every block's damage, capped at its hp, and a block
+## knocked off counts as all of it.
+func hull_whole() -> float:
+	if launch_blueprint == null:
+		return 1.0
+	var total := 0.0
+	var lost := 0.0
+	for i in launch_blueprint.coords.size():
+		var def := catalog.get_def(launch_blueprint.block_ids[i])
+		if def == null:
+			continue
+		total += def.hp
+		var inst := grid.get_block(launch_blueprint.coords[i])
+		lost += def.hp if inst == null else minf(inst.damage, def.hp)
+	return 1.0 - lost / total if total > 0.0 else 1.0
+
+## How much the block at `cell` has to mend, hp.
+func damage_at(cell: Vector3i) -> float:
+	var inst := grid.get_block(cell)
+	return inst.damage if inst != null else 0.0
+
+## Deals `amount` to the block at `cell` (health and damage spec §4). Returns
+## what it knocked off.
+func take_damage(cell: Vector3i, amount: float) -> Array[Vector3i]:
+	return take_damage_many({cell: amount})
+
+## Deals every hit in `hits` (cell -> amount) together: one rebuild for all
+## that goes.
+func take_damage_many(hits: Dictionary) -> Array[Vector3i]:
+	var real := {}
+	for cell: Vector3i in hits:
+		if cell != ShipCells.NONE and hits[cell] > 0.0 and grid.has_block(cell):
+			real[cell] = hits[cell]
+	if real.is_empty():
+		var none: Array[Vector3i] = []
+		return none
+	damage_log.note()
+	var removed := BlockDamage.apply_many(grid, catalog, real)
+	if not removed.is_empty():
+		damage_show.lost(removed)
+		_shed_plate(removed)
+		blocks_lost.emit(removed)
+	return removed
+
+## One scrap plate from the first block knocked off, if it had a face onto
+## space: it drifts out from that face at SHED_SPEED (spec §8.1).
+func _shed_plate(removed: Array[Vector3i]) -> void:
+	var def := item_catalog.get_def(SHED_ITEM) if item_catalog != null else null
+	if def == null or outside == null or not exterior.is_inside_tree():
+		return
+	var cell := removed[0]
+	for n in ShipGrid.FACE_OFFSETS:
+		if grid.has_block(cell + n) or removed.has(cell + n):
+			continue
+		var item := Item.new()
+		item.setup(def, fposmod(float(hash(cell)) * 0.001, 1.0))
+		item.set_space(true)
+		outside.add_child(item, true)
+		item.add_to_group(Universe.EXTERIOR_SPACE)
+		var out := exterior.global_basis * Vector3(n)
+		item.global_position = exterior.to_global(ShipGrid.cell_center(cell) + Vector3(n) * SHED_OUT)
+		item.linear_velocity = exterior.linear_velocity + out * SHED_SPEED
+		item.set_loose()
+		plate_shed.emit(item)
+		return
+
+## Where you wake after blacking out (health and damage spec §7.2), best
+## first, in the world: the bunk room's cells, then the rest by how near they
+## are to it (or to the core, with no bunk room); never the airlock. The
+## caller takes the first you fit: a bunk room is mostly bunks, so that is
+## often the cell at its door.
+func wake_spots() -> Array[Transform3D]:
+	var layout := interior_builder.layout()
+	var core := Vector3.ZERO
+	for coord: Vector3i in grid.coords():
+		if grid.get_block(coord).block_id == BlockDamage.CORE:
+			core = Vector3(coord)
+	var bunks: Array[Vector3i] = []
+	var rest: Array[Vector3i] = []
+	for cell: Vector3i in interior_builder.walkable_coords():
+		var zone := layout.zone_at(cell) if layout != null else &""
+		if zone == InteriorLayout.AIRLOCK_ZONE:
+			continue
+		if zone == WAKE_ROOM:
+			bunks.append(cell)
+		else:
+			rest.append(cell)
+	var near := Vector3(bunks[0]) if not bunks.is_empty() else core
+	rest.sort_custom(func(a: Vector3i, b: Vector3i) -> bool:
+		return Vector3(a).distance_to(near) < Vector3(b).distance_to(near))
+	var out: Array[Transform3D] = []
+	for cell in bunks + rest:
+		out.append(interior.global_transform * Transform3D(Basis.IDENTITY, DeckPaths.floor_point(cell)))
+	return out
+
+## A block crossed a stage (spec §4.3): what it can do changed, and nothing
+## else did. The stats follow; no geometry is rebuilt.
+func _on_block_staged(coord: Vector3i, stage: int) -> void:
+	exterior_builder.set_stage(coord, stage)
+	damage_show.stage(grid, coord, stage)
+	if interior_builder.shows(coord):
+		# The dressing is merged meshes, so one cell can't be recoloured: the
+		# ship is rebuilt, once, at the end of the frame (as built, spec §4.3).
+		_queue_rebuild()
+	stats = ShipStats.compute(grid, catalog)
+	_apply_stats()
+	if quantum != null and quantum.store != null:
+		quantum.store.set_capacity(stats.quantum_capacity)
+	stats_changed.emit(stats)
 
 ## A strike carries through the rock it hit: anything living on it feels it
 ## (NPC foundation spec §6.1).
@@ -250,10 +520,25 @@ func set_grid(new_grid: ShipGrid, stock := true) -> void:
 		_stocked = true
 	if grid != null and grid.cell_changed.is_connected(_on_cell_changed):
 		grid.cell_changed.disconnect(_on_cell_changed)
+		grid.block_staged.disconnect(_on_block_staged)
 	grid = new_grid
+	if launch_blueprint == null:
+		launch_blueprint = unhurt(ShipBlueprint.from_grid(grid, String(name)))
 	grid.cell_changed.connect(_on_cell_changed)
+	grid.block_staged.connect(_on_block_staged)
 	exterior_builder.bind(grid, catalog)
 	interior_builder.bind(grid, catalog)
+	_rebuild_everything()
+
+func _queue_rebuild() -> void:
+	if _rebuild_queued:
+		return
+	_rebuild_queued = true
+	_rebuild_queued_now.call_deferred()
+
+func _rebuild_queued_now() -> void:
+	if not _rebuild_queued:
+		return
 	_rebuild_everything()
 
 func _on_cell_changed(_coord: Vector3i) -> void:
@@ -263,10 +548,13 @@ func _on_cell_changed(_coord: Vector3i) -> void:
 	_rebuild_everything()
 
 func _rebuild_everything() -> void:
+	_rebuild_queued = false
 	_save_computers()
 	var stowed := _stowed_items()
 	exterior_builder.rebuild()
 	interior_builder.rebuild()
+	interior_builder.geometry_body().set_meta(&"receive_hit", _on_interior_hit)
+	interior_builder.geometry_body().set_meta(&"ship", self)
 	_bind_airlocks()
 	_reseat(stowed)
 	if not _stocked:
@@ -276,10 +564,16 @@ func _rebuild_everything() -> void:
 	_apply_stats()
 	quantum.bind(interior_builder.quantum_cores(), interior_builder.quantum_machines(), stats)
 	flight_computer.quantum = quantum.store
+	if lights != null:
+		lights.bind(exterior_builder.light_mounts(), exterior_builder.lenses(), exterior_builder.window_glow())
+		for panel in interior_builder.lights_panels():
+			panel.bind(lights)
 	_bind_computers()
 	if rcs_show != null:
 		rcs_show.rebuild(grid, catalog, stats.center_of_mass)
 	stats_changed.emit(stats)
+	if damage_show != null:
+		damage_show.sync(grid, catalog)
 	_set_anchor_radius()
 	_bind_crew()
 
@@ -430,6 +724,9 @@ func _stock() -> void:
 func busy() -> String:
 	if since_struck < STRUCK_CALM:
 		return "hull struck"
+	var hurt := damage_log.busy()
+	if hurt != "":
+		return hurt
 	for airlock: Airlock in airlocks.values():
 		var why := airlock.busy()
 		if why != "":
@@ -444,9 +741,9 @@ func busy() -> String:
 	return ""
 
 ## The ship's part of a save: its layout, where it is in `universe` and how
-## it moves, its flight settings, its store, its airlocks and every item
-## aboard that is not in someone's hand. During a warp the hull is saved at the
-## drop-out point, moving in (the warp spec §5.5).
+## it moves, its flight settings, its store, its warp chart, its lights, its
+## airlocks and every item aboard that is not in someone's hand. During a warp
+## the hull is saved at the drop-out point, moving in (the warp spec §5.5).
 func to_dict(universe: Universe) -> Dictionary:
 	var hull := exterior.global_transform
 	var place := warp.arrival() if warp != null else {}
@@ -464,6 +761,7 @@ func to_dict(universe: Universe) -> Dictionary:
 			saved_items.append(item.to_dict(frame))
 	return {
 		"layout": ShipBlueprint.from_grid(grid, String(name)).to_dict(),
+		"launch": launch_blueprint.to_dict() if launch_blueprint != null else {},
 		"hull": {
 			"at": SaveCodec.upoint(hull_at),
 			"turn": SaveCodec.basis(hull_turn),
@@ -473,9 +771,29 @@ func to_dict(universe: Universe) -> Dictionary:
 		"warp": warp.to_dict() if warp != null else {},
 		"flight": flight_computer.to_dict(),
 		"store": quantum.store.to_dict() if quantum.store != null else {},
+		"lights": lights.to_dict() if lights != null else {},
 		"airlocks": saved_airlocks,
 		"items": saved_items,
 	}
+
+## `bp` with every block's damage cleared.
+static func unhurt(bp: ShipBlueprint) -> ShipBlueprint:
+	for i in bp.damage_values.size():
+		bp.damage_values[i] = 0.0
+	return bp
+
+## What the ship launched with at `cell`: [block id, orientation], or [] if
+## nothing was there.
+func launch_block(cell: Vector3i) -> Array:
+	if launch_blueprint == null:
+		return []
+	var i := launch_blueprint.coords.find(cell)
+	return [] if i < 0 else [launch_blueprint.block_ids[i], launch_blueprint.orientations[i]]
+
+## The launch layout a save kept, or, from a save before there was one, its
+## layout with nothing hurt.
+static func launch_of(d: Dictionary) -> ShipBlueprint:
+	return unhurt(ShipBlueprint.from_dict(d.get("launch", d.get("layout", {}))))
 
 ## The grid a saved ship was built from.
 static func layout_of(d: Dictionary) -> ShipGrid:
@@ -497,6 +815,8 @@ func restore_aboard(d: Dictionary) -> void:
 	flight_computer.from_dict(d.get("flight", {}))
 	if quantum.store != null:
 		quantum.store.from_dict(d.get("store", {}))
+	if lights != null:
+		lights.from_dict(d.get("lights", {}))
 	warp.from_dict(d.get("warp", {}))
 	var saved_airlocks: Dictionary = d.get("airlocks", {})
 	for key: String in saved_airlocks:

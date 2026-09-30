@@ -16,8 +16,14 @@ const PAINTING_FILES := [
 	"res://src/ship/interior/interior_dressing.gd",
 	"res://src/ship/interior/interior_materials.gd",
 	"res://src/ship/interior/interior_layout.gd",
+	"res://src/ship/hull/hull_props.gd",
+	"res://src/ship/hull/hull_materials.gd",
+	"res://src/ship/hull/hull_layout.gd",
+	"res://src/ship/hull/hull_dressing.gd",
 	"res://src/ship/interior/sliding_door.gd",
 	"res://src/ship/interior_builder.gd",
+	"res://src/ship/ship_lights.gd",
+	"res://src/ship/lights_panel.gd",
 	"res://src/items/item_looks.gd",
 	"res://src/avatar/glove.gd",
 	"res://src/avatar/hands.gd",
@@ -62,12 +68,19 @@ const PAINTING_FILES := [
 	"res://src/ship/computer/holo_volume.gd",
 	"res://src/ship/computer/ship_computer.gd",
 	"res://src/ship/computer/map_page.gd",
+	"res://src/ship/exterior_builder.gd",
+	"res://src/ship/damage_show.gd",
+	"res://src/items/repair_torch.gd",
+	"res://src/ui/hurt_edge.gd",
+	"res://src/ui/hull_panel.gd",
 ]
 
 ## The reusable asset library and what it builds with. Ships are generated
 ## from blueprints, so these must work from a frame alone -- never the grid.
 const REUSABLE_FILES := [
 	"res://src/ship/interior/interior_props.gd",
+	"res://src/ship/hull/hull_props.gd",
+	"res://src/ship/hull/hull_materials.gd",
 	"res://src/ship/interior/interior_kit.gd",
 	"res://src/ship/interior/sliding_door.gd",
 	"res://src/items/item_looks.gd",

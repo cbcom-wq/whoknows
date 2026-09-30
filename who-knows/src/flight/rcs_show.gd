@@ -31,7 +31,8 @@ const SOFT_DB := -26.0
 const LAYER := 1
 
 ## One entry per `rcs` block, in hull axes: {coord, force (N), torque about the
-## centre of mass (N m), nozzle (the middle of the face the exhaust leaves)}.
+## centre of mass (N m), nozzle (the mouth of the hull pod's nozzle ring:
+## HullProps.RCS_POD_DEPTH out from the middle of the face the exhaust leaves)}.
 var blocks: Array = []
 ## Each block's firing this tick, 0..1, in `blocks` order.
 var firing := PackedFloat32Array()
@@ -91,7 +92,7 @@ static func gather(grid: ShipGrid, catalog: BlockCatalog, center_of_mass: Vector
 			"coord": coord,
 			"force": force,
 			"torque": (centre - center_of_mass).cross(force),
-			"nozzle": centre - force.normalized() * ShipGrid.CELL_SIZE * 0.5,
+			"nozzle": centre - force.normalized() * (ShipGrid.CELL_SIZE * 0.5 + HullProps.RCS_POD_DEPTH),
 		})
 	return out
 

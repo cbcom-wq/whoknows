@@ -20,9 +20,13 @@ var bar_track: ColorRect
 var bar_fill: ColorRect
 var mode_label: Label
 var hold_label: Label
+## The work lights (ship exterior spec §7.2): FLOOD and FWD, each lit when on.
+var lights_row: HBoxContainer
+var flood_label: Label
+var forward_label: Label
 
 func _ready() -> void:
-	custom_minimum_size = Vector2(320.0, 56.0)
+	custom_minimum_size = Vector2(320.0, 74.0)
 
 	speed_label = Label.new()
 	speed_label.text = "0"
@@ -70,6 +74,15 @@ func _ready() -> void:
 	hold_label.position = Vector2(170.0, 20.0)
 	add_child(hold_label)
 
+	lights_row = HBoxContainer.new()
+	lights_row.position = Vector2(170.0, 56.0)
+	lights_row.add_theme_constant_override("separation", 18)
+	# A container stops clicks by default, like the bars above.
+	lights_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(lights_row)
+	flood_label = _light_word()
+	forward_label = _light_word()
+
 func render(telemetry: VehicleTelemetry) -> void:
 	if telemetry == null:
 		return
@@ -101,3 +114,20 @@ func render(telemetry: VehicleTelemetry) -> void:
 	if telemetry.heading_hold:
 		holds.append("HDG HOLD")
 	hold_label.text = "   ".join(holds)
+
+	# The work lights (ship exterior spec §7.2): each word lit when on, in the
+	# green the bridge's lights panel glows, and dim when off.
+	_show_light(flood_label, "FLOOD", telemetry.floods_on, telemetry.has_lights)
+	_show_light(forward_label, "FWD", telemetry.forward_on, telemetry.has_lights)
+
+func _light_word() -> Label:
+	var label := Label.new()
+	label.text = ""
+	label.add_theme_font_size_override("font_size", 11)
+	label.add_theme_color_override("font_color", HudPalette.DIM)
+	lights_row.add_child(label)
+	return label
+
+func _show_light(label: Label, word: String, on: bool, shown: bool) -> void:
+	label.text = ("%s %s" % [word, "ON" if on else "OFF"]) if shown else ""
+	label.add_theme_color_override("font_color", HudPalette.GO if on else HudPalette.DIM)

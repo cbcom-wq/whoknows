@@ -21,6 +21,8 @@ const ROWS := [
 	[[&"warp"], "Warp, when charted", " "],
 	[[&"point_mode", &"set_heading"], "Hold, click: set heading", " + "],
 	[[&"toggle_assist"], "Assist", " "],
+	[[&"lights_flood"], "Floods", " "],
+	[[&"lights_forward"], "Forward lights", " "],
 	[[&"cycle_camera"], "Camera", " "],
 	[[&"interact"], "Stand up", " "],
 	[[&"toggle_controls"], "Hide this card", " "],
