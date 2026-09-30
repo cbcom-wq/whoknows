@@ -149,7 +149,8 @@ static func _band() -> Color:
 	return InteriorKit.lit(HullPalette.WINDOW_LIGHT, InteriorMaterials.GLOW_ENERGY)
 
 ## A porthole from outside (spec §5.1), in a skin frame at its centre: a
-## chunky trim ring, dark amber glass, and two warm bands behind it.
+## chunky trim ring, dark amber glass, and two warm bands on it (just proud of
+## the glass, at GLASS_Z + 0.005, so the dark glass cannot hide them).
 static func window_porthole(kit: InteriorKit, f: Transform3D, radius: float) -> void:
 	kit.ring(SOLID, f, radius, radius + FRAME * 1.6, -0.02, GLASS_Z + 0.05, _trim())
 	kit.disc(GLASS, f * _at(Vector3(0, 0, GLASS_Z)), radius, _glass())
@@ -158,7 +159,8 @@ static func window_porthole(kit: InteriorKit, f: Transform3D, radius: float) -> 
 		kit.box(GLOW, f * _at(Vector3(0, y, GLASS_Z + 0.005)), Vector3(w, 0.04, 0.004), _band())
 
 ## A rectangular window from outside, `size` across and up its face: a
-## bevelled trim frame, glass, and three warm bands.
+## bevelled trim frame, glass, and three warm bands on the glass (at
+## GLASS_Z + 0.005, as the porthole's).
 static func window_rect(kit: InteriorKit, f: Transform3D, size: Vector2) -> void:
 	var hx := size.x * 0.5
 	var hy := size.y * 0.5

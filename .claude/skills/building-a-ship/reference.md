@@ -226,7 +226,8 @@ every rebuild. Any blueprint gets its crew from its own layout:
   (`InteriorBuilder.computers()`); `Ship` binds each to a `ComputerContext` (its sensors, store,
   stats, hull, exterior builder) after every rebuild and keeps its page, range and selection by
   cell across one. The status page's miniature shares `ExteriorBuilder.hull_meshes()` (the skin's
-  plating and trim, an `Array[Mesh]`; `multimeshes()` is gone), sized by
+  plating and trim, and the windows and pod shell, every batch but the glows, an `Array[Mesh]`;
+  `multimeshes()` is gone), sized by
   `ExteriorBuilder.bounds()`, so any blueprint gets its own model.
 - **The sensors** (`Ship.sensors`): `RockContacts` (big rocks to 30 km) and `LifeContacts` are
   registered by the flight scene. One course per ship: `set_course(id)`, `clear_course()`,

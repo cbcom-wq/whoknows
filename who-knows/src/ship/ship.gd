@@ -154,14 +154,15 @@ func _ready() -> void:
 	exterior.body_entered.connect(_on_hull_struck)
 
 func _process(_delta: float) -> void:
-	# hull_livery.gdshader paints its stripe from ship-local height, but
-	# MultiMesh's MODEL_MATRIX is model-to-*world* -- it carries the hull
-	# RigidBody3D's own rotation along with each block's per-instance
-	# transform. Pushing the hull's inverse transform every frame lets the
-	# shader cancel that rotation (`hull_inverse * MODEL_MATRIX`) before
-	# testing height, so the stripe stays fixed on the hull under roll and
-	# pitch instead of swimming across it. See hull_livery.gdshader's header
-	# comment for the full derivation.
+	# hull_livery.gdshader paints its stripe from ship-local height, but the
+	# skin's merged plating meshes (HullDressing: the Hull and Windows kits'
+	# HULL batches, built in hull space) are drawn with a MODEL_MATRIX that is
+	# model-to-*world* -- it carries the hull RigidBody3D's own rotation.
+	# Pushing the hull's inverse transform every frame lets the shader cancel
+	# that rotation (`hull_inverse * MODEL_MATRIX`) before testing height, so
+	# the stripe stays fixed on the hull under roll and pitch instead of
+	# swimming across it. See hull_livery.gdshader's header comment for the
+	# full derivation.
 	HULL_LIVERY_MATERIAL.set_shader_parameter(&"hull_inverse", exterior.global_transform.affine_inverse())
 	_update_hum()
 

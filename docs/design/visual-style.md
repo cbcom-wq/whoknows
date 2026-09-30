@@ -371,9 +371,10 @@ The ship's computer (`docs/superpowers/specs/2026-09-25-bridge-computer-design.m
 - **Sized to read at arm's length.** The spec's first pip sizes (6–20 mm) and glow vanished at
   1.6 m eye height; pips are now 8–30 mm, the holo's glow energy 2.0, and the bracket's corners
   7 mm whatever they close round.
-- **The miniature ship** on the status page shares the hull's own MultiMeshes in
+- **The miniature ship** on the status page shares the hull's own merged meshes (the skin's
+  plating and trim, and the windows and pod shell; every batch but the glows) in
   `InteriorMaterials.holo()`: `LIGHT_WARM`, lit and emissive, opaque. An unshaded one read as a
-  flat cream silhouette; lit, its blocks separate.
+  flat cream silhouette; lit, its plates, chamfers and panel lines separate.
 
 ### 3.8 The hull's outside
 
@@ -400,7 +401,8 @@ made.
 - **Windows match the interior.** Every interior window has one outside, at the same height, and
   nothing outside is a window that isn't one inside; the layout reads the interior's own layout,
   so the two cannot disagree. From outside the glass is `WINDOW_GLASS`, dark amber, with two or
-  three soft `LIGHT_WARM` bands behind it, in a chunky `TRIM` frame. The bands are the ship's
+  three soft `LIGHT_WARM` bands on it (5 mm proud of the glass, `GLASS_Z + 0.005`, so the dark
+  glass never hides them), in a chunky `TRIM` frame. The bands are the ship's
   glow, one energy for every window, and low power halves it. The glass stands clear of the
   plate (`HullProps.GLASS_Z`): a plate is 0.05 m proud and would hide glass flush with the cell
   face. A pod's canopy face is the **pod shell**, built from the interior pod's own numbers; the
