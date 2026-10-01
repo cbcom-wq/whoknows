@@ -51,6 +51,7 @@ const PAINTING_FILES := [
 	"res://src/world/system_recipe.gd",
 	"res://src/world/body_look.gd",
 	"res://src/world/world_terrain.gd",
+	"res://src/world/terrain_chunk_data.gd",
 	"res://src/world/body_proxy.gd",
 	"res://src/world/star_system.gd",
 	"res://src/world/ring_look.gd",
