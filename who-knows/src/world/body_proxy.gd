@@ -7,9 +7,11 @@ extends Node3D
 ## From the cockpit it looks just as the real thing would, and no camera needs
 ## to see further than the rocks already make it.
 ##
-## Up close it swaps its 320-face look for a 5,120-face one and grows a convex
-## collider on the `terrain` layer, exactly the shell you see: you bump off it.
-## Planetfall replaces both with terrain.
+## Within SURFACE_AT of its centre a world is drawn by its WorldSurface, at
+## its true place, and the far mesh gives way (the world scale spec §5.1). The
+## surface is this proxy's sibling, under the same parent that never moves.
+## Up close it still grows a convex collider on the `terrain` layer until the
+## surface's own collision replaces it.
 ##
 ## The floating origin (CLAUDE.md): a member of Universe.EXTERIOR_SPACE whose
 ## parent never moves, placed afresh every physics tick from its
@@ -35,15 +37,26 @@ const NEAR_HYSTERESIS := 500.0
 ## The far and near looks cross-fade over this, by the built-in visibility
 ## ranges.
 const FADE_MARGIN := 500.0
+## Within SURFACE_RADII radii of its centre, and never beyond SURFACE_MOST
+## (inside the far plane), a world is drawn by its surface; it goes back to
+## its far mesh SURFACE_HYSTERESIS times farther out.
+const SURFACE_RADII := 10.0
+const SURFACE_MOST := 300000.0
+const SURFACE_HYSTERESIS := 1.1
 ## Within this of its surface it casts shadows; beyond, shadows reach nothing.
 const SHADOW_WITHIN := AsteroidStream.SHADOW_REACH
 
 var body: SystemBody
 ## How far the focus is from its centre, as of the last place().
 var distance := INF
+## While a warp carries you no surface starts (the world scale spec §5.1): a
+## synchronous first build mid-warp would be a hitch, for a world gone in a
+## second.
+var frozen := false
 
+var _universe: Universe
+var _surface: WorldSurface
 var _far: MeshInstance3D
-var _near: MeshInstance3D
 var _collider: StaticBody3D
 
 func setup(p_body: SystemBody) -> void:
@@ -53,10 +66,6 @@ func setup(p_body: SystemBody) -> void:
 	var star := body.kind == SystemBody.Kind.STAR
 	_far = _look(BodyLook.STAR_DETAIL if star else BodyLook.FAR_DETAIL, star)
 	_far.name = "Far"
-	if not star:
-		_far.visibility_range_begin = body.radius + NEAR_WITHIN - FADE_MARGIN
-		_far.visibility_range_begin_margin = FADE_MARGIN
-		_far.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
 	add_child(_far)
 	if body.ring != null:
 		var ring := RingLook.new()
@@ -76,26 +85,39 @@ static func placement(point: UniversePoint, focus: UniversePoint, universe: Univ
 ## Places it for `focus`, and swaps its look, collider and shadows for how
 ## near that is.
 func place(universe: Universe, focus: UniversePoint) -> void:
+	_universe = universe
 	var at := placement(body.point, focus, universe)
 	distance = body.point.minus(focus).length()
 	var s: float = at[1]
 	global_transform = Transform3D(Basis.from_scale(Vector3.ONE * s), at[0])
 	if body.kind == SystemBody.Kind.STAR:
 		return
+	if distance < surface_at() and _surface == null and not frozen:
+		_make_surface()
+	elif distance > surface_at() * SURFACE_HYSTERESIS and _surface != null:
+		_drop_surface()
+	if _surface != null:
+		_surface.update(focus)
+	_far.visible = _surface == null
 	var height := distance - body.radius
-	if height < NEAR_WITHIN and _near == null:
+	if height < NEAR_WITHIN and _collider == null:
 		_make_near()
-	elif height > NEAR_WITHIN + NEAR_HYSTERESIS and _near != null:
+	elif height > NEAR_WITHIN + NEAR_HYSTERESIS and _collider != null:
 		_drop_near()
-	var shadows := GeometryInstance3D.SHADOW_CASTING_SETTING_ON if height < SHADOW_WITHIN \
+	_far.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if height < SHADOW_WITHIN \
 		else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	_far.cast_shadow = shadows
-	if _near != null:
-		_near.cast_shadow = shadows
 
-## True while it is drawn in detail and solid.
+## Where the surface takes over, metres from the centre.
+func surface_at() -> float:
+	return minf(body.radius * SURFACE_RADII, SURFACE_MOST)
+
+## Its surface while it is near, else null.
+func surface() -> WorldSurface:
+	return _surface
+
+## True while its shell is solid (until the surface's collision replaces it).
 func is_near() -> bool:
-	return _near != null
+	return _collider != null
 
 func collider() -> StaticBody3D:
 	return _collider
@@ -109,13 +131,22 @@ func _look(detail: int, star: bool) -> MeshInstance3D:
 	m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	return m
 
+func _make_surface() -> void:
+	_surface = WorldSurface.new()
+	_surface.setup(body, _universe)
+	get_parent().add_child(_surface)
+	_surface.build_roots()
+
+func _drop_surface() -> void:
+	_surface.queue_free()
+	_surface = null
+
+func _exit_tree() -> void:
+	if _surface != null:
+		_surface.queue_free()
+		_surface = null
+
 func _make_near() -> void:
-	_near = _look(BodyLook.NEAR_DETAIL, false)
-	_near.name = "Near"
-	_near.visibility_range_end = body.radius + NEAR_WITHIN + FADE_MARGIN
-	_near.visibility_range_end_margin = FADE_MARGIN
-	_near.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
-	add_child(_near)
 	_collider = StaticBody3D.new()
 	_collider.name = "Shell"
 	_collider.collision_layer = LAYER
@@ -131,7 +162,5 @@ func _make_near() -> void:
 	add_child(_collider)
 
 func _drop_near() -> void:
-	_near.queue_free()
-	_near = null
 	_collider.queue_free()
 	_collider = null

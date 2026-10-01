@@ -1,7 +1,6 @@
 extends GutTest
 
-## A world's surface (the world scale spec §5): which chunks are drawn for
-## where you are, and (below) the node that streams them.
+## A world's surface (the world scale spec §5): which chunks are drawn for where you are, and the node that streams them.
 
 const R := 60000.0
 const RELIEF := 1200.0
@@ -89,3 +88,87 @@ func test_bounds_cache_respects_height_at():
 	# Use same bounds with height_at; ground should be lifted and key should be a leaf
 	var with_height: Array[Vector4i] = WorldSurface.select(R, RELIEF, _depth, at, {}, bounds, height_at_func)[0]
 	assert_true(with_height.has(key), "finest chunk is a leaf when bounds are reused with height_at")
+
+# --- the node (§5.3, §5.4) ----------------------------------------------------
+
+var _universe: Universe
+var _system: SystemRecipe
+## Off the cube's grid lines: straight up is where four cells meet, and
+## "the chunk under you" would be a tie.
+var _up := Vector3(0.31, 0.9, 0.22).normalized()
+
+func _planet() -> SystemBody:
+	if _system == null:
+		_system = SystemRecipe.from_seed(1337)
+	return _system.planets()[0]
+
+func _surface(altitude: float) -> WorldSurface:
+	_universe = Universe.new()
+	add_child_autofree(_universe)
+	var p := _planet()
+	var s := WorldSurface.new()
+	s.setup(p, _universe)
+	add_child_autofree(s)
+	s.build_roots()
+	var focus := _above(p, s, altitude)
+	_universe.origin = focus
+	s.update(focus)
+	return s
+
+func _above(p: SystemBody, s: WorldSurface, altitude: float) -> UniversePoint:
+	return p.point.plus(_up * (p.radius + s.terrain.height_at(_up) + altitude))
+
+func test_a_surface_is_whole_from_its_first_frame():
+	_universe = Universe.new()
+	add_child_autofree(_universe)
+	var s := WorldSurface.new()
+	s.setup(_planet(), _universe)
+	add_child_autofree(s)
+	s.build_roots()
+	assert_eq(s.chunk_count(), 6)
+	assert_eq(s.visible_chunks().size(), 6)
+
+func test_every_leaf_is_drawn_once_and_nothing_overlaps():
+	var s := _surface(500.0)
+	s.finish()
+	var shown := s.visible_chunks()
+	assert_eq(shown.size(), s.leaves.size())
+	for k in s.leaves:
+		assert_true(shown.has(k), "%s is drawn" % k)
+	assert_eq(s.jobs_in_flight(), 0)
+
+func test_chunks_are_members_and_the_surface_never_moves():
+	var s := _surface(500.0)
+	s.finish()
+	assert_false(s.is_in_group(Universe.EXTERIOR_SPACE))
+	assert_eq(s.global_transform, Transform3D.IDENTITY)
+	for c in s.get_children():
+		assert_true(c.is_in_group(Universe.EXTERIOR_SPACE), "%s shifts" % c.name)
+
+func test_a_shift_moves_every_chunk_with_the_focus():
+	var s := _surface(500.0)
+	s.finish()
+	var before := {}
+	for c: Node3D in s.get_children():
+		before[c.name] = c.global_position
+	_universe.shift(Vector3(2000, 0, -1000))
+	for c: Node3D in s.get_children():
+		assert_almost_eq(c.global_position, before[c.name] - Vector3(2000, 0, -1000), Vector3.ONE * 0.001)
+
+func test_climbing_away_merges_chunks():
+	var s := _surface(300.0)
+	s.finish()
+	var low := s.chunk_count()
+	var p := _planet()
+	var high := _above(p, s, 80000.0)
+	s.update(high)
+	s.finish()
+	assert_lt(s.chunk_count(), low)
+	assert_eq(s.visible_chunks().size(), s.leaves.size())
+
+func test_a_surface_freed_mid_build_waits_for_its_jobs():
+	var s := _surface(200.0)
+	assert_gt(s.jobs_in_flight(), 0, "jobs are out")
+	remove_child(s)
+	s.free()
+	pass_test("freed with jobs in flight, and nothing broke")

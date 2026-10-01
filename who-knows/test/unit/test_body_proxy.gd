@@ -138,3 +138,33 @@ func test_the_far_mesh_is_lifted_by_the_real_ground():
 	for i in range(0, positions.size(), 97):
 		var p := positions[i]
 		assert_almost_eq(p.length(), 1.0 + t.height_at(p) / t.radius, 1e-4)
+
+func test_near_a_world_its_surface_takes_over():
+	var b := _planet()
+	var p := _proxy(b)
+	var near := b.point.plus(Vector3(0, 0, b.radius * 3.0))
+	_universe.origin = near
+	p.place(_universe, near)
+	var s := p.surface()
+	assert_not_null(s, "within %.0f km" % (p.surface_at() / 1000.0))
+	assert_false((p.get_node("Far") as Node3D).visible, "the far mesh gives way")
+	assert_eq(s.get_parent(), p.get_parent(), "beside the proxy, under a parent that never moves")
+	var far := b.point.plus(Vector3(0, 0, p.surface_at() * 1.2))
+	_universe.origin = far
+	p.place(_universe, far)
+	assert_null(p.surface())
+	assert_true((p.get_node("Far") as Node3D).visible)
+
+func test_no_surface_starts_while_frozen():
+	var b := _planet()
+	var p := _proxy(b)
+	p.frozen = true
+	var near := b.point.plus(Vector3(0, 0, b.radius * 3.0))
+	_universe.origin = near
+	p.place(_universe, near)
+	assert_null(p.surface(), "a warp is carrying you past")
+
+func test_the_surface_starts_within_ten_radii_and_300_km():
+	var b := _planet()
+	var p := _proxy(b)
+	assert_eq(p.surface_at(), minf(b.radius * BodyProxy.SURFACE_RADII, BodyProxy.SURFACE_MOST))

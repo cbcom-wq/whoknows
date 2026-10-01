@@ -166,3 +166,13 @@ func test_the_sun_throws_shadows_far_enough_to_shape_a_big_rock():
 	var sun: DirectionalLight3D = _root.get_node("DirectionalLight3D")
 	assert_gte(sun.directional_shadow_max_distance, AsteroidStream.SHADOW_REACH)
 
+func test_everything_outside_is_covered_beside_a_world():
+	var system: SystemRecipe = _root.system
+	var planet := system.planets()[0]
+	_root.hop_index = system.bodies.find(planet) - 1
+	assert_true(_root.hop(1))
+	await wait_physics_frames(2)
+	var surface: WorldSurface = (_root.star_system.proxy(planet.id) as BodyProxy).surface()
+	assert_not_null(surface)
+	surface.finish()
+	assert_eq(_uncovered(), [], "every chunk of ground shifts too")
