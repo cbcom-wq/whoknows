@@ -14,6 +14,9 @@ extends RefCounted
 var speed: float = 0.0
 ## The vehicle's own cruise ceiling, so no readout hardcodes 120.
 var cruise_limit: float = 0.0
+## True while the limit is above the cruise ceiling: high in a world's well
+## (the world scale spec §6).
+var limit_raised: bool = false
 ## World frame. The velocity marker projects `hull_origin + world_velocity`.
 var world_velocity: Vector3 = Vector3.ZERO
 ## Velocity in the hull's frame. X is drift across the beam, Y is vertical,

@@ -106,6 +106,9 @@ func render(telemetry: VehicleTelemetry) -> void:
 		"ON" if telemetry.assist_enabled else "OFF",
 		"ON" if telemetry.boost_active else "OFF",
 	]
+	# High in a world's well the limit climbs (the world scale spec §6).
+	if telemetry.limit_raised:
+		mode_label.text += "   LIMIT %d" % roundi(telemetry.cruise_limit)
 
 	# What the flight computer is holding (flight controls spec §8).
 	var holds := PackedStringArray()

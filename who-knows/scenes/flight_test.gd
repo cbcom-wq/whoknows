@@ -386,6 +386,9 @@ func _wire_sensors() -> void:
 	_ship.sensors.add_source(BodyContacts.new(system))
 	_ship.sensors.system = system
 	_ship.sensors.whereabouts = star_system.whereabouts
+	# The speed limit climbs with altitude in a world's well (the world scale
+	# spec §6); where you are is Whereabouts' to say.
+	_ship.flight_computer.whereabouts = star_system.whereabouts
 	contact_markers.clear()
 	for m in _mount_per_view(func() -> WorldMarker: return ContactMarker.new(), "Contacts"):
 		(m as ContactMarker).sensors = _ship.sensors
