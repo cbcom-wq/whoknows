@@ -11,12 +11,6 @@ var _depth := CubeSphere.depth_for(R)
 func _leaves(altitude: float, was := {}) -> Array:
 	return WorldSurface.select(R, RELIEF, _depth, Vector3.UP * (R + altitude), was, {})
 
-static func _is_ancestor(a: Vector4i, b: Vector4i) -> bool:
-	var p := b
-	while p.y > a.y:
-		p = CubeSphere.parent(p)
-	return p == a and a != b
-
 func test_from_far_off_a_world_is_a_few_coarse_chunks():
 	var leaves: Array[Vector4i] = _leaves(R * 9.0)[0]
 	assert_between(leaves.size(), 1, 24)
@@ -71,8 +65,8 @@ func test_selection_from_the_centre_is_sane():
 
 func test_height_at_callable_is_honoured():
 	# With a height callable providing +500 m, focus at R + 502 m sees the finest
-	# chunk under an off-grid direction as a leaf; without the callable it splits
-	# it (because the ground is then 502 m away, within SPLIT * edge).
+	# chunk under an off-grid direction as a leaf; without the callable an ancestor
+	# stays a leaf (because the ground is then 502 m away, within SPLIT * edge).
 	var dir := Vector3(0.31, 0.9, 0.22).normalized()
 	var at := dir * (R + 502.0)
 	var height_at_func := func(_d: Vector3) -> float: return 500.0
@@ -80,4 +74,18 @@ func test_height_at_callable_is_honoured():
 	var with_height: Array[Vector4i] = WorldSurface.select(R, RELIEF, _depth, at, {}, {}, height_at_func)[0]
 	assert_true(with_height.has(key), "finest chunk is a leaf with height callable")
 	var without_height: Array[Vector4i] = WorldSurface.select(R, RELIEF, _depth, at, {}, {})[0]
-	assert_false(without_height.has(key), "finest chunk is split without height callable")
+	assert_false(without_height.has(key), "finest chunk is an ancestor leaf without height callable")
+
+func test_bounds_cache_respects_height_at():
+	# A bounds dictionary filled without height_at and later read with one must
+	# recompute ground; the lifted ground point (R + 500) is much closer.
+	var bounds := {}
+	var dir := Vector3(0.31, 0.9, 0.22).normalized()
+	var at := dir * (R + 502.0)
+	var key := CubeSphere.key_for(dir, _depth)
+	var height_at_func := func(_d: Vector3) -> float: return 500.0
+	# Fill cache without height_at
+	WorldSurface.select(R, RELIEF, _depth, at, {}, bounds)
+	# Use same bounds with height_at; ground should be lifted and key should be a leaf
+	var with_height: Array[Vector4i] = WorldSurface.select(R, RELIEF, _depth, at, {}, bounds, height_at_func)[0]
+	assert_true(with_height.has(key), "finest chunk is a leaf when bounds are reused with height_at")

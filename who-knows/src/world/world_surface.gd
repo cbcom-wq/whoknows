@@ -18,7 +18,7 @@ const MERGE := 1.8
 ## split, for hysteresis; `bounds` caches each node's bound between calls.
 ## `height_at` is an optional Callable(direction: Vector3) -> float that returns
 ## the height above the planet at a given direction; if provided, split decisions
-## use the actual ground; if not, they use the planet centre. The relief pad is
+## use the actual ground; if not, they use the sphere point at radius. The relief pad is
 ## only safe for horizon visibility, not for measuring proximity.
 static func select(radius: float, relief: float, depth_max: int, local: Vector3,
 		was_split: Dictionary, bounds: Dictionary, height_at := Callable()) -> Array:
@@ -39,22 +39,26 @@ static func horizon_reach(radius: float, relief: float, d: float) -> float:
 		return INF
 	return sqrt(d * d - low * low) + sqrt(high * high - low * low)
 
-## A node's [centre, cull_radius, ground, chord], cached. The cull_radius
-## (centre + relief/2) is safe for horizon visibility but not for split
-## decisions; the chord (cull_radius - relief/2) is the node's actual edge.
-## The ground (centre × (radius + height_at)) is the true surface; if height_at
-## is not valid, ground = centre.
+## A node's [centre, cull_radius, chord], cached. The cull_radius
+## (corner chord + relief/2) is safe for horizon visibility but not for split
+## decisions; the chord is the corner chord alone. Compute ground fresh each
+## call via height_at to avoid cache staling (a bounds dictionary belongs to
+## one terrain; a different height function needs a new dictionary).
 static func bound_of(key: Vector4i, radius: float, relief: float, bounds: Dictionary, height_at := Callable()) -> Array:
 	if not bounds.has(key):
 		var b := CubeSphere.node_bound(key, radius, relief)
 		var centre: Vector3 = b[0]
 		var cull_radius: float = b[1]
 		var chord := cull_radius - relief * 0.5
-		var ground := centre
-		if height_at.is_valid():
-			ground = centre.normalized() * (radius + height_at.call(centre.normalized()))
-		bounds[key] = [centre, cull_radius, ground, chord]
-	return bounds[key]
+		bounds[key] = [centre, cull_radius, chord]
+	var cached: Array = bounds[key]
+	var centre: Vector3 = cached[0]
+	var cull_radius: float = cached[1]
+	var chord: float = cached[2]
+	var ground := centre
+	if height_at.is_valid():
+		ground = centre.normalized() * (radius + height_at.call(centre.normalized()))
+	return [centre, cull_radius, ground, chord]
 
 static func _walk(key: Vector4i, radius: float, relief: float, depth_max: int, local: Vector3, reach: float,
 		was_split: Dictionary, bounds: Dictionary, leaves: Array[Vector4i], split: Dictionary, height_at := Callable()) -> void:
