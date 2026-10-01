@@ -71,6 +71,8 @@ var floor_fired := 0
 ## key -> StaticBody3D
 var _solid := {}
 var _wanted_solid := {}
+## anchor instance id -> {local, reach, keys}: what keys_near last said for it.
+var _solid_cache := {}
 
 ## The leaves to draw for a focus at `local` (from the world's centre), and
 ## which nodes are split: [leaves, split]. `was_split` is the last call's
@@ -305,19 +307,38 @@ func solid_keys() -> Array[Vector4i]:
 	return out
 
 ## Every finest chunk some anchor needs solid; the one under an anchor that
-## is missing is built now.
+## is missing is built now, every tick (it is one key_for). The rest of an
+## anchor's keys are worked out again only once it has moved half a finest
+## edge, or its reach has changed by as much: near a cube edge they cost
+## milliseconds.
 func _solid_wanted() -> Dictionary:
 	var out := {}
+	var seen := {}
+	var half_edge := CubeSphere.edge_m(body.radius, depth_max) * 0.5
 	for node in get_tree().get_nodes_in_group(AsteroidStream.SPACE_ANCHOR):
 		var a := node as Node3D
 		if a == null or not a.is_inside_tree():
 			continue
+		var id := a.get_instance_id()
+		seen[id] = true
 		var local := universe.to_universe(a.global_position).minus(body.point)
-		var keys := TerrainCollider.keys_near(terrain, depth_max, local, TerrainCollider.reach_for(_speed_of(a)))
-		for k in keys:
+		var reach := TerrainCollider.reach_for(_speed_of(a))
+		var cached: Dictionary = _solid_cache.get(id, {})
+		if cached.is_empty() or (cached.local as Vector3).distance_to(local) > half_edge 				or absf(float(cached.reach) - reach) > half_edge:
+			cached = {"local": local, "reach": reach, "keys": TerrainCollider.keys_near(terrain, depth_max, local, reach)}
+			_solid_cache[id] = cached
+		var keys: Array = cached.keys
+		if keys.is_empty():
+			continue
+		for k: Vector4i in keys:
 			out[k] = true
-		if not keys.is_empty() and not _solid.has(keys[0]):
-			_make_solid(TerrainChunkData.build(terrain, keys[0]))
+		var under := CubeSphere.key_for(local, depth_max)
+		out[under] = true
+		if not _solid.has(under):
+			_make_solid(TerrainChunkData.build(terrain, under))
+	for id: int in _solid_cache.keys():
+		if not seen.has(id):
+			_solid_cache.erase(id)
 	return out
 
 func _make_solid(data: TerrainChunkData) -> void:

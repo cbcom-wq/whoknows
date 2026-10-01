@@ -17,8 +17,9 @@ const REACH_MAX := 160.0
 static func reach_for(speed: float) -> float:
 	return minf(REACH + LOOKAHEAD * speed, REACH_MAX)
 
-## The finest chunks within `reach` of `local` (from the world's centre),
-## nearest first; none from the centre or from higher than `reach` up.
+## The finest chunks within `reach` of `local` (from the world's centre): the
+## one that holds it first, then the rest nearest first; none from the centre
+## or from higher than `reach` up.
 static func keys_near(terrain: WorldTerrain, depth: int, local: Vector3, reach: float) -> Array[Vector4i]:
 	var out: Array[Vector4i] = []
 	if local.is_zero_approx() or terrain.altitude_of(local) > reach:
@@ -52,8 +53,12 @@ static func keys_near(terrain: WorldTerrain, depth: int, local: Vector3, reach: 
 	var centre_of := func(k: Vector4i) -> Vector3:
 		var r := CubeSphere.node_rect(k)
 		return CubeSphere.direction(k.x, r.x + r.z * 0.5, r.y + r.z * 0.5) * terrain.radius
+	# Centres are not the cells: on the spherified cube the nearest centre is
+	# sometimes a neighbour's, so the cell under the anchor is put first by hand.
+	out.erase(under)
 	var d := {}
 	for k in out:
 		d[k] = (centre_of.call(k) as Vector3).distance_to(local)
 	out.sort_custom(func(p: Vector4i, q: Vector4i) -> bool: return d[p] < d[q])
+	out.push_front(under)
 	return out

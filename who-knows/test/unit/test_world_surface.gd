@@ -93,6 +93,10 @@ func test_bounds_cache_respects_height_at():
 
 var _universe: Universe
 var _system: SystemRecipe
+
+func after_each():
+	WorldSurface.warn_on_floor = true
+
 ## Off the cube's grid lines: straight up is where four cells meet, and
 ## "the chunk under you" would be a tie.
 var _up := Vector3(0.31, 0.9, 0.22).normalized()
@@ -229,13 +233,46 @@ func test_an_anchor_under_the_ground_is_lifted_out():
 	var s := _surface(3000.0)
 	var a := _anchor(s, -20.0)
 	a.freeze = false
-	a.linear_velocity = -a.global_position.normalized() * 30.0
+	var tangent := _up.cross(Vector3.RIGHT).normalized()
+	a.linear_velocity = -_up * 30.0 + tangent * 5.0
 	s.update(_universe.to_universe(a.global_position))
 	WorldSurface.warn_on_floor = true
 	var local := _universe.to_universe(a.global_position).minus(_planet().point)
 	assert_gte(s.terrain.altitude_of(local), 0.0)
 	assert_eq(s.floor_fired, 1)
-	assert_gte(a.linear_velocity.dot(local.normalized()), 0.0, "no longer moving in")
+	var up := local.normalized()
+	assert_gte(a.linear_velocity.dot(up), -0.01, "no longer moving in")
+	assert_almost_eq(a.linear_velocity.dot(tangent), 5.0, 0.1, "the sideways motion is kept")
+	s.finish()
+
+func test_the_chunk_under_you_is_always_first():
+	var t := WorldTerrain.new(_planet().recipe)
+	var d := CubeSphere.depth_for(t.radius)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4242
+	for i in 50:
+		var dir := Vector3(rng.randf_range(-1, 1), rng.randf_range(-1, 1), rng.randf_range(-1, 1)).normalized()
+		var local := dir * (t.radius + t.height_at(dir) + 3.0)
+		var keys := TerrainCollider.keys_near(t, d, local, TerrainCollider.REACH)
+		assert_eq(keys[0], CubeSphere.key_for(local, d), "direction %d" % i)
+
+func test_an_anchors_keys_are_kept_until_it_has_moved_half_an_edge():
+	var s := _surface(3000.0)
+	var a := _anchor(s, 40.0)
+	s.update(_universe.to_universe(a.global_position))
+	var first := s.solid_keys()
+	var edge := CubeSphere.edge_m(_planet().radius, s.depth_max)
+	a.global_position += Vector3(0.1, 0, 0) * edge   # well under half an edge, in the same cell or a neighbour
+	var cached_before: Dictionary = s._solid_cache.duplicate(true)
+	s.update(_universe.to_universe(a.global_position))
+	assert_eq(s._solid_cache[a.get_instance_id()].local, cached_before[a.get_instance_id()].local, "not recomputed")
+	a.global_position += Vector3(0.9, 0, 0) * edge
+	s.update(_universe.to_universe(a.global_position))
+	assert_ne(s._solid_cache[a.get_instance_id()].local, cached_before[a.get_instance_id()].local, "recomputed")
+	assert_gt(first.size(), 0)
+	a.remove_from_group(AsteroidStream.SPACE_ANCHOR)
+	s.update(_universe.to_universe(a.global_position))
+	assert_true(s._solid_cache.is_empty(), "a gone anchor is forgotten")
 	s.finish()
 
 func test_a_ghosted_hull_is_left_alone():
