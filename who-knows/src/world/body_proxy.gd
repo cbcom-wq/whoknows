@@ -10,8 +10,7 @@ extends Node3D
 ## Within SURFACE_AT of its centre a world is drawn by its WorldSurface, at
 ## its true place, and the far mesh gives way (the world scale spec §5.1). The
 ## surface is this proxy's sibling, under the same parent that never moves.
-## Up close it still grows a convex collider on the `terrain` layer until the
-## surface's own collision replaces it.
+## The surface's own collision makes it solid where anything touches it (§5.5).
 ##
 ## The floating origin (CLAUDE.md): a member of Universe.EXTERIOR_SPACE whose
 ## parent never moves, placed afresh every physics tick from its
@@ -30,10 +29,6 @@ const PROXY_AT := 350000.0
 const VIEW_FAR := PROXY_AT + SystemRecipe.STAR_RADIUS.y + 50000.0
 ## Physics layer 4, `terrain` (Planetfall §4.2).
 const LAYER := 8
-## Within this of its surface, a body is drawn in detail and is solid.
-const NEAR_WITHIN := 6000.0
-## ... and it stops being so this much farther out.
-const NEAR_HYSTERESIS := 500.0
 ## The far and near looks cross-fade over this, by the built-in visibility
 ## ranges.
 const FADE_MARGIN := 500.0
@@ -57,7 +52,6 @@ var frozen := false
 var _universe: Universe
 var _surface: WorldSurface
 var _far: MeshInstance3D
-var _collider: StaticBody3D
 
 func setup(p_body: SystemBody) -> void:
 	body = p_body
@@ -100,10 +94,6 @@ func place(universe: Universe, focus: UniversePoint) -> void:
 		_surface.update(focus)
 	_far.visible = _surface == null
 	var height := distance - body.radius
-	if height < NEAR_WITHIN and _collider == null:
-		_make_near()
-	elif height > NEAR_WITHIN + NEAR_HYSTERESIS and _collider != null:
-		_drop_near()
 	_far.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if height < SHADOW_WITHIN \
 		else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
@@ -114,13 +104,6 @@ func surface_at() -> float:
 ## Its surface while it is near, else null.
 func surface() -> WorldSurface:
 	return _surface
-
-## True while its shell is solid (until the surface's collision replaces it).
-func is_near() -> bool:
-	return _collider != null
-
-func collider() -> StaticBody3D:
-	return _collider
 
 func _look(detail: int, star: bool) -> MeshInstance3D:
 	var m := MeshInstance3D.new()
@@ -145,22 +128,3 @@ func _exit_tree() -> void:
 	if _surface != null:
 		_surface.queue_free()
 		_surface = null
-
-func _make_near() -> void:
-	_collider = StaticBody3D.new()
-	_collider.name = "Shell"
-	_collider.collision_layer = LAYER
-	_collider.collision_mask = 0
-	var shape := CollisionShape3D.new()
-	var hull := ConvexPolygonShape3D.new()
-	var points := PackedVector3Array()
-	for p in BodyLook.points(BodyLook.NEAR_DETAIL):
-		points.append(p * body.radius)
-	hull.points = points
-	shape.shape = hull
-	_collider.add_child(shape)
-	add_child(_collider)
-
-func _drop_near() -> void:
-	_collider.queue_free()
-	_collider = null

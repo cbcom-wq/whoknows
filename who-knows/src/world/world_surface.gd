@@ -12,6 +12,12 @@ extends Node3D
 ## does. The six coarsest are built at once, so the world is whole on its
 ## first frame.
 ##
+## Round every space anchor near the ground its finest chunks are solid too
+## (§5.5): the one right under it built at once if it is missing, the rest
+## streamed. If an anchor ever ends up more than FLOOR_SLACK under the ground
+## -- a chunk late, or continuous collision missing -- it is lifted out and a
+## warning logged. That should never happen; the probe counts it.
+##
 ## The floating origin (CLAUDE.md): this node never moves and is not a member;
 ## each chunk is a member of Universe.EXTERIOR_SPACE of its own, placed from
 ## its UniversePoint when made.
@@ -35,6 +41,11 @@ const RESELECT_AFTER := 10.0
 ## Chunks with an edge this short or shorter cast shadows: the sun's shadows
 ## reach 2 km.
 const SHADOW_EDGE := 512.0
+## Below the ground by more than this, an anchor is lifted out (§5.5).
+const FLOOR_SLACK := 0.5
+
+## Tests quieten the floor's warning when they set it off on purpose.
+static var warn_on_floor := true
 
 var body: SystemBody
 var universe: Universe
@@ -54,6 +65,12 @@ var _done := {}
 var _mutex := Mutex.new()
 var _selected_at: UniversePoint
 var _local := Vector3.ZERO
+
+## How many times an anchor was lifted out from under the ground.
+var floor_fired := 0
+## key -> StaticBody3D
+var _solid := {}
+var _wanted_solid := {}
 
 ## The leaves to draw for a focus at `local` (from the world's centre), and
 ## which nodes are split: [leaves, split]. `was_split` is the last call's
@@ -140,13 +157,16 @@ func update(focus: UniversePoint) -> void:
 		var sel := select(body.radius, terrain.relief, depth_max, _local, _split, _bounds, terrain.height_at)
 		leaves.assign(sel[0])
 		_split = sel[1]
+	_wanted_solid = _solid_wanted()
 	_collect()
 	_request()
 	_apply(Time.get_ticks_usec() + APPLY_BUDGET_USEC)
 	_prune()
+	_keep_anchors_above_ground()
 
 ## Waits for every job and applies everything: tests and probes.
 func finish() -> void:
+	_wanted_solid = _solid_wanted()
 	while not _jobs.is_empty() or _missing().size() > 0:
 		for id: int in _jobs.values():
 			WorkerThreadPool.wait_for_task_completion(id)
@@ -183,6 +203,9 @@ func _missing() -> Array[Vector4i]:
 	_mutex.lock()
 	for k in leaves:
 		if not _chunks.has(k) and not _jobs.has(k) and not _done.has(k):
+			out.append(k)
+	for k: Vector4i in _wanted_solid:
+		if not _solid.has(k) and not _jobs.has(k) and not _done.has(k) and not out.has(k):
 			out.append(k)
 	_mutex.unlock()
 	return out
@@ -226,6 +249,8 @@ func _apply(deadline: float) -> void:
 		_mutex.unlock()
 		if wanted.has(k) and not _chunks.has(k):
 			_make_chunk(data)
+		if _wanted_solid.has(k) and not _solid.has(k):
+			_make_solid(data)
 
 func _make_chunk(data: TerrainChunkData) -> void:
 	var arrays: Array = []
@@ -269,6 +294,78 @@ func _prune() -> void:
 		_chunks.erase(k)
 	for k: Vector4i in _chunks:
 		(_chunks[k] as MeshInstance3D).visible = not _below_any(k, _chunks)
+	for k: Vector4i in _solid.keys():
+		if not _wanted_solid.has(k):
+			(_solid[k] as Node).queue_free()
+			_solid.erase(k)
+
+func solid_keys() -> Array[Vector4i]:
+	var out: Array[Vector4i] = []
+	out.assign(_solid.keys())
+	return out
+
+## Every finest chunk some anchor needs solid; the one under an anchor that
+## is missing is built now.
+func _solid_wanted() -> Dictionary:
+	var out := {}
+	for node in get_tree().get_nodes_in_group(AsteroidStream.SPACE_ANCHOR):
+		var a := node as Node3D
+		if a == null or not a.is_inside_tree():
+			continue
+		var local := universe.to_universe(a.global_position).minus(body.point)
+		var keys := TerrainCollider.keys_near(terrain, depth_max, local, TerrainCollider.reach_for(_speed_of(a)))
+		for k in keys:
+			out[k] = true
+		if not keys.is_empty() and not _solid.has(keys[0]):
+			_make_solid(TerrainChunkData.build(terrain, keys[0]))
+	return out
+
+func _make_solid(data: TerrainChunkData) -> void:
+	var b := StaticBody3D.new()
+	b.name = "S%d_%d_%d_%d" % [data.key.x, data.key.y, data.key.z, data.key.w]
+	b.collision_layer = BodyProxy.LAYER
+	b.collision_mask = 0
+	var shape := ConcavePolygonShape3D.new()
+	shape.backface_collision = true
+	shape.set_faces(data.faces)
+	var cs := CollisionShape3D.new()
+	cs.shape = shape
+	b.add_child(cs)
+	b.add_to_group(Universe.EXTERIOR_SPACE)
+	add_child(b)
+	b.global_position = universe.to_engine(body.point.plus(Vector3(data.centre)))
+	_solid[data.key] = b
+
+## The analytic floor (§5.5): an anchor more than FLOOR_SLACK under the
+## ground is put back above it, clear by its own reach, moving in no more.
+## Not a ghosted hull at warp: it passes through everything on purpose.
+func _keep_anchors_above_ground() -> void:
+	for node in get_tree().get_nodes_in_group(AsteroidStream.SPACE_ANCHOR):
+		var a := node as CollisionObject3D
+		if a == null or not a.is_inside_tree() or a.collision_mask & BodyProxy.LAYER == 0:
+			continue
+		var local := universe.to_universe(a.global_position).minus(body.point)
+		if local.is_zero_approx() or terrain.altitude_of(local) >= -FLOOR_SLACK:
+			continue
+		var up := local.normalized()
+		var clear := float(a.get_meta(AsteroidStream.ANCHOR_RADIUS, 1.0))
+		a.global_position = universe.to_engine(body.point.plus(up * (terrain.radius + terrain.height_at(up) + clear)))
+		if a is RigidBody3D:
+			var v := (a as RigidBody3D).linear_velocity
+			(a as RigidBody3D).linear_velocity = v - up * minf(v.dot(up), 0.0)
+		elif a is CharacterBody3D:
+			var v := (a as CharacterBody3D).velocity
+			(a as CharacterBody3D).velocity = v - up * minf(v.dot(up), 0.0)
+		floor_fired += 1
+		if warn_on_floor:
+			push_warning("WorldSurface: %s was under %s's ground; lifted out" % [a.name, body.name])
+
+static func _speed_of(a: Node3D) -> float:
+	if a is RigidBody3D:
+		return (a as RigidBody3D).linear_velocity.length()
+	if a is CharacterBody3D:
+		return (a as CharacterBody3D).velocity.length()
+	return 0.0
 
 ## True if an ancestor of `key` is in `set`.
 static func _below_any(key: Vector4i, set: Dictionary) -> bool:

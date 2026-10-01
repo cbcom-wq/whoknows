@@ -172,3 +172,75 @@ func test_a_surface_freed_mid_build_waits_for_its_jobs():
 	remove_child(s)
 	s.free()
 	pass_test("freed with jobs in flight, and nothing broke")
+
+# --- solid ground (§5.5) --------------------------------------------------------
+
+func _anchor(s: WorldSurface, altitude: float, mask := BodyProxy.LAYER) -> RigidBody3D:
+	var a := RigidBody3D.new()
+	a.freeze = true
+	a.collision_mask = mask
+	a.add_to_group(AsteroidStream.SPACE_ANCHOR)
+	a.add_to_group(Universe.EXTERIOR_SPACE)
+	add_child_autofree(a)
+	a.global_position = _universe.to_engine(_above(_planet(), s, altitude))
+	return a
+
+func test_no_keys_from_the_centre_or_far_away():
+	var t := WorldTerrain.new(_planet().recipe)
+	var d := CubeSphere.depth_for(t.radius)
+	assert_eq(TerrainCollider.keys_near(t, d, Vector3.ZERO, 100.0).size(), 0)
+	assert_eq(TerrainCollider.keys_near(t, d, Vector3.UP * (t.radius + t.relief + 5000.0), 160.0).size(), 0)
+
+func test_the_ground_under_you_is_among_the_keys_and_they_are_few():
+	var t := WorldTerrain.new(_planet().recipe)
+	var d := CubeSphere.depth_for(t.radius)
+	var local := _up * (t.radius + t.height_at(_up) + 10.0)
+	var keys := TerrainCollider.keys_near(t, d, local, TerrainCollider.REACH_MAX)
+	assert_eq(keys[0], CubeSphere.key_for(local, d), "the one under you first")
+	# A finest edge is 16-32 m, so 160 m reach is a disc of 6-11 cells' radius: 113 to
+	# 380 chunks, 149 here. "A few dozen" (spec §5.5) is the common case, at 64 m.
+	assert_lte(keys.size(), 200)
+	assert_lt(TerrainCollider.keys_near(t, d, local, TerrainCollider.REACH).size(), keys.size())
+
+func test_an_anchor_near_the_ground_has_solid_ground_round_it():
+	var s := _surface(3000.0)
+	var a := _anchor(s, 20.0)
+	s.update(_universe.to_universe(a.global_position))
+	s.finish()
+	var solid := s.solid_keys()
+	assert_gt(solid.size(), 0)
+	var bodies := s.get_children().filter(func(n: Node) -> bool: return n is StaticBody3D)
+	assert_eq(bodies.size(), solid.size())
+	for b: StaticBody3D in bodies:
+		assert_eq(b.collision_layer, BodyProxy.LAYER)
+		assert_eq(b.collision_mask, 0)
+		assert_true(b.is_in_group(Universe.EXTERIOR_SPACE))
+
+func test_an_anchor_arriving_fast_has_ground_under_it():
+	var s := _surface(3000.0)
+	var a := _anchor(s, 5.0)
+	s.update(_universe.to_universe(a.global_position))   # no finish(): this tick
+	var under := CubeSphere.key_for(_universe.to_universe(a.global_position).minus(_planet().point), s.depth_max)
+	assert_true(s.solid_keys().has(under), "built at once, not waited for")
+	s.finish()   # a worker mid-job locks the surface against being freed
+
+func test_an_anchor_under_the_ground_is_lifted_out():
+	WorldSurface.warn_on_floor = false
+	var s := _surface(3000.0)
+	var a := _anchor(s, -20.0)
+	a.freeze = false
+	a.linear_velocity = -a.global_position.normalized() * 30.0
+	s.update(_universe.to_universe(a.global_position))
+	WorldSurface.warn_on_floor = true
+	var local := _universe.to_universe(a.global_position).minus(_planet().point)
+	assert_gte(s.terrain.altitude_of(local), 0.0)
+	assert_eq(s.floor_fired, 1)
+	assert_gte(a.linear_velocity.dot(local.normalized()), 0.0, "no longer moving in")
+	s.finish()
+
+func test_a_ghosted_hull_is_left_alone():
+	var s := _surface(3000.0)
+	var a := _anchor(s, -20.0, 0)
+	s.update(_universe.to_universe(a.global_position))
+	assert_eq(s.floor_fired, 0, "at warp the hull passes through everything")
+	s.finish()

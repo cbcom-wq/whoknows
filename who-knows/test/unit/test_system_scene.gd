@@ -2,7 +2,7 @@ extends GutTest
 
 ## The star system in the real flight scene (the system skeleton spec §3, §10):
 ## it is there from the first frame, the debug hop puts you by any body, the
-## hull bumps off a world's shell, and the sensors and map know the bodies.
+## hull bumps off a world's ground, and the sensors and map know the bodies.
 
 var _root: Node
 var _ship: Ship
@@ -59,12 +59,14 @@ func test_the_hull_bumps_off_a_world():
 	_root.hop_index = system.bodies.find(planet) - 1
 	assert_true(_root.hop(1))
 	await wait_physics_frames(2)
-	var proxy: BodyProxy = _root.star_system.proxy(planet.id)
-	assert_true(proxy.is_near(), "3 km off: solid")
+	var surface: WorldSurface = (_root.star_system.proxy(planet.id) as BodyProxy).surface()
+	assert_not_null(surface, "3 km off: its ground is drawn")
 	var centre := _universe.to_engine(planet.point)
 	var out := (_ship.exterior.global_position - centre).normalized()
-	_ship.exterior.global_position = centre + out * (planet.radius + 40.0)
+	var ground := planet.radius + surface.terrain.height_at(out)
+	_ship.exterior.global_position = centre + out * (ground + 40.0)
 	_ship.exterior.linear_velocity = -out * 15.0
 	await wait_physics_frames(240)
-	var closest := (_ship.exterior.global_position - centre).length()
-	assert_gt(closest, planet.radius, "the hull never went in")
+	var local := _universe.to_universe(_ship.exterior.global_position).minus(planet.point)
+	assert_gt(surface.terrain.altitude_of(local), 0.0, "the hull never went in")
+	assert_eq(surface.floor_fired, 0, "the ground held it, not the safety net")

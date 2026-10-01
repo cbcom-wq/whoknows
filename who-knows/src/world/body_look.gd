@@ -11,10 +11,8 @@ extends RefCounted
 ##
 ## Meshes are radius one; a proxy scales them.
 
-## Subdivisions: a world from afar (1,280 faces), up close until the surface
-## replaces it (5,120), and the star (1,280).
+## Subdivisions: a world from afar (1,280 faces), and the star (1,280).
 const FAR_DETAIL := 3
-const NEAR_DETAIL := 4
 const STAR_DETAIL := 3
 ## How finely the star's shade patches vary over it.
 const SHADE_SCALE := 2.2
@@ -68,11 +66,6 @@ static func mesh(body: SystemBody, detail: int) -> ArrayMesh:
 	var m := ArrayMesh.new()
 	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	return m
-
-## The shell's distinct points at `detail`, radius one: the near collision
-## hull, until the surface's own collision replaces it.
-static func points(detail: int) -> PackedVector3Array:
-	return RockMesh.sphere(detail)[0]
 
 ## The material every world shares: its vertex colours, lit by the sun. The
 ## star's is unshaded: it is the light, and is never in shadow.
