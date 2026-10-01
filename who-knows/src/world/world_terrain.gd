@@ -15,7 +15,7 @@ extends RefCounted
 ## and for a cratered world the same craters its far pattern paints. The
 ## colours are that pattern -- patches, bands, plateaus, craters (style guide
 ## §3.5) -- with steep ground bare rock, in shade patches a few triangles
-## across at every detail.
+## across (PATCH_QUADS) at every detail.
 
 ## Continents: this many across the unit sphere.
 const CONTINENT_SCALE := 1.4
@@ -45,9 +45,9 @@ const BANDS := 9.0
 const PATTERN_SCALE := 1.6
 ## Steeper than this, the ground is bare rock.
 const ROCK_SLOPE := deg_to_rad(35.0)
-## A shade patch is this many triangles across, so shades come in broad
-## patches at every detail, never triangle by triangle.
-const PATCH_QUADS := 12.0
+## A shade patch is this many triangles across (about six), so shades come in
+## broad patches at every detail, never triangle by triangle.
+const PATCH_QUADS := 6.0
 
 var recipe: WorldRecipe
 var radius: float

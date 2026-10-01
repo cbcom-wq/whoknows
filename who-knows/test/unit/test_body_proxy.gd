@@ -130,18 +130,6 @@ func test_every_face_takes_a_colour_from_its_palette():
 		kinds[c.to_html()] = true
 	assert_gt(kinds.size(), 2, "a little world, not a ball")
 
-func test_shades_come_in_patches_not_triangle_by_triangle():
-	# Style guide §3.5: faces read as big flat pieces, never as noise. Most
-	# faces share their neighbour's shade up close.
-	var b := _planet()
-	var colours: PackedColorArray = BodyLook.mesh(b, BodyLook.FAR_DETAIL).surface_get_arrays(0)[Mesh.ARRAY_COLOR]
-	var same := 0
-	var faces := colours.size() / 3
-	for f in range(1, faces):
-		if colours[f * 3].is_equal_approx(colours[(f - 1) * 3]):
-			same += 1
-	assert_gt(float(same) / faces, 0.6)
-
 func test_the_far_mesh_is_lifted_by_the_real_ground():
 	# The world scale spec §5.1: the far mesh is sampled from WorldTerrain.
 	var b := _planet()

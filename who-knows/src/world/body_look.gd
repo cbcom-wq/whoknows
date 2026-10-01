@@ -32,6 +32,10 @@ static func mesh(body: SystemBody, detail: int) -> ArrayMesh:
 	lifted.resize(dirs.size())
 	for i in dirs.size():
 		lifted[i] = dirs[i] if terrain == null else dirs[i] * (1.0 + terrain.height_at(dirs[i]) / terrain.radius)
+	# One patch size for the whole mesh, from the detail's nominal edge (an
+	# icosahedron's edge for unit radius, halved per subdivision), so the shade
+	# field is one consistent field and not one per lifted face.
+	var patch := 1.0515 / float(1 << detail) * terrain.radius * WorldTerrain.PATCH_QUADS if terrain != null else 0.0
 	var positions := PackedVector3Array()
 	var normals := PackedVector3Array()
 	var colours := PackedColorArray()
@@ -52,7 +56,6 @@ static func mesh(body: SystemBody, detail: int) -> ArrayMesh:
 		if terrain == null:
 			colour = _star_colour(body, shades, mid)
 		else:
-			var patch := (a - b).length() * terrain.radius * WorldTerrain.PATCH_QUADS
 			colour = terrain.colour_at(mid, n.angle_to(mid), patch)
 		positions.append_array(PackedVector3Array([a, b, c]))
 		normals.append_array(PackedVector3Array([n, n, n]))

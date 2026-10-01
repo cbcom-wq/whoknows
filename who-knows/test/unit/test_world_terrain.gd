@@ -83,3 +83,26 @@ func test_a_crater_seen_from_afar_is_a_real_bowl():
 	var rim := centre.rotated(side, size * (WorldTerrain.CRATER_FLOOR + 1.0) * 0.5)
 	assert_lt(t.height_at(centre), t.height_at(rim), "the floor is below the rim")
 	assert_eq(t.ground_at(centre, 0.0), &"rock", "and painted as the far pattern paints it")
+
+func test_shades_come_in_patches_a_few_triangles_across():
+	# Style guide §3.5: broad patches, never triangle by triangle. Walk a great
+	# circle one triangle at a time; most steps keep the shade they had.
+	var patch_m := 60.0
+	for seed in [61, 62, 63]:
+		var t := WorldTerrain.new(_recipe(seed))
+		var rng := RandomNumberGenerator.new()
+		rng.seed = seed
+		var d := _dir(rng)
+		var axis := d.cross(_dir(rng)).normalized()
+		var step := (patch_m / WorldTerrain.PATCH_QUADS) / t.radius
+		var same := 0
+		var prev := t.colour_at(d, 0.0, patch_m)
+		for i in 400:
+			d = d.rotated(axis, step)
+			var c := t.colour_at(d, 0.0, patch_m)
+			if c == prev:
+				same += 1
+			prev = c
+		var fraction := float(same) / 400.0
+		gut.p("seed %d: %.3f of steps keep their colour" % [seed, fraction])
+		assert_gt(fraction, 0.6, "seed %d: shades by the triangle, not in patches" % seed)
