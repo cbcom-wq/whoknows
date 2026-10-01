@@ -115,7 +115,7 @@ func test_every_face_takes_a_colour_from_its_palette():
 	var b := _planet()
 	var mesh := BodyLook.mesh(b, BodyLook.FAR_DETAIL)
 	var colours: PackedColorArray = mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
-	assert_eq(colours.size(), 320 * 3)
+	assert_eq(colours.size(), 1280 * 3)
 	var palette: Dictionary = SpacePalette.WORLDS[b.recipe.palette]
 	var allowed: Array[Color] = []
 	for key in [&"ground_low", &"ground_high", &"rock", &"dust"]:
@@ -134,10 +134,19 @@ func test_shades_come_in_patches_not_triangle_by_triangle():
 	# Style guide §3.5: faces read as big flat pieces, never as noise. Most
 	# faces share their neighbour's shade up close.
 	var b := _planet()
-	var colours: PackedColorArray = BodyLook.mesh(b, BodyLook.NEAR_DETAIL).surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+	var colours: PackedColorArray = BodyLook.mesh(b, BodyLook.FAR_DETAIL).surface_get_arrays(0)[Mesh.ARRAY_COLOR]
 	var same := 0
 	var faces := colours.size() / 3
 	for f in range(1, faces):
 		if colours[f * 3].is_equal_approx(colours[(f - 1) * 3]):
 			same += 1
 	assert_gt(float(same) / faces, 0.6)
+
+func test_the_far_mesh_is_lifted_by_the_real_ground():
+	# The world scale spec §5.1: the far mesh is sampled from WorldTerrain.
+	var b := _planet()
+	var t := WorldTerrain.new(b.recipe)
+	var positions: PackedVector3Array = BodyLook.mesh(b, BodyLook.FAR_DETAIL).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	for i in range(0, positions.size(), 97):
+		var p := positions[i]
+		assert_almost_eq(p.length(), 1.0 + t.height_at(p) / t.radius, 1e-4)
