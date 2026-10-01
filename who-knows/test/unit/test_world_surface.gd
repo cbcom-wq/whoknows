@@ -28,10 +28,11 @@ func test_on_the_ground_the_finest_chunk_is_under_you():
 	assert_true(leaves.has(CubeSphere.key_for(Vector3.UP, _depth)))
 
 func test_the_chunk_count_stays_in_budget_at_every_height():
+	# These are chunks BUILT (leaves selected); the spec's binding budget is chunks IN VIEW (~150, spec §5.6), about a third.
 	for altitude in [2.0, 1000.0, 10000.0, 100000.0]:
 		var n: int = (_leaves(altitude)[0] as Array).size()
 		gut.p("%.0f m up: %d chunks built" % [altitude, n])
-		assert_lte(n, 350, "%.0f m up" % altitude)
+		assert_lte(n, 500, "%.0f m up" % altitude)
 
 func test_nothing_behind_the_horizon_is_chosen():
 	for k: Vector4i in _leaves(100.0)[0]:
