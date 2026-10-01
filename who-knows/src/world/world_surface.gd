@@ -9,20 +9,24 @@ extends Node3D
 ## This part chooses the leaves, and is pure.
 
 ## Split a node when the focus is within SPLIT times its edge of it; merge it
-## again only beyond MERGE (§5.2). Tuned to 1.3/1.6 for chunk budget per spec §5.6.
-const SPLIT := 1.3
-const MERGE := 1.6
+## again only beyond MERGE (§5.2). About 21 leaves a level at 1.5.
+const SPLIT := 1.5
+const MERGE := 1.8
 
 ## The leaves to draw for a focus at `local` (from the world's centre), and
 ## which nodes are split: [leaves, split]. `was_split` is the last call's
 ## split, for hysteresis; `bounds` caches each node's bound between calls.
+## `height_at` is an optional Callable(direction: Vector3) -> float that returns
+## the height above the planet at a given direction; if provided, split decisions
+## use the actual ground; if not, they use the planet centre. The relief pad is
+## only safe for horizon visibility, not for measuring proximity.
 static func select(radius: float, relief: float, depth_max: int, local: Vector3,
-		was_split: Dictionary, bounds: Dictionary) -> Array:
+		was_split: Dictionary, bounds: Dictionary, height_at := Callable()) -> Array:
 	var leaves: Array[Vector4i] = []
 	var split := {}
 	var reach := horizon_reach(radius, relief, local.length())
 	for f in CubeSphere.FACES:
-		_walk(Vector4i(f, 0, 0, 0), radius, relief, depth_max, local, reach, was_split, bounds, leaves, split)
+		_walk(Vector4i(f, 0, 0, 0), radius, relief, depth_max, local, reach, was_split, bounds, leaves, split, height_at)
 	return [leaves, split]
 
 ## How far from a focus `d` from the centre any ground can still be seen: to
@@ -35,23 +39,39 @@ static func horizon_reach(radius: float, relief: float, d: float) -> float:
 		return INF
 	return sqrt(d * d - low * low) + sqrt(high * high - low * low)
 
-## A node's [centre, radius], cached.
-static func bound_of(key: Vector4i, radius: float, relief: float, bounds: Dictionary) -> Array:
+## A node's [centre, cull_radius, ground, chord], cached. The cull_radius
+## (centre + relief/2) is safe for horizon visibility but not for split
+## decisions; the chord (cull_radius - relief/2) is the node's actual edge.
+## The ground (centre × (radius + height_at)) is the true surface; if height_at
+## is not valid, ground = centre.
+static func bound_of(key: Vector4i, radius: float, relief: float, bounds: Dictionary, height_at := Callable()) -> Array:
 	if not bounds.has(key):
-		bounds[key] = CubeSphere.node_bound(key, radius, relief)
+		var b := CubeSphere.node_bound(key, radius, relief)
+		var centre: Vector3 = b[0]
+		var cull_radius: float = b[1]
+		var chord := cull_radius - relief * 0.5
+		var ground := centre
+		if height_at.is_valid():
+			ground = centre.normalized() * (radius + height_at.call(centre.normalized()))
+		bounds[key] = [centre, cull_radius, ground, chord]
 	return bounds[key]
 
 static func _walk(key: Vector4i, radius: float, relief: float, depth_max: int, local: Vector3, reach: float,
-		was_split: Dictionary, bounds: Dictionary, leaves: Array[Vector4i], split: Dictionary) -> void:
-	var b := bound_of(key, radius, relief, bounds)
-	var to := (b[0] as Vector3).distance_to(local)
-	var near := maxf(to - float(b[1]), 0.0)
-	if near > reach:
+		was_split: Dictionary, bounds: Dictionary, leaves: Array[Vector4i], split: Dictionary, height_at := Callable()) -> void:
+	var b := bound_of(key, radius, relief, bounds, height_at)
+	var centre: Vector3 = b[0]
+	var cull_radius: float = b[1]
+	var ground: Vector3 = b[2]
+	var chord: float = b[3]
+	var to := centre.distance_to(local)
+	var cull_near := maxf(to - cull_radius, 0.0)
+	if cull_near > reach:
 		return
+	var ground_near := maxf(ground.distance_to(local) - chord, 0.0)
 	var factor := MERGE if was_split.has(key) else SPLIT
-	if key.y < depth_max and near < factor * CubeSphere.edge_m(radius, key.y):
+	if key.y < depth_max and ground_near < factor * CubeSphere.edge_m(radius, key.y):
 		split[key] = true
 		for c in CubeSphere.children(key):
-			_walk(c, radius, relief, depth_max, local, reach, was_split, bounds, leaves, split)
+			_walk(c, radius, relief, depth_max, local, reach, was_split, bounds, leaves, split, height_at)
 	else:
 		leaves.append(key)

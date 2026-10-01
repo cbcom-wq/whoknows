@@ -52,10 +52,11 @@ func test_leaves_never_overlap():
 func test_a_split_node_stays_split_until_merge():
 	# A node between SPLIT and MERGE edges away splits only if it already was.
 	var key := Vector4i(2, 4, 8, 8)
-	var b := CubeSphere.node_bound(key, R, RELIEF)
+	var b := WorldSurface.bound_of(key, R, RELIEF, {})
 	var edge := CubeSphere.edge_m(R, key.y)
-	var centre: Vector3 = b[0]
-	var at := centre + centre.normalized() * (float(b[1]) + edge * (WorldSurface.SPLIT + WorldSurface.MERGE) * 0.5)
+	var ground: Vector3 = b[2]
+	var chord: float = b[3]
+	var at := ground + ground.normalized() * (chord + edge * (WorldSurface.SPLIT + WorldSurface.MERGE) * 0.5)
 	var fresh: Dictionary = WorldSurface.select(R, RELIEF, _depth, at, {}, {})[1]
 	assert_false(fresh.has(key), "not split from fresh")
 	var kept: Dictionary = WorldSurface.select(R, RELIEF, _depth, at, {key: true}, {})[1]
@@ -66,3 +67,16 @@ func test_selection_from_the_centre_is_sane():
 	for k: Vector4i in sel[0]:
 		assert_lte(k.y, _depth)
 	assert_eq(WorldSurface.horizon_reach(R, RELIEF, 0.0), INF)
+
+func test_height_at_callable_is_honoured():
+	# With a height callable providing +500 m, focus at R + 502 m sees the finest
+	# chunk under an off-grid direction as a leaf; without the callable it splits
+	# it (because the ground is then 502 m away, within SPLIT * edge).
+	var dir := Vector3(0.31, 0.9, 0.22).normalized()
+	var at := dir * (R + 502.0)
+	var height_at_func := func(_d: Vector3) -> float: return 500.0
+	var key := CubeSphere.key_for(dir, _depth)
+	var with_height: Array[Vector4i] = WorldSurface.select(R, RELIEF, _depth, at, {}, {}, height_at_func)[0]
+	assert_true(with_height.has(key), "finest chunk is a leaf with height callable")
+	var without_height: Array[Vector4i] = WorldSurface.select(R, RELIEF, _depth, at, {}, {})[0]
+	assert_false(without_height.has(key), "finest chunk is split without height callable")
