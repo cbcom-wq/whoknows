@@ -499,6 +499,8 @@ frozen kinematic with layer and mask 0; `QuantumPlant` runs the cores at `&"warp
 | Solid ground round the hull | 64 m + 1 s × speed, at most 160 m | `TerrainCollider` |
 | The floor | an anchor > 0.5 m under the ground is lifted out; `WorldSurface.floor_fired` counts it | `WorldSurface.FLOOR_SLACK` |
 | Far plane | `BodyProxy.PROXY_AT` + the star's largest radius + 50 km = 700 km | `BodyProxy.VIEW_FAR` |
+| Bodies shrunk onto a shell | beyond 350 km | `BodyProxy.PROXY_AT` |
+| The far mesh hands over to the quadtree surface | within 10 radii, or 300 km if less (1.1× hysteresis) | `BodyProxy.SURFACE_RADII`, `SURFACE_MOST`, `SURFACE_HYSTERESIS` |
 
 The hull is a space anchor (`AsteroidStream.SPACE_ANCHOR`), so a world's surface keeps ground
 solid under it with no wiring. A ghosted hull (mask 0, at warp) is never lifted.

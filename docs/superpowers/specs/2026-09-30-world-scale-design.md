@@ -274,7 +274,7 @@ func altitude_of(local: Vector3) -> float    # body-local point's height above t
 
 - `TerrainCollider` keeps a collision chunk (a `StaticBody3D` on layer 4 `terrain`, mask 0, with a
   `ConcavePolygonShape3D` from the same `TerrainChunkData`) for every finest chunk within
-  `64 m + 1 s × speed` of each terrain anchor, capped at 160 m (*as built*, up to about 200 keys
+  `64 m + 1 s × speed` of each terrain anchor, capped at 160 m (*as built*, 113 to 380 keys
   an anchor at full reach, cached per anchor, and the chunk under an anchor is built at once, §13.4).
   The hull is an anchor (`AsteroidStream.SPACE_ANCHOR`); the avatar becomes one on a spacewalk. This is Planetfall §6.5, less boulders, which stay Planetfall's.
 - **The analytic floor:** if the hull's lowest point is ever more than 0.5 m below
@@ -505,9 +505,9 @@ shows more than 150 in view, `SPLIT` is the lever. A chunk builds in about 4 ms 
 
 ### 13.4 Solid ground
 
-- Solid keys run to about 200 an anchor at full reach (`keys_near`'s disc is
-  `ceil(reach / edge) + 1`, 113 to 380 finest chunks across the planet range; the test's bound is
-  200). They are cached per anchor, since a cube-edge `keys_near` cost 1.8 to 7.5 ms uncached.
+- Solid keys run to 113 to 380 an anchor at full reach (149 on the test planet), across the
+  planet range: `keys_near`'s disc is `ceil(reach / edge) + 1`. 200 is only the bound the test
+  puts on the test planet, not a cap. They are cached per anchor, since a cube-edge `keys_near` cost 1.8 to 7.5 ms uncached.
 - The chunk **under** an anchor is first in `keys_near` and is built at once, directly, through
   `key_for`, so a fast, low hull never outruns its own ground.
 - A ghosted hull (mask 0, at warp) is never lifted by the floor.

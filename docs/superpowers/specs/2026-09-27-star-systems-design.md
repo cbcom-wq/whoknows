@@ -17,6 +17,7 @@ the **warp** replaces quantum cruise as piece 3 (§7, §12). The system keeps it
 > §6's proxies sit at 350 km inside a 700 km far plane (its §13 says why not 400), and near a
 > world its surface is a quadtree drawn at true scale (its §5), not a swap to a real `Planet` at
 > 20 km.
+
 **Depends on:** `main` at `1d23261` (the floating origin and asteroids, saving, the bridge computer)
 **Relates to:** asteroids spec §5.2 (`density_at`), §5.6 (the start), §13; Planetfall §3, §7, §14,
 §18 (*Many worlds*); saving spec §3; bridge computer spec §4; quantum energy spec §8
