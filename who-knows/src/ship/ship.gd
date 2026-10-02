@@ -615,6 +615,7 @@ func _rebuild_everything(hull := true) -> void:
 	if hull:
 		exterior_builder.rebuild()
 	interior_builder.rebuild()
+	_place_seat()
 	interior_builder.geometry_body().set_meta(&"receive_hit", _on_interior_hit)
 	interior_builder.geometry_body().set_meta(&"ship", self)
 	_bind_airlocks()
@@ -898,6 +899,21 @@ func launch_block(cell: Vector3i) -> Array:
 		return []
 	var i := launch_blueprint.coords.find(cell)
 	return [] if i < 0 else [launch_blueprint.block_ids[i], launch_blueprint.orientations[i]]
+
+## The helm's cell, or null with no pilot seat.
+func helm_cell() -> Variant:
+	for coord: Vector3i in grid.coords():
+		if grid.get_block(coord).block_id == InteriorLayout.HELM_ID:
+			return coord
+	return null
+
+## The helm's seat where the dressing drew the chair (cockpit pod spec §7): its
+## collider and eye from the same fixture frame, after every rebuild, so a
+## spawned ship's seat stands where the starter's does.
+func _place_seat() -> void:
+	var helm: Variant = helm_cell()
+	if helm != null and seat != null:
+		seat.transform = InteriorDressing.fixture_frame(interior_builder.layout(), helm)
 
 ## The launch layout a save kept, or, from a save before there was one, its
 ## layout with nothing hurt.
