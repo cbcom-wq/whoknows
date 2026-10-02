@@ -663,9 +663,10 @@ func warp_busy_for(ship: Ship) -> StringName:
 			return &"airlock"
 	return &""
 
-## Why a save must wait on any ship (many ships spec §6.4), or "".
+## Why a save must wait on any ship (many ships spec §6.4), or "". Not a
+## sleeping one: frozen mid-cycle, it would hold the save forever.
 func _fleet_busy() -> String:
-	for ship in fleet.ships():
+	for ship in fleet.awake():
 		var why := ship.busy()
 		if why != "":
 			return why

@@ -123,6 +123,69 @@ func test_a_block_lost_on_another_ship_leaves_you_aboard():
 	assert_eq(avatar.mode, Avatar.Mode.PLATING)
 	assert_same(avatar.get_parent(), _starter.interior)
 
+## Moves the starter `by` and lets the origin and the fleet catch up.
+func _fly_starter(by: Vector3) -> void:
+	_starter.exterior.global_position += by
+	(_root.get_node("Universe") as Universe).check()
+	_fleet.check_sleep()
+
+func test_a_ship_left_far_behind_sleeps_and_wakes_when_you_come_back():
+	var ship := _spawn()
+	var universe: Universe = _root.get_node("Universe")
+	var was := universe.to_universe(ship.exterior.global_position)
+	_fly_starter(Vector3(21000, 0, 0))
+	assert_true(_fleet.sleeping(ship), "20.7 km off: asleep")
+	assert_true(ship.is_in_group(Fleet.ASLEEP))
+	assert_false(ship.exterior.is_in_group(Universe.EXTERIOR_SPACE))
+	assert_false(ship.exterior.is_in_group(AsteroidStream.SPACE_ANCHOR))
+	assert_eq(ship.process_mode, Node.PROCESS_MODE_DISABLED)
+	assert_false(ship.visible)
+	assert_false(_fleet.awake().has(ship))
+	_fly_starter(Vector3(-2000, 0, 0))
+	assert_true(_fleet.sleeping(ship), "18.7 km: between the two, it sleeps on")
+	_fly_starter(Vector3(-2000, 0, 0))
+	assert_false(_fleet.sleeping(ship), "16.7 km: awake")
+	assert_true(ship.visible)
+	assert_true(ship.exterior.is_in_group(Universe.EXTERIOR_SPACE))
+	assert_lt(universe.to_universe(ship.exterior.global_position).minus(was).length(), 0.01, "where it was")
+
+func test_a_sleeping_ship_keeps_its_place_across_shifts():
+	var ship := _spawn()
+	var universe: Universe = _root.get_node("Universe")
+	var was := universe.to_universe(ship.exterior.global_position)
+	_fly_starter(Vector3(25000, 0, 0))
+	for i in 3:
+		_starter.exterior.global_position += Vector3(0, 0, 3000)
+		assert_true(universe.check())
+	assert_lt(_fleet.place_of(ship).minus(was).length(), 0.001)
+	_starter.exterior.global_position = universe.to_engine(was) + Vector3(100, 0, 0)
+	_fleet.check_sleep()
+	assert_false(_fleet.sleeping(ship))
+	assert_lt(universe.to_universe(ship.exterior.global_position).minus(was).length(), 0.01)
+
+func test_the_ship_aboard_never_sleeps():
+	var ship := _spawn()
+	assert_true(_root.board_nearest())
+	ship.exterior.global_position += Vector3(30000, 0, 0)
+	(_root.get_node("Universe") as Universe).check()
+	_fleet.check_sleep()
+	assert_false(_fleet.sleeping(ship), "you are aboard it")
+	assert_true(_fleet.sleeping(_starter), "the one you left behind sleeps")
+
+## Review focus: asleep, a ship holds neither the origin's shift nor the save.
+func test_a_ship_falling_asleep_stops_its_puffs_and_never_holds_the_save():
+	var ship := _spawn()
+	var puffs := ship.find_children("*", "GPUParticles3D", true, false)
+	assert_gt(puffs.size(), 0, "it has emitters")
+	for p in puffs:
+		(p as GPUParticles3D).emitting = true
+	ship.since_struck = 0.0
+	assert_eq(_root._fleet_busy(), "hull struck")
+	_fly_starter(Vector3(25000, 0, 0))
+	for p in puffs:
+		assert_false((p as GPUParticles3D).emitting, "%s stopped" % p.name)
+	assert_eq(_root._fleet_busy(), "", "asleep, it never holds the save")
+
 ## Saving waits on any ship (§6.4).
 func test_the_save_waits_on_every_ship():
 	var ship := _spawn()

@@ -8,6 +8,8 @@ extends Node
 
 signal joined(ship: Ship)
 signal left(ship: Ship)
+signal slept(ship: Ship)
+signal woke(ship: Ship)
 
 const SHIP_SCENE: PackedScene = preload("res://scenes/ship.tscn")
 ## The starter's name. The save's ship of that name is always built into the
@@ -16,6 +18,14 @@ const STARTER := &"Ship"
 ## Interiors stand Ship.SLOT_SPACING apart on x: slot 15 is 30 km out, where a
 ## float still holds about 2 mm.
 const MAX_SHIPS := 16
+## A ship you are not aboard farther than this from the universe's focus
+## sleeps; it wakes back inside WAKE_AT. The gap stops it toggling at the edge.
+const SLEEP_AT := 20000.0
+const WAKE_AT := 18000.0
+const CHECK_EVERY := 1.0
+## A sleeping ship's root is in this group: out of Universe.EXTERIOR_SPACE,
+## held as a UniversePoint instead (CLAUDE.md, the floating origin).
+const ASLEEP := &"ships_asleep"
 
 ## Where spawned ships go in the tree (the flight scene), and their outside.
 var home: Node
@@ -30,13 +40,27 @@ var max_ships := MAX_SHIPS
 var next_number := 2
 
 var _ships: Array[Ship] = []
+var _asleep: Dictionary = {}   # Ship -> {"at": UniversePoint, "turn": Basis, "v": Vector3, "w": Vector3}
+var _check_in := 0.0
+
+func _physics_process(delta: float) -> void:
+	_check_in -= delta
+	if _check_in > 0.0:
+		return
+	_check_in = CHECK_EVERY
+	check_sleep()
 
 func ships() -> Array[Ship]:
 	return _ships.duplicate()
 
-## The ships that are awake: every one, until ships sleep.
+## The ships that are awake. Built by hand: filter() on a typed array hands
+## back an untyped one.
 func awake() -> Array[Ship]:
-	return _ships.duplicate()
+	var out: Array[Ship] = []
+	for ship in _ships:
+		if not _asleep.has(ship):
+			out.append(ship)
+	return out
 
 func named(ship_name: StringName) -> Ship:
 	for ship in _ships:
@@ -83,6 +107,7 @@ func remove(ship: Ship) -> bool:
 	if aboard.is_valid() and aboard.call() == ship:
 		return false
 	_ships.erase(ship)
+	_asleep.erase(ship)
 	left.emit(ship)
 	ship.get_parent().remove_child(ship)
 	ship.queue_free()
@@ -101,6 +126,74 @@ func nearest(point: Vector3, except: Ship = null) -> Ship:
 			best = ship
 			best_d = d
 	return best
+
+func sleeping(ship: Ship) -> bool:
+	return _asleep.has(ship)
+
+## Where `ship` is in the universe, asleep or awake.
+func place_of(ship: Ship) -> UniversePoint:
+	if _asleep.has(ship):
+		return _asleep[ship]["at"]
+	return universe.to_universe(ship.exterior.global_position)
+
+## Puts to sleep every ship past SLEEP_AT of the focus and wakes every one
+## back inside WAKE_AT (many ships spec §5.1). The ship you are aboard never
+## sleeps.
+func check_sleep() -> void:
+	if universe == null or not is_instance_valid(universe.focus):
+		return
+	var here := universe.to_universe(universe.focus.global_position)
+	var mine: Ship = aboard.call() if aboard.is_valid() else null
+	for ship in _ships:
+		if ship == mine:
+			if _asleep.has(ship):
+				wake(ship)
+			continue
+		var d := place_of(ship).minus(here).length()
+		if not _asleep.has(ship) and d > SLEEP_AT:
+			sleep(ship)
+		elif _asleep.has(ship) and d < WAKE_AT:
+			wake(ship)
+
+## Holds `ship` where it is, as a UniversePoint, with the velocities it had.
+func sleep(ship: Ship) -> void:
+	if _asleep.has(ship):
+		return
+	var hull := ship.exterior
+	_hold(ship, {"at": universe.to_universe(hull.global_position), "turn": hull.global_basis,
+		"v": hull.linear_velocity, "w": hull.angular_velocity})
+
+## Asleep at `held`: out of the shift and of the worlds' ground, its puffs
+## stopped so it never holds the shift, out of physics, its droid and sounds
+## stopped, and hidden. A ship coasting when it fell asleep is found where it
+## fell asleep.
+func _hold(ship: Ship, held: Dictionary) -> void:
+	_asleep[ship] = held
+	ship.exterior.remove_from_group(Universe.EXTERIOR_SPACE)
+	ship.exterior.remove_from_group(AsteroidStream.SPACE_ANCHOR)
+	for p in ship.find_children("*", "GPUParticles3D", true, false):
+		(p as GPUParticles3D).emitting = false
+	ship.add_to_group(ASLEEP)
+	ship.process_mode = Node.PROCESS_MODE_DISABLED
+	ship.visible = false
+	slept.emit(ship)
+
+## Back where it was held, moving as it was.
+func wake(ship: Ship) -> void:
+	if not _asleep.has(ship):
+		return
+	var held: Dictionary = _asleep[ship]
+	_asleep.erase(ship)
+	var hull := ship.exterior
+	hull.global_transform = Transform3D(held["turn"], universe.to_engine(held["at"]))
+	ship.remove_from_group(ASLEEP)
+	ship.process_mode = Node.PROCESS_MODE_INHERIT
+	ship.visible = true
+	hull.linear_velocity = held["v"]
+	hull.angular_velocity = held["w"]
+	hull.add_to_group(Universe.EXTERIOR_SPACE)
+	hull.add_to_group(AsteroidStream.SPACE_ANCHOR)
+	woke.emit(ship)
 
 func _next_name() -> String:
 	var n := "Ship%d" % next_number
