@@ -43,6 +43,9 @@ const RESELECT_AFTER := 10.0
 const SHADOW_EDGE := 512.0
 ## Below the ground by more than this, an anchor is lifted out (§5.5).
 const FLOOR_SLACK := 0.5
+## Node bounds kept between selections. A long low flight leaves a trail of
+## them, nearly one a metre; past this many only the last selection's stay.
+const BOUNDS_KEPT := 20000
 
 ## Tests quieten the floor's warning when they set it off on purpose.
 static var warn_on_floor := true
@@ -159,12 +162,26 @@ func update(focus: UniversePoint) -> void:
 		var sel := select(body.radius, terrain.relief, depth_max, _local, _split, _bounds, terrain.height_at)
 		leaves.assign(sel[0])
 		_split = sel[1]
+		if _bounds.size() > BOUNDS_KEPT:
+			_bounds = _bounds_of_selection()
 	_wanted_solid = _solid_wanted()
 	_collect()
 	_request()
 	_apply(Time.get_ticks_usec() + APPLY_BUDGET_USEC)
 	_prune()
 	_keep_anchors_above_ground()
+
+## The bounds the last selection looked at: the roots, and every child of a
+## split node.
+func _bounds_of_selection() -> Dictionary:
+	var kept := {}
+	for f in CubeSphere.FACES:
+		var root := Vector4i(f, 0, 0, 0)
+		kept[root] = _bounds[root]
+	for k: Vector4i in _split:
+		for c in CubeSphere.children(k):
+			kept[c] = _bounds[c]
+	return kept
 
 ## Waits for every job and applies everything: tests and probes.
 func finish() -> void:
@@ -221,7 +238,10 @@ func _collect() -> void:
 
 func _request() -> void:
 	var missing := _missing()
-	missing.sort_custom(func(a: Vector4i, b: Vector4i) -> bool: return _distance(a) < _distance(b))
+	var near := {}
+	for k in missing:
+		near[k] = _distance(k)
+	missing.sort_custom(func(a: Vector4i, b: Vector4i) -> bool: return near[a] < near[b])
 	for k in missing:
 		if _jobs.size() >= MAX_JOBS:
 			return
@@ -234,17 +254,32 @@ func _job(key: Vector4i, recipe: WorldRecipe) -> void:
 	_done[key] = data
 	_mutex.unlock()
 
+## Turns finished chunks into nodes, nearest first, until `deadline`, and at
+## least one a call so the ground always catches up. Results the focus has
+## left behind go first, all of them: skimming low and fast they pile up, and
+## once sorting them took the whole budget nothing was made again (a key
+## waiting here is never asked for again either).
 func _apply(deadline: float) -> void:
-	_mutex.lock()
-	var ready: Array = _done.keys()
-	_mutex.unlock()
-	ready.sort_custom(func(a: Vector4i, b: Vector4i) -> bool: return _distance(a) < _distance(b))
 	var wanted := {}
 	for k in leaves:
 		wanted[k] = true
+	var near := {}
+	_mutex.lock()
+	for k: Vector4i in _done.keys():
+		if wanted.has(k) or _wanted_solid.has(k):
+			near[k] = 0.0
+		else:
+			_done.erase(k)
+	_mutex.unlock()
+	for k: Vector4i in near:
+		near[k] = _distance(k)
+	var ready: Array = near.keys()
+	ready.sort_custom(func(a: Vector4i, b: Vector4i) -> bool: return near[a] < near[b])
+	var applied := 0
 	for k: Vector4i in ready:
-		if Time.get_ticks_usec() > deadline:
+		if applied > 0 and Time.get_ticks_usec() > deadline:
 			return
+		applied += 1
 		_mutex.lock()
 		var data: TerrainChunkData = _done[k]
 		_done.erase(k)

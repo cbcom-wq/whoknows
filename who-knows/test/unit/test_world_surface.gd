@@ -177,6 +177,47 @@ func test_a_surface_freed_mid_build_waits_for_its_jobs():
 	s.free()
 	pass_test("freed with jobs in flight, and nothing broke")
 
+## Skimming fast, jobs finish for chunks the focus has already left. Those
+## results must go at once and a wanted one must still be made, even with the
+## budget spent: once they piled up, sorting them alone took the whole budget,
+## nothing was ever made, and the pile grew for ever.
+func test_results_nobody_wants_are_dropped_and_a_wanted_one_is_always_made():
+	var s := _surface(500.0)
+	s.finish()
+	var k: Vector4i = s.leaves[0]
+	(s._chunks[k] as Node).free()
+	s._chunks.erase(k)
+	var data := TerrainChunkData.build(s.terrain, k)
+	var wanted := {}
+	for l in s.leaves:
+		wanted[l] = true
+	s._done[k] = data
+	var stale := 0
+	for x in 64:
+		for y in 64:
+			var other := Vector4i(CubeSphere.face_of(-_up), 6, x, y)
+			if not wanted.has(other):
+				s._done[other] = data
+				stale += 1
+	assert_gt(stale, 4000)
+	s._apply(0.0)
+	assert_true(s._chunks.has(k), "the wanted chunk is made though the deadline has passed")
+	assert_true(s._done.is_empty(), "the results nobody wants are gone")
+
+## The bounds cache grows by nearly one node a metre on a long low flight;
+## past BOUNDS_KEPT it keeps only what the last selection looked at.
+func test_the_bounds_cache_stays_bounded_on_a_long_flight():
+	var s := _surface(500.0)
+	s.finish()
+	var kept := s._bounds.size()
+	for i in WorldSurface.BOUNDS_KEPT:
+		s._bounds[Vector4i(CubeSphere.face_of(-_up), 14, i, 0)] = [Vector3.ZERO, 1.0, 1.0]
+	s.update(_above(_planet(), s, 500.0 + 2.0 * WorldSurface.RESELECT_AFTER))
+	assert_lt(s._bounds.size(), kept * 2, "only the last selection's bounds are kept")
+	for k in s.leaves:
+		assert_true(s._bounds.has(k), "%s's bound is kept" % k)
+	s.finish()
+
 # --- solid ground (§5.5) --------------------------------------------------------
 
 func _anchor(s: WorldSurface, altitude: float, mask := BodyProxy.LAYER) -> RigidBody3D:
