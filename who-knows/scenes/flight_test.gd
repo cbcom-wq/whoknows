@@ -10,11 +10,12 @@ extends Node3D
 ## calm moments. This is the one place that knows every part of the game, so
 ## capture() and restore here gather and hand out each part's dictionary.
 
+## The ship you are aboard changed (many ships spec §4.1).
+signal aboard_changed(ship: Ship)
+
 @onready var _starter: Ship = $Ship
 @onready var _hud: HudRoot = $HudRoot
 @onready var _director: CameraDirector = $CameraDirector
-@onready var _cockpit_marker: VelocityMarker = $Ship/Canopy/CanopyOverlay/CockpitMarker
-@onready var _heading_cockpit: HeadingMarker = $Ship/Canopy/CanopyOverlay/HeadingCockpitMarker
 @onready var _prompt: Label = $Prompt/Label
 @onready var _interactor: Interactor = $Ship/Interior/Avatar/Head/Interactor
 @onready var _avatar: Avatar = $Ship/Interior/Avatar
@@ -133,6 +134,7 @@ func _ready() -> void:
 		_wire_ship(ship)
 	fleet.joined.connect(_wire_ship)
 	fleet.left.connect(_on_ship_left)
+	board(aboard, true)
 
 ## Every ship in the world (many ships spec §5): the starter first, aboard.
 func _make_fleet() -> void:
@@ -188,6 +190,105 @@ func _wire_ship(ship: Ship) -> void:
 
 func _on_ship_left(ship: Ship) -> void:
 	npc_debug.directors.erase(ship.npc_director)
+
+## Hands you to `ship` (many ships spec §4.1): its hull drawn as your own and
+## its interior shown, the other's not; the views, the HUD's markers, the warp
+## panel, your hands and the origin's focus all follow it, and only its
+## sensors scan. Boarding the ship you are aboard does nothing unless `force`.
+func board(ship: Ship, force := false) -> void:
+	if ship == null or (ship == aboard and not force):
+		return
+	var old := aboard
+	aboard = ship
+	if old != null and old != ship and is_instance_valid(old):
+		old.set_own(false)
+		for m in _cockpit_markers(old):
+			_hud.unregister_element(m)
+	ship.set_own(true)
+	for m in _cockpit_markers(ship):
+		_hud.register_element(m)
+	_director.bind(ship)
+	($HudRoot/Screen/ChaseMarker as VelocityMarker).set_camera(ship.chase_camera)
+	($HudRoot/Screen/HeadingChaseMarker as HeadingMarker).set_camera(ship.chase_camera)
+	_rebind_markers(ship)
+	if warp_panel != null:
+		warp_panel.drive = ship.warp
+	_avatar.grasp.world_root = ship.items
+	if exterior_npcs != null:
+		exterior_npcs.cameras = [ship.chase_camera, ship.canopy_camera, _avatar.camera]
+	for s in fleet.ships():
+		s.sensors.process_mode = Node.PROCESS_MODE_INHERIT if s == ship else Node.PROCESS_MODE_DISABLED
+	_universe.set_focus(_avatar if _avatar.mode == Avatar.Mode.SUIT else ship.exterior)
+	aboard_changed.emit(ship)
+
+## The cockpit's own markers, in `ship`'s canopy view: the HUD feeds them while
+## it is the ship you are aboard.
+static func _cockpit_markers(ship: Ship) -> Array[HudElement]:
+	var out: Array[HudElement] = []
+	for marker_name in ["CockpitMarker", "HeadingCockpitMarker"]:
+		var m := ship.canopy_overlay.get_node_or_null(marker_name) as HudElement
+		if m != null:
+			out.append(m)
+	return out
+
+## The contact, course and body markers onto `ship` (bridge computer spec §8):
+## the cockpit's into its canopy view, the chase view's through its chase
+## camera, all reading its sensors.
+func _rebind_markers(ship: Ship) -> void:
+	for group: Array in [contact_markers, course_markers, body_markers]:
+		for m: WorldMarker in group:
+			if String(m.name).ends_with("Cockpit"):
+				if m.get_parent() != ship.canopy_overlay:
+					m.reparent(ship.canopy_overlay, false)
+				m.set_camera(ship.canopy_camera)
+			elif String(m.name).ends_with("Chase"):
+				m.set_camera(ship.chase_camera)
+	for m in contact_markers:
+		(m as ContactMarker).sensors = ship.sensors
+	for m in course_markers:
+		(m as CourseMarker).bind(ship.sensors)
+		(m as CourseMarker).warp = ship.warp
+	for m in body_markers:
+		(m as BodyMarker).sensors = ship.sensors
+
+## F8, debug (many ships spec §4.3): seats you at the helm of the nearest other
+## awake ship. False, with a toast saying why, when it can't.
+func board_nearest() -> bool:
+	var why := _board_refusal()
+	var target: Ship = null
+	if why == "":
+		target = fleet.nearest(aboard.exterior.global_position, aboard)
+		if target == null:
+			why = "NO OTHER SHIP NEAR"
+	if why != "":
+		if warp_panel != null:
+			warp_panel.toast(why)
+		return false
+	board_at_helm(target)
+	return true
+
+## Why F8 must wait, or "": on a spacewalk, mid-sit, during a warp, or while an
+## airlock of the ship you are aboard cycles.
+func _board_refusal() -> String:
+	if _avatar.mode == Avatar.Mode.SUIT:
+		return "NOT ON A SPACEWALK"
+	if _director.is_moving():
+		return "SITTING DOWN"
+	for ship in fleet.ships():
+		if ship.warp.is_spinning():
+			return "WARP ENGAGED"
+	for airlock: Airlock in aboard.airlocks.values():
+		if airlock.busy() != "":
+			return "AIRLOCK CYCLING"
+	return ""
+
+## Seats you at `ship`'s helm at once (many ships spec §4.3): up out of your own
+## chair, across to its deck, aboard it, and down into its seat.
+func board_at_helm(ship: Ship) -> void:
+	_director.stand_now()
+	_avatar.move_aboard(ship.interior, ship.interior.global_transform * _deck_spot(ship))
+	board(ship)
+	_director.sit_now(ship.seat)
 
 ## The interior camera is also the seated camera -- CameraDirector moves it
 ## between head and seat -- so one assignment covers walking and flying.
@@ -552,6 +653,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			_universe_readout.visible = not _universe_readout.visible
 		KEY_F7:
 			hop(-1 if key.shift_pressed else 1)
+		KEY_F8:
+			board_nearest()
 
 ## How far off `b`'s surface the hop leaves you.
 static func hop_off(b: SystemBody) -> float:
@@ -1029,10 +1132,9 @@ func _deck_spot(ship: Ship) -> Transform3D:
 ## reusable for any future vehicle. The bootstrap is the only place that
 ## knows both halves.
 func _wire_hud() -> void:
-	# The cockpit marker lives in the ship's SubViewport, so it cannot be
-	# discovered as one of HudRoot's descendants.
-	_hud.register_element(_cockpit_marker)
-	_hud.register_element(_heading_cockpit)
+	# The cockpit's markers live in a ship's SubViewport, so they cannot be
+	# discovered as HudRoot's descendants: board() registers those of the ship
+	# you are aboard.
 	# The hull (health and damage spec §11), in the band beside the store.
 	var hull := HullPanel.new()
 	hull.name = "HullPanel"
@@ -1046,10 +1148,12 @@ func _wire_hud() -> void:
 	# §8.3): speed relative to the ship, and the way home.
 	_avatar.mode_changed.connect(_on_avatar_mode_changed)
 
-## The pilot's controls report the flight computer's telemetry plus the stick
-## and the pointer (flight controls spec §7).
+## The pilot's controls of the ship whose seat you took report the flight
+## computer's telemetry plus the stick and the pointer (flight controls spec
+## §7).
 func _on_piloting_changed(piloting: bool) -> void:
-	_hud.set_active_vehicle(_starter.pilot if piloting else null)
+	var ship := _director.seat_ship()
+	_hud.set_active_vehicle(ship.pilot if piloting and ship != null else null)
 
 func _on_avatar_mode_changed(mode: Avatar.Mode) -> void:
 	if mode == Avatar.Mode.SUIT:

@@ -34,9 +34,16 @@ var align_go := false
 
 var _fading := 0.0
 
+## Reads `p_sensors`, letting go of the ship it read before (many ships spec
+## §4.1).
 func bind(p_sensors: ShipSensors) -> void:
+	if sensors != null and sensors.course_arrived.is_connected(_on_course_arrived):
+		sensors.course_arrived.disconnect(_on_course_arrived)
 	sensors = p_sensors
-	sensors.course_arrived.connect(func(_id: StringName) -> void: _fading = FADE)
+	sensors.course_arrived.connect(_on_course_arrived)
+
+func _on_course_arrived(_id: StringName) -> void:
+	_fading = FADE
 
 func _process(delta: float) -> void:
 	if _fading > 0.0:

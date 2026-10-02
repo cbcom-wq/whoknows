@@ -36,9 +36,16 @@ func _process(_delta: float) -> void:
 	sync(get_viewport().get_camera_3d())
 
 ## Aligns the canopy camera with `viewer` when it is inside the interior.
+## With no viewer inside, the view stops rendering and the camera rides on the
+## hull where the helm's eye would see from: the cockpit's markers project
+## through it the moment you board a ship you have never been in (many ships
+## spec §4.1), so it is never left at the world's origin, nor at the hull's,
+## where the velocity marker aims at rest.
 func sync(viewer: Camera3D) -> void:
 	if viewer == null or not _interior.is_ancestor_of(viewer):
 		_viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
+		var eye := _interior.get_node_or_null("PilotSeat/Eye") as Node3D
+		_place(eye.global_transform if eye != null else _interior.global_transform)
 		return
 	_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	var screen := Vector2i(get_viewport().get_visible_rect().size)
@@ -49,8 +56,12 @@ func sync(viewer: Camera3D) -> void:
 	if _base_mask < 0:
 		_base_mask = _camera.cull_mask
 	_camera.cull_mask = _base_mask | (ExteriorBuilder.OWN_HULL_LAYER if include_hull else 0)
-	# Interior storeys are taller than the grid: take the viewer's storey
-	# offset off, so upper-deck windows line up too.
-	var local := _interior.global_transform.affine_inverse() * viewer.global_transform
+	_place(viewer.global_transform)
+
+## Stands the canopy camera where `at`, a pose in interior space, would be if
+## the interior were inside the hull. Interior storeys are taller than the
+## grid: the storey offset comes off, so upper-deck windows line up too.
+func _place(at: Transform3D) -> void:
+	var local := _interior.global_transform.affine_inverse() * at
 	local.origin.y -= InteriorBuilder.storey_offset(InteriorBuilder.storey_at(local.origin.y))
 	_camera.global_transform = _hull.global_transform * local
