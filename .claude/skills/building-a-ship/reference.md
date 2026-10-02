@@ -444,11 +444,13 @@ Saved places outside are `UniversePoint`s (`SaveCodec.upoint`). The world's star
 |---|---|
 | `BlockInstance.damage` | hp lost; 0 intact. Only `BlockDamage` writes it |
 | `BlockDamage.stage_of(inst, def)`, `stage_at(damage, hp)` | `INTACT` < 0.5 hp, `DAMAGED` < 1.0, `WRECKED` < 1.5, `GONE`; `output_of(stage)` 1, 0.5, 0, 0 |
-| `BlockDamage.apply(grid, catalog, coord, hp)` / `apply_many(grid, catalog, {coord: hp})` | deals damage; `grid.block_staged(coord, stage)` on a stage change; removes the gone and anything cut off from the core in one `ShipGrid.remove_many` (one rebuild); returns what went |
+| `BlockDamage.apply(grid, catalog, coord, hp, held)` / `apply_many(grid, catalog, {coord: hp}, held)` | deals damage; `held` (coord -> true) is the cabin's shell, wrecked but never knocked off; `grid.block_staged(coord, stage)` on a stage change; removes the gone and anything cut off from the core in one `ShipGrid.remove_many` (one rebuild); returns what went |
 | `BlockDamage.repair(...)`, `rebuild(grid, catalog, coord, id, orientation)` | mends; puts a block back at `WRECKED_AT` × hp |
 | `BlockDamage.KEEP` | `core`, `pilot_seat`, `airlock`: never knocked off |
 | `Ship.inner_cells`, `Ship.inner_of(layout, catalog)` | the cabin's shell, from the launch layout: walkable cells and every block beside one. Passed as `held` to `BlockDamage.apply_many`: wrecked, never knocked off, and no loss may cut any of it off. `set_grid` puts missing shell blocks back, wrecked |
-| `DamageShow.spitting()`, `spitting_inside()` | hull spits (damaged, from a face onto space) and cabin spits (damaged or wrecked, from the wall into the cabin), all in their parent's frame |
+| `DamageShow.spitting()`, `spitting_inside()` | hull spits (damaged, from a face onto space) and cabin spits (damaged or wrecked, from the wall into the cabin, at `Ship._inside_face`), all in their parent's frame (`local_coords`), never in `Universe.HOLDS_SHIFT`. `SPARKS` 6 a spit, `SPARK_LIFE` 0.3 s, every `SPIT_EVERY` 0.8–2.5 s; a spark is a 1.5 × 5 cm unshaded box in `HullPalette.SPARK` |
+| `DamageShow.lost(coords)` | a block gone: a world-space burst (`BURST_SPARKS` 32, 2 s, holds the shift) and 3–5 charred chunks in `EXTERIOR_SPACE`, freed after 2 s, at up to `MAX_BURSTS` 4 cells |
+| `Ship._queue_rebuild()` | a stage seen from inside (`InteriorBuilder.shows`): one deferred interior rebuild (`_rebuild_everything(false)`), the hull left standing |
 | `ShipStats.intact_forward`, `intact_torque`, `crippled`, `crippled_reason` | crippled below 25% of intact forward thrust or any intact turning axis, or with no working `quantum_core` |
 | `ShipCells.hull_cell(grid, body, shape, p, n)`, `interior_cell(grid, p, n)`, `interior_cell_at(p)` | which block a hit lands on: a hull collider's meta `&"cell"`; the block 0.35 m behind an interior face, else the one in front |
 | `Ship.take_damage(cell, hp)`, `take_damage_many`, `crash_damage(knock)` | crashes: nothing below `CRASH_FROM` 2 m/s of knock, then `CRASH_K` 12 × (knock − 2)² on the struck cell and half on its neighbours, dealt after the physics step |
@@ -459,8 +461,10 @@ Saved places outside are `UniversePoint`s (`SaveCodec.upoint`). The world's star
 | `ExteriorBuilder.set_stage(coord, stage)`, `stage_colour(stage)`, `instance_colour(coord)`, `skin_spans(coord)` | the cell's skin multiplied by `HullPalette.UNHURT` (white) / `SCORCH` / `CHAR`: the plating's vertex colour is the stage colour, trim and glass their colour times it; glows, lenses and beams stay lit. In place: the cell's vertices are recoloured in the kept arrays and the touched surfaces re-added to the same `ArrayMesh`es once at the end of the frame. On the starter (GTX 960 box) `set_stage` 0.03–0.08 ms, the upload 1.3–1.9 ms, five stages in one frame 1.4 ms; re-dressing the skin would be 53 ms. The alcove is not tinted |
 | `InteriorKit.wear`, `InteriorBuilder.wear_at(coord, normal)`, `shows(coord)` | interior dressing leans toward `InteriorPalette.SCORCH` / `CHAR`; a wreck's glow goes dark |
 
-Measured on the starter (crash probe, `test/probes/crash_probe.gd`): 3 m/s nose-on hurts 3
-blocks a little; 5 m/s knocks one off and damages 3; 8 m/s knocks 4 off. Not crippled by any.
+Measured on the starter (crash probe, `test/probes/crash_probe.gd`, with the cabin's shell held,
+2026-10-02): 3 m/s nose-on hurts 3 blocks a little; 5 m/s damages 2 and wrecks 1, nothing
+knocked off; 8 m/s knocks 3 buffer blocks off. Not crippled by any. The buffer is 49 of 110
+blocks. A full rebuild is ~220 ms and an interior-only one ~125 ms (headless, dev Xeon).
 
 ## The warp (`docs/superpowers/specs/2026-09-28-warp-design.md`)
 
@@ -498,6 +502,15 @@ frozen kinematic with layer and mask 0; `QuantumPlant` runs the cores at `&"warp
   <abs out dir>`. Use absolute paths, and don't pass `--headless`: headless never renders or
   compiles shaders. In a worktree, give the worktree's copy of the script.
 - **The full suite** takes about 8 minutes: run it in the background, logged to a file.
+- **Damage probes** (`who-knows/test/probes/`, run like the ship probe):
+  - `damage_review.gd`: the renders to show the owner for any damage work (step 10);
+  - `damage_render.gd`: an interior wall intact, damaged and wrecked at eye height, and a block
+    knocked off;
+  - `torch_render.gd`: the repair torch in hand and welding;
+  - `crash_probe.gd` (headless is fine): nose-on crashes at 3, 5 and 8 m/s and the rebuild cost.
+- **Rendering without a GPU** (a cloud session): `xvfb-run -a -s "-screen 0 1280x720x24" <godot>
+  --rendering-method gl_compatibility --rendering-driver opengl3 ...` renders through Mesa
+  llvmpipe. Flatter than the owner's GPU, and an unlit hull is near-black: fill-light it.
 - **Godot:** `D:\Godot_v4.5.1-stable_mono_win64\Godot_v4.5.1-stable_mono_win64\Godot_v4.5.1-stable_mono_win64_console.exe`.
 - **Testing a real scene in GUT:**
   - load `res://scenes/flight_test.tscn` and `add_child_autofree`;

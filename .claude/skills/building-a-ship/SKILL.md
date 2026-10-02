@@ -144,7 +144,11 @@ Do these in order. Each one names the check that proves it.
    stern starboard), the profile, above and below, fill-lit to judge the shape and **dark with the floods, the forward
    lights and both on** to judge the lights; and the ship **by a big rock's night side**, nose on
    with the seat's view and belly down over it. The worst view is seated by the rock with both
-   groups on; the starter holds 143–150 fps there.
+   groups on; the starter holds 143–150 fps there. **Damage** (anything touching damage, its
+   looks or the cabin's shell): render `test/probes/damage_review.gd` before merging. It shows
+   the hull intact and after a heavy port-bow hit (fill-lit; intact, scorched, charred and
+   knocked off in one view), and the cabin at eye height after it (the helm, the corridor, a
+   wrecked wall and its sparks). The cabin must keep its shape: same rooms, pod, helm and doors.
 11. **Fly it:** a steady turn on the arrow keys, a clicked heading 120° away, and a speed-locked
     turn at cruise. Compare them with the feel numbers you meant.
 
@@ -207,6 +211,7 @@ thrust.
 | Re-dressing the skin for one stage | Rebuilding the skin from the layout costs 53 ms on the starter, and would replace the lens meshes and window glow `ShipLights` holds | `set_stage` recolours the cell's vertex runs in arrays kept from the dressing and re-adds the touched surfaces once at the end of the frame (~1.5 ms). Never read a mesh's arrays back to do it: that stalls on the GPU (5–25 ms) |
 | Recolouring one interior cell | The dressing is a few merged meshes, so there is no one cell's mesh to tint | A stage seen from inside rebuilds the interior once, deferred (`Ship._queue_rebuild`), leaving the hull standing: ~125 ms on the dev Xeon |
 | Letting damage knock off cabin blocks | After a hard crash onto a planet the cabin had reshaped round the owner: a little room with the chair, and no way to sit back down to fly | The cabin's shell is held (`Ship.inner_cells`, `BlockDamage.apply_many(..., held)`); only the buffer breaks away, and a save missing shell blocks gets them back wrecked |
+| Merging damage work on green tests | The cabin's shell went to `main` with no renders; the owner had to ask for them, and the first ones showed the cabin's sparks as chunky white tiles hanging in the air | Render `damage_review.gd` and show the owner before merging (step 10). Sparks are 1.5 × 5 cm and live 0.3 s |
 | A repeating world-space emitter in `Universe.HOLDS_SHIFT` | Every damaged block re-fired its sparks every second or two, so with a few damaged the floating origin would almost never have found a gap to shift in | Anything that repeats stays in its parent's frame (`local_coords`) and out of the group; only short one-shots outside hold the shift |
 | Letting go of a warp at 120 m/s with the assist on | The assist cancels velocity nobody asked for, so the ship braked to rest at the warp limit instead of coasting in | `WarpDrive` sets the speed lock to 120 m/s at drop-out; anything else that hands the hull a velocity with the assist on must do the same |
 | Letting the rest of the ship behave normally at warp | Found in the final review: you could cycle the airlock and step out mid-warp (stranded kilometres behind), the RCS kept its last command and puffed the whole way, and motion coupling read the frozen hull's placing as a 12 m/s² shove | Anything that acts on the hull's motion or lets someone outside asks `warp.is_spinning()` / `travelling()` first: `Airlock.warping()`, `FlightComputer`'s early return, `MotionCoupling._warp()` |
@@ -229,8 +234,12 @@ thrust.
 
 ## Not built yet (plan for it; don't assume it works)
 
-- **Per-cell rebuilds.** Any removal, and any stage seen from inside, rebuilds the whole ship:
-  ~140 ms headless on a 2.8 GHz Xeon for the starter. Fine for now; a hitch in a big fight.
+- **Per-cell rebuilds.** Any removal rebuilds the whole ship (~220 ms headless on the 2.8 GHz
+  dev Xeon for the starter since the generated skin), and a stage seen from inside rebuilds the
+  interior (~125 ms; the hull recolours in place). Fine for now; a hitch in a big fight.
+- **What a wrecked ceiling light should do.** A wreck's glow goes dark, so its ceiling lights
+  show as black discs that read a little like holes (the damage renders, 2026-10-02). Asked of
+  the owner: dark, flickering or a faint glow.
 - **Debris and breaches.** A piece cut off vanishes in a burst; a hole has no air to lose.
 
 - **Multi-storey interiors.** A `ladder` passes the validator, but every walkable cell still gets
