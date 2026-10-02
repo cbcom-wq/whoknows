@@ -139,10 +139,13 @@ func test_the_weapon_rack_is_stocked_with_two_pistols():
 func test_the_galley_counter_has_two_mugs():
 	assert_eq(_stock(_built()).get(&"mug", 0), 2)
 
-func test_the_closet_has_canisters_and_a_crate():
+## The crate's place went to a pile of three scrap plates for the repair torch
+## (health and damage spec §8.1, the owner's choice on 2026-10-02).
+func test_the_closet_has_canisters_and_a_pile_of_scrap_plates():
 	var stock := _stock(_built())
 	assert_gt(stock.get(&"canister", 0), 0)
-	assert_eq(stock.get(&"crate", 0), 1)
+	assert_eq(stock.get(&"scrap_plate", 0), 3)
+	assert_eq(stock.get(&"crate", 0), 0)
 
 func test_every_stow_point_takes_what_it_is_stocked_with():
 	var items := ItemCatalog.load_from_dir()
@@ -160,7 +163,6 @@ func test_the_old_stock_is_where_it_was():
 	var stock := _stock(_built())
 	assert_eq(stock.get(&"plasma_pistol", 0), 2)
 	assert_eq(stock.get(&"mug", 0), 2)
-	assert_eq(stock.get(&"crate", 0), 1)
 
 
 const FAIRINGS := [&"fairing_slope", &"fairing_slope_long_low", &"fairing_slope_long_high",
