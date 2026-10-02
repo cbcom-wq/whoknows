@@ -260,6 +260,8 @@ thrust.
 | Naming a ship anew on load | The droid's ledger record is named for its ship, so its health would be lost or given to another | Names never change and are never reused; `Fleet.next_number` is saved |
 | Standing up in the frame you let go of a key | `clear_pilot_input` latches the burn on purpose, so a scripted run kept reversing at 4.8 m/s² after standing | In a probe or test, let a process frame or two pass between releasing a key and standing |
 | A GUT file that will not parse | GUT skips it, says nothing failed and exits 0 | Check the run's `Tests` count is there, not only the exit code |
+| Every ship writing its uniform into one shared material | Found in many ships' final review: each ship pushed its hull's `hull_inverse` into the one livery, so with two awake one ship's stripe was measured in the other's frame | Anything per ship in a shared material needs a copy per ship: `Ship.livery`, swapped on by `_apply_livery`. Render two ships at different attitudes |
+| A SubViewport that only turns off when its owner processes | A ship loaded asleep (processing disabled from the start) rendered its canopy view every frame, unseen | Start it `UPDATE_DISABLED` in the scene; whatever puts a ship to sleep turns it off too (`Fleet._hold`) |
 
 ## Not built yet (plan for it; don't assume it works)
 

@@ -383,6 +383,21 @@ designed, except:
   sets `aboard` before it first boards, so the starter stayed own beside the ship you were in.
 - **Beyond §5.1:** `Fleet.awake()`, `max_ships` (the cap, settable for tests), and `launch` on
   `spawn` (a saved ship's launch layout must be set before its grid).
+- **§4.2 as built:** a ship is its own until told otherwise (`Ship.own` starts true; `Fleet.spawn`
+  makes a new one not own), and the layer is moved by one pass over the hull's drawn pieces after
+  every rebuild (`Ship._apply_own`, pieces made on layer 4 alone are marked `OWN_ONLY`), not by
+  each builder taking its layer from the ship. F8 is also refused mid-sit ("SITTING DOWN").
+- **From the final review** (a fresh reviewer read the whole branch):
+  - **each ship has its own livery** (`Ship.livery`, swapped onto every piece painted with the
+    shared one by `_apply_livery` after each rebuild). The stripe is measured through
+    `hull_inverse`, which every ship had been pushing into the one shared material: with two
+    awake, one ship's stripe was drawn in the other's frame. Rendered with the second ship
+    rolled 15°: each stripe stays on its own hull;
+  - **a canopy view starts off** (`ship.tscn`, `render_target_update_mode` 0) and a ship falling
+    asleep turns it off: one loaded asleep never ran its portal, so it rendered a 1536 × 512 view
+    every frame;
+  - **a ship spawned after you boarded scans nothing** (`_wire_ship` sets its sensors' process
+    mode, as `board()` does).
 - **`SuitTie` checks at 4 Hz in its own `_physics_process`**; `suit_tie.check()` runs it now.
 - **Proof** (§8.2), on the owner's box at 1280 × 720:
   - seated 60 m off a rock's night side with both light groups on: **130 fps with one ship and

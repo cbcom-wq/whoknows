@@ -239,7 +239,10 @@ func _fleet_pass(scene: Node) -> void:
 	first.exterior.global_position += first.exterior.global_basis.z * 2000.0
 	await _process_frames(60)
 	var hull := first.exterior.global_transform
-	second.exterior.global_transform = Transform3D(Basis(hull.basis.y, PI) * hull.basis, hull * Vector3(-5, 1, -60))
+	# Rolled 15°: each hull's stripe must stay on its own hull, painted in its
+	# own frame, not the other ship's.
+	var turned := Basis(hull.basis.y, PI) * hull.basis * Basis(Vector3.FORWARD, deg_to_rad(15))
+	second.exterior.global_transform = Transform3D(turned, hull * Vector3(-5, 1, -60))
 	second.exterior.linear_velocity = Vector3.ZERO
 	second.exterior.angular_velocity = Vector3.ZERO
 	var fill := DirectionalLight3D.new()

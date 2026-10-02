@@ -429,6 +429,7 @@ _hud.set_active_vehicle(ship.pilot if piloting and ship != null else null)
 | `Fleet.capture(universe)`, `to_dict()`, `from_dict(d)`, `restore_hull(ship, part)` | the save's `"ships"` and `"fleet"`; a far ship loads asleep |
 | flight scene `aboard`, `board(ship, force)`, `board_nearest()` (F8), `board_at_helm(ship)`, `_wire_ship(ship)`, `aboard_changed` | the ship you are in; the one switch; F8's hop; everything one ship needs from the game |
 | `Ship.own`, `set_own(on)` | the own render layer and the interior shown, for the ship aboard only; re-applied after every rebuild |
+| `Ship.livery`, `_apply_livery()` | the ship's own copy of `HULL_LIVERY_MATERIAL`, swapped onto every piece painted with the shared one after each rebuild; `_process` pushes its hull's `hull_inverse` into it |
 | `Ship.pilot`, `seat`, `motion`, `chase_camera`, `canopy_camera`, `canopy_overlay`, `helm_cell()`, `airlock_crossed` | |
 | `CameraDirector.bind(ship)`, `seat_ship()`, `stand_now()`, `ship_of(node)` | |
 | `PilotControls.bind_director(d)`, `PilotSeat.director`, `Avatar.move_aboard(interior, pose)` | |

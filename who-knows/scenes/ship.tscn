@@ -42,7 +42,7 @@ interior_path = NodePath("../Interior")
 
 [node name="Canopy" type="SubViewport" parent="."]
 size = Vector2i(1536, 512)
-render_target_update_mode = 4
+render_target_update_mode = 0
 
 [node name="CanopyCam" type="Camera3D" parent="Canopy"]
 current = true

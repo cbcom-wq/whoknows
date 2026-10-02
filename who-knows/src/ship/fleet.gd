@@ -173,6 +173,8 @@ func _hold(ship: Ship, held: Dictionary) -> void:
 	ship.exterior.remove_from_group(AsteroidStream.SPACE_ANCHOR)
 	for p in ship.find_children("*", "GPUParticles3D", true, false):
 		(p as GPUParticles3D).emitting = false
+	# Its portal stops processing too, so it could not turn its view off.
+	(ship.get_node("Canopy") as SubViewport).render_target_update_mode = SubViewport.UPDATE_DISABLED
 	ship.add_to_group(ASLEEP)
 	ship.process_mode = Node.PROCESS_MODE_DISABLED
 	ship.visible = false

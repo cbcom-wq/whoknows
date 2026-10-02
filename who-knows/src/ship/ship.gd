@@ -42,10 +42,8 @@ const SHED_SPEED := 1.0
 ## Where you wake after blacking out, if the ship has one.
 const WAKE_ROOM := &"bunk_room"
 
-## The exact ShaderMaterial `hull`/`hull_wedge` meshes reference (their .tres
-## surfaces point at this same path, and Godot's resource cache guarantees a
-## single shared instance) -- not a duplicate. Loading it here needs no
-## change to ExteriorBuilder.
+## The livery every builder paints the hull with: one shared instance. Each
+## ship swaps it for its own copy, `livery` (_apply_livery).
 const HULL_LIVERY_MATERIAL: ShaderMaterial = preload("res://data/materials/hull_livery.tres")
 ## The window glass's shader; each ship makes its own material from it.
 const CANOPY_SHADER: Shader = preload("res://data/materials/interior/canopy_window.gdshader")
@@ -99,6 +97,8 @@ var warp: WarpDrive
 ## layer 1, so you see it through your windows, and hides its interior, which
 ## nobody can see from outside. A ship is your own until told otherwise.
 var own := true
+## This ship's own copy of the hull livery (_apply_livery).
+var livery: ShaderMaterial = HULL_LIVERY_MATERIAL.duplicate()
 
 ## Seconds since a rock last struck the hull.
 var since_struck := INF
@@ -245,9 +245,19 @@ func _process(_delta: float) -> void:
 	# that rotation (`hull_inverse * MODEL_MATRIX`) before testing height, so
 	# the stripe stays fixed on the hull under roll and pitch instead of
 	# swimming across it. See hull_livery.gdshader's header comment for the
-	# full derivation.
-	HULL_LIVERY_MATERIAL.set_shader_parameter(&"hull_inverse", exterior.global_transform.affine_inverse())
+	# full derivation. Each ship pushes its own hull's into its own copy: one
+	# shared material would hold only the last ship's (many ships, §12).
+	livery.set_shader_parameter(&"hull_inverse", exterior.global_transform.affine_inverse())
 	_update_hum()
+
+## Every hull piece painted with the shared livery gets this ship's own copy:
+## the stripe is measured through `hull_inverse`, which is this hull's alone.
+## After every rebuild, as the builders always paint with the shared one.
+func _apply_livery() -> void:
+	for node in exterior.find_children("*", "GeometryInstance3D", true, false):
+		var g := node as GeometryInstance3D
+		if g.material_override == HULL_LIVERY_MATERIAL:
+			g.material_override = livery
 
 ## The hum plays while the listener is aboard, and stops outside.
 func _update_hum() -> void:
@@ -643,6 +653,7 @@ func _rebuild_everything(hull := true) -> void:
 	_set_anchor_radius()
 	_bind_crew()
 	_apply_own()
+	_apply_livery()
 
 ## Keeps each bridge computer's page, range and selection across a rebuild,
 ## which frees the dressing and every table in it (bridge computer spec §10).

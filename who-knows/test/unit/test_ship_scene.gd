@@ -43,7 +43,8 @@ func test_every_exported_path_survived_the_parse():
 	assert_eq(ship.seat.collision_layer, 2)
 	assert_eq(ship.chase_camera.cull_mask, 5)
 	assert_eq(ship.canopy_camera.cull_mask, 1)
-	assert_eq((ship.get_node("Canopy") as SubViewport).render_target_update_mode, SubViewport.UPDATE_ALWAYS)
+	assert_eq((ship.get_node("Canopy") as SubViewport).render_target_update_mode, SubViewport.UPDATE_DISABLED,
+		"no canopy view until someone looks through it: its portal turns it on")
 
 func test_each_ship_draws_its_own_canopy_view():
 	var a := _ship(3)

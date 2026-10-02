@@ -186,6 +186,41 @@ func test_a_ship_falling_asleep_stops_its_puffs_and_never_holds_the_save():
 		assert_false((p as GPUParticles3D).emitting, "%s stopped" % p.name)
 	assert_eq(_root._fleet_busy(), "", "asleep, it never holds the save")
 
+## The stripe is painted from ship-local height through `hull_inverse`: each
+## ship's livery must carry its own hull's, or one ship's stripe is measured in
+## the other's frame (the final review, I1).
+func test_each_ship_paints_its_stripe_from_its_own_hull():
+	var ship := _spawn(Vector3(300, 40, 0))
+	ship.exterior.global_basis = Basis(Vector3.RIGHT, 0.3)
+	await wait_process_frames(2)
+	for s: Ship in [_starter, ship]:
+		var found := 0
+		for node in s.exterior.find_children("*", "GeometryInstance3D", true, false):
+			var mat := (node as GeometryInstance3D).material_override as ShaderMaterial
+			if mat == null or mat.shader != Ship.HULL_LIVERY_MATERIAL.shader:
+				continue
+			found += 1
+			var inv: Variant = mat.get_shader_parameter(&"hull_inverse")
+			var t: Transform3D = Transform3D(inv) if inv is Projection else inv
+			assert_true(t.is_equal_approx(s.exterior.global_transform.affine_inverse()),
+				"%s's %s carries its own hull" % [s.name, node.name])
+		assert_gt(found, 0, "%s has livery pieces" % s.name)
+
+## A ship nobody is in draws no canopy view: one asleep from the start never
+## had its portal run to turn it off (the final review, I2).
+func test_a_ship_nobody_looks_into_draws_no_canopy_view():
+	var far := _spawn(Vector3(0, 0, 25000))
+	_fleet.check_sleep()
+	assert_true(_fleet.sleeping(far))
+	assert_eq((far.get_node("Canopy") as SubViewport).render_target_update_mode, SubViewport.UPDATE_DISABLED)
+
+## Only the ship you are aboard scans (§5.2), a ship spawned after you boarded
+## included (the final review, M2).
+func test_a_ship_spawned_beside_you_scans_nothing():
+	var ship := _spawn()
+	assert_eq(ship.sensors.process_mode, Node.PROCESS_MODE_DISABLED)
+	assert_eq(_starter.sensors.process_mode, Node.PROCESS_MODE_INHERIT)
+
 ## Saving waits on any ship (§6.4).
 func test_the_save_waits_on_every_ship():
 	var ship := _spawn()

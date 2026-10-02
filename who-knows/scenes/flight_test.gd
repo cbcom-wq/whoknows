@@ -185,6 +185,8 @@ func _wire_ship(ship: Ship) -> void:
 	ship.sensors.system = system
 	ship.sensors.whereabouts = star_system.whereabouts
 	ship.sensors.course_arrived.connect(_on_course_arrived.bind(ship))
+	# Only the ship you are aboard scans (§5.2); board() moves it after.
+	ship.sensors.process_mode = Node.PROCESS_MODE_INHERIT if ship == aboard else Node.PROCESS_MODE_DISABLED
 	# The speed limit climbs with altitude in a world's well (the world scale
 	# spec §6).
 	ship.flight_computer.whereabouts = star_system.whereabouts
