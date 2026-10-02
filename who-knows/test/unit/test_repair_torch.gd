@@ -55,6 +55,24 @@ func test_the_ship_starts_with_a_full_torch():
 	assert_not_null(_item, "stocked in the weapon room's ammo crate")
 	assert_eq(_torch.feed, RepairTorch.HOPPER, "three plates' worth")
 
+## Three plates to load, in a pile on the closet's bottom shelf where a crate
+## stood (spec §8.1; the owner chose the crate's place, 2026-10-02).
+func test_the_ship_starts_with_three_plates_stowed_in_a_pile():
+	var piled: Array[Item] = []
+	for node in _ship.items.get_children():
+		if node is Item and node.definition.id == &"scrap_plate":
+			assert_eq(node.state, Item.State.STOWED, "on the shelf, not loose")
+			piled.append(node)
+	assert_eq(piled.size(), InteriorProps.PLATE_STACK)
+	for item in _ship.items.get_children():
+		assert_ne((item as Item).definition.id, &"crate", "the plates took the crate's place")
+	piled.sort_custom(func(a: Item, b: Item) -> bool: return a.global_position.y < b.global_position.y)
+	for i in range(1, piled.size()):
+		var below := _ship.interior.to_local(piled[i - 1].global_position)
+		var above := _ship.interior.to_local(piled[i].global_position)
+		assert_almost_eq(Vector2(above.x, above.z), Vector2(below.x, below.z), Vector2.ONE * 0.001, "one on another")
+		assert_almost_eq(above.y - below.y, InteriorProps.PLATE_LIFT, 0.001)
+
 ## A scrap plate lying loose on the deck at `at` (interior-local).
 func _plate(at: Vector3) -> Item:
 	var plate := Item.new()

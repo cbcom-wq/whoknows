@@ -322,7 +322,10 @@ The owner chose a handheld tool: you carry it to the damage and point it there.
 - **Where plates come from:**
   - salvage fields already scatter them (`SalvageField.MIX`);
   - the quantum machine already makes them from QE;
-  - the ship starts with the torch full and **three plates** stowed in the cargo crates;
+  - the ship starts with the torch full and **three plates** in a pile on the closet's bottom
+    shelf, where a crate used to stand: their own stow class, `plate`, three spots stacked
+    `InteriorProps.PLATE_LIFT` apart (amended 2026-10-02: they had never been stocked, and the
+    owner chose the crate's place);
   - a block knocked off outside sheds **one plate** from the hole, as a stray (saving §7), which
     you can catch before it drifts off.
 - **The prompt** shows what the aim is on, its health left, its stage and the hopper, which the

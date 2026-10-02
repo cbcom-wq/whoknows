@@ -66,7 +66,12 @@ const SHELF_BOARD := 0.04
 const SHELF_DEPTH := 0.4
 
 ## Half the width a stow spot keeps clear of decor, by stow class.
-const STOW_CLEARANCE := {&"small": 0.12, &"crate": 0.27, &"sidearm": 0.15, &"tool": 0.14}
+const STOW_CLEARANCE := {&"small": 0.12, &"crate": 0.27, &"sidearm": 0.15, &"tool": 0.14, &"plate": 0.27}
+## Scrap plates for the repair torch lie in a pile on the full-width shelves'
+## bottom board, where a crate stood (owner, 2026-10-02): one spot a plate,
+## each PLATE_LIFT above the one below (a plate is 4 cm thick).
+const PLATE_STACK := 3
+const PLATE_LIFT := 0.042
 
 ## The top of the lower bunk's mattress. The lower bunk is solid only to here,
 ## so the Interactor can reach what lies on it (bunks_spots()).
@@ -1159,7 +1164,8 @@ static func shelves_spots(width: float) -> Array:
 	var out: Array = [[_at(Vector3(-half + 0.2, shelf_top(2), 0.2)), &"small"]]
 	if width >= 1.2:
 		out.append([_at(Vector3(-half + 0.45, shelf_top(2), 0.2)), &"small"])
-		out.append([_at(Vector3(half - 0.35, shelf_top(0), 0.2)), &"crate"])
+		for i in PLATE_STACK:
+			out.append([_at(Vector3(half - 0.35, shelf_top(0) + i * PLATE_LIFT, 0.2)), &"plate"])
 		out.append([_at(Vector3(-half + 0.35, shelf_top(0), 0.2)), &"crate"])
 		for x in [-half + 0.25, -half + 0.5, -half + 0.75]:
 			out.append([_at(Vector3(x, shelf_top(1), 0.2)), &"small"])

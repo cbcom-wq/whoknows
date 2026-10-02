@@ -152,7 +152,7 @@ func test_the_salvage_set_is_on_disk_as_the_spec_gives_it():
 const SALVAGE_HANDLING := {
 	&"rock_chunk": [&"small", Vector3(0.09, 0, 0), Vector3.ZERO],
 	&"ice_chunk": [&"small", Vector3(0.09, 0, 0), Vector3.ZERO],
-	&"scrap_plate": [&"crate", Vector3.ZERO, Vector3.ZERO],
+	&"scrap_plate": [&"plate", Vector3.ZERO, Vector3.ZERO],
 	&"wire_coil": [&"small", Vector3(0.063, 0, 0), Vector3.ZERO],
 	&"broken_module": [&"tool", Vector3(0.1, 0, 0.03), Vector3(30, 0, 0)],
 	&"quantum_shard": [&"small", Vector3(0, -0.04, 0), Vector3.ZERO],

@@ -467,7 +467,8 @@ static func _wall_piece(kit: InteriorKit, f: Transform3D, face: Dictionary) -> v
 ## the narrow one on the side wall.
 const CLOSET_STOCK := {
 	&"small": [&"canister", &"canister", &"power_cell", &"power_cell", &"rock_sample"],
-	&"crate": [&"crate", &"toolbox"],
+	&"crate": &"toolbox",
+	&"plate": &"scrap_plate",
 	&"tool": [&"spanner", &"spare_module", &"hand_lamp"],
 }
 const CLOSET_SIDE_STOCK := {
