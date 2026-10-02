@@ -160,7 +160,40 @@ func test_galley_counter_and_fridge_are_solid():
 func test_washstand_is_solid_and_the_towel_rail_is_not():
 	InteriorProps.washstand(_kit, Transform3D.IDENTITY, 0.3)
 	InteriorProps.towel_rail(_kit, InteriorKit.at(Vector3(3, 0, 0)), 0.3)
-	_built_with_colliders(1)
+	# Two blocks, not one: the toilet's is low, so the Interactor can reach its
+	# lid and the button under it (ToiletLid); the sink's is its full height.
+	_built_with_colliders(2)
+
+func test_the_toilet_s_collider_stops_under_the_button_in_its_bowl():
+	InteriorProps.washstand(_kit, Transform3D.IDENTITY, 0.3)
+	var tops := _colliders().map(func(c): return c.position.y + (c.shape as BoxShape3D).size.y * 0.5)
+	assert_lte(tops.min(), InteriorProps.toilet_button().origin.y, "the toilet's")
+	assert_almost_eq(tops.max(), 0.9, 0.001, "the sink's")
+
+func test_the_shut_lid_rests_on_the_seat_over_the_button():
+	var hinge := InteriorProps.toilet_hinge()
+	var underside := hinge.origin.y - InteriorProps.TOILET_LID.y * 0.5
+	assert_gte(underside, InteriorProps.TOILET_SEAT_TOP, "on the seat, not in it")
+	assert_lt(underside - InteriorProps.TOILET_SEAT_TOP, 0.01, "and not floating over it")
+	var button := InteriorProps.toilet_button()
+	assert_almost_eq(button.basis.z, Vector3.UP, Vector3.ONE * 0.001, "the button faces up out of the bowl")
+	# A ReadoutPanel's lit button stands 0.012 m proud of its face.
+	assert_lt(button.origin.y + InteriorProps.TOILET_BUTTON.z + 0.012, underside, "and the shut lid clears it")
+	var front := hinge.origin.z + InteriorProps.TOILET_LID.z
+	assert_between(button.origin.z, hinge.origin.z, front, "under the lid")
+
+func test_the_lifted_lid_clears_the_cistern():
+	var hinge := InteriorProps.toilet_hinge()
+	assert_gt(hinge.origin.z - InteriorProps.TOILET_LID.y * 0.5, InteriorProps.TOILET_TANK_DEPTH)
+
+func test_the_toilet_lid_builds_in_its_hinge_frame():
+	InteriorProps.toilet_lid(_kit, Transform3D.IDENTITY)
+	var box := AABB()
+	for mi in _kit.commit():
+		box = mi.mesh.get_aabb()
+	assert_almost_eq(box.size, InteriorProps.TOILET_LID, Vector3.ONE * 0.001)
+	assert_almost_eq(box.position.z, 0.0, 0.001, "from the hinge line forward")
+	assert_eq(_colliders().size(), 0, "ToiletLid gives it a hit box, not a collider")
 
 func test_shelves_are_solid():
 	InteriorProps.shelves(_kit, Transform3D.IDENTITY, 0.6)
@@ -332,7 +365,7 @@ func test_the_ammo_stack_holds_two_flares_on_top():
 
 func test_the_washstand_has_a_bracket_for_a_medkit():
 	InteriorProps.washstand(_kit, Transform3D.IDENTITY, 0.3)
-	_built_with_colliders(1)
+	_built_with_colliders(2)
 	_assert_spots_clear(InteriorProps.washstand_spots(), [&"tool"])
 
 ## Quantum energy spec §6.2: the core, in a bare fixture frame -- origin on

@@ -501,6 +501,7 @@ static func _room_piece(kit: InteriorKit, f: Transform3D, face: Dictionary, vari
 		&"bathroom":
 			if feature:
 				InteriorProps.washstand(kit, f, variety)
+				_toilet_lid(kit, f)
 				_stow(kit, f, InteriorProps.washstand_spots(), {&"tool": &"medkit"})
 			else:
 				InteriorProps.towel_rail(kit, f, variety)
@@ -519,6 +520,15 @@ static func _room_piece(kit: InteriorKit, f: Transform3D, face: Dictionary, vari
 				_stow(kit, f, InteriorProps.ammo_crates_spots(), {&"tool": [&"flare", &"repair_torch"]})
 	if porthole:
 		InteriorProps.porthole(kit, f)
+
+## The washstand's toilet lid, on its own node so it can lift; in a dev build
+## the QE refill button is under it. The ship binds it to its store.
+static func _toilet_lid(kit: InteriorKit, f: Transform3D) -> void:
+	var lid := ToiletLid.new()
+	lid.name = "ToiletLid"
+	lid.transform = f
+	lid.setup(kit.layer, kit.wear)
+	kit.root.add_child(lid, true)
 
 ## A StowPoint at every spot a prop publishes, stocked by stow class
 ## (hands-and-items spec §5.2). The prop decides where things can sit; this

@@ -492,7 +492,7 @@ shader.
   rocks and skitters; `InteriorKit` is exempt: it packs data into vertex colours). The hull's
   files are `hull_props.gd`, `hull_materials.gd`, `hull_layout.gd` and `hull_dressing.gd`, and
   the lights' are `ship_lights.gd` and `lights_panel.gd`;
-- `interior_props.gd`, `interior_kit.gd`, `sliding_door.gd`, `item_looks.gd`, `item.gd`,
+- `interior_props.gd`, `interior_kit.gd`, `sliding_door.gd`, `toilet_lid.gd`, `item_looks.gd`, `item.gd`,
   `glove.gd`, `hands.gd`, `airlock_hatch.gd`, `airlock_panel.gd`, `airlock_show.gd`,
   `npc_looks.gd`, `droid_look.gd`, `holo_volume.gd`, `ship_computer.gd`, `hull_props.gd` or
   `hull_materials.gd` reference the grid, the layout, the builder or the dressing (the bridge
