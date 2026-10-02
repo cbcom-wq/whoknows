@@ -71,7 +71,8 @@ func _frames(n: int) -> void:
 ## `outside`: look from the hull with a camera of the probe's own, the ship
 ## hidden, because the player's view is the ship's interior and the world only
 ## shows in its windows.
-func _shot(name: String, outside := true) -> void:
+## `fov`: a narrower lens than the default, for a small thing far off (0 keeps it).
+func _shot(name: String, outside := true, fov := 0.0, up := Vector3.ZERO) -> void:
 	var before := root.get_viewport().get_camera_3d()
 	var cam: Camera3D = null
 	if outside:
@@ -81,6 +82,11 @@ func _shot(name: String, outside := true) -> void:
 		cam.add_to_group(Universe.EXTERIOR_SPACE)
 		_root.get_node("Outside").add_child(cam)
 		cam.global_transform = _ship.exterior.global_transform
+		if fov > 0.0:
+			cam.fov = fov
+		if up != Vector3.ZERO:
+			# Rolled to the ground's own up, not the engine's: a planet's up is anywhere.
+			cam.global_transform = Transform3D(Basis.looking_at(-cam.global_transform.basis.z, up), cam.global_position)
 		cam.make_current()
 		_ship.visible = false
 	await _frames(8)
@@ -225,15 +231,77 @@ func _standing(dir: Vector3) -> void:
 		before.make_current()
 	await _frames(2)
 
-func _moon_in_the_sky(dir: Vector3) -> void:
-	var moons := _system.moons_of(_planet)
+## The moon is shown from the ground of its own planet, at a place chosen so
+## that it is wholly above the local horizon (MOON_MIN_ELEVATION) and as full
+## as that allows: the sub-moon point moved towards the star until the moon's
+## lit side faces the eye. A moon in the planet's shadow or on the wrong side
+## of the sky would be a black frame, so the line printed says what was chosen.
+const MOON_MIN_ELEVATION := deg_to_rad(25.0)
+const MOON_EYE_ABOVE := 300.0
+const MOON_SEARCH_STEPS := 90
+## A moon a few degrees across is a speck at the default lens.
+const MOON_SHOT_FOV := 20.0
+
+func _moon_in_the_sky(_dir: Vector3) -> void:
+	var planet := _planet
+	var moons := _system.moons_of(planet)
 	if moons.is_empty():
-		print("probe   no moon round %s" % _planet.name)
-		return
-	var m := moons[0]
-	var up := m.point.minus(_planet.point).normalized()
-	_put(_ground(up.slerp(dir, 0.3).normalized(), 200.0), m.point)
-	await _shot("moon_in_the_sky")
+		for p in _system.planets():
+			if not _system.moons_of(p).is_empty():
+				planet = p
+				break
+		if planet == _planet:
+			print("probe   no moon in the system, no moon shot")
+			return
+		moons = _system.moons_of(planet)
+	var note := "" if planet == _planet else " (%s has none, so %s's)" % [_planet.name, planet.name]
+	# Everything below measures against `planet`: the ground helpers read the
+	# probe's own, so swap it for the shot and put it back after.
+	var kept_planet := _planet
+	var kept_terrain := _terrain
+	_planet = planet
+	_terrain = WorldTerrain.new(planet.recipe)
+	var sun := _system.star.point.minus(planet.point).normalized()
+	var best_m: SystemBody = null
+	var best_dir := Vector3.ZERO
+	var best_phase := -1.0
+	var best_elev := -1.0
+	for m in moons:
+		var up := m.point.minus(planet.point).normalized()
+		for i in MOON_SEARCH_STEPS + 1:
+			var d := up.slerp(sun, float(i) / MOON_SEARCH_STEPS).normalized() if up.dot(sun) > -0.999 else up
+			var eye := _ground(d, MOON_EYE_ABOVE)
+			var to_moon := m.point.minus(eye)
+			var elev := asin(clampf(to_moon.normalized().dot(d), -1.0, 1.0))
+			if elev < MOON_MIN_ELEVATION:
+				continue
+			var phase := _moon_phase(to_moon, m.point, _system.star.point)
+			if phase > best_phase:
+				best_phase = phase
+				best_m = m
+				best_dir = d
+				best_elev = elev
+	if best_m == null:
+		# Nothing both above the horizon and pleasing: the sub-moon point of the first.
+		best_m = moons[0]
+		best_dir = best_m.point.minus(planet.point).normalized()
+		var to_moon := best_m.point.minus(_ground(best_dir, MOON_EYE_ABOVE))
+		best_phase = _moon_phase(to_moon, best_m.point, _system.star.point)
+		best_elev = PI / 2.0
+	var eye := _ground(best_dir, MOON_EYE_ABOVE)
+	var to := best_m.point.minus(eye)
+	print("probe   moon %s%s  r %.0f m at %.0f km  angular size %.1f deg  elevation %.0f deg  angle eye->moon to moon->star %.0f deg (180 full, 0 new)" % [
+		best_m.name, note, best_m.radius, to.length() / 1000.0,
+		rad_to_deg(2.0 * atan(best_m.radius / to.length())), rad_to_deg(best_elev), best_phase])
+	_put(eye, best_m.point)
+	await _shot("moon_in_the_sky", true, MOON_SHOT_FOV, best_dir)
+	_planet = kept_planet
+	_terrain = kept_terrain
+
+## The angle in degrees between "eye to moon" and "moon to star": 180 when the
+## star is behind the eye (a full moon), 0 when it is behind the moon.
+func _moon_phase(eye_to_moon: Vector3, moon: UniversePoint, star: UniversePoint) -> float:
+	return rad_to_deg(eye_to_moon.angle_to(star.minus(moon)))
 
 func _belt_from_a_planet() -> void:
 	if _system.belts.is_empty():
