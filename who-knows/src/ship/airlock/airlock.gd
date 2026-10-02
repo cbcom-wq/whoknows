@@ -169,7 +169,8 @@ func _physics_process(delta: float) -> void:
 ## Where the avatar is, as the cycle needs it: {room_empty, clear_inner,
 ## clear_outer}. Aboard it is looked for in the room; on a spacewalk, in the
 ## room's copy on the hull -- so the outer hatch closes behind you once you
-## float clear, and never on you.
+## float clear, and never on you. A suit from any ship counts (many ships spec
+## §4.3).
 func occupancy() -> Dictionary:
 	var who := {"room_empty": true, "clear_inner": true, "clear_outer": true}
 	var avatar := _avatar()
@@ -181,7 +182,7 @@ func occupancy() -> Dictionary:
 		who["clear_outer"] = not points.any(func(p): return in_doorway(p, room.outer_frame))
 		if room.inner_hatch != null:
 			who["clear_inner"] = not points.any(func(p): return in_doorway(p, room.inner_frame))
-	elif avatar.mode == Avatar.Mode.SUIT and is_instance_valid(alcove) and avatar.hull == _ship.exterior:
+	elif avatar.mode == Avatar.Mode.SUIT and is_instance_valid(alcove):
 		var points := _body_points(avatar, _ship.exterior.global_transform.affine_inverse())
 		who["room_empty"] = not points.any(func(p): return in_room(p, alcove.room_frame))
 		who["clear_outer"] = not points.any(func(p): return in_doorway(p, alcove.outer_frame))
@@ -196,7 +197,8 @@ static func _body_points(avatar: Avatar, to_local: Transform3D) -> Array:
 		to_local * (feet + up * (Avatar.STAND_HEIGHT - 0.1))]
 
 ## Crossing the outer hatch's plane, either way, while it is fully open (§7):
-## out into the world onto a spacewalk, or back into the room aboard.
+## out into the world onto a spacewalk, or back into the room aboard -- in a
+## suit from any ship (many ships spec §4.3).
 func _watch_threshold() -> void:
 	var avatar := _avatar()
 	if avatar == null or _ship == null or not is_instance_valid(alcove) or cycle.outer_open < 1.0 or warping():
@@ -217,7 +219,7 @@ func _watch_threshold() -> void:
 		avatar.beacon_source = beacon
 		avatar.home_source = home
 		crossed.emit(avatar, true)
-	elif avatar.hull == hull:
+	elif avatar.mode == Avatar.Mode.SUIT:
 		var local := alcove.outer_frame.affine_inverse() * (hull.global_transform.affine_inverse() * avatar.global_position)
 		if not _in_opening(local) or not Threshold.crossed_in(local.z) or local.z > ShipGrid.CELL_SIZE:
 			return

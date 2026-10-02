@@ -26,6 +26,8 @@ signal aboard_changed(ship: Ship)
 ## the one your suit belongs to on a spacewalk (§3.4).
 var fleet: Fleet
 var aboard: Ship
+## On a spacewalk, which ship your suit belongs to (§4.3).
+var suit_tie: SuitTie
 
 ## The star system the flight is in (the system skeleton spec §4), from the
 ## world seed, and the node that draws its star, planets and moons.
@@ -118,6 +120,7 @@ func _ready() -> void:
 	if resumed:
 		_starter.restore_aboard(ship_part)
 	_make_fleet()
+	_make_suit_tie()
 	_place_avatar_on_deck()
 	_set_interior_mood()
 	_set_outside_mood()
@@ -187,9 +190,46 @@ func _wire_ship(ship: Ship) -> void:
 	ship.pilot.warp_pressed.connect(ship.warp.engage)
 	ship.warp.travel_started.connect(_on_warp_started)
 	ship.warp.travel_ended.connect(_on_warp_ended)
+	# In through its airlock, you are aboard it (§4.3).
+	ship.airlock_crossed.connect(_on_airlock_crossed.bind(ship))
 
 func _on_ship_left(ship: Ship) -> void:
 	npc_debug.directors.erase(ship.npc_director)
+
+## On a spacewalk, your suit belongs to the nearest ship (many ships spec §4.3).
+func _make_suit_tie() -> void:
+	suit_tie = SuitTie.new()
+	suit_tie.name = "SuitTie"
+	suit_tie.fleet = fleet
+	suit_tie.avatar = _avatar
+	suit_tie.current = func() -> Ship: return aboard
+	suit_tie.tied.connect(_tie_suit)
+	add_child(suit_tie)
+
+## Your suit is `ship`'s now: speed relative to its hull, home its nearest
+## airlock, and aboard it.
+func _tie_suit(ship: Ship) -> void:
+	_avatar.hull = ship.exterior
+	var lock := _nearest_airlock(ship, _avatar.global_position)
+	if lock != null:
+		_avatar.beacon_source = lock.beacon
+		_avatar.home_source = lock.home
+	board(ship)
+
+## `ship`'s airlock with a hatch on the hull nearest `p`, or null.
+static func _nearest_airlock(ship: Ship, p: Vector3) -> Airlock:
+	var best: Airlock = null
+	for lock: Airlock in ship.airlocks.values():
+		if not is_instance_valid(lock.alcove):
+			continue
+		if best == null or lock.beacon().distance_to(p) < best.beacon().distance_to(p):
+			best = lock
+	return best
+
+## In through any ship's airlock: you are aboard it.
+func _on_airlock_crossed(_who: Avatar, outward: bool, ship: Ship) -> void:
+	if not outward:
+		board(ship)
 
 ## Hands you to `ship` (many ships spec §4.1): its hull drawn as your own and
 ## its interior shown, the other's not; the views, the HUD's markers, the warp

@@ -12,6 +12,9 @@ signal blocks_lost(coords: Array[Vector3i])
 ## §8.1): already outside, in space and in EXTERIOR_SPACE. The flight scene
 ## makes it a stray.
 signal plate_shed(item: Item)
+## Someone crossed one of its airlocks' outer hatches (airlock spec §7):
+## `outward` true out onto a spacewalk, false in, aboard (many ships spec §4.3).
+signal airlock_crossed(avatar: Avatar, outward: bool)
 
 const INTERIOR_WORLD_BASE := Vector3(0.0, -5000.0, 0.0)
 ## Every ship is in this group, for things that must find one without being
@@ -725,6 +728,7 @@ func _bind_airlocks() -> void:
 			airlock = Airlock.new()
 			airlock.setup(self, room.coord)
 			_airlocks_root.add_child(airlock)
+			airlock.crossed.connect(airlock_crossed.emit)
 			airlocks[room.coord] = airlock
 		airlock.bind(room, exterior_builder.alcoves().get(room.coord))
 	for at in airlocks.keys():

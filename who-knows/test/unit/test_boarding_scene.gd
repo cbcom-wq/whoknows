@@ -119,6 +119,39 @@ func test_refused_with_no_other_ship():
 	assert_true(_root.fleet.remove(_second))
 	assert_false(_root.board_nearest())
 
+## Steps out of the second ship onto a spacewalk at `at`, tied to it.
+func _out_of_the_second(at: Vector3) -> void:
+	_root.board_nearest()
+	_director.stand_now()
+	_avatar.enter_suit(_root.get_node("Outside"), Transform3D(Basis.IDENTITY, at), Vector3.ZERO, _second.exterior)
+
+func test_floating_near_the_starter_ties_your_suit_to_it():
+	_out_of_the_second(_starter.exterior.global_position + Vector3(0, 30, 0))
+	_root.suit_tie.check()
+	assert_same(_avatar.hull, _starter.exterior)
+	assert_same(_root.aboard, _starter)
+	var lock: Airlock = _starter.airlocks.values()[0]
+	assert_eq(_avatar.beacon_source, Callable(lock, &"beacon"), "home is its airlock")
+	assert_same((_root.get_node("Universe") as Universe).focus, _avatar, "the origin still follows you")
+
+func test_halfway_between_your_suit_stays_with_the_ship_you_left():
+	_out_of_the_second((_starter.exterior.global_position + _second.exterior.global_position) * 0.5)
+	_root.suit_tie.check()
+	assert_same(_avatar.hull, _second.exterior)
+	assert_same(_root.aboard, _second)
+
+func test_in_through_the_starters_airlock_you_are_aboard_it():
+	_out_of_the_second(_second.exterior.global_position + Vector3(0, 30, 0))
+	var lock: Airlock = _starter.airlocks.values()[0]
+	lock.cycle.restore_idle(0.0, AirlockCycle.Door.OUTER)
+	var hull := _starter.exterior
+	var at := hull.global_transform * (lock.alcove.outer_frame * Vector3(0, 0.2, 0.3))
+	_avatar.global_transform = Transform3D(hull.global_basis, at)
+	lock._watch_threshold()
+	assert_eq(_avatar.mode, Avatar.Mode.PLATING, "in through its outer hatch, though your suit was the other ship's")
+	assert_same(_avatar.get_parent(), _starter.interior)
+	assert_same(_root.aboard, _starter, "and aboard it")
+
 ## Review focus: what you hold comes with you, and lands in the ship you are in.
 func test_what_you_hold_comes_with_you():
 	var mugs := _starter.items.get_children().filter(func(n): return n is Item and n.definition.id == &"mug")
