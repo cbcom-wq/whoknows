@@ -73,6 +73,9 @@ var hop_index := -1
 ## moon, so you are near it.
 const HOP_OFF := 3000.0
 const HOP_INSIDE := 200.0
+## A save from another world generator brings every ship along, lined up this
+## far apart beside the starter (many ships spec §6.3).
+const RESTART_ROW := 300.0
 
 ## The interior's own mood (spec §3.3): dim and warm, with bloom turning the
 ## thin lit strips into light. It goes on the interior camera, not the world,
@@ -107,18 +110,19 @@ const O_KEEL := 2        ## FORWARD rolled 180 deg: a half block's upper half, h
 
 func _ready() -> void:
 	var saved := _read_save()
-	var ship_part: Dictionary = saved.get("ship", {})
-	var layout := Ship.layout_of(ship_part) if resumed else null
+	var starter_part := _part_named(saved, Fleet.STARTER)
+	var layout := Ship.layout_of(starter_part) if resumed else null
 	if resumed and (layout == null or layout.coords().is_empty()):
-		push_error("FlightTest: the saved ship has no blocks; starting a new game")
+		push_error("FlightTest: the saved starter has no blocks; starting a new game")
 		resumed = false
 		saved = {}
+		starter_part = {}
 	if resumed:
-		_starter.launch_blueprint = Ship.launch_of(ship_part)
+		_starter.launch_blueprint = Ship.launch_of(starter_part)
 		npc_ledger.from_dict(saved.get("npcs", {}))
 	_starter.set_grid(layout if resumed else _starter_grid(), not resumed)
 	if resumed:
-		_starter.restore_aboard(ship_part)
+		_starter.restore_aboard(starter_part)
 	_make_fleet()
 	_make_suit_tie()
 	_place_avatar_on_deck()
@@ -238,12 +242,14 @@ func _on_airlock_crossed(_who: Avatar, outward: bool, ship: Ship) -> void:
 func board(ship: Ship, force := false) -> void:
 	if ship == null or (ship == aboard and not force):
 		return
-	var old := aboard
 	aboard = ship
-	if old != null and old != ship and is_instance_valid(old):
-		old.set_own(false)
-		for m in _cockpit_markers(old):
-			_hud.unregister_element(m)
+	# Every other ship lets go, not only the last one aboard: a loaded game
+	# sets `aboard` before it first boards, and a ship starts as its own.
+	for other in fleet.ships():
+		if other != ship and other.own:
+			other.set_own(false)
+			for m in _cockpit_markers(other):
+				_hud.unregister_element(m)
 	ship.set_own(true)
 	for m in _cockpit_markers(ship):
 		_hud.register_element(m)
@@ -472,6 +478,7 @@ func _wire_universe(saved: Dictionary) -> void:
 	else:
 		_universe.origin = start
 		if resumed:
+			_restore_fleet(saved, false)
 			_restore_you(saved.get("avatar", {}), false)
 	_stream.start(_universe, start)
 	_wire_star_system()
@@ -819,7 +826,9 @@ func _notification(what: int) -> void:
 func capture() -> Dictionary:
 	return {
 		"world": {"seed": _stream.seed},
-		"ship": _starter.to_dict(_universe),
+		"ships": fleet.capture(_universe),
+		"aboard": String(aboard.name),
+		"fleet": fleet.to_dict(),
 		"avatar": _capture_you(),
 		"salvage": salvage.to_dict(),
 		"strays": strays.to_dict(),
@@ -868,19 +877,56 @@ static func _same_generator(saved: Dictionary, which: String) -> bool:
 	var theirs: Dictionary = saved.get("generators", {})
 	return int(theirs.get(which, -1)) == int(SaveGame.generators()[which])
 
-## The origin near where you were, then the hull and you (§6.1).
+## The origin near where you were, then every ship and you (§6.1; many ships
+## spec §6.3).
 func _restore_places(saved: Dictionary) -> void:
-	var ship_part: Dictionary = saved.get("ship", {})
 	var you: Dictionary = saved.get("avatar", {})
-	var focus := SaveCodec.to_upoint(ship_part.get("hull", {}).get("at"))
+	var first := _part_named(saved, String(saved.get("aboard", Fleet.STARTER)))
+	if first.is_empty():
+		first = _part_named(saved, Fleet.STARTER)
+	var focus := SaveCodec.to_upoint(first.get("hull", {}).get("at"))
 	if String(you.get("mode", "")) == "suit":
 		focus = SaveCodec.to_upoint(you.get("at"))
 	_universe.origin = UniversePoint.at(
 		roundi(focus.x / Universe.STEP) * int(Universe.STEP),
 		roundi(focus.y / Universe.STEP) * int(Universe.STEP),
 		roundi(focus.z / Universe.STEP) * int(Universe.STEP))
-	_starter.restore_hull(ship_part, _universe)
+	_restore_fleet(saved, true)
 	_restore_you(you, true)
+
+## Every saved ship but the starter, spawned under its own name, unstocked,
+## with everything aboard, and the ship you were aboard (many ships spec
+## §6.3). `in_place` false (the world started over) lines them up RESTART_ROW
+## apart beside the starter instead of where they were.
+func _restore_fleet(saved: Dictionary, in_place: bool) -> void:
+	fleet.from_dict(saved.get("fleet", {}))
+	if in_place:
+		_starter.restore_hull(_part_named(saved, Fleet.STARTER), _universe)
+	var row := 0
+	for part in saved.get("ships", []):
+		if not (part is Dictionary) or String(part.get("name", "")) == Fleet.STARTER:
+			continue
+		var grid := Ship.layout_of(part)
+		if grid.coords().is_empty():
+			push_error("FlightTest: the saved ship %s has no blocks; it is left out" % part.get("name", "?"))
+			continue
+		row += 1
+		var place := _starter.exterior.global_transform.translated(Vector3(RESTART_ROW * row, 0, 0))
+		var ship := fleet.spawn(grid, place, false, String(part["name"]), Ship.launch_of(part))
+		if ship == null:
+			continue
+		ship.restore_aboard(part)
+		if in_place:
+			fleet.restore_hull(ship, part)
+	var named := fleet.named(StringName(saved.get("aboard", Fleet.STARTER)))
+	aboard = named if named != null else _starter
+
+## The saved ship called `ship_name`, or {}.
+static func _part_named(saved: Dictionary, ship_name: String) -> Dictionary:
+	for part in saved.get("ships", []):
+		if part is Dictionary and String(part.get("name", "")) == ship_name:
+			return part
+	return {}
 
 ## You as the save had you (§6.3). With `outside_too` false -- the world
 ## started over -- a spacewalk comes back aboard, standing.
@@ -890,10 +936,17 @@ func _restore_you(d: Dictionary, outside_too: bool) -> void:
 	_avatar.health.from_dict(d.get("health", {}))
 	var mode := String(d.get("mode", "walking"))
 	if mode != "suit":
+		# Into the ship you were aboard (many ships spec §6.3), where you
+		# stood, or on its deck if that is no place to stand any more.
 		var pose := aboard.interior.global_transform * SaveCodec.to_transform(d.get("place"))
 		if _can_stand(pose):
-			_avatar.place(Transform3D(Basis(Vector3.UP, pose.basis.get_euler().y), pose.origin))
+			pose = Transform3D(Basis(Vector3.UP, pose.basis.get_euler().y), pose.origin)
+		else:
+			pose = aboard.interior.global_transform * _deck_spot(aboard)
+		_avatar.move_aboard(aboard.interior, pose)
 		_avatar.set_head_pitch(float(d.get("pitch", 0.0)))
+	elif not outside_too:
+		_avatar.move_aboard(aboard.interior, aboard.interior.global_transform * _deck_spot(aboard))
 	# Hands work only aboard and standing, so the held item is taken first.
 	var held: Variant = d.get("held")
 	if held is Dictionary:

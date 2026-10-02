@@ -309,3 +309,109 @@ func test_health_and_the_ledger_round_trip():
 	assert_not_null(droid_b)
 	assert_almost_eq(droid_b.health.current, droid_b.health.max - 20.0, 0.01)
 	_drop(b)
+
+## A second starter spawned 300 m off `root`'s.
+func _spawn_second(root: Node, off := Vector3(300, 0, 0)) -> Ship:
+	var starter: Ship = root.get_node("Ship")
+	var place := Transform3D(starter.exterior.global_basis, starter.exterior.global_position + off)
+	return root.fleet.spawn(root._starter_grid(), place)
+
+static func _you(root: Node) -> Avatar:
+	return root.get_tree().get_first_node_in_group(Avatar.GROUP) as Avatar
+
+## Many ships (docs/superpowers/specs/2026-10-02-many-ships-design.md §6): two
+## ships through a save, aboard the second at its helm. It comes back named and
+## slotted as it was, where it was, with you in its seat.
+func test_two_ships_round_trip_aboard_the_second_seated():
+	var a := _scene()
+	await wait_process_frames(2)
+	var second := _spawn_second(a)
+	second.quantum.store.from_dict({"amount": 123})
+	assert_true(a.board_nearest())
+	var was_at: UniversePoint = a.get_node("Universe").to_universe(second.exterior.global_position)
+	assert_true(a.save_now())
+	_drop(a)
+	var b := _scene()
+	await wait_process_frames(2)
+	assert_eq(b.fleet.ships().size(), 2)
+	var again: Ship = b.fleet.named(&"Ship2")
+	assert_not_null(again, "Ship2 is back")
+	assert_eq(again.interior_slot, 1)
+	assert_same(b.aboard, again)
+	assert_true(again.own)
+	assert_false((b.get_node("Ship") as Ship).own)
+	assert_eq(again.quantum.store.amount, 123)
+	var director: CameraDirector = b.get_node("CameraDirector")
+	assert_true(director.is_seated)
+	assert_same(director.seat_ship(), again)
+	assert_true(again.pilot.seated)
+	assert_lt((b.get_node("Universe") as Universe).to_universe(again.exterior.global_position).minus(was_at).length(), 0.5)
+	assert_eq(b.fleet.next_number, 3)
+	_drop(b)
+
+## Your save from before many ships: one ship, with you aboard it.
+func test_a_format_1_save_loads_as_one_ship_with_you_aboard():
+	var a := _scene()
+	await wait_process_frames(2)
+	var parts: Dictionary = a.capture()
+	_drop(a)
+	var old := parts.duplicate(true)
+	var ship: Dictionary = old["ships"][0]
+	ship.erase("name")
+	old.erase("ships")
+	old.erase("aboard")
+	old.erase("fleet")
+	old["ship"] = ship
+	old["format"] = 1
+	old["generators"] = SaveGame.generators()
+	DirAccess.make_dir_recursive_absolute(DIR)
+	var f := FileAccess.open(PATH, FileAccess.WRITE)
+	f.store_string(JSON.stringify(old, "", false, true))
+	f.close()
+	var b := _scene()
+	await wait_process_frames(2)
+	assert_true(b.resumed, "it loaded")
+	assert_eq(b.fleet.ships().size(), 1)
+	assert_same(b.aboard, b.get_node("Ship"))
+	_drop(b)
+
+func test_a_far_ship_loads_asleep_where_it_was():
+	var a := _scene()
+	await wait_process_frames(2)
+	var far := _spawn_second(a, Vector3(0, 0, 25000))
+	var was: UniversePoint = a.get_node("Universe").to_universe(far.exterior.global_position)
+	a.fleet.check_sleep()
+	assert_true(a.fleet.sleeping(far))
+	assert_true(a.save_now())
+	_drop(a)
+	var b := _scene()
+	await wait_process_frames(2)
+	var again: Ship = b.fleet.named(&"Ship2")
+	assert_true(b.fleet.sleeping(again), "it loads asleep")
+	assert_lt(b.fleet.place_of(again).minus(was).length(), 0.01)
+	_drop(b)
+
+## Review focus: a spacewalk tied to the second ship comes back tied to it.
+func test_a_spacewalk_tied_to_the_second_ship_comes_back_tied_to_it():
+	var a := _scene()
+	await wait_process_frames(2)
+	var second := _spawn_second(a)
+	assert_true(a.board_nearest())
+	(a.get_node("CameraDirector") as CameraDirector).stand_now()
+	var you := _you(a)
+	you.enter_suit(a.get_node("Outside"), Transform3D(Basis.IDENTITY, second.exterior.global_position + Vector3(0, 25, 0)),
+		Vector3.ZERO, second.exterior)
+	var lock: Airlock = second.airlocks.values()[0]
+	you.beacon_source = lock.beacon
+	you.home_source = lock.home
+	assert_true(a.save_now())
+	_drop(a)
+	var b := _scene()
+	await wait_process_frames(2)
+	var again: Ship = b.fleet.named(&"Ship2")
+	var back := _you(b)
+	assert_eq(back.mode, Avatar.Mode.SUIT)
+	assert_same(b.aboard, again)
+	assert_same(back.hull, again.exterior)
+	assert_same(back.beacon_source.get_object(), again.airlocks.values()[0])
+	_drop(b)

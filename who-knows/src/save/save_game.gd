@@ -14,7 +14,7 @@ extends RefCounted
 
 ## The shape of the file. Bump it, and add a step to migrate(), whenever a
 ## part's dictionary changes shape.
-const FORMAT := 1
+const FORMAT := 2
 const DEFAULT_PATH := "user://save/game.json"
 
 ## Why the last read() came back empty: &"" (it loaded), &"missing",
@@ -106,10 +106,30 @@ func set_aside() -> void:
 	if FileAccess.file_exists(path + ".bak"):
 		DirAccess.remove_absolute(path + ".bak")
 
-## Brings an older format up to FORMAT, one step at a time. Format 1 is the
-## first, so there is nothing to do yet.
+## Brings an older format up to FORMAT, one step at a time.
 static func migrate(data: Dictionary) -> Dictionary:
-	return data
+	var out := data
+	if int(out.get("format", 1)) < 2:
+		out = _to_many_ships(out)
+	return out
+
+## Format 1 to 2 (docs/superpowers/specs/2026-10-02-many-ships-design.md
+## §6.1): the one ship becomes the first of a list, named Ship, and you are
+## aboard it.
+static func _to_many_ships(data: Dictionary) -> Dictionary:
+	var out := data.duplicate()
+	var ship: Dictionary = out.get("ship", {})
+	out.erase("ship")
+	var ships := []
+	if not ship.is_empty():
+		var named := ship.duplicate()
+		named["name"] = String(Fleet.STARTER)
+		ships.append(named)
+	out["ships"] = ships
+	out["aboard"] = String(Fleet.STARTER)
+	out["fleet"] = {"next": 2}
+	out["format"] = 2
+	return out
 
 static func _parse(file_path: String) -> Dictionary:
 	if not FileAccess.file_exists(file_path):

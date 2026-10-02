@@ -195,6 +195,38 @@ func wake(ship: Ship) -> void:
 	hull.add_to_group(AsteroidStream.SPACE_ANCHOR)
 	woke.emit(ship)
 
+## Every ship's part of a save, each with its name (many ships spec §6.1). A
+## sleeping ship's hull is where it is held, not an engine position.
+func capture(universe_now: Universe) -> Array:
+	var out := []
+	for ship in _ships:
+		var part := ship.to_dict(universe_now)
+		part["name"] = String(ship.name)
+		if _asleep.has(ship):
+			var held: Dictionary = _asleep[ship]
+			part["hull"] = {"at": SaveCodec.upoint(held["at"]), "turn": SaveCodec.basis(held["turn"]),
+				"v": SaveCodec.vec3(held["v"]), "w": SaveCodec.vec3(held["w"])}
+		out.append(part)
+	return out
+
+func to_dict() -> Dictionary:
+	return {"next": next_number}
+
+func from_dict(d: Dictionary) -> void:
+	next_number = maxi(int(d.get("next", 2)), 2)
+
+## Puts a loaded ship's hull back (§6.3): where the save had it, or asleep
+## there when that is past SLEEP_AT of the origin, never placed far off in
+## engine space.
+func restore_hull(ship: Ship, part: Dictionary) -> void:
+	var hull: Dictionary = part.get("hull", {})
+	var at := SaveCodec.to_upoint(hull.get("at"))
+	if at.minus(universe.origin).length() > SLEEP_AT:
+		_hold(ship, {"at": at, "turn": SaveCodec.to_basis(hull.get("turn")),
+			"v": SaveCodec.to_vec3(hull.get("v")), "w": SaveCodec.to_vec3(hull.get("w"))})
+	else:
+		ship.restore_hull(part, universe)
+
 func _next_name() -> String:
 	var n := "Ship%d" % next_number
 	next_number += 1

@@ -96,11 +96,11 @@ func test_a_save_during_travel_loads_at_the_drop_out_point():
 	_ship.warp.engage()
 	_run(WarpDrive.SPOOL + 4.0)
 	var saved: Dictionary = _root.capture()
-	var at := SaveCodec.to_upoint(saved["ship"]["hull"]["at"])
+	var at := SaveCodec.to_upoint(saved["ships"][0]["hull"]["at"])
 	assert_almost_eq(at.minus(t.point).length(), t.limit, 400.0)
-	assert_almost_eq(SaveCodec.to_vec3(saved["ship"]["hull"]["v"]).length(), WarpProfile.EDGE_SPEED, 0.5)
-	assert_eq(int(saved["ship"]["store"]["amount"]), paid, "the warp is paid for")
-	assert_eq(String(saved["ship"]["warp"]["charted"]), String(t.id))
+	assert_almost_eq(SaveCodec.to_vec3(saved["ships"][0]["hull"]["v"]).length(), WarpProfile.EDGE_SPEED, 0.5)
+	assert_eq(int(saved["ships"][0]["store"]["amount"]), paid, "the warp is paid for")
+	assert_eq(String(saved["ships"][0]["warp"]["charted"]), String(t.id))
 
 func test_the_hop_is_refused_while_warping():
 	_ready_above(WarpTarget.Kind.PLANET)
