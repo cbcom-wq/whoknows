@@ -618,8 +618,7 @@ little busy from 1 km; standing on the ground reads best. The size renders of Pa
   so it is blank until its leaves build; the class doc's "nothing is ever a hole" overclaims. Low
   severity; not seen in the renders.
 - `FlightComputer`: `current_limit` and `limit_raised` are not updated during a warp (a stale HUD
-  if one starts with the limit raised); `well()` is computed twice a tick; `var ease` shadows the
-  built-in.
+  if one starts with the limit raised); `well()` is computed twice a tick.
 - Belts from afar: a slab is 2 to 3 px at 2,600 km, so a belt reads as a dotted arc; the slab fade
   (22 to 26 km) was not rescaled to 8 to 16 km slabs and may pop at the hand-over. A cluster's
   lift of group chance is masked in belt cores (the chance is already 1.0). `problems()` does not
