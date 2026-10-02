@@ -16,13 +16,15 @@ func _hit(at: Vector3, normal: Vector3, damage: float) -> Hit:
 	hit.damage = damage
 	return hit
 
-## A hull block with open space on +x, and not a kept one.
+## A hull block of the buffer, outside the cabin's shell, with open space on
+## +x: one that can be knocked off.
 func _outer_hull() -> Vector3i:
 	for coord: Vector3i in _ship.grid.coords():
 		var id := _ship.grid.get_block(coord).block_id
-		if id == &"hull" and not _ship.grid.has_block(coord + Vector3i(1, 0, 0)):
+		if id == &"hull" and not _ship.grid.has_block(coord + Vector3i(1, 0, 0)) \
+				and not _ship.inner_cells.has(coord):
 			return coord
-	fail_test("no outer hull block on +x")
+	fail_test("no buffer hull block on +x")
 	return Vector3i.ZERO
 
 func test_the_ship_is_not_crippled_as_built():
@@ -252,18 +254,65 @@ func test_a_blackout_aboard_wakes_you_in_the_bunk_room_and_costs_the_ship():
 			nearest = minf(nearest, Vector3(c).distance_to(Vector3(cell)))
 	assert_lt(nearest, 1.5, "woke at %s" % cell)
 
-func test_a_hole_under_you_puts_you_outside():
-	var avatar: Avatar = _ship.get_node("Interior/Avatar")
-	var walk: Array = _ship.interior_builder.walkable_coords()
-	var cell: Vector3i = Vector3i.ZERO
-	for c: Vector3i in walk:
+## Spec §4.5 as amended 2026-10-02: however hard the ship is hit, the cabin
+## keeps its shape -- every walkable cell, every room and pod, the helm --
+## and only the buffer outside it breaks away. (The owner crashed onto a
+## planet and was left in a room with the chair, unable to sit back down.)
+func test_the_cabin_keeps_its_shape_however_hard_it_is_hit():
+	var layout := _ship.interior_builder.layout()
+	var walk_before: Array = _ship.interior_builder.walkable_coords().duplicate()
+	var pods_before := layout.pods()
+	var rooms_before := layout.rooms().size()
+	var blocks_before := _ship.grid.size()
+	var shell := 0
+	for coord: Vector3i in _ship.grid.coords():
+		if _ship.inner_cells.has(coord):
+			shell += 1
+	var hits := {}
+	for coord: Vector3i in _ship.grid.coords():
+		hits[coord] = 100_000.0
+	_ship.take_damage_many(hits)
+	assert_eq(_ship.interior_builder.walkable_coords().size(), walk_before.size(), "every walkable cell")
+	for cell in walk_before:
+		assert_true(_ship.grid.has_block(cell), "%s is still there" % cell)
+	assert_eq(_ship.interior_builder.layout().pods(), pods_before, "the cockpit pod")
+	assert_eq(_ship.interior_builder.layout().rooms().size(), rooms_before, "every room")
+	assert_lt(_ship.grid.size(), blocks_before, "the buffer broke away")
+	assert_eq(_ship.grid.size(), shell, "and only the buffer")
+	for coord: Vector3i in _ship.grid.coords():
+		var inst := _ship.grid.get_block(coord)
+		assert_eq(BlockDamage.stage_of(inst, _ship.catalog.get_def(inst.block_id)), BlockDamage.Stage.WRECKED)
+
+func test_a_save_with_holes_in_the_cabin_gets_its_shell_back_wrecked():
+	var deck := Vector3i.ZERO
+	for c: Vector3i in _ship.interior_builder.walkable_coords():
 		if _ship.grid.get_block(c).block_id == &"deck":
-			cell = c
+			deck = c
 			break
-	avatar.place(_ship.interior.global_transform * Transform3D(Basis.IDENTITY, DeckPaths.floor_point(cell)))
-	_ship.take_damage(cell, 100_000.0)
-	assert_false(_ship.grid.has_block(cell))
-	assert_eq(avatar.mode, Avatar.Mode.SUIT)
+	var holed := ShipBlueprint.from_grid(_ship.grid, "Holed").to_grid()
+	holed.clear_block(deck)
+	_ship.set_grid(holed, false)
+	assert_true(_ship.grid.has_block(deck), "put back")
+	assert_eq(_ship.damage_at(deck), float(_ship.catalog.get_def(&"deck").hp) * BlockDamage.WRECKED_AT)
+	assert_true(_ship.interior_builder.walkable_coords().has(deck))
+
+func test_a_wrecked_cabin_wall_spits_sparks_inside():
+	var wall := Vector3i.ZERO
+	for coord: Vector3i in _ship.grid.coords():
+		if _ship.inner_cells.has(coord) and _ship.grid.get_block(coord).block_id == &"hull":
+			wall = coord
+			break
+	assert_eq(_ship.damage_show.spitting_inside(), 0)
+	_ship.take_damage(wall, float(_ship.catalog.get_def(&"hull").hp) * 1.2)
+	assert_eq(_ship.damage_show.spitting_inside(), 1)
+	await wait_physics_frames(2)
+	assert_eq(_ship.damage_show.spitting_inside(), 1, "still, after the rebuild")
+
+func test_the_spits_never_hold_the_floating_origin():
+	var cell := _outer_hull()
+	_ship.take_damage(cell, float(_ship.catalog.get_def(&"hull").hp) * 0.6)
+	for node in get_tree().get_nodes_in_group(Universe.HOLDS_SHIFT):
+		assert_ne(node.name, "Sparks", "a spit in its own frame does not hold the shift")
 
 # --- the band (spec §11) --------------------------------------------------------
 
@@ -283,3 +332,16 @@ func test_crippled_reaches_the_band():
 		if _ship.grid.get_block(coord).block_id == &"thruster":
 			_ship.take_damage(coord, float(_ship.catalog.get_def(&"thruster").hp) * 1.2)
 	assert_eq(_ship.flight_computer.build_telemetry().crippled_reason, "no thrust")
+
+func test_a_stage_seen_from_inside_leaves_the_hull_standing():
+	var wall := Vector3i.ZERO
+	for coord: Vector3i in _ship.grid.coords():
+		if _ship.inner_cells.has(coord) and _ship.grid.get_block(coord).block_id == &"hull":
+			wall = coord
+			break
+	var hull_shapes := _ship.exterior.get_children().filter(func(n): return n is CollisionShape3D)
+	_ship.take_damage(wall, float(_ship.catalog.get_def(&"hull").hp) * 0.6)
+	await wait_physics_frames(2)
+	for shape in hull_shapes:
+		assert_true(is_instance_valid(shape), "the hull's colliders were not rebuilt")
+	assert_eq(_ship.airlocks.size(), 1, "the airlock is still bound")

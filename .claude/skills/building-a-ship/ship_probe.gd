@@ -225,16 +225,19 @@ func _run(scene: Node) -> void:
 	# crippled before anything hits it, and the most one block's loss cuts off.
 	var total_hp := 0
 	var worst_cut := 0
+	var buffer := 0
 	for coord: Vector3i in ship.grid.coords():
 		var def := ship.catalog.get_def(ship.grid.get_block(coord).block_id)
 		if def == null:
 			continue
 		total_hp += def.hp
+		if not ship.inner_cells.has(coord) and not BlockDamage.KEEP.has(def.id):
+			buffer += 1
 		if not BlockDamage.KEEP.has(def.id):
 			var cut := BlockDamage.cut_off(ship.grid, [coord] as Array[Vector3i]).size()
 			worst_cut = maxi(worst_cut, cut)
-	print("damage  intact hp %d, crippled as built %s, one loss cuts off at most %d%s" % [total_hp,
-		"no" if not s.crippled else "YES: " + s.crippled_reason, worst_cut,
+	print("damage  intact hp %d, crippled as built %s, buffer %d of %d can break away, one loss cuts off at most %d%s" % [
+		total_hp, "no" if not s.crippled else "YES: " + s.crippled_reason, buffer, ship.grid.size(), worst_cut,
 		"" if worst_cut <= 2 else "  <-- FRAGILE"])
 	var reach_km := (s.quantum_capacity - WarpPlan.WARP_BASE) / WarpPlan.WARP_PER_KM
 	print("warp    reach %.0f km on a full store (%d QE); drive %s" % [reach_km, s.quantum_capacity,

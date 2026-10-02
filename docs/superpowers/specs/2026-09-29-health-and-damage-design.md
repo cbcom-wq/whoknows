@@ -158,6 +158,15 @@ now crippled is a warning you earned by crashing.
 
 ### 4.5 Blocks that can't be removed, and pieces that break off
 
+> **Amended 2026-10-02, the owner's report:** after a hard crash onto a planet, losing blocks
+> reshaped the cabin and left the owner stuck in a little room with the chair, unable to sit
+> back down to fly. The inside now **changes style, never shape**. Every walkable cell of the
+> launch layout, and every block that walls, floors or roofs one (the cabin's shell,
+> `Ship.inner_cells`), is wrecked but never knocked off. So is any block whose loss would cut
+> part of the shell off from the core. Only the **buffer** outside the shell breaks away: on
+> the starter, 49 of 110 blocks (fairings, outer hull and wedges, engines and RCS). A save that
+> had already lost shell blocks gets them back, wrecked. §4.6 and §7.4 no longer happen.
+
 - **The ship core** goes down to Wrecked but is never removed. Losing the core would need "the
   ship is destroyed", which the owner's answers rule out for now. A wrecked core means crippled.
 - **The pilot seat and the airlock you came in through** follow the same rule: they can be
@@ -168,6 +177,8 @@ now crippled is a warning you earned by crashing.
   This is rare with the starter shuttle, but it must not leave blocks floating.
 
 ### 4.6 Holes
+
+> **Amended 2026-10-02:** the cabin never opens (§4.5): holes are in the buffer only.
 
 The slice-1 non-goals still stand: there is **no atmosphere or pressure**. A removed wall is a
 hole onto space. The interior builder already treats a face onto an empty cell as outer skin, so
@@ -275,6 +286,9 @@ is the weak point the art direction left for it. That keeps a crash from being a
 a wreck.
 
 ### 7.4 Falling out
+
+> **Amended 2026-10-02:** no longer happens: the deck under you is part of the cabin's shell
+> (§4.5). The handling stays, harmlessly, for whatever opens a deck later.
 
 If the deck cell under you is removed (§4.6), you switch to suit mode at your current velocity, as
 if you had just left the airlock. If the suit is dry, the emergency cell brings you home.
@@ -542,4 +556,17 @@ Built 2026-09-29 to 30: the suite went from 1,421 tests to 1,530, all green, hea
     the owner's GPU: the interior at each stage (`test/probes/damage_render.gd`) and the torch
     in hand and welding (`test/probes/torch_render.gd`). Outside, at the sun's back, the hull
     was too dark to judge.
+14. **The cabin keeps its shape** (amended 2026-10-02, §4.5): the owner's crash left them stuck
+    beside the helm. Damage wrecks the cabin's shell and knocks off only the buffer outside it.
+    Inside, a damaged or wrecked wall now spits sparks into the cabin as well as darkening. On
+    the starter, nose-on into a wall: 3 m/s hurts three blocks a little, 5 m/s damages two and
+    wrecks one (nothing goes), and 8 m/s knocks three buffer blocks off.
+15. **The spits no longer hold the floating origin.** The first build gave every damaged hull
+    block a world-space emitter in `Universe.HOLDS_SHIFT`, re-fired every 0.8–2.5 s. With a few
+    damaged blocks, the shift would almost never have found a gap. The spits are now in their
+    emitter's own frame (the hull, or the interior) and hold nothing; only the two-second burst
+    when a block goes still does.
+16. **A stage seen from inside rebuilds only the interior.** The hull recolours in place, so it
+    is left standing: about 125 ms of a full rebuild's 210–230 ms on the dev Xeon (the generated
+    skin from the ship exterior work made the full rebuild dearer).
 

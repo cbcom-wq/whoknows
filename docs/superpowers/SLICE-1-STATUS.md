@@ -73,7 +73,8 @@ scenery any more.
   - a repair torch fed with scrap plates mends the hull, even on a spacewalk;
   - HULL % and CRIPPLED show in the band.
   
-  Open: a rebuild costs ~140 ms, a hitch whenever a block goes.
+  The cabin keeps its shape (amended 2026-10-02): only the buffer outside it breaks away.
+  Open: a full rebuild costs ~220 ms, a hitch whenever a block goes.
 
 Derived stats for the starter shuttle (2026-09-27, with the quantum fixtures and the bridge
 computer): 96,900 kg, torque imbalance 11,146 / −6,192 N·m (0.36% / 0.3% of pitch / yaw

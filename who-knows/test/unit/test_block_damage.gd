@@ -164,3 +164,20 @@ func test_apply_many_removes_everything_gone_with_one_signal():
 	assert_eq(removed.size(), 2)
 	assert_signal_emit_count(grid, "cell_changed", 1)
 	assert_signal_emitted_with_parameters(grid, "block_staged", [Vector3i(2, 0, 0), BlockDamage.Stage.DAMAGED])
+
+# --- the cabin's shell (spec §4.5 as amended 2026-10-02) ---------------------------
+
+func test_held_cells_stop_at_wrecked():
+	var grid := _line()
+	var at := Vector3i(3, 0, 0)
+	var removed := BlockDamage.apply(grid, _catalog, at, _hp(&"hull") * 10.0, {at: true})
+	assert_eq(removed, [])
+	assert_eq(BlockDamage.stage_of(grid.get_block(at), _catalog.get_def(&"hull")), BlockDamage.Stage.WRECKED)
+
+func test_a_loss_that_would_cut_the_shell_off_stays_wrecked():
+	var grid := _line()
+	watch_signals(grid)
+	var removed := BlockDamage.apply(grid, _catalog, Vector3i(1, 0, 0), _hp(&"hull") * 10.0, {Vector3i(3, 0, 0): true})
+	assert_eq(removed, [], "(2) and (3) would go with it, and (3) is held")
+	assert_true(grid.has_block(Vector3i(1, 0, 0)))
+	assert_signal_emitted_with_parameters(grid, "block_staged", [Vector3i(1, 0, 0), BlockDamage.Stage.WRECKED])

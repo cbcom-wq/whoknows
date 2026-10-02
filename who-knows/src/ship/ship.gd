@@ -56,6 +56,11 @@ var grid: ShipGrid
 ## by the first grid the ship is given, or by a save; a rebuild never
 ## changes it.
 var launch_blueprint: ShipBlueprint
+## The cabin's shell (health and damage spec §4.5, as amended 2026-10-02):
+## every walkable cell of the launch layout and every block that walls, floors
+## or roofs one. Damage wrecks these but never knocks them off, so the inside
+## keeps its shape; only the buffer outside them breaks away. coord -> true.
+var inner_cells := {}
 var outside: Node3D
 var stats: ShipStats
 var catalog: BlockCatalog
@@ -150,7 +155,7 @@ func _ready() -> void:
 	damage_show = DamageShow.new()
 	damage_show.name = "DamageShow"
 	exterior.add_child(damage_show)
-	damage_show.setup(exterior, outside)
+	damage_show.setup(exterior, outside, interior, _inside_face)
 	rcs_show = RcsShow.new()
 	rcs_show.name = "RcsShow"
 	exterior.add_child(rcs_show)
@@ -381,7 +386,7 @@ func take_damage_many(hits: Dictionary) -> Array[Vector3i]:
 		var none: Array[Vector3i] = []
 		return none
 	damage_log.note()
-	var removed := BlockDamage.apply_many(grid, catalog, real)
+	var removed := BlockDamage.apply_many(grid, catalog, real, inner_cells)
 	if not removed.is_empty():
 		damage_show.lost(removed)
 		_shed_plate(removed)
@@ -524,6 +529,8 @@ func set_grid(new_grid: ShipGrid, stock := true) -> void:
 	grid = new_grid
 	if launch_blueprint == null:
 		launch_blueprint = unhurt(ShipBlueprint.from_grid(grid, String(name)))
+	inner_cells = inner_of(launch_blueprint.to_grid(), catalog)
+	_restore_shell(grid)
 	grid.cell_changed.connect(_on_cell_changed)
 	grid.block_staged.connect(_on_block_staged)
 	exterior_builder.bind(grid, catalog)
@@ -536,10 +543,13 @@ func _queue_rebuild() -> void:
 	_rebuild_queued = true
 	_rebuild_queued_now.call_deferred()
 
+## A stage seen from inside: the interior is rebuilt to restyle it; the hull
+## already recoloured in place, so it is left standing (about 85 of a full
+## rebuild's 210 ms on the dev Xeon).
 func _rebuild_queued_now() -> void:
 	if not _rebuild_queued:
 		return
-	_rebuild_everything()
+	_rebuild_everything(false)
 
 func _on_cell_changed(_coord: Vector3i) -> void:
 	# Slice 1 rebuilds wholesale on any change. At 150 blocks this is well
@@ -547,11 +557,14 @@ func _on_cell_changed(_coord: Vector3i) -> void:
 	# for when weapons start destroying blocks every few milliseconds.
 	_rebuild_everything()
 
-func _rebuild_everything() -> void:
+## Rebuilds both representations from the grid; `hull` false keeps the
+## exterior as it is (only the interior's look changed).
+func _rebuild_everything(hull := true) -> void:
 	_rebuild_queued = false
 	_save_computers()
 	var stowed := _stowed_items()
-	exterior_builder.rebuild()
+	if hull:
+		exterior_builder.rebuild()
 	interior_builder.rebuild()
 	interior_builder.geometry_body().set_meta(&"receive_hit", _on_interior_hit)
 	interior_builder.geometry_body().set_meta(&"ship", self)
@@ -775,6 +788,52 @@ func to_dict(universe: Universe) -> Dictionary:
 		"airlocks": saved_airlocks,
 		"items": saved_items,
 	}
+
+## Where a block's damage shows in the cabin (DamageShow): a point on the
+## cabin side of its wall, floor or roof, interior-local, or null if no
+## walkable cell is beside it.
+func _inside_face(coord: Vector3i) -> Variant:
+	var walk := interior_builder.walkable_coords()
+	for n: Vector3i in ShipGrid.FACE_OFFSETS:
+		var cell := coord + n
+		if not walk.has(cell):
+			continue
+		var toward := -Vector3(n)
+		return InteriorBuilder.interior_center(cell) + toward * Vector3(
+			ShipGrid.CELL_SIZE * 0.5 - 0.08, InteriorBuilder.STOREY_HEIGHT * 0.5 - 0.15,
+			ShipGrid.CELL_SIZE * 0.5 - 0.08)
+	return null
+
+## The cabin's shell of `layout`: its walkable cells and every block beside
+## one. coord -> true.
+static func inner_of(layout: ShipGrid, blocks: BlockCatalog) -> Dictionary:
+	var out := {}
+	for cell: Vector3i in DeckGraph.build(layout, blocks).walkable_coords():
+		out[cell] = true
+		for n in ShipGrid.FACE_OFFSETS:
+			if layout.has_block(cell + n):
+				out[cell + n] = true
+	return out
+
+## Puts back, wrecked, any block of the cabin's shell missing from `g`: a
+## save from before the shell was held could have lost some, leaving a cabin
+## you can't get round. Before any signal is connected, so no rebuild yet.
+func _restore_shell(g: ShipGrid) -> int:
+	var put := 0
+	for i in launch_blueprint.coords.size():
+		var cell := launch_blueprint.coords[i]
+		if not inner_cells.has(cell) or g.has_block(cell):
+			continue
+		var def := catalog.get_def(launch_blueprint.block_ids[i])
+		if def == null:
+			continue
+		var inst := BlockInstance.new()
+		inst.block_id = def.id
+		inst.orientation = launch_blueprint.orientations[i]
+		inst.damage = float(def.hp) * BlockDamage.WRECKED_AT
+		g.set_block(cell, inst)
+		put += 1
+	return put
 
 ## `bp` with every block's damage cleared.
 static func unhurt(bp: ShipBlueprint) -> ShipBlueprint:

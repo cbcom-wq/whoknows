@@ -250,7 +250,8 @@ func test_damage_and_the_launch_layout_round_trip():
 	var gone := Vector3i.ZERO
 	var found := 0
 	for coord: Vector3i in ship.grid.coords():
-		if ship.grid.get_block(coord).block_id == &"hull" and not ship.grid.has_block(coord + Vector3i(1, 0, 0)):
+		if ship.grid.get_block(coord).block_id == &"hull" and not ship.grid.has_block(coord + Vector3i(1, 0, 0)) \
+				and not ship.inner_cells.has(coord):
 			if found == 0:
 				hurt = coord
 			else:

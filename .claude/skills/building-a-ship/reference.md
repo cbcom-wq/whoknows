@@ -447,6 +447,8 @@ Saved places outside are `UniversePoint`s (`SaveCodec.upoint`). The world's star
 | `BlockDamage.apply(grid, catalog, coord, hp)` / `apply_many(grid, catalog, {coord: hp})` | deals damage; `grid.block_staged(coord, stage)` on a stage change; removes the gone and anything cut off from the core in one `ShipGrid.remove_many` (one rebuild); returns what went |
 | `BlockDamage.repair(...)`, `rebuild(grid, catalog, coord, id, orientation)` | mends; puts a block back at `WRECKED_AT` × hp |
 | `BlockDamage.KEEP` | `core`, `pilot_seat`, `airlock`: never knocked off |
+| `Ship.inner_cells`, `Ship.inner_of(layout, catalog)` | the cabin's shell, from the launch layout: walkable cells and every block beside one. Passed as `held` to `BlockDamage.apply_many`: wrecked, never knocked off, and no loss may cut any of it off. `set_grid` puts missing shell blocks back, wrecked |
+| `DamageShow.spitting()`, `spitting_inside()` | hull spits (damaged, from a face onto space) and cabin spits (damaged or wrecked, from the wall into the cabin), all in their parent's frame |
 | `ShipStats.intact_forward`, `intact_torque`, `crippled`, `crippled_reason` | crippled below 25% of intact forward thrust or any intact turning axis, or with no working `quantum_core` |
 | `ShipCells.hull_cell(grid, body, shape, p, n)`, `interior_cell(grid, p, n)`, `interior_cell_at(p)` | which block a hit lands on: a hull collider's meta `&"cell"`; the block 0.35 m behind an interior face, else the one in front |
 | `Ship.take_damage(cell, hp)`, `take_damage_many`, `crash_damage(knock)` | crashes: nothing below `CRASH_FROM` 2 m/s of knock, then `CRASH_K` 12 × (knock − 2)² on the struck cell and half on its neighbours, dealt after the physics step |

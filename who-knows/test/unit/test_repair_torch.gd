@@ -107,7 +107,8 @@ func test_it_eats_a_plate_and_refuses_one_when_full():
 func test_it_rebuilds_a_hole_from_outside_wrecked_for_its_cost():
 	var gone := Vector3i.ZERO
 	for coord: Vector3i in _ship.grid.coords():
-		if _ship.grid.get_block(coord).block_id == &"hull" and not _ship.grid.has_block(coord + Vector3i(1, 0, 0)):
+		if _ship.grid.get_block(coord).block_id == &"hull" and not _ship.grid.has_block(coord + Vector3i(1, 0, 0)) \
+				and not _ship.inner_cells.has(coord):
 			gone = coord
 			break
 	_ship.take_damage(gone, 100_000.0)

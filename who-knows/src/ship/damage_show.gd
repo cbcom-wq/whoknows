@@ -4,9 +4,15 @@ extends Node3D
 ## What damage looks like on the hull, beyond its colour (docs/superpowers/
 ## specs/2026-09-29-health-and-damage-design.md §9): a damaged block spits a
 ## few sparks now and then, and a block knocked off goes in a burst of sparks
-## and a few charred chunks. On the hull body, so it moves with the ship;
-## every spark is a world-space particle, and its emitter holds the floating
-## origin's shift (CLAUDE.md). Chunks are loose bodies outside, in
+## and a few charred chunks. Inside, a damaged or wrecked wall spits sparks
+## into the cabin (as amended 2026-10-02: the inside changes style, never
+## shape).
+##
+## The floating origin (CLAUDE.md): the spits are in their emitter's own frame,
+## on the hull or in the interior, so they move with it and never hold the
+## shift -- a spit every second or two from every damaged block would hold it
+## for good. Only the burst is world-space, under Outside, and holds it for
+## its two seconds. Chunks are loose bodies outside, in
 ## Universe.EXTERIOR_SPACE, gone in CHUNK_LIFE.
 
 const SPARKS := 6
@@ -28,40 +34,60 @@ var outside: Node3D
 var hull: RigidBody3D
 ## Render layers the sparks draw on: the hull's own.
 var layer := ExteriorBuilder.OWN_HULL_LAYER
+## The interior, and where a block's damage shows in it: inside_face(coord)
+## returns an interior-local point on the cabin side of its wall, or null.
+var interior: Node3D
+var inside_face: Callable
 
 ## coord -> {emitter, next}
 var _spitting: Dictionary = {}
+## coord -> {emitter, next}: walls spitting into the cabin.
+var _inside: Dictionary = {}
 var _rng := RandomNumberGenerator.new()
 static var _spark_mesh: Mesh
 static var _chunk_mesh: Mesh
 
-func setup(p_hull: RigidBody3D, p_outside: Node3D) -> void:
+func setup(p_hull: RigidBody3D, p_outside: Node3D, p_interior: Node3D = null,
+		p_inside_face := Callable()) -> void:
 	hull = p_hull
 	outside = p_outside
+	interior = p_interior
+	inside_face = p_inside_face
 
 ## Every damaged block spits; nothing else does. After a rebuild or a load.
 func sync(grid: ShipGrid, catalog: BlockCatalog) -> void:
-	for coord: Vector3i in _spitting.keys():
+	for coord: Vector3i in _spitting.keys() + _inside.keys():
 		_stop(coord)
 	for coord: Vector3i in grid.coords():
 		var inst := grid.get_block(coord)
 		stage(grid, coord, BlockDamage.stage_of(inst, catalog.get_def(inst.block_id)))
 
 ## The block at `coord` is at `stage` now.
+## Outside, a damaged block spits from its face onto space; inside, a damaged
+## or wrecked one spits from its wall into the cabin.
 func stage(grid: ShipGrid, coord: Vector3i, stage: int) -> void:
-	if stage != BlockDamage.Stage.DAMAGED:
-		_stop(coord)
-		return
-	if _spitting.has(coord):
-		return
-	var at: Variant = _outer_face(grid, coord)
-	if at == null:
-		return   # inside the ship: the interior shows it instead
-	var emitter := _emitter(SPARKS, SPARK_LIFE, 2.0)
+	var outside_spits := stage == BlockDamage.Stage.DAMAGED
+	var inside_spits := stage == BlockDamage.Stage.DAMAGED or stage == BlockDamage.Stage.WRECKED
+	if not outside_spits:
+		_drop(_spitting, coord)
+	elif not _spitting.has(coord):
+		var at: Variant = _outer_face(grid, coord)
+		if at != null:
+			_spitting[coord] = _spit(self, at, layer | 1, coord)
+	if not inside_spits or interior == null or not inside_face.is_valid():
+		_drop(_inside, coord)
+	elif not _inside.has(coord):
+		var at: Variant = inside_face.call(coord)
+		if at != null:
+			_inside[coord] = _spit(interior, at, InteriorKit.LAYER, coord)
+
+func _spit(parent: Node3D, at: Vector3, layers: int, coord: Vector3i) -> Dictionary:
+	var emitter := _emitter(SPARKS, SPARK_LIFE, 2.0, true)
+	emitter.layers = layers
 	emitter.position = at
-	add_child(emitter)
+	parent.add_child(emitter)
 	_rng.seed = hash(coord)
-	_spitting[coord] = {"emitter": emitter, "next": _rng.randf_range(0.0, SPIT_EVERY.y)}
+	return {"emitter": emitter, "next": _rng.randf_range(0.0, SPIT_EVERY.y)}
 
 ## Blocks at `coords` are gone: a burst and chunks at each of the first few.
 func lost(coords: Array[Vector3i]) -> void:
@@ -72,23 +98,33 @@ func lost(coords: Array[Vector3i]) -> void:
 		_burst(at)
 		_chunks(at)
 
-## How many cells spit now, for tests.
+## How many cells spit now, outside and into the cabin, for tests.
 func spitting() -> int:
 	return _spitting.size()
 
+func spitting_inside() -> int:
+	return _inside.size()
+
 func _process(delta: float) -> void:
-	for coord: Vector3i in _spitting:
-		var e: Dictionary = _spitting[coord]
-		e["next"] -= delta
-		if e["next"] <= 0.0:
-			e["next"] = _rng.randf_range(SPIT_EVERY.x, SPIT_EVERY.y)
-			(e["emitter"] as GPUParticles3D).restart()
+	for spits: Dictionary in [_spitting, _inside]:
+		for coord: Vector3i in spits:
+			var e: Dictionary = spits[coord]
+			e["next"] -= delta
+			if e["next"] <= 0.0:
+				e["next"] = _rng.randf_range(SPIT_EVERY.x, SPIT_EVERY.y)
+				var emitter: GPUParticles3D = e["emitter"]
+				if is_instance_valid(emitter):
+					emitter.restart()
 
 func _stop(coord: Vector3i) -> void:
-	if not _spitting.has(coord):
+	_drop(_spitting, coord)
+	_drop(_inside, coord)
+
+static func _drop(spits: Dictionary, coord: Vector3i) -> void:
+	if not spits.has(coord):
 		return
-	var emitter: GPUParticles3D = _spitting[coord]["emitter"]
-	_spitting.erase(coord)
+	var emitter: GPUParticles3D = spits[coord]["emitter"]
+	spits.erase(coord)
 	if is_instance_valid(emitter):
 		emitter.queue_free()
 
@@ -139,7 +175,9 @@ static func _free_after(node: Node, seconds: float) -> void:
 	node.add_child(timer)
 
 ## A one-shot spray of sparks in world space, which holds the shift.
-func _emitter(amount: int, life: float, speed: float) -> GPUParticles3D:
+## A one-shot spray of sparks. In its own frame (`local`) it moves with its
+## parent and never holds the shift; in world space, it does.
+func _emitter(amount: int, life: float, speed: float, local := false) -> GPUParticles3D:
 	var p := GPUParticles3D.new()
 	p.name = "Sparks"
 	p.amount = amount
@@ -147,7 +185,7 @@ func _emitter(amount: int, life: float, speed: float) -> GPUParticles3D:
 	p.one_shot = true
 	p.explosiveness = 0.9
 	p.emitting = false
-	p.local_coords = false
+	p.local_coords = local
 	p.layers = layer | 1
 	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	p.draw_pass_1 = _spark()
@@ -163,7 +201,8 @@ func _emitter(amount: int, life: float, speed: float) -> GPUParticles3D:
 	m.scale_max = 1.2
 	p.process_material = m
 	p.visibility_aabb = AABB(Vector3(-6, -6, -6), Vector3(12, 12, 12))
-	p.add_to_group(Universe.HOLDS_SHIFT)
+	if not local:
+		p.add_to_group(Universe.HOLDS_SHIFT)
 	return p
 
 static func _spark() -> Mesh:

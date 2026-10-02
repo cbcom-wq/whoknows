@@ -73,7 +73,7 @@ func _run() -> void:
 	var ship: Ship = scene.get_node("Ship")
 	var outer: Array[Vector3i] = []
 	for coord: Vector3i in ship.grid.coords():
-		if ship.grid.get_block(coord).block_id == &"hull" and not ship.grid.has_block(coord + Vector3i(1, 0, 0)):
+		if not ship.inner_cells.has(coord) and not ship.grid.has_block(coord + Vector3i(1, 0, 0)):
 			outer.append(coord)
 		if outer.size() == 3:
 			break

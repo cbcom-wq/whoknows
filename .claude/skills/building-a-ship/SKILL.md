@@ -54,9 +54,14 @@ Do these in order. Each one names the check that proves it.
    - every block needs a sensible `hp` in its `.tres`: damage is taken against it, and a block
      goes damaged at half, wrecked at all of it and is knocked off at one and a half;
    - `core`, `pilot_seat` and every `airlock` are **kept**: wrecked, never knocked off;
-   - a block knocked off takes with it every block no longer joined to the core, so don't hang
-     half the ship off one cell (the probe's `damage` line counts the blocks one loss would cut
-     off at worst);
+   - **the cabin keeps its shape:** every walkable cell and every block beside one (the cabin's
+     shell, `Ship.inner_cells`, from the launch layout) is wrecked but never knocked off. Only
+     the **buffer** outside the shell breaks away, so give a ship one: fairings, outer plating,
+     engines and thrusters. The probe's `damage` line counts it (the starter's is 49 of 110);
+   - a block knocked off takes with it every block no longer joined to the core. A loss that
+     would cut off part of the shell is refused (the block stays wrecked), but don't hang half
+     the buffer off one cell either (the probe counts the blocks one loss would cut off at
+     worst);
    - the ship must not be **crippled as built** (forward thrust, every turning axis and a
      working `quantum_core`): the probe's `damage` line says so;
    - **damage shows on the skin:** a hurt cell's plating, trim and glass are multiplied by its
@@ -200,7 +205,9 @@ thrust.
 | Raycasting a body built this frame | The torch's tests hit nothing: a new body joins the physics space on the next physics frame | Wait a physics frame (`await wait_physics_frames(2)`) before querying what a rebuild made |
 | The plating's vertex colour after main's livery took `COLOR` | The skin wrote `HullPalette.PLATE` into its `HULL` batch, which the livery ignored until the damage merge made it multiply by `COLOR.rgb`: every plate would have darkened by the plate colour | The plating's vertex colour is the cell's stage colour, `UNHURT` (white) when whole; `test_an_unhurt_cell_s_plating_is_white_so_the_livery_is_as_painted` |
 | Re-dressing the skin for one stage | Rebuilding the skin from the layout costs 53 ms on the starter, and would replace the lens meshes and window glow `ShipLights` holds | `set_stage` recolours the cell's vertex runs in arrays kept from the dressing and re-adds the touched surfaces once at the end of the frame (~1.5 ms). Never read a mesh's arrays back to do it: that stalls on the GPU (5–25 ms) |
-| Recolouring one interior cell | The dressing is a few merged meshes, so there is no one cell's mesh to tint | A stage seen from inside rebuilds the ship once, deferred (`Ship._queue_rebuild`); it costs ~140 ms on the dev Xeon |
+| Recolouring one interior cell | The dressing is a few merged meshes, so there is no one cell's mesh to tint | A stage seen from inside rebuilds the interior once, deferred (`Ship._queue_rebuild`), leaving the hull standing: ~125 ms on the dev Xeon |
+| Letting damage knock off cabin blocks | After a hard crash onto a planet the cabin had reshaped round the owner: a little room with the chair, and no way to sit back down to fly | The cabin's shell is held (`Ship.inner_cells`, `BlockDamage.apply_many(..., held)`); only the buffer breaks away, and a save missing shell blocks gets them back wrecked |
+| A repeating world-space emitter in `Universe.HOLDS_SHIFT` | Every damaged block re-fired its sparks every second or two, so with a few damaged the floating origin would almost never have found a gap to shift in | Anything that repeats stays in its parent's frame (`local_coords`) and out of the group; only short one-shots outside hold the shift |
 | Letting go of a warp at 120 m/s with the assist on | The assist cancels velocity nobody asked for, so the ship braked to rest at the warp limit instead of coasting in | `WarpDrive` sets the speed lock to 120 m/s at drop-out; anything else that hands the hull a velocity with the assist on must do the same |
 | Letting the rest of the ship behave normally at warp | Found in the final review: you could cycle the airlock and step out mid-warp (stranded kilometres behind), the RCS kept its last command and puffed the whole way, and motion coupling read the frozen hull's placing as a 12 m/s² shove | Anything that acts on the hull's motion or lets someone outside asks `warp.is_spinning()` / `travelling()` first: `Airlock.warping()`, `FlightComputer`'s early return, `MotionCoupling._warp()` |
 | A test script that types a local from the untyped `_root.system` and loops its `warp_targets()` | Godot 4.5.1 segfaulted at exit (ObjectDB leak, GUT's own scripts included) though every test passed | Hold the system in a typed member set in `before_each`, as `test_warp_drive.gd` does; watch the run's exit code, not only its pass count |
