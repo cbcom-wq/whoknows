@@ -16,7 +16,7 @@ extends Node3D
 ## Universe.EXTERIOR_SPACE, gone in CHUNK_LIFE.
 
 const SPARKS := 6
-const SPARK_LIFE := 0.5
+const SPARK_LIFE := 0.3
 ## Seconds between a damaged block's spits, at random between these.
 const SPIT_EVERY := Vector2(0.8, 2.5)
 const BURST_SPARKS := 32
@@ -82,7 +82,7 @@ func stage(grid: ShipGrid, coord: Vector3i, stage: int) -> void:
 			_inside[coord] = _spit(interior, at, InteriorKit.LAYER, coord)
 
 func _spit(parent: Node3D, at: Vector3, layers: int, coord: Vector3i) -> Dictionary:
-	var emitter := _emitter(SPARKS, SPARK_LIFE, 2.0, true)
+	var emitter := _emitter(SPARKS, SPARK_LIFE, 3.5, true)
 	emitter.layers = layers
 	emitter.position = at
 	parent.add_child(emitter)
@@ -197,8 +197,8 @@ func _emitter(amount: int, life: float, speed: float, local := false) -> GPUPart
 	m.gravity = Vector3.ZERO
 	m.damping_min = 1.0
 	m.damping_max = 2.0
-	m.scale_min = 0.6
-	m.scale_max = 1.2
+	m.scale_min = 0.5
+	m.scale_max = 1.0
 	p.process_material = m
 	p.visibility_aabb = AABB(Vector3(-6, -6, -6), Vector3(12, 12, 12))
 	if not local:
@@ -208,7 +208,7 @@ func _emitter(amount: int, life: float, speed: float, local := false) -> GPUPart
 static func _spark() -> Mesh:
 	if _spark_mesh == null:
 		var b := BoxMesh.new()
-		b.size = Vector3(0.04, 0.04, 0.12)
+		b.size = Vector3(0.015, 0.015, 0.05)
 		var m := StandardMaterial3D.new()
 		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		m.albedo_color = HullPalette.SPARK
