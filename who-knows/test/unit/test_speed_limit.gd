@@ -55,28 +55,67 @@ func test_the_well_you_are_in_and_your_height_over_its_ground():
 	assert_null(_where.well())
 	assert_eq(_where.altitude(), INF)
 
-func test_the_flight_computer_holds_you_to_the_limit_where_you_are():
+## A hull and its flight computer 4,000 m over the first planet's ground,
+## flying at `speed` m/s down the nose. Fills `_hull` and `_fc`.
+var _hull: RigidBody3D
+var _fc: FlightComputer
+
+func _fly_over_a_planet(speed: float) -> void:
 	_setup_where()
 	var p := _system.planets()[0]
 	var t := _where.terrain_of(p)
-	var hull := RigidBody3D.new()
-	hull.mass = 95300.0
-	add_child_autofree(hull)
-	var fc := FlightComputer.new()
-	fc.hull_path = NodePath("../" + hull.name)
-	hull.get_parent().add_child(fc)
-	autofree(fc)
-	fc.whereabouts = _where
-	_universe.set_focus(hull)
+	_hull = RigidBody3D.new()
+	_hull.mass = 95300.0
+	add_child_autofree(_hull)
+	_fc = FlightComputer.new()
+	_fc.hull_path = NodePath("../" + _hull.name)
+	_hull.get_parent().add_child(_fc)
+	autofree(_fc)
+	_fc.whereabouts = _where
+	_universe.set_focus(_hull)
 	_universe.origin = p.point.plus(Vector3.UP * (p.radius + t.height_at(Vector3.UP) + 4000.0))
-	hull.global_position = Vector3.ZERO
-	hull.linear_velocity = Vector3(0, 0, -500)
+	_hull.global_position = Vector3.ZERO
+	_hull.linear_velocity = Vector3(0, 0, -speed)
+
+## Moves the hull out past the well's edge, where the limit is the cruise ceiling.
+func _leave_the_well() -> void:
+	var p := _system.planets()[0]
+	_place(p.point.plus(Vector3.UP * (p.well_radius + 100.0)))
+
+func test_the_flight_computer_holds_you_to_the_limit_where_you_are():
+	_fly_over_a_planet(500.0)
+	var hull := _hull
+	var fc := _fc
 	fc._physics_process(1.0 / 60.0)
 	assert_almost_eq(fc.current_limit, 220.0, 0.5)
 	assert_almost_eq(hull.linear_velocity.length(), 220.0, 0.5)
 	var tm := fc.build_telemetry()
 	assert_almost_eq(tm.cruise_limit, 220.0, 0.5)
 	assert_true(tm.limit_raised)
+
+func test_no_limit_with_the_assist_off():
+	_fly_over_a_planet(500.0)
+	_fc.assist_enabled = false
+	_fc._physics_process(1.0 / 60.0)
+	assert_almost_eq(_hull.linear_velocity.length(), 500.0, 0.5, "the pilot's own risk")
+
+func test_boost_never_raises_the_limit():
+	_fly_over_a_planet(500.0)
+	_fc.set_pilot_input(Vector3(0, 0, -1), Vector3.ZERO, true)
+	_fc._physics_process(1.0 / 60.0)
+	assert_true(_fc.boosting, "boost was applying")
+	assert_almost_eq(_fc.current_limit, 220.0, 0.5, "the same limit with boost held")
+	assert_almost_eq(_hull.linear_velocity.length(), 220.0, 0.5)
+
+func test_a_lock_set_high_in_a_well_is_clamped_after_leaving_it():
+	_fly_over_a_planet(1400.0)
+	_fc.speed_locked = true
+	_fc.locked_speed = 1400.0
+	_leave_the_well()
+	_fc._physics_process(1.0 / 60.0)
+	assert_almost_eq(_fc.current_limit, 120.0, 1e-6)
+	assert_almost_eq(_fc.locked_speed, 120.0, 1e-6, "no stale lock")
+	assert_almost_eq(_fc.build_telemetry().locked_speed, 120.0, 1e-6, "nor on the readout")
 
 func test_the_panel_shows_the_limit_only_while_it_is_raised():
 	var panel := VelocityPanel.new()

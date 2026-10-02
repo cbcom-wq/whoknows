@@ -199,6 +199,9 @@ func _physics_process(delta: float) -> void:
 
 func _apply_translation(delta: float) -> void:
 	current_limit = speed_limit_now()
+	# A lock set high in a well must not outlive it: the assist would keep
+	# driving toward a speed the clamp below refuses, and the readout would lie.
+	locked_speed = clampf(locked_speed, -current_limit, current_limit)
 	var basis := _hull.global_transform.basis
 	var local_velocity := basis.inverse() * _hull.linear_velocity
 	# While locked, W or S moves the lock: letting go holds the new speed.

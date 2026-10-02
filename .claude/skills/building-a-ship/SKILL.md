@@ -117,8 +117,8 @@ Do these in order. Each one names the check that proves it.
      - **the assist's limit climbs with altitude** (`FlightComputer.speed_limit`): anything else
        that caps the hull's speed must use `current_limit`, never `CRUISE_LIMIT_MPS`, and a
        ship's `Whereabouts` must be wired (`flight_computer.whereabouts`) or it is held to
-       120 m/s everywhere. Known gap: `locked_speed` is re-clamped to the limit only while W or S
-       is pressed (spec §13.9);
+       120 m/s everywhere. `locked_speed` is re-clamped to the limit every tick, so a lock set high
+       in a well drops to cruise on leaving it;
      - **the hull is a space anchor** (`AsteroidStream.SPACE_ANCHOR`, joined in `Ship._ready`),
        so a world's `WorldSurface` keeps solid ground under it with no wiring. Anything else that
        flies near ground (a wingman, a pod) joins that group with its `ANCHOR_RADIUS` meta, or the
