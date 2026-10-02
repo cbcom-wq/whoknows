@@ -466,6 +466,11 @@ Measured on the starter (crash probe, `test/probes/crash_probe.gd`, with the cab
 knocked off; 8 m/s knocks 3 buffer blocks off. Not crippled by any. The buffer is 49 of 110
 blocks. A full rebuild is ~220 ms and an interior-only one ~125 ms (headless, dev Xeon).
 
+On a world, the solid ground round the hull (`WorldSurface`'s chunks, `StaticBody3D`s on
+`BodyProxy.LAYER`) reaches `_on_hull_struck` like any body, so hitting the ground is a crash.
+The floor that lifts a hull out from under the ground (`WorldSurface.floor_fired`) deals
+nothing: it is a safety net against tunnelling, not a contact, so never rely on it to hurt a ship.
+
 ## The warp (`docs/superpowers/specs/2026-09-28-warp-design.md`)
 
 `WarpDrive` at `Ship/Warp`, built by `Ship._ready`; `flight_test.gd` binds it
