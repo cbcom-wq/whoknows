@@ -100,7 +100,7 @@ func _star_shots(scene: Node, ship: Ship) -> void:
 	var toward := star_system.recipe.star.point.minus(focus).normalized()
 	var cam := Camera3D.new()
 	cam.cull_mask = 1 | ExteriorBuilder.OWN_HULL_LAYER
-	cam.far = AsteroidStream.VIEW_FAR
+	cam.far = BodyProxy.VIEW_FAR
 	ship.exterior.add_child(cam)
 	cam.global_transform = Transform3D(Basis.looking_at(toward, Vector3.UP if absf(toward.y) < 0.9 else Vector3.RIGHT),
 		ship.exterior.global_position + toward * 12.0)
