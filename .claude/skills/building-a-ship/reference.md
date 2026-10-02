@@ -177,6 +177,20 @@ touches no nodes.
     else where you sat from;
   - the avatar is a capsule of radius 0.35 m and height 1.8 m, with the eye at 1.6 m; a room
     needs an aisle ≥ 1.0 m.
+- **The bathroom's toilet and the dev QE refill:**
+  - the washstand's toilet lid is its own node, `ToiletLid` (`src/ship/interior/toilet_lid.gd`).
+    The dressing places it with the washstand, `InteriorBuilder.toilet_lids()` finds it, and
+    `Ship._rebuild_everything` binds it to `quantum.store`, so each ship's lid fills its own store;
+  - **in a dev build only** (`ToiletLid.dev`, which defaults to `OS.is_debug_build()`): F on the
+    lid lifts it (`OPEN_TIME` 0.3 s, upright against the cistern) and F again shuts it. With it
+    up, a `ReadoutPanel` button in the bowl ("Refill QE (dev)") calls
+    `store.credit(store.room(), &"dev")`. In a release build the lid is drawn shut, with no hit
+    box and no button;
+  - the numbers are in `InteriorProps`: `toilet_hinge()`, `toilet_button()`, `TOILET_LID`
+    0.42 × 0.04 × 0.36 m, `TOILET_SEAT_TOP` 0.43 m and `TOILET_TANK_DEPTH` 0.18 m. The
+    washstand's colliders are the toilet's (0.40 m high, under the button) and the sink's
+    (0.9 m);
+  - the lid always starts shut, after a rebuild or a load. It isn't saved; the store is.
 
 ## Who lives aboard (NPC foundation spec §14)
 
