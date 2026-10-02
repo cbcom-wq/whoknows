@@ -272,7 +272,7 @@ func _wire_universe(saved: Dictionary) -> void:
 	_wire_star_system()
 	_wire_salvage(saved if same_world else {}, _same_generator(saved, "salvage"))
 	_wire_strays(saved.get("strays", {}) if same_world else {})
-	# Godot's cameras stop drawing at 4 km; a world's horizon is 100 km off
+	# Godot's cameras stop drawing at 4 km; a world's horizon is about 120 km off
 	# and every proxy sits at 350 km (the world scale spec §5.2).
 	for cam: Camera3D in [$Ship/Exterior/ChaseCamera, $Ship/Canopy/CanopyCam, _avatar.camera]:
 		cam.far = BodyProxy.VIEW_FAR

@@ -139,7 +139,8 @@ static func well_at(system: SystemRecipe, u: UniversePoint) -> SystemBody:
 	return null
 
 func _focus_point() -> UniversePoint:
-	if recipe == null or universe == null or not is_instance_valid(universe.focus) 			or not universe.focus.is_inside_tree():
+	if recipe == null or universe == null or not is_instance_valid(universe.focus) \
+			or not universe.focus.is_inside_tree():
 		return null
 	return universe.to_universe(universe.focus.global_position)
 

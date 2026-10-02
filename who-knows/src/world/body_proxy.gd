@@ -2,12 +2,12 @@ class_name BodyProxy
 extends Node3D
 
 ## One star, planet or moon as you see it (the system skeleton spec §7): at
-## at its true place and size when within PROXY_AT of the focus, and beyond that
+## its true place and size when within PROXY_AT of the focus, and beyond that
 ## along the same direction at PROXY_AT, scaled so its angular size is exact.
 ## From the cockpit it looks just as the real thing would, and no camera needs
 ## to see further than the rocks already make it.
 ##
-## Within SURFACE_AT of its centre a world is drawn by its WorldSurface, at
+## Within surface_at() of its centre a world is drawn by its WorldSurface, at
 ## its true place, and the far mesh gives way (the world scale spec §5.1). The
 ## surface is this proxy's sibling, under the same parent that never moves.
 ## The surface's own collision makes it solid where anything touches it (§5.5).

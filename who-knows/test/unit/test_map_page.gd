@@ -238,7 +238,7 @@ func test_a_shift_leaves_the_map_unchanged():
 	assert_almost_eq(_holo.mark_transform(&"ball", 0).origin, before, Vector3.ONE * 0.0001)
 	assert_almost_eq(before, Vector3(700, 100, -1600) * (HoloVolume.RADIUS / 10000.0), Vector3.ONE * 0.0001)
 
-## At 30 km the marks are placed twice a second and turned with the ship in
+## At 50 km the marks are placed twice a second and turned with the ship in
 ## between: a turn of the hull shows at once, where a fresh placement would
 ## put it.
 func test_between_placements_at_50_km_the_marks_turn_with_the_ship():

@@ -7,10 +7,10 @@ extends Node3D
 ## drawn behind the horizon, each leaf one chunk of TerrainChunkData built on
 ## a worker thread and turned into a mesh here within a budget a tick.
 ##
-## Nothing is ever a hole: a node stays drawn until every leaf beneath it that
-## replaces it is built, and a chunk shows only while nothing drawn above it
-## does. The six coarsest are built at once, so the world is whole on its
-## first frame.
+## Nothing is a hole while it works, bar the horizon (the spec §13.9): a node
+## stays drawn until every leaf beneath it that replaces it is built, and a
+## chunk shows only while nothing drawn above it does. The six coarsest are
+## built at once, so the world is whole on its first frame.
 ##
 ## Round every space anchor near the ground its finest chunks are solid too
 ## (§5.5): the one right under it built at once if it is missing, the rest
@@ -359,7 +359,8 @@ func _solid_wanted() -> Dictionary:
 		var local := universe.to_universe(a.global_position).minus(body.point)
 		var reach := TerrainCollider.reach_for(_speed_of(a))
 		var cached: Dictionary = _solid_cache.get(id, {})
-		if cached.is_empty() or (cached.local as Vector3).distance_to(local) > half_edge 				or absf(float(cached.reach) - reach) > half_edge:
+		if cached.is_empty() or (cached.local as Vector3).distance_to(local) > half_edge \
+				or absf(float(cached.reach) - reach) > half_edge:
 			cached = {"local": local, "reach": reach, "keys": TerrainCollider.keys_near(terrain, depth_max, local, reach)}
 			_solid_cache[id] = cached
 		var keys: Array = cached.keys

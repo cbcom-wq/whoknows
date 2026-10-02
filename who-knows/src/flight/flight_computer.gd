@@ -133,8 +133,8 @@ static func speed_limit(altitude: float, well_top: float) -> float:
 		return CRUISE_LIMIT_MPS
 	var a := maxf(altitude, 0.0)
 	var climb := minf(CRUISE_LIMIT_MPS + a * LIMIT_PER_M, LIMIT_CAP)
-	var ease := clampf((well_top - a) / (LIMIT_EASE * well_top), 0.0, 1.0)
-	return lerpf(CRUISE_LIMIT_MPS, climb, ease)
+	var fade := clampf((well_top - a) / (LIMIT_EASE * well_top), 0.0, 1.0)
+	return lerpf(CRUISE_LIMIT_MPS, climb, fade)
 
 ## The limit where the focus is now.
 func speed_limit_now() -> float:
