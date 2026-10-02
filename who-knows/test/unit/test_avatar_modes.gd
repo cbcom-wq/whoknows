@@ -161,7 +161,7 @@ func test_dry_with_no_home_holds_station():
 
 func test_you_cannot_take_the_seat_from_outside():
 	_out()
-	var director: CameraDirector = _root.get_node("Ship/CameraDirector")
+	var director: CameraDirector = _root.get_node("CameraDirector")
 	director.sit(_root.get_node("Ship/Interior/PilotSeat"))
 	assert_false(director.is_seated)
 

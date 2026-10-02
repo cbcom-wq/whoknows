@@ -72,6 +72,17 @@ func sit_now(seat: PilotSeat) -> void:
 func is_moving() -> bool:
 	return _tween != null
 
+## The ship whose seat you sit in, or null standing (many ships spec §3.2):
+## every ship's controls ask, and take the stick only for their own.
+func seat_ship() -> Ship:
+	return ship_of(_seat) if is_seated else null
+
+## The Ship `node` is part of, or null.
+static func ship_of(node: Node) -> Ship:
+	while node != null and not (node is Ship):
+		node = node.get_parent()
+	return node as Ship
+
 func stand() -> void:
 	if not is_seated or _tween != null:
 		return

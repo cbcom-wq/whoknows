@@ -121,14 +121,14 @@ func test_walking_round_trips():
 
 func test_seated_round_trips():
 	var a := _scene()
-	var director: CameraDirector = a.get_node("Ship/CameraDirector")
+	var director: CameraDirector = a.get_node("CameraDirector")
 	director.sit_now(a.get_node("Ship/Interior/PilotSeat"))
 	assert_true(director.is_seated)
 	assert_true(a.save_now())
 	_drop(a)
 
 	var b := _scene()
-	var director_b: CameraDirector = b.get_node("Ship/CameraDirector")
+	var director_b: CameraDirector = b.get_node("CameraDirector")
 	assert_true(director_b.is_seated, "back at the helm")
 	assert_eq(director_b.view, CameraDirector.View.COCKPIT)
 	assert_true(b.get_node("Ship/PilotControls").seated)

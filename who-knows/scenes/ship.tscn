@@ -1,0 +1,102 @@
+[gd_scene load_steps=12 format=3]
+
+[ext_resource type="Script" path="res://src/ship/ship.gd" id="1_ship"]
+[ext_resource type="Script" path="res://src/ship/exterior_builder.gd" id="2_exterior_builder"]
+[ext_resource type="Script" path="res://src/flight/flight_computer.gd" id="3_flight_computer"]
+[ext_resource type="Script" path="res://src/ship/canopy_portal.gd" id="4_canopy_portal"]
+[ext_resource type="Script" path="res://src/ui/velocity_marker.gd" id="5_velocity_marker"]
+[ext_resource type="Script" path="res://src/ui/heading_marker.gd" id="6_heading_marker"]
+[ext_resource type="Script" path="res://src/ship/interior_builder.gd" id="7_interior_builder"]
+[ext_resource type="Script" path="res://src/avatar/pilot_seat.gd" id="8_pilot_seat"]
+[ext_resource type="Script" path="res://src/camera/motion_coupling.gd" id="9_motion_coupling"]
+[ext_resource type="Script" path="res://src/flight/pilot_controls.gd" id="10_pilot_controls"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_seat"]
+size = Vector3(1.4, 1.6, 1.4)
+
+[node name="Ship" type="Node3D"]
+script = ExtResource("1_ship")
+
+[node name="Exterior" type="RigidBody3D" parent="."]
+mass = 42000.0
+
+[node name="ExteriorBuilder" type="Node3D" parent="Exterior"]
+script = ExtResource("2_exterior_builder")
+body_path = NodePath("..")
+
+[node name="ChaseCamera" type="Camera3D" parent="Exterior"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5, 26)
+current = false
+cull_mask = 5
+
+[node name="FlightComputer" type="Node" parent="."]
+script = ExtResource("3_flight_computer")
+hull_path = NodePath("../Exterior")
+
+[node name="CanopyPortal" type="Node" parent="."]
+script = ExtResource("4_canopy_portal")
+viewport_path = NodePath("../Canopy")
+camera_path = NodePath("../Canopy/CanopyCam")
+hull_path = NodePath("../Exterior")
+interior_path = NodePath("../Interior")
+
+[node name="Canopy" type="SubViewport" parent="."]
+size = Vector2i(1536, 512)
+render_target_update_mode = 4
+
+[node name="CanopyCam" type="Camera3D" parent="Canopy"]
+current = true
+cull_mask = 1
+fov = 40.0
+
+[node name="CanopyOverlay" type="Control" parent="Canopy"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+
+[node name="CockpitMarker" type="Control" parent="Canopy/CanopyOverlay"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+script = ExtResource("5_velocity_marker")
+camera_path = NodePath("../../CanopyCam")
+
+[node name="HeadingCockpitMarker" type="Control" parent="Canopy/CanopyOverlay"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+script = ExtResource("6_heading_marker")
+camera_path = NodePath("../../CanopyCam")
+
+[node name="Interior" type="Node3D" parent="."]
+
+[node name="InteriorBuilder" type="Node3D" parent="Interior"]
+script = ExtResource("7_interior_builder")
+
+[node name="PilotSeat" type="StaticBody3D" parent="Interior"]
+position = Vector3(0, -0.95, -4)
+collision_layer = 2
+collision_mask = 0
+script = ExtResource("8_pilot_seat")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Interior/PilotSeat"]
+position = Vector3(0, -0.1, 0)
+shape = SubResource("BoxShape3D_seat")
+
+[node name="Eye" type="Node3D" parent="Interior/PilotSeat"]
+position = Vector3(0, 1.35, 0.45)
+
+[node name="MotionCoupling" type="Node" parent="."]
+script = ExtResource("9_motion_coupling")
+hull_path = NodePath("../Exterior")
+interior_path = NodePath("../Interior")
+interior_builder_path = NodePath("../Interior/InteriorBuilder")
+
+[node name="PilotControls" type="Node" parent="."]
+script = ExtResource("10_pilot_controls")
+flight_computer_path = NodePath("../FlightComputer")
+hull_path = NodePath("../Exterior")
+interior_path = NodePath("../Interior")

@@ -12,7 +12,7 @@ extends Node3D
 
 @onready var _ship: Ship = $Ship
 @onready var _hud: HudRoot = $HudRoot
-@onready var _director: CameraDirector = $Ship/CameraDirector
+@onready var _director: CameraDirector = $CameraDirector
 @onready var _cockpit_marker: VelocityMarker = $Ship/Canopy/CanopyOverlay/CockpitMarker
 @onready var _heading_cockpit: HeadingMarker = $Ship/Canopy/CanopyOverlay/HeadingCockpitMarker
 @onready var _prompt: Label = $Prompt/Label
@@ -110,6 +110,10 @@ func _ready() -> void:
 		_ship.launch_blueprint = Ship.launch_of(ship_part)
 		npc_ledger.from_dict(saved.get("npcs", {}))
 	_ship.set_grid(layout if resumed else _starter_grid(), not resumed)
+	# The ship's scene cannot reach the game's director by path (many ships
+	# spec §3.2): its seat and controls are handed it.
+	_ship.seat.director = _director
+	_ship.pilot.bind_director(_director)
 	if resumed:
 		_ship.restore_aboard(ship_part)
 	_place_avatar_on_deck()

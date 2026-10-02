@@ -1,26 +1,18 @@
-[gd_scene load_steps=32 format=3]
+[gd_scene load_steps=21 format=3]
 
-[ext_resource type="Script" path="res://src/ship/ship.gd" id="1_ship"]
+[ext_resource type="PackedScene" path="res://scenes/ship.tscn" id="1_ship"]
 [ext_resource type="PackedScene" path="res://scenes/avatar.tscn" id="2_avatar"]
-[ext_resource type="Script" path="res://src/flight/flight_computer.gd" id="3_flight_computer"]
 [ext_resource type="Script" path="res://src/avatar/interactor.gd" id="4_interactor"]
-[ext_resource type="Script" path="res://src/avatar/pilot_seat.gd" id="5_pilot_seat"]
 [ext_resource type="Script" path="res://src/camera/camera_director.gd" id="6_camera_director"]
-[ext_resource type="Script" path="res://src/camera/motion_coupling.gd" id="7_motion_coupling"]
-[ext_resource type="Script" path="res://src/ship/exterior_builder.gd" id="9_exterior_builder"]
-[ext_resource type="Script" path="res://src/ship/interior_builder.gd" id="10_interior_builder"]
 [ext_resource type="Script" path="res://scenes/flight_test.gd" id="11_flight_test"]
 [ext_resource type="Script" path="res://src/ui/hud_root.gd" id="12_hud_root"]
 [ext_resource type="Script" path="res://src/ui/velocity_marker.gd" id="13_velocity_marker"]
 [ext_resource type="Script" path="res://src/ui/panels/velocity_panel.gd" id="14_velocity_panel"]
 [ext_resource type="Script" path="res://src/ui/panels/attitude_panel.gd" id="15_attitude_panel"]
 [ext_resource type="Script" path="res://src/ui/hud_band.gd" id="16_hud_band"]
-[ext_resource type="Shader" path="res://data/materials/interior/canopy_window.gdshader" id="17_canopy_window"]
-[ext_resource type="Script" path="res://src/ship/canopy_portal.gd" id="18_canopy_portal"]
 [ext_resource type="Script" path="res://src/ui/airlock_marker.gd" id="19_airlock_marker"]
 [ext_resource type="Script" path="res://src/world/universe.gd" id="20_universe"]
 [ext_resource type="Script" path="res://src/world/asteroid_stream.gd" id="21_asteroid_stream"]
-[ext_resource type="Script" path="res://src/flight/pilot_controls.gd" id="22_pilot_controls"]
 [ext_resource type="Script" path="res://src/ui/stick_cursor.gd" id="23_stick_cursor"]
 [ext_resource type="Script" path="res://src/ui/heading_marker.gd" id="24_heading_marker"]
 [ext_resource type="Script" path="res://src/ui/controls_card.gd" id="25_controls_card"]
@@ -42,18 +34,6 @@ sky_material = SubResource("ProceduralSkyMaterial_flighttest")
 background_mode = 2
 sky = SubResource("Sky_flighttest")
 
-[sub_resource type="ViewportTexture" id="ViewportTexture_canopy"]
-resource_local_to_scene = true
-viewport_path = NodePath("Ship/Canopy")
-
-[sub_resource type="ShaderMaterial" id="ShaderMaterial_canopy"]
-resource_local_to_scene = true
-shader = ExtResource("17_canopy_window")
-shader_parameter/canopy_view = SubResource("ViewportTexture_canopy")
-
-[sub_resource type="BoxShape3D" id="BoxShape3D_seat"]
-size = Vector3(1.4, 1.6, 1.4)
-
 [node name="FlightTest" type="Node3D"]
 script = ExtResource("11_flight_test")
 
@@ -71,83 +51,8 @@ script = ExtResource("20_universe")
 [node name="AsteroidStream" type="Node3D" parent="."]
 script = ExtResource("21_asteroid_stream")
 
-[node name="Ship" type="Node3D" parent="."]
-script = ExtResource("1_ship")
+[node name="Ship" parent="." instance=ExtResource("1_ship")]
 outside_path = NodePath("../Outside")
-
-[node name="Exterior" type="RigidBody3D" parent="Ship"]
-mass = 42000.0
-
-[node name="ExteriorBuilder" type="Node3D" parent="Ship/Exterior"]
-script = ExtResource("9_exterior_builder")
-body_path = NodePath("..")
-
-[node name="ChaseCamera" type="Camera3D" parent="Ship/Exterior"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5, 26)
-current = false
-cull_mask = 5
-
-[node name="FlightComputer" type="Node" parent="Ship"]
-script = ExtResource("3_flight_computer")
-hull_path = NodePath("../Exterior")
-
-[node name="CanopyPortal" type="Node" parent="Ship"]
-script = ExtResource("18_canopy_portal")
-viewport_path = NodePath("../Canopy")
-camera_path = NodePath("../Canopy/CanopyCam")
-hull_path = NodePath("../Exterior")
-interior_path = NodePath("../Interior")
-
-[node name="Canopy" type="SubViewport" parent="Ship"]
-size = Vector2i(1536, 512)
-render_target_update_mode = 4
-
-[node name="CanopyCam" type="Camera3D" parent="Ship/Canopy"]
-current = true
-cull_mask = 1
-fov = 40.0
-
-[node name="CanopyOverlay" type="Control" parent="Ship/Canopy"]
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-mouse_filter = 2
-
-[node name="CockpitMarker" type="Control" parent="Ship/Canopy/CanopyOverlay"]
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-mouse_filter = 2
-script = ExtResource("13_velocity_marker")
-camera_path = NodePath("../../CanopyCam")
-
-[node name="HeadingCockpitMarker" type="Control" parent="Ship/Canopy/CanopyOverlay"]
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-mouse_filter = 2
-script = ExtResource("24_heading_marker")
-camera_path = NodePath("../../CanopyCam")
-
-[node name="Interior" type="Node3D" parent="Ship"]
-
-[node name="InteriorBuilder" type="Node3D" parent="Ship/Interior"]
-script = ExtResource("10_interior_builder")
-canopy_material = SubResource("ShaderMaterial_canopy")
-
-[node name="PilotSeat" type="StaticBody3D" parent="Ship/Interior"]
-position = Vector3(0, -0.95, -4)
-collision_layer = 2
-collision_mask = 0
-script = ExtResource("5_pilot_seat")
-camera_director_path = NodePath("../../CameraDirector")
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="Ship/Interior/PilotSeat"]
-position = Vector3(0, -0.1, 0)
-shape = SubResource("BoxShape3D_seat")
-
-[node name="Eye" type="Node3D" parent="Ship/Interior/PilotSeat"]
-position = Vector3(0, 1.35, 0.45)
 
 [node name="Avatar" parent="Ship/Interior" instance=ExtResource("2_avatar")]
 position = Vector3(0, 0.1, 3.0)
@@ -155,25 +60,12 @@ position = Vector3(0, 0.1, 3.0)
 [node name="Interactor" type="RayCast3D" parent="Ship/Interior/Avatar/Head" owner="Ship/Interior/Avatar"]
 script = ExtResource("4_interactor")
 
-[node name="CameraDirector" type="Node" parent="Ship"]
+[node name="CameraDirector" type="Node" parent="."]
 script = ExtResource("6_camera_director")
-avatar_path = NodePath("../Interior/Avatar")
-flight_computer_path = NodePath("../FlightComputer")
-interior_camera_path = NodePath("../Interior/Avatar/Head/Camera3D")
-chase_camera_path = NodePath("../Exterior/ChaseCamera")
-
-[node name="MotionCoupling" type="Node" parent="Ship"]
-script = ExtResource("7_motion_coupling")
-hull_path = NodePath("../Exterior")
-avatar_path = NodePath("../Interior/Avatar")
-interior_builder_path = NodePath("../Interior/InteriorBuilder")
-
-[node name="PilotControls" type="Node" parent="Ship"]
-script = ExtResource("22_pilot_controls")
-flight_computer_path = NodePath("../FlightComputer")
-camera_director_path = NodePath("../CameraDirector")
-hull_path = NodePath("../Exterior")
-interior_path = NodePath("../Interior")
+avatar_path = NodePath("../Ship/Interior/Avatar")
+flight_computer_path = NodePath("../Ship/FlightComputer")
+interior_camera_path = NodePath("../Ship/Interior/Avatar/Head/Camera3D")
+chase_camera_path = NodePath("../Ship/Exterior/ChaseCamera")
 
 [node name="Outside" type="Node3D" parent="."]
 

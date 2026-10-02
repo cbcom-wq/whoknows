@@ -13,7 +13,9 @@ const STAND_SPOTS: Array[Vector3] = [
 	Vector3(1.1, 0, 0.3), Vector3(-1.1, 0, 0.3), Vector3(0, 0, 1.9),
 ]
 
-@export var camera_director_path: NodePath
+## The game's one camera director (many ships spec §3.2), handed over by the
+## flight scene: a ship's scene cannot reach it by path.
+var director: CameraDirector
 
 ## Where the seated camera ends up, and which way it faces.
 @onready var eye: Node3D = $Eye
@@ -36,7 +38,7 @@ func stand_spot(avatar: Avatar) -> Transform3D:
 	return avatar.global_transform
 
 func interact(avatar: Avatar) -> void:
-	var director: CameraDirector = get_node(camera_director_path)
-	director.sit(self)
+	if director != null:
+		director.sit(self)
 	# `avatar` is unused here; the director owns the handoff. Kept in the
 	# signature because every interactable receives it.

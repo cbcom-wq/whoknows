@@ -44,6 +44,8 @@ const WAKE_ROOM := &"bunk_room"
 ## single shared instance) -- not a duplicate. Loading it here needs no
 ## change to ExteriorBuilder.
 const HULL_LIVERY_MATERIAL: ShaderMaterial = preload("res://data/materials/hull_livery.tres")
+## The window glass's shader; each ship makes its own material from it.
+const CANOPY_SHADER: Shader = preload("res://data/materials/interior/canopy_window.gdshader")
 
 @export var interior_slot: int = 0
 ## Where a spacewalker goes (airlock spec §7.4): the scene's root for things in
@@ -120,8 +122,17 @@ var _blast_in := 0.0
 @onready var exterior_builder: ExteriorBuilder = $Exterior/ExteriorBuilder
 @onready var interior_builder: InteriorBuilder = $Interior/InteriorBuilder
 @onready var flight_computer: FlightComputer = $FlightComputer
+## The parts of ship.tscn the flight scene hands you between (many ships spec
+## §3.1).
+@onready var pilot: PilotControls = $PilotControls
+@onready var seat: PilotSeat = $Interior/PilotSeat
+@onready var motion: MotionCoupling = $MotionCoupling
+@onready var chase_camera: Camera3D = $Exterior/ChaseCamera
+@onready var canopy_camera: Camera3D = $Canopy/CanopyCam
+@onready var canopy_overlay: Control = $Canopy/CanopyOverlay
 
 func _ready() -> void:
+	_make_canopy_material()
 	exterior.gravity_scale = 0.0
 	exterior.linear_damp = 0.0
 	exterior.angular_damp = 0.0
@@ -199,6 +210,19 @@ func _ready() -> void:
 	add_to_group(GROUP)
 	flight_computer.hull_status = func() -> Array:
 		return [hull_whole(), stats.crippled_reason if stats != null else ""]
+
+## Every window's glass shows this ship's own canopy view (cockpit pod spec
+## §3): one material per ship, fed by its own SubViewport, so each instance of
+## ship.tscn draws its own (many ships spec §3.1). Made here rather than in the
+## .tscn: a ViewportTexture's path inside an instanced scene is fragile.
+func _make_canopy_material() -> void:
+	var canopy := get_node_or_null("Canopy") as SubViewport
+	if canopy == null:
+		return
+	var mat := ShaderMaterial.new()
+	mat.shader = CANOPY_SHADER
+	mat.set_shader_parameter(&"canopy_view", canopy.get_texture())
+	interior_builder.canopy_material = mat
 
 func _process(_delta: float) -> void:
 	# hull_livery.gdshader paints its stripe from ship-local height, but the

@@ -211,7 +211,7 @@ func _run(scene: Node) -> void:
 	var ship: Ship = scene.get_node("Ship")
 	var avatar: Avatar = ship.get_node("Interior/Avatar")
 	var seat: PilotSeat = ship.get_node("Interior/PilotSeat")
-	var director: CameraDirector = ship.get_node("CameraDirector")
+	var director: CameraDirector = scene.get_node("CameraDirector")
 
 	var issues := ShipValidator.validate(ship.grid, ship.catalog)
 	for issue in issues:
