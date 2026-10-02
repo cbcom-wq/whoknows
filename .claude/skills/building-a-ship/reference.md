@@ -354,7 +354,9 @@ pieces, all under `src/ship/` unless stated:
     The port forward light hangs 0.06 m lower because the computer's porthole is above it.
 - **Measured** (GTX 960, 1280 × 720, both groups on, shadows on): standing 438, seated 181, seated
   with lights 173, seated 60 m off a rock's night side **143–150** (the worst, two runs), chase there
-  298–302, 20 m over a rock belly down 273–286 fps.
+  298–302, 20 m over a rock belly down 273–286 fps. Re-measured 2026-10-02 on `main` (after
+  world scale and health and damage): standing 321, seated 149, with lights 143, by the rock
+  **130**, chase there 204, belly down 240. Re-measure before comparing against older figures.
 - **Not adopted:** volumetric shafts (fog with a `FogVolume` per beam, cone turned so it widens
   away from the lamp, fog length about 150 m). Worst view 132–142 fps against 150.
 
@@ -386,17 +388,15 @@ blueprint gets it for free.
 ## Scene wiring (as in `flight_test.gd`)
 
 ```gdscript
-_ship.set_grid(grid)            # or _ship.load_blueprint(bp)
-var layout := _ship.interior_builder.layout()
-$Ship/Interior/PilotSeat.transform = InteriorDressing.fixture_frame(layout, seat_coord)
-var cell := seat_coord + Vector3i(0, 0, 1)      # spawn a cell aft of the seat
-var c := ShipGrid.cell_center(cell)
-$Ship/Interior/Avatar.position = Vector3(c.x, InteriorBuilder.floor_y(cell) + 0.05, c.z)
+_starter.set_grid(grid)                     # the authored /Ship; or load_blueprint(bp)
+var other := fleet.spawn(grid, place)       # any other ship (see Many ships)
+_avatar.position = _deck_spot(_starter).origin   # a cell aft of the helm, InteriorBuilder.floor_y
 ```
 
-A second ship in the same scene needs its own `interior_slot`. The exterior hull body is already
-in `Universe.EXTERIOR_SPACE` and `AsteroidStream.SPACE_ANCHOR`, because `Ship._ready` puts it
-there.
+`Ship` places its own `PilotSeat` (`_place_seat`, from `InteriorDressing.fixture_frame`) after
+every rebuild. Every ship is spawned through `Fleet`, which hands out `interior_slot`s; see *Many
+ships*. The exterior hull body is already in `Universe.EXTERIOR_SPACE` and
+`AsteroidStream.SPACE_ANCHOR`, because `Ship._ready` puts it there.
 
 **What the hull bumps into** (`Ship.exterior.collision_mask`): other hulls (1), worlds' shells
 (`BodyProxy.LAYER`, 8, layer 4 `terrain`), rocks (`AsteroidBody.LAYER`, 64) and NPCs
@@ -409,13 +409,39 @@ takes the same mask.
 shapes, starts at `system.entry()`, and adds a `StarSystem` (proxies, belts, dust,
 `Whereabouts`) and `BodyContacts`. F7 / Shift+F7 hop the ship to the next or previous body.
 
-A flyable ship also needs a `PilotControls` node under the ship, with the paths shown in
-`flight_test.tscn`. It listens to `CameraDirector.piloting_changed`. While you sit, the HUD's
-vehicle is that node, not the `FlightComputer`:
+Every ship's `PilotControls` is in `ship.tscn`; the flight scene hands it the one
+`CameraDirector` (`bind_director`), and it takes the stick only when the seat you took is its
+ship's. While you sit, the HUD's vehicle is that ship's controls, not the `FlightComputer`:
 
 ```gdscript
-_hud.set_active_vehicle(_pilot if piloting else null)   # _pilot: $Ship/PilotControls
+var ship := _director.seat_ship()
+_hud.set_active_vehicle(ship.pilot if piloting and ship != null else null)
 ```
+
+## Many ships (`docs/superpowers/specs/2026-10-02-many-ships-design.md`)
+
+| API | Does |
+|---|---|
+| `scenes/ship.tscn` | a whole ship: hull, interior, seat, flight computer, controls, canopy view, motion coupling. No avatar, no director |
+| `Fleet.adopt(ship)`, `spawn(grid, place, stock, ship_name, launch)`, `remove(ship)` | take in the starter; a new ship at rest with the next free slot and a never-reused name (`Ship2`...), not own; free one (never `Ship` or the one aboard) |
+| `Fleet.ships()`, `awake()`, `named(n)`, `nearest(p, except)`, `sleeping(s)`, `place_of(s)` | |
+| `Fleet.MAX_SHIPS` 16, `SLEEP_AT` 20 km, `WAKE_AT` 18 km, `CHECK_EVERY` 1 s, `ASLEEP`, `STARTER` `&"Ship"`, `next_number` | a ship asleep is out of `EXTERIOR_SPACE` and `SPACE_ANCHOR`, held as a `UniversePoint`, `PROCESS_MODE_DISABLED`, hidden, its emitters stopped |
+| `Fleet.capture(universe)`, `to_dict()`, `from_dict(d)`, `restore_hull(ship, part)` | the save's `"ships"` and `"fleet"`; a far ship loads asleep |
+| flight scene `aboard`, `board(ship, force)`, `board_nearest()` (F8), `board_at_helm(ship)`, `_wire_ship(ship)`, `aboard_changed` | the ship you are in; the one switch; F8's hop; everything one ship needs from the game |
+| `Ship.own`, `set_own(on)` | the own render layer and the interior shown, for the ship aboard only; re-applied after every rebuild |
+| `Ship.livery`, `_apply_livery()` | the ship's own copy of `HULL_LIVERY_MATERIAL`, swapped onto every piece painted with the shared one after each rebuild; `_process` pushes its hull's `hull_inverse` into it |
+| `Ship.pilot`, `seat`, `motion`, `chase_camera`, `canopy_camera`, `canopy_overlay`, `helm_cell()`, `airlock_crossed` | |
+| `CameraDirector.bind(ship)`, `seat_ship()`, `stand_now()`, `ship_of(node)` | |
+| `PilotControls.bind_director(d)`, `PilotSeat.director`, `Avatar.move_aboard(interior, pose)` | |
+| `SuitTie.choose`, `gap`, `SWITCH_MARGIN` 10 m, `REACH` 500 m, `EVERY` 0.25 s | your suit belongs to the nearest ship |
+| `CanopyPortal.sync` | with no viewer inside, the canopy camera rests at the helm's eye on the hull |
+| Save format 2 | `"ships"` (each `Ship.to_dict` + `"name"`), `"aboard"`, `"fleet"`; format 1 migrates. The save file is shared by every checkout of the project, so playing a format-2 branch makes `main` (format 1) refuse it |
+
+**Measured** (2026-10-02, the owner's box, 1280 × 720): seated 60 m off a rock's night side, both
+light groups on, **130 fps with one ship and 130 with a second 300 m off**; `main` gave the same
+130 that day. The probe prints `fleet   2 ships, aboard Ship2, own layer ok, asleep 0`;
+`test/probes/fleet_play.gd` plays F8, a cycle out, the crossing and a cycle in, and prints
+`play    ALL OK`.
 
 ## Saving (`docs/superpowers/specs/2026-09-26-saving-design.md`)
 

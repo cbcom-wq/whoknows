@@ -84,13 +84,13 @@ func test_cockpit_marker_lives_inside_the_canopy_viewport():
 func test_camera_director_exports_survived_the_parse():
 	# This scene's other exported NodePaths are re-verified here because the
 	# same edit touches the same file.
-	var director: CameraDirector = _root.get_node_or_null("Ship/CameraDirector")
+	var director: CameraDirector = _root.get_node_or_null("CameraDirector")
 	assert_not_null(director, "CameraDirector present")
 	assert_ne(director.chase_camera_path, NodePath(""), "chase_camera_path intact")
 	assert_ne(director.flight_computer_path, NodePath(""), "flight_computer_path intact")
 
 func test_camera_director_announces_piloting_changes():
-	var director: CameraDirector = _root.get_node_or_null("Ship/CameraDirector")
+	var director: CameraDirector = _root.get_node_or_null("CameraDirector")
 	assert_has_signal(director, "piloting_changed")
 
 ## The windows are portals: the canopy SubViewport renders the outside from
@@ -230,7 +230,7 @@ func test_the_reticle_is_centred_on_the_screen():
 	assert_almost_eq(reticle.get_global_rect().get_center(), screen.get_center(), Vector2.ONE)
 
 func test_third_person_hides_the_reticle_and_refuses_use():
-	var director: CameraDirector = _root.get_node("Ship/CameraDirector")
+	var director: CameraDirector = _root.get_node("CameraDirector")
 	var avatar: Avatar = _root.get_node("Ship/Interior/Avatar")
 	director.cycle_view()
 	assert_false(_root.get_node("Prompt/Reticle").visible)
@@ -240,7 +240,7 @@ func test_third_person_hides_the_reticle_and_refuses_use():
 	assert_true(avatar.grasp.first_person)
 
 func test_sitting_down_hides_the_reticle_at_once():
-	var director: CameraDirector = _root.get_node("Ship/CameraDirector")
+	var director: CameraDirector = _root.get_node("CameraDirector")
 	director.sit(_root.get_node("Ship/Interior/PilotSeat"))
 	assert_false(_root.get_node("Prompt/Reticle").visible)
 
@@ -255,14 +255,14 @@ func test_a_stow_prompt_wins_over_the_interact_prompt():
 	assert_eq(label.text, "[F] Take the controls")
 
 func test_third_person_hides_the_hands():
-	var director: CameraDirector = _root.get_node("Ship/CameraDirector")
+	var director: CameraDirector = _root.get_node("CameraDirector")
 	var avatar: Avatar = _root.get_node("Ship/Interior/Avatar")
 	assert_true(avatar.hands.shown)
 	director.cycle_view()
 	assert_false(avatar.hands.shown)
 
 func test_sitting_down_hides_the_hands():
-	var director: CameraDirector = _root.get_node("Ship/CameraDirector")
+	var director: CameraDirector = _root.get_node("CameraDirector")
 	var avatar: Avatar = _root.get_node("Ship/Interior/Avatar")
 	director.sit(_root.get_node("Ship/Interior/PilotSeat"))
 	assert_false(avatar.hands.shown)
@@ -293,13 +293,13 @@ func test_the_canopy_view_can_include_the_own_hull():
 func test_pilot_controls_survived_the_parse():
 	var pilot: PilotControls = _root.get_node_or_null("Ship/PilotControls")
 	assert_not_null(pilot, "PilotControls present")
-	for path in [pilot.flight_computer_path, pilot.camera_director_path, pilot.hull_path,
-			pilot.interior_path]:
+	for path in [pilot.flight_computer_path, pilot.hull_path, pilot.interior_path]:
 		assert_ne(path, NodePath(""), "no export was dropped")
 		assert_not_null(pilot.get_node_or_null(path), "%s resolves" % path)
+	assert_same(pilot.director, _root.get_node("CameraDirector"), "handed the director")
 
 func test_sitting_down_hands_the_hud_to_the_pilot():
-	var director: CameraDirector = _root.get_node("Ship/CameraDirector")
+	var director: CameraDirector = _root.get_node("CameraDirector")
 	var hud: HudRoot = _root.get_node("HudRoot")
 	director.sit(_root.get_node("Ship/Interior/PilotSeat"))
 	assert_same(hud._source, _root.get_node("Ship/PilotControls"))

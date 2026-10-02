@@ -215,6 +215,13 @@ func place(pose: Transform3D) -> void:
 	_yaw = rotation.y
 	velocity = Vector3.ZERO
 
+## Moves you, standing aboard, into another ship's `interior` at `pose` (many
+## ships spec §4.3): F8's hop to a helm. Not for a spacewalk: that is
+## enter_plating's.
+func move_aboard(interior: Node3D, pose: Transform3D) -> void:
+	_move_to(interior)
+	place(pose)
+
 func set_control_enabled(enabled: bool) -> void:
 	_control_enabled = enabled
 	grasp.set_enabled(enabled)

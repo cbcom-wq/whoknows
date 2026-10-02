@@ -80,7 +80,7 @@ func _run() -> void:
 	_ship = _root.get_node("Ship")
 	_universe = _root.get_node("Universe")
 	_stream = _root.get_node("AsteroidStream")
-	_director = _ship.get_node("CameraDirector")
+	_director = _ship.get_parent().get_node("CameraDirector")
 	_system = _root.system
 	print(_system.describe())
 	var avatar: Avatar = _ship.get_node("Interior/Avatar")

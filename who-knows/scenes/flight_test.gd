@@ -10,17 +10,24 @@ extends Node3D
 ## calm moments. This is the one place that knows every part of the game, so
 ## capture() and restore here gather and hand out each part's dictionary.
 
-@onready var _ship: Ship = $Ship
+## The ship you are aboard changed (many ships spec §4.1).
+signal aboard_changed(ship: Ship)
+
+@onready var _starter: Ship = $Ship
 @onready var _hud: HudRoot = $HudRoot
-@onready var _director: CameraDirector = $Ship/CameraDirector
-@onready var _cockpit_marker: VelocityMarker = $Ship/Canopy/CanopyOverlay/CockpitMarker
-@onready var _heading_cockpit: HeadingMarker = $Ship/Canopy/CanopyOverlay/HeadingCockpitMarker
+@onready var _director: CameraDirector = $CameraDirector
 @onready var _prompt: Label = $Prompt/Label
 @onready var _interactor: Interactor = $Ship/Interior/Avatar/Head/Interactor
 @onready var _avatar: Avatar = $Ship/Interior/Avatar
 @onready var _universe: Universe = $Universe
 @onready var _stream: AsteroidStream = $AsteroidStream
-@onready var _pilot: PilotControls = $Ship/PilotControls
+
+## Every ship in the world (many ships spec §5), and the one you are in, or
+## the one your suit belongs to on a spacewalk (§3.4).
+var fleet: Fleet
+var aboard: Ship
+## On a spacewalk, which ship your suit belongs to (§4.3).
+var suit_tie: SuitTie
 
 ## The star system the flight is in (the system skeleton spec §4), from the
 ## world seed, and the node that draws its star, planets and moons.
@@ -66,6 +73,9 @@ var hop_index := -1
 ## moon, so you are near it.
 const HOP_OFF := 3000.0
 const HOP_INSIDE := 200.0
+## A save from another world generator brings every ship along, lined up this
+## far apart beside the starter (many ships spec §6.3).
+const RESTART_ROW := 300.0
 
 ## The interior's own mood (spec §3.3): dim and warm, with bloom turning the
 ## thin lit strips into light. It goes on the interior camera, not the world,
@@ -100,18 +110,21 @@ const O_KEEL := 2        ## FORWARD rolled 180 deg: a half block's upper half, h
 
 func _ready() -> void:
 	var saved := _read_save()
-	var ship_part: Dictionary = saved.get("ship", {})
-	var layout := Ship.layout_of(ship_part) if resumed else null
+	var starter_part := _part_named(saved, Fleet.STARTER)
+	var layout := Ship.layout_of(starter_part) if resumed else null
 	if resumed and (layout == null or layout.coords().is_empty()):
-		push_error("FlightTest: the saved ship has no blocks; starting a new game")
+		push_error("FlightTest: the saved starter has no blocks; starting a new game")
 		resumed = false
 		saved = {}
+		starter_part = {}
 	if resumed:
-		_ship.launch_blueprint = Ship.launch_of(ship_part)
+		_starter.launch_blueprint = Ship.launch_of(starter_part)
 		npc_ledger.from_dict(saved.get("npcs", {}))
-	_ship.set_grid(layout if resumed else _starter_grid(), not resumed)
+	_starter.set_grid(layout if resumed else _starter_grid(), not resumed)
 	if resumed:
-		_ship.restore_aboard(ship_part)
+		_starter.restore_aboard(starter_part)
+	_make_fleet()
+	_make_suit_tie()
 	_place_avatar_on_deck()
 	_set_interior_mood()
 	_set_outside_mood()
@@ -124,6 +137,206 @@ func _ready() -> void:
 	_wire_sensors()
 	_wire_warp()
 	_wire_saving()
+	for ship in fleet.ships():
+		_wire_ship(ship)
+	fleet.joined.connect(_wire_ship)
+	fleet.left.connect(_on_ship_left)
+	board(aboard, true)
+
+## Every ship in the world (many ships spec §5): the starter first, aboard.
+func _make_fleet() -> void:
+	fleet = Fleet.new()
+	fleet.name = "Fleet"
+	fleet.home = self
+	fleet.outside = $Outside
+	fleet.universe = _universe
+	fleet.aboard = func() -> Ship: return aboard
+	add_child(fleet)
+	fleet.adopt(_starter)
+	aboard = _starter
+
+## Everything one ship needs from the game, once (many ships spec §5.2): every
+## ship at the end of _ready, and each the fleet takes in after.
+func _wire_ship(ship: Ship) -> void:
+	# The ship's scene cannot reach the game's director by path (§3.2).
+	ship.seat.director = _director
+	ship.pilot.bind_director(_director)
+	ship.pilot.lights = ship.lights
+	# Godot's cameras stop drawing at 4 km; a world's horizon is about 120 km
+	# off (the world scale spec §5.2).
+	for cam: Camera3D in [ship.chase_camera, ship.canopy_camera]:
+		cam.far = BodyProxy.VIEW_FAR
+	# Hurt (health and damage spec §7.4, §8.1): a hole where you stand puts you
+	# outside; a shed plate is a stray.
+	ship.blocks_lost.connect(_on_blocks_lost.bind(ship))
+	ship.plate_shed.connect(func(item: Item) -> void: strays.adopt(item))
+	# Its crew answers to the game's ledger, and shows on F4. The crew woke
+	# with the ship, before it had the ledger.
+	ship.npc_director.ledger = npc_ledger
+	for npc: Npc in ship.npc_director.live_npcs():
+		npc.health.current = npc_ledger.health_of(npc.record.id, npc.health.max)
+	npc_debug.directors.append(ship.npc_director)
+	# Its sensors (NPC foundation spec §22; the system skeleton spec §8, §10):
+	# signs of life, big rocks to 30 km, the star, planets and moons.
+	ship.sensors.universe = _universe
+	ship.sensors.add_source(LifeContacts.new(_stream, exterior_npcs, _universe))
+	ship.sensors.add_source(RockContacts.new(_stream.seed, _stream.recipe.start, _stream.shapes))
+	ship.sensors.add_source(BodyContacts.new(system))
+	ship.sensors.system = system
+	ship.sensors.whereabouts = star_system.whereabouts
+	ship.sensors.course_arrived.connect(_on_course_arrived.bind(ship))
+	# Only the ship you are aboard scans (§5.2); board() moves it after.
+	ship.sensors.process_mode = Node.PROCESS_MODE_INHERIT if ship == aboard else Node.PROCESS_MODE_DISABLED
+	# The speed limit climbs with altitude in a world's well (the world scale
+	# spec §6).
+	ship.flight_computer.whereabouts = star_system.whereabouts
+	# Its warp (the warp spec §5): J at its helm engages it.
+	ship.warp.bind(system, _universe, star_system.whereabouts, ship.sensors, _stream.recipe,
+		warp_busy_for.bind(ship))
+	ship.pilot.warp_pressed.connect(ship.warp.engage)
+	ship.warp.travel_started.connect(_on_warp_started)
+	ship.warp.travel_ended.connect(_on_warp_ended)
+	# In through its airlock, you are aboard it (§4.3).
+	ship.airlock_crossed.connect(_on_airlock_crossed.bind(ship))
+
+func _on_ship_left(ship: Ship) -> void:
+	npc_debug.directors.erase(ship.npc_director)
+
+## On a spacewalk, your suit belongs to the nearest ship (many ships spec §4.3).
+func _make_suit_tie() -> void:
+	suit_tie = SuitTie.new()
+	suit_tie.name = "SuitTie"
+	suit_tie.fleet = fleet
+	suit_tie.avatar = _avatar
+	suit_tie.current = func() -> Ship: return aboard
+	suit_tie.tied.connect(_tie_suit)
+	add_child(suit_tie)
+
+## Your suit is `ship`'s now: speed relative to its hull, home its nearest
+## airlock, and aboard it.
+func _tie_suit(ship: Ship) -> void:
+	_avatar.hull = ship.exterior
+	var lock := _nearest_airlock(ship, _avatar.global_position)
+	if lock != null:
+		_avatar.beacon_source = lock.beacon
+		_avatar.home_source = lock.home
+	board(ship)
+
+## `ship`'s airlock with a hatch on the hull nearest `p`, or null.
+static func _nearest_airlock(ship: Ship, p: Vector3) -> Airlock:
+	var best: Airlock = null
+	for lock: Airlock in ship.airlocks.values():
+		if not is_instance_valid(lock.alcove):
+			continue
+		if best == null or lock.beacon().distance_to(p) < best.beacon().distance_to(p):
+			best = lock
+	return best
+
+## In through any ship's airlock: you are aboard it.
+func _on_airlock_crossed(_who: Avatar, outward: bool, ship: Ship) -> void:
+	if not outward:
+		board(ship)
+
+## Hands you to `ship` (many ships spec §4.1): its hull drawn as your own and
+## its interior shown, the other's not; the views, the HUD's markers, the warp
+## panel, your hands and the origin's focus all follow it, and only its
+## sensors scan. Boarding the ship you are aboard does nothing unless `force`.
+func board(ship: Ship, force := false) -> void:
+	if ship == null or (ship == aboard and not force):
+		return
+	aboard = ship
+	# Every other ship lets go, not only the last one aboard: a loaded game
+	# sets `aboard` before it first boards, and a ship starts as its own.
+	for other in fleet.ships():
+		if other != ship and other.own:
+			other.set_own(false)
+			for m in _cockpit_markers(other):
+				_hud.unregister_element(m)
+	ship.set_own(true)
+	for m in _cockpit_markers(ship):
+		_hud.register_element(m)
+	_director.bind(ship)
+	($HudRoot/Screen/ChaseMarker as VelocityMarker).set_camera(ship.chase_camera)
+	($HudRoot/Screen/HeadingChaseMarker as HeadingMarker).set_camera(ship.chase_camera)
+	_rebind_markers(ship)
+	if warp_panel != null:
+		warp_panel.drive = ship.warp
+	_avatar.grasp.world_root = ship.items
+	if exterior_npcs != null:
+		exterior_npcs.cameras = [ship.chase_camera, ship.canopy_camera, _avatar.camera]
+	for s in fleet.ships():
+		s.sensors.process_mode = Node.PROCESS_MODE_INHERIT if s == ship else Node.PROCESS_MODE_DISABLED
+	_universe.set_focus(_avatar if _avatar.mode == Avatar.Mode.SUIT else ship.exterior)
+	aboard_changed.emit(ship)
+
+## The cockpit's own markers, in `ship`'s canopy view: the HUD feeds them while
+## it is the ship you are aboard.
+static func _cockpit_markers(ship: Ship) -> Array[HudElement]:
+	var out: Array[HudElement] = []
+	for marker_name in ["CockpitMarker", "HeadingCockpitMarker"]:
+		var m := ship.canopy_overlay.get_node_or_null(marker_name) as HudElement
+		if m != null:
+			out.append(m)
+	return out
+
+## The contact, course and body markers onto `ship` (bridge computer spec §8):
+## the cockpit's into its canopy view, the chase view's through its chase
+## camera, all reading its sensors.
+func _rebind_markers(ship: Ship) -> void:
+	for group: Array in [contact_markers, course_markers, body_markers]:
+		for m: WorldMarker in group:
+			if String(m.name).ends_with("Cockpit"):
+				if m.get_parent() != ship.canopy_overlay:
+					m.reparent(ship.canopy_overlay, false)
+				m.set_camera(ship.canopy_camera)
+			elif String(m.name).ends_with("Chase"):
+				m.set_camera(ship.chase_camera)
+	for m in contact_markers:
+		(m as ContactMarker).sensors = ship.sensors
+	for m in course_markers:
+		(m as CourseMarker).bind(ship.sensors)
+		(m as CourseMarker).warp = ship.warp
+	for m in body_markers:
+		(m as BodyMarker).sensors = ship.sensors
+
+## F8, debug (many ships spec §4.3): seats you at the helm of the nearest other
+## awake ship. False, with a toast saying why, when it can't.
+func board_nearest() -> bool:
+	var why := _board_refusal()
+	var target: Ship = null
+	if why == "":
+		target = fleet.nearest(aboard.exterior.global_position, aboard)
+		if target == null:
+			why = "NO OTHER SHIP NEAR"
+	if why != "":
+		if warp_panel != null:
+			warp_panel.toast(why)
+		return false
+	board_at_helm(target)
+	return true
+
+## Why F8 must wait, or "": on a spacewalk, mid-sit, during a warp, or while an
+## airlock of the ship you are aboard cycles.
+func _board_refusal() -> String:
+	if _avatar.mode == Avatar.Mode.SUIT:
+		return "NOT ON A SPACEWALK"
+	if _director.is_moving():
+		return "SITTING DOWN"
+	for ship in fleet.ships():
+		if ship.warp.is_spinning():
+			return "WARP ENGAGED"
+	for airlock: Airlock in aboard.airlocks.values():
+		if airlock.busy() != "":
+			return "AIRLOCK CYCLING"
+	return ""
+
+## Seats you at `ship`'s helm at once (many ships spec §4.3): up out of your own
+## chair, across to its deck, aboard it, and down into its seat.
+func board_at_helm(ship: Ship) -> void:
+	_director.stand_now()
+	_avatar.move_aboard(ship.interior, ship.interior.global_transform * _deck_spot(ship))
+	board(ship)
+	_director.sit_now(ship.seat)
 
 ## The interior camera is also the seated camera -- CameraDirector moves it
 ## between head and seat -- so one assignment covers walking and flying.
@@ -186,37 +399,37 @@ func _wire_hurt() -> void:
 	_avatar.seated_source = func() -> bool: return _director.is_seated
 	_avatar.rescue = _rescue
 	_avatar.rescue_cost = func(n: int) -> int:
-		return _ship.quantum.store.drain(n, &"rescue") if _ship.quantum.store != null else 0
+		return aboard.quantum.store.drain(n, &"rescue") if aboard.quantum.store != null else 0
 	_avatar.let_fall.connect(func(item: Item, outside: bool) -> void:
 		if outside and strays != null:
 			strays.adopt(item))
-	_ship.blocks_lost.connect(_on_blocks_lost)
 
 ## Puts a blacked-out `avatar` aboard where it fits first (§7.2).
 func _rescue(avatar: Avatar) -> void:
-	for pose in _ship.wake_spots():
+	for pose in aboard.wake_spots():
 		if not avatar.can_stand_at(pose) and avatar.mode == Avatar.Mode.PLATING:
 			continue
 		if avatar.mode == Avatar.Mode.SUIT:
-			avatar.enter_plating(_ship.interior, pose, 0.0, Vector3.ZERO, Quaternion.IDENTITY)
+			avatar.enter_plating(aboard.interior, pose, 0.0, Vector3.ZERO, Quaternion.IDENTITY)
 		else:
 			avatar.place(pose)
 		return
 
-## A hole where you stand puts you outside, moving as you were (§7.4).
-func _on_blocks_lost(_coords: Array[Vector3i]) -> void:
-	if _avatar.mode != Avatar.Mode.PLATING or _avatar.get_parent() != _ship.interior:
+## A hole where you stand puts you outside, moving as you were (health and
+## damage spec §7.4): only a hole in the ship you stand in.
+func _on_blocks_lost(_coords: Array[Vector3i], ship: Ship) -> void:
+	if _avatar.mode != Avatar.Mode.PLATING or _avatar.get_parent() != ship.interior:
 		return
-	var local := _ship.interior.to_local(_avatar.global_position + _avatar.global_basis.y * 0.1)
+	var local := ship.interior.to_local(_avatar.global_position + _avatar.global_basis.y * 0.1)
 	var cell := ShipCells.interior_cell_at(local)
-	if _ship.grid.has_block(cell):
+	if ship.grid.has_block(cell):
 		return
-	var world := Threshold.to_world(_ship.interior.global_transform, _ship.exterior.global_transform,
+	var world := Threshold.to_world(ship.interior.global_transform, ship.exterior.global_transform,
 		_avatar.global_transform, InteriorBuilder.storey_offset(cell.y))
-	var v := Threshold.carry_velocity_out(_ship.exterior.linear_velocity, _ship.exterior.global_basis,
+	var v := Threshold.carry_velocity_out(ship.exterior.linear_velocity, ship.exterior.global_basis,
 		_avatar.velocity)
-	_avatar.enter_suit(_ship.outside, world, v, _ship.exterior)
-	for airlock: Airlock in _ship.airlocks.values():
+	_avatar.enter_suit(ship.outside, world, v, ship.exterior)
+	for airlock: Airlock in ship.airlocks.values():
 		_avatar.beacon_source = airlock.beacon
 		_avatar.home_source = airlock.home
 		break
@@ -226,7 +439,7 @@ func _on_blocks_lost(_coords: Array[Vector3i]) -> void:
 ## follows the view. Wired here so src/avatar and src/ui never learn about
 ## CameraDirector or Ship.
 func _wire_hands() -> void:
-	_avatar.grasp.world_root = _ship.items
+	_avatar.grasp.world_root = aboard.items
 	_reticle = Reticle.new()
 	_reticle.name = "Reticle"
 	$Prompt.add_child(_reticle)
@@ -248,7 +461,7 @@ func _on_view_changed(view: CameraDirector.View, moving: bool) -> void:
 ## from another asteroid generator starts the world over at the start, with
 ## your ship, its store and everything aboard (§8.1).
 func _wire_universe(saved: Dictionary) -> void:
-	_universe.set_focus(_ship.exterior)
+	_universe.set_focus(aboard.exterior)
 	var world: Dictionary = saved.get("world", {})
 	if world.has("seed"):
 		_stream.seed = int(world["seed"])
@@ -267,20 +480,21 @@ func _wire_universe(saved: Dictionary) -> void:
 	else:
 		_universe.origin = start
 		if resumed:
+			_restore_fleet(saved, false)
 			_restore_you(saved.get("avatar", {}), false)
 	_stream.start(_universe, start)
 	_wire_star_system()
 	_wire_salvage(saved if same_world else {}, _same_generator(saved, "salvage"))
 	_wire_strays(saved.get("strays", {}) if same_world else {})
 	# Godot's cameras stop drawing at 4 km; a world's horizon is about 120 km off
-	# and every proxy sits at 350 km (the world scale spec §5.2).
-	for cam: Camera3D in [$Ship/Exterior/ChaseCamera, $Ship/Canopy/CanopyCam, _avatar.camera]:
-		cam.far = BodyProxy.VIEW_FAR
+	# and every proxy sits at 350 km (the world scale spec §5.2). Each ship's
+	# cameras get the same in _wire_ship.
+	_avatar.camera.far = BodyProxy.VIEW_FAR
 	# The sun's shadows stopped at 100 m, so nothing on a big rock cast one.
 	$DirectionalLight3D.directional_shadow_max_distance = AsteroidStream.SHADOW_REACH
 	_avatar.mode_changed.connect(
 		func(mode: Avatar.Mode) -> void:
-			_universe.set_focus(_avatar if mode == Avatar.Mode.SUIT else _ship.exterior)
+			_universe.set_focus(_avatar if mode == Avatar.Mode.SUIT else aboard.exterior)
 	)
 	_universe_readout = Label.new()
 	_universe_readout.name = "UniverseReadout"
@@ -306,7 +520,7 @@ func _wire_salvage(saved: Dictionary, same_salvage: bool) -> void:
 	salvage = SalvageField.new()
 	salvage.name = "SalvageField"
 	$Outside.add_child(salvage)
-	salvage.setup(_universe, _ship.item_catalog, _stream.seed)
+	salvage.setup(_universe, _starter.item_catalog, _stream.seed)
 	var part: Dictionary = saved.get("salvage", {})
 	if part.get("centres", {}).is_empty():
 		salvage.add_near_cloud(_stern())
@@ -319,23 +533,20 @@ func _wire_strays(saved: Dictionary) -> void:
 	strays = StrayField.new()
 	strays.name = "StrayField"
 	$Outside.add_child(strays)
-	strays.setup(_universe, _ship.item_catalog)
+	strays.setup(_universe, _starter.item_catalog)
 	if not saved.is_empty():
 		strays.from_dict(saved)
-	# A plate shed by a block knocked off is a stray like any other
-	# (health and damage spec §8.1).
-	_ship.plate_shed.connect(func(item: Item) -> void: strays.adopt(item))
 
 ## A frame on the hull at the middle of the airlock's outer hatch, +z pointing
 ## out of it along the airlock's line: aft, on the starter.
 func _stern() -> Transform3D:
-	for airlock: Airlock in _ship.airlocks.values():
+	for airlock: Airlock in _starter.airlocks.values():
 		if not is_instance_valid(airlock.alcove):
 			continue
 		var hatch := airlock.alcove.outer_hatch.global_transform
 		var out := -hatch.basis.z.normalized()
 		return Transform3D(Basis.looking_at(-out, hatch.basis.y), airlock.beacon())
-	return _ship.exterior.global_transform
+	return _starter.exterior.global_transform
 
 ## NPCs (docs/superpowers/specs/2026-09-26-npc-foundation-design.md): the
 ## overlay (F4) watches every director.
@@ -355,47 +566,29 @@ func _wire_npcs() -> void:
 	exterior_npcs.rule = NpcDirector.Rule.BY_DISTANCE
 	exterior_npcs.max_live = 32
 	exterior_npcs.holder = holder
-	exterior_npcs.catalog = _ship.npc_director.catalog
+	exterior_npcs.catalog = _starter.npc_director.catalog
 	exterior_npcs.bus = npc_bus
-	exterior_npcs.cameras = [$Ship/Exterior/ChaseCamera as Camera3D, $Ship/Canopy/CanopyCam as Camera3D, _avatar.camera]
+	exterior_npcs.cameras = [aboard.chase_camera, aboard.canopy_camera, _avatar.camera]
 	exterior_npcs.sources = [RockHerdSource.new(_stream)]
 	exterior_npcs.ledger = npc_ledger
-	_ship.npc_director.ledger = npc_ledger
-	# The crew woke with the ship, before it had the ledger.
-	for npc: Npc in _ship.npc_director.live_npcs():
-		npc.health.current = npc_ledger.health_of(npc.record.id, npc.health.max)
 	add_child(exterior_npcs)
 	npc_debug = NpcDebug.new()
 	npc_debug.name = "NpcDebug"
 	add_child(npc_debug)
-	npc_debug.directors.append(_ship.npc_director)
 	npc_debug.directors.append(exterior_npcs)
 
-## The ship's sensors (NPC foundation spec §22): they follow the universe's
-## focus, and read signs of life and the big rocks. Their contacts, and the
-## course the bridge computer sets, show on the HUD three ways, like the
-## velocity marker: through the canopy, in chase view, and on a spacewalk.
+## The sensors' contacts, and the course the bridge computer sets (NPC
+## foundation spec §22), show on the HUD three ways, like the velocity marker:
+## through the canopy, in chase view, and on a spacewalk. They read the ship
+## you are aboard; each ship's sensors get their sources in _wire_ship.
 func _wire_sensors() -> void:
-	_ship.sensors.universe = _universe
-	_ship.sensors.add_source(LifeContacts.new(_stream, exterior_npcs, _universe))
-	# Big rocks out to 30 km, for the bridge computer's map and the course
-	# (bridge computer spec §4.2). The same seed and start as the stream.
-	_ship.sensors.add_source(RockContacts.new(_stream.seed, _stream.recipe.start, _stream.shapes))
-	# The star, planets and moons, anywhere in the system, and where you are
-	# (the system skeleton spec §8, §10).
-	_ship.sensors.add_source(BodyContacts.new(system))
-	_ship.sensors.system = system
-	_ship.sensors.whereabouts = star_system.whereabouts
-	# The speed limit climbs with altitude in a world's well (the world scale
-	# spec §6); where you are is Whereabouts' to say.
-	_ship.flight_computer.whereabouts = star_system.whereabouts
 	contact_markers.clear()
 	for m in _mount_per_view(func() -> WorldMarker: return ContactMarker.new(), "Contacts"):
-		(m as ContactMarker).sensors = _ship.sensors
+		(m as ContactMarker).sensors = aboard.sensors
 		contact_markers.append(m)
 	course_markers.clear()
 	for m in _mount_per_view(func() -> WorldMarker: return CourseMarker.new(), "Course"):
-		(m as CourseMarker).bind(_ship.sensors)
+		(m as CourseMarker).bind(aboard.sensors)
 		course_markers.append(m)
 	_wire_course_chime()
 
@@ -405,8 +598,8 @@ func _wire_sensors() -> void:
 ## marker; each is named `prefix` and its view.
 func _mount_per_view(make: Callable, prefix: String) -> Array[WorldMarker]:
 	var out: Array[WorldMarker] = []
-	for mount: Array in [[$Ship/Canopy/CanopyOverlay, $Ship/Canopy/CanopyCam, "Cockpit"],
-			[$HudRoot/Screen, $Ship/Exterior/ChaseCamera, "Chase"], [$HudRoot/Screen, null, "Spacewalk"]]:
+	for mount: Array in [[aboard.canopy_overlay, aboard.canopy_camera, "Cockpit"],
+			[$HudRoot/Screen, aboard.chase_camera, "Chase"], [$HudRoot/Screen, null, "Spacewalk"]]:
 		var marker: WorldMarker = make.call()
 		marker.name = prefix + mount[2]
 		marker.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -419,43 +612,42 @@ func _mount_per_view(make: Callable, prefix: String) -> Array[WorldMarker]:
 		out.append(marker)
 	return out
 
-## A soft chime when a course clears by arriving (bridge computer spec §9):
-## through the suit on a spacewalk, else the ship.
+## The chime a course makes when it clears by arriving (_on_course_arrived).
 func _wire_course_chime() -> void:
 	course_chime = AudioStreamPlayer.new()
 	course_chime.name = "CourseChime"
 	add_child(course_chime)
-	_ship.sensors.course_arrived.connect(func(_id: StringName) -> void:
-		var s := Synth.sound(&"course_arrived")
-		if s == null:
-			return
-		course_chime.bus = AudioBuses.SUIT if _avatar.mode == Avatar.Mode.SUIT else AudioBuses.SHIP
-		course_chime.stream = s
-		course_chime.play())
 
-## The warp (docs/superpowers/specs/2026-09-28-warp-design.md §5): the drive
-## gets the system, where you are, the sensors for its course and the rocks
-## for clear arrivals; J at the helm engages it. While it travels the rocks and
-## salvage wait and the belts show whole; after, everything near is loaded
-## before the next frame, as the hop does.
+## A soft chime when the course of the ship you are aboard clears by arriving
+## (bridge computer spec §9): through the suit on a spacewalk, else the ship.
+func _on_course_arrived(_id: StringName, ship: Ship) -> void:
+	if ship != aboard:
+		return
+	var s := Synth.sound(&"course_arrived")
+	if s == null:
+		return
+	course_chime.bus = AudioBuses.SUIT if _avatar.mode == Avatar.Mode.SUIT else AudioBuses.SHIP
+	course_chime.stream = s
+	course_chime.play()
+
+## The warp (docs/superpowers/specs/2026-09-28-warp-design.md §5) on the HUD:
+## its panel, the toasts at a limit and a bracket per world. Each ship's drive
+## is bound in _wire_ship. While one travels the rocks and salvage wait and the
+## belts show whole; after, everything near is loaded before the next frame,
+## as the hop does.
 func _wire_warp() -> void:
-	var warp := _ship.warp
-	warp.bind(system, _universe, star_system.whereabouts, _ship.sensors, _stream.recipe, warp_busy)
-	_pilot.warp_pressed.connect(warp.engage)
-	warp.travel_started.connect(_on_warp_started)
-	warp.travel_ended.connect(_on_warp_ended)
 	warp_panel = WarpPanel.new()
 	warp_panel.name = "WarpPanel"
-	warp_panel.drive = warp
+	warp_panel.drive = aboard.warp
 	$HudRoot/Screen/Band/Row.add_child(warp_panel)
 	star_system.whereabouts.limit_entered.connect(_on_limit_entered)
 	star_system.whereabouts.limit_left.connect(_on_limit_left)
 	body_markers.clear()
 	for m in _mount_per_view(func() -> WorldMarker: return BodyMarker.new(), "Bodies"):
-		(m as BodyMarker).sensors = _ship.sensors
+		(m as BodyMarker).sensors = aboard.sensors
 		body_markers.append(m)
 	for m in course_markers:
-		m.warp = warp
+		m.warp = aboard.warp
 
 ## A toast as you cross a warp limit (the warp spec §7.3).
 func _on_limit_entered(place: Whereabouts.Place) -> void:
@@ -465,15 +657,29 @@ func _on_limit_left(place: Whereabouts.Place) -> void:
 	var clear := star_system.whereabouts.warp_clear()
 	warp_panel.toast("LEAVING %s · WARP CLEAR" % place.name if clear else "LEAVING %s" % place.name)
 
-## Why the warp must wait for the crew: &"crew" on a spacewalk, &"airlock"
-## while one cycles or stands open to space, else &"".
+## Why the warp of the ship you are aboard must wait for the crew.
 func warp_busy() -> StringName:
+	return warp_busy_for(aboard)
+
+## Why `ship`'s warp must wait for the crew: &"crew" on a spacewalk,
+## &"airlock" while one of its airlocks cycles or stands open to space, else
+## &"".
+func warp_busy_for(ship: Ship) -> StringName:
 	if _avatar.mode == Avatar.Mode.SUIT:
 		return &"crew"
-	for airlock: Airlock in _ship.airlocks.values():
+	for airlock: Airlock in ship.airlocks.values():
 		if airlock.busy() != "" or airlock.cycle.open_side() == AirlockCycle.Door.OUTER:
 			return &"airlock"
 	return &""
+
+## Why a save must wait on any ship (many ships spec §6.4), or "". Not a
+## sleeping one: frozen mid-cycle, it would hold the save forever.
+func _fleet_busy() -> String:
+	for ship in fleet.awake():
+		var why := ship.busy()
+		if why != "":
+			return why
+	return ""
 
 func _on_warp_started() -> void:
 	_stream.suspended = true
@@ -497,6 +703,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			_universe_readout.visible = not _universe_readout.visible
 		KEY_F7:
 			hop(-1 if key.shift_pressed else 1)
+		KEY_F8:
+			board_nearest()
 
 ## How far off `b`'s surface the hop leaves you.
 static func hop_off(b: SystemBody) -> float:
@@ -508,18 +716,18 @@ static func hop_off(b: SystemBody) -> float:
 ## and facing it. A system is 15,000 km across; this is the debug way round it. Refused on a spacewalk, while an airlock cycles, and while a
 ## warp spools or travels. True if it hopped.
 func hop(step: int) -> bool:
-	if _ship.warp.is_spinning():
+	if aboard.warp.is_spinning():
 		return false
 	if _avatar.mode == Avatar.Mode.SUIT:
 		return false
-	for airlock: Airlock in _ship.airlocks.values():
+	for airlock: Airlock in aboard.airlocks.values():
 		if airlock.busy() != "":
 			return false
 	hop_index = posmod(hop_index + step, system.bodies.size())
 	var b := system.bodies[hop_index]
 	var out := Vector3.BACK if b == system.star else system.star.point.minus(b.point).normalized()
 	var at := b.point.plus(out * (b.radius + hop_off(b)))
-	var hull := _ship.exterior
+	var hull := aboard.exterior
 	hull.linear_velocity = Vector3.ZERO
 	hull.angular_velocity = Vector3.ZERO
 	var up := Vector3.UP if absf(out.dot(Vector3.UP)) < 0.99 else Vector3.RIGHT
@@ -576,7 +784,7 @@ func _read_save() -> Dictionary:
 ## game begins.
 func _wire_saving() -> void:
 	save_gate.add_source(func() -> String: return "sitting" if _director.is_moving() else "")
-	save_gate.add_source(_ship.busy)
+	save_gate.add_source(_fleet_busy)
 	save_gate.add_source(_avatar.busy)
 	save_gate.settle()
 	_saved_tag = SavedTag.new()
@@ -587,7 +795,7 @@ func _wire_saving() -> void:
 
 func _physics_process(delta: float) -> void:
 	if star_system != null:
-		star_system.streak = _ship.warp.streak()
+		star_system.streak = aboard.warp.streak()
 	play_time += delta
 	if not save_enabled:
 		return
@@ -620,7 +828,9 @@ func _notification(what: int) -> void:
 func capture() -> Dictionary:
 	return {
 		"world": {"seed": _stream.seed},
-		"ship": _ship.to_dict(_universe),
+		"ships": fleet.capture(_universe),
+		"aboard": String(aboard.name),
+		"fleet": fleet.to_dict(),
 		"avatar": _capture_you(),
 		"salvage": salvage.to_dict(),
 		"strays": strays.to_dict(),
@@ -630,7 +840,9 @@ func capture() -> Dictionary:
 ## The dead, and the health of every NPC awake now and asleep (health and
 ## damage spec §10): the awake ones are written into the ledger first.
 func _capture_npcs() -> Dictionary:
-	for director: NpcDirector in [_ship.npc_director, exterior_npcs]:
+	var directors: Array = fleet.ships().map(func(s: Ship) -> NpcDirector: return s.npc_director)
+	directors.append(exterior_npcs)
+	for director: NpcDirector in directors:
 		if director == null:
 			continue
 		for npc: Npc in director.live_npcs():
@@ -657,7 +869,7 @@ func _capture_you() -> Dictionary:
 			d["airlock"] = SaveCodec.cell_key(airlock.coord)
 	else:
 		d["mode"] = "seated" if _director.is_seated else "walking"
-		d["place"] = SaveCodec.transform(_ship.interior.global_transform.affine_inverse() * _avatar.global_transform)
+		d["place"] = SaveCodec.transform(aboard.interior.global_transform.affine_inverse() * _avatar.global_transform)
 	if _avatar.grasp.item != null:
 		d["held"] = _avatar.grasp.item.to_dict(Transform3D.IDENTITY)
 	return d
@@ -667,19 +879,56 @@ static func _same_generator(saved: Dictionary, which: String) -> bool:
 	var theirs: Dictionary = saved.get("generators", {})
 	return int(theirs.get(which, -1)) == int(SaveGame.generators()[which])
 
-## The origin near where you were, then the hull and you (§6.1).
+## The origin near where you were, then every ship and you (§6.1; many ships
+## spec §6.3).
 func _restore_places(saved: Dictionary) -> void:
-	var ship_part: Dictionary = saved.get("ship", {})
 	var you: Dictionary = saved.get("avatar", {})
-	var focus := SaveCodec.to_upoint(ship_part.get("hull", {}).get("at"))
+	var first := _part_named(saved, String(saved.get("aboard", Fleet.STARTER)))
+	if first.is_empty():
+		first = _part_named(saved, Fleet.STARTER)
+	var focus := SaveCodec.to_upoint(first.get("hull", {}).get("at"))
 	if String(you.get("mode", "")) == "suit":
 		focus = SaveCodec.to_upoint(you.get("at"))
 	_universe.origin = UniversePoint.at(
 		roundi(focus.x / Universe.STEP) * int(Universe.STEP),
 		roundi(focus.y / Universe.STEP) * int(Universe.STEP),
 		roundi(focus.z / Universe.STEP) * int(Universe.STEP))
-	_ship.restore_hull(ship_part, _universe)
+	_restore_fleet(saved, true)
 	_restore_you(you, true)
+
+## Every saved ship but the starter, spawned under its own name, unstocked,
+## with everything aboard, and the ship you were aboard (many ships spec
+## §6.3). `in_place` false (the world started over) lines them up RESTART_ROW
+## apart beside the starter instead of where they were.
+func _restore_fleet(saved: Dictionary, in_place: bool) -> void:
+	fleet.from_dict(saved.get("fleet", {}))
+	if in_place:
+		_starter.restore_hull(_part_named(saved, Fleet.STARTER), _universe)
+	var row := 0
+	for part in saved.get("ships", []):
+		if not (part is Dictionary) or String(part.get("name", "")) == Fleet.STARTER:
+			continue
+		var grid := Ship.layout_of(part)
+		if grid.coords().is_empty():
+			push_error("FlightTest: the saved ship %s has no blocks; it is left out" % part.get("name", "?"))
+			continue
+		row += 1
+		var place := _starter.exterior.global_transform.translated(Vector3(RESTART_ROW * row, 0, 0))
+		var ship := fleet.spawn(grid, place, false, String(part["name"]), Ship.launch_of(part))
+		if ship == null:
+			continue
+		ship.restore_aboard(part)
+		if in_place:
+			fleet.restore_hull(ship, part)
+	var named := fleet.named(StringName(saved.get("aboard", Fleet.STARTER)))
+	aboard = named if named != null else _starter
+
+## The saved ship called `ship_name`, or {}.
+static func _part_named(saved: Dictionary, ship_name: String) -> Dictionary:
+	for part in saved.get("ships", []):
+		if part is Dictionary and String(part.get("name", "")) == ship_name:
+			return part
+	return {}
 
 ## You as the save had you (§6.3). With `outside_too` false -- the world
 ## started over -- a spacewalk comes back aboard, standing.
@@ -689,30 +938,37 @@ func _restore_you(d: Dictionary, outside_too: bool) -> void:
 	_avatar.health.from_dict(d.get("health", {}))
 	var mode := String(d.get("mode", "walking"))
 	if mode != "suit":
-		var pose := _ship.interior.global_transform * SaveCodec.to_transform(d.get("place"))
+		# Into the ship you were aboard (many ships spec §6.3), where you
+		# stood, or on its deck if that is no place to stand any more.
+		var pose := aboard.interior.global_transform * SaveCodec.to_transform(d.get("place"))
 		if _can_stand(pose):
-			_avatar.place(Transform3D(Basis(Vector3.UP, pose.basis.get_euler().y), pose.origin))
+			pose = Transform3D(Basis(Vector3.UP, pose.basis.get_euler().y), pose.origin)
+		else:
+			pose = aboard.interior.global_transform * _deck_spot(aboard)
+		_avatar.move_aboard(aboard.interior, pose)
 		_avatar.set_head_pitch(float(d.get("pitch", 0.0)))
+	elif not outside_too:
+		_avatar.move_aboard(aboard.interior, aboard.interior.global_transform * _deck_spot(aboard))
 	# Hands work only aboard and standing, so the held item is taken first.
 	var held: Variant = d.get("held")
 	if held is Dictionary:
-		var item := _ship.restore_item(held)
+		var item := aboard.restore_item(held)
 		if item != null and not _avatar.grasp.take(item):
 			item.set_loose()
 	if mode == "seated":
-		_director.sit_now($Ship/Interior/PilotSeat)
+		_director.sit_now(aboard.seat)
 	elif mode == "suit" and outside_too:
 		_restore_spacewalk(d)
 
 func _restore_spacewalk(d: Dictionary) -> void:
-	var airlock: Airlock = _ship.airlocks.get(SaveCodec.to_cell(String(d.get("airlock", ""))))
+	var airlock: Airlock = aboard.airlocks.get(SaveCodec.to_cell(String(d.get("airlock", ""))))
 	if airlock == null or not is_instance_valid(airlock.alcove):
-		for a: Airlock in _ship.airlocks.values():
+		for a: Airlock in aboard.airlocks.values():
 			if is_instance_valid(a.alcove):
 				airlock = a
 				break
 	var pose := Transform3D(SaveCodec.to_basis(d.get("turn")), _universe.to_engine(SaveCodec.to_upoint(d.get("at"))))
-	_avatar.enter_suit(_ship.outside, pose, SaveCodec.to_vec3(d.get("v")), _ship.exterior)
+	_avatar.enter_suit(aboard.outside, pose, SaveCodec.to_vec3(d.get("v")), aboard.exterior)
 	_avatar.set_head_pitch(float(d.get("pitch", 0.0)))
 	if airlock != null:
 		_avatar.beacon_source = airlock.beacon
@@ -722,13 +978,13 @@ func _restore_spacewalk(d: Dictionary) -> void:
 ## Whether a saved standing place is still somewhere to stand: a walkable
 ## block under it, so a changed layout never leaves you in a wall (§6.3).
 func _can_stand(pose: Transform3D) -> bool:
-	var local := _ship.interior.global_transform.affine_inverse() * pose.origin
+	var local := aboard.interior.global_transform.affine_inverse() * pose.origin
 	var cell := Vector3i(roundi(local.x / ShipGrid.CELL_SIZE),
 		roundi((local.y - InteriorBuilder.floor_y(Vector3i.ZERO)) / InteriorBuilder.STOREY_HEIGHT),
 		roundi(local.z / ShipGrid.CELL_SIZE))
-	if not _ship.grid.has_block(cell):
+	if not aboard.grid.has_block(cell):
 		return false
-	var def := _ship.catalog.get_def(_ship.grid.get_block(cell).block_id)
+	var def := aboard.catalog.get_def(aboard.grid.get_block(cell).block_id)
 	return def != null and def.is_walkable()
 
 func _starter_grid() -> ShipGrid:
@@ -937,46 +1193,33 @@ func _starter_grid() -> ShipGrid:
 
 	return g
 
+## Stands you on the starter's deck to begin with (see _deck_spot). The
+## avatar's scene position was authored for the hand-built room; deriving it
+## from the grid survives blueprint edits. The seat places itself
+## (Ship._place_seat).
 func _place_avatar_on_deck() -> void:
-	# The avatar's scene position was authored for the hand-built room, whose
-	# floor surface sat at local y = 0. Generated cells are centred on their
-	# coordinate, so the deck surface is half a cell lower. Derive the spawn
-	# from the grid instead of hardcoding it, so it survives blueprint edits.
-	var seat := Vector3i.ZERO
-	var found := false
-	for coord in _ship.grid.coords():
-		if _ship.grid.get_block(coord).block_id == &"pilot_seat":
-			seat = coord
-			found = true
-			break
-	if not found:
+	if _starter.helm_cell() == null:
 		return
+	_avatar.position = _deck_spot(_starter).origin
 
-	# Stand in the first cell aft of the seat that is walkable and holds no
-	# fixture -- a MOUNT block, like the quantum core, still occupies its
-	# cell's floor even though the cell itself is walkable (quantum energy
-	# spec §5.3, §6.1). Falls back to the seat's own cell when the ship has
-	# nothing else clear aft of it.
-	var cell := seat
-	var probe := seat + Vector3i(0, 0, 1)
-	while _ship.grid.has_block(probe):
-		var inst := _ship.grid.get_block(probe)
-		var def := _ship.catalog.get_def(inst.block_id)
+## Where you stand on `ship`'s deck to start, in its interior's frame: the first
+## walkable cell aft of its helm that holds no fixture, or the helm's own cell
+## (quantum energy spec §5.3, §6.1). A MOUNT block, like the quantum core,
+## still fills its cell's floor though the cell is walkable.
+func _deck_spot(ship: Ship) -> Transform3D:
+	var helm: Variant = ship.helm_cell()
+	if helm == null:
+		return Transform3D.IDENTITY
+	var cell: Vector3i = helm
+	var probe: Vector3i = cell + Vector3i(0, 0, 1)
+	while ship.grid.has_block(probe):
+		var def := ship.catalog.get_def(ship.grid.get_block(probe).block_id)
 		if def != null and def.is_walkable() and def.occupancy != BlockDefinition.Occupancy.MOUNT:
 			cell = probe
 			break
 		probe += Vector3i(0, 0, 1)
-
 	var centre := ShipGrid.cell_center(cell)
-	var deck_surface := InteriorBuilder.floor_y(cell)
-	$Ship/Interior/Avatar.position = Vector3(centre.x, deck_surface + 0.05, centre.z)
-
-	# The interactable seat is the captain's chair the interior's dressing
-	# draws, so take its transform from the same fixture frame -- out in the
-	# cockpit pod when there is one -- rather than authoring it twice.
-	# Hardcoding it in the scene is what let the collider and the blueprint
-	# drift apart in the first place.
-	$Ship/Interior/PilotSeat.transform = InteriorDressing.fixture_frame(_ship.interior_builder.layout(), seat)
+	return Transform3D(Basis.IDENTITY, Vector3(centre.x, InteriorBuilder.floor_y(cell) + 0.05, centre.z))
 
 ## Connects the HUD to this scene's ship.
 ##
@@ -985,10 +1228,9 @@ func _place_avatar_on_deck() -> void:
 ## reusable for any future vehicle. The bootstrap is the only place that
 ## knows both halves.
 func _wire_hud() -> void:
-	# The cockpit marker lives in the ship's SubViewport, so it cannot be
-	# discovered as one of HudRoot's descendants.
-	_hud.register_element(_cockpit_marker)
-	_hud.register_element(_heading_cockpit)
+	# The cockpit's markers live in a ship's SubViewport, so they cannot be
+	# discovered as HudRoot's descendants: board() registers those of the ship
+	# you are aboard.
 	# The hull (health and damage spec §11), in the band beside the store.
 	var hull := HullPanel.new()
 	hull.name = "HullPanel"
@@ -998,15 +1240,16 @@ func _wire_hud() -> void:
 	# this: the HUD's fade-in and the seat transition it is timed against.
 	_hud.fade_in = CameraDirector.SIT_DURATION
 	_director.piloting_changed.connect(_on_piloting_changed)
-	_pilot.lights = _ship.lights
 	# On a spacewalk the suit is the vehicle the HUD reports (airlock spec
 	# §8.3): speed relative to the ship, and the way home.
 	_avatar.mode_changed.connect(_on_avatar_mode_changed)
 
-## The pilot's controls report the flight computer's telemetry plus the stick
-## and the pointer (flight controls spec §7).
+## The pilot's controls of the ship whose seat you took report the flight
+## computer's telemetry plus the stick and the pointer (flight controls spec
+## §7).
 func _on_piloting_changed(piloting: bool) -> void:
-	_hud.set_active_vehicle(_pilot if piloting else null)
+	var ship := _director.seat_ship()
+	_hud.set_active_vehicle(ship.pilot if piloting and ship != null else null)
 
 func _on_avatar_mode_changed(mode: Avatar.Mode) -> void:
 	if mode == Avatar.Mode.SUIT:

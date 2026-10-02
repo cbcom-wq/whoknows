@@ -29,6 +29,11 @@ func _ready() -> void:
 	if not camera_path.is_empty():
 		_camera = get_node_or_null(camera_path) as Camera3D
 
+## Aims it through `cam`: the chase camera of the ship you are aboard (many
+## ships spec §4.1).
+func set_camera(cam: Camera3D) -> void:
+	_camera = cam
+
 func render(telemetry: VehicleTelemetry) -> void:
 	armed = telemetry != null and telemetry.heading_hold and _camera != null and _camera.current
 	if not armed:

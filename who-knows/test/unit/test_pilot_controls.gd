@@ -35,13 +35,13 @@ func _motion(relative: Vector2) -> InputEventMouseMotion:
 
 func test_sitting_down_seats_the_controls():
 	_pilot.set_seated(false)
-	var director: CameraDirector = _root.get_node("Ship/CameraDirector")
+	var director: CameraDirector = _root.get_node("CameraDirector")
 	director.sit(_root.get_node("Ship/Interior/PilotSeat"))
 	assert_true(_pilot.seated)
 
 func test_while_seated_your_hands_do_nothing():
 	# RMB and LMB fly the ship while you sit (spec §4): Grasp must be off.
-	var director: CameraDirector = _root.get_node("Ship/CameraDirector")
+	var director: CameraDirector = _root.get_node("CameraDirector")
 	var avatar: Avatar = _root.get_node("Ship/Interior/Avatar")
 	director.sit(_root.get_node("Ship/Interior/PilotSeat"))
 	assert_false(avatar.grasp.enabled)

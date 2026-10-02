@@ -75,6 +75,11 @@ scenery any more.
   
   The cabin keeps its shape (amended 2026-10-02): only the buffer outside it breaks away.
   Open: a full rebuild costs ~220 ms, a hitch whenever a block goes.
+- **Many ships (2026-10-02)** (docs/superpowers/specs/2026-10-02-many-ships-design.md): any
+  number of ships, each boarded, flown and saved. A ship is `scenes/ship.tscn`; `Fleet` owns them
+  (slots, names, sleeping past 20 km); `board()` hands you between them. F8 seats you at the
+  nearest other helm, any airlock lets a suit in, and on a spacewalk your suit belongs to the
+  nearest ship. Saves are format 2. No way yet to spawn a second ship in play (project 2).
 
 Derived stats for the starter shuttle (2026-09-27, with the quantum fixtures and the bridge
 computer): 96,900 kg, torque imbalance 11,146 / −6,192 N·m (0.36% / 0.3% of pitch / yaw

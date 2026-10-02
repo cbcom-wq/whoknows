@@ -72,6 +72,44 @@ func sit_now(seat: PilotSeat) -> void:
 func is_moving() -> bool:
 	return _tween != null
 
+## The ship whose seat you sit in, or null standing (many ships spec §3.2):
+## every ship's controls ask, and take the stick only for their own.
+func seat_ship() -> Ship:
+	return ship_of(_seat) if is_seated else null
+
+## The Ship `node` is part of, or null.
+static func ship_of(node: Node) -> Ship:
+	while node != null and not (node is Ship):
+		node = node.get_parent()
+	return node as Ship
+
+## Points the views at `ship` (many ships spec §4.1): the flight computer you
+## let go of when you stand, and the chase camera C switches to.
+func bind(ship: Ship) -> void:
+	_flight = ship.flight_computer
+	if _chase_cam == ship.chase_camera:
+		return
+	var chasing := view == View.CHASE
+	_chase_cam.current = false
+	_chase_cam = ship.chase_camera
+	if chasing:
+		_chase_cam.current = true
+
+## Stands you up at once, with no camera move (many ships spec §4.3): F8's hop
+## to another helm. The camera goes straight back to your head.
+func stand_now() -> void:
+	if not is_seated or _tween != null:
+		return
+	is_seated = false
+	piloting_changed.emit(false)
+	_flight.clear_pilot_input()
+	_avatar.place(_seat.stand_spot(_avatar))
+	_interior_cam.reparent(_avatar.head, false)
+	_interior_cam.transform = Transform3D.IDENTITY
+	_avatar.set_control_enabled(true)
+	view = View.FOOT_FIRST
+	_apply_view()
+
 func stand() -> void:
 	if not is_seated or _tween != null:
 		return

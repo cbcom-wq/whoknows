@@ -16,7 +16,7 @@ func before_each():
 	_interior = _root.get_node("Ship/Interior")
 	_avatar = _root.get_node("Ship/Interior/Avatar")
 	_seat = _root.get_node("Ship/Interior/PilotSeat")
-	_director = _root.get_node("Ship/CameraDirector")
+	_director = _root.get_node("CameraDirector")
 	# Let the scene run a frame or two, as it has by the time you reach the chair.
 	await wait_process_frames(2)
 	await wait_physics_frames(2)

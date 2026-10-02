@@ -103,7 +103,7 @@ func _run(scene: Node) -> void:
 	print("course  %s, %s" % [_ship.sensors.course, computer.screen_text().replace("\n", " / ")])
 	await _shot("course_set")
 	var seat: PilotSeat = _ship.get_node("Interior/PilotSeat")
-	var director: CameraDirector = _ship.get_node("CameraDirector")
+	var director: CameraDirector = _ship.get_parent().get_node("CameraDirector")
 	seat.interact(avatar)
 	await director.transition_finished
 	await _shot("hud_cockpit")

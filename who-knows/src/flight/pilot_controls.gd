@@ -9,7 +9,6 @@ extends Node
 ## pointer.
 
 @export var flight_computer_path: NodePath
-@export var camera_director_path: NodePath
 @export var hull_path: NodePath
 @export var interior_path: NodePath
 
@@ -26,14 +25,13 @@ var pointer := Vector2.ZERO
 ## The ship's work lights (ship exterior spec §7.2), set by the flight scene:
 ## L and K switch them while you sit.
 var lights: ShipLights
+## The game's one camera director (many ships spec §3.2). A ship's scene
+## cannot reach it by path, so the flight scene hands it over.
+var director: CameraDirector
 
 @onready var _flight: FlightComputer = get_node(flight_computer_path)
 @onready var _hull: Node3D = get_node(hull_path)
 @onready var _interior: Node3D = get_node(interior_path)
-
-func _ready() -> void:
-	var director: CameraDirector = get_node(camera_director_path)
-	director.piloting_changed.connect(set_seated)
 
 ## Sitting down or standing up: the stick centres and point mode ends. A
 ## heading hold or a speed lock keeps running (spec §4.2).
@@ -42,6 +40,20 @@ func set_seated(on: bool) -> void:
 	stick.centre()
 	pointing = false
 	pointer = Vector2.ZERO
+
+## Listens to `d` for sitting and standing. Every ship's controls hear every
+## sit, and take the stick only when the seat is their own ship's. Bound late,
+## they catch up with a sit that has already happened (a game loaded at the
+## helm).
+func bind_director(d: CameraDirector) -> void:
+	if director != null and director.piloting_changed.is_connected(_on_piloting_changed):
+		director.piloting_changed.disconnect(_on_piloting_changed)
+	director = d
+	director.piloting_changed.connect(_on_piloting_changed)
+	_on_piloting_changed(director.is_seated)
+
+func _on_piloting_changed(piloting: bool) -> void:
+	set_seated(piloting and director.seat_ship() == get_parent())
 
 func _unhandled_input(event: InputEvent) -> void:
 	if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:

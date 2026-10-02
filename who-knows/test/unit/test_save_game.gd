@@ -81,6 +81,26 @@ func test_a_newer_format_is_refused_and_never_written_over():
 	assert_eq(int(SaveGame._parse(PATH)["n"]), 7, "left alone")
 	assert_push_error("newer than this game")
 
+## Many ships (docs/superpowers/specs/2026-10-02-many-ships-design.md §6.1):
+## format 1's one ship becomes the first of a list, named Ship, with you
+## aboard it.
+func test_a_format_1_save_becomes_one_ship_named_ship_with_you_aboard():
+	var old := {"format": 1, "ship": {"layout": {"cells": []}, "hull": {}}, "avatar": {"mode": "walking"}}
+	var now := SaveGame.migrate(old)
+	assert_eq(int(now["format"]), 2)
+	assert_false(now.has("ship"))
+	assert_eq(now["ships"].size(), 1)
+	assert_eq(now["ships"][0]["name"], "Ship")
+	assert_eq(now["ships"][0]["hull"], {})
+	assert_eq(now["aboard"], "Ship")
+	assert_eq(now["fleet"], {"next": 2})
+	assert_eq(now["avatar"], old["avatar"], "the rest untouched")
+	assert_true(old.has("ship"), "the dictionary passed in is not changed")
+
+func test_a_format_2_save_is_left_as_it_is():
+	var d := {"format": 2, "ships": [], "aboard": "Ship", "fleet": {"next": 2}}
+	assert_eq(SaveGame.migrate(d), d)
+
 func test_starting_over_sets_the_save_aside():
 	var sg := SaveGame.new(PATH)
 	sg.write({"n": 1}, 0.0)

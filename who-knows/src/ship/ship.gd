@@ -12,6 +12,9 @@ signal blocks_lost(coords: Array[Vector3i])
 ## §8.1): already outside, in space and in EXTERIOR_SPACE. The flight scene
 ## makes it a stray.
 signal plate_shed(item: Item)
+## Someone crossed one of its airlocks' outer hatches (airlock spec §7):
+## `outward` true out onto a spacewalk, false in, aboard (many ships spec §4.3).
+signal airlock_crossed(avatar: Avatar, outward: bool)
 
 const INTERIOR_WORLD_BASE := Vector3(0.0, -5000.0, 0.0)
 ## Every ship is in this group, for things that must find one without being
@@ -39,11 +42,14 @@ const SHED_SPEED := 1.0
 ## Where you wake after blacking out, if the ship has one.
 const WAKE_ROOM := &"bunk_room"
 
-## The exact ShaderMaterial `hull`/`hull_wedge` meshes reference (their .tres
-## surfaces point at this same path, and Godot's resource cache guarantees a
-## single shared instance) -- not a duplicate. Loading it here needs no
-## change to ExteriorBuilder.
+## The livery every builder paints the hull with: one shared instance. Each
+## ship swaps it for its own copy, `livery` (_apply_livery).
 const HULL_LIVERY_MATERIAL: ShaderMaterial = preload("res://data/materials/hull_livery.tres")
+## The window glass's shader; each ship makes its own material from it.
+const CANOPY_SHADER: Shader = preload("res://data/materials/interior/canopy_window.gdshader")
+## Marks a hull piece made for the own layer alone, so set_own can move it
+## back.
+const OWN_ONLY := &"own_only"
 
 @export var interior_slot: int = 0
 ## Where a spacewalker goes (airlock spec §7.4): the scene's root for things in
@@ -85,6 +91,14 @@ var lights: ShipLights
 ## Ship/Warp. The flight scene binds it to the system; the ship only builds it
 ## and saves its chart.
 var warp: WarpDrive
+## True for the ship you are aboard (many ships spec §4.2): the hull's own
+## pieces are drawn on ExteriorBuilder.OWN_HULL_LAYER, which your canopy and
+## windows leave out, and the interior shows. Any other ship draws them on
+## layer 1, so you see it through your windows, and hides its interior, which
+## nobody can see from outside. A ship is your own until told otherwise.
+var own := true
+## This ship's own copy of the hull livery (_apply_livery).
+var livery: ShaderMaterial = HULL_LIVERY_MATERIAL.duplicate()
 
 ## Seconds since a rock last struck the hull.
 var since_struck := INF
@@ -120,8 +134,17 @@ var _blast_in := 0.0
 @onready var exterior_builder: ExteriorBuilder = $Exterior/ExteriorBuilder
 @onready var interior_builder: InteriorBuilder = $Interior/InteriorBuilder
 @onready var flight_computer: FlightComputer = $FlightComputer
+## The parts of ship.tscn the flight scene hands you between (many ships spec
+## §3.1).
+@onready var pilot: PilotControls = $PilotControls
+@onready var seat: PilotSeat = $Interior/PilotSeat
+@onready var motion: MotionCoupling = $MotionCoupling
+@onready var chase_camera: Camera3D = $Exterior/ChaseCamera
+@onready var canopy_camera: Camera3D = $Canopy/CanopyCam
+@onready var canopy_overlay: Control = $Canopy/CanopyOverlay
 
 func _ready() -> void:
+	_make_canopy_material()
 	exterior.gravity_scale = 0.0
 	exterior.linear_damp = 0.0
 	exterior.angular_damp = 0.0
@@ -200,6 +223,19 @@ func _ready() -> void:
 	flight_computer.hull_status = func() -> Array:
 		return [hull_whole(), stats.crippled_reason if stats != null else ""]
 
+## Every window's glass shows this ship's own canopy view (cockpit pod spec
+## §3): one material per ship, fed by its own SubViewport, so each instance of
+## ship.tscn draws its own (many ships spec §3.1). Made here rather than in the
+## .tscn: a ViewportTexture's path inside an instanced scene is fragile.
+func _make_canopy_material() -> void:
+	var canopy := get_node_or_null("Canopy") as SubViewport
+	if canopy == null:
+		return
+	var mat := ShaderMaterial.new()
+	mat.shader = CANOPY_SHADER
+	mat.set_shader_parameter(&"canopy_view", canopy.get_texture())
+	interior_builder.canopy_material = mat
+
 func _process(_delta: float) -> void:
 	# hull_livery.gdshader paints its stripe from ship-local height, but the
 	# skin's merged plating meshes (HullDressing: the Hull and Windows kits'
@@ -209,9 +245,19 @@ func _process(_delta: float) -> void:
 	# that rotation (`hull_inverse * MODEL_MATRIX`) before testing height, so
 	# the stripe stays fixed on the hull under roll and pitch instead of
 	# swimming across it. See hull_livery.gdshader's header comment for the
-	# full derivation.
-	HULL_LIVERY_MATERIAL.set_shader_parameter(&"hull_inverse", exterior.global_transform.affine_inverse())
+	# full derivation. Each ship pushes its own hull's into its own copy: one
+	# shared material would hold only the last ship's (many ships, §12).
+	livery.set_shader_parameter(&"hull_inverse", exterior.global_transform.affine_inverse())
 	_update_hum()
+
+## Every hull piece painted with the shared livery gets this ship's own copy:
+## the stripe is measured through `hull_inverse`, which is this hull's alone.
+## After every rebuild, as the builders always paint with the shared one.
+func _apply_livery() -> void:
+	for node in exterior.find_children("*", "GeometryInstance3D", true, false):
+		var g := node as GeometryInstance3D
+		if g.material_override == HULL_LIVERY_MATERIAL:
+			g.material_override = livery
 
 ## The hum plays while the listener is aboard, and stops outside.
 func _update_hum() -> void:
@@ -516,6 +562,22 @@ func interior_slot_origin() -> Vector3:
 	# the same separation independently.
 	return INTERIOR_WORLD_BASE + Vector3(interior_slot * SLOT_SPACING, 0.0, 0.0)
 
+func set_own(on: bool) -> void:
+	own = on
+	_apply_own()
+
+## Every piece the builders made for the own layer alone goes on the layer
+## `own` says; pieces on both layers stay on both. After every rebuild too: the
+## builders always make the own layer.
+func _apply_own() -> void:
+	interior.visible = own
+	for node in exterior.find_children("*", "GeometryInstance3D", true, false):
+		var g := node as GeometryInstance3D
+		if g.layers == ExteriorBuilder.OWN_HULL_LAYER:
+			g.set_meta(OWN_ONLY, true)
+		if g.has_meta(OWN_ONLY):
+			g.layers = ExteriorBuilder.OWN_HULL_LAYER if own else 1
+
 func load_blueprint(bp: ShipBlueprint) -> void:
 	set_grid(bp.to_grid())
 
@@ -567,6 +629,7 @@ func _rebuild_everything(hull := true) -> void:
 	if hull:
 		exterior_builder.rebuild()
 	interior_builder.rebuild()
+	_place_seat()
 	interior_builder.geometry_body().set_meta(&"receive_hit", _on_interior_hit)
 	interior_builder.geometry_body().set_meta(&"ship", self)
 	_bind_airlocks()
@@ -590,6 +653,8 @@ func _rebuild_everything(hull := true) -> void:
 		damage_show.sync(grid, catalog)
 	_set_anchor_radius()
 	_bind_crew()
+	_apply_own()
+	_apply_livery()
 
 ## Keeps each bridge computer's page, range and selection across a rebuild,
 ## which frees the dressing and every table in it (bridge computer spec §10).
@@ -675,6 +740,7 @@ func _bind_airlocks() -> void:
 			airlock = Airlock.new()
 			airlock.setup(self, room.coord)
 			_airlocks_root.add_child(airlock)
+			airlock.crossed.connect(airlock_crossed.emit)
 			airlocks[room.coord] = airlock
 		airlock.bind(room, exterior_builder.alcoves().get(room.coord))
 	for at in airlocks.keys():
@@ -849,6 +915,21 @@ func launch_block(cell: Vector3i) -> Array:
 		return []
 	var i := launch_blueprint.coords.find(cell)
 	return [] if i < 0 else [launch_blueprint.block_ids[i], launch_blueprint.orientations[i]]
+
+## The helm's cell, or null with no pilot seat.
+func helm_cell() -> Variant:
+	for coord: Vector3i in grid.coords():
+		if grid.get_block(coord).block_id == InteriorLayout.HELM_ID:
+			return coord
+	return null
+
+## The helm's seat where the dressing drew the chair (cockpit pod spec §7): its
+## collider and eye from the same fixture frame, after every rebuild, so a
+## spawned ship's seat stands where the starter's does.
+func _place_seat() -> void:
+	var helm: Variant = helm_cell()
+	if helm != null and seat != null:
+		seat.transform = InteriorDressing.fixture_frame(interior_builder.layout(), helm)
 
 ## The launch layout a save kept, or, from a save before there was one, its
 ## layout with nothing hurt.

@@ -25,7 +25,9 @@ const JOLT_MAX := 0.06
 const JOLT_DECAY := 8.0
 
 @export var hull_path: NodePath
-@export var avatar_path: NodePath
+## The ship's Interior: you are shoved only while you stand in it (many ships
+## spec §3.2).
+@export var interior_path: NodePath
 ## The InteriorBuilder whose FeltGravity loose items feel (hands-and-items
 ## spec §6). Optional: with none, only the avatar is shoved.
 @export var interior_builder_path: NodePath
@@ -35,9 +37,14 @@ var _shake_phase: float = 0.0
 var _last_shove := Vector3.ZERO
 ## Where a crash has thrown the head, dying away.
 var jolt := Vector3.ZERO
+var _avatar: Avatar
+
+## The plating gravity loose items feel when no one is about to read it from:
+## the avatar's own default grav_strength.
+const PLATING_GRAVITY := 9.8
 
 @onready var _hull: RigidBody3D = get_node(hull_path)
-@onready var _avatar: Avatar = get_node(avatar_path)
+@onready var _interior: Node3D = get_node_or_null(interior_path) if not interior_path.is_empty() else null
 @onready var _builder: InteriorBuilder = (
 	get_node_or_null(interior_builder_path) if not interior_builder_path.is_empty() else null)
 
@@ -54,8 +61,8 @@ func _physics_process(delta: float) -> void:
 		_last_velocity = warp.velocity()
 		_last_shove = Vector3.ZERO
 		drive_felt_gravity(Vector3.ZERO)
-		if _avatar.mode == Avatar.Mode.PLATING:
-			_avatar.external_accel = Vector3.ZERO
+		if _you_aboard():
+			_you().external_accel = Vector3.ZERO
 		return
 	var velocity := _hull.linear_velocity
 	var accel_world := (velocity - _last_velocity) / delta
@@ -77,10 +84,23 @@ func _physics_process(delta: float) -> void:
 	jolt *= exp(-JOLT_DECAY * delta)
 	drive_felt_gravity(shove)
 	# A spacewalker is not aboard: the hull's motion is only the ship's
-	# (airlock spec §7.4).
-	if _avatar.mode == Avatar.Mode.PLATING:
-		_avatar.external_accel = shove
+	# (airlock spec §7.4). Nor is someone in another ship.
+	if _you_aboard():
+		_you().external_accel = shove
 		_apply_shake(accel_local, delta)
+
+## You, wherever you are: a ship's scene holds no path to you, so you are found
+## by group, as the airlock finds you.
+func _you() -> Avatar:
+	if not is_instance_valid(_avatar) and is_inside_tree():
+		_avatar = get_tree().get_first_node_in_group(Avatar.GROUP) as Avatar
+	return _avatar
+
+## True while you stand in this ship's interior: only then are you shoved.
+func _you_aboard() -> bool:
+	var you := _you()
+	return you != null and you.mode == Avatar.Mode.PLATING \
+		and (_interior == null or you.get_parent() == _interior)
 
 ## The ship's warp drive, when this couples a ship's hull.
 func _warp() -> WarpDrive:
@@ -97,8 +117,8 @@ func _apply_shake(accel_local: Vector3, delta: float) -> void:
 	var magnitude := minf(accel_local.length(), SHOVE_CAP / shove_scale) * shake_scale
 	# Deliberately cheap: a single axis wobble reads as engine rumble.
 	var sway := sin(_shake_phase) * magnitude * 0.01 if magnitude >= 0.001 else 0.0
-	_avatar.head.position.x = sway + jolt.x
-	_avatar.head.position.z = jolt.z
+	_you().head.position.x = sway + jolt.x
+	_you().head.position.z = jolt.z
 
 ## Sets the interior's felt gravity to exactly what the avatar integrates
 ## (Avatar._physics_process): plating gravity plus the shove, so you and a
@@ -106,7 +126,9 @@ func _apply_shake(accel_local: Vector3, delta: float) -> void:
 func drive_felt_gravity(shove: Vector3) -> void:
 	if _builder == null or _builder.felt_gravity == null:
 		return
-	_builder.felt_gravity.set_felt(Vector3.DOWN * _avatar.grav_strength + shove)
+	var you := _you()
+	var g := you.grav_strength if you != null else PLATING_GRAVITY
+	_builder.felt_gravity.set_felt(Vector3.DOWN * g + shove)
 	# A sudden change -- a burn starting, a hull strike -- is a shake the whole
 	# interior feels (NPC foundation spec §6.1).
 	if (shove - _last_shove).length() > SHAKE_AT:

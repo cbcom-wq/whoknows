@@ -54,7 +54,19 @@ itself, never through a parent) or listen to `Universe.shifted(delta)` and subtr
 any engine position it remembers.** World-space particles outside join `Universe.HOLDS_SHIFT`.
 The interior never moves and is never a member. `test_floating_origin_scene.gd` fails if a body
 or mesh outside the interior is not covered. Positions that must survive a shift (seeds, homes,
-saved places) are `UniversePoint`s, never engine `Vector3`s.
+saved places) are `UniversePoint`s, never engine `Vector3`s. A ship asleep, more than 20 km off, is
+the one exception: it leaves the group, is held as a `UniversePoint`, and is in group
+`Fleet.ASLEEP`.
+
+## Every ship is usable
+
+The owner's rule (2026-10-02): **any ship in the game can be boarded, flown and saved**, never a
+look-only prop. Ships come and go through `Fleet` (`src/ship/fleet.gd`): the starter is `/Ship`,
+an instance of `scenes/ship.tscn`; any other is `fleet.spawn(grid, place)`. The ship you are in
+is the flight scene's `aboard`, and `board(ship)` is the one place it changes
+(`docs/superpowers/specs/2026-10-02-many-ships-design.md`). Never author a second `Ship` in a
+`.tscn` or instance `ship.tscn` any other way. `test/probes/fleet_play.gd` plays a trip between
+two ships in real time; run it after any change to boarding, airlocks or the suit.
 
 ## Godot `.tscn`/`.tres`: no `#` comments inside `[node]`, `[sub_resource]`, or `[resource]` blocks
 

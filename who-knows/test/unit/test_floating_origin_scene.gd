@@ -25,10 +25,11 @@ func _back_in() -> void:
 	_avatar.enter_plating(_ship.interior, Transform3D(Basis.IDENTITY, _ship.interior.to_global(Vector3(0, -0.95, 6))),
 		0.0, Vector3.ZERO, Quaternion.IDENTITY)
 
-## A node is covered if it, or something above it, is shifted.
+## A node is covered if it, or something above it, is shifted, or is a ship
+## asleep, held as a UniversePoint (many ships spec §5.1).
 func _covered(node: Node) -> bool:
 	while node != null:
-		if node.is_in_group(Universe.EXTERIOR_SPACE):
+		if node.is_in_group(Universe.EXTERIOR_SPACE) or node.is_in_group(Fleet.ASLEEP):
 			return true
 		node = node.get_parent()
 	return false
@@ -38,11 +39,18 @@ func _uncovered() -> Array:
 	for n in _root.find_children("*", "Node3D", true, false):
 		if not (n is PhysicsBody3D or n is GeometryInstance3D):
 			continue
-		if _ship.interior.is_ancestor_of(n):
+		if _in_an_interior(n):
 			continue
 		if not _covered(n):
 			out.append(str(_root.get_path_to(n)))
 	return out
+
+## Inside any ship: interiors never move (many ships spec §5.1).
+func _in_an_interior(n: Node) -> bool:
+	for ship: Ship in _root.fleet.ships():
+		if ship.interior.is_ancestor_of(n):
+			return true
+	return false
 
 func test_the_universe_survived_the_parse():
 	assert_true(_universe is Universe, "FlightTest/Universe is a Universe")
@@ -79,6 +87,18 @@ func test_a_spacewalk_across_a_shift_keeps_you_beside_your_ship():
 
 func test_everything_outside_is_covered():
 	assert_eq(_uncovered(), [], "every body and mesh outside the interior shifts")
+
+func test_with_a_second_ship_everything_outside_is_covered():
+	var place := Transform3D(Basis.IDENTITY, _ship.exterior.global_position + Vector3(300, 0, 0))
+	_root.fleet.spawn(_root._starter_grid(), place)
+	assert_eq(_uncovered(), [])
+
+func test_with_a_ship_asleep_everything_outside_is_covered():
+	var place := Transform3D(Basis.IDENTITY, _ship.exterior.global_position + Vector3(0, 0, 25000))
+	var far: Ship = _root.fleet.spawn(_root._starter_grid(), place)
+	_root.fleet.check_sleep()
+	assert_true(_root.fleet.sleeping(far))
+	assert_eq(_uncovered(), [])
 
 func test_everything_outside_is_covered_on_a_spacewalk():
 	_out(Vector3(0, 0, 12))
