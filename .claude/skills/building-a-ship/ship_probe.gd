@@ -242,6 +242,11 @@ func _run(scene: Node) -> void:
 	var mask := ship.exterior.collision_mask
 	var wants := 1 | BodyProxy.LAYER | AsteroidBody.LAYER | Npc.LAYER
 	print("bumps   hull mask %d: hulls, worlds, rocks, NPCs %s" % [mask, "yes" if (mask & wants) == wants else "MISSING"])
+	var anchored := ship.exterior.is_in_group(AsteroidStream.SPACE_ANCHOR)
+	var placed := ship.flight_computer != null and ship.flight_computer.whereabouts != null
+	print("worlds  hull is a space anchor %s; speed limit knows where it is %s" % [
+		"yes" if anchored else "MISSING (no solid ground under it)",
+		"yes" if placed else "MISSING (held to 120 m/s everywhere)"])
 	print("thrust  kN fwd %.0f rev %.0f lat %.0f vert %.0f" % [s.thrust_budget[&"forward"] / 1000.0,
 		s.thrust_budget[&"reverse"] / 1000.0, s.thrust_budget[&"lateral"] / 1000.0,
 		s.thrust_budget[&"vertical"] / 1000.0])

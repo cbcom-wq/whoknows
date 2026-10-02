@@ -12,6 +12,11 @@ starts at its terrain
 §8.1; bridge computer spec §5; the style guide (§12 here)
 **Governed by:** `docs/design/visual-style.md`
 
+> **Amended 2026-09-30 by the world scale spec** (`2026-09-30-world-scale-design.md` §5): a
+> proxy keeps its far mesh, now sampled from `WorldTerrain`, and hands over to a
+> `WorldSurface` within min(10 radii, 300 km). The near shell and its convex collider are gone;
+> the surface's own collision replaces them. `BodyProxy.NEAR_WITHIN` no longer exists.
+
 ---
 
 ## 1. What you get
@@ -518,7 +523,7 @@ The amendments §14 lists are noted at the head of each spec they touch.
 | How busy belts and rings are | `AsteroidRecipe.BELT_GROUP_LOW/HIGH`, `RING_PEAK` (bump `AsteroidRecipe.VERSION`) |
 | Belts and rings from afar | `BeltLook.SLAB_ACROSS/SLAB_THICK/SLABS`, fade `FADE_GONE/WHOLE`; `RingLook` the same |
 | Dust | `SpaceDust.SIZE/COUNT/BOX`; how much by place in `Whereabouts.DUST_OPEN/NEAR/THICK` |
-| When a world turns solid and detailed | `BodyProxy.NEAR_WITHIN`; `PROXY_AT` must stay between 25 and 30 km (§7.4) |
+| When a world turns solid and detailed | `BodyProxy.SURFACE_RADII`, `SURFACE_MOST`; `PROXY_AT` (350 km since the world scale spec, with the cameras' far plane `BodyProxy.VIEW_FAR` held above it) |
 | The hop | `HOP_OFF` in `scenes/flight_test.gd` |
 
 After changing a recipe constant, `test_system_recipe.gd` checks every rule of §4.3 over 500

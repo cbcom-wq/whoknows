@@ -12,6 +12,12 @@ quantum cruise** (§7 there). Jumps between stars (piece 6) are unchanged.
 §16.1; the bridge computer spec §5; the quantum energy spec §8.4; the saving spec's world section
 **Governed by:** `docs/design/visual-style.md`
 
+> **Amended 2026-09-30 by the world scale spec** (`2026-09-30-world-scale-design.md` §3.3,
+> §3.4): moons are warp targets, each wholly outside its planet's limit, and block a line like
+> a planet. A planet's limit is its well + 14 km and past its ring, no longer at least its
+> neighbourhood. Travel is 18 s + 1 s per 350 km; the cost is 40 QE + 1 QE per 12.5 km
+> (`WARP_M_PER_QE`). The map's ranges are 2, 10, 50 and 500 km and the system.
+
 ---
 
 ## 1. Why

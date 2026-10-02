@@ -19,6 +19,13 @@ Slice 6; piloting HUD spec §4.3, §5, §6, §10; starter shuttle art direction 
 > world is a faceted shell on it until this spec's terrain replaces it. The test area (§14)
 > becomes the system's entry.
 
+> **Amended 2026-09-30 by the world scale spec** (`2026-09-30-world-scale-design.md`): worlds
+> are 15–60 km (moons 4–15 km) with relief up to 1.2 km (§3, §5.2), and the well is 2 radii
+> (§7.1). The terrain of §6 is built there, at the new depths, as `WorldTerrain`, `CubeSphere`,
+> `TerrainChunkData`, `WorldSurface` and `TerrainCollider`, with the analytic floor of §8.5;
+> boulders are still this spec's. What stays here: gravity, the assisted descent, landing,
+> the airlock step-out, walking, boulders, sites and the atmosphere.
+
 ---
 
 ## 1. Why this document exists

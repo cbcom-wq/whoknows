@@ -1,9 +1,10 @@
 # World scale — planets big enough to be places
 
 **Date:** 2026-09-30
-**Status:** Designed with the owner on 2026-09-30, section by section. The numbers are first guesses
-to be tuned by flying. Awaiting the owner's review of this written spec before an implementation
-plan.
+**Status:** Designed with the owner on 2026-09-30, section by section. **Built** on branch
+`world-scale` (2026-09-30 to 2026-10-01); §13 is what was built, where it differs from this text
+(amended in place, each marked *as built*) and what is left. The owner's approval of the look is
+pending (§13.7).
 **Depends on:** `main` at `a59890a` (the system skeleton, the warp, the ship exterior, health and
 damage)
 **Amends:** the star systems design §2, §4.1, §4.3, §6; the system skeleton spec's proxies (§7); the
@@ -50,7 +51,7 @@ hangs in the sky, four times the width of ours.
 | How big | **Large planets 30–60 km in radius**; all planets 15–60 km, moons 4–15 km, the star 200–300 km (§3) | Horizon about 400 m on foot, 3–5 km from 100 m up: the ground looks flat until you climb. A lap is 25–50 minutes at 120 m/s. Roughly KSP's Minmus. Big enough for regions and long flights, small enough to cross in one sitting. |
 | Where this piece stops | **Scale, spacing and the world renderer** (§4, §5). Gravity, landing, the airlock step-out, walking and sites stay in Planetfall, amended to the new scale (§9) | A 60 km world cannot be a 5,120-face shell: each facet would be 3 km across. The renderer has to come forward; the rest of Planetfall builds on top of it. |
 | Getting around a big world | **The speed limit rises with altitude** inside a well (§6) | Climb, dash, descend: the far side is minutes away and the world still feels huge low down. It also bounds how fast terrain detail must stream. |
-| How to draw it | **One quadtree surface per body, at true scale when near, with the far plane raised to 400 km** (§5) | Godot 4.5's Forward+ uses reversed depth, so a long far plane costs no precision. No new shader, no second scene, and one surface from across the system to the ground. |
+| How to draw it | **One quadtree surface per body, at true scale when near, with the far plane raised to 700 km** (§5; *as built*, 400 km was too short for the star, §13.1) | Godot 4.5's Forward+ uses reversed depth, so a long far plane costs no precision. No new shader, no second scene, and one surface from across the system to the ground. |
 | Moons at the new spacing | **Moons become warp targets** (§3.3) | A moon 180–400 km from its planet is a 25–55 minute flight. |
 | Warp trips | **Retuned so they take and cost what they do now** (§3.4) | The warp's feel and QE progression were agreed on 2026-09-28; only the distances change. |
 
@@ -206,7 +207,7 @@ func altitude_of(local: Vector3) -> float    # body-local point's height above t
 
 | Where the focus is | What is drawn | Cost |
 |---|---|---|
-| Beyond `SURFACE_AT` (10 radii) from a body's centre | **The far mesh:** one icosphere of 1,280 faces, heights and colours sampled once from `WorldTerrain`. Beyond `PROXY_AT` it is shrunk onto the proxy shell, as today | 1 draw call per body |
+| Beyond `SURFACE_AT` (10 radii, or 300 km if less) from a body's centre | **The far mesh:** one icosphere of 1,280 faces, heights and colours sampled once from `WorldTerrain`. Beyond `PROXY_AT` it is shrunk onto the proxy shell, as today | 1 draw call per body |
 | Inside `SURFACE_AT` | **The quadtree surface** (§5.2) at the body's true place | Budget: 150 chunks in view |
 | Within 160 m of a terrain anchor | The finest chunks also become **collision** (§5.5) | A few dozen shapes |
 
@@ -226,11 +227,14 @@ func altitude_of(local: Vector3) -> float    # body-local point's height above t
   nodes `(face, depth, ix, iy)`. Every node's chunk is **16 × 16 quads** plus a skirt.
 - **Depth per body:** the smallest `D` with a leaf quad of 2 m or less,
   `D = ceil(log2(π·R / (2 · 16 · 2.0)))`: 12 for a 60 km planet, 10 at 15 km, 8 for a 4 km moon.
-- **Split** a node when the focus is within 1.5× its edge of its bounding sphere; merge beyond
-  1.8×. Each level costs about the same number of chunks, about 21 at 1.5× (about 58 at
-  Planetfall's 2.5×, which over 12 levels is about 700 chunks built). At 1.5× a quad is about
-  2.4° across at the split distance: chunky, which is the style. A 60 km world is then about
-  250 chunks built, before horizon culling, and about a third of them in view.
+- **Split** a node when the focus is within 1.5× its edge of it; merge beyond 1.8×. *As built,
+  the distance is measured to the node's real ground point (its centre direction at the radius
+  plus the height there) less the node's corner chord, with no relief padding; the relief-padded
+  bound is for horizon culling only (§13.2).* Each level costs about the same number of chunks,
+  about 21 at 1.5× (about 58 at Planetfall's 2.5×, which over 12 levels is about 700 chunks
+  built). At 1.5× a quad is about 2.4° across at the split distance: chunky, which is the style.
+  *As built, a 60 km world is about 450 chunks built at ground level, not 250, and about a
+  quarter of them in view (§13.3).*
 - **Horizon culling:** a node wholly below the focus's horizon (its bounding sphere, lifted by the
   world's relief, behind the sphere of radius `R − relief`) is neither built nor drawn. Low down,
   that removes most of the coarse ones.
@@ -238,8 +242,9 @@ func altitude_of(local: Vector3) -> float    # body-local point's height above t
   second view draws the same chunks.
 - **Skirts** hide cracks between levels; no geomorphing. Popping is accepted, and the flat-shaded
   look hides most of it (Planetfall §6.4).
-- The cameras' far plane goes from 30 km to **400 km** (`flight_test.gd`, and every probe that sets
-  it). `BodyProxy.PROXY_AT` goes from 28 km to **350 km**. Rocks keep their own 25 km fade; sun
+- The cameras' far plane goes from 30 km to **700 km** (`BodyProxy.VIEW_FAR`, which
+  `flight_test.gd` and every probe that sets it read; *as built*, not the 400 km first written, §13.1).
+  `BodyProxy.PROXY_AT` goes from 28 km to **350 km**. Rocks keep their own 25 km fade; sun
   shadows keep their 2 km reach.
 
 ### 5.3 Streaming
@@ -269,8 +274,9 @@ func altitude_of(local: Vector3) -> float    # body-local point's height above t
 
 - `TerrainCollider` keeps a collision chunk (a `StaticBody3D` on layer 4 `terrain`, mask 0, with a
   `ConcavePolygonShape3D` from the same `TerrainChunkData`) for every finest chunk within
-  `64 m + 1 s × speed` of each terrain anchor, capped at 160 m. The hull is an anchor; the avatar
-  becomes one on a spacewalk. This is Planetfall §6.5, less boulders, which stay Planetfall's.
+  `64 m + 1 s × speed` of each terrain anchor, capped at 160 m (*as built*, up to about 200 keys
+  an anchor at full reach, cached per anchor, and the chunk under an anchor is built at once, §13.4).
+  The hull is an anchor (`AsteroidStream.SPACE_ANCHOR`); the avatar becomes one on a spacewalk. This is Planetfall §6.5, less boulders, which stay Planetfall's.
 - **The analytic floor:** if the hull's lowest point is ever more than 0.5 m below
   `WorldTerrain`'s ground, it is lifted out along local up, its inward velocity is removed, and a
   warning is logged (Planetfall §8.5). It should never fire; the descent probe counts it.
@@ -282,7 +288,7 @@ func altitude_of(local: Vector3) -> float    # body-local point's height above t
 | What | Budget |
 |---|---|
 | Worst frame, descending and skimming | 33 ms |
-| Chunks drawn in view | 150 or fewer |
+| Chunks drawn in view | 150 or fewer (*as built*: this is the binding budget, not chunks built, §13.3) |
 | A chunk's build on a worker | 10 ms or less |
 | Applying chunks on the main thread | 2 ms a frame |
 | The analytic floor firing | never |
@@ -383,7 +389,7 @@ the floor, against §5.6.
 - a belt from the neighbouring planet;
 - the map's SYSTEM and 500 km ranges.
 
-The style guide gains a *Worlds up close* rule only once the owner approves these.
+The style guide gains a *Worlds up close* rule only once the owner approves these (§13.7).
 
 ---
 
@@ -452,3 +458,150 @@ Changing a recipe constant needs its version bumped (§3.6).
 - Hand-made worlds: the authoring piece (star systems design §12, step 5) works at whatever scale
   this sets.
 - A new shader.
+
+---
+
+## 13. What was built
+
+Built on branch `world-scale` (off `main` at `a59890a`), 2026-09-30 to 2026-10-01, in thirteen
+tasks: the numbers (sizes, spacing, moons as targets, the warp), the map and far plane, the far
+mesh from `WorldTerrain`, `CubeSphere`, `TerrainChunkData`, `WorldSurface`, `TerrainCollider` and
+the floor, the altitude speed limit and `Whereabouts.well()`/`altitude()`, the descent probe, and
+the documents. Versions: `WorldRecipe.GENERATOR_VERSION` 2, `SystemRecipe.VERSION` 3,
+`AsteroidRecipe.VERSION` 4, so an old save starts over at the start. The sections above are
+amended in place where the build differs and marked *as built*; this section says why.
+
+Tests: 1,674 before (158 scripts); 1,734 at Task 11's last full run, and two more in
+`test_world_surface.gd` since. Per the owner's rule of 2026-10-01 the full suite was not run after
+Task 12; the owner decides whether to run it before merging.
+
+### 13.1 The far plane is 700 km, not 400 km
+
+`BodyProxy.VIEW_FAR` is `PROXY_AT + SystemRecipe.STAR_RADIUS.y + 50 km`, 700 km. A proxy just past
+`PROXY_AT` (350 km) is drawn at nearly its true radius, so its far edge lies about `PROXY_AT` plus
+its radius from the eye, and the star's radius is up to 300 km. With 400 km the render probe showed
+the star's disc clipped; 420 km showed it whole. The far plane has to hold `PROXY_AT` plus the
+biggest body's radius. Reversed-Z makes the length free of precision cost and nothing else is drawn
+that far.
+
+### 13.2 The split distance is measured to the real ground
+
+The plan's metric padded every node's bounding sphere by half the world's relief (about 600 m on
+the largest), so everything within roughly 600 m split to the finest depth: about 2,000 chunks.
+As built, `WorldSurface.select()` measures from the focus to the node's real ground point (its
+centre direction at the radius plus `height_at` there) minus the node's corner chord, with no
+relief padding. `bound_of` returns `[centre, cull radius, ground point, chord]`; the relief-padded
+cull radius is for horizon culling only. `SPLIT` and `MERGE` are the spec's 1.5 and 1.8 (they were
+tuned to 1.3 and 1.6 on the way and put back once the metric was fixed).
+
+### 13.3 Chunks built about 450, in view about 100: the budget that binds is in view
+
+At ground level a 60 km world has about 450 chunks built (452 at 2 m, 391 to 470 over a skim), not
+the 250 estimated in §5.2: "within 1.5× its edge of its bounding sphere" ignored the chord. The
+binding budget of §5.6 is chunks **in view**, at 150 or fewer, and that holds: **94 in the canopy's
+frustum on the descent, 115 on the skim.**
+`test_the_chunk_count_stays_in_budget_at_every_height` caps built chunks at 500. If a later probe
+shows more than 150 in view, `SPLIT` is the lever. A chunk builds in about 4 ms on a worker.
+
+### 13.4 Solid ground
+
+- Solid keys run to about 200 an anchor at full reach (`keys_near`'s disc is
+  `ceil(reach / edge) + 1`, 113 to 380 finest chunks across the planet range; the test's bound is
+  200). They are cached per anchor, since a cube-edge `keys_near` cost 1.8 to 7.5 ms uncached.
+- The chunk **under** an anchor is first in `keys_near` and is built at once, directly, through
+  `key_for`, so a fast, low hull never outruns its own ground.
+- A ghosted hull (mask 0, at warp) is never lifted by the floor.
+
+### 13.5 `PATCH_QUADS` stays 6, and a direct shade-patch test
+
+Tuning `WorldTerrain.PATCH_QUADS` to 12 passed a test that measured the 1,280-face far mesh, but
+that test was dominated by ground-pattern changes, not shade patches. The test now samples
+consecutive points one triangle apart along a great circle and requires that they share a shade
+more than 60% of the time (measured 0.84 at `PATCH_QUADS` 6), and the far mesh uses one nominal
+patch size per detail rather than each face's lifted edge. If the owner finds six-triangle patches
+too busy, `PATCH_QUADS` is the one constant to raise.
+
+### 13.6 The descent probe, and what it found
+
+`test/probes/world_probe.gd` runs in the real flight scene (1280 × 720, GTX 960, Vulkan Forward+,
+not headless): it warps to the largest planet (r 54,607 m, relief 864 m), descends from its limit
+to the ground at the speed limit, and skims 20 km, logging per-phase frames, worst frame, frames
+over 33 ms, draw calls, chunks visible, in the frustum and built, and the floor's count.
+
+It found the **`_apply` death spiral.** Skimming at 150 m, `_apply` sorted every finished chunk,
+including ones no longer wanted, by distance before applying any; once the sort used up the 2 ms
+budget nothing was applied, `_done` grew without end (2,255 to 2,930), leaves stayed undrawn, and
+frames went to 400 to 730 ms with memory climbing from 187 to 605 MB. The owner saw it in play
+("unusable"). The fix (`dbc85ee`): `_apply` first drops results nobody wants, works each distance
+out once, and applies at least one result a tick whatever the deadline; the bounds cache is capped
+(`BOUNDS_KEPT`).
+
+| After the fix | Descent | Skim |
+|---|---|---|
+| Frames, time | 13,300 frames, 222 s | 9,697 frames, 162 s |
+| Worst frame | 28.9 ms, none over 33 ms | 33.7 ms, 3 of 9,697 over 33 ms |
+| Chunks in the frustum / built | 94 / 392 | 115 / 470 |
+| Draw calls, at most | 1,085 | 1,269 |
+| Floor fired | 0 | 0 |
+
+Memory stays flat. The skim misses the 33 ms budget by 0.7 ms on three frames, within one vsync of
+a 60 Hz screen; "frames over 33 ms in 10,000" is a steadier budget than a strict worst frame. The
+first frames after a teleport cost 137 to 147 ms (shaders and uploads at a new place); the probe
+settles 60 ticks first.
+
+**Remaining cost (open):** `WorldSurface.update()` costs 8 to 16 ms a physics tick at the speed
+limit (about 25 m a tick): `select` about 4 ms, solid keys 5 to 7 ms, `_apply` about 2.2 ms. The
+frame is physics-bound there, with about 8 ms of headroom. Levers, not pulled: keep the previous
+solid keys and add only the swept path ahead (or compute them on a worker); cache a node's ground
+in `_bounds` (terrain is a pure function of direction, so it cannot go stale).
+
+### 13.7 The look: approval pending
+
+The world renders (from a neighbour, the limit, the well's edge, 1 km, skimming at 150 m,
+standing at 1.6 m, a belt) were sent to the owner on 2026-10-01 for the look, and **approval is
+pending**. So `docs/design/visual-style.md` is not changed and has no *Worlds up close* rule yet.
+On approval it gains one stating what was approved (flat-shaded chunks, one palette colour a
+triangle, shade patches about six triangles across, rock on slopes over 35°), with the date and
+the render names; if the owner asks for something else, record it here. What the renders showed:
+no holes, cracks or z-fighting; patch edges visibly stair-stepped on the coarse meshes; ridges a
+little busy from 1 km; standing on the ground reads best. The size renders of Part A (planet
+25 km, star, belts) were shown to the owner earlier; no change was recorded.
+
+### 13.8 Levers
+
+| Lever | Value | Why |
+|---|---|---|
+| `QUADS` | 16, unchanged | no draw-call problem: 1,085 to 1,269 at most |
+| `SPLIT` / `MERGE` | 1.5 / 1.8, unchanged | tuned to 1.3 / 1.6, then restored once the metric was fixed (§13.2) |
+| `WarpProfile.PACE` | 350,000, unchanged | measured 30.4 s mean trip between star and planets, inside 25 to 35 s |
+| `BELT_GAP` | 300 km, unchanged | no rule needed it moved |
+| `WorldTerrain.PATCH_QUADS` | 6, unchanged | 12 tried and withdrawn (§13.5) |
+
+### 13.9 Left to do
+
+- **Fix before merge:** `FlightComputer.locked_speed` is re-clamped only while W or S is pressed,
+  so a lock set high in a well (say 1,400) stays after leaving it: a stale LOCK readout, and the
+  assist pushes against the clamp every tick. Clamp it to `current_limit` every tick.
+- `WorldSurface.update()` at the speed limit (§13.6).
+- **Horizon hole:** a region newly over the horizon has no drawn ancestor once its root was freed,
+  so it is blank until its leaves build; the class doc's "nothing is ever a hole" overclaims. Low
+  severity; not seen in the renders.
+- `FlightComputer`: `current_limit` and `limit_raised` are not updated during a warp (a stale HUD
+  if one starts with the limit raised); `well()` is computed twice a tick; `var ease` shadows the
+  built-in.
+- Belts from afar: a slab is 2 to 3 px at 2,600 km, so a belt reads as a dotted arc; the slab fade
+  (22 to 26 km) was not rescaled to 8 to 16 km slabs and may pop at the hand-over. A cluster's
+  lift of group chance is masked in belt cores (the chance is already 1.0). `problems()` does not
+  check moon limits against each other, so adjacent moons can block each other's warp line (§3.3
+  allows it). The moon and long-warp scene tests fall back to `pass_test` if a seed has no moon or
+  no 5,000 km line.
+- Render probes: `world_moon_in_the_sky` shows no moon (it needs a lit angle). The SYSTEM and
+  500 km map renders from the start inside a cluster show a huge rock and "TOO CLOSE TO WARP"; the
+  SYSTEM page wants the owner's eye. `computer_render.gd` ran with saving on before this branch
+  fixed it, so it may have rewritten the owner's save.
+- Missing tests: a mid-stream no-hole/no-overlap check, a seam test in `test_cube_sphere`, a skirt
+  geometry test, `set_warp` freezing proxies, a far mesh for a cratered world or the star.
+- Housekeeping: `AsteroidStream.VIEW_FAR` and `BodyProxy.FADE_MARGIN` are unused; one full run
+  failed `test_save_scene` because the real save's mtime changed mid-run (something else was
+  writing it); subagent commits carry `Co-Authored-By: Claude Sonnet 5.5`, not the plan's Opus 5.5
+  line.
