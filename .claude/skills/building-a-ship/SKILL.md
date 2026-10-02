@@ -93,18 +93,22 @@ Do these in order. Each one names the check that proves it.
    Pin all of this in a test (`reference.md` has one). The starter's numbers live only in its
    comments, so nothing would catch it drifting.
 7. **Wire the scene:**
-   - `Ship.set_grid(grid)` or `load_blueprint(bp)`;
-   - a unique `interior_slot` per ship in a scene;
-   - the `PilotSeat` transform from `InteriorDressing.fixture_frame(layout, seat)`;
-   - the avatar spawn from `InteriorBuilder.floor_y(cell)`;
-   - a `PilotControls` node beside the ship's `CameraDirector` (paths to its `FlightComputer`,
-     `CameraDirector`, `Exterior` and `Interior`), and the HUD's vehicle set to that node while
-     seated. It adds the stick and pointer to the flight computer's telemetry. `Ship` makes the
-     `RcsShow` puffs and sounds itself;
-   - `Ship` makes its own `ShipLights` and rebinds it after every rebuild; **the scene sets
-     `PilotControls.lights`** (`_pilot.lights = _ship.lights`, as `flight_test.gd` does in
-     `_wire_hud`), or L and K do nothing and the HUD shows no lights. The bridge's lights panel
-     comes from the interior by itself, on a shoulder's wall;
+   - **every ship goes through `Fleet`** (`docs/superpowers/specs/2026-10-02-many-ships-design.md`):
+     the starter is `/Ship`, an instance of `scenes/ship.tscn`; any other is
+     `fleet.spawn(grid, place)`, which gives it an `interior_slot` and a name never reused
+     (`Ship2`, `Ship3`...). `ship.tscn` holds everything one ship needs to be flown (seat,
+     `FlightComputer`, `PilotControls`, `MotionCoupling`, canopy view), and `Ship` places its own
+     `PilotSeat` from `InteriorDressing.fixture_frame` after every rebuild. The flight scene's
+     `_wire_ship` hands each ship the game's one `CameraDirector` (`seat.director`,
+     `pilot.bind_director`), `pilot.lights` (or L and K do nothing), its warp, its sensors'
+     sources and its crew's ledger. `Ship` makes the `RcsShow` puffs, `ShipLights` and the
+     bridge's lights panel itself;
+   - **every ship is usable** (the owner's rule, 2026-10-02): you can board it (F8 to the nearest
+     other helm, or any ship's airlock from a spacewalk), fly it, and it saves. Only the ship you
+     are aboard (`aboard`) draws its hull on `OWN_HULL_LAYER` (`Ship.set_own`). The probe's
+     `fleet` line and `test/probes/fleet_play.gd` prove it;
+   - the avatar's starting spot from `InteriorBuilder.floor_y(cell)` (the flight scene's
+     `_deck_spot`);
    - anything outside the hull goes in `Universe.EXTERIOR_SPACE` (CLAUDE.md);
    - **a ship's state round-trips through the save** (`docs/superpowers/specs/
      2026-09-26-saving-design.md`). A block with state of its own (a fixture, a store, a door that
@@ -157,7 +161,8 @@ Do these in order. Each one names the check that proves it.
    stern starboard), the profile, above and below, fill-lit to judge the shape and **dark with the floods, the forward
    lights and both on** to judge the lights; and the ship **by a big rock's night side**, nose on
    with the seat's view and belly down over it. The worst view is seated by the rock with both
-   groups on; the starter holds 143–150 fps there. **Damage** (anything touching damage, its
+   groups on; the starter held 143–150 fps there on 2026-09-29, and 130 on 2026-10-02 (`main`
+   and `many-ships` alike, the same box), with or without a second ship 300 m off. **Damage** (anything touching damage, its
    looks or the cabin's shell): render `test/probes/damage_review.gd` before merging. It shows
    the hull intact and after a heavy port-bow hit (fill-lit; intact, scorched, charred and
    knocked off in one view), and the cabin at eye height after it (the helm, the corridor, a
@@ -246,6 +251,15 @@ thrust.
 | A reach test with the eye where the brief said | The lights panel is on the shoulder's front wall, about 3.1 m from the cell behind, past the Interactor's 2.5 m; the test failed | Stand the test's eye in the shoulder's own cell (1.3 m from the panel) and remember the desk is 0.4 m deep |
 | Running a test or the probe from the main checkout | `run_tests.ps1` resolves from the current directory, so a shell that started in another tree ran that tree's code and reported a pass | Check the directory before every command when working in a worktree |
 | A new `class_name` without `--import` and its `.uid` | Tests fail to find the class, and the generated `.uid` is not committed | Run `--import`, then commit the `.uid` files (the repo tracks them) |
+| Every hull on `OWN_HULL_LAYER` | Found while designing many ships: the canopy and every window leave that layer out, so a second ship would have been invisible from your seat | `Ship.set_own`: only the ship you are aboard draws there; `board()` moves it and lets every other ship go |
+| Each `PilotControls` listening to the one director | Sitting in any seat would have handed every ship the stick | `bind_director`; controls take the stick only when `director.seat_ship()` is their ship |
+| An airlock that let in only its own suit (`avatar.hull == hull`) | No way to board another ship from a spacewalk | Any suit; `Ship.airlock_crossed` boards that ship |
+| A canopy camera left where nobody looks through it | A second ship's canopy camera sat at the world's origin, then (first fix) at the hull's origin, where the velocity marker aims at rest: `unproject_position` hit depth 0 the frame you boarded | Unused, `CanopyPortal` rests the camera at the helm's eye on the hull |
+| `board()` letting go only of the last ship aboard | A loaded game sets `aboard` before its first board, so the starter stayed own beside the ship you were in | `board()` makes every other ship not own |
+| A `ViewportTexture` path for a scene instanced many times | Fragile inside an instanced scene | `Ship._make_canopy_material()` from `Canopy.get_texture()`, one per ship |
+| Naming a ship anew on load | The droid's ledger record is named for its ship, so its health would be lost or given to another | Names never change and are never reused; `Fleet.next_number` is saved |
+| Standing up in the frame you let go of a key | `clear_pilot_input` latches the burn on purpose, so a scripted run kept reversing at 4.8 m/s² after standing | In a probe or test, let a process frame or two pass between releasing a key and standing |
+| A GUT file that will not parse | GUT skips it, says nothing failed and exits 0 | Check the run's `Tests` count is there, not only the exit code |
 
 ## Not built yet (plan for it; don't assume it works)
 
@@ -275,5 +289,10 @@ thrust.
   new game gets the reshaped one.
 - **Dust kicked up by the floods** near a surface, and a rendered low-power frame of the beams
   (their dimming is tested by property only).
+- **Docking** (two hulls held airlock to airlock), **ships flown by NPCs**, and a ship that moves
+  while asleep (one coasting when it falls asleep is found where it fell asleep).
+- **A way to spawn a chosen ship in play** (a debug key, a library of blueprints in
+  `data/ships/`): project 2 of the ship-designer plan. Until then a second ship comes only from
+  code (`fleet.spawn`), as the probes do.
 - **The shipyard** (blueprints are built in code for now). Blueprints save with
   `ShipBlueprint.from_grid(grid, name)`, sorted and diffable.

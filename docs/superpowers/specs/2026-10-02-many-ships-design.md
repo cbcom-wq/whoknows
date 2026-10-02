@@ -1,10 +1,12 @@
 # Many ships — every ship can be boarded, flown and saved
 
 **Date:** 2026-10-02
-**Status:** Designed with the owner on 2026-10-02. Not built.
+**Status:** Designed with the owner on 2026-10-02. **Built** on `many-ships` (2026-10-02); §12 is
+what was built. The owner has the renders; they have not yet flown it themselves.
 **Project 1 of 3** toward a ship-designer agent (§1.2). Projects 2 (a ship library and the test
 spawn) and 3 (the agent) get their own specs once this is built.
-**Depends on:** `main` at `7e8c281` (world scale merged)
+**Depends on:** `main` at `269f106` (world scale and health and damage merged; the design was
+drafted against `7e8c281`, and nothing between touched it)
 **Amends:** the saving spec (`2026-09-26-saving-design.md`) §3 and §6 (one ship becomes many);
 the airlock spec (`2026-09-24-airlock-design.md`) §7 (any ship's airlock lets a suit in); the
 cockpit pod spec's seat wiring
@@ -362,3 +364,36 @@ say-so at the end.
 - **The ship library, the debug spawn key, the catalog test:** project 2.
 - **The designer agent and design skill:** project 3.
 - **Ships flown by NPCs**, and a ship that moves while asleep.
+
+## 12. What was built (2026-10-02)
+
+Built on `many-ships` in eight tasks (`docs/superpowers/plans/2026-10-02-many-ships.md`), as
+designed, except:
+
+- **The canopy material is made in code** (`Ship._make_canopy_material`, from
+  `Canopy.get_texture()`), not a `resource_local_to_scene` `ViewportTexture` in `ship.tscn`
+  (§3.1): a `ViewportTexture`'s path inside an instanced scene is fragile, and the code version is
+  checked directly (`test_ship_scene.gd`).
+- **A canopy camera nobody looks through rests at the helm's eye on the hull**
+  (`CanopyPortal.sync`). Found building §4.1: a ship you had never been in kept its canopy camera
+  at the world's origin, and the cockpit's velocity marker projected through it at depth 0 the
+  frame you boarded (an engine error). A first fix at the hull's origin was wrong too: the marker
+  aims at the hull's origin at rest.
+- **`board()` lets go of every other ship**, not only the last one aboard (§4.1): a loaded game
+  sets `aboard` before it first boards, so the starter stayed own beside the ship you were in.
+- **Beyond §5.1:** `Fleet.awake()`, `max_ships` (the cap, settable for tests), and `launch` on
+  `spawn` (a saved ship's launch layout must be set before its grid).
+- **`SuitTie` checks at 4 Hz in its own `_physics_process`**; `suit_tie.check()` runs it now.
+- **Proof** (§8.2), on the owner's box at 1280 × 720:
+  - seated 60 m off a rock's night side with both light groups on: **130 fps with one ship and
+    130 with a second 300 m off**. `main` gave the same 130 that day; the 143–150 in the skill
+    was from 2026-09-29;
+  - the probe prints `fleet   2 ships, aboard Ship2, own layer ok, asleep 0`, `board   F8 ok`, and
+    the second ship flying while the starter stays put;
+  - `test/probes/fleet_play.gd` plays it in real time: F8 to the second ship's helm, a full cycle
+    out of its airlock, across the gap with the suit switching to the starter, a full cycle in
+    through the starter's airlock, and the starter's helm and a burn. All 16 checks pass.
+- **Not done:** the owner flying it by hand, which needs a way to spawn a second ship in play
+  (project 2's debug spawn key). Until then a second ship comes only from code.
+- **The save file is shared by every checkout** (`user://`): playing this branch upgrades it to
+  format 2, which `main` (format 1) then refuses and locks against autosaves.
