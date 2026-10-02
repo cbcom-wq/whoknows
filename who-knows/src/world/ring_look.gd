@@ -7,10 +7,11 @@ extends MultiMeshInstance3D
 ## dithers out as the ring's real rocks fade in, by the material's built-in
 ## distance fade: no new shader, and nothing pops.
 
-## Slabs in a ring, and their size: across, and thick.
+## Slabs in a ring, and their size: across, and thick. A ring is 10-30 km
+## wide at the world scale (spec §3.5); tuned at the renders.
 const SLABS := 128
-const SLAB_ACROSS := Vector2(150.0, 300.0)
-const SLAB_THICK := 30.0
+const SLAB_ACROSS := Vector2(1500.0, 3000.0)
+const SLAB_THICK := 60.0
 ## A slab is gone within FADE_GONE of the camera and whole beyond FADE_WHOLE:
 ## about where the ring's mid-size rocks fade in.
 const FADE_GONE := 2000.0

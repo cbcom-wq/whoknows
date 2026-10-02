@@ -14,7 +14,7 @@ func test_the_star_is_at_the_middle_of_a_layer_of_giant_cells():
 	assert_eq(s.star, s.bodies[0])
 	assert_true(s.star.point.is_equal_approx(UniversePoint.at(0, SystemRecipe.PLANE_Y, 0)))
 	assert_eq(SystemRecipe.PLANE_Y * 2, AsteroidRecipe.CELL[AsteroidRecipe.Tier.GIANT])
-	assert_between(s.star.radius, 2500.0, 4000.0)
+	assert_between(s.star.radius, 200000.0, 300000.0)
 	assert_between(s.star.star_palette, 0, SpacePalette.STARS.size() - 1)
 	assert_eq(s.name, s.star.name)
 
@@ -103,7 +103,7 @@ func test_a_planet_s_world_comes_from_its_slot():
 
 # --- warp targets, limits, clusters and debris (the warp spec §3) -------------
 
-func test_warp_limits_reach_past_each_body_s_edge_and_hold_its_moons():
+func test_warp_limits_reach_past_each_body_s_well_and_moons_lie_outside_their_planet_s():
 	for k in 200:
 		var s := SystemRecipe.from_seed(k * 7919 + 3)
 		var broken := s.problems()
@@ -111,10 +111,15 @@ func test_warp_limits_reach_past_each_body_s_edge_and_hold_its_moons():
 		for t in s.warp_targets():
 			assert_gte(t.limit, t.edge + SystemRecipe.WARP_CLEAR - 0.01, "%s" % t.id)
 		for p in s.planets():
+			assert_almost_eq(p.warp_limit, SystemRecipe._planet_limit(p), 0.01)
+			if p.ring != null:
+				assert_gte(p.warp_limit, p.ring.outer + SystemRecipe.CLEAR - 0.01, "%s holds its ring" % p.id)
 			for m in s.moons_of(p):
-				assert_lte(m.point.minus(p.point).length() + m.neighbourhood, p.warp_limit, "%s" % m.id)
+				var d := m.point.minus(p.point).length()
+				assert_gte(d - m.warp_limit, p.warp_limit + SystemRecipe.CLEAR - 0.01, "%s is clear of %s's limit" % [m.id, p.id])
+				assert_lte(d + m.neighbourhood, p.neighbourhood + 0.01, "%s stays in %s's neighbourhood" % [m.id, p.id])
 
-func test_targets_are_the_star_then_the_planets_then_the_clusters():
+func test_targets_are_the_star_the_planets_the_moons_then_the_clusters():
 	var s := SystemRecipe.from_seed(1337)
 	var targets := s.warp_targets()
 	assert_eq(targets[0].id, &"star")
@@ -125,9 +130,16 @@ func test_targets_are_the_star_then_the_planets_then_the_clusters():
 		assert_eq(targets[i + 1].id, planets[i].id)
 		assert_eq(targets[i + 1].kind, WarpTarget.Kind.PLANET)
 		assert_eq(targets[i + 1].limit, planets[i].warp_limit)
+	var moons := s.bodies.filter(func(b: SystemBody) -> bool: return b.kind == SystemBody.Kind.MOON)
+	for i in moons.size():
+		var t := targets[planets.size() + 1 + i]
+		assert_eq(t.id, moons[i].id)
+		assert_eq(t.kind, WarpTarget.Kind.MOON)
+		assert_eq(t.limit, moons[i].well_radius + SystemRecipe.WARP_CLEAR)
+	var first_cluster := 1 + planets.size() + moons.size()
 	for i in s.clusters.size():
-		assert_eq(targets[planets.size() + 1 + i], s.clusters[i])
-	assert_eq(targets.size(), 1 + planets.size() + s.clusters.size())
+		assert_eq(targets[first_cluster + i], s.clusters[i])
+	assert_eq(targets.size(), first_cluster + s.clusters.size())
 	for t in targets:
 		assert_eq(s.warp_target(t.id), t)
 		assert_eq(t.contact_id(), StringName("body:" + String(t.id)))
@@ -171,5 +183,20 @@ func test_every_planet_has_a_debris_disc_from_its_well_to_inside_its_limit():
 		assert_lte(d.normal.angle_to(Vector3.UP), SystemRecipe.RING_TILT + 0.001)
 
 func test_the_versions_moved_on():
-	assert_eq(SystemRecipe.VERSION, 2)
-	assert_eq(AsteroidRecipe.VERSION, 3)
+	assert_eq(SystemRecipe.VERSION, 3)
+	assert_eq(AsteroidRecipe.VERSION, 4)
+
+# --- the world scale spec §3 ----------------------------------------------------
+
+func test_the_system_is_thousands_of_kilometres_across():
+	var s := SystemRecipe.from_seed(1337)
+	assert_between(s.slots[0], SystemRecipe.FIRST_SLOT * 0.9, SystemRecipe.FIRST_SLOT * 1.1)
+	assert_eq(SystemRecipe.FIRST_SLOT, 1500000.0)
+	assert_eq(SystemRecipe.LAST_SLOT, 7500000.0)
+	for p in s.planets():
+		assert_between(p.radius, 15000.0, 60000.0)
+		assert_eq(p.well_radius, p.radius * 2.0)
+	for b in s.belts:
+		assert_between(b.half_width, SystemRecipe.BELT_MIN_HALF_WIDTH, SystemRecipe.BELT_HALF_WIDTH.y)
+		assert_lte(b.half_thickness, 2000.0, "inside one layer of giant cells")
+	gut.p(s.describe())

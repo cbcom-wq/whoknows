@@ -1,7 +1,7 @@
 class_name BodyMarker
 extends WorldMarker
 
-## Every warp target in view, bracketed and named with its distance
+## Every warp target in view, moons included (the world scale spec §3.3), bracketed and named with its distance
 ## (docs/superpowers/specs/2026-09-28-warp-design.md §7.3): KORVA-7 · 82 KM,
 ## so you can see where things are and how far. Dim, so it never competes
 ## with the course. The charted one is the course's, drawn by CourseMarker,
@@ -28,7 +28,7 @@ func render(telemetry: VehicleTelemetry) -> void:
 		if not source is BodyContacts:
 			continue
 		for c: Contact in (source as BodyContacts).contacts(focus, BodyContacts.RANGE, 0.0):
-			if c.kind == BodyContacts.MOON or c.id == sensors.course:
+			if c.id == sensors.course:
 				continue
 			# Inside a cluster's reach you are there: nothing to point at.
 			var metres := c.point.minus(focus).length()

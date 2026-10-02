@@ -119,7 +119,9 @@ func _run() -> void:
 		var out := m.point.minus(p.point).normalized()
 		var across := out.cross(Vector3.UP).normalized()
 		var sun := _system.star.point.minus(m.point).normalized()
-		var eye := m.point.plus(out * 4000.0 + sun * 5000.0 + across * 1500.0)
+		# Offsets in the moon's radii: moons are 4 to 15 km across now, and a fixed
+		# few km put the eye inside one.
+		var eye := m.point.plus(out * (m.radius * 2.7) + sun * (m.radius * 3.3) + across * m.radius)
 		var mid := p.point.plus(m.point.minus(p.point) * 0.7)
 		_put(eye, mid)
 		await _shot("moon_seat")

@@ -473,9 +473,9 @@ blocks a little; 5 m/s knocks one off and damages 3; 8 m/s knocks 4 off. Not cri
 | Spool | 10 s; aborts past 10° off the line | `WarpDrive.SPOOL`, `ABORT_ANGLE` |
 | Lined up | within 5° | `WarpPlan.ALIGN` |
 | Shortest warp | 5 km of travel | `WarpPlan.MIN_TRAVEL` |
-| Cost | 40 QE + 4 QE per km, rounded up | `WarpPlan.WARP_BASE`, `WARP_PER_KM` |
-| Travel | 18 s + 1 s per 5 km; 4 s ramps; 120 m/s at both ends | `WarpProfile.BASE_TIME`, `PACE`, `RAMP`, `EDGE_SPEED` |
-| Warp limit | a body's well (a cluster's 4 km) + 14 km | `SystemRecipe.WARP_CLEAR`, `CLUSTER_RADIUS` |
+| Cost | 40 QE + 1 QE per 12.5 km, rounded up | `WarpPlan.WARP_BASE`, `WARP_M_PER_QE` |
+| Travel | 18 s + 1 s per 350 km; 4 s ramps; 120 m/s at both ends | `WarpProfile.BASE_TIME`, `PACE`, `RAMP`, `EDGE_SPEED` |
+| Warp limit | a body's well (a cluster's 4 km) + 14 km; a planet's also past its ring; moons are targets too | `SystemRecipe.WARP_CLEAR`, `CLUSTER_RADIUS` |
 | Arrival clear of rocks | 300 m of mid and big rocks, 30 m of rubble | `WarpPlan.ROCK_CLEAR` |
 
 | API | Does |
@@ -489,6 +489,23 @@ blocks a little; 5 m/s knocks one off and damages 3; 8 m/s knocks 4 off. Not cri
 
 While travelling, `FlightComputer` ignores the pilot and reports the warp's velocity; the hull is
 frozen kinematic with layer and mask 0; `QuantumPlant` runs the cores at `&"warp"`.
+
+## Flying near a world (`docs/superpowers/specs/2026-09-30-world-scale-design.md` §5.5, §6)
+
+| What | Value | Where |
+|---|---|---|
+| Speed limit in a well, assist on | 120 m/s + 1 m/s per 40 m of altitude, at most 1,500 | `FlightComputer.speed_limit`, `LIMIT_PER_M`, `LIMIT_CAP` |
+| Easing at the well's edge | back to 120 m/s over the top tenth | `FlightComputer.LIMIT_EASE` |
+| The limit now | what the assist clamps to and the HUD shows | `FlightComputer.current_limit`, `limit_raised` |
+| Where you are | the well and the altitude over its ground | `Whereabouts.well()`, `altitude()` |
+| Solid ground round the hull | 64 m + 1 s × speed, at most 160 m | `TerrainCollider` |
+| The floor | an anchor > 0.5 m under the ground is lifted out; `WorldSurface.floor_fired` counts it | `WorldSurface.FLOOR_SLACK` |
+| Far plane | `BodyProxy.PROXY_AT` + the star's largest radius + 50 km = 700 km | `BodyProxy.VIEW_FAR` |
+| Bodies shrunk onto a shell | beyond 350 km | `BodyProxy.PROXY_AT` |
+| The far mesh hands over to the quadtree surface | within 10 radii, or 300 km if less (1.1× hysteresis) | `BodyProxy.SURFACE_RADII`, `SURFACE_MOST`, `SURFACE_HYSTERESIS` |
+
+The hull is a space anchor (`AsteroidStream.SPACE_ANCHOR`), so a world's surface keeps ground
+solid under it with no wiring. A ghosted hull (mask 0, at warp) is never lifted.
 
 ## Commands
 

@@ -21,6 +21,8 @@ var _cam: Camera3D
 func _initialize() -> void:
 	_out = OS.get_cmdline_user_args()[0]
 	var scene: Node = load("res://scenes/flight_test.tscn").instantiate()
+	# The starter, never the owner's saved ship (and never their save).
+	scene.save_enabled = false
 	root.add_child(scene)
 	_run.call_deferred(scene)
 

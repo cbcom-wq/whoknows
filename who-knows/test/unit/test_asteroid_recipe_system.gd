@@ -35,9 +35,13 @@ func _in_ring(ring: AsteroidShapes.Ring, angle: float) -> UniversePoint:
 func test_big_rocks_lie_only_in_belts():
 	var shapes := _recipe.shapes
 	var seen := 0
+	# Round the first belt's +x side: the system's belts are a thousand
+	# kilometres out.
+	var belt := _system.belts[0]
+	var middle := AsteroidRecipe.cell_of(T.GIANT, belt.centre.plus(Vector3(belt.radius, 0.0, 0.0)))
 	for x in range(-32, 33):
 		for z in range(-32, 33, 4):
-			var cell := Vector3i(x, 0, z)
+			var cell := middle + Vector3i(x, 0, z)
 			for rock in _recipe.cell_rocks(T.GIANT, cell):
 				seen += 1
 				var at := AsteroidRecipe.cell_corner(T.GIANT, cell).plus(rock.local)
@@ -100,18 +104,46 @@ func test_rings_are_crowded_with_rubble_and_never_giants():
 	assert_gt(float(inside), total * 0.8)
 
 func test_no_rock_lies_inside_a_body():
+	# Rocks crowd a planet's debris disc from its well outwards and its ring
+	# from 1.6 radii: so look there, round each disc's plane from just above the
+	# ground to past the well's edge and across the ring, and at the cells beside
+	# each sample.
 	var found: Array = _ringed()
 	var sys: SystemRecipe = found[0]
 	var recipe := AsteroidRecipe.new(sys.seed, null, sys.asteroid_shapes())
-	for b in sys.bodies:
-		for tier in [T.RUBBLE, T.MID]:
-			for k in 6:
-				var dir := Vector3(sin(k * 1.7), cos(k * 2.3), sin(k * 0.9)).normalized()
-				var cell := AsteroidRecipe.cell_of(tier, b.point.plus(dir * b.radius))
-				for rock in recipe.cell_rocks(tier, cell):
-					var p := AsteroidRecipe.cell_corner(tier, cell).plus(rock.local)
-					assert_gt(p.minus(b.point).length(), b.radius * 1.1 + rock.radius - 0.01,
-						"a rock inside %s" % b.id)
+	var examined := 0
+	var inside := 0
+	var planets := sys.planets()
+	for k in planets.size():
+		var planet := planets[k]
+		var disc := sys.debris[k]
+		var across := disc.normal.cross(Vector3.RIGHT)
+		if across.length() < 0.1:
+			across = disc.normal.cross(Vector3.FORWARD)
+		across = across.normalized()
+		var sideways := disc.normal.cross(across)
+		var reaches := [planet.radius * 1.05, planet.radius * 1.3, planet.well_radius, planet.well_radius * 1.05,
+			planet.well_radius * 1.2]
+		if planet.ring != null:
+			reaches.append_array([planet.ring.inner, (planet.ring.inner + planet.ring.outer) * 0.5])
+		for reach: float in reaches:
+			for j in 16:
+				var angle := TAU * j / 16.0
+				var at := planet.point.plus((across * cos(angle) + sideways * sin(angle)) * reach)
+				for tier in [T.RUBBLE, T.MID]:
+					var centre := AsteroidRecipe.cell_of(tier, at)
+					for dx in range(-1, 2):
+						for dz in range(-1, 2):
+							var cell := centre + Vector3i(dx, 0, dz)
+							for rock in recipe.cell_rocks(tier, cell):
+								var p := AsteroidRecipe.cell_corner(tier, cell).plus(rock.local)
+								for b in sys.bodies:
+									examined += 1
+									if p.minus(b.point).length() <= b.radius * 1.1 + rock.radius - 0.01:
+										inside += 1
+	gut.p("%d rock-and-body pairs examined" % examined)
+	assert_gt(examined, 0, "no rock near any body to examine")
+	assert_eq(inside, 0, "rocks inside a body")
 
 func test_the_flight_starts_by_the_first_belt_s_first_group():
 	var entry := _system.entry()
@@ -168,19 +200,21 @@ func test_no_debris_lies_in_a_well():
 				assert_eq(d.profile(b.point), 0.0, "%s's well, in %s's debris" % [b.id, p.id])
 
 func test_a_cluster_lifts_the_chance_of_groups_round_it():
-	var c := _system.clusters[1] if _system.clusters.size() > 1 else _system.clusters[0]
 	var lifted := AsteroidRecipe.new(_system.seed, null, _system.asteroid_shapes())
 	var flat := AsteroidRecipe.new(_system.seed, null, _system.asteroid_shapes(false))
 	var more := 0
-	for dx in range(-1, 2):
-		for dz in range(-1, 2):
-			var cell := AsteroidRecipe.cell_of(T.GIANT, c.point) + Vector3i(dx, 0, dz)
-			var a := lifted.group_chance(cell)
-			var b := flat.group_chance(cell)
-			assert_gte(a, b - 1e-6, "a lift never lowers the chance")
-			if a > b + 0.01:
-				more += 1
-	assert_gt(more, 0, "the cluster at %s lifted nothing" % c.id)
+	# A belt this wide is often at certainty already, where a lift has nothing
+	# to add: so look at every cluster, not one.
+	for c in _system.clusters:
+		for dx in range(-1, 2):
+			for dz in range(-1, 2):
+				var cell := AsteroidRecipe.cell_of(T.GIANT, c.point) + Vector3i(dx, 0, dz)
+				var a := lifted.group_chance(cell)
+				var b := flat.group_chance(cell)
+				assert_gte(a, b - 1e-6, "a lift never lowers the chance")
+				if a > b + 0.01:
+					more += 1
+	assert_gt(more, 0, "no cluster lifted anything")
 
 func test_the_start_ignores_the_clusters_lift():
 	var flat := AsteroidRecipe.new(_system.seed, null, _system.asteroid_shapes(false))

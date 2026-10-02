@@ -9,14 +9,15 @@ extends MultiMeshInstance3D
 ##
 ## The floating origin (CLAUDE.md): a member of Universe.EXTERIOR_SPACE whose
 ## parent never moves, its slabs placed from their UniversePoints. They are
-## placed again only once the focus has moved REWORK_AFTER: from 28 km, that
+## placed again only once the focus has moved REWORK_AFTER: from 350 km, that
 ## is a fraction of a pixel. Between times the shift moves the node with
 ## everything else.
 
-const SLABS := 160
-## A slab's size: across, and thick. Each stands for a few kilometres of belt.
-const SLAB_ACROSS := Vector2(1500.0, 3000.0)
-const SLAB_THICK := 500.0
+const SLABS := 320
+## A slab's size: across, and thick. Each stands for tens of kilometres of a
+## belt 40-80 km wide (the world scale spec §3.5); tuned at the renders.
+const SLAB_ACROSS := Vector2(8000.0, 16000.0)
+const SLAB_THICK := 1500.0
 ## Slabs spread this far through the belt's cross-section, as a share of it.
 const SPREAD := 0.7
 ## A slab is gone within FADE_GONE of the camera and whole beyond FADE_WHOLE:

@@ -23,7 +23,7 @@ func _ids(places: Array) -> Array:
 	return places.map(func(p: Whereabouts.Place) -> StringName: return p.id)
 
 func test_open_space_is_just_the_system():
-	var far := UniversePoint.at(0, SystemRecipe.PLANE_Y + 90000, 0)
+	var far := UniversePoint.at(0, SystemRecipe.PLANE_Y + int(_system.star.neighbourhood) + 100000, 0)
 	var places := Whereabouts.places_at(_system, far)
 	assert_eq(_ids(places), [&"system"])
 	assert_eq(places[0].name, _system.name)
@@ -112,7 +112,7 @@ func test_warp_clear_the_limit_signals_and_the_line_unchanged():
 	assert_false(w.text().contains("limit"), "limits stay off the line")
 	var left := []
 	w.limit_left.connect(func(q: Whereabouts.Place) -> void: left.append(q.id))
-	universe.origin = s.star.point.plus(Vector3.UP * 100000.0)
+	universe.origin = s.star.point.plus(Vector3.UP * (s.star.neighbourhood + 100000.0))
 	w.look()
 	assert_true(w.warp_clear())
 	assert_true(left.has(StringName("limit_%s" % p.id)))
