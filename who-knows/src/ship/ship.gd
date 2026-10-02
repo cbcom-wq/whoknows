@@ -46,6 +46,9 @@ const WAKE_ROOM := &"bunk_room"
 const HULL_LIVERY_MATERIAL: ShaderMaterial = preload("res://data/materials/hull_livery.tres")
 ## The window glass's shader; each ship makes its own material from it.
 const CANOPY_SHADER: Shader = preload("res://data/materials/interior/canopy_window.gdshader")
+## Marks a hull piece made for the own layer alone, so set_own can move it
+## back.
+const OWN_ONLY := &"own_only"
 
 @export var interior_slot: int = 0
 ## Where a spacewalker goes (airlock spec §7.4): the scene's root for things in
@@ -87,6 +90,12 @@ var lights: ShipLights
 ## Ship/Warp. The flight scene binds it to the system; the ship only builds it
 ## and saves its chart.
 var warp: WarpDrive
+## True for the ship you are aboard (many ships spec §4.2): the hull's own
+## pieces are drawn on ExteriorBuilder.OWN_HULL_LAYER, which your canopy and
+## windows leave out, and the interior shows. Any other ship draws them on
+## layer 1, so you see it through your windows, and hides its interior, which
+## nobody can see from outside. A ship is your own until told otherwise.
+var own := true
 
 ## Seconds since a rock last struck the hull.
 var since_struck := INF
@@ -539,6 +548,22 @@ func interior_slot_origin() -> Vector3:
 	# the same separation independently.
 	return INTERIOR_WORLD_BASE + Vector3(interior_slot * SLOT_SPACING, 0.0, 0.0)
 
+func set_own(on: bool) -> void:
+	own = on
+	_apply_own()
+
+## Every piece the builders made for the own layer alone goes on the layer
+## `own` says; pieces on both layers stay on both. After every rebuild too: the
+## builders always make the own layer.
+func _apply_own() -> void:
+	interior.visible = own
+	for node in exterior.find_children("*", "GeometryInstance3D", true, false):
+		var g := node as GeometryInstance3D
+		if g.layers == ExteriorBuilder.OWN_HULL_LAYER:
+			g.set_meta(OWN_ONLY, true)
+		if g.has_meta(OWN_ONLY):
+			g.layers = ExteriorBuilder.OWN_HULL_LAYER if own else 1
+
 func load_blueprint(bp: ShipBlueprint) -> void:
 	set_grid(bp.to_grid())
 
@@ -613,6 +638,7 @@ func _rebuild_everything(hull := true) -> void:
 		damage_show.sync(grid, catalog)
 	_set_anchor_radius()
 	_bind_crew()
+	_apply_own()
 
 ## Keeps each bridge computer's page, range and selection across a rebuild,
 ## which frees the dressing and every table in it (bridge computer spec §10).
