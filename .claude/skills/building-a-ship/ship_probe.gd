@@ -9,14 +9,19 @@ extends SceneTree
 #     --script <abs path>/ship_probe.gd -- <abs out dir> [scene path]
 #
 # The scene defaults to res://scenes/flight_test.tscn. It must hold a Ship at
-# Ship, with Interior/Avatar, Interior/PilotSeat and CameraDirector, as that
-# scene does. Writes <out>/probe_spawn.png, probe_seated.png and
+# Ship, with Interior/Avatar and Interior/PilotSeat, and a CameraDirector at
+# its root, as that scene does. Writes <out>/probe_spawn.png, probe_seated.png and
 # probe_stood.png; on a ship with a lights panel, probe_panel_off.png,
 # probe_panel_on.png and probe_panel_close.png too. On a ship with lights it
 # also writes probe_lit_{floods,forward,both}_* (the hull against the dark),
 # probe_star_bloom_{off,on}, probe_seated_lit, and, parked beside a rock's
 # night side, probe_seated_rock_{dark,lit} and probe_rock_*. Every ship gets
 # probe_hull_* (the skin, fill-lit) and prints skin, windows, lights and tint lines.
+# Then a two-ship pass (docs/superpowers/specs/2026-10-02-many-ships-design.md
+# §8.2): fps in the worst view with a second ship 300 m off,
+# probe_fleet_from_starter{,_dark}.png, F8 to its helm, probe_fleet_from_second
+# .png, a burn, standing and walking, probe_fleet_spacewalk.png, and the fleet
+# line.
 #
 # A windowed run would save and load the owner's real game
 # (docs/superpowers/specs/2026-09-26-saving-design.md §9), so the probe turns
@@ -204,6 +209,101 @@ func _panel_shots(ship: Ship, avatar: Avatar) -> void:
 	await _shot("panel_close")
 	ship.lights.toggle(ShipLights.FLOOD)
 	ship.lights.toggle(ShipLights.FORWARD)
+
+## Many ships (docs/superpowers/specs/2026-10-02-many-ships-design.md §8.2):
+## the worst view's frame rate with a second ship 300 m off; the second ship
+## from the starter's seat, sunlit and then dark with its floods on; F8 to its
+## helm and the starter from there; a 1.5 s burn, short of the starter; standing
+## and walking; a spacewalk between the two. Prints the fleet line.
+func _fleet_pass(scene: Node) -> void:
+	var fleet: Fleet = scene.get("fleet")
+	if fleet == null:
+		print("fleet   no Fleet in this scene")
+		return
+	var first: Ship = scene.get("aboard")
+	var director: CameraDirector = scene.get_node("CameraDirector")
+	var sun: DirectionalLight3D = scene.get_node("DirectionalLight3D")
+	var avatar: Avatar = scene.get_tree().get_first_node_in_group(Avatar.GROUP)
+	director.sit_now(first.seat)
+	var behind := first.exterior.global_transform * Vector3(0, 0, 300)
+	var second := fleet.spawn(scene.call("_starter_grid"), Transform3D(first.exterior.global_basis, behind))
+	if await _park_by_a_rock(scene, first, 60.0):
+		second.exterior.global_position = first.exterior.global_transform * Vector3(0, 0, 300)
+		_lights(first, true, true)
+		print("fps     %.0f seated by a rock, both groups on, a second ship 300 m off" % await _fps(2.0))
+		_lights(first, false, false)
+	# Out in the open, the second ship 60 m ahead and a little to port, nose to
+	# the starter. Parked by the rock the starter looks toward the sun, so the
+	# other ship's near side is unlit: a fill light riding with the viewer shows
+	# its shape, as _hull_shots' does.
+	first.exterior.global_position += first.exterior.global_basis.z * 2000.0
+	await _process_frames(60)
+	var hull := first.exterior.global_transform
+	second.exterior.global_transform = Transform3D(Basis(hull.basis.y, PI) * hull.basis, hull * Vector3(-5, 1, -60))
+	second.exterior.linear_velocity = Vector3.ZERO
+	second.exterior.angular_velocity = Vector3.ZERO
+	var fill := DirectionalLight3D.new()
+	fill.light_cull_mask = 1 | ExteriorBuilder.OWN_HULL_LAYER
+	fill.light_energy = 1.4
+	fill.shadow_enabled = false
+	scene.add_child(fill)
+	fill.global_basis = hull.basis * Basis.from_euler(Vector3(deg_to_rad(-22), deg_to_rad(28), 0))
+	await _shot("fleet_from_starter")
+	fill.visible = false
+	sun.visible = false
+	_lights(second, true, true)
+	await _shot("fleet_from_starter_dark")
+	_lights(second, false, false)
+	sun.visible = true
+	print("board   F8 %s" % ("ok" if scene.call("board_nearest") else "REFUSED"))
+	await _process_frames(10)
+	fill.global_basis = second.exterior.global_basis * Basis.from_euler(Vector3(deg_to_rad(-22), deg_to_rad(28), 0))
+	fill.visible = true
+	await _shot("fleet_from_second")
+	fill.visible = false
+	# Backing away, so it never reaches the starter 60 m ahead.
+	var first_at := first.exterior.global_position
+	Input.action_press("move_back")
+	for i in 90:
+		await physics_frame
+	Input.action_release("move_back")
+	print("fly     second ship %.1f m/s after 1.5 s in reverse; the starter moved %.2f m" % [
+		second.exterior.linear_velocity.length(), first.exterior.global_position.distance_to(first_at)])
+	# Let the controls see the key go before standing: a burn held as you
+	# stand latches on (FlightComputer.clear_pilot_input), by design.
+	await _process_frames(2)
+	director.stand()
+	await director.transition_finished
+	var from := avatar.global_position
+	Input.action_press("move_back")
+	for i in 60:
+		await physics_frame
+	Input.action_release("move_back")
+	var walked := from.distance_to(avatar.global_position)
+	print("walked  %.2f m aboard %s%s" % [walked, second.name, "" if walked > 1.0 else "  <-- STUCK"])
+	print("motion  second ship %.1f m/s, turning %.2f rad/s" % [second.exterior.linear_velocity.length(),
+		second.exterior.angular_velocity.length()])
+	# Off to the side of the line between them, so both ships are in view.
+	var mid := (first.exterior.global_position + second.exterior.global_position) * 0.5
+	var at := mid + first.exterior.global_basis.x * 45.0 + first.exterior.global_basis.y * 8.0
+	var look := Basis.looking_at(mid - at, first.exterior.global_basis.y)
+	avatar.enter_suit(scene.get_node("Outside"), Transform3D(look, at), second.exterior.linear_velocity, second.exterior)
+	fill.global_basis = look * Basis.from_euler(Vector3(deg_to_rad(-22), deg_to_rad(28), 0))
+	fill.visible = true
+	await _process_frames(10)
+	await _shot("fleet_spacewalk")
+	fill.queue_free()
+	var aboard: Ship = scene.get("aboard")
+	var own_ok := true
+	for s in fleet.ships():
+		var own_pieces := 0
+		for g in s.exterior.find_children("*", "GeometryInstance3D", true, false):
+			if (g as GeometryInstance3D).layers == ExteriorBuilder.OWN_HULL_LAYER:
+				own_pieces += 1
+		own_ok = own_ok and ((own_pieces > 0) == (s == aboard))
+	var asleep := fleet.ships().filter(func(s: Ship) -> bool: return fleet.sleeping(s)).size()
+	print("fleet   %d ships, aboard %s, own layer %s, asleep %d" % [fleet.ships().size(), aboard.name,
+		"ok" if own_ok else "WRONG", asleep])
 
 func _run(scene: Node) -> void:
 	# A process frame or two first: the canopy camera is placed on the first.
@@ -403,4 +503,5 @@ func _run(scene: Node) -> void:
 	var walked := from.distance_to(avatar.global_position)
 	print("walked  %.2f m in 1 s after standing%s" % [walked, "" if walked > 1.0 else "  <-- STUCK"])
 	await _panel_shots(ship, avatar)
+	await _fleet_pass(scene)
 	quit()
