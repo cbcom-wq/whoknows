@@ -60,9 +60,12 @@ func _refresh() -> void:
 
 func test_it_opens_at_ten_kilometres_and_range_cycles():
 	assert_eq(_page.title(), "MAP · 10 KM")
-	assert_eq(_page.prompt(&"range", _ctx), "Range 30 km")
+	assert_eq(_page.prompt(&"range", _ctx), "Range 50 km")
 	_page.press(&"range", _ctx)
-	assert_eq(_page.title(), "MAP · 30 KM")
+	assert_eq(_page.title(), "MAP · 50 KM")
+	assert_eq(_page.prompt(&"range", _ctx), "Range 500 km")
+	_page.press(&"range", _ctx)
+	assert_eq(_page.title(), "MAP · 500 KM")
 	assert_eq(_page.prompt(&"range", _ctx), "Range system")
 	_page.press(&"range", _ctx)
 	assert_eq(_page.title(), "MAP · SYSTEM")
@@ -88,8 +91,10 @@ func test_after_a_change_of_range_the_course_is_selected_if_it_is_there():
 	_add(&"rock:far", Contact.EXACT, Vector3(0, 0, -8000), 300.0)
 	_refresh()
 	_sensors.set_course(&"rock:far")
-	_page.press(&"range", _ctx)   # 30 km
+	_page.press(&"range", _ctx)   # 50 km
 	assert_eq(_page.selected, &"rock:far")
+	_page.press(&"range", _ctx)   # 500 km
+	_page.press(&"range", _ctx)   # system
 	_page.press(&"range", _ctx)   # 2 km: the course is off this range
 	assert_eq(_page.selected, &"", "nothing within 2 km")
 
@@ -233,10 +238,10 @@ func test_a_shift_leaves_the_map_unchanged():
 	assert_almost_eq(_holo.mark_transform(&"ball", 0).origin, before, Vector3.ONE * 0.0001)
 	assert_almost_eq(before, Vector3(700, 100, -1600) * (HoloVolume.RADIUS / 10000.0), Vector3.ONE * 0.0001)
 
-## At 30 km the marks are placed twice a second and turned with the ship in
+## At 50 km the marks are placed twice a second and turned with the ship in
 ## between: a turn of the hull shows at once, where a fresh placement would
 ## put it.
-func test_between_placements_at_30_km_the_marks_turn_with_the_ship():
+func test_between_placements_at_50_km_the_marks_turn_with_the_ship():
 	_add(&"rock:a", Contact.EXACT, Vector3(0, 0, -20000), 300.0)
 	_page.range_index = 2
 	_refresh()
@@ -244,14 +249,14 @@ func test_between_placements_at_30_km_the_marks_turn_with_the_ship():
 	_hull.rotation = Vector3(0, PI * 0.5, 0)   # turned to port: the rock is now off to starboard
 	_page.holo(_holo, _ctx, 0.016)
 	var shown: Vector3 = _holo.turn() * _holo.mark_transform(&"ball", 0).origin
-	assert_almost_eq(shown, Vector3(20000, 0, 0) * (HoloVolume.RADIUS / 30000.0), Vector3.ONE * 0.001)
+	assert_almost_eq(shown, Vector3(20000, 0, 0) * (HoloVolume.RADIUS / 50000.0), Vector3.ONE * 0.001)
 	_page.holo(_holo, _ctx, MapPage.PLACE_EVERY[2])
 	assert_true(_holo.turn().is_equal_approx(Basis.IDENTITY), "placed afresh")
 	assert_almost_eq(_holo.mark_transform(&"ball", 0).origin, shown, Vector3.ONE * 0.001)
 
 # --- the system range (the system skeleton spec §10) --------------------------
 
-func test_the_system_range_shows_worlds_only_and_30_km_rocks_and_worlds():
+func test_the_system_range_shows_worlds_only_and_50_km_rocks_and_worlds():
 	_add(&"rock:a", Contact.EXACT, Vector3(0, 0, -20000), 300.0)
 	_add(&"body:p1", Contact.EXACT, Vector3(0, 0, -25000), 900.0, 0, &"body")
 	_add(&"body:p2", Contact.EXACT, Vector3(0, 0, -150000), 1100.0, 0, &"body")
@@ -260,7 +265,7 @@ func test_the_system_range_shows_worlds_only_and_30_km_rocks_and_worlds():
 	_refresh()
 	var ids := _page.targets(_ctx).map(func(c: Contact) -> StringName: return c.id)
 	assert_eq(ids, [&"body:p1", &"body:p2"])
-	_page.range_index = MapPage.SYSTEM_RANGE - 1
+	_page.range_index = 2
 	_refresh()
 	ids = _page.targets(_ctx).map(func(c: Contact) -> StringName: return c.id)
 	assert_eq(ids, [&"rock:a", &"body:p1"])
@@ -281,19 +286,19 @@ func test_worlds_are_drawn_in_their_own_colour_by_class_on_the_system_range():
 	c.kind = &"body"
 	c.precision = Contact.EXACT
 	c.id = &"body:p1"
-	for r in [[150.0, &"small"], [700.0, &"medium"], [1100.0, &"large"]]:
+	for r in [[15000.0, &"small"], [35000.0, &"medium"], [50000.0, &"large"]]:
 		c.radius = r[0]
 		assert_eq(MapPage.size_class(c), r[1])
 		assert_eq(MapPage.mark_size(c, MapPage.RANGES[MapPage.SYSTEM_RANGE], 0.0), MapPage.CLASS_SIZE[r[1]])
 	c.id = &"body:star"
-	c.radius = 3000.0
+	c.radius = 250000.0
 	assert_eq(MapPage.size_class(c), &"star")
 	c.kind = &"cluster"
 	c.id = &"body:belt_0.c1"
 	assert_eq(MapPage.size_class(c), &"cluster")
 	c.kind = &"body"
 	c.id = &"body:p1"
-	c.radius = 1200.0
+	c.radius = 60000.0
 	assert_eq(MapPage.mark_size(c, 2000.0, 0.0), MapPage.BODY_MAX, "near ranges keep true size, clamped")
 
 func test_the_system_range_draws_each_belt_as_a_ring_of_ticks():
@@ -338,14 +343,14 @@ func _with_system() -> SystemRecipe:
 	_refresh()
 	return s
 
-func test_the_system_range_steps_through_warp_targets_only():
+func test_the_system_range_steps_through_warp_targets_moons_included():
 	var s := _with_system()
 	var ids := _page.targets(_ctx).map(func(c: Contact) -> StringName: return c.id)
 	for t in s.warp_targets():
 		assert_true(ids.has(t.contact_id()), "%s" % t.id)
 	for b in s.bodies:
 		if b.kind == SystemBody.Kind.MOON:
-			assert_false(ids.has(BodyContacts.id_of(b)), "moons are not targets")
+			assert_true(ids.has(BodyContacts.id_of(b)), "moons are targets at this scale")
 
 func test_the_system_range_is_centred_on_the_star():
 	var s := _with_system()
@@ -390,6 +395,28 @@ func test_the_screen_gives_size_distance_time_and_cost():
 	assert_eq(lines.size(), 3)
 	assert_true(lines[0].begins_with(planet.name + " · PLANET · "), lines[0])
 	assert_true(lines[0].ends_with(" KM ACROSS"), lines[0])
-	assert_true(lines[1].contains(" MIN FLYING"), lines[1])
+	assert_true(lines[1].contains(" FLYING"), lines[1])
 	assert_true(lines[2].begins_with("WARP ") or lines[2].begins_with("NEED ") or lines[2].begins_with("FLY")
 		or lines[2].begins_with("BLOCKED"), lines[2])
+
+func test_the_ranges_reach_a_planet_s_moons_and_the_whole_system():
+	assert_eq(MapPage.RANGES, [2000.0, 10000.0, 50000.0, 500000.0, 20000000.0] as Array[float])
+	assert_eq(MapPage.SYSTEM_RANGE, MapPage.RANGES.size() - 1)
+	assert_eq(MapPage.PLACE_EVERY.size(), MapPage.RANGES.size())
+	assert_gte(BodyContacts.RANGE, MapPage.RANGES[MapPage.SYSTEM_RANGE])
+
+func test_flying_time_reads_in_minutes_then_hours():
+	assert_eq(MapPage.flying_text(72000.0), "10 MIN FLYING")
+	assert_eq(MapPage.flying_text(10.0), "1 MIN FLYING")
+	assert_eq(MapPage.flying_text(4600000.0), "11 H FLYING")
+
+func test_a_moon_s_screen_says_moon_and_its_size():
+	var s := _with_system()
+	var moons := s.bodies.filter(func(b: SystemBody) -> bool: return b.kind == SystemBody.Kind.MOON)
+	if moons.is_empty():
+		pass_test("no moons in this seed")
+		return
+	var m: SystemBody = moons[0]
+	_page.selected = BodyContacts.id_of(m)
+	var lines := _page.lines(_ctx)
+	assert_eq(lines[0], "%s · MOON · %d KM ACROSS" % [m.name, roundi(m.radius * 2.0 / 1000.0)])

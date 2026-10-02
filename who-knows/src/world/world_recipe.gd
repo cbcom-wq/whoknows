@@ -15,20 +15,22 @@ enum Archetype { CRATERED, ROLLING, RIDGED, MESA }
 enum Atmosphere { NONE, THIN, THICK }
 
 ## Part of a world's identity: bumped whenever a seed's world changes.
-const GENERATOR_VERSION := 1
-## Radius, metres, by kind: uniform.
-const RADIUS: Array[Vector2] = [Vector2(300.0, 1200.0), Vector2(120.0, 400.0)]
+const GENERATOR_VERSION := 2
+## Radius, metres, by kind: uniform. Worlds you fly down into, not balls you
+## orbit (the world scale spec §3.1).
+const RADIUS: Array[Vector2] = [Vector2(15000.0, 60000.0), Vector2(4000.0, 15000.0)]
 ## Surface gravity, m/s2, by kind: capped below the starter shuttle's lift of
 ## about 10.8 m/s2 so no world strands the only ship (Planetfall §5.2).
 const GRAVITY: Array[Vector2] = [Vector2(2.0, 8.0), Vector2(1.0, 4.0)]
 ## Peak-to-trough terrain, as a share of radius, and never more than
-## RELIEF_MAX metres.
-const RELIEF := Vector2(0.02, 0.06)
-const RELIEF_MAX := 72.0
+## RELIEF_MAX metres: real mountains to fly between.
+const RELIEF := Vector2(0.01, 0.025)
+const RELIEF_MAX := 1200.0
 ## Atmosphere weights, NONE / THIN / THICK, by kind: moons are mostly bare.
 const ATMOSPHERE_WEIGHTS := [[0.40, 0.35, 0.25], [0.80, 0.20, 0.0]]
-## A world's well reaches this many radii (Planetfall §7.1).
-const WELL_RADII := 3.0
+## A world's well reaches this many radii: its edge is a radius above the
+## ground (the world scale spec §3.1).
+const WELL_RADII := 2.0
 
 var seed: int
 var kind: Kind

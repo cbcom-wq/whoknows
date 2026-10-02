@@ -21,8 +21,6 @@ const FADE_START: Array[float] = [450.0, 3000.0, 20000.0]
 const FADE_END: Array[float] = [600.0, 4000.0, 25000.0]
 const LOAD: Array[float] = [900.0, 5000.0, 30000.0]
 const UNLOAD: Array[float] = [1100.0, 5500.0, 35000.0]
-## How far a camera outside must see: past the farthest fade.
-const VIEW_FAR := 30000.0
 ## Pebbles on a big rock show only near, so from afar they never read as
 ## specks: whole within PEBBLE_FADE_START, gone past PEBBLE_FADE_END.
 const PEBBLE_FADE_START := 250.0

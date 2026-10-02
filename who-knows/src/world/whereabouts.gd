@@ -14,6 +14,10 @@ extends Node
 ## (docs/superpowers/specs/2026-09-28-warp-design.md §8), apart from here():
 ## they are not places on the location line, but WarpPlan and the HUD's
 ## toasts ask about them.
+##
+## And which well you are in and how high you are over its ground (the world
+## scale spec §7), for the speed limit: worked out when asked, from the
+## world's own WorldTerrain, never cached between ticks.
 
 signal entered(place: Place)
 signal left(place: Place)
@@ -54,6 +58,8 @@ var universe: Universe
 var _here: Array[Place] = []
 var _limits: Array[Place] = []
 var _since := INF
+## One WorldTerrain per world, by body id, for this thread.
+var _terrains := {}
 
 func setup(p_recipe: SystemRecipe, p_universe: Universe) -> void:
 	recipe = p_recipe
@@ -103,6 +109,40 @@ func dust() -> float:
 			Kind.NEAR:
 				out = maxf(out, DUST_NEAR)
 	return out
+
+## The body whose well the focus is in, or null. Wells never overlap.
+func well() -> SystemBody:
+	var u := _focus_point()
+	return well_at(recipe, u) if u != null else null
+
+## How high the focus is over the ground of the well it is in; INF in none.
+func altitude() -> float:
+	var b := well()
+	if b == null:
+		return INF
+	var local := _focus_point().minus(b.point)
+	var t := terrain_of(b)
+	return t.altitude_of(local) if t != null else local.length() - b.radius
+
+## `body`'s ground, or null for the star.
+func terrain_of(body: SystemBody) -> WorldTerrain:
+	if body.recipe == null:
+		return null
+	if not _terrains.has(body.id):
+		_terrains[body.id] = WorldTerrain.new(body.recipe)
+	return _terrains[body.id]
+
+static func well_at(system: SystemRecipe, u: UniversePoint) -> SystemBody:
+	for b in system.bodies:
+		if u.minus(b.point).length() <= b.well_radius:
+			return b
+	return null
+
+func _focus_point() -> UniversePoint:
+	if recipe == null or universe == null or not is_instance_valid(universe.focus) \
+			or not universe.focus.is_inside_tree():
+		return null
+	return universe.to_universe(universe.focus.global_position)
 
 ## Looks now, and tells anyone listening what changed.
 func look() -> void:

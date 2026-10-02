@@ -76,10 +76,13 @@ func place_all() -> void:
 	if sun != null:
 		aim_sun(sun, recipe.star.point, focus)
 
-## The belts' look while a warp carries you: every slab whole (§5.2).
+## The belts' look while a warp carries you: every slab whole (§5.2); and no
+## world starts its surface on the way past (the world scale spec §5.1).
 func set_warp(on: bool) -> void:
 	for b in belts:
 		b.set_whole(on)
+	for p in proxies:
+		p.frozen = on
 
 ## Points `light` from the star at `star` towards `focus` (§7.6).
 static func aim_sun(light: DirectionalLight3D, star: UniversePoint, focus: UniversePoint) -> void:

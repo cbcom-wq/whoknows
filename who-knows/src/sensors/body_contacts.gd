@@ -8,12 +8,12 @@ extends RefCounted
 ## warp spec §7.4). Moons are kind MOON and clusters CLUSTER, so KIND is exactly
 ## the star and the planets.
 
-## The whole system, and then some.
-const RANGE := 400000.0
+## The whole system, about 15,000 km across, and then some.
+const RANGE := 20000000.0
 const PREFIX := "body:"
 ## The star and planets: warp targets (the warp spec §7.4).
 const KIND := &"body"
-## Moons: not warp targets; the HUD's contact marker still marks them near.
+## Moons: warp targets at the world scale, kept apart so the map can size them.
 const MOON := &"moon"
 ## Belt clusters: warp targets with no body of their own.
 const CLUSTER := &"cluster"

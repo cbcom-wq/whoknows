@@ -7,14 +7,17 @@ extends RefCounted
 ##
 ## The checks go in the order a pilot would want to hear them: nothing
 ## charted, crew outside or an airlock cycling, too close to warp, still
-## inside a limit, the line blocked by the star or a planet, low power, too
-## little QE, the nose off the line; else ready. Where you are comes from
+## inside a limit, the line blocked by the star, a planet or a moon, low power,
+## too little QE, the nose off the line; else ready. Where you are comes from
 ## Whereabouts (`inside`), never worked out here.
 
 enum Status { NONE, CREW, AIRLOCK, INSIDE, CLOSE, BLOCKED, LOW_POWER, NO_QE, ALIGN, READY }
 
 const WARP_BASE := 40
-const WARP_PER_KM := 4.0
+## One QE for every this many metres of travel (the world scale spec §3.4):
+## 0.08 QE a km, written this way round so the cost is exact -- 0.08 is not,
+## and ceili(240.00000000000003) is 241.
+const WARP_M_PER_QE := 12500.0
 ## The nose within this of the line is lined up.
 const ALIGN := deg_to_rad(5.0)
 ## Less travel than this, and you fly.
@@ -45,7 +48,7 @@ var into_low_power := false
 var clear_in := 0.0
 
 static func cost_of(travel: float) -> int:
-	return WARP_BASE + ceili(WARP_PER_KM * maxf(travel, 0.0) / 1000.0)
+	return WARP_BASE + ceili(maxf(travel, 0.0) / WARP_M_PER_QE)
 
 static func check(from: UniversePoint, nose: Vector3, p_target: WarpTarget, targets: Array[WarpTarget],
 		inside: Array[StringName], store: QuantumStore, busy: StringName = &"") -> WarpPlan:

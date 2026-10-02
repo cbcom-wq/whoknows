@@ -117,7 +117,20 @@ Do these in order. Each one names the check that proves it.
      freezes the hull kinematic and clears its layer and mask, restoring them at drop-out. Anything
      that sets the hull's `collision_layer`, `collision_mask` or `freeze` must check
      `warp.travelling()` first. How far a ship can warp is set by its store; the probe prints
-     `warp    reach ...`.
+     `warp    reach ...`;
+   - **near a world** (`docs/superpowers/specs/2026-09-30-world-scale-design.md` §5.5, §6):
+     - **the assist's limit climbs with altitude** (`FlightComputer.speed_limit`): anything else
+       that caps the hull's speed must use `current_limit`, never `CRUISE_LIMIT_MPS`, and a
+       ship's `Whereabouts` must be wired (`flight_computer.whereabouts`) or it is held to
+       120 m/s everywhere. `locked_speed` is re-clamped to the limit every tick, so a lock set high
+       in a well drops to cruise on leaving it;
+     - **the hull is a space anchor** (`AsteroidStream.SPACE_ANCHOR`, joined in `Ship._ready`),
+       so a world's `WorldSurface` keeps solid ground under it with no wiring. Anything else that
+       flies near ground (a wingman, a pod) joins that group with its `ANCHOR_RADIUS` meta, or the
+       ground under it is not built and the floor does not lift it;
+     - **a ghosted hull** (mask 0, at warp) is never lifted by the floor: it passes through
+       everything on purpose, so do not give it a mask to "protect" it. The probe prints
+       `worlds  hull is a space anchor yes; speed limit knows where it is yes`;
 8. **Run the full suite** (`who-knows/run_tests.ps1`). It takes **about 8 minutes**, longer than a
    single command's timeout: run it in the background, logged to a file, and wait for the end. Add
    ship-specific tests: launches, stats, rooms, and the pod and airlock present.
@@ -167,7 +180,7 @@ is the blueprint's budgets, so the grid decides the feel:
 | Braking; a speed lock slowing down | `reverse` / mass | 4.8 m/s² |
 | Accelerating; a speed lock catching up | `forward` / mass | 14.3 m/s² |
 | Thrusters the player sees | each `rcs` block's exhaust face open and in view | 6 of 8 blocked (only the pitch-down pair shows); none in the pilot's view |
-| Warp reach on a full store | `(quantum_capacity − WarpPlan.WARP_BASE) / WarpPlan.WARP_PER_KM` km | 290 km on 1,200 QE (140 km on its starting 600) |
+| Warp reach on a full store | `(quantum_capacity − WarpPlan.WARP_BASE) × WarpPlan.WARP_M_PER_QE / 1000` km | 14,500 km on 1,200 QE (7,000 km on its starting 600) |
 
 The figures are the **reshaped starter's** (110 blocks, 104.7 t; the spine, fins and keel added
 7.8 t). Before the reshape it was 1.60 / 0.74 / 2.05 rad/s², 15.5 forward, 5.2 brake and side and
@@ -215,6 +228,8 @@ thrust.
 | A repeating world-space emitter in `Universe.HOLDS_SHIFT` | Every damaged block re-fired its sparks every second or two, so with a few damaged the floating origin would almost never have found a gap to shift in | Anything that repeats stays in its parent's frame (`local_coords`) and out of the group; only short one-shots outside hold the shift |
 | Letting go of a warp at 120 m/s with the assist on | The assist cancels velocity nobody asked for, so the ship braked to rest at the warp limit instead of coasting in | `WarpDrive` sets the speed lock to 120 m/s at drop-out; anything else that hands the hull a velocity with the assist on must do the same |
 | Letting the rest of the ship behave normally at warp | Found in the final review: you could cycle the airlock and step out mid-warp (stranded kilometres behind), the RCS kept its last command and puffed the whole way, and motion coupling read the frozen hull's placing as a 12 m/s² shove | Anything that acts on the hull's motion or lets someone outside asks `warp.is_spinning()` / `travelling()` first: `Airlock.warping()`, `FlightComputer`'s early return, `MotionCoupling._warp()` |
+| Writing a warp cost as 0.08 QE per km | `ceili(0.08 * 3000)` is 241, not 240: 0.08 is not exact in floating point | Price per whole units the other way round: `WarpPlan.WARP_M_PER_QE` (metres per QE) |
+| A camera outside with its own far plane | The far plane must hold `PROXY_AT` plus the biggest body's radius: a proxy just past `PROXY_AT` is drawn at nearly its true size, so at 400 km the star's disc was clipped | Use `BodyProxy.VIEW_FAR` (`PROXY_AT` + `SystemRecipe.STAR_RADIUS.y` + 50 km, 700 km) for any new outside camera |
 | A test script that types a local from the untyped `_root.system` and loops its `warp_targets()` | Godot 4.5.1 segfaulted at exit (ObjectDB leak, GUT's own scripts included) though every test passed | Hold the system in a typed member set in `before_each`, as `test_warp_drive.gd` does; watch the run's exit code, not only its pass count |
 | An off-centre retro counted as steering | It would light up for yaw, but `ShipStats` never counts pure fore-and-aft thrust as authority | Steer with blocks that push across the hull; retros only brake |
 | A fairing in the cabin row | The interior sees a solid cell and builds a whole wall against it, but a slope or a half leaves the outside open, and a porthole outside lands on a slope or above a 1 m block | Fairings go above and below the cabin and at its ends. The cabin row keeps full blocks. Check the probe's `windows` line |
@@ -241,6 +256,9 @@ thrust.
   show as black discs that read a little like holes (the damage renders, 2026-10-02). Asked of
   the owner: dark, flickering or a faint glow.
 - **Debris and breaches.** A piece cut off vanishes in a burst; a hole has no air to lose.
+- **Gravity and landing on a world.** Worlds are solid and you can skim and bump off them, but
+  there is no gravity, landing gear or step-out yet (Planetfall's). Do not give a ship legs or
+  skids that assume a pull.
 
 - **Multi-storey interiors.** A `ladder` passes the validator, but every walkable cell still gets
   a solid floor and ceiling, so you can't climb.

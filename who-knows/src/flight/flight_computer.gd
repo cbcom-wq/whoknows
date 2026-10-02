@@ -10,6 +10,13 @@ extends Node
 
 const CRUISE_LIMIT_MPS := 120.0
 const BOOST_MULTIPLIER := 2.5
+## Inside a well the limit climbs with altitude (the world scale spec §6): 1 m/s
+## more for every 40 m up, to LIMIT_CAP, easing back to CRUISE_LIMIT_MPS over
+## the top LIMIT_EASE of the well so you leave it at the speed the rocks
+## outside stream for. At full speed you are always about 40 s from the ground.
+const LIMIT_PER_M := 1.0 / 40.0
+const LIMIT_CAP := 1500.0
+const LIMIT_EASE := 0.1
 ## Fraction of the budget assist may spend on velocity nobody asked for: all
 ## of it, so after a turn your travel swings onto the nose in seconds (spec
 ## §5.4). At 0.6 the shuttle slid the old way for half a minute after a turn.
@@ -62,6 +69,11 @@ var hull_status: Callable
 ## The ship's warp drive, or null. While it travels it flies the hull, and
 ## this ignores the pilot (the warp spec §5.2).
 var warp: WarpDrive = null
+## Where you are, for the limit; null means the cruise ceiling everywhere, as
+## in every test that never sets it.
+var whereabouts: Whereabouts = null
+## This tick's limit with the assist on, m/s.
+var current_limit := CRUISE_LIMIT_MPS
 ## True while boost is actually applying this tick: held, with translation
 ## input, at full power (spec §8.2). QuantumPlant polls this exactly as
 ## RcsShow polls commanded_force_local, to run the core's ring speed.
@@ -112,6 +124,26 @@ func toggle_speed_lock() -> void:
 ## Speed out of the nose, m/s: negative when drifting backward.
 func forward_speed() -> float:
 	return -(_hull.global_transform.basis.inverse() * _hull.linear_velocity).z
+
+## The assist's limit `altitude` over the ground of a well whose edge is
+## `well_top` over it (§6). Pure. The cruise ceiling outside a well, on or
+## under the ground, and above the well's edge.
+static func speed_limit(altitude: float, well_top: float) -> float:
+	if is_inf(altitude) or well_top <= 0.0 or altitude >= well_top:
+		return CRUISE_LIMIT_MPS
+	var a := maxf(altitude, 0.0)
+	var climb := minf(CRUISE_LIMIT_MPS + a * LIMIT_PER_M, LIMIT_CAP)
+	var fade := clampf((well_top - a) / (LIMIT_EASE * well_top), 0.0, 1.0)
+	return lerpf(CRUISE_LIMIT_MPS, climb, fade)
+
+## The limit where the focus is now.
+func speed_limit_now() -> float:
+	if whereabouts == null:
+		return CRUISE_LIMIT_MPS
+	var b := whereabouts.well()
+	if b == null:
+		return CRUISE_LIMIT_MPS
+	return speed_limit(whereabouts.altitude(), b.well_radius - b.radius)
 
 ## Swings the nose onto `direction` (world) and holds it there. Needs assist.
 func set_heading(direction: Vector3) -> void:
@@ -166,11 +198,15 @@ func _physics_process(delta: float) -> void:
 	_apply_rotation(delta)
 
 func _apply_translation(delta: float) -> void:
+	current_limit = speed_limit_now()
+	# A lock set high in a well must not outlive it: the assist would keep
+	# driving toward a speed the clamp below refuses, and the readout would lie.
+	locked_speed = clampf(locked_speed, -current_limit, current_limit)
 	var basis := _hull.global_transform.basis
 	var local_velocity := basis.inverse() * _hull.linear_velocity
 	# While locked, W or S moves the lock: letting go holds the new speed.
 	if speed_locked and not is_zero_approx(_translate_input.z):
-		locked_speed = clampf(-local_velocity.z, -CRUISE_LIMIT_MPS, CRUISE_LIMIT_MPS)
+		locked_speed = clampf(-local_velocity.z, -current_limit, current_limit)
 	var full_power := quantum == null or not quantum.is_low_power()
 	# "Boost with translation input" (spec §8.2): held, and asking for some
 	# thrust -- holding it with the stick centred costs nothing, because the
@@ -184,8 +220,8 @@ func _apply_translation(delta: float) -> void:
 		_authority_budget(thrust_budget), boosting, assist_enabled, speed_locked, locked_speed)
 	_hull.apply_central_force(basis * commanded_force_local)
 
-	if assist_enabled and _hull.linear_velocity.length() > CRUISE_LIMIT_MPS:
-		_hull.linear_velocity = _hull.linear_velocity.normalized() * CRUISE_LIMIT_MPS
+	if assist_enabled and _hull.linear_velocity.length() > current_limit:
+		_hull.linear_velocity = _hull.linear_velocity.normalized() * current_limit
 
 ## The share of the RCS's rated force or torque the core still delivers
 ## right now: half in low power, all of it otherwise (spec §8.3). A null
@@ -321,12 +357,13 @@ func build_telemetry() -> VehicleTelemetry:
 		_hull.angular_velocity,
 		assist_enabled,
 		boosting,
-		CRUISE_LIMIT_MPS
+		current_limit
 	)
 	t.heading_hold = heading_hold
 	t.heading = heading
 	t.speed_locked = speed_locked
 	t.locked_speed = locked_speed
+	t.limit_raised = current_limit > CRUISE_LIMIT_MPS + 0.5
 	t.has_energy = true
 	t.energy_label = &"QE"
 	if quantum != null:

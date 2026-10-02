@@ -177,3 +177,37 @@ func test_the_thrusters_rest_and_nothing_is_felt_during_a_warp():
 		worst = maxf(worst, avatar.external_accel.length())
 	assert_false(_ship.warp.travelling(), "dropped out")
 	assert_lt(worst, 0.5, "the warp is not felt aboard, nor its ends")
+
+func test_a_warp_to_a_moon_arrives_at_its_limit():
+	if not _system.bodies.any(func(b: SystemBody) -> bool: return b.kind == SystemBody.Kind.MOON):
+		pass_test("no moon in the flight test's system")
+		return
+	var t := _ready_above(WarpTarget.Kind.MOON)
+	_ship.warp.engage()
+	_run(WarpDrive.SPOOL + 1.0)
+	_run(_ship.warp.time_left() + 0.1)
+	await wait_physics_frames(2)
+	assert_almost_eq(_focus().minus(t.point).length(), t.limit, 400.0)
+
+## About 250 km/s at the peak, 4 km a tick: the origin must keep up
+## (the world scale spec §3.4). WarpDrive re-centres it every step.
+func test_a_long_warp_keeps_the_origin_up_at_full_speed():
+	_ship.quantum.store.amount = _ship.quantum.store.capacity
+	var planets := _system.planets()
+	for a in planets:
+		for b in planets:
+			if a == b or a.point.minus(b.point).length() < 5000000.0:
+				continue
+			var toward := b.point.minus(a.point).normalized()
+			_put(a.point.plus(toward * (a.warp_limit + 25000.0)), b.point)
+			_ship.warp.chart(b.id)
+			if _ship.warp.check().status != WarpPlan.Status.READY:
+				continue
+			_ship.warp.engage()
+			_run(WarpDrive.SPOOL + 1.0)
+			for k in 8:
+				_run(3.0)
+				assert_lt(_ship.exterior.global_position.length(), Universe.FORCE_AT,
+					"the origin keeps up at %.0f km/s" % (_ship.warp.velocity().length() / 1000.0))
+			return
+	pass_test("no clear line of 5,000 km in this system")

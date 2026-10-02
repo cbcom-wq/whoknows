@@ -60,7 +60,7 @@ func test_distances_read_in_km():
 func test_the_contact_marker_leaves_worlds_and_clusters_to_the_body_marker():
 	assert_false(ContactMarker.marks_kind(BodyContacts.KIND))
 	assert_false(ContactMarker.marks_kind(BodyContacts.CLUSTER))
-	assert_true(ContactMarker.marks_kind(BodyContacts.MOON))
+	assert_false(ContactMarker.marks_kind(BodyContacts.MOON), "moons are warp targets: the body marker's")
 	assert_true(ContactMarker.marks_kind(&"life"))
 
 func test_labels_that_would_overlap_keep_only_the_nearer():

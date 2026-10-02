@@ -17,9 +17,9 @@ var radius: float
 var well_radius: float
 ## The space that belongs to it (§4.2): no other body's overlaps it.
 var neighbourhood: float
-## A warp may start only beyond this, from its centre (the warp spec §3.2):
-## its well plus WARP_CLEAR, and never inside its neighbourhood. 0 for a moon,
-## which is not a warp target.
+## A warp may start only beyond this, from its centre (the warp spec §3.2; the
+## world scale spec §3.3): its well plus WARP_CLEAR, and a planet's past its
+## ring. Every star, planet and moon has one.
 var warp_limit := 0.0
 ## What its seed decided; null for the star.
 var recipe: WorldRecipe

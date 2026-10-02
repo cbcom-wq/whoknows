@@ -10,6 +10,14 @@ are first guesses to be tuned by flying. Two questions stay open (§13).
 Planetfall.
 **Amended 2026-09-28 by the warp spec** (`2026-09-28-warp-design.md`), after the owner's play-test:
 the **warp** replaces quantum cruise as piece 3 (§7, §12). The system keeps its size.
+
+> **Amended 2026-09-30 by the world scale spec** (`2026-09-30-world-scale-design.md`): the
+> *Scale* decision (§2) is replaced: planets are 15–60 km, moons 4–15 km, the star 200–300 km,
+> and a system is about 15,000 km across (its §3). §4.1's and §4.3's numbers are that spec's.
+> §6's proxies sit at 350 km inside a 700 km far plane (its §13 says why not 400), and near a
+> world its surface is a quadtree drawn at true scale (its §5), not a swap to a real `Planet` at
+> 20 km.
+
 **Depends on:** `main` at `1d23261` (the floating origin and asteroids, saving, the bridge computer)
 **Relates to:** asteroids spec §5.2 (`density_at`), §5.6 (the start), §13; Planetfall §3, §7, §14,
 §18 (*Many worlds*); saving spec §3; bridge computer spec §4; quantum energy spec §8

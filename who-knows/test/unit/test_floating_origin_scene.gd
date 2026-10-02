@@ -154,8 +154,25 @@ func test_the_cameras_outside_see_as_far_as_rocks_are_drawn():
 	for path in ["Ship/Exterior/ChaseCamera", "Ship/Canopy/CanopyCam"]:
 		assert_gte((_root.get_node(path) as Camera3D).far, far, path)
 	assert_gte(_avatar.camera.far, far, "on a spacewalk")
+	# The world scale spec §5.2: far enough for the horizon of the world
+	# you are over, and past every proxy.
+	assert_gt(BodyProxy.VIEW_FAR, BodyProxy.PROXY_AT)
+	assert_gte(BodyProxy.VIEW_FAR, BodyProxy.PROXY_AT + SystemRecipe.STAR_RADIUS.y, "every proxy is drawn whole, the star's too")
+	for path in ["Ship/Exterior/ChaseCamera", "Ship/Canopy/CanopyCam"]:
+		assert_eq((_root.get_node(path) as Camera3D).far, BodyProxy.VIEW_FAR, path)
+	assert_eq(_avatar.camera.far, BodyProxy.VIEW_FAR, "on a spacewalk")
 
 func test_the_sun_throws_shadows_far_enough_to_shape_a_big_rock():
 	var sun: DirectionalLight3D = _root.get_node("DirectionalLight3D")
 	assert_gte(sun.directional_shadow_max_distance, AsteroidStream.SHADOW_REACH)
 
+func test_everything_outside_is_covered_beside_a_world():
+	var system: SystemRecipe = _root.system
+	var planet := system.planets()[0]
+	_root.hop_index = system.bodies.find(planet) - 1
+	assert_true(_root.hop(1))
+	await wait_physics_frames(2)
+	var surface: WorldSurface = (_root.star_system.proxy(planet.id) as BodyProxy).surface()
+	assert_not_null(surface)
+	surface.finish()
+	assert_eq(_uncovered(), [], "every chunk of ground shifts too")

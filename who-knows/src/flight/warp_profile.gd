@@ -2,13 +2,15 @@ class_name WarpProfile
 extends RefCounted
 
 ## How fast a warp goes (docs/superpowers/specs/2026-09-28-warp-design.md
-## §5.3): it takes BASE_TIME and a second more per PACE metres, rising from
-## EDGE_SPEED to its peak over RAMP seconds, holding, and easing back down
-## over the last RAMP. The peak is whatever makes the distance come out exact.
-## Pure.
+## §5.3; the world scale spec §3.4): it takes BASE_TIME and a second more per
+## PACE metres, rising from EDGE_SPEED to its peak over RAMP seconds, holding,
+## and easing back down over the last RAMP. The peak is whatever makes the
+## distance come out exact. Pure.
+##
+## PACE keeps the median trip about 30 s at the world scale's distances.
 
 const BASE_TIME := 18.0
-const PACE := 5000.0
+const PACE := 350000.0
 const RAMP := 4.0
 ## The flight computer's top speed with the assist on: you leave and arrive
 ## at it.

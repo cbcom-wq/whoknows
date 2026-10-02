@@ -100,7 +100,7 @@ func _star_shots(scene: Node, ship: Ship) -> void:
 	var toward := star_system.recipe.star.point.minus(focus).normalized()
 	var cam := Camera3D.new()
 	cam.cull_mask = 1 | ExteriorBuilder.OWN_HULL_LAYER
-	cam.far = AsteroidStream.VIEW_FAR
+	cam.far = BodyProxy.VIEW_FAR
 	ship.exterior.add_child(cam)
 	cam.global_transform = Transform3D(Basis.looking_at(toward, Vector3.UP if absf(toward.y) < 0.9 else Vector3.RIGHT),
 		ship.exterior.global_position + toward * 12.0)
@@ -239,12 +239,17 @@ func _run(scene: Node) -> void:
 	print("damage  intact hp %d, crippled as built %s, buffer %d of %d can break away, one loss cuts off at most %d%s" % [
 		total_hp, "no" if not s.crippled else "YES: " + s.crippled_reason, buffer, ship.grid.size(), worst_cut,
 		"" if worst_cut <= 2 else "  <-- FRAGILE"])
-	var reach_km := (s.quantum_capacity - WarpPlan.WARP_BASE) / WarpPlan.WARP_PER_KM
+	var reach_km := (s.quantum_capacity - WarpPlan.WARP_BASE) * WarpPlan.WARP_M_PER_QE / 1000.0
 	print("warp    reach %.0f km on a full store (%d QE); drive %s" % [reach_km, s.quantum_capacity,
 		"yes" if ship.warp != null else "MISSING"])
 	var mask := ship.exterior.collision_mask
 	var wants := 1 | BodyProxy.LAYER | AsteroidBody.LAYER | Npc.LAYER
 	print("bumps   hull mask %d: hulls, worlds, rocks, NPCs %s" % [mask, "yes" if (mask & wants) == wants else "MISSING"])
+	var anchored := ship.exterior.is_in_group(AsteroidStream.SPACE_ANCHOR)
+	var placed := ship.flight_computer != null and ship.flight_computer.whereabouts != null
+	print("worlds  hull is a space anchor %s; speed limit knows where it is %s" % [
+		"yes" if anchored else "MISSING (no solid ground under it)",
+		"yes" if placed else "MISSING (held to 120 m/s everywhere)"])
 	print("thrust  kN fwd %.0f rev %.0f lat %.0f vert %.0f" % [s.thrust_budget[&"forward"] / 1000.0,
 		s.thrust_budget[&"reverse"] / 1000.0, s.thrust_budget[&"lateral"] / 1000.0,
 		s.thrust_budget[&"vertical"] / 1000.0])
