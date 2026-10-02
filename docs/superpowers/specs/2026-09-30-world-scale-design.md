@@ -3,8 +3,8 @@
 **Date:** 2026-09-30
 **Status:** Designed with the owner on 2026-09-30, section by section. **Built** on branch
 `world-scale` (2026-09-30 to 2026-10-01); §13 is what was built, where it differs from this text
-(amended in place, each marked *as built*) and what is left. The owner's approval of the look is
-pending (§13.7).
+(amended in place, each marked *as built*) and what is left. The owner said on 2026-10-02 that the
+renders generally look good, with a terrain pass and populating worlds to come (§13.7).
 **Depends on:** `main` at `a59890a` (the system skeleton, the warp, the ship exterior, health and
 damage)
 **Amends:** the star systems design §2, §4.1, §4.3, §6; the system skeleton spec's proxies (§7); the
@@ -213,10 +213,12 @@ func altitude_of(local: Vector3) -> float    # body-local point's height above t
 
 - **The far mesh hands over to the quadtree** at `SURFACE_AT`, where a world is about 11°
   across and the two differ by a pixel or two at 1280 × 720. The quadtree's first frame is its six coarsest
-  chunks, built synchronously when it is made. A fade over `FADE_MARGIN` by visibility ranges
-  covers any residue, as the proxies do today.
-- Moons are 180 km or more from their planet, so normally one quadtree is live. Two may be, briefly,
-  near a moon.
+  chunks, built synchronously when it is made. *As built:* there is no cross-fade; the far mesh is
+  simply hidden while a surface exists (`_far.visible = _surface == null`), and `FADE_MARGIN` is
+  unused.
+- Moons are 180 km or more from their planet, so normally one quadtree is live. *As built:* a moon 204 to
+  330 km from a large planet keeps that planet's surface alive (`SURFACE_MOST` 300 km × 1.1) for the
+  whole visit, so two are live there; it is cheap, but not brief.
 - `BodyProxy` keeps its place and scale rules (the skeleton spec §7), owns the far mesh and, inside
   `SURFACE_AT`, a `WorldSurface`. Its faceted "near" shell and convex collider go.
 - **The star** stays a far mesh at every distance, unshaded, as today.
@@ -252,8 +254,9 @@ func altitude_of(local: Vector3) -> float    # body-local point's height above t
 - `TerrainChunkData` (pure) builds one chunk's packed arrays (positions, normals, colours, collision
   faces) in `WorkerThreadPool` tasks, each with its own `WorldTerrain`.
 - The main thread turns finished data into meshes and nodes within **2 ms a frame**, the budget the
-  asteroids use (`AsteroidStream.APPLY_BUDGET_USEC`). A generation counter drops results superseded
-  while they were building. Nearest-first, by the split rule's distance.
+  asteroids use (`AsteroidStream.APPLY_BUDGET_USEC`). *As built:* no generation counter; `_apply` drops
+  every result nobody wants any more (the leaf set changed while it built), under the lock, before
+  it sorts, and applies at least one a tick. Nearest-first, by the split rule's distance.
 - **The altitude speed limit (§6) is what keeps this from falling behind.** Speed is tied to height,
   so the detail you need changes at a bounded rate however fast you fly: halving your altitude
   takes at least about 28 s at full speed, and crossing a chunk sideways takes about as long at
@@ -389,7 +392,7 @@ the floor, against §5.6.
 - a belt from the neighbouring planet;
 - the map's SYSTEM and 500 km ranges.
 
-The style guide gains a *Worlds up close* rule only once the owner approves these (§13.7).
+The style guide gains a *Worlds up close* rule only once a terrain pass settles them (§13.7).
 
 ---
 
@@ -544,25 +547,39 @@ out once, and applies at least one result a tick whatever the deadline; the boun
 | Draw calls, at most | 1,085 | 1,269 |
 | Floor fired | 0 | 0 |
 
+The descent probe never touches the ground: it stops at 150 m and teleports the hull every tick,
+so "Floor fired 0" is not evidence about contact. Contact at speed is tested by
+`test_system_scene.gd` (the hull glides and dives into the biggest planet at the low-altitude
+limit: it stops about 9 m above the ground, the origin of a hull the size of the ship, and the
+floor never fires).
+
 Memory stays flat. The skim misses the 33 ms budget by 0.7 ms on three frames, within one vsync of
 a 60 Hz screen; "frames over 33 ms in 10,000" is a steadier budget than a strict worst frame. The
 first frames after a teleport cost 137 to 147 ms (shaders and uploads at a new place); the probe
 settles 60 ticks first.
 
-**Remaining cost (open):** `WorldSurface.update()` costs 8 to 16 ms a physics tick at the speed
-limit (about 25 m a tick): `select` about 4 ms, solid keys 5 to 7 ms, `_apply` about 2.2 ms. The
-frame is physics-bound there, with about 8 ms of headroom. Levers, not pulled: keep the previous
-solid keys and add only the swept path ahead (or compute them on a worker); cache a node's ground
-in `_bounds` (terrain is a pure function of direction, so it cannot go stale).
+**Remaining cost (open):** `WorldSurface.update()` spikes to 8 to 16 ms on some physics ticks at
+the speed limit: `select` about 4 ms, solid keys 5 to 7 ms, `_apply` about 2.2 ms. The skim flies
+at `speed_limit(150)`, 123.75 m/s, which is about 2 m a tick (the 25 m a tick of an earlier
+note is the high descent, where there are no solid keys). So `select` runs about every 5 ticks
+(`RESELECT_AFTER` 10 m) and the solid keys about every 4 (half a 16 m edge): the 8 to 16 ms are
+periodic spikes where the two land on the same tick, not a steady per-tick cost. The frame is
+physics-bound on those ticks, with about 8 ms of headroom. Levers, not pulled, so staggering and
+caching beat trimming the work done every tick: cache a node's ground in `_bounds` (terrain is a
+pure function of direction, so it cannot go stale); never run a reselect and a keys recompute on
+the same tick; keep the previous solid keys and add only the swept path ahead (or compute them on a
+worker).
 
-### 13.7 The look: approval pending
+### 13.7 The look: the owner's verdict (2026-10-02)
 
 The world renders (from a neighbour, the limit, the well's edge, 1 km, skimming at 150 m,
-standing at 1.6 m, a belt) were sent to the owner on 2026-10-01 for the look, and **approval is
-pending**. So `docs/design/visual-style.md` is not changed and has no *Worlds up close* rule yet.
-On approval it gains one stating what was approved (flat-shaded chunks, one palette colour a
-triangle, shade patches about six triangles across, rock on slopes over 35°), with the date and
-the render names; if the owner asks for something else, record it here. What the renders showed:
+standing at 1.6 m, a belt) were sent to the owner on 2026-10-01 for the look. On 2026-10-02 the
+owner said the renders **"generally look good"**, that **terrain may need another pass for a truly
+playable world**, and that **populating worlds is a later, targeted session**. That is a verdict on
+the renders, not a rule change: `docs/design/visual-style.md` is not changed and has no *Worlds up
+close* rule yet; a terrain pass would settle one (flat-shaded chunks, one palette colour a
+triangle, shade patches about six triangles across, rock on slopes over 35°), with its date and
+render names. What the renders showed:
 no holes, cracks or z-fighting; patch edges visibly stair-stepped on the coarse meshes; ridges a
 little busy from 1 km; standing on the ground reads best. The size renders of Part A (planet
 25 km, star, belts) were shown to the owner earlier; no change was recorded.
@@ -579,10 +596,24 @@ little busy from 1 km; standing on the ground reads best. The size renders of Pa
 
 ### 13.9 Left to do
 
-- **Fix before merge:** `FlightComputer.locked_speed` is re-clamped only while W or S is pressed,
-  so a lock set high in a well (say 1,400) stays after leaving it: a stale LOCK readout, and the
-  assist pushes against the clamp every tick. Clamp it to `current_limit` every tick.
-- `WorldSurface.update()` at the speed limit (§13.6).
+- **Fixed in the final-review wave:** `FlightComputer.locked_speed` was re-clamped only while W or
+  S was pressed, so a lock set high in a well (say 1,400) stayed after leaving it: a stale LOCK
+  readout, and the assist pushed against the clamp every tick. It is now clamped to
+  `current_limit` every tick (`test_speed_limit.gd` pins it, with the assist-off and boost cases).
+  Also added then: a scene test that dives the hull into the ground at about 124 m/s
+  (`test_system_scene.gd`).
+- **Rings at the raised limit are unmeasured.** Rings lie inside the well (`RING_INNER` is 1.6 to
+  2.0 radii; the well is 2.0), where the limit reaches about 1,000 to 1,470 m/s, but rock
+  streaming was sized for 120 m/s (rubble `LOAD` 900 m, bubble `LOOKAHEAD` 1.5 s): at 1,000 m/s the
+  rubble shell is crossed in under a second, so expect pop-in, rocks not yet solid when passed,
+  and stream churn. Run the descent probe through a ringed planet's ring plane before Planetfall
+  builds on the speed limit. If it misbehaves, ease the limit back toward cruise on the distance
+  to the ring's slab (`Whereabouts` has `Kind.RING` places); a flat clamp on entry would be a
+  hard wall, because the assist clamps velocity instantly.
+- **`WorldSurface.update()` spikes at the speed limit (§13.6).** Cheap levers, in order: cache a
+  node's ground in `_bounds`; skip `_prune`'s ancestor walks unless `leaves`, `_chunks` or
+  `_solid` changed; never run a reselect and a keys recompute on the same tick; in
+  `_solid_wanted`, take `_done[under]` if it is ready instead of building it again.
 - **Horizon hole:** a region newly over the horizon has no drawn ancestor once its root was freed,
   so it is blank until its leaves build; the class doc's "nothing is ever a hole" overclaims. Low
   severity; not seen in the renders.
@@ -595,13 +626,14 @@ little busy from 1 km; standing on the ground reads best. The size renders of Pa
   check moon limits against each other, so adjacent moons can block each other's warp line (§3.3
   allows it). The moon and long-warp scene tests fall back to `pass_test` if a seed has no moon or
   no 5,000 km line.
-- Render probes: `world_moon_in_the_sky` shows no moon (it needs a lit angle). The SYSTEM and
+- Render probes: the SYSTEM and
   500 km map renders from the start inside a cluster show a huge rock and "TOO CLOSE TO WARP"; the
   SYSTEM page wants the owner's eye. `computer_render.gd` ran with saving on before this branch
   fixed it, so it may have rewritten the owner's save.
 - Missing tests: a mid-stream no-hole/no-overlap check, a seam test in `test_cube_sphere`, a skirt
   geometry test, `set_warp` freezing proxies, a far mesh for a cratered world or the star.
-- Housekeeping: `AsteroidStream.VIEW_FAR` and `BodyProxy.FADE_MARGIN` are unused; one full run
+- Housekeeping: `BodyProxy.FADE_MARGIN` is unused (`AsteroidStream.VIEW_FAR` went in the
+  final-review wave); one full run
   failed `test_save_scene` because the real save's mtime changed mid-run (something else was
   writing it); subagent commits carry `Co-Authored-By: Claude Sonnet 5.5`, not the plan's Opus 5.5
   line.
