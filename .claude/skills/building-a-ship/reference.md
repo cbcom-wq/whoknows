@@ -471,6 +471,11 @@ On a world, the solid ground round the hull (`WorldSurface`'s chunks, `StaticBod
 The floor that lifts a hull out from under the ground (`WorldSurface.floor_fired`) deals
 nothing: it is a safety net against tunnelling, not a contact, so never rely on it to hurt a ship.
 
+A `quantum_cell` holds its 400 QE times its stage's output: half when damaged, none when wrecked.
+`QuantumStore.set_capacity` clamps the amount down and never restocks it, so a hit on the cells
+loses QE for good, and the low-power line (10% of capacity) moves with it. Mending the cells gives
+back room, not energy. The torch's prompt names a block's health as `40% H`, then its stage.
+
 ## The warp (`docs/superpowers/specs/2026-09-28-warp-design.md`)
 
 `WarpDrive` at `Ship/Warp`, built by `Ship._ready`; `flight_test.gd` binds it

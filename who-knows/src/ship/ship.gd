@@ -334,7 +334,8 @@ func rebuild_cell(cell: Vector3i) -> bool:
 	return true
 
 ## What the torch's prompt says of the block at `cell`: its name and state,
-## as "HULL BLOCK · WRECKED 0%", or of a hole, "REBUILD THRUSTER".
+## as "HULL PLATE · 0% H · WRECKED" (health left, then the stage), or of a
+## hole, "REBUILD THRUSTER".
 func cell_label(cell: Vector3i) -> String:
 	var inst := grid.get_block(cell)
 	if inst == null:
@@ -346,7 +347,7 @@ func cell_label(cell: Vector3i) -> String:
 		return ""
 	var stage: String = BlockDamage.Stage.keys()[BlockDamage.stage_of(inst, def)]
 	var left := clampf(1.0 - inst.damage / float(def.hp), 0.0, 1.0)
-	return "%s · %s %d%%" % [def.display_name.to_upper(), stage, roundi(left * 100.0)]
+	return "%s · %d%% H · %s" % [def.display_name.to_upper(), roundi(left * 100.0), stage]
 
 ## How whole the hull is, 0..1, against the layout it launched with (health
 ## and damage spec §11): every block's damage, capped at its hp, and a block

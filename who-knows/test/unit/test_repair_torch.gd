@@ -74,6 +74,20 @@ func test_holding_mends_at_its_rate_for_one_feed_an_hp():
 	assert_almost_eq(_torch.feed, RepairTorch.HOPPER - 50.0, 0.5)
 	assert_eq(_torch.busy(), "welding")
 
+## Health as a share with H and the stage beside it, and the hopper as SCRAP
+## (owner, 2026-10-02: "WRECKED 0%" read either way, and "FEED" said nothing).
+func test_the_aim_line_names_health_and_scrap():
+	var wall := _wall()
+	var cell: Vector3i = wall[1]
+	var name := _ship.catalog.get_def(_ship.grid.get_block(cell).block_id).display_name.to_upper()
+	var hp := float(_ship.catalog.get_def(_ship.grid.get_block(cell).block_id).hp)
+	assert_eq(_torch.aim_text(_item, wall[0], _avatar), "%s · 100%% H · INTACT · SCRAP 300/300" % name)
+	_ship.take_damage(cell, hp * 0.6)
+	assert_eq(_torch.aim_text(_item, wall[0], _avatar), "%s · 40%% H · DAMAGED · SCRAP 300/300" % name)
+	_ship.take_damage(cell, hp * 0.5)
+	assert_eq(_torch.aim_text(_item, wall[0], _avatar), "%s · 0%% H · WRECKED · SCRAP 300/300" % name)
+	assert_eq(_torch.status(), "scrap 300/300")
+
 func test_an_empty_hopper_does_nothing():
 	var wall := _wall()
 	var cell: Vector3i = wall[1]
@@ -96,10 +110,11 @@ func test_it_eats_a_plate_and_refuses_one_when_full():
 	var above := plate.global_position + Vector3.UP * 0.4
 	var aim := Transform3D(Basis.looking_at(Vector3.DOWN, Vector3.FORWARD), above)
 	assert_eq(_torch.target(_item, aim, _avatar).get("kind"), &"plate")
-	assert_eq(_torch.aim_text(_item, aim, _avatar), "TORCH FULL")
+	assert_eq(_torch.aim_text(_item, aim, _avatar), "TORCH FULL · SCRAP 300/300")
 	_hold(aim, 1.0)
 	assert_true(is_instance_valid(plate), "full: refused")
 	_torch.feed = 150.0
+	assert_eq(_torch.aim_text(_item, aim, _avatar), "LOAD PLATE +100 · SCRAP 150/300")
 	_hold(aim, RepairTorch.PLATE_TIME + 0.2)
 	assert_false(is_instance_valid(plate), "eaten")
 	assert_almost_eq(_torch.feed, 250.0, 0.001)
@@ -119,7 +134,7 @@ func test_it_rebuilds_a_hole_from_outside_wrecked_for_its_cost():
 	var t := _torch.target(_item, aim, _avatar)
 	assert_eq(t.get("kind"), &"hole")
 	assert_eq(t.get("cell"), gone)
-	assert_string_starts_with(_torch.aim_text(_item, aim, _avatar), "REBUILD HULL")
+	assert_eq(_torch.aim_text(_item, aim, _avatar), "REBUILD HULL PLATE · COSTS 100 · SCRAP 300/300")
 	var held := 0.0
 	while not _ship.grid.has_block(gone) and held < RepairTorch.REBUILD_TIME + 1.0:
 		_torch.hold(_item, aim, _ship.items, _avatar, 0.1)

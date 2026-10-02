@@ -325,8 +325,9 @@ The owner chose a handheld tool: you carry it to the damage and point it there.
   - the ship starts with the torch full and **three plates** stowed in the cargo crates;
   - a block knocked off outside sheds **one plate** from the hole, as a stray (saving §7), which
     you can catch before it drifts off.
-- **The prompt** shows what the aim is on, its state and the feed:
-  *HULL BLOCK · WRECKED 12% · FEED 180*. Releasing `use`, looking away or moving out of reach
+- **The prompt** shows what the aim is on, its health left, its stage and the hopper, which the
+  player sees as **scrap**: *HULL PLATE · 12% H · WRECKED · SCRAP 180/300*. (Amended
+  2026-10-02: the owner read *WRECKED 12%* either way round and *FEED* said nothing.) Releasing `use`, looking away or moving out of reach
   stops the weld.
 - **The feed is saved** with the torch, through `ItemUse.save()`/`restore()` (saving §6.5).
 
@@ -338,7 +339,7 @@ The owner chose a handheld tool: you carry it to the damage and point it there.
   outside. The torch rebuilds it from the blueprint the ship launched with, which the ship
   already keeps (saving §6.2). It costs **100 feed** (one plate's worth) and **3 s** of holding.
   The block comes back **wrecked**, through `ShipGrid.set_block` and one rebuild, so it then has
-  to be welded up. The prompt reads *REBUILD THRUSTER · 100 FEED*.
+  to be welded up. The prompt reads *REBUILD THRUSTER · COSTS 100 · SCRAP 300/300*.
 - **The maintenance droid** (§6): welding a knocked-out droid brings it round at once, and welding
   a hurt one mends it, at the same rate and feed.
 - **Not you, and not creatures.**
