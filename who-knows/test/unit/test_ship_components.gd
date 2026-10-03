@@ -69,6 +69,7 @@ func test_a_damaged_cockpit_is_sluggish_and_cracked():
 	assert_eq(flight.assist_strength, 1.0)
 	var cracks := _root.get_node("HudRoot/Screen/CanopyCracks") as CanopyCracks
 	assert_not_null(cracks, "the HUD has the cracks")
+	assert_eq(cracks.size, (_root.get_node("HudRoot/Screen") as Control).size, "over the whole screen")
 	cracks.render(flight.build_telemetry())
 	assert_eq(cracks.level, 0)
 	_hurt(&"cockpit", 0.6)
