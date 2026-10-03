@@ -91,8 +91,15 @@ func _end_station() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	station_changed.emit(null)
 
-## The table went while you were at it (a rebuild, or wrecked; spec §3.5): back
-## to your head at once, with no move.
+## Whether you can still use the station (spec §3.5): its table is there, and
+## you are awake and standing aboard its ship. A blackout, or a hole that puts
+## you outside, changes you under the camera.
+func _station_usable() -> bool:
+	return is_instance_valid(_station) and _station.is_inside_tree() 		and _avatar.downed == null and _avatar.mode == Avatar.Mode.PLATING 		and ship_of(_station) == ship_of(_avatar)
+
+## The station can no longer be used: back to your head at once, with no move.
+## Only what the station took comes back. Your controls do too, unless a
+## blackout holds them: waking gives them back.
 func _drop_station() -> void:
 	if _tween != null:
 		_tween.kill()
@@ -100,7 +107,8 @@ func _drop_station() -> void:
 	_end_station()
 	_interior_cam.reparent(_avatar.head, false)
 	_interior_cam.transform = Transform3D.IDENTITY
-	_avatar.set_control_enabled(true)
+	if _avatar.downed == null:
+		_avatar.set_control_enabled(true)
 	view = View.FOOT_FIRST
 	_apply_view()
 
@@ -108,7 +116,7 @@ func _drop_station() -> void:
 func _process(_delta: float) -> void:
 	if not is_at_station:
 		return
-	if not is_instance_valid(_station) or not _station.is_inside_tree():
+	if not _station_usable():
 		_drop_station()
 		return
 	if _tween == null:

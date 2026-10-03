@@ -115,6 +115,16 @@ func test_refused_on_a_spacewalk():
 	assert_false(_root.board_nearest())
 	assert_same(_root.aboard, _starter)
 
+## Computer mode spec §3.3: at the computer, F8 waits, and says why.
+func test_refused_at_the_computer():
+	_starter.interior_builder.computers()[0].station.interact(_avatar)
+	await wait_seconds(CameraDirector.SIT_DURATION + 0.2)
+	assert_true(_director.is_at_station)
+	assert_false(_root.board_nearest())
+	assert_same(_root.aboard, _starter)
+	assert_true(_director.is_at_station, "still at the computer")
+	assert_eq(_root.warp_panel.toast_label.text, "AT THE COMPUTER")
+
 func test_refused_with_no_other_ship():
 	assert_true(_root.fleet.remove(_second))
 	assert_false(_root.board_nearest())

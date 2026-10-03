@@ -71,23 +71,56 @@ func test_the_camera_key_does_nothing_at_the_station():
 	await _enter()
 	_press(&"cycle_camera")
 	assert_eq(_director.view, CameraDirector.View.STATION)
-	await wait_frames(2)
+	await wait_process_frames(2)
 	assert_almost_eq(_director.camera().global_position, _station().eye_transform().origin, Vector3.ONE * 0.01)
 
 func test_the_eye_follows_the_orbit():
 	await _enter()
 	_station().orbit(30.0)
-	await wait_frames(2)
+	await wait_process_frames(2)
 	assert_almost_eq(_director.camera().global_position, _station().eye_transform().origin, Vector3.ONE * 0.01)
 
 func test_a_rebuild_drops_you_out_with_your_controls_back():
 	await _enter()
 	_ship._rebuild_everything()
-	await wait_frames(3)
+	await wait_process_frames(3)
 	assert_false(_director.is_at_station)
 	assert_eq(_director.camera().get_parent(), _avatar.head)
 	assert_false(_avatar.at_station)
 	assert_eq(_director.view, CameraDirector.View.FOOT_FIRST)
+	assert_false(_avatar.interactor.suspended)
+	assert_true(_avatar.grasp.enabled, "your controls are back")
+
+## Spec §3.5: blacked out at the table, you drop out of it at once, and waking,
+## not the station, gives your controls back.
+func test_blacking_out_at_the_station_drops_you_out():
+	await _enter()
+	var hit := Hit.make(Vector3.ZERO, Vector3.UP, Vector3.FORWARD, Vector3.ZERO, null)
+	hit.damage = Avatar.MAX_HEALTH * 2.0
+	_avatar.receive_hit(hit)
+	assert_not_null(_avatar.downed, "blacked out")
+	await wait_process_frames(2)
+	assert_false(_director.is_at_station)
+	assert_false(_avatar.at_station)
+	assert_false(_avatar.interactor.suspended)
+	assert_eq(_director.camera().get_parent(), _avatar.head)
+	assert_eq(_director.view, CameraDirector.View.FOOT_FIRST)
+	assert_not_null(_avatar.downed, "still out cold")
+	assert_false(_avatar.grasp.enabled, "no controls until you wake")
+
+## Spec §3.5: a hole where you stand puts you outside (flight_test's
+## _on_blocks_lost), and out of the computer, with your suit yours to fly.
+func test_blown_outside_at_the_station_drops_you_out():
+	await _enter()
+	var at := _ship.exterior.global_position + Vector3(0, 0, 20)
+	_avatar.enter_suit(_ship.outside, Transform3D(Basis.IDENTITY, at), Vector3.ZERO, _ship.exterior)
+	await wait_process_frames(2)
+	assert_false(_director.is_at_station)
+	assert_false(_avatar.at_station)
+	assert_false(_avatar.interactor.suspended)
+	assert_eq(_director.camera().get_parent(), _avatar.head)
+	assert_eq(_director.view, CameraDirector.View.FOOT_FIRST)
+	assert_true(_avatar.grasp.enabled, "your suit's controls are yours")
 
 func test_saved_at_the_table_you_are_walking():
 	await _enter()

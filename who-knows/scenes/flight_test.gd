@@ -319,11 +319,13 @@ func board_nearest() -> bool:
 	board_at_helm(target)
 	return true
 
-## Why F8 must wait, or "": on a spacewalk, mid-sit, during a warp, or while an
-## airlock of the ship you are aboard cycles.
+## Why F8 must wait, or "": on a spacewalk, at a computer, mid-sit, during a
+## warp, or while an airlock of the ship you are aboard cycles.
 func _board_refusal() -> String:
 	if _avatar.mode == Avatar.Mode.SUIT:
 		return "NOT ON A SPACEWALK"
+	if _director.is_at_station:
+		return "AT THE COMPUTER"
 	if _director.is_moving():
 		return "SITTING DOWN"
 	for ship in fleet.ships():
