@@ -2,6 +2,13 @@
 
 **Date:** 2026-09-30
 **Status:** Design approved section by section by the owner on 2026-09-30. Not yet built.
+
+> **Amended 2026-10-02 by the owner, before planning:** `main` moved to the world scale
+> (`2026-09-30-world-scale-design.md`) and many ships (`2026-10-02-many-ships-design.md`) after
+> this was approved. The map's numbers are rescaled to the new world (§4: 1 km to 9,000 km, the
+> stops 2, 10, 50, 500 km and SYSTEM, the centre sliding from 500 to 3,000 km), warp limits are
+> drawn at every scale, and a station finds the game's one camera director through a group (§3.1).
+> The design is otherwise as approved.
 **Depends on:** the bridge computer (`2026-09-25-bridge-computer-design.md`), the system skeleton
 (`2026-09-27-system-skeleton-design.md`) and the warp (`2026-09-28-warp-design.md`), all on `main`
 at `1282fc5`, plus the button fix on this branch (`a6e7fa8`, §1).
@@ -89,7 +96,9 @@ Every row was decided by the owner on 2026-09-29/30, as recommended.
 - **The buttons still win.** They stand proud of the station's shape, so looking straight at one
   still offers that button. The station's shape stops short of the buttons' faces.
 - **Pressing F** calls `CameraDirector.use_station(station)`, as `PilotSeat.interact` calls
-  `sit`. The director:
+  `sit`. Tables are rebuilt with their ship and ships come and go (`Fleet`), so a station is never
+  handed the director: it finds the game's one director in group `CameraDirector.GROUP`. The
+  director:
   - turns off the avatar's control, so there is no walking, grasping or Interactor;
   - moves the camera, with the same 0.75 s cubic move as sitting, to the station's **eye**;
   - makes the mouse visible;
@@ -140,10 +149,13 @@ every event it uses as handled, so neither the avatar nor anything else sees it.
 
 - **Saving** waits while the camera moves (`is_moving()`, as for the helm). A game saved in the
   mode loads with you standing at the table, not in the mode.
-- **A rebuild** of the ship while you are in the mode drops you out at once, with no move. The
-  station is rebuilt with the table.
+- **A rebuild** of the ship while you are in the mode, or the table wrecked (health and damage
+  spec), drops you out at once, with no move. The station is rebuilt with the table, if it still
+  stands.
 - **Warp:** the mode works during a warp. Charting is already allowed from anywhere (warp spec
   §4.1).
+- **Another ship's table** works the same way once you are aboard it (CLAUDE.md: every ship is
+  usable).
 - **Two tables** on one ship: each has its own station. Only one can be used at a time, since
   there is one camera.
 
@@ -154,9 +166,9 @@ every event it uses as handled, so neither the avatar nor anything else sees it.
 ### 4.1 Scale
 
 - `MapPage.range_index` becomes **`scale_m`**, the metres the holo's radius (0.5 m) shows, from
-  **1 km to 180 km** (`SYSTEM_REACH`).
-- **Scroll** multiplies or divides it by 1.15 a notch, clamped.
-- **The four stops** stay: 2, 10, 30 km and SYSTEM (180 km). The physical RANGE button steps to
+  **1 km to 9,000 km** (`SYSTEM_REACH`).
+- **Scroll** multiplies or divides it by 1.3 a notch, clamped: about 35 notches end to end.
+- **The five stops** stay: 2, 10, 50, 500 km and SYSTEM (9,000 km). The physical RANGE button steps to
   the next stop above the current scale, wrapping from SYSTEM to 2 km. It glides there over 0.4 s,
   smooth in log scale, instead of cutting.
 - **The title** reads *MAP · 12 KM* (rounded to 1 km, or 0.1 km under 2 km), or *MAP · SYSTEM*
@@ -167,12 +179,12 @@ every event it uses as handled, so neither the avatar nor anything else sees it.
 The holo's centre eases from the ship to the star as you zoom out:
 
 ```
-w = smoothstep(ln 30 km, ln 120 km, ln scale_m)
+w = smoothstep(ln 500 km, ln 3,000 km, ln scale_m)
 centre = ship + w · (star − ship)       (in the map's frame)
 ```
 
-At 30 km and nearer the map is round the ship, as today's three ranges are. From 120 km it is
-round the star, as today's SYSTEM range is. Between, it slides. The ship's pip and heading tick are
+At 500 km and nearer the map is round the ship, as today's nearer ranges are: your planet and its
+moons round you. From 3,000 km it is round the star, as today's SYSTEM range is. Between, it slides. The ship's pip and heading tick are
 drawn at every scale, so you can always find yourself. Without a system (a test scene), `w` is 0.
 
 ### 4.3 What is drawn at each scale
@@ -184,10 +196,10 @@ not placed.
 
 | Content | Full size up to | Gone by |
 |---|---|---|
-| Salvage, signs of life, small and mid rocks | 10 km | 20 km |
-| Big rocks | 30 km | 60 km |
-| Worlds, moons, clusters, the course, the charted line | always, while inside the holo | — |
-| Belts, warp limits, 50 km scale rings | grow in from 30 km | full by 60 km |
+| Salvage, signs of life | 10 km | 20 km |
+| Big rocks (the sensors know them to 30 km) | 50 km | 100 km |
+| Worlds, moons, clusters, the course, the charted line, warp limits | always, while inside the holo | — |
+| Belts, 2,500 km scale rings | grow in from 500 km | full by 1,000 km |
 
 - **Worlds** are drawn when they fall inside the holo. As today, only the course is pinned to the
   edge when it is outside.
@@ -195,8 +207,9 @@ not placed.
   near-range sizing.
 - **Reach colouring** (lit if your QE reaches it, dim if not) applies once `w` > 0.5, where warping
   is what you are choosing.
-- **Contacts** are asked of the sensors out to `scale_m`, as today's `range_m`. Body contacts are
-  always asked for the whole system.
+- **Contacts** are asked of the sensors out to the whole system (today's SYSTEM range,
+  20,000 km) at every scale. Each source already stops at its own reach (rocks 30 km), and the
+  bands decide what is drawn.
 
 ### 4.4 Orbit
 
@@ -236,8 +249,8 @@ between placements is handled by `set_turn`. **While the scale is changing** (a 
 glide), they are placed every frame, then at the usual rate again. `PLACE_EVERY` becomes a function
 of `scale_m`: 0 up to 10 km, 0.5 s beyond.
 
-**Risk:** the 30 km scale places hundreds of marks. The probe (§8.2) times a sweep from 1 km to
-180 km against the holo's budget (style guide §2.6). If it is over, placement while zooming drops
+**Risk:** the 50 km scale places hundreds of marks. The probe (§8.2) times a sweep from 1 km to
+9,000 km against the holo's budget (style guide §2.6). If it is over, placement while zooming drops
 to 15 Hz.
 
 ---
@@ -371,8 +384,8 @@ F at the table ─► ComputerStation.interact ─► CameraDirector.use_station
 - saving waits during the move.
 
 **`test_map_page.gd` additions:**
-- the scale's bounds, and 1.15 a notch;
-- the centre is the ship at ≤ 30 km and the star at ≥ 120 km, and moves only one way between;
+- the scale's bounds, and 1.3 a notch;
+- the centre is the ship at ≤ 500 km and the star at ≥ 3,000 km, and moves only one way between;
 - each band's shrink is 1 at its full size and 0 by its gone size;
 - RANGE steps the stops in order and wraps;
 - the pick takes the nearest within 24 px, and nothing beyond;
@@ -390,8 +403,8 @@ F at the table ─► ComputerStation.interact ─► CameraDirector.use_station
 ### 8.2 Real-scene probes and renders
 
 - **`test/probes/computer_mode_render.gd`:** the real flight scene, in the mode, rendered at about
-  5 km, 30 km and 180 km, with the overlay. Sent to the owner.
-- The same probe **times a zoom sweep** from 1 km to 180 km and back, and reports the worst frame
+  5 km, 500 km and 9,000 km, with the overlay. Sent to the owner.
+- The same probe **times a zoom sweep** from 1 km to 9,000 km and back, and reports the worst frame
   against the holo budget.
 
 ### 8.3 Playtest checklist
