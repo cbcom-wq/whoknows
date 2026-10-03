@@ -52,6 +52,8 @@ var resumed := false
 var _reticle: Reticle
 var _interact_prompt := ""
 var _grasp_prompt := ""
+## The computer mode (computer mode spec §3.3, §5): its input and its overlay.
+var computer_input: ComputerModeInput
 var _universe_readout: Label
 var _saved_tag: SavedTag
 var npc_debug: NpcDebug
@@ -134,6 +136,7 @@ func _ready() -> void:
 	_set_outside_mood()
 	_wire_hud()
 	_wire_prompt()
+	_wire_computer_mode()
 	_wire_hands()
 	_wire_hurt()
 	_wire_universe(saved)
@@ -390,6 +393,21 @@ func _wire_prompt() -> void:
 
 func _show_prompt() -> void:
 	_prompt.text = _grasp_prompt if _grasp_prompt != "" else _interact_prompt
+
+## The computer mode (docs/superpowers/specs/2026-09-30-computer-mode-design.md):
+## the mouse and keys at a station, and the on-foot prompt cleared while you
+## are there. Wired here so src/ship/computer never learns about the scene.
+func _wire_computer_mode() -> void:
+	computer_input = ComputerModeInput.new()
+	computer_input.name = "ComputerModeInput"
+	computer_input.director = _director
+	add_child(computer_input)
+	_director.station_changed.connect(_on_station_changed)
+
+func _on_station_changed(_station: ComputerStation) -> void:
+	_interact_prompt = ""
+	_grasp_prompt = ""
+	_show_prompt()
 
 ## Health and damage (docs/superpowers/specs/
 ## 2026-09-29-health-and-damage-design.md §7): the view's red edge and the
