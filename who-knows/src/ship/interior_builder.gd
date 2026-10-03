@@ -198,6 +198,15 @@ func lights_panels() -> Array[LightsPanel]:
 			out.append(node as LightsPanel)
 	return out
 
+## Every toilet lid the last rebuild dressed, for the ship to bind to its
+## store (the dev QE refill button, ToiletLid).
+func toilet_lids() -> Array[ToiletLid]:
+	var out: Array[ToiletLid] = []
+	if is_instance_valid(_physics_body):
+		for node in _physics_body.find_children("*", "ToiletLid", true, false):
+			out.append(node as ToiletLid)
+	return out
+
 func walkable_coords() -> Array:
 	return _walkable.duplicate()
 

@@ -668,6 +668,8 @@ func _rebuild_everything(hull := true) -> void:
 	_apply_stats()
 	quantum.bind(interior_builder.quantum_cores(), interior_builder.quantum_machines(), stats)
 	flight_computer.quantum = quantum.store
+	for lid in interior_builder.toilet_lids():
+		lid.bind(quantum.store)
 	if lights != null:
 		lights.bind(exterior_builder.light_mounts(), exterior_builder.lenses(), exterior_builder.window_glow())
 		for panel in interior_builder.lights_panels():

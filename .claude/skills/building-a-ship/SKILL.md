@@ -149,6 +149,10 @@ Do these in order. Each one names the check that proves it.
      floods, 2 forward` on the starter (the four belly corners and one on the keel, and a forward
      pair); `panel` says whether the bridge has its lights panel; `tint` counts the cells the
      damage tint reaches and flags `VERTICES WITHOUT A CELL`;
+   - `toilet`, on a ship with a bathroom: whether the Interactor finds the shut lid and, in a dev
+     build, the QE refill button under it once it is lifted, and whether the button fills the
+     store (`NOT FOUND`, `NOT FULL`). It writes `probe_toilet_shut.png` and
+     `probe_toilet_open.png`;
    - the droid's dock and its jobs, flagging any `UNREACHABLE`;
    - fps.
 
@@ -249,6 +253,7 @@ thrust.
 | Additive beams at alpha 0.06 | Each cone rendered as a flat, hard-edged tan solid that hid the ship, and overlapping cones stacked | `HullMaterials.BEAM_ALPHA` 0.012, a mid fade stop, back faces culled. Judge them against a dark sky, not a bare hull |
 | Bloom left at the engine's default blend | The outside's glow drew no halo at all round lenses and strips, at any intensity | `glow_blend_mode` Screen (`OUTSIDE_GLOW_BLEND` in `flight_test.gd`) |
 | A new sound not in `test_synth`'s list | `test_synth` pins `Synth.NAMES.size()` against its `LENGTHS` table and each sound's length, so the full suite fails on one line | Add the sound and its length to `LENGTHS` in the same change |
+| One collider over a whole prop with something to use on it | The washstand was one 1.5 × 0.9 m box over the toilet and the sink, so the Interactor's ray stopped on it 0.4 m above the toilet's lid (found adding the dev QE refill) | Keep a prop's colliders under anything on it that is used or picked up (the bunk's mattress, the shelves' boards, the toilet's bowl). Prove it with a ray from eye height in the real scene, as `test_toilet_lid.gd` does: it fails with the old box |
 | A reach test with the eye where the brief said | The lights panel is on the shoulder's front wall, about 3.1 m from the cell behind, past the Interactor's 2.5 m; the test failed | Stand the test's eye in the shoulder's own cell (1.3 m from the panel) and remember the desk is 0.4 m deep |
 | Running a test or the probe from the main checkout | `run_tests.ps1` resolves from the current directory, so a shell that started in another tree ran that tree's code and reported a pass | Check the directory before every command when working in a worktree |
 | A new `class_name` without `--import` and its `.uid` | Tests fail to find the class, and the generated `.uid` is not committed | Run `--import`, then commit the `.uid` files (the repo tracks them) |

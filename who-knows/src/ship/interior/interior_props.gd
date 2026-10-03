@@ -78,6 +78,16 @@ const PLATE_LIFT := 0.042
 const BUNK_MATTRESS_TOP := 0.54
 ## The top of the medkit bracket beside the washstand's mirror.
 const WASHSTAND_BRACKET := 1.15
+## The top of the toilet's seat ring, which its lid rests on.
+const TOILET_SEAT_TOP := 0.43
+## How far the toilet's cistern stands out of the wall: a lifted lid clears it.
+const TOILET_TANK_DEPTH := 0.18
+## The toilet's lid: across, thick, and long from its hinge to its front edge.
+const TOILET_LID := Vector3(0.42, 0.04, 0.36)
+## The QE refill button in the toilet's bowl (ToiletLid, dev builds only).
+const TOILET_BUTTON := Vector3(0.12, 0.12, 0.015)
+## The toilet's bowl in the washstand's frame: the middle of its seat ring.
+const _TOILET_BOWL := Vector3(-0.5, 0.4, 0.38)
 
 ## The rounded cockpit nose (spec §6), in a frame on the canopy plane at
 ## floor level: +x across the windshield, +y up, +z back into the room.
@@ -1101,12 +1111,16 @@ static func fridge(kit: InteriorKit, f: Transform3D, _variety: float) -> void:
 	kit.disc(GLOW, f * _at(Vector3(x + 0.28, 1.65, 0.602)), 0.025, _lit(InteriorPalette.SKY, 1.6))
 	kit.collider(f * _at(Vector3(x, 0.925, 0.3)), Vector3(0.8, 1.85, 0.6))
 
-## A toilet and a sink under a mirror lit from above.
+## A toilet and a sink under a mirror lit from above. The toilet is a bowl,
+## a seat ring and a cistern; its lid is ToiletLid's, so it can lift.
 static func washstand(kit: InteriorKit, f: Transform3D, _variety: float) -> void:
 	var trim := _c(InteriorPalette.TRIM)
 	kit.bevel_box(SOLID, f * _at(Vector3(-0.5, 0.2, 0.3)), Vector3(0.4, 0.4, 0.55), 0.06, trim)
-	kit.bevel_box(SOLID, f * _at(Vector3(-0.5, 0.43, 0.32)), Vector3(0.44, 0.06, 0.5), 0.025, trim)
-	kit.bevel_box(SOLID, f * _at(Vector3(-0.5, 0.62, 0.09)), Vector3(0.44, 0.38, 0.18), 0.04, trim)
+	var up := Basis(Vector3.RIGHT, -PI * 0.5)
+	kit.ring(SOLID, f * Transform3D(up, _TOILET_BOWL), 0.12, 0.19, 0.0, TOILET_SEAT_TOP - _TOILET_BOWL.y, trim)
+	kit.disc(SOLID, f * Transform3D(up, _TOILET_BOWL + Vector3(0, 0.001, 0)), 0.12, _c(InteriorPalette.MIRROR))
+	kit.bevel_box(SOLID, f * _at(Vector3(-0.5, 0.62, TOILET_TANK_DEPTH * 0.5)), Vector3(0.44, 0.38, TOILET_TANK_DEPTH),
+		0.04, trim)
 	kit.bevel_box(SOLID, f * _at(Vector3(0.45, 0.4, 0.2)), Vector3(0.14, 0.8, 0.14), 0.03, trim)
 	kit.bevel_box(SOLID, f * _at(Vector3(0.45, 0.85, 0.24)), Vector3(0.56, 0.14, 0.44), 0.05, trim)
 	kit.tube_between(SOLID, f * Vector3(0.45, 0.92, 0.05), f * Vector3(0.45, 1.02, 0.05), 0.02,
@@ -1118,11 +1132,29 @@ static func washstand(kit: InteriorKit, f: Transform3D, _variety: float) -> void
 	# (washstand_spots()). Under 0.15 m proud, so it needs no collider.
 	kit.bevel_box(SOLID, f * _at(Vector3(-0.5, WASHSTAND_BRACKET - 0.015, 0.075)), Vector3(0.36, 0.03, 0.13), 0.01,
 		trim)
-	kit.collider(f * _at(Vector3(0, 0.45, 0.3)), Vector3(1.5, 0.9, 0.6))
+	# The toilet is solid only to its bowl, so the Interactor's ray reaches the
+	# lid and the button under it; the sink is solid to its top.
+	kit.collider(f * _at(Vector3(-0.5, _TOILET_BOWL.y * 0.5, 0.3)), Vector3(0.44, _TOILET_BOWL.y, 0.6))
+	kit.collider(f * _at(Vector3(0.45, 0.45, 0.24)), Vector3(0.6, 0.9, 0.48))
 
 ## The medkit bracket beside the mirror.
 static func washstand_spots() -> Array:
 	return [[_at(Vector3(-0.5, WASHSTAND_BRACKET, 0.08)), &"tool"]]
+
+## The toilet's lid in its hinge frame (toilet_hinge()): origin on the hinge
+## line, +z to its front edge, +y up off the seat while it is shut.
+static func toilet_lid(kit: InteriorKit, f: Transform3D) -> void:
+	kit.bevel_box(SOLID, f * _at(Vector3(0, 0, TOILET_LID.z * 0.5)), TOILET_LID, 0.015, _c(InteriorPalette.TRIM))
+
+## The lid's hinge in the washstand's frame: just in front of the cistern,
+## the shut lid lying on the seat.
+static func toilet_hinge() -> Transform3D:
+	return _at(Vector3(_TOILET_BOWL.x, TOILET_SEAT_TOP + TOILET_LID.y * 0.5 + 0.005, TOILET_TANK_DEPTH + 0.03))
+
+## The refill button's panel frame in the washstand's frame: on the water in
+## the bowl, +z up out of it.
+static func toilet_button() -> Transform3D:
+	return Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), _TOILET_BOWL + Vector3(0, 0.002, 0))
 
 ## A towel on a rail.
 static func towel_rail(kit: InteriorKit, f: Transform3D, variety: float) -> void:

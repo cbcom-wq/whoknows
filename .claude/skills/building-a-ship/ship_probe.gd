@@ -12,7 +12,9 @@ extends SceneTree
 # Ship, with Interior/Avatar and Interior/PilotSeat, and a CameraDirector at
 # its root, as that scene does. Writes <out>/probe_spawn.png, probe_seated.png and
 # probe_stood.png; on a ship with a lights panel, probe_panel_off.png,
-# probe_panel_on.png and probe_panel_close.png too. On a ship with lights it
+# probe_panel_on.png and probe_panel_close.png too; with a bathroom,
+# probe_toilet_shut.png and (a dev build) probe_toilet_open.png and the
+# toilet line. On a ship with lights it
 # also writes probe_lit_{floods,forward,both}_* (the hull against the dark),
 # probe_star_bloom_{off,on}, probe_seated_lit, and, parked beside a rock's
 # night side, probe_seated_rock_{dark,lit} and probe_rock_*. Every ship gets
@@ -209,6 +211,45 @@ func _panel_shots(ship: Ship, avatar: Avatar) -> void:
 	await _shot("panel_close")
 	ship.lights.toggle(ShipLights.FLOOD)
 	ship.lights.toggle(ShipLights.FORWARD)
+
+## The bathroom's toilet at eye height (ToiletLid): stood in front of it,
+## aimed at the shut lid, then -- on a dev build -- at the QE refill button
+## with the lid lifted, which is pressed to fill the store and the store put
+## back. Prints what the Interactor finds each time. Skipped with no bathroom.
+func _toilet_shots(ship: Ship, avatar: Avatar) -> void:
+	var lids := ship.interior_builder.toilet_lids()
+	if lids.is_empty():
+		print("toilet  none")
+		return
+	var lid := lids[0]
+	var interactor: Interactor = avatar.get_node("Head/Interactor")
+	var feet := lid.global_transform * Vector3(-0.3, 0, 1.25)
+	var toward := lid.global_transform * Vector3(-0.5, 0, 0.4) - feet
+	toward.y = 0.0
+	avatar.place(Transform3D(Basis.looking_at(toward.normalized(), Vector3.UP), feet))
+	var aim := func(at: Vector3) -> void:
+		var eye: Vector3 = avatar.head.global_position
+		var flat := Vector2(at.x - eye.x, at.z - eye.z).length()
+		avatar.set_head_pitch(atan2(at.y - eye.y, flat))
+	aim.call(lid.global_transform * (InteriorProps.toilet_hinge().origin + Vector3(0, 0, 0.25)))
+	await _shot("toilet_shut")
+	var found_lid := interactor.current() == lid
+	if not lid.dev:
+		print("toilet  %d lids; no dev button (a release build)" % lids.size())
+		return
+	var store := ship.quantum.store
+	var before := store.amount
+	lid.set_open(true, false)
+	aim.call(lid.global_transform * InteriorProps.toilet_button().origin)
+	await _shot("toilet_open")
+	var found_button := interactor.current() == lid.button
+	lid.button.interact(avatar)
+	var filled := store.amount
+	store.drain(filled - before, &"probe")
+	lid.set_open(false, false)
+	print("toilet  %d lids; the shut lid %s, the button under it %s; refill %d -> %d of %d%s" % [lids.size(),
+		"found" if found_lid else "NOT FOUND", "found" if found_button else "NOT FOUND", before, filled,
+		store.capacity, "" if filled == store.capacity else "  <-- NOT FULL"])
 
 ## Many ships (docs/superpowers/specs/2026-10-02-many-ships-design.md §8.2):
 ## the worst view's frame rate with a second ship 300 m off; the second ship
@@ -506,5 +547,6 @@ func _run(scene: Node) -> void:
 	var walked := from.distance_to(avatar.global_position)
 	print("walked  %.2f m in 1 s after standing%s" % [walked, "" if walked > 1.0 else "  <-- STUCK"])
 	await _panel_shots(ship, avatar)
+	await _toilet_shots(ship, avatar)
 	await _fleet_pass(scene)
 	quit()
