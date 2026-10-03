@@ -3,7 +3,7 @@ extends GutTest
 ## The quantum machine's charge plate (docs/superpowers/specs/
 ## 2026-09-24-quantum-energy-design.md §7.3, §9): ChargeDock on its own, then
 ## the plant charging the avatar's suit from the ship's store through it, in
-## the real scene -- 50 QE a second, one for one, while you stay within 1.2 m.
+## the real scene -- 50 QE a second, 4 suit QE per store QE, while you stay within 1.2 m.
 
 const DT := 1.0 / 60.0
 
@@ -185,7 +185,7 @@ func test_the_plate_offers_to_charge_an_empty_suit():
 	_avatar(ship).suit_cell.charge = 13.6
 	assert_eq(plate.prompt_text(), "Charge suit (+86 QE)")
 
-func test_it_charges_at_50_a_second_from_the_store():
+func test_it_charges_at_50_a_second_for_a_quarter_from_the_store():
 	var ship := _ship()
 	var plant := ship.quantum
 	var suit := _avatar(ship).suit_cell
@@ -193,7 +193,7 @@ func test_it_charges_at_50_a_second_from_the_store():
 	_press(ship)
 	_step(plant, 1.0)
 	assert_almost_eq(suit.charge, 50.0, 0.9)
-	assert_almost_eq(float(before - plant.store.amount), suit.charge, 1.0, "one for one")
+	assert_almost_eq(float(before - plant.store.amount), suit.charge / QuantumPlant.SUIT_PER_STORE, 1.0, "four suit QE for each QE of store")
 
 func test_it_stops_at_100():
 	var ship := _ship()
@@ -204,7 +204,7 @@ func test_it_stops_at_100():
 	_press(ship)
 	_step(plant, 3.0)
 	assert_eq(suit.charge, SuitCell.CAPACITY)
-	assert_eq(plant.store.amount, before - 100, "100 QE, and no more")
+	assert_eq(plant.store.amount, before - 25, "25 store QE fill it, and no more")
 	assert_eq(plate.prompt_text(), "Suit charged")
 	assert_false(plate.is_lit(), "nothing more to give")
 	assert_eq(plate.readout_percent(), -1, "the charge is over")
@@ -214,11 +214,11 @@ func test_it_stops_when_the_store_reaches_0():
 	var plant := ship.quantum
 	var suit := _avatar(ship).suit_cell
 	var plate := _machine(ship).plate
-	plant.store.drain(plant.store.amount - 30, &"test")
+	plant.store.drain(plant.store.amount - 10, &"test")
 	_press(ship)
 	_step(plant, 2.0)
 	assert_eq(plant.store.amount, 0, "down to 0: there is no reserve")
-	assert_almost_eq(suit.charge, 30.0, 0.0001, "every QE the store had, and not a fraction more")
+	assert_almost_eq(suit.charge, 40.0, 0.0001, "every QE the store had, and not a fraction more")
 	assert_eq(plate.readout_percent(), -1, "the charge is over")
 	assert_eq(plate.prompt_text(), "Store empty")
 	assert_false(plate.is_lit())
@@ -252,7 +252,7 @@ func test_it_charges_in_low_power():
 func test_after_a_charge_empties_the_store_the_pilot_light_brings_it_back_to_25():
 	var ship := _ship()
 	var plant := ship.quantum
-	plant.store.drain(plant.store.amount - 40, &"test")
+	plant.store.drain(plant.store.amount - 10, &"test")
 	_press(ship)
 	_step(plant, 1.0)
 	assert_eq(plant.store.amount, 0)
@@ -274,7 +274,7 @@ func test_the_screen_counts_up_while_charging():
 	assert_eq(m.plate.readout_percent(), percent)
 	assert_true(m.plate.is_lit())
 	_step(plant, 2.0)
-	assert_eq(m.panel.readout_text(), "MAKE · MUG\nCOST 6 QE\nSTORE %d QE" % (before - 100), "and back when it is done")
+	assert_eq(m.panel.readout_text(), "MAKE · MUG\nCOST 6 QE\nSTORE %d QE" % (before - 25), "and back when it is done")
 
 ## Every line the charge puts on the machine's screen fits its glass.
 func test_the_charge_lines_fit_the_screen():
@@ -285,9 +285,9 @@ func test_the_charge_lines_fit_the_screen():
 		var w := font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, label.font_size).x * label.pixel_size
 		assert_lt(w, InteriorProps.QUANTUM_MACHINE_SCREEN_GLASS.x - 0.02, line)
 
-## A charge is one for one (spec §3.2): the store pays in whole QE for exactly
-## what the suit takes, a fraction owed at most, over charge after charge.
-func test_charge_after_charge_is_one_for_one():
+## A charge is SUIT_PER_STORE to one: the store pays in whole QE for exactly
+## a quarter of what the suit takes, a fraction owed at most, over charge after charge.
+func test_charge_after_charge_is_four_for_one():
 	var ship := _ship()
 	var plant := ship.quantum
 	var suit := _avatar(ship).suit_cell
@@ -300,6 +300,7 @@ func test_charge_after_charge_is_one_for_one():
 		_step(plant, 3.0)
 		taken += suit.charge - from
 	var paid := before - plant.store.amount
+	taken /= QuantumPlant.SUIT_PER_STORE
 	assert_true(taken - paid >= 0.0 and taken - paid < 1.0, "paid %d for %.3f" % [paid, taken])
 
 ## Whoever was charging is gone (freed): the charge ends quietly.

@@ -134,7 +134,7 @@ func test_z_toggles_assist_and_drops_the_lock():
 	assert_false(_fc.speed_locked)
 
 ## Holding C swings the chase camera round the ship; the mouse leaves the
-## stick alone, and letting go puts you back in the cockpit.
+## stick alone, and letting go glides the camera back, then into the cockpit.
 func test_holding_c_orbits_the_camera_and_not_the_stick():
 	var director: CameraDirector = _root.get_node("CameraDirector")
 	director.sit_now(_root.get_node("Ship/Interior/PilotSeat"))
@@ -152,17 +152,24 @@ func test_holding_c_orbits_the_camera_and_not_the_stick():
 		"it swings about the ship's centre")
 	_pilot.handle(_action(&"orbit_camera", false))
 	assert_false(director.is_orbiting)
+	_pilot.handle(_motion(Vector2(-30.0, 0.0)))
+	assert_ne(_pilot.stick.offset, stick, "the mouse flies again at once")
+	assert_eq(director.view, CameraDirector.View.CHASE, "the camera glides back, not snaps")
+	await wait_seconds(CameraDirector.ORBIT_RETURN_DURATION * 0.5)
+	assert_false(chase.transform.is_equal_approx(rest), "halfway through the glide")
+	assert_true(director.is_orbit_shown())
+	await wait_seconds(CameraDirector.ORBIT_RETURN_DURATION * 0.5 + 0.2)
+	assert_false(director.is_orbit_shown())
 	assert_eq(director.view, CameraDirector.View.COCKPIT)
 	assert_true(chase.transform.is_equal_approx(rest), "the camera is back at rest")
-	_pilot.handle(_motion(Vector2(-30.0, 0.0)))
-	assert_ne(_pilot.stick.offset, stick, "the mouse flies again")
 
 func test_standing_up_ends_an_orbit():
 	var director: CameraDirector = _root.get_node("CameraDirector")
 	director.sit_now(_root.get_node("Ship/Interior/PilotSeat"))
 	_pilot.handle(_action(&"orbit_camera", true))
+	_pilot.handle(_action(&"orbit_camera", false))
 	director.stand_now()
-	assert_false(director.is_orbiting)
+	assert_false(director.is_orbit_shown(), "standing up cuts the glide short")
 
 func test_nothing_happens_standing_up():
 	_pilot.set_seated(false)

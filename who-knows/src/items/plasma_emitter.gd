@@ -6,14 +6,12 @@ extends ItemUse
 ## heads for wherever the eye's ray lands, so it hits what the reticle is on
 ## although the muzzle is off to one side. If something stands between the eye
 ## and the muzzle -- you are pressed against a wall -- the shot strikes it at
-## once.
+## once. On a spacewalk (works_outside) the item is in_space, and so is
+## everything the shot makes.
 
 const COOLDOWN := 0.25
 const AIM_RANGE := 100.0
 const MAX_BOLTS := 8
-## interior_geometry | items.
-const RAY_MASK := 2 | 32 | Npc.LAYER
-
 var _cooldown := 0.0
 var _bolts: Array[PlasmaBolt] = []
 
@@ -29,21 +27,24 @@ func use(item: Item, aim: Transform3D, world: Node3D, holder: CollisionObject3D)
 		exclude.append(holder.get_rid())
 	var space := item.get_world_3d().direct_space_state
 	var muzzle := item.global_transform * item.definition.use_point
+	var outside := item.in_space
+	var mask := PlasmaBolt.mask(outside)
 	var bolt := PlasmaBolt.new()
 	bolt.exclude = exclude
 	bolt.source = holder
+	bolt.outside = outside
 	world.add_child(bolt)
-	var blocked := space.intersect_ray(PhysicsRayQueryParameters3D.create(aim.origin, muzzle, RAY_MASK, exclude))
+	var blocked := space.intersect_ray(PhysicsRayQueryParameters3D.create(aim.origin, muzzle, mask, exclude))
 	if not blocked.is_empty():
 		bolt.launch(aim.origin, muzzle - aim.origin)
 		bolt.impact(blocked)
 		return true
 	var far := aim.origin - aim.basis.z * AIM_RANGE
-	var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(aim.origin, far, RAY_MASK, exclude))
+	var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(aim.origin, far, mask, exclude))
 	var target: Vector3 = hit["position"] if not hit.is_empty() else far
 	bolt.launch(muzzle, target - muzzle)
 	_track(bolt)
-	ImpactFlash.spawn(world, muzzle, bolt.direction, ImpactFlash.Kind.MUZZLE)
+	ImpactFlash.spawn(world, muzzle, bolt.direction, ImpactFlash.Kind.MUZZLE, outside)
 	return true
 
 ## The bolts this pistol has in flight, oldest first.

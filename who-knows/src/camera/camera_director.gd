@@ -35,6 +35,8 @@ const THIRD_PERSON_OFFSET := Vector3(0.5, 0.4, 2.5)
 ## pixel of mouse travel, and how far over the top or under the keel it goes.
 const ORBIT_SENSITIVITY := 0.005
 const ORBIT_PITCH_LIMIT := deg_to_rad(80.0)
+## Letting go of C glides the camera back to rest over this long, in seconds.
+const ORBIT_RETURN_DURATION := 0.5
 
 @export var avatar_path: NodePath
 @export var flight_computer_path: NodePath
@@ -57,6 +59,8 @@ var _orbit_rest := Transform3D.IDENTITY
 var _orbit_return: View = View.COCKPIT
 var _orbit_yaw := 0.0
 var _orbit_pitch := 0.0
+## The glide back to rest after C is let go, or null.
+var _orbit_tween: Tween = null
 
 @onready var _avatar: Avatar = get_node(avatar_path)
 @onready var _flight: FlightComputer = get_node(flight_computer_path)
@@ -257,17 +261,22 @@ func _on_transition_finished() -> void:
 	transition_finished.emit()
 
 ## Starts an orbit (C held at the helm): from the cockpit or the chase view,
-## you see through the chase camera, starting from where it rests.
+## you see through the chase camera, starting from where it rests. Pressed
+## again during the glide back, it carries on from where the glide got to.
 func begin_orbit() -> void:
 	if not is_seated or is_orbiting or _tween != null:
 		return
+	if _orbit_tween != null:
+		_orbit_tween.kill()
+		_orbit_tween = null
+	else:
+		_orbit_return = view
+		_orbit_rest = _chase_cam.transform
+		_orbit_yaw = 0.0
+		_orbit_pitch = 0.0
+		view = View.CHASE
+		_apply_view()
 	is_orbiting = true
-	_orbit_return = view
-	_orbit_rest = _chase_cam.transform
-	_orbit_yaw = 0.0
-	_orbit_pitch = 0.0
-	view = View.CHASE
-	_apply_view()
 
 ## Swings the orbit by a mouse move: right swings the camera round to the
 ## right, up raises it over the ship. The camera turns about the ship's centre,
@@ -275,18 +284,44 @@ func begin_orbit() -> void:
 func orbit(relative: Vector2) -> void:
 	if not is_orbiting:
 		return
-	_orbit_yaw -= relative.x * ORBIT_SENSITIVITY
-	_orbit_pitch = clampf(_orbit_pitch - relative.y * ORBIT_SENSITIVITY,
-		-ORBIT_PITCH_LIMIT, ORBIT_PITCH_LIMIT)
-	var swing := Basis(Vector3.UP, _orbit_yaw) * Basis(Vector3.RIGHT, _orbit_pitch)
-	_chase_cam.transform = Transform3D(swing, Vector3.ZERO) * _orbit_rest
+	_swing_to(Vector2(_orbit_yaw - relative.x * ORBIT_SENSITIVITY,
+		clampf(_orbit_pitch - relative.y * ORBIT_SENSITIVITY, -ORBIT_PITCH_LIMIT, ORBIT_PITCH_LIMIT)))
 
-## Lets go of C: the chase camera goes back to rest and you to the view you
+## Lets go of C: the mouse is the stick's again at once, and the chase camera
+## glides back to rest the short way round; then you are back in the view you
 ## were in.
-func end_orbit() -> void:
+func release_orbit() -> void:
 	if not is_orbiting:
 		return
 	is_orbiting = false
+	var from := Vector2(wrapf(_orbit_yaw, -PI, PI), _orbit_pitch)
+	_orbit_tween = create_tween()
+	_orbit_tween.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	_orbit_tween.tween_method(_swing_to, from, Vector2.ZERO, ORBIT_RETURN_DURATION)
+	_orbit_tween.finished.connect(_finish_orbit)
+
+## True from pressing C until the glide back has finished.
+func is_orbit_shown() -> bool:
+	return is_orbiting or _orbit_tween != null
+
+## Ends an orbit or its glide at once, with no glide: standing up, or another
+## ship.
+func end_orbit() -> void:
+	if not is_orbit_shown():
+		return
+	if _orbit_tween != null:
+		_orbit_tween.kill()
+	_finish_orbit()
+
+func _swing_to(angles: Vector2) -> void:
+	_orbit_yaw = angles.x
+	_orbit_pitch = angles.y
+	var swing := Basis(Vector3.UP, _orbit_yaw) * Basis(Vector3.RIGHT, _orbit_pitch)
+	_chase_cam.transform = Transform3D(swing, Vector3.ZERO) * _orbit_rest
+
+func _finish_orbit() -> void:
+	is_orbiting = false
+	_orbit_tween = null
 	_chase_cam.transform = _orbit_rest
 	view = _orbit_return
 	_apply_view()
@@ -294,6 +329,7 @@ func end_orbit() -> void:
 func cycle_view() -> void:
 	if _tween != null or is_at_station or is_orbiting:
 		return
+	end_orbit()
 	if is_seated:
 		view = View.CHASE if view == View.COCKPIT else View.COCKPIT
 	else:

@@ -153,10 +153,15 @@ func take(candidate: Item) -> bool:
 func use() -> bool:
 	if not can_use():
 		return false
-	if not item.use(aim(), world_root, _body):
+	if not item.use(aim(), use_world(), _body):
 		return false
 	used.emit(item)
 	return true
+
+## Where what you use acts: world_root aboard; on a spacewalk the space you
+## are in, beside you, never the interior you left.
+func use_world() -> Node3D:
+	return _body.get_parent() as Node3D if suspended else world_root
 
 ## The eye: origin at the head, -z along the view.
 func aim() -> Transform3D:
@@ -258,7 +263,7 @@ func _physics_process(delta: float) -> void:
 func hold_now(delta: float, pressed: bool) -> bool:
 	if not pressed or not can_use() or item.use_node == null:
 		return false
-	return item.use_node.hold(item, aim(), world_root, _body, delta)
+	return item.use_node.hold(item, aim(), use_world(), _body, delta)
 
 ## Lets go: the item goes back into the world loose, at a point a ray from the
 ## eye proves is clear of walls, still ignoring its holder until the two no

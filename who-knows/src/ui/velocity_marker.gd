@@ -123,6 +123,13 @@ func render(telemetry: VehicleTelemetry) -> void:
 		return
 
 	var target := telemetry.hull_origin + telemetry.world_velocity
+	# A point in the camera's own plane has no screen position: the canopy
+	# camera, before the portal first places it, sits on a hull at rest.
+	var depth := _camera.global_basis.z.dot(_camera.global_position - target)
+	if absf(depth) < 0.001:
+		mode = Mode.HIDDEN
+		queue_redraw()
+		return
 	var state := resolve(
 		telemetry.speed,
 		_camera.is_position_behind(target),

@@ -84,7 +84,7 @@ func handle(event: InputEvent) -> void:
 			director.begin_orbit()
 	elif event.is_action_released(&"orbit_camera"):
 		if director != null:
-			director.end_orbit()
+			director.release_orbit()
 	elif event.is_action_pressed(&"point_mode"):
 		pointing = true
 		pointer = Vector2.ZERO

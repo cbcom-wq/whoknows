@@ -312,3 +312,27 @@ func test_on_a_spacewalk_only_what_works_outside_can_be_used():
 	assert_false(_grasp.can_use())
 	item.definition.works_outside = true
 	assert_true(_grasp.can_use())
+
+class WorldRecorder extends ItemUse:
+	var world: Node3D
+	func use(_item: Item, _aim: Transform3D, w: Node3D, _holder: CollisionObject3D) -> bool:
+		world = w
+		return true
+
+## On a spacewalk world_root is still the interior; what you use acts in the
+## space you are in, beside you.
+func test_on_a_spacewalk_what_you_use_acts_where_you_are():
+	var aboard := Node3D.new()
+	add_child_autofree(aboard)
+	_grasp.world_root = aboard
+	var item := _item(ItemDefinition.Grip.WIELD, 1.0)
+	item.definition.works_outside = true
+	var recorder := WorldRecorder.new()
+	item.use_node = recorder
+	item.add_child(recorder)
+	assert_true(_grasp.take(item))
+	assert_true(_grasp.use())
+	assert_eq(recorder.world, aboard, "aboard: world_root")
+	_grasp.suspended = true
+	assert_true(_grasp.use())
+	assert_eq(recorder.world, _world, "outside: where the body is")
