@@ -306,8 +306,11 @@ at 1080p, with capitalised labels as on the rim.
   - for the selected contact, the lines the rim screen shows (`MapPage.lines`, `warp_lines`), one
     per row;
   - under them, **the action button**: *SET COURSE*, *CLEAR COURSE*, *CHART WARP* or *CLEAR WARP*.
-    It is exactly what the big button would do, and it is disabled with the reason as its label
-    (*FLY · TOO CLOSE TO WARP*, *NEED 512 QE*) when it would do nothing.
+    It is exactly what the big button would do, the big button's own prompt, lit whenever the big
+    button is. It is disabled, reading *NO ACTION*, only when the big button is dark. A warp
+    target's reason (*FLY · TOO CLOSE TO WARP*, *NEED 512 QE · STORE 300*) stays on the card's third
+    line (`warp_lines`), as on the rim: charting is allowed anywhere (the warp spec §4.1), so the
+    button stays lit and the reason is not its label.
 - **Hover tag:** beside the cursor over a mark, the contact's name and distance, e.g.
   *ZESU · 140 KM*.
 - **Bottom:** the control hints, and the scale on the right.
@@ -336,7 +339,7 @@ state. Someone standing beside you sees what you are doing.
 | `src/ship/computer/computer_station.gd` | **New.** The interactable, the eye, and its `ShipComputer`. |
 | `src/ship/computer/computer_mode_input.gd` | **New.** The mode's input (§3.3). |
 | `src/ui/computer_overlay.gd` | **New.** The overlay (§5). Reads the page every frame and keeps no state of its own beyond hover. |
-| `src/ship/computer/ship_computer.gd` | `station`, `pick()`, `hover()`, `act()`, `set_spin()`, `tab()`. |
+| `src/ship/computer/ship_computer.gd` | `station`, `pick()`, `hover()`, `act()`, the `spin` property, `tab()`. |
 | `src/ship/computer/map_page.gd` | `scale_m`, `zoom(notches)`, `step_range()`, the centre blend, the shrink bands, the placed list, save migration. |
 | `src/ship/computer/holo_volume.gd` | `set_turn` takes the spin. |
 | `src/camera/camera_director.gd` | `use_station()`, `leave_station()`, `is_at_station`, `station_changed`, orbit of the camera round the station's holo. |
@@ -356,7 +359,7 @@ F at the table ─► ComputerStation.interact ─► CameraDirector.use_station
                          ┌────────────────────────┴───────────────┐
                  ComputerModeInput on                     ComputerOverlay shown
                          │ click ─► ShipComputer.pick ─► page.selected
-                         │ drag  ─► set_spin / director orbit
+                         │ drag  ─► spin / director orbit
                          │ wheel ─► page.zoom
                          │ Enter ─► ShipComputer.act ─► press(&"big")
                          │ Esc/F ─► CameraDirector.leave_station ─► station_changed(null)
@@ -473,6 +476,12 @@ differences, each ruled during the build:
 - **The eye** is `InteriorProps.holo_station_eye(elevation)` with `HOLO_STATION_DISTANCE` 1.03 m
   and `HOLO_STATION_ELEVATION` 29°, not `holo_table_station_eye()`; the station's box is
   `HOLO_STATION_SIZE` (1.1 × 0.14 × 1.1 m, 0.93 m up).
+- **The spin is its own node.** §4.4's `set_turn(ship_turn * Basis(UP, spin))` is built as a
+  separate `Spin` root in `HoloVolume`, between the volume and the marks: `ShipComputer.spin` sets
+  it (`HoloVolume.set_spin`), and `set_turn` still takes the ship's turn alone. The chevron hangs
+  under the spin but not the turn, so it spins with the marks and never turns with the ship.
+- **Back on the map the selection is kept** (§3.4) while it is still a target, by a tab or by PAGE;
+  only when it has gone does `MapPage.opened()` take the course or the nearest.
 - **RANGE glides** in log scale with a 0.1 s time constant (`MapPage.GLIDE`), about half a second
   to settle, rather than a fixed 0.4 s ease.
 - **The overlay's text is outlined** in `SCREEN_BACK`, and the action button is ruled in `TRIM`.

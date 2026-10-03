@@ -273,6 +273,7 @@ overlay (`ComputerOverlay`, a `CanvasLayer` in the flight scene) frames it. Esc 
 | `MapPage.ROCK_BAND` | full ≤ 50 km, gone by 100 km | big rocks |
 | `MapPage.WIDE_BAND` | grow in from 500 km, full by 1,000 km | belts and the 2,500 km scale rings |
 | `MapPage.place_every()` | 0 up to 10 km, 0.5 s beyond | how often the marks are placed afresh; every frame while the scale glides |
+| `ComputerOverlay.NEAR_ROWS` | 30 | the near list's rows at most, nearest first; the system's list is never cut |
 | `CameraDirector.GROUP` | `&"camera_director"` | how a station finds the game's one director; never a path |
 
 - **Drawn vs picked:** `MapPage.shown()` is what is drawn at the scale shown (marks shrinking
@@ -291,7 +292,10 @@ overlay (`ComputerOverlay`, a `CanvasLayer` in the flight scene) frames it. Esc 
 - **The overlay:** a list (the system once `system_weight` > 0.5, else what is near at full size),
   the selected target's card and its action (the big button's prompt; *NO ACTION* only when the
   big button is dark), tabs, hints and the scale. A far world picked in the list zooms the map out
-  to the system first. Colours from `InteriorPalette` only; text outlined in `SCREEN_BACK`.
+  to the system first. Colours from `InteriorPalette` only; text outlined in `SCREEN_BACK`. Every
+  button overrides all five boxes (`hover_pressed` too) and every font colour, or Godot's default
+  theme shows through (a salmon box under the lit tab); a row is written only when its text or
+  colour changes. Back on the map by a tab or PAGE, the selection is kept while it is a target.
 - **The cost** (2026-10-03, the build machine's CPU): a placing is (headless)
   about 0.5 ms at 500 km, 0.7 ms at 1,000 km, 1.2 ms at 3,000 km and 1.9 ms at 9,000 km, mostly
   the rings', belts' and limits' ticks. A 1 km to 9,000 km sweep
