@@ -19,8 +19,12 @@ extends Node3D
 
 const RADIUS := 0.5
 const HALF_HEIGHT := 0.3
-## Marks of one shape and colour it can draw at once.
+## Marks of one shape and colour a group starts with room for. A busy system
+## needs more -- seed 2's 31 worlds draw about 840 faint ticks on the system
+## range -- so a group doubles as it fills, up to MAX_CAPACITY; past that,
+## marks are dropped, counted (dropped()) and warned of, never silently.
 const CAPACITY := 512
+const MAX_CAPACITY := 4096
 ## The miniature's longest side, metres (spec §7.1), and how fast it turns.
 const MINIATURE_SIZE := 0.8
 const SPIN := deg_to_rad(10.0)
@@ -39,6 +43,11 @@ const SHAPES: Array[StringName] = [&"ball", &"diamond", &"sphere", &"pin", &"sta
 const _GLOW := InteriorKit.Batch.GLOW
 
 var layer := InteriorKit.LAYER
+## Whether marks dropped past MAX_CAPACITY are warned of (once). A test that
+## means to overflow turns it off to keep its output clean.
+var warn_on_drop := true
+var _dropped := 0
+var _warned := false
 var _groups: Dictionary = {}   # StringName shape -> {Color: MultiMeshInstance3D}
 ## What each group was given this time. Kept here too: the renderer owns a
 ## MultiMesh's own copy, and a headless run keeps none to read back.
@@ -128,13 +137,16 @@ func show_marks(marks: Array) -> void:
 ## The same, a mark at a time, with nothing allocated per mark: begin, add
 ## each, end. For the map, which draws hundreds every frame.
 func begin_marks() -> void:
+	_dropped = 0
 	for mmi in _placed:
 		(_placed[mmi] as Array).clear()
 
 func add_mark(shape: StringName, colour: Color, position: Vector3, size: float) -> void:
 	var placed: Array = _placed[_group(shape, colour)]
-	if placed.size() < CAPACITY:
+	if placed.size() < MAX_CAPACITY:
 		placed.append(_transform(shape, position, size))
+	else:
+		_dropped += 1
 
 ## Many ticks of one colour and size at once, as add_mark would place them:
 ## the map's rings, belts and limits, hundreds a placing, for one group looked
@@ -145,17 +157,27 @@ func add_ticks(colour: Color, positions: PackedVector3Array, size: float) -> voi
 	var placed: Array = _placed[_group(&"tick", colour)]
 	var b := Basis.from_scale(Vector3.ONE * size)
 	for at in positions:
-		if placed.size() >= CAPACITY:
-			return
+		if placed.size() >= MAX_CAPACITY:
+			_dropped += 1
+			continue
 		placed.append(Transform3D(b, at))
 
 ## Hands each group its transforms in one buffer, 12 floats apiece as
-## MultiMesh.buffer lays them out: one call, not one per mark.
+## MultiMesh.buffer lays them out: one call, not one per mark. A group with
+## more marks than room doubles first.
 func end_marks() -> void:
+	if _dropped > 0 and warn_on_drop and not _warned:
+		push_warning("HoloVolume: %d marks past MAX_CAPACITY (%d) dropped" % [_dropped, MAX_CAPACITY])
+		_warned = true
 	for mmi: MultiMeshInstance3D in _placed:
 		var placed: Array = _placed[mmi]
+		var room := mmi.multimesh.instance_count
+		if placed.size() > room:
+			while room < placed.size():
+				room *= 2
+			mmi.multimesh.instance_count = mini(room, MAX_CAPACITY)
 		var buf := PackedFloat32Array()
-		buf.resize(CAPACITY * 12)
+		buf.resize(mmi.multimesh.instance_count * 12)
 		var i := 0
 		for xf: Transform3D in placed:
 			var b := xf.basis
@@ -174,6 +196,10 @@ func end_marks() -> void:
 			i += 12
 		mmi.multimesh.buffer = buf
 		mmi.multimesh.visible_instance_count = placed.size()
+
+## How many marks the last begin..end could not hold (past MAX_CAPACITY).
+func dropped() -> int:
+	return _dropped
 
 ## How many marks of `shape` are drawn, in any colour or in `colour` alone.
 func mark_count(shape: StringName, colour: Variant = null) -> int:

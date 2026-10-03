@@ -341,8 +341,8 @@ func test_with_nothing_selected_the_screen_says_where_you_are():
 
 var _drive: WarpDrive
 
-func _with_system() -> SystemRecipe:
-	var s := SystemRecipe.from_seed(1337)
+func _with_system(seed := 1337) -> SystemRecipe:
+	var s := SystemRecipe.from_seed(seed)
 	_sensors.system = s
 	_sensors.add_source(BodyContacts.new(s))
 	_universe.origin = s.entry()
@@ -740,9 +740,25 @@ func _check_placing(now: Dictionary, golden_path: String) -> void:
 		compared += 1
 	assert_gt(compared, 3, "several groups compared")
 
-## HoloVolume.add_mark drops a group's marks past CAPACITY without a word, so
-## the whole system's faint ticks must fit in one group.
-func test_the_system_s_faint_ticks_fit_in_the_holo():
-	_with_system()
-	_page.holo(_holo, _ctx, 1.0)
-	assert_lt(_holo.mark_count(&"tick", InteriorPalette.HOLO_DIM), HoloVolume.CAPACITY)
+## The whole system's faint ticks -- every world's limit and the scale rings --
+## are all drawn, wherever you are: a busy system has more than a group's first
+## CAPACITY (seed 2 has 31 worlds), and nothing may be dropped.
+func _assert_no_faint_tick_dropped(seed: int) -> int:
+	var s := _with_system(seed)
+	var most := 0
+	var star_side: UniversePoint = s.star.point.plus(Vector3(s.star.warp_limit + 50000.0, 0, 0))
+	for at: UniversePoint in [s.entry(), star_side]:
+		_universe.origin = at
+		_refresh()
+		_page.restore({"scale": MapPage.SYSTEM_REACH})
+		_page.holo(_holo, _ctx, 1.0)
+		assert_eq(_holo.dropped(), 0, "seed %d: no mark dropped" % seed)
+		most = maxi(most, _holo.mark_count(&"tick", InteriorPalette.HOLO_DIM))
+	return most
+
+func test_the_shipped_system_s_faint_ticks_are_all_drawn():
+	_assert_no_faint_tick_dropped(1337)
+
+func test_a_busy_system_s_faint_ticks_are_all_drawn():
+	var most := _assert_no_faint_tick_dropped(2)
+	assert_gt(most, HoloVolume.CAPACITY, "more than a group's first capacity, so the growth is exercised")

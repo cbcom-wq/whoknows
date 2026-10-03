@@ -302,8 +302,10 @@ overlay (`ComputerOverlay`, a `CanvasLayer` in the flight scene) frames it. Esc 
   (`test/probes/computer_mode_render.gd`, windowed) placing every frame: worst 2.2-2.6 ms, mean
   1.0-1.1 ms; a still SYSTEM placing 2.2-2.6 ms, twice a second. `MapPage.Placing` holds what a
   placing works out once; a tick is never a UniversePoint, and goes to the holo with
-  `HoloVolume.add_ticks`. The HOLO_DIM tick group at SYSTEM is 506 of `HoloVolume.CAPACITY` 512;
-  past that `add_mark` drops ticks silently (`test_the_system_s_faint_ticks_fit_in_the_holo`).
+  `HoloVolume.add_ticks`. A mark group starts at `HoloVolume.CAPACITY` 512 and doubles as it
+  fills, up to `MAX_CAPACITY` 4096; past that marks are dropped, counted (`dropped()`) and warned
+  of once. The shipped system's faint ticks at SYSTEM are about 506; seed 2's 31 worlds need about
+  840 (`test_a_busy_system_s_faint_ticks_are_all_drawn`).
 
 ## The hull's outside (ship exterior spec, `docs/superpowers/specs/2026-09-28-ship-exterior-design.md`)
 

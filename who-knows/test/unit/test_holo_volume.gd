@@ -50,12 +50,36 @@ func test_marks_are_drawn_by_shape_and_colour():
 	_holo.show_marks([])
 	assert_eq(_holo.mark_count(&"ball"), 0, "an empty list clears them")
 
-func test_more_marks_than_it_holds_are_cut_off_not_crashed():
+## A group starts at CAPACITY and grows as a busy system needs, so a mark is
+## never dropped below MAX_CAPACITY.
+func test_a_group_grows_past_its_first_capacity():
 	var marks := []
-	for i in HoloVolume.CAPACITY + 10:
+	for i in HoloVolume.CAPACITY + 100:
 		marks.append(_mark(&"ball", Vector3.ZERO, 0.006))
 	_holo.show_marks(marks)
-	assert_eq(_holo.mark_count(&"ball"), HoloVolume.CAPACITY)
+	assert_eq(_holo.mark_count(&"ball"), HoloVolume.CAPACITY + 100)
+	assert_eq(_holo.dropped(), 0)
+
+func test_ticks_added_together_grow_their_group_too():
+	_holo.begin_marks()
+	var at := PackedVector3Array()
+	at.resize(HoloVolume.CAPACITY * 2)
+	_holo.add_ticks(InteriorPalette.HOLO_DIM, at, 0.01)
+	_holo.end_marks()
+	assert_eq(_holo.mark_count(&"tick"), HoloVolume.CAPACITY * 2)
+	assert_eq(_holo.dropped(), 0)
+
+## Past MAX_CAPACITY marks are cut off, never crashed on, and counted.
+func test_more_marks_than_it_can_ever_hold_are_cut_off_and_counted():
+	_holo.warn_on_drop = false
+	var marks := []
+	for i in HoloVolume.MAX_CAPACITY + 10:
+		marks.append(_mark(&"ball", Vector3.ZERO, 0.006))
+	_holo.show_marks(marks)
+	assert_eq(_holo.mark_count(&"ball"), HoloVolume.MAX_CAPACITY)
+	assert_eq(_holo.dropped(), 10)
+	_holo.show_marks([])
+	assert_eq(_holo.dropped(), 0, "counted afresh each time")
 
 func test_a_mark_is_scaled_to_its_size_where_it_is_put():
 	_holo.show_marks([_mark(&"ball", Vector3(0.1, 0.05, -0.2), 0.03)])
