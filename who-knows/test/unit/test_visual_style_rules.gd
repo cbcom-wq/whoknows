@@ -106,6 +106,7 @@ const REUSABLE_FILES := [
 	"res://src/npc/droid_look.gd",
 	"res://src/ship/computer/holo_volume.gd",
 	"res://src/ship/computer/ship_computer.gd",
+	"res://src/ship/computer/computer_station.gd",
 ]
 const GRID_SIDE := ["ShipGrid", "BlockCatalog", "DeckGraph", "InteriorLayout", "InteriorBuilder",
 	"InteriorDressing"]

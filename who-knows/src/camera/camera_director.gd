@@ -23,6 +23,9 @@ signal view_changed(view: View, moving: bool)
 enum View { COCKPIT, CHASE, FOOT_FIRST, FOOT_THIRD }
 
 const SIT_DURATION := 0.75
+## The group the game's one director is in: a computer station finds it here
+## (computer mode spec §3.1), since tables are rebuilt and ships come and go.
+const GROUP := &"camera_director"
 const THIRD_PERSON_OFFSET := Vector3(0.5, 0.4, 2.5)
 
 @export var avatar_path: NodePath
@@ -42,7 +45,13 @@ var _tween: Tween = null
 @onready var _chase_cam: Camera3D = get_node(chase_camera_path)
 
 func _ready() -> void:
+	add_to_group(GROUP)
 	_apply_view()
+
+## Stub until the director learns to fly to a station's eye (computer mode
+## spec §3.3).
+func use_station(_station: ComputerStation) -> void:
+	pass
 
 func sit(seat: PilotSeat) -> void:
 	if is_seated or _tween != null or _avatar.mode == Avatar.Mode.SUIT:

@@ -180,3 +180,19 @@ func test_a_course_to_where_you_are_arrives_and_the_table_says_so():
 	assert_eq(_ship.sensors.course, &"")
 	c.update(0.016)
 	assert_eq(c.screen_text().split("\n")[2], "ARRIVED")
+
+## Computer mode spec §3.1: looking at the table top offers the computer, and
+## (test_looking_at_a_button...) the buttons still win when looked at.
+func test_looking_at_the_table_top_from_its_operator_s_spot_offers_the_computer():
+	await wait_physics_frames(2)
+	var c := _computer()
+	var spot := DeckPaths.floor_point(Vector3i(-1, 0, -2))
+	var eye := _ship.interior.global_transform * (spot + Vector3(0, 1.6, 0))
+	var target := c.station.global_transform * Vector3(0, 0.95, 0)
+	var query := PhysicsRayQueryParameters3D.create(eye, target, Interactor.MASK)
+	query.collide_with_areas = true
+	var hit := _ship.interior.get_world_3d().direct_space_state.intersect_ray(query)
+	assert_eq(hit.get("collider"), c.station)
+
+func test_the_station_finds_the_game_s_director():
+	assert_eq(_computer().station.director(), _root.get_node("CameraDirector"))

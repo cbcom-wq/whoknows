@@ -28,6 +28,7 @@ const PICK_TIE := 2.0
 
 var cell := Vector3i.ZERO
 var holo: HoloVolume
+var station: ComputerStation
 var panels: Dictionary = {}   # StringName -> ReadoutPanel
 var pages: Array[ComputerPage] = []
 var page_index := 0
@@ -82,6 +83,11 @@ func setup(f: Transform3D, render_layer := InteriorKit.LAYER) -> void:
 		panel.pressed.connect(_on_pressed.bind(panel))
 		add_child(panel)
 		panels[button] = panel
+
+	station = ComputerStation.new()
+	station.setup(self, InteriorKit.LAYER)
+	station.transform = f
+	add_child(station)
 
 	_hum = _player("Hum", holo.position, HUM_DB)
 	_blip = _player("Blip", screen.transform.origin, BLIP_DB)
