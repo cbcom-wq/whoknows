@@ -50,6 +50,12 @@ var _bracket_size := 0.0
 var _pivot: Node3D
 ## The marks and the bracket, turned as a whole by set_turn.
 var _marks_root: Node3D
+## Turned by the operator at a computer station (computer mode spec §4.4): the
+## marks, the bracket and the chevron, on top of the ship's turn.
+var _spin_root: Node3D
+var _chevron_parts: Array[MeshInstance3D] = []
+var _chevron_wanted := true
+var _frame_wanted := true
 var _mini_meshes: Array[Mesh] = []
 var _time := 0.0
 
@@ -58,14 +64,21 @@ var _time := 0.0
 func setup(render_layer := InteriorKit.LAYER) -> void:
 	layer = render_layer
 	var kit := _kit()
-	_chevron(kit)
 	_edge_ring(kit)
 	_frame_parts = kit.commit()
 	for part in _frame_parts:
 		part.name = "MapFrame"
+	_spin_root = Node3D.new()
+	_spin_root.name = "Spin"
+	add_child(_spin_root)
+	var chevron_kit := _kit(_spin_root)
+	_chevron(chevron_kit)
+	_chevron_parts = chevron_kit.commit()
+	for part in _chevron_parts:
+		part.name = "Chevron"
 	_marks_root = Node3D.new()
 	_marks_root.name = "Marks"
-	add_child(_marks_root)
+	_spin_root.add_child(_marks_root)
 	var bracket_kit := _kit()
 	bracket_kit.bevel_box(_GLOW, Transform3D.IDENTITY, Vector3.ONE, 0.25, InteriorKit.lit(InteriorPalette.AMBER, ENERGY))
 	var corners := MultiMesh.new()
@@ -177,7 +190,7 @@ func bracket_position() -> Vector3:
 
 ## Turns every mark and the bracket together: for a map placed a moment ago,
 ## brought round to the way the ship faces now, without placing each mark
-## again. The chevron and the ring never turn.
+## again. The chevron spins with the marks but never turns with the ship.
 func set_turn(turn: Basis) -> void:
 	_marks_root.basis = turn
 
@@ -187,11 +200,37 @@ func turn() -> Basis:
 ## The ship's chevron and the edge ring, which the map shows and the status
 ## page doesn't.
 func show_map_frame(shown: bool) -> void:
+	_frame_wanted = shown
 	for part in _frame_parts:
 		part.visible = shown
+	_show_chevron_parts()
 
 func map_frame_shown() -> bool:
 	return not _frame_parts.is_empty() and _frame_parts[0].visible
+
+## The chevron alone: the map hides it once its centre has left the ship, and
+## draws the ship as a pip instead (computer mode spec §4.2).
+func show_chevron(shown: bool) -> void:
+	_chevron_wanted = shown
+	_show_chevron_parts()
+
+func chevron_shown() -> bool:
+	return not _chevron_parts.is_empty() and _chevron_parts[0].visible
+
+func _show_chevron_parts() -> void:
+	for part in _chevron_parts:
+		part.visible = _frame_wanted and _chevron_wanted
+
+func set_spin(angle: float) -> void:
+	_spin_root.basis = Basis(Vector3.UP, angle)
+
+func spin() -> float:
+	return _spin_root.basis.get_euler().y
+
+## A mark's place in the world, from where it was placed: through the ship's
+## turn and the operator's spin. For picking marks with the mouse.
+func marks_to_global(position: Vector3) -> Vector3:
+	return _marks_root.global_transform * position
 
 ## The ship in miniature (spec §7.1), from `meshes` shared as they are, and
 ## `bounds`, everything they draw in their own frame.
@@ -354,8 +393,8 @@ static func _edge_ring(kit: InteriorKit) -> void:
 	kit.annulus(_GLOW, Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), Vector3.ZERO), RADIUS - 0.006, RADIUS, dim)
 	kit.annulus(_GLOW, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3.ZERO), RADIUS - 0.006, RADIUS, dim)
 
-func _kit() -> InteriorKit:
-	var kit := InteriorKit.new(self)
+func _kit(root: Node3D = null) -> InteriorKit:
+	var kit := InteriorKit.new(root if root != null else self)
 	kit.layer = layer
 	kit.light_mask = layer
 	return kit

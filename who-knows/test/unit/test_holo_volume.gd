@@ -115,3 +115,42 @@ func test_the_miniature_shares_the_meshes_it_is_given():
 	_holo.clear_miniature()
 	assert_false(_holo.miniature_shown())
 	assert_eq(_holo.find_children("*", "MeshInstance3D", true, false).filter(func(n): return n.mesh == mesh).size(), 0)
+
+## Computer mode spec §4.4: the operator spins the holo's contents about its
+## upright, the ship's turn and all; the table and the ring stay put.
+func test_spin_turns_the_marks_about_the_holo_s_upright():
+	_holo.show_marks([_mark(&"ball", Vector3(0, 0, -0.2), 0.02)])
+	_holo.set_spin(PI * 0.5)
+	assert_almost_eq(_holo.spin(), PI * 0.5, 0.000001)
+	var expected := _holo.global_transform * (Basis(Vector3.UP, PI * 0.5) * Vector3(0, 0, -0.2))
+	assert_almost_eq(_holo.marks_to_global(Vector3(0, 0, -0.2)), expected, Vector3.ONE * 0.0001)
+
+func test_spin_comes_on_top_of_the_ship_s_turn():
+	_holo.set_turn(Basis(Vector3.UP, 0.3))
+	_holo.set_spin(0.2)
+	var expected := _holo.global_transform * (Basis(Vector3.UP, 0.5) * Vector3(0, 0, -0.2))
+	assert_almost_eq(_holo.marks_to_global(Vector3(0, 0, -0.2)), expected, Vector3.ONE * 0.0001)
+
+func test_the_chevron_hides_while_the_ring_stays():
+	_holo.show_map_frame(true)
+	_holo.show_chevron(false)
+	assert_false(_holo.chevron_shown())
+	assert_true(_holo.map_frame_shown())
+	_holo.show_map_frame(false)
+	_holo.show_chevron(true)
+	assert_false(_holo.chevron_shown(), "the frame hidden hides it too")
+
+func test_the_ring_stays_put_and_the_chevron_spins():
+	var map_frames = _holo.find_children("MapFrame", "MeshInstance3D", true, false)
+	var chevrons = _holo.find_children("Chevron", "MeshInstance3D", true, false)
+	for part in map_frames:
+		assert_eq(part.get_parent(), _holo, "every MapFrame part's parent is the HoloVolume itself")
+	var spin_node = _holo.get_node("Spin")
+	for part in chevrons:
+		assert_eq(part.get_parent(), spin_node, "every Chevron part's parent is the Spin node")
+
+func test_round_trip_chevron_visibility():
+	_holo.show_chevron(false)
+	_holo.show_map_frame(false)
+	_holo.show_map_frame(true)
+	assert_false(_holo.chevron_shown(), "chevron stays hidden through map frame on/off cycle")
