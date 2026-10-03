@@ -7,6 +7,8 @@ extends ItemUse
 ## a block knocked off (wrecked, for REBUILD_COST after REBUILD_TIME); and
 ## brings a knocked-out droid round. It is fed scrap plates: aim at one and
 ## hold, and in PLATE_TIME the plate is gone and the hopper has PLATE more.
+## The player sees the hopper's `feed` as SCRAP (owner, 2026-10-02: "FEED"
+## said nothing).
 ## It works on a spacewalk (ItemDefinition.works_outside), where the hull is.
 ##
 ## It finds the ship from what it hits (meta &"ship" on the hull and the
@@ -179,21 +181,23 @@ func target(item: Item, aim: Transform3D, holder: CollisionObject3D) -> Dictiona
 
 func aim_text(item: Item, aim: Transform3D, holder: CollisionObject3D) -> String:
 	var t := target(item, aim, holder)
-	var fed := "FEED %d" % floori(feed)
+	var scrap := status().to_upper()
 	match t.get("kind", &""):
 		&"plate":
-			return "LOAD PLATE · %s" % fed if HOPPER - feed >= PLATE else "TORCH FULL"
+			return "LOAD PLATE +%d · %s" % [roundi(PLATE), scrap] if HOPPER - feed >= PLATE else "TORCH FULL · %s" % scrap
 		&"block":
-			return "%s · %s" % [(t["ship"] as Ship).cell_label(t["cell"]), fed]
+			return "%s · %s" % [(t["ship"] as Ship).cell_label(t["cell"]), scrap]
 		&"hole":
-			return "%s · %d FEED" % [(t["ship"] as Ship).cell_label(t["cell"]), roundi(REBUILD_COST)]
+			return "%s · COSTS %d · %s" % [(t["ship"] as Ship).cell_label(t["cell"]), roundi(REBUILD_COST), scrap]
 		&"npc":
 			var npc: Npc = t["npc"]
-			return "%s · %s · %s" % [npc.species.display_name.to_upper(), "DOWN" if npc.down else "%d%%" % roundi(npc.health.fraction() * 100.0), fed]
-	return fed
+			return "%s · %s · %s" % [npc.species.display_name.to_upper(), "DOWN" if npc.down else "%d%% H" % roundi(npc.health.fraction() * 100.0), scrap]
+	return scrap
 
+## What the hopper holds, shown as SCRAP: welding and rebuilding use it up
+## (one an hp mended), and each scrap plate loaded adds PLATE.
 func status() -> String:
-	return "feed %d" % floori(feed)
+	return "scrap %d/%d" % [floori(feed), roundi(HOPPER)]
 
 func busy() -> String:
 	return "welding" if _since_weld < BUSY_FOR else ""

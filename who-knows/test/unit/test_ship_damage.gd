@@ -345,3 +345,50 @@ func test_a_stage_seen_from_inside_leaves_the_hull_standing():
 	for shape in hull_shapes:
 		assert_true(is_instance_valid(shape), "the hull's colliders were not rebuilt")
 	assert_eq(_ship.airlocks.size(), 1, "the airlock is still bound")
+
+## A hit on the quantum cells keeps the energy (owner, 2026-10-02): the store
+## stops taking more until they are mended, and mending gives the room back.
+func test_a_hit_on_the_quantum_cells_keeps_the_energy():
+	var cells: Array[Vector3i] = []
+	for coord: Vector3i in _ship.grid.coords():
+		if _ship.grid.get_block(coord).block_id == &"quantum_cell":
+			cells.append(coord)
+	assert_gt(cells.size(), 0, "the starter has quantum cells")
+	var store := _ship.quantum.store
+	var full := store.capacity
+	store.credit(store.room(), &"test")
+	assert_eq(store.amount, full)
+	var hp := float(_ship.catalog.get_def(&"quantum_cell").hp)
+	for c in cells:
+		_ship.take_damage(c, hp * 1.1)
+	assert_eq(store.capacity, 0, "every cell wrecked holds nothing more")
+	assert_eq(store.amount, full, "but what was stored stays")
+	assert_false(store.credit(1, &"test"))
+	for c in cells:
+		_ship.repair_cell(c, hp * 2.0)
+	assert_eq(store.capacity, full, "mended")
+	assert_eq(store.amount, full)
+
+## A wrecked ceiling flickers (owner, 2026-10-02) and a mended one is steady.
+func test_a_wrecked_ceiling_light_flickers_and_a_mended_one_is_steady():
+	var cell := Vector3i.ZERO
+	var above := Vector3i.ZERO
+	for c: Vector3i in _ship.interior_builder.walkable_coords():
+		var b := _ship.grid.get_block(c + Vector3i.UP)
+		if b != null and _ship.interior_builder.shows(c + Vector3i.UP):
+			cell = c
+			above = c + Vector3i.UP
+			break
+	assert_ne(above, Vector3i.ZERO, "a walkable cell with a ceiling block")
+	assert_eq(_ship.find_children("Flicker", "LightFlicker", true, false).size(), 0, "none as built")
+	var hp := float(_ship.catalog.get_def(_ship.grid.get_block(above).block_id).hp)
+	_ship.take_damage(above, hp * 1.1)
+	await wait_process_frames(3)
+	var flickers := _ship.find_children("Flicker", "LightFlicker", true, false)
+	assert_gt(flickers.size(), 0, "the wrecked ceiling's light flickers")
+	var f: LightFlicker = flickers[0]
+	assert_eq(f.lamp.get_meta(&"role"), InteriorProps.CELL_LIGHT_ROLE)
+	assert_almost_eq(f.lamp_energy, InteriorProps.CELL_LIGHT_ENERGY, 0.0001)
+	_ship.repair_cell(above, hp * 2.0)
+	await wait_process_frames(3)
+	assert_eq(_ship.find_children("Flicker", "LightFlicker", true, false).size(), 0, "mended: steady again")

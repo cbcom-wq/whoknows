@@ -273,9 +273,6 @@ thrust.
 - **Per-cell rebuilds.** Any removal rebuilds the whole ship (~220 ms headless on the 2.8 GHz
   dev Xeon for the starter since the generated skin), and a stage seen from inside rebuilds the
   interior (~125 ms; the hull recolours in place). Fine for now; a hitch in a big fight.
-- **What a wrecked ceiling light should do.** A wreck's glow goes dark, so its ceiling lights
-  show as black discs that read a little like holes (the damage renders, 2026-10-02). Asked of
-  the owner: dark, flickering or a faint glow.
 - **Debris and breaches.** A piece cut off vanishes in a burst; a hole has no air to lose.
 - **Gravity and landing on a world.** Worlds are solid and you can skim and bump off them, but
   there is no gravity, landing gear or step-out yet (Planetfall's). Do not give a ship legs or

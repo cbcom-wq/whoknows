@@ -106,11 +106,17 @@ A block's stage is read from the damage it has taken, against its definition's `
 |---|---|---|---|
 | **Intact** | under 50% of `hp` | fully | as now |
 | **Damaged** | 50% up to 100% | at **half** output: thrust, power, QE capacity, grav radius | scorched; sparks now and then |
-| **Wrecked** | 100% up to 150% | **not at all**; keeps its mass and collision | charred; lights dead |
+| **Wrecked** | 100% up to 150% | **not at all**; keeps its mass and collision | charred; its ceiling light flickers |
 | **Gone** | 150% or more | removed with `ShipGrid.clear_block` | a burst, and a hole |
 
 The span from 100% to 150% is how much a wreck takes before it is knocked off. That way
 "wrecked" lasts long enough to be seen and repaired.
+
+**Quantum cells keep their energy** (amended 2026-10-03, the owner's call). A damaged or wrecked
+cell lowers the store's capacity, so the store takes no more, but what it already holds stays, up
+to what the cells hold intact (`QuantumStore.most`, from `ShipStats.intact_quantum_capacity`).
+Spending it down below the damaged capacity, or mending the cells, lets it fill again. The status
+page reads *QE 900 / 600 · CELLS DAMAGED*. Until then a hit on the cells lost the energy for good.
 
 ### 4.2 Store damage, not hp left
 
@@ -322,11 +328,15 @@ The owner chose a handheld tool: you carry it to the damage and point it there.
 - **Where plates come from:**
   - salvage fields already scatter them (`SalvageField.MIX`);
   - the quantum machine already makes them from QE;
-  - the ship starts with the torch full and **three plates** stowed in the cargo crates;
+  - the ship starts with the torch full and **three plates** in a pile on the closet's bottom
+    shelf, where a crate used to stand: their own stow class, `plate`, three spots stacked
+    `InteriorProps.PLATE_LIFT` apart (amended 2026-10-02: they had never been stocked, and the
+    owner chose the crate's place);
   - a block knocked off outside sheds **one plate** from the hole, as a stray (saving §7), which
     you can catch before it drifts off.
-- **The prompt** shows what the aim is on, its state and the feed:
-  *HULL BLOCK · WRECKED 12% · FEED 180*. Releasing `use`, looking away or moving out of reach
+- **The prompt** shows what the aim is on, its health left, its stage and the hopper, which the
+  player sees as **scrap**: *HULL PLATE · 12% H · WRECKED · SCRAP 180/300*. (Amended
+  2026-10-02: the owner read *WRECKED 12%* either way round and *FEED* said nothing.) Releasing `use`, looking away or moving out of reach
   stops the weld.
 - **The feed is saved** with the torch, through `ItemUse.save()`/`restore()` (saving §6.5).
 
@@ -338,7 +348,7 @@ The owner chose a handheld tool: you carry it to the damage and point it there.
   outside. The torch rebuilds it from the blueprint the ship launched with, which the ship
   already keeps (saving §6.2). It costs **100 feed** (one plate's worth) and **3 s** of holding.
   The block comes back **wrecked**, through `ShipGrid.set_block` and one rebuild, so it then has
-  to be welded up. The prompt reads *REBUILD THRUSTER · 100 FEED*.
+  to be welded up. The prompt reads *REBUILD THRUSTER · COSTS 100 · SCRAP 300/300*.
 - **The maintenance droid** (§6): welding a knocked-out droid brings it round at once, and welding
   a hurt one mends it, at the same rate and feed.
 - **Not you, and not creatures.**
@@ -362,8 +372,8 @@ practical lights, no procedural surface detail, and no fourth interior shader.
 
 | Stage | Hull, outside | Interior |
 |---|---|---|
-| Damaged | the block's colours darkened toward a new `HullPalette.SCORCH`; now and then a spark (world-space particles, in `Universe.HOLDS_SHIFT`) | the cell's dressing darkened toward `InteriorPalette.SCORCH`; its practical light flickers |
-| Wrecked | toward `HullPalette.CHAR`; accents and emissives off | toward `InteriorPalette.CHAR`; its light dead; screens `SCREEN_BACK` |
+| Damaged | the block's colours darkened toward a new `HullPalette.SCORCH`; now and then a spark (in its parent's frame, as built) | the cell's dressing darkened toward `InteriorPalette.SCORCH`; sparks from the wall; its light steady (as built) |
+| Wrecked | toward `HullPalette.CHAR`; accents and emissives off | toward `InteriorPalette.CHAR`; screens `SCREEN_BACK`; its ceiling light **flickers**: 10% of full most of the time, with a short ragged burst at full every few seconds, about 93% of the time dim (`LightFlicker`; amended 2026-10-03, the owner's call: first it went dark and read as a hole) |
 | Gone | a burst of warm sparks and a few chunks for 2 s; then a hole | the hole shows the stars |
 
 Colours change through the existing kit's per-vertex colour, which means a rebuild of that one

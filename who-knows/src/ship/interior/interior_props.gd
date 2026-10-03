@@ -66,7 +66,12 @@ const SHELF_BOARD := 0.04
 const SHELF_DEPTH := 0.4
 
 ## Half the width a stow spot keeps clear of decor, by stow class.
-const STOW_CLEARANCE := {&"small": 0.12, &"crate": 0.27, &"sidearm": 0.15, &"tool": 0.14}
+const STOW_CLEARANCE := {&"small": 0.12, &"crate": 0.27, &"sidearm": 0.15, &"tool": 0.14, &"plate": 0.27}
+## Scrap plates for the repair torch lie in a pile on the full-width shelves'
+## bottom board, where a crate stood (owner, 2026-10-02): one spot a plate,
+## each PLATE_LIFT above the one below (a plate is 4 cm thick).
+const PLATE_STACK := 3
+const PLATE_LIFT := 0.042
 
 ## The top of the lower bunk's mattress. The lower bunk is solid only to here,
 ## so the Interactor can reach what lies on it (bunks_spots()).
@@ -230,9 +235,19 @@ static func wall_trim(kit: InteriorKit, f: Transform3D) -> void:
 static func ceiling_light(kit: InteriorKit, ceiling_centre: Vector3) -> void:
 	var down := Transform3D(Basis(Vector3.RIGHT, PI * 0.5), ceiling_centre)
 	kit.ring(SOLID, down, 0.3, CEILING_LIGHT_RIM, -0.02, 0.05, _c(InteriorPalette.TRIM))
-	kit.disc(GLOW, down * _at(Vector3(0, 0, 0.02)), 0.3, _lit(InteriorPalette.LIGHT_WARM, 0.9))
-	kit.light(ceiling_centre + Vector3(0, -0.9, 0), InteriorPalette.LIGHT_WARM, CELL_LIGHT_ENERGY,
+	var lamp := kit.light(ceiling_centre + Vector3(0, -0.9, 0), InteriorPalette.LIGHT_WARM, CELL_LIGHT_ENERGY,
 		CELL_LIGHT_RANGE, CELL_LIGHT_ROLE)
+	if kit.wear < 2:
+		kit.disc(GLOW, down * _at(Vector3(0, 0, 0.02)), 0.3, _lit(InteriorPalette.LIGHT_WARM, 0.9))
+		return
+	# Wrecked, it flickers (health and damage spec §9): its disc is its own
+	# mesh with its own copy of the glow material, which LightFlicker dims
+	# with the lamp. Unworn: the flicker is the damage, not the colour.
+	var own := InteriorKit.new(kit.root)
+	own.disc(GLOW, down * _at(Vector3(0, 0, 0.02)), 0.3, _lit(InteriorPalette.LIGHT_WARM, 0.9))
+	var material := InteriorMaterials.glow().duplicate() as ShaderMaterial
+	var disc := kit.add_mesh(own.mesh(GLOW), material, "FlickeringLight")
+	LightFlicker.attach(lamp, disc, material)
 
 ## A station console: glowing plinth, bevelled body, a sloped screen, four big
 ## buttons (one blinks) and, unless `wall_screen` is false (a window needs the
@@ -1191,7 +1206,8 @@ static func shelves_spots(width: float) -> Array:
 	var out: Array = [[_at(Vector3(-half + 0.2, shelf_top(2), 0.2)), &"small"]]
 	if width >= 1.2:
 		out.append([_at(Vector3(-half + 0.45, shelf_top(2), 0.2)), &"small"])
-		out.append([_at(Vector3(half - 0.35, shelf_top(0), 0.2)), &"crate"])
+		for i in PLATE_STACK:
+			out.append([_at(Vector3(half - 0.35, shelf_top(0) + i * PLATE_LIFT, 0.2)), &"plate"])
 		out.append([_at(Vector3(-half + 0.35, shelf_top(0), 0.2)), &"crate"])
 		for x in [-half + 0.25, -half + 0.5, -half + 0.75]:
 			out.append([_at(Vector3(x, shelf_top(1), 0.2)), &"small"])

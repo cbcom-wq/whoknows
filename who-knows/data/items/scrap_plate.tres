@@ -9,6 +9,6 @@ display_name = "Scrap plate"
 mass_kg = 6.0
 size = Vector3(0.5, 0.04, 0.35)
 grip = 1
-stow_class = &"crate"
+stow_class = &"plate"
 look = &"scrap_plate"
 quantum_value = 18

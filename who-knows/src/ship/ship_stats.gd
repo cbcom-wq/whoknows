@@ -30,6 +30,9 @@ var power_gen: float = 0.0
 var power_draw: float = 0.0
 ## QE the ship's quantum cells can hold, summed like power.
 var quantum_capacity: int = 0
+## What the quantum cells would hold with none of them damaged: the most the
+## store keeps (health and damage spec §4.1, amended 2026-10-02).
+var intact_quantum_capacity: int = 0
 
 ## Health and damage spec §4.4: what the ship had with nothing hurt, so that
 ## "crippled" measures what was lost, whatever the design.
@@ -107,6 +110,7 @@ func _accumulate_power(entries: Array) -> void:
 func _accumulate_quantum(entries: Array) -> void:
 	for e in entries:
 		quantum_capacity += roundi(e["def"].quantum_capacity * e["output"])
+		intact_quantum_capacity += e["def"].quantum_capacity
 
 func _accumulate_thrust(entries: Array) -> void:
 	var intact := _thrust(entries, false)

@@ -229,11 +229,22 @@ func test_the_galley_counter_holds_two_small_things():
 	_assert_built()
 	_assert_spots_clear(InteriorProps.galley_counter_spots(), [&"small", &"small"])
 
-func test_full_shelves_hold_small_things_tools_and_two_crates():
+func test_full_shelves_hold_small_things_tools_a_crate_and_a_pile_of_plates():
 	InteriorProps.shelves(_kit, Transform3D.IDENTITY, 0.6, 1.7)
 	_assert_built()
 	_assert_spots_clear(InteriorProps.shelves_spots(1.7),
-		[&"small", &"small", &"crate", &"crate", &"small", &"small", &"small", &"tool", &"tool", &"tool"])
+		[&"small", &"small", &"plate", &"plate", &"plate", &"crate", &"small", &"small", &"small", &"tool", &"tool", &"tool"])
+
+func test_the_plates_pile_up_one_on_another():
+	var plates := InteriorProps.shelves_spots(1.7).filter(func(s): return s[1] == &"plate")
+	assert_eq(plates.size(), InteriorProps.PLATE_STACK)
+	var plate := ItemCatalog.load_from_dir().get_def(&"scrap_plate")
+	assert_eq(plate.stow_class, &"plate")
+	for i in plates.size():
+		var at: Vector3 = (plates[i][0] as Transform3D).origin
+		var first: Vector3 = (plates[0][0] as Transform3D).origin
+		assert_almost_eq(at, first + Vector3.UP * InteriorProps.PLATE_LIFT * i, Vector3.ONE * 0.0001)
+	assert_gt(InteriorProps.PLATE_LIFT, plate.size.y, "a plate clears the one below")
 
 func test_narrow_shelves_hold_small_things_and_a_crate():
 	InteriorProps.shelves(_kit, Transform3D.IDENTITY, 0.6, 0.85)
@@ -252,6 +263,8 @@ func test_shelf_spots_do_not_overlap():
 
 func test_shelf_spots_sit_on_the_boards():
 	for spot in InteriorProps.shelves_spots(1.7):
+		if spot[1] == &"plate":
+			continue
 		var y: float = (spot[0] as Transform3D).origin.y
 		assert_true(is_equal_approx(y, InteriorProps.shelf_top(0)) or is_equal_approx(y, InteriorProps.shelf_top(1))
 			or is_equal_approx(y, InteriorProps.shelf_top(2)), "on a board top")

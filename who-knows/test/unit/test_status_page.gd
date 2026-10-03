@@ -27,6 +27,12 @@ func test_in_low_power_it_says_so_and_the_core_gives_half():
 	assert_eq(StatusPage.qe_line(ctx), "QE 96 · LOW POWER")
 	assert_eq(StatusPage.power_line(ctx), "POWER 18.0 / 31.3 MW")
 
+func test_with_damaged_cells_it_says_so():
+	var ctx := _ctx()
+	ctx.store.amount = 900
+	ctx.store.set_capacity(600, 1200)
+	assert_eq(StatusPage.qe_line(ctx), "QE 900 / 600 · CELLS DAMAGED", "the energy kept, the cells full")
+
 func test_it_shows_the_suit_of_whoever_pressed_it():
 	var ctx := _ctx()
 	assert_eq(StatusPage.suit_line(ctx), "SUIT --", "nobody yet")

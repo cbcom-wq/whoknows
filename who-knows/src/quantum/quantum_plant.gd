@@ -98,11 +98,11 @@ func bind(new_cores: Array[QuantumCore], new_machines: Array[QuantumMachine], st
 	cores = new_cores
 	machines = new_machines
 	if store == null:
-		store = QuantumStore.new(stats.quantum_capacity, stats.quantum_capacity / 2)
+		store = QuantumStore.new(stats.quantum_capacity, stats.quantum_capacity / 2, stats.intact_quantum_capacity)
 		store.changed.connect(_on_store_changed)
 		store.low_power_changed.connect(func(low: bool) -> void: low_power_changed.emit(low))
 	else:
-		store.set_capacity(stats.quantum_capacity)
+		store.set_capacity(stats.quantum_capacity, stats.intact_quantum_capacity)
 	_bind_machines()
 	_bind_hums()
 	_drive_cores()
@@ -159,7 +159,7 @@ func _on_store_changed(_amount: int, _capacity: int) -> void:
 func _drive_cores() -> void:
 	if store == null or store.capacity <= 0:
 		return
-	var fraction := float(store.amount) / float(store.capacity)
+	var fraction := minf(float(store.amount) / float(store.capacity), 1.0)
 	var line_fraction := float(store.line()) / float(store.capacity)
 	for core in cores:
 		core.set_fill(fraction, line_fraction)
