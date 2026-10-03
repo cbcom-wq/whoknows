@@ -47,7 +47,8 @@ Do these in order. Each one names the check that proves it.
      Jobs it cannot reach are dropped; the probe prints the dock and names them `UNREACHABLE`.
    - **a `computer`** (optional) for the bridge computer's holo table, a quiet fixture: put the
      cell its frame faces (its operator's spot) on walkable deck, within the Interactor's 2.5 m of
-     its buttons, and face it so the operator looks out of a window (the owner's wish, 2026-09-27:
+     its buttons (and with nothing solid between that eye and them:
+     `test_looking_at_a_button_from_its_operator_s_spot_finds_the_button`), and face it so the operator looks out of a window (the owner's wish, 2026-09-27:
      on the starter, the port front corner, facing aft). A console it displaces moves aft. The
      probe prints each table and where you stand to use it.
 3. **Damage** (`docs/superpowers/specs/2026-09-29-health-and-damage-design.md`):
@@ -240,6 +241,7 @@ thrust.
 | Letting the rest of the ship behave normally at warp | Found in the final review: you could cycle the airlock and step out mid-warp (stranded kilometres behind), the RCS kept its last command and puffed the whole way, and motion coupling read the frozen hull's placing as a 12 m/s² shove | Anything that acts on the hull's motion or lets someone outside asks `warp.is_spinning()` / `travelling()` first: `Airlock.warping()`, `FlightComputer`'s early return, `MotionCoupling._warp()` |
 | Writing a warp cost as 0.08 QE per km | `ceili(0.08 * 3000)` is 241, not 240: 0.08 is not exact in floating point | Price per whole units the other way round: `WarpPlan.WARP_M_PER_QE` (metres per QE) |
 | A camera outside with its own far plane | The far plane must hold `PROXY_AT` plus the biggest body's radius: a proxy just past `PROXY_AT` is drawn at nearly its true size, so at 400 km the star's disc was clipped | Use `BodyProxy.VIEW_FAR` (`PROXY_AT` + `SystemRecipe.STAR_RADIUS.y` + 50 km, 700 km) for any new outside camera |
+| An upright collider round a tilted console | The holo table's console lip was a box round the whole console, so it enclosed all five buttons: the Interactor's ray hit the table, every prompt was empty, and the computer could not be used at all in play. Its tests pressed the buttons in code and only measured distance | Give a tilted part its collider in its own frame, no farther out than its face, so its buttons stand proud of it. Test an interactable by casting the Interactor's ray at it from where you stand, not by distance |
 | A test script that types a local from the untyped `_root.system` and loops its `warp_targets()` | Godot 4.5.1 segfaulted at exit (ObjectDB leak, GUT's own scripts included) though every test passed | Hold the system in a typed member set in `before_each`, as `test_warp_drive.gd` does; watch the run's exit code, not only its pass count |
 | An off-centre retro counted as steering | It would light up for yaw, but `ShipStats` never counts pure fore-and-aft thrust as authority | Steer with blocks that push across the hull; retros only brake |
 | A fairing in the cabin row | The interior sees a solid cell and builds a whole wall against it, but a slope or a half leaves the outside open, and a porthole outside lands on a slope or above a 1 m block | Fairings go above and below the cabin and at its ends. The cabin row keeps full blocks. Check the probe's `windows` line |
