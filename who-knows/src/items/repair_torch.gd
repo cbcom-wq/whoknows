@@ -2,10 +2,12 @@ class_name RepairTorch
 extends ItemUse
 
 ## The repair torch (docs/superpowers/specs/
-## 2026-09-29-health-and-damage-design.md §8): hold `use` to weld what you are
-## aimed at within REACH. It mends a block at RATE, one feed per hp; puts back
-## a block knocked off (wrecked, for REBUILD_COST after REBUILD_TIME); and
-## brings a knocked-out droid round. It is fed scrap plates: aim at one and
+## 2026-09-29-health-and-damage-design.md §8, and for ships
+## 2026-10-03-ship-damage-sections-design.md §6): hold `use` to weld what you
+## are aimed at within REACH. A hull section only from outside, SECTION_RATE of
+## it a second for SECTION_SCRAP a whole section, its pieces coming back as it
+## rises; a component where it is, at RATE, one feed per hp; and it brings a
+## knocked-out droid round. It is fed scrap plates: aim at one and
 ## hold, and in PLATE_TIME the plate is gone and the hopper has PLATE more.
 ## The player sees the hopper's `feed` as SCRAP (owner, 2026-10-02: "FEED"
 ## said nothing).
@@ -19,8 +21,10 @@ const RATE := 25.0
 const HOPPER := 300.0
 const PLATE := 100.0
 const PLATE_TIME := 1.5
-const REBUILD_COST := 100.0
-const REBUILD_TIME := 3.0
+## The share of a hull section mended a second, and what a whole section
+## costs: 25 s and one plate from nothing to whole.
+const SECTION_RATE := 0.04
+const SECTION_SCRAP := 100.0
 const PLATE_ID := &"scrap_plate"
 ## The hull, the interior, items and NPCs.
 const MASK := 1 | 2 | Item.LAYER | Npc.LAYER
@@ -101,25 +105,28 @@ func hold(item: Item, aim: Transform3D, _world: Node3D, holder: CollisionObject3
 					feed += PLATE
 					_charge = 0.0
 					_target_key = ""
-		&"block":
-			var used: float = (t["ship"] as Ship).repair_cell(t["cell"], minf(RATE * delta, feed))
-			feed -= used
-			did = used > 0.0
-		&"hole":
-			if feed >= REBUILD_COST:
-				did = true
-				_charge += delta
-				if _charge >= REBUILD_TIME:
-					if (t["ship"] as Ship).rebuild_cell(t["cell"]):
-						feed -= REBUILD_COST
-					_charge = 0.0
-					_target_key = ""
+		&"part":
+			did = _mend_part(t, delta)
 		&"npc":
 			did = _mend_npc(t["npc"], delta)
 	if did:
 		_since_weld = 0.0
 		_show_at(t["point"], t["normal"], holder)
 	return did
+
+## Mends the section or component `t` is on: a section only from outside.
+func _mend_part(t: Dictionary, delta: float) -> bool:
+	var ship: Ship = t["ship"]
+	var part: StringName = t["part"]
+	if ship.damage.is_section(part):
+		if not t["outside"]:
+			return false
+		var used := ship.repair_section(part, minf(SECTION_RATE * delta, feed / SECTION_SCRAP))
+		feed -= used * SECTION_SCRAP
+		return used > 0.0
+	var hp := ship.repair_component(part, minf(RATE * delta, feed))
+	feed -= hp
+	return hp > 0.0
 
 ## Brings a knocked-out NPC round for the health it gets up with, or heals a
 ## hurt one at RATE; one feed per hp either way.
@@ -139,8 +146,10 @@ func _mend_npc(npc: Npc, delta: float) -> bool:
 	return true
 
 ## What the torch is aimed at: {kind, key, point, normal} and, by kind, the
-## plate `item`, the `ship` and `cell` (a block, or a hole to rebuild), or the
-## `npc`. Empty when it is aimed at nothing it can work on.
+## plate `item`; for a `part`, the `ship`, the `part` (a section or a
+## component), its `cell` and whether it is `outside` (a hole is a piece of
+## its section, from outside); or the `npc`. Empty when it is aimed at nothing
+## it can work on.
 func target(item: Item, aim: Transform3D, holder: CollisionObject3D) -> Dictionary:
 	if not item.is_inside_tree():
 		return {}
@@ -166,17 +175,19 @@ func target(item: Item, aim: Transform3D, holder: CollisionObject3D) -> Dictiona
 			return {"kind": &"npc", "key": "npc:%s" % npc.record.id, "npc": npc, "point": point, "normal": normal}
 		if collider != null and collider.has_meta(&"ship"):
 			var ship := collider.get_meta(&"ship") as Ship
-			var cell := ship.cell_hit(collider, int(hit.get("shape", -1)), point, normal)
-			if cell != ShipCells.NONE:
-				return {"kind": &"block", "key": "block:%s" % cell, "ship": ship, "cell": cell,
+			var on := ship.part_hit(collider, int(hit.get("shape", -1)), point, normal)
+			if not on.is_empty():
+				return {"kind": &"part", "key": "part:%s:%s" % [on["part"], on["outside"]], "ship": ship,
+					"part": on["part"], "cell": on["cell"], "outside": on["outside"],
 					"point": point, "normal": normal}
 	# Nothing hit on the way, or not yet: a hole along the ray?
 	for node in item.get_tree().get_nodes_in_group(Ship.GROUP):
 		var ship := node as Ship
 		var cell := ship.missing_cell_along(from, dir, reach)
 		if cell != ShipCells.NONE:
-			return {"kind": &"hole", "key": "hole:%s" % cell, "ship": ship, "cell": cell,
-				"point": from + dir * reach, "normal": -dir}
+			var part := ship.damage.part_of(cell)
+			return {"kind": &"part", "key": "part:%s:true" % part, "ship": ship, "part": part,
+				"cell": cell, "outside": true, "point": from + dir * reach, "normal": -dir}
 	return {}
 
 func aim_text(item: Item, aim: Transform3D, holder: CollisionObject3D) -> String:
@@ -185,17 +196,18 @@ func aim_text(item: Item, aim: Transform3D, holder: CollisionObject3D) -> String
 	match t.get("kind", &""):
 		&"plate":
 			return "LOAD PLATE +%d · %s" % [roundi(PLATE), scrap] if HOPPER - feed >= PLATE else "TORCH FULL · %s" % scrap
-		&"block":
-			return "%s · %s" % [(t["ship"] as Ship).cell_label(t["cell"]), scrap]
-		&"hole":
-			return "%s · COSTS %d · %s" % [(t["ship"] as Ship).cell_label(t["cell"]), roundi(REBUILD_COST), scrap]
+		&"part":
+			var ship: Ship = t["ship"]
+			if ship.damage.is_section(t["part"]) and not t["outside"]:
+				return "HULL %d%% · WELD FROM OUTSIDE" % roundi(ship.hull_whole() * 100.0)
+			return "%s · %s" % [ship.part_label(t["part"]), scrap]
 		&"npc":
 			var npc: Npc = t["npc"]
 			return "%s · %s · %s" % [npc.species.display_name.to_upper(), "DOWN" if npc.down else "%d%% H" % roundi(npc.health.fraction() * 100.0), scrap]
 	return scrap
 
-## What the hopper holds, shown as SCRAP: welding and rebuilding use it up
-## (one an hp mended), and each scrap plate loaded adds PLATE.
+## What the hopper holds, shown as SCRAP: welding uses it up (one an hp of a
+## component, SECTION_SCRAP a whole section), and each plate loaded adds PLATE.
 func status() -> String:
 	return "scrap %d/%d" % [floori(feed), roundi(HOPPER)]
 

@@ -181,14 +181,3 @@ func test_a_loss_that_would_cut_the_shell_off_stays_wrecked():
 	assert_eq(removed, [], "(2) and (3) would go with it, and (3) is held")
 	assert_true(grid.has_block(Vector3i(1, 0, 0)))
 	assert_signal_emitted_with_parameters(grid, "block_staged", [Vector3i(1, 0, 0), BlockDamage.Stage.WRECKED])
-
-## A light under a block flickers below 20% of its health (owner, 2026-10-03).
-func test_a_block_flickers_under_a_fifth_of_its_health():
-	var def := _catalog.get_def(&"hull")
-	var hp := float(def.hp)
-	var inst := BlockInstance.new()
-	inst.block_id = &"hull"
-	for case in [[0.0, false], [0.6, false], [0.8, false], [0.81, true], [1.0, true], [1.3, true]]:
-		inst.damage = hp * case[0]
-		assert_eq(BlockDamage.flickers(inst, def), case[1], "%d%% damage" % roundi(case[0] * 100.0))
-	assert_false(BlockDamage.flickers(null, def))

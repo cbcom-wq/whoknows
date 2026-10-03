@@ -67,6 +67,11 @@ var launch_blueprint: ShipBlueprint
 ## or roofs one. Damage wrecks these but never knocks them off, so the inside
 ## keeps its shape; only the buffer outside them breaks away. coord -> true.
 var inner_cells := {}
+## The ship's damage: six hull sections and four components (ship damage
+## sections spec). The grid's per-block damage is its view (_apply_view).
+var damage: ShipDamage
+## The cabin's look the interior was last built at (ShipDamage.cabin_level).
+var _cabin_level := 0
 var outside: Node3D
 var stats: ShipStats
 var catalog: BlockCatalog
@@ -304,15 +309,17 @@ func _crash(body: Node, knock: float) -> void:
 		var normal := exterior.global_basis.inverse() * state.get_contact_local_normal(i)
 		var cell := ShipCells.hull_cell(grid, exterior, state.get_contact_local_shape(i), at, normal)
 		if cell != ShipCells.NONE:
-			_deal_crash.call_deferred(cell, amount)
+			_deal_crash.call_deferred(cell, amount, at.x - ShipGrid.cell_center(cell).x)
 		return
 
-func _deal_crash(cell: Vector3i, amount: float) -> void:
+func _deal_crash(cell: Vector3i, amount: float, side_x := 0.0) -> void:
 	var hits := {cell: amount}
+	var sides := {cell: side_x}
 	for n in grid.neighbours(cell):
 		if grid.has_block(n):
 			hits[n] = amount * 0.5
-	take_damage_many(hits)
+			sides[n] = side_x
+	take_damage_many(hits, sides)
 
 ## hp a crash with this knock (the hull's change of speed, m/s) deals to the
 ## cell it lands on.
@@ -323,15 +330,18 @@ static func crash_damage(knock: float) -> float:
 
 ## A hit on the hull, in world space (a bolt from a spacewalk, a bite).
 func _on_hull_hit(hit: Hit) -> void:
-	var cell := ShipCells.hull_cell(grid, exterior, hit.shape, exterior.to_local(hit.position),
-		exterior.global_basis.inverse() * hit.normal)
-	take_damage(cell, hit.damage)
+	var at := exterior.to_local(hit.position)
+	var cell := ShipCells.hull_cell(grid, exterior, hit.shape, at, exterior.global_basis.inverse() * hit.normal)
+	if cell != ShipCells.NONE:
+		take_damage_many({cell: hit.damage}, {cell: at.x - ShipGrid.cell_center(cell).x})
 
-## A hit on an interior surface: the block behind it (spec §5.1).
+## A hit on an interior surface: the block behind it (spec §5.1), and a hull
+## block's section on the side the shot landed (ship damage sections spec §3).
 func _on_interior_hit(hit: Hit) -> void:
-	var cell := ShipCells.interior_cell(grid, interior.to_local(hit.position),
-		interior.global_basis.inverse() * hit.normal)
-	take_damage(cell, hit.damage)
+	var at := interior.to_local(hit.position)
+	var cell := ShipCells.interior_cell(grid, at, interior.global_basis.inverse() * hit.normal)
+	if cell != ShipCells.NONE:
+		take_damage_many({cell: hit.damage}, {cell: at.x - InteriorBuilder.interior_center(cell).x})
 
 # --- mending (health and damage spec §8) -----------------------------------------
 
@@ -345,21 +355,32 @@ func cell_hit(collider: Object, shape: int, at: Vector3, normal: Vector3) -> Vec
 		return ShipCells.interior_cell(grid, interior.to_local(at), interior.global_basis.inverse() * normal)
 	return ShipCells.NONE
 
+## What a ray on `collider` (world point and normal) landed on, for the torch
+## (ship damage sections spec §6): {part, cell, outside} -- the section or
+## component, the block, and whether it was the hull from outside -- or {}.
+func part_hit(collider: Object, shape: int, at: Vector3, normal: Vector3) -> Dictionary:
+	var cell := cell_hit(collider, shape, at, normal)
+	if cell == ShipCells.NONE or damage == null:
+		return {}
+	var outside := collider == exterior
+	var across := exterior.to_local(at).x - ShipGrid.cell_center(cell).x if outside \
+		else interior.to_local(at).x - InteriorBuilder.interior_center(cell).x
+	var part := damage.part_of(cell, across)
+	return {} if part == &"" else {"part": part, "cell": cell, "outside": outside}
+
 ## The first cell along a ray (world, `reach` m) that has no block now but had
-## one at launch, beside a block that is still there: a hole the torch can
-## rebuild. Looked for from outside (the hull's frame) and aboard (the
-## interior's), a quarter metre at a time. ShipCells.NONE if there is none.
+## one at launch, beside a block that is still there: a piece knocked off,
+## which the torch mends as its section. Looked for in the hull's frame, a
+## quarter metre at a time. ShipCells.NONE if there is none.
 func missing_cell_along(from: Vector3, dir: Vector3, reach: float) -> Vector3i:
 	var steps := ceili(reach / 0.25)
 	for i in range(1, steps + 1):
-		var p := from + dir * (reach * i / steps)
-		for cell in [Vector3i((exterior.to_local(p) / ShipGrid.CELL_SIZE).round()),
-				ShipCells.interior_cell_at(interior.to_local(p))]:
-			if _rebuildable(cell):
-				return cell
+		var cell := Vector3i((exterior.to_local(from + dir * (reach * i / steps)) / ShipGrid.CELL_SIZE).round())
+		if _missing(cell):
+			return cell
 	return ShipCells.NONE
 
-func _rebuildable(cell: Vector3i) -> bool:
+func _missing(cell: Vector3i) -> bool:
 	if grid.has_block(cell) or launch_block(cell).is_empty():
 		return false
 	for n in ShipGrid.FACE_OFFSETS:
@@ -367,105 +388,104 @@ func _rebuildable(cell: Vector3i) -> bool:
 			return true
 	return false
 
-## Mends up to `hp` of the block at `cell`; returns what it used.
-func repair_cell(cell: Vector3i, hp: float) -> float:
-	var was := _flickering([cell])
-	var used := BlockDamage.repair(grid, catalog, cell, hp)
-	_reflicker(was)
+## Mends `share` (0..1) of a hull section; returns the share it used. Pieces
+## come back as it rises.
+func repair_section(section: StringName, share: float) -> float:
+	var used := damage.repair_section(section, share)
+	if used > 0.0:
+		_apply_view()
 	return used
 
-## Puts back, wrecked, what the ship launched with at `cell` (§8.2).
-func rebuild_cell(cell: Vector3i) -> bool:
-	if not _rebuildable(cell):
-		return false
-	var was := launch_block(cell)
-	BlockDamage.rebuild(grid, catalog, cell, was[0], was[1])
-	return true
+## Mends up to `hp` of a component; returns what it used.
+func repair_component(comp: StringName, hp: float) -> float:
+	var used := damage.repair_component(comp, hp)
+	if used > 0.0:
+		_apply_view()
+	return used
 
-## What the torch's prompt says of the block at `cell`: its name and state,
-## as "HULL PLATE · 0% H · WRECKED" (health left, then the stage), or of a
-## hole, "REBUILD THRUSTER".
-func cell_label(cell: Vector3i) -> String:
-	var inst := grid.get_block(cell)
-	if inst == null:
-		var was := launch_block(cell)
-		var gone := catalog.get_def(was[0]) if not was.is_empty() else null
-		return "REBUILD %s" % gone.display_name.to_upper() if gone != null else ""
-	var def := catalog.get_def(inst.block_id)
-	if def == null:
-		return ""
-	var stage: String = BlockDamage.Stage.keys()[BlockDamage.stage_of(inst, def)]
-	var left := clampf(1.0 - inst.damage / float(def.hp), 0.0, 1.0)
-	return "%s · %d%% H · %s" % [def.display_name.to_upper(), roundi(left * 100.0), stage]
+## What the torch's prompt says of a part: "PORT BOW HULL · 45% H" for a
+## section, "ENGINES · 40% H · DAMAGED" for a component.
+func part_label(part: StringName) -> String:
+	var left := roundi(damage.part_health(part) * 100.0)
+	if damage.is_section(part):
+		return "%s HULL · %d%% H" % [damage.label(part), left]
+	var stage: String = BlockDamage.Stage.keys()[damage.component_stage(part)]
+	return "%s · %d%% H · %s" % [damage.label(part), left, stage]
 
-## How whole the hull is, 0..1, against the layout it launched with (health
-## and damage spec §11): every block's damage, capped at its hp, and a block
-## knocked off counts as all of it.
+## How whole the hull is, 0..1: its six sections' health, weighted by their
+## hp (ship damage sections spec §2.1). The HUD band's HULL %.
 func hull_whole() -> float:
-	if launch_blueprint == null:
-		return 1.0
-	var total := 0.0
-	var lost := 0.0
-	for i in launch_blueprint.coords.size():
-		var def := catalog.get_def(launch_blueprint.block_ids[i])
-		if def == null:
-			continue
-		total += def.hp
-		var inst := grid.get_block(launch_blueprint.coords[i])
-		lost += def.hp if inst == null else minf(inst.damage, def.hp)
-	return 1.0 - lost / total if total > 0.0 else 1.0
+	return damage.hull_whole() if damage != null else 1.0
 
 ## How much the block at `cell` has to mend, hp.
 func damage_at(cell: Vector3i) -> float:
 	var inst := grid.get_block(cell)
 	return inst.damage if inst != null else 0.0
 
-## Deals `amount` to the block at `cell` (health and damage spec §4). Returns
-## what it knocked off.
+## Deals `amount` to whatever the block at `cell` is part of (ship damage
+## sections spec §3). Returns what it knocked off.
 func take_damage(cell: Vector3i, amount: float) -> Array[Vector3i]:
 	return take_damage_many({cell: amount})
 
-## Deals every hit in `hits` (cell -> amount) together: one rebuild for all
-## that goes.
-func take_damage_many(hits: Dictionary) -> Array[Vector3i]:
-	var real := {}
+## Deals every hit in `hits` (cell -> amount) together to the sections and
+## components they land on, a centre-line block's to the side `sides` (cell ->
+## the hit's offset across the ship from the cell's centre) says. Then the
+## grid shows it: pieces lost go in one rebuild. Returns them.
+func take_damage_many(hits: Dictionary, sides: Dictionary = {}) -> Array[Vector3i]:
+	var landed := false
 	for cell: Vector3i in hits:
 		if cell != ShipCells.NONE and hits[cell] > 0.0 and grid.has_block(cell):
-			real[cell] = hits[cell]
-	if real.is_empty():
+			landed = damage.hit(cell, hits[cell], float(sides.get(cell, 0.0))) or landed
+	if not landed:
 		var none: Array[Vector3i] = []
 		return none
 	damage_log.note()
-	var was := _flickering(real.keys())
-	var removed := BlockDamage.apply_many(grid, catalog, real, inner_cells)
-	_reflicker(was)
-	if not removed.is_empty():
-		damage_show.lost(removed)
-		_shed_plate(removed)
-		blocks_lost.emit(removed)
-	return removed
+	return _apply_view()
 
-## Of `cells`, those seen from inside, each with whether its ceiling light
-## would flicker now (BlockDamage.flickers).
-func _flickering(cells: Array) -> Dictionary:
-	var out := {}
-	for cell: Vector3i in cells:
-		if interior_builder.shows(cell):
-			var inst := grid.get_block(cell)
-			out[cell] = inst != null and BlockDamage.flickers(inst, catalog.get_def(inst.block_id))
-	return out
-
-## A light starts or stops flickering partway through a stage, which no
-## block_staged reports: the interior is rebuilt for it, once, at the end of
-## the frame, as for a stage seen from inside.
-func _reflicker(was: Dictionary) -> void:
-	for cell: Vector3i in was:
-		var inst := grid.get_block(cell)
-		if inst == null:
+## Writes the damage model into the grid (spec §4): each block's damage is
+## what its section or component shows, a piece lost is removed and one
+## welded back is put back, all in one grid change. `quiet` (set_grid, before
+## the signals are connected) only writes. Returns the pieces removed, after
+## their burst, plate and blocks_lost.
+func _apply_view(quiet := false) -> Array[Vector3i]:
+	var lost := damage.lost()
+	var remove: Array[Vector3i] = []
+	var add := {}
+	var staged := {}
+	for coord: Vector3i in damage.launch:
+		var inst := grid.get_block(coord)
+		var shown := damage.shown_damage(coord)
+		var hp: float = damage.launch[coord][2]
+		if lost.has(coord):
+			if inst != null:
+				remove.append(coord)
 			continue
-		if BlockDamage.flickers(inst, catalog.get_def(inst.block_id)) != was[cell]:
-			_queue_rebuild()
-			return
+		if inst == null:
+			inst = BlockInstance.new()
+			inst.block_id = damage.launch[coord][0]
+			inst.orientation = damage.launch[coord][1]
+			inst.damage = shown
+			add[coord] = inst
+			continue
+		var before := BlockDamage.stage_at(inst.damage, hp)
+		inst.damage = shown
+		var after := BlockDamage.stage_at(shown, hp)
+		if after != before:
+			staged[coord] = after
+	if quiet:
+		grid.replace_many(remove, add)
+		return remove
+	for coord: Vector3i in staged:
+		grid.note_staged(coord, staged[coord])
+	if ShipDamage.cabin_level(damage.hull_whole()) != _cabin_level:
+		_queue_rebuild()   # the cabin's look follows HULL % (spec §5)
+	if not remove.is_empty() or not add.is_empty():
+		grid.replace_many(remove, add)
+	if not remove.is_empty():
+		damage_show.lost(remove)
+		_shed_plate(remove)
+		blocks_lost.emit(remove)
+	return remove
 
 ## One scrap plate from the first block knocked off, if it had a face onto
 ## space: it drifts out from that face at SHED_SPEED (spec §8.1).
@@ -523,6 +543,8 @@ func wake_spots() -> Array[Transform3D]:
 func _on_block_staged(coord: Vector3i, stage: int) -> void:
 	exterior_builder.set_stage(coord, stage)
 	damage_show.stage(grid, coord, stage)
+	if damage == null or not damage.component_of.has(coord):
+		return   # a hull block's stage is looks only (ship damage sections spec §2.3)
 	if interior_builder.shows(coord):
 		# The dressing is merged meshes, so one cell can't be recoloured: the
 		# ship is rebuilt, once, at the end of the frame (as built, spec §4.3).
@@ -619,8 +641,14 @@ func set_grid(new_grid: ShipGrid, stock := true) -> void:
 	grid = new_grid
 	if launch_blueprint == null:
 		launch_blueprint = unhurt(ShipBlueprint.from_grid(grid, String(name)))
-	inner_cells = inner_of(launch_blueprint.to_grid(), catalog)
-	_restore_shell(grid)
+	var layout := launch_blueprint.to_grid()
+	inner_cells = inner_of(layout, catalog)
+	# The model reads what the grid's blocks have taken (a new ship: nothing;
+	# a save from before sections: its block damage), then the grid shows it,
+	# which puts back any block the sections say is there.
+	damage = ShipDamage.build(layout, catalog, inner_cells)
+	damage.infer(grid)
+	_apply_view(true)
 	grid.cell_changed.connect(_on_cell_changed)
 	grid.block_staged.connect(_on_block_staged)
 	exterior_builder.bind(grid, catalog)
@@ -655,6 +683,9 @@ func _rebuild_everything(hull := true) -> void:
 	var stowed := _stowed_items()
 	if hull:
 		exterior_builder.rebuild()
+	_cabin_level = ShipDamage.cabin_level(hull_whole())
+	interior_builder.hull_wear = _cabin_level
+	interior_builder.hull_flicker = _cabin_level == 2
 	interior_builder.rebuild()
 	_place_seat()
 	interior_builder.geometry_body().set_meta(&"receive_hit", _on_interior_hit)
@@ -680,6 +711,7 @@ func _rebuild_everything(hull := true) -> void:
 	stats_changed.emit(stats)
 	if damage_show != null:
 		damage_show.sync(grid, catalog)
+		damage_show.cabin(_cabin_level, _cabin_walls())
 	_set_anchor_radius()
 	_bind_crew()
 	_apply_own()
@@ -880,10 +912,22 @@ func to_dict(universe: Universe) -> Dictionary:
 		"warp": warp.to_dict() if warp != null else {},
 		"flight": flight_computer.to_dict(),
 		"store": quantum.store.to_dict() if quantum.store != null else {},
+		"damage": damage.to_dict() if damage != null else {},
 		"lights": lights.to_dict() if lights != null else {},
 		"airlocks": saved_airlocks,
 		"items": saved_items,
 	}
+
+## The cabin's shell that sparks can spit from, in a fixed order: its blocks
+## that are not walked on.
+func _cabin_walls() -> Array:
+	var walk := interior_builder.walkable_coords()
+	var out: Array = []
+	for coord: Vector3i in inner_cells:
+		if grid.has_block(coord) and not walk.has(coord):
+			out.append(coord)
+	out.sort_custom(func(a: Vector3i, b: Vector3i) -> bool: return hash(a) < hash(b))
+	return out
 
 ## Where a block's damage shows in the cabin (DamageShow): a point on the
 ## cabin side of its wall, floor or roof, interior-local, or null if no
@@ -910,26 +954,6 @@ static func inner_of(layout: ShipGrid, blocks: BlockCatalog) -> Dictionary:
 			if layout.has_block(cell + n):
 				out[cell + n] = true
 	return out
-
-## Puts back, wrecked, any block of the cabin's shell missing from `g`: a
-## save from before the shell was held could have lost some, leaving a cabin
-## you can't get round. Before any signal is connected, so no rebuild yet.
-func _restore_shell(g: ShipGrid) -> int:
-	var put := 0
-	for i in launch_blueprint.coords.size():
-		var cell := launch_blueprint.coords[i]
-		if not inner_cells.has(cell) or g.has_block(cell):
-			continue
-		var def := catalog.get_def(launch_blueprint.block_ids[i])
-		if def == null:
-			continue
-		var inst := BlockInstance.new()
-		inst.block_id = def.id
-		inst.orientation = launch_blueprint.orientations[i]
-		inst.damage = float(def.hp) * BlockDamage.WRECKED_AT
-		g.set_block(cell, inst)
-		put += 1
-	return put
 
 ## `bp` with every block's damage cleared.
 static func unhurt(bp: ShipBlueprint) -> ShipBlueprint:
@@ -982,6 +1006,9 @@ func restore_hull(d: Dictionary, universe: Universe) -> void:
 ## Everything aboard as the save had it: flight settings, store, airlocks
 ## and items. Call after set_grid(layout_of(d), false).
 func restore_aboard(d: Dictionary) -> void:
+	if d.has("damage") and damage != null:
+		damage.from_dict(d["damage"])
+		_apply_view()
 	flight_computer.from_dict(d.get("flight", {}))
 	if quantum.store != null:
 		quantum.store.from_dict(d.get("store", {}))

@@ -22,6 +22,10 @@ func before_each():
 	reactor.mass_t = 1.0
 	reactor.power_gen = 8.0
 	_cat.register(reactor)
+	var core := _def(&"quantum_core")
+	core.mass_t = 1.0
+	core.power_gen = 8.0
+	_cat.register(core)
 
 	var lamp := _def(&"lamp")
 	lamp.mass_t = 1.0
@@ -197,10 +201,15 @@ func test_stage_never_changes_mass():
 	_hurt(Vector3i(0, 0, 0), 1.2)
 	assert_almost_eq(ShipStats.compute(_grid, _cat).total_mass_kg, 9000.0, 0.001)
 
-func test_power_follows_stage():
-	_put(Vector3i(0, 0, 0), &"reactor")
+## Only a component's blocks lose function (ship damage sections spec §2.3):
+## the quantum core does, a hull block making power would not.
+func test_power_follows_stage_for_a_component_only():
+	_put(Vector3i(0, 0, 0), &"quantum_core")
 	_hurt(Vector3i(0, 0, 0), 0.5)
 	assert_almost_eq(ShipStats.compute(_grid, _cat).power_gen, 4.0, 0.001)
+	_put(Vector3i(1, 0, 0), &"reactor")
+	_hurt(Vector3i(1, 0, 0), 0.5)
+	assert_almost_eq(ShipStats.compute(_grid, _cat).power_gen, 12.0, 0.001, "the reactor is not a component")
 
 func test_intact_torque_ignores_damage():
 	_put(Vector3i(0, 0, 0), &"heavy")

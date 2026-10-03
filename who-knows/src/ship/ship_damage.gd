@@ -161,6 +161,14 @@ func _find_pieces(layout: ShipGrid, held: Dictionary) -> void:
 static func _key(c: Vector3i) -> int:
 	return (c.x + 512) * 1048576 + (c.y + 512) * 1024 + (c.z + 512)
 
+## Whether a block of `block_id` loses function when damaged: only a
+## component's blocks do (spec §2.3).
+static func degrades(block_id: StringName) -> bool:
+	for comp: StringName in COMPONENTS:
+		if COMPONENTS[comp].has(block_id):
+			return true
+	return false
+
 # --- health ---------------------------------------------------------------------
 
 ## A section's health, 1 whole to 0.
@@ -190,6 +198,19 @@ func hull_whole() -> float:
 
 func has_component(comp: StringName) -> bool:
 	return component_hp.has(comp)
+
+## The cabin's look at HULL % `hull` (spec §5): 0 over CABIN_SCORCH_BELOW, 1
+## to CABIN_CHAR_BELOW (scorched, a few sparks), 2 under it (charred, more
+## sparks, the lights flicker).
+const CABIN_SCORCH_BELOW := 0.5
+const CABIN_CHAR_BELOW := 0.2
+
+static func cabin_level(hull: float) -> int:
+	if hull < CABIN_CHAR_BELOW:
+		return 2
+	if hull < CABIN_SCORCH_BELOW:
+		return 1
+	return 0
 
 # --- hits -----------------------------------------------------------------------
 

@@ -4,9 +4,9 @@ extends Node3D
 ## What damage looks like on the hull, beyond its colour (docs/superpowers/
 ## specs/2026-09-29-health-and-damage-design.md §9): a damaged block spits a
 ## few sparks now and then, and a block knocked off goes in a burst of sparks
-## and a few charred chunks. Inside, a damaged or wrecked wall spits sparks
-## into the cabin (as amended 2026-10-02: the inside changes style, never
-## shape).
+## and a few charred chunks. Inside, a few walls spit sparks into the cabin, more
+## the more the hull is hurt (cabin(); ship damage sections spec §5: the
+## inside follows HULL %, and changes style, never shape).
 ##
 ## The floating origin (CLAUDE.md): the spits are in their emitter's own frame,
 ## on the hull or in the interior, so they move with it and never hold the
@@ -27,6 +27,9 @@ const CHUNK_SPEED := 2.5
 ## At most this many cells of one loss burst: a big piece breaking off is a
 ## few bursts, not a hundred.
 const MAX_BURSTS := 4
+## How many cabin walls spit at each cabin level (Ship.cabin_level): none
+## over 50% HULL, a few to 20%, more below.
+const CABIN_SPITS := [0, 3, 8]
 
 ## Where the ship's outside things go (Ship.outside).
 var outside: Node3D
@@ -54,7 +57,8 @@ func setup(p_hull: RigidBody3D, p_outside: Node3D, p_interior: Node3D = null,
 	interior = p_interior
 	inside_face = p_inside_face
 
-## Every damaged block spits; nothing else does. After a rebuild or a load.
+## Every damaged block spits outside; nothing else does. After a rebuild or a
+## load, before cabin().
 func sync(grid: ShipGrid, catalog: BlockCatalog) -> void:
 	for coord: Vector3i in _spitting.keys() + _inside.keys():
 		_stop(coord)
@@ -62,21 +66,27 @@ func sync(grid: ShipGrid, catalog: BlockCatalog) -> void:
 		var inst := grid.get_block(coord)
 		stage(grid, coord, BlockDamage.stage_of(inst, catalog.get_def(inst.block_id)))
 
-## The block at `coord` is at `stage` now.
-## Outside, a damaged block spits from its face onto space; inside, a damaged
-## or wrecked one spits from its wall into the cabin.
+## The block at `coord` is at `stage` now: a damaged block spits from its
+## face onto space.
 func stage(grid: ShipGrid, coord: Vector3i, stage: int) -> void:
-	var outside_spits := stage == BlockDamage.Stage.DAMAGED
-	var inside_spits := stage == BlockDamage.Stage.DAMAGED or stage == BlockDamage.Stage.WRECKED
-	if not outside_spits:
+	if stage != BlockDamage.Stage.DAMAGED:
 		_drop(_spitting, coord)
 	elif not _spitting.has(coord):
 		var at: Variant = _outer_face(grid, coord)
 		if at != null:
 			_spitting[coord] = _spit(self, at, layer | 1, coord)
-	if not inside_spits or interior == null or not inside_face.is_valid():
+
+## The cabin at `level` (Ship.cabin_level): CABIN_SPITS of the `walls` (the
+## cabin's shell, in a fixed order) spit into it, the first that show inside.
+func cabin(level: int, walls: Array) -> void:
+	var want: int = CABIN_SPITS[clampi(level, 0, CABIN_SPITS.size() - 1)]
+	if interior == null or not inside_face.is_valid():
+		want = 0
+	for coord: Vector3i in _inside.keys():
 		_drop(_inside, coord)
-	elif not _inside.has(coord):
+	for coord: Vector3i in walls:
+		if _inside.size() >= want:
+			break
 		var at: Variant = inside_face.call(coord)
 		if at != null:
 			_inside[coord] = _spit(interior, at, InteriorKit.LAYER, coord)

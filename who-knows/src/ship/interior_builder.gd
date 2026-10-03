@@ -137,13 +137,23 @@ func rebuild() -> void:
 	_compute_gravity()
 	_fill_felt_gravity()
 
+## How worn the cabin is as a whole (ship damage sections spec §5), set by the
+## ship from HULL % before each rebuild: 0 as built, 1 scorched, 2 charred.
+var hull_wear := 0
+## Whether every ceiling light flickers: HULL under 20%.
+var hull_flicker := false
+
 ## How worn the block a face looks onto is (health and damage spec §9), as
-## InteriorKit.wear: the block behind it (a wall's hull, the hull under a
-## floor), or, with none there, the cell's own (a deck, a fixture).
+## InteriorKit.wear: a component's block (the core, the computer, the helm) by
+## its own stage; any other, the hull's wear as a whole. The block is the one
+## behind the face (a wall's hull, the hull under a floor), or, with none
+## there, the cell's own (a deck, a fixture).
 func wear_at(coord: Vector3i, normal: Vector3i) -> int:
 	var inst := _looked_onto(coord, normal)
 	if inst == null:
 		return 0
+	if not ShipDamage.degrades(inst.block_id):
+		return hull_wear
 	match BlockDamage.stage_of(inst, _catalog.get_def(inst.block_id)):
 		BlockDamage.Stage.DAMAGED:
 			return 1
@@ -151,11 +161,10 @@ func wear_at(coord: Vector3i, normal: Vector3i) -> int:
 			return 2
 	return 0
 
-## Whether the light on a face flickers (health and damage spec §9): the
-## block it looks onto, as wear_at() finds it, is under 20% of its health.
-func flicker_at(coord: Vector3i, normal: Vector3i) -> bool:
-	var inst := _looked_onto(coord, normal)
-	return inst != null and BlockDamage.flickers(inst, _catalog.get_def(inst.block_id))
+## Whether the light on a face flickers: the hull is under 20% (ship damage
+## sections spec §5), as the ship says in `hull_flicker`.
+func flicker_at(_coord: Vector3i, _normal: Vector3i) -> bool:
+	return hull_flicker
 
 ## The block a face looks onto: the one behind it, or with none there, the
 ## cell's own.

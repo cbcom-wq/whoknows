@@ -240,10 +240,9 @@ static func ceiling_light(kit: InteriorKit, ceiling_centre: Vector3) -> void:
 	if not kit.flicker:
 		kit.disc(GLOW, down * _at(Vector3(0, 0, 0.02)), 0.3, _lit(InteriorPalette.LIGHT_WARM, 0.9))
 		return
-	# Under 20% of its block's health it flickers (health and damage spec §9,
-	# BlockDamage.FLICKER_AT): its disc is its own
-	# mesh with its own copy of the glow material, which LightFlicker dims
-	# with the lamp. Unworn: the flicker is the damage, not the colour.
+	# With the hull under 20% it flickers (ship damage sections spec §5,
+	# InteriorKit.flicker): its disc is its own mesh with its own copy of the
+	# glow material, which LightFlicker dims with the lamp. Unworn: the flicker is the damage, not the colour.
 	var own := InteriorKit.new(kit.root)
 	own.disc(GLOW, down * _at(Vector3(0, 0, 0.02)), 0.3, _lit(InteriorPalette.LIGHT_WARM, 0.9))
 	var material := InteriorMaterials.glow().duplicate() as ShaderMaterial
