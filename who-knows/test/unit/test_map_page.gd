@@ -620,30 +620,31 @@ func test_marks_are_placed_every_frame_while_the_scale_glides_up_close():
 	_page.holo(_holo, _ctx, 0.016)
 	assert_ne(_holo.mark_transform(&"ball", 0).origin, before, "placed afresh while zooming")
 
-## Spec §4.7's fallback: past 10 km a placing is hundreds of ticks, so a
-## glide places at most every 1/15 s, and once more as it ends.
-func test_a_glide_at_50_km_places_at_most_every_fifteenth_of_a_second():
+## Spec §4.7 as planned: a placing is cheap enough (2-3 ms at the whole
+## system) that a glide places every frame at any scale, and the last lands on
+## the final scale.
+func test_a_glide_at_50_km_places_every_frame():
 	_add(&"rock:a", Contact.EXACT, Vector3(0, 0, -20000), 300.0)
 	_page.range_index = 2
 	_refresh()
 	_page.holo(_holo, _ctx, 0.0)
 	_page.zoom(1.0, _ctx)
-	var placed_at: Array[float] = []
+	var frames := 0
+	var placed := 0
 	var last := _holo.mark_transform(&"ball", 0).origin
-	var t := 0.0
-	while _page.gliding() and t < 2.0:
+	while _page.gliding() and frames < 120:
 		_page.holo(_holo, _ctx, 0.016)
-		t += 0.016
+		frames += 1
 		var now := _holo.mark_transform(&"ball", 0).origin
 		if not now.is_equal_approx(last):
-			placed_at.append(t)
+			placed += 1
 			last = now
 	assert_false(_page.gliding(), "the glide ended")
-	assert_gt(placed_at.size(), 1, "placed while gliding, not only at the end")
-	for i in range(1, placed_at.size() - 1):
-		assert_gte(placed_at[i] - placed_at[i - 1], MapPage.GLIDE_PLACE_EVERY - 0.001, "no faster than 15 Hz")
-	assert_almost_eq(last, Vector3(0, 0, -20000) * (HoloVolume.RADIUS / _page.scale_m), Vector3.ONE * 0.001,
-		"placed at the final scale as the glide ends")
+	assert_gt(frames, 5, "a glide of several frames")
+	assert_eq(placed, frames, "placed afresh every frame of it")
+	_page.holo(_holo, _ctx, 0.016)
+	assert_almost_eq(_holo.mark_transform(&"ball", 0).origin, Vector3(0, 0, -20000) * (HoloVolume.RADIUS / _page.scale_m),
+		Vector3.ONE * 0.001, "placed at the final scale as the glide ends")
 
 # --- the placing's guard (the final review, item 1) ----------------------------
 

@@ -10,8 +10,8 @@ extends SceneTree
 # system with the nearest planet selected and the cursor's tag on it),
 # mode_status.png and mode_orbit.png (the eye raised and the holo spun), and
 # prints the worst frame's holo update while zooming from 1 km to 9,000 km and
-# back, where it was drawn, and the sweep's mean; a still SYSTEM placing; and
-# the sweep again placed every frame, as if there were no GLIDE_PLACE_EVERY.
+# back (a glide places every frame), where it was drawn, and the sweep's
+# mean; and a still SYSTEM placing, which the system view pays twice a second.
 
 var _out := ""
 
@@ -120,22 +120,4 @@ func _run(scene: Node) -> void:
 		worst = maxf(worst, ms)
 		await process_frame
 	print("still   SYSTEM placing worst %.2f ms, mean %.2f ms over 20" % [worst, total / 20.0])
-	# The sweep again with a placing every frame, as if there were no
-	# GLIDE_PLACE_EVERY: whether the fallback is still needed.
-	map.restore({"scale": 1000.0})
-	worst = 0.0
-	worst_at = 0.0
-	total = 0.0
-	for i in 80:
-		computer.zoom(1.0 if i < 40 else -1.0)
-		map._placed_for = []
-		var t := Time.get_ticks_usec()
-		computer.update(1.0 / 60.0)
-		var ms := (Time.get_ticks_usec() - t) / 1000.0
-		total += ms
-		if ms > worst:
-			worst = ms
-			worst_at = map.shown_m()
-		await process_frame
-	print("every   placed every frame: worst %.2f ms at %d km drawn; mean %.2f ms" % [worst, roundi(worst_at / 1000.0), total / 80.0])
 	quit()

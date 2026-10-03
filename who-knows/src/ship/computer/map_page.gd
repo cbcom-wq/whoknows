@@ -35,12 +35,10 @@ const SCALE_MIN := 1000.0
 const SCALE_MAX := SYSTEM_REACH
 const ZOOM_STEP := 1.3
 ## How quickly the drawn scale catches up with the chosen one, seconds: RANGE
-## glides between stops instead of cutting.
+## glides between stops instead of cutting. While it glides the marks are
+## placed every frame (spec §4.7): a placing at the far scales, the rings',
+## belts' and limits' hundreds of ticks, costs 2-3 ms (spec §11).
 const GLIDE := 0.1
-## How often the marks are placed while the scale glides beyond 10 km, seconds
-## (spec §4.7): a placing at the far scales is the rings', belts' and limits'
-## hundreds of ticks, about 12 ms at 9,000 km, too much for every frame.
-const GLIDE_PLACE_EVERY := 1.0 / 15.0
 ## What the sensors are asked for: the whole system (each source stops at its
 ## own reach).
 const QUERY := 20000000.0
@@ -382,9 +380,8 @@ func holo(volume: HoloVolume, ctx: ComputerContext, delta: float) -> void:
 	var frame := ctx.map_frame()
 	_placed_ago += delta
 	var course_id: StringName = ctx.sensors.course if ctx.sensors != null else &""
-	# A capped glide leaves the drawn scale out, so it is placed at
-	# GLIDE_PLACE_EVERY and not every frame, and once more as the glide ends.
-	var placing_for := [-1.0 if _glide_capped() else _shown_m, selected, course_id, volume]
+	# The drawn scale is in it, so a glide places every frame.
+	var placing_for := [_shown_m, selected, course_id, volume]
 	if _placed_ago >= place_every() or placing_for != _placed_for:
 		_place(volume, ctx, frame)
 		_placed_ago = 0.0
@@ -395,16 +392,10 @@ func holo(volume: HoloVolume, ctx: ComputerContext, delta: float) -> void:
 ## How often the marks are placed afresh, seconds: every frame up close, twice
 ## a second further out, where there are hundreds (and a ship at 300 m/s moves
 ## a pip 2 mm a second at 50 km). In between they are only turned with the ship
-## (HoloVolume.set_turn). While the scale glides, every frame up to 10 km,
-## since placing_for holds the drawn scale, and GLIDE_PLACE_EVERY beyond.
+## (HoloVolume.set_turn). While the scale glides, every frame at any scale,
+## since placing_for holds the drawn scale.
 func place_every() -> float:
-	if _glide_capped():
-		return GLIDE_PLACE_EVERY
 	return 0.0 if _shown_m <= STOPS[1] * 1.001 else 0.5
-
-## Whether the scale is gliding where placing every frame costs too much.
-func _glide_capped() -> bool:
-	return gliding() and _shown_m > STOPS[1]
 
 ## What a placing works out once and every mark it places reads: the map's
 ## frame, where the holo's centre is (from the ship, in that frame), metres to

@@ -253,7 +253,8 @@ of `scale_m`: 0 up to 10 km, 0.5 s beyond.
 
 **Risk:** the 50 km scale places hundreds of marks. The probe (§8.2) times a sweep from 1 km to
 9,000 km against the holo's budget (style guide §2.6). If it is over, placement while zooming drops
-to 15 Hz.
+to 15 Hz. (As built: it was over, and the 15 Hz fallback went in; once the placing was made cheap,
+it came out again. §11 has the figures.)
 
 ---
 
@@ -481,18 +482,35 @@ differences, each ruled during the build:
 **The zoom's cost** (§4.7, `test/probes/computer_mode_render.gd`, 1280 × 720 windowed on the
 build machine, the computer's own processing paused so each frame's holo update is the timed
 one). A placing costs more the farther out it is, mostly the belts', scale rings' and warp limits'
-ticks: about 1 ms at 500 km, 4.5 ms at 1,000 km, 8 ms at 3,000 km and 11.5 ms at 9,000 km
-(headless). The sweep from 1 km to 9,000 km and back, one notch a frame:
+ticks. As first built, every tick made a UniversePoint, worked the star's offset out again and
+undid the frame's basis: a placing took about 1 ms at 500 km, 4.5 ms at 1,000 km, 8 ms at 3,000
+km and 11.5 ms at 9,000 km (headless), and the sweep from 1 km to 9,000 km and back, one notch a
+frame, was:
 
-| Placement while gliding | Worst frame | Where | Mean over the sweep |
+| Placement while gliding (as first built) | Worst frame | Where | Mean over the sweep |
 |---|---|---|---|
-| every frame (as planned) | 12.0-15.3 ms | 3,700-4,200 km drawn | 3.2 ms |
-| 15 Hz past 10 km (`MapPage.GLIDE_PLACE_EVERY`, the fallback) | 10.2-10.3 ms | about 3,800 km drawn | 1.1 ms |
+| every frame (as planned) | 12.0-15.3 ms | 3,700-8,200 km drawn | 3.2 ms |
+| 15 Hz past 10 km (`GLIDE_PLACE_EVERY`, the fallback) | 10.1-10.3 ms | 3,800-5,200 km drawn | 1.1 ms |
 
-The worst was over 8 ms, so the fallback is in. It makes the expensive placings rarer, not
-cheaper: one placing at the far scales is still over 8 ms, and the system view held still places
-twice a second. Making a placing cheaper (the star's offset is worked out again for every tick)
-is left for later.
+A still SYSTEM placing then cost 12 ms (14.8 ms at worst) twice a second, a rhythmic stutter.
+
+**The placing made cheap** (the final review). `MapPage._place` works out once a placing what
+every mark reads (`MapPage.Placing`: the frame, the centre, metres to the holo, whether the map is
+round the star, the ship's place). The map's frame is orthonormal, so a ring's or a limit's tick
+is its centre plus a unit circle times its radius, from static tables, with no UniversePoint and no
+basis undone; a belt's circle is turned into the map's frame once a placing; a scale ring wholly
+outside the holo is skipped; ticks go to the holo a ring at a time (`HoloVolume.add_ticks`), and
+`HoloVolume.inside` is `place`'s pin test without a Dictionary. A guard in `test_map_page.gd`
+holds every mark at SYSTEM and at 500 km where the old placing put it, to 1e-4. A placing now takes
+(headless) about 0.5 ms at 500 km, 0.7 ms at 1,000 km, 1.2 ms at 3,000 km and 1.9 ms at 9,000 km:
+
+| Windowed, three runs | Worst frame | Where | Mean |
+|---|---|---|---|
+| the sweep, placed every frame | 2.2-2.6 ms | 1,000-5,200 km drawn | 1.0-1.1 ms a frame |
+| a still SYSTEM placing (twice a second) | 2.8-3.4 ms | | 2.2-2.6 ms |
+
+The worst frame placing every frame is under 4 ms, so the 15 Hz fallback is gone and a glide
+places every frame, as §4.7 planned; the tick cache it allowed for was not needed.
 
 **Renders** (`computer_mode_render.gd`): `mode_5km`, `mode_500km`, `mode_system`, `mode_world`
 (the system, the nearest planet selected and the cursor's tag on it), `mode_orbit` and

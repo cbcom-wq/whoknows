@@ -115,11 +115,11 @@ second, and the sensors' 30 km read about 3 ms four times a second; in between t
 turned with the ship.
 
 The computer mode's continuous map (2026-10-03, on the build machine's CPU): a fresh placing costs
-(headless) about 1 ms at 500 km, 4.5 ms at 1,000 km, 8 ms at 3,000 km and 11.5 ms at 9,000 km,
-mostly the belts', scale rings' and warp limits' ticks. A zoom from 1 km to 9,000 km and back
-(`computer_mode_render.gd`, windowed) placing every frame had a worst frame of 12-15 ms, so past 10
-km a glide places at 15 Hz: worst 10.2 ms (one placing), mean 1.1 ms a frame. Holding still at the
-system, it places twice a second.
+(headless) about 0.5 ms at 500 km, 0.7 ms at 1,000 km, 1.2 ms at 3,000 km and 1.9 ms at 9,000 km,
+mostly the belts', scale rings' and warp limits' ticks, each worked out once a placing and
+handed over a ring at a time (it was 1, 4.5, 8 and 11.5 ms before). A zoom from 1 km to 9,000 km
+and back (`computer_mode_render.gd`, windowed), placing every frame: worst 2.2-2.6 ms, mean 1.0-1.1
+ms a frame. Holding still at the system, it places twice a second, 2.2-2.6 ms a placing.
 
 The ship's exterior (2026-09-29, 1280 × 720 on the GTX 960, the probe's own runs). With the skin,
 the windows, the floods and forward lights and the outside's bloom, both light groups casting

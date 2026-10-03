@@ -272,7 +272,7 @@ overlay (`ComputerOverlay`, a `CanvasLayer` in the flight scene) frames it. Esc 
 | `MapPage.NEAR_BAND` | full ≤ 10 km, gone by 20 km | salvage and signs of life shrink away |
 | `MapPage.ROCK_BAND` | full ≤ 50 km, gone by 100 km | big rocks |
 | `MapPage.WIDE_BAND` | grow in from 500 km, full by 1,000 km | belts and the 2,500 km scale rings |
-| `MapPage.GLIDE_PLACE_EVERY` | 1/15 s | placing while the scale glides past 10 km; every frame nearer |
+| `MapPage.place_every()` | 0 up to 10 km, 0.5 s beyond | how often the marks are placed afresh; every frame while the scale glides |
 | `CameraDirector.GROUP` | `&"camera_director"` | how a station finds the game's one director; never a path |
 
 - **Drawn vs picked:** `MapPage.shown()` is what is drawn at the scale shown (marks shrinking
@@ -293,10 +293,13 @@ overlay (`ComputerOverlay`, a `CanvasLayer` in the flight scene) frames it. Esc 
   big button is dark), tabs, hints and the scale. A far world picked in the list zooms the map out
   to the system first. Colours from `InteriorPalette` only; text outlined in `SCREEN_BACK`.
 - **The cost** (2026-10-03, the build machine's CPU): a placing is (headless)
-  about 1 ms at 500 km, 4.5 ms at 1,000 km, 8 ms at 3,000 km and 11.5 ms at 9,000 km, mostly the
-  rings', belts' and limits' ticks. A 1 km to 9,000 km sweep
-  (`test/probes/computer_mode_render.gd`, windowed) placing every frame: worst 12-15 ms,
-  mean 3.2 ms; at 15 Hz past 10 km: worst 10.2 ms (one placing), mean 1.1 ms.
+  about 0.5 ms at 500 km, 0.7 ms at 1,000 km, 1.2 ms at 3,000 km and 1.9 ms at 9,000 km, mostly
+  the rings', belts' and limits' ticks. A 1 km to 9,000 km sweep
+  (`test/probes/computer_mode_render.gd`, windowed) placing every frame: worst 2.2-2.6 ms, mean
+  1.0-1.1 ms; a still SYSTEM placing 2.2-2.6 ms, twice a second. `MapPage.Placing` holds what a
+  placing works out once; a tick is never a UniversePoint, and goes to the holo with
+  `HoloVolume.add_ticks`. The HOLO_DIM tick group at SYSTEM is 506 of `HoloVolume.CAPACITY` 512;
+  past that `add_mark` drops ticks silently (`test_the_system_s_faint_ticks_fit_in_the_holo`).
 
 ## The hull's outside (ship exterior spec, `docs/superpowers/specs/2026-09-28-ship-exterior-design.md`)
 
