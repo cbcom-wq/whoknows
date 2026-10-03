@@ -644,3 +644,90 @@ func test_a_glide_at_50_km_places_at_most_every_fifteenth_of_a_second():
 		assert_gte(placed_at[i] - placed_at[i - 1], MapPage.GLIDE_PLACE_EVERY - 0.001, "no faster than 15 Hz")
 	assert_almost_eq(last, Vector3(0, 0, -20000) * (HoloVolume.RADIUS / _page.scale_m), Vector3.ONE * 0.001,
 		"placed at the final scale as the glide ends")
+
+# --- the placing's guard (the final review, item 1) ----------------------------
+
+## Every mark the last placing drew: for each shape and colour, its transforms
+## as 12 floats apiece, in the order they were added; and the bracket.
+func _placing_snapshot() -> Dictionary:
+	var out := {}
+	for shape: StringName in HoloVolume.SHAPES:
+		for colour: Color in _holo._groups.get(shape, {}):
+			var floats: Array[float] = []
+			for xf: Transform3D in _holo._placed[_holo._groups[shape][colour]]:
+				for v in [xf.basis.x, xf.basis.y, xf.basis.z, xf.origin]:
+					floats.append_array([v.x, v.y, v.z])
+			if not floats.is_empty():
+				out["%s/%s" % [shape, colour.to_html()]] = floats
+	var b := _holo.bracket_position()
+	out["bracket"] = [b.x, b.y, b.z] if _holo.bracket_shown() else []
+	return out
+
+## The whole system with a warp charted, the hull turned off the axes.
+func _placing_at_system() -> Dictionary:
+	var s := _with_system()
+	_hull.rotation = Vector3(0.2, 0.9, -0.1)
+	var planet := s.planets()[s.planets().size() - 1]
+	_page.selected = StringName("body:" + String(planet.id))
+	_page.press(&"big", _ctx)
+	_page.holo(_holo, _ctx, 1.0)
+	return _placing_snapshot()
+
+## 500 km off a planet, just outside its warp limit, the hull turned.
+func _placing_near_a_planet() -> Dictionary:
+	var s := _with_system()
+	_hull.rotation = Vector3(-0.3, 2.1, 0.15)
+	var planet: SystemBody = null
+	for b in s.bodies:
+		if b.kind == SystemBody.Kind.PLANET:
+			planet = b
+			break
+	_universe.origin = planet.point.plus(Vector3(planet.warp_limit + 20000.0, 0, 0))
+	_page.range_index = 3
+	_refresh()
+	_page.holo(_holo, _ctx, 1.0)
+	return _placing_snapshot()
+
+## Making the placing cheaper must not move a mark: every tick and mark
+## matches what the per-point placing drew, recorded under test/fixtures. Run
+## with WHOKNOWS_RECORD_PLACING=1 to record them afresh.
+func test_a_placing_at_system_draws_every_mark_where_it_always_has():
+	_check_placing(_placing_at_system(), "res://test/fixtures/map_page_placing_system.json")
+
+func test_a_placing_near_a_planet_draws_every_mark_where_it_always_has():
+	_check_placing(_placing_near_a_planet(), "res://test/fixtures/map_page_placing_near_planet.json")
+
+func _check_placing(now: Dictionary, golden_path: String) -> void:
+	if OS.get_environment("WHOKNOWS_RECORD_PLACING") == "1":
+		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(golden_path.get_base_dir()))
+		var out := FileAccess.open(golden_path, FileAccess.WRITE)
+		out.store_string(JSON.stringify(now, "", true, true))
+		out.close()
+		pending("recorded %s" % golden_path)
+		return
+	var golden: Variant = JSON.parse_string(FileAccess.get_file_as_string(golden_path))
+	assert_true(golden is Dictionary, "the recorded placing %s" % golden_path)
+	if not golden is Dictionary:
+		return
+	var was: Dictionary = golden
+	assert_eq(now.keys().size(), was.keys().size(), "the same groups: %s" % [now.keys()])
+	var compared := 0
+	for key: String in was:
+		var a: Array = was[key]
+		var b: Array = now.get(key, [])
+		assert_eq(b.size(), a.size(), "%s: the same number of marks" % key)
+		if b.size() != a.size():
+			continue
+		var worst := 0.0
+		for i in a.size():
+			worst = maxf(worst, absf(float(a[i]) - float(b[i])))
+		assert_lt(worst, 0.0001, "%s: no mark moved" % key)
+		compared += 1
+	assert_gt(compared, 3, "several groups compared")
+
+## HoloVolume.add_mark drops a group's marks past CAPACITY without a word, so
+## the whole system's faint ticks must fit in one group.
+func test_the_system_s_faint_ticks_fit_in_the_holo():
+	_with_system()
+	_page.holo(_holo, _ctx, 1.0)
+	assert_lt(_holo.mark_count(&"tick", InteriorPalette.HOLO_DIM), HoloVolume.CAPACITY)
