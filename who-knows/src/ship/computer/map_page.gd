@@ -269,8 +269,8 @@ func selected_contact(ctx: ComputerContext) -> Contact:
 			return c
 	return null
 
-## After a change of page or scale: the course if it is among the targets,
-## else the nearest.
+## After a change of scale, or back on the map with the selection gone: the
+## course if it is among the targets, else the nearest.
 func reselect(ctx: ComputerContext) -> void:
 	_targets_key = []
 	_shown_key = []
@@ -284,8 +284,14 @@ func reselect(ctx: ComputerContext) -> void:
 			return
 	selected = list[0].id
 
+## Back on the map, by a tab or PAGE: the selection is kept while it is still
+## a target (computer mode spec §3.4); only when it has gone is the course or
+## the nearest taken.
 func opened(ctx: ComputerContext) -> void:
-	reselect(ctx)
+	_targets_key = []
+	_shown_key = []
+	if selected_contact(ctx) == null:
+		reselect(ctx)
 	_placed_for = []
 
 func lit(ctx: ComputerContext) -> Array[StringName]:

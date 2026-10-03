@@ -86,6 +86,20 @@ func test_prev_and_next_step_nearest_first_and_wrap():
 	_page.press(&"prev", _ctx)
 	assert_eq(_page.selected, &"rock:far")
 
+## Computer mode spec §3.4: back on the map, the selection is kept while it is
+## still a target; only when it has gone is the course or the nearest taken.
+func test_opening_the_map_keeps_a_selection_still_on_it():
+	_add(&"rock:near", Contact.EXACT, Vector3(0, 0, -3000), 300.0)
+	_add(&"rock:far", Contact.EXACT, Vector3(0, 0, -8000), 300.0)
+	_refresh()
+	_page.press(&"next", _ctx)
+	assert_eq(_page.selected, &"rock:far")
+	_page.opened(_ctx)
+	assert_eq(_page.selected, &"rock:far", "kept")
+	_page.selected = &"rock:gone"
+	_page.opened(_ctx)
+	assert_eq(_page.selected, &"rock:near", "gone, so the nearest")
+
 func test_after_a_change_of_range_the_course_is_selected_if_it_is_there():
 	_add(&"rock:near", Contact.EXACT, Vector3(0, 0, -3000), 300.0)
 	_add(&"rock:far", Contact.EXACT, Vector3(0, 0, -8000), 300.0)

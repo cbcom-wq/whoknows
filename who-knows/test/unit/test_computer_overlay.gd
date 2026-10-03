@@ -157,6 +157,16 @@ func test_every_button_overrides_every_state_it_can_draw():
 	assert_eq(tab.get_theme_color("font_hover_color"), InteriorPalette.LIGHT_WARM)
 	assert_eq(tab.get_theme_color("font_hover_pressed_color"), InteriorPalette.AMBER)
 
+## Spec §3.4: MAP, STATUS and back to MAP keeps the selection.
+func test_tabbing_away_and_back_keeps_the_selection():
+	_ready_map()
+	_map().press(&"next", _computer.ctx)
+	var chosen := _map().selected
+	assert_eq(chosen, &"life:b", "not the nearest")
+	_computer.tab(1)
+	_computer.tab(0)
+	assert_eq(_map().selected, chosen)
+
 # --- the list's rows, frame to frame (the final review, item 3) ---------------
 
 func test_the_near_list_holds_the_nearest_thirty_at_most():
