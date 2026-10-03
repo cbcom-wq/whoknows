@@ -16,6 +16,8 @@ static func qe_line(ctx: ComputerContext) -> String:
 		return "QE --"
 	if ctx.store.is_low_power():
 		return "QE %d · LOW POWER" % ctx.store.amount
+	if ctx.store.capacity < ctx.store.most:
+		return "QE %d / %d · CELLS DAMAGED" % [ctx.store.amount, ctx.store.capacity]
 	return "QE %d / %d" % [ctx.store.amount, ctx.store.capacity]
 
 ## Generated against drawn: the core gives half in low power (quantum energy

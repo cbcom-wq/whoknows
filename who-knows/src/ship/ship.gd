@@ -503,7 +503,7 @@ func _on_block_staged(coord: Vector3i, stage: int) -> void:
 	stats = ShipStats.compute(grid, catalog)
 	_apply_stats()
 	if quantum != null and quantum.store != null:
-		quantum.store.set_capacity(stats.quantum_capacity)
+		quantum.store.set_capacity(stats.quantum_capacity, stats.intact_quantum_capacity)
 	stats_changed.emit(stats)
 
 ## A strike carries through the rock it hit: anything living on it feels it

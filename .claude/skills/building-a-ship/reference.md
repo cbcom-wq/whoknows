@@ -485,7 +485,8 @@ Saved places outside are `UniversePoint`s (`SaveCodec.upoint`). The world's star
 | `Ship.cell_hit`, `missing_cell_along`, `repair_cell`, `rebuild_cell`, `cell_label`, `hull_whole()` | the repair torch's side, and HULL % in the band |
 | `Ship.wake_spots()` | where you wake after blacking out: the bunk room's cells first |
 | `ExteriorBuilder.set_stage(coord, stage)`, `stage_colour(stage)`, `instance_colour(coord)`, `skin_spans(coord)` | the cell's skin multiplied by `HullPalette.UNHURT` (white) / `SCORCH` / `CHAR`: the plating's vertex colour is the stage colour, trim and glass their colour times it; glows, lenses and beams stay lit. In place: the cell's vertices are recoloured in the kept arrays and the touched surfaces re-added to the same `ArrayMesh`es once at the end of the frame. On the starter (GTX 960 box) `set_stage` 0.03–0.08 ms, the upload 1.3–1.9 ms, five stages in one frame 1.4 ms; re-dressing the skin would be 53 ms. The alcove is not tinted |
-| `InteriorKit.wear`, `InteriorBuilder.wear_at(coord, normal)`, `shows(coord)` | interior dressing leans toward `InteriorPalette.SCORCH` / `CHAR`; a wreck's glow goes dark |
+| `InteriorKit.wear`, `InteriorBuilder.wear_at(coord, normal)`, `shows(coord)` | interior dressing leans toward `InteriorPalette.SCORCH` / `CHAR`; a wreck's glow goes dark, except a wrecked ceiling light |
+| `LightFlicker.attach(lamp, disc, material)`, `level_at(t, phase)` | a wrecked ceiling light (`InteriorProps.ceiling_light` at `kit.wear` 2): its disc is its own mesh with its own copy of the glow material, and the lamp and disc sit at `DIM` 0.1 with a burst at full every `CYCLE` 3 s (none in a `QUIET` quarter), ~93% of the time dim. Gone when the interior is rebuilt mended |
 
 Measured on the starter (crash probe, `test/probes/crash_probe.gd`, with the cabin's shell held,
 2026-10-02): 3 m/s nose-on hurts 3 blocks a little; 5 m/s damages 2 and wrecks 1, nothing
@@ -498,9 +499,12 @@ The floor that lifts a hull out from under the ground (`WorldSurface.floor_fired
 nothing: it is a safety net against tunnelling, not a contact, so never rely on it to hurt a ship.
 
 A `quantum_cell` holds its 400 QE times its stage's output: half when damaged, none when wrecked.
-`QuantumStore.set_capacity` clamps the amount down and never restocks it, so a hit on the cells
-loses QE for good, and the low-power line (10% of capacity) moves with it. Mending the cells gives
-back room, not energy. The torch's prompt names a block's health as `40% H`, then its stage.
+That is the store's `capacity`, so damaged cells stop it taking more; but what it holds is kept,
+up to `QuantumStore.most` (`ShipStats.intact_quantum_capacity`, every cell intact), on a rebuild
+and on loading a save. `room()` is never below 0 and `overfull()` says it holds more than its
+cells can. Pass the intact figure to `set_capacity(capacity, intact)` and `QuantumStore.new`, or a
+hit loses the energy. The low-power line (10% of capacity) moves with the capacity. The torch's
+prompt names a block's health as `40% H`, then its stage.
 
 ## The warp (`docs/superpowers/specs/2026-09-28-warp-design.md`)
 

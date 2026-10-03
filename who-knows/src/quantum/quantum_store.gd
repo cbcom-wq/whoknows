@@ -24,6 +24,11 @@ const PILOT_PERIOD := 5.0
 
 var amount: int
 var capacity: int
+## What the store keeps at most: its capacity with every cell intact. A
+## damaged cell lowers `capacity` and so stops the store taking more, but
+## what it already holds stays, up to this (owner, 2026-10-02: a hit on the
+## cells must not lose the energy).
+var most: int
 
 ## Fractional QE accrued so far, per purpose, toward spend_continuous()'s
 ## next whole-QE debit.
@@ -31,9 +36,10 @@ var _continuous: Dictionary = {}
 var _pilot_elapsed := 0.0
 var _was_low_power := false
 
-func _init(starting_capacity: int = 0, starting_amount: int = 0) -> void:
+func _init(starting_capacity: int = 0, starting_amount: int = 0, intact_capacity: int = -1) -> void:
 	capacity = maxi(starting_capacity, 0)
-	amount = clampi(starting_amount, 0, capacity)
+	most = maxi(capacity, intact_capacity)
+	amount = clampi(starting_amount, 0, most)
 	_was_low_power = is_low_power()
 
 ## The low-power line, in QE: 10% of capacity, rounded up (120 on the
@@ -46,9 +52,16 @@ func line() -> int:
 func is_low_power() -> bool:
 	return amount < line()
 
-## How much more the store can hold before it is full.
+## How much more the store can take before it is full: none while it holds
+## more than its damaged cells can (overfull()).
 func room() -> int:
-	return capacity - amount
+	return maxi(capacity - amount, 0)
+
+## True while the store holds more than its cells can now: they were damaged
+## with it fuller. It keeps the energy and takes no more until they are mended
+## or it is spent down.
+func overfull() -> bool:
+	return amount > capacity
 
 func can_spend(n: int) -> bool:
 	return n >= 0 and n <= amount
@@ -115,11 +128,14 @@ func tick(delta: float) -> void:
 	if amount >= PILOT_CAP:
 		_pilot_elapsed = 0.0
 
-## A new capacity from the ship's blocks (a rebuild, §3.2): clamps the
-## amount down if it no longer fits, but never restocks it.
-func set_capacity(c: int) -> void:
+## A new capacity from the ship's blocks (a rebuild, §3.2), and what they
+## hold intact (`intact`, the capacity itself if not given): the amount is
+## clamped down to what intact cells hold, never to what damaged ones do, and
+## never restocked.
+func set_capacity(c: int, intact := -1) -> void:
 	capacity = maxi(c, 0)
-	amount = clampi(amount, 0, capacity)
+	most = maxi(capacity, intact)
+	amount = clampi(amount, 0, most)
 	_settle()
 
 ## What a save keeps (saving spec §3): the amount. The capacity comes from
@@ -128,9 +144,9 @@ func set_capacity(c: int) -> void:
 func to_dict() -> Dictionary:
 	return {"amount": amount}
 
-## Takes a saved amount, clamped to this store's capacity.
+## Takes a saved amount, clamped to what the store keeps at most.
 func from_dict(d: Dictionary) -> void:
-	amount = clampi(int(d.get("amount", amount)), 0, capacity)
+	amount = clampi(int(d.get("amount", amount)), 0, most)
 	_settle()
 
 func _settle() -> void:

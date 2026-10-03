@@ -115,3 +115,44 @@ func test_low_power_changed_fires_only_on_a_crossing():
 	assert_signal_emit_count(s, "low_power_changed", 1)
 	s.credit(1, &"test")   # back to 120: full power again
 	assert_signal_emitted_with_parameters(s, "low_power_changed", [false])
+
+# --- damaged cells (health and damage spec §4.1, amended 2026-10-02) ----------------
+
+## The owner's call: a hit on the cells must not lose the energy. The store
+## keeps what it holds and takes no more until the cells are mended.
+func test_damaged_cells_keep_the_energy_and_take_no_more():
+	var s := QuantumStore.new(1200, 1000)
+	s.set_capacity(600, 1200)
+	assert_eq(s.amount, 1000, "kept")
+	assert_true(s.overfull())
+	assert_eq(s.room(), 0)
+	assert_false(s.credit(1, &"test"), "takes no more")
+	assert_true(s.spend(500, &"test"))
+	assert_eq(s.room(), 100, "spent below the damaged capacity, it takes again")
+	s.set_capacity(1200, 1200)
+	assert_eq(s.room(), 700, "mended: the room is back")
+
+func test_wrecked_cells_keep_the_energy_too():
+	var s := QuantumStore.new(1200, 900)
+	s.set_capacity(0, 1200)
+	assert_eq(s.amount, 900)
+	assert_false(s.credit(1, &"test"))
+
+func test_the_most_kept_is_what_intact_cells_hold():
+	var s := QuantumStore.new(1200, 1200)
+	s.set_capacity(400, 800)
+	assert_eq(s.amount, 800, "a cell lost outright takes its share")
+	s.set_capacity(300)
+	assert_eq(s.amount, 300, "with no intact figure, the capacity is the most")
+
+func test_a_save_loads_above_a_damaged_capacity():
+	var s := QuantumStore.new(600, 0, 1200)
+	s.from_dict({"amount": 1000})
+	assert_eq(s.amount, 1000, "not clamped to what the damaged cells hold")
+	s.from_dict({"amount": 5000})
+	assert_eq(s.amount, 1200)
+
+func test_an_overfull_store_is_not_in_low_power():
+	var s := QuantumStore.new(1200, 1000)
+	s.set_capacity(0, 1200)
+	assert_false(s.is_low_power())
