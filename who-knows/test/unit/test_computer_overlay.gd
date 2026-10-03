@@ -190,3 +190,27 @@ func test_selecting_what_is_not_a_target_anywhere_changes_nothing():
 	_computer.select(&"nothing:here")
 	assert_eq(_map().scale_m, before, "the scale is left alone")
 	assert_eq(_map().selected, selected)
+
+# --- the tag under the cursor ------------------------------------------------
+# gui_get_hovered_control needs a real window and mouse, so the decision is
+# driven through _refresh_tag's over_gui argument, which refresh() fills from it.
+
+func test_the_tag_shows_for_a_hovered_mark_and_hides_over_a_panel():
+	_ready_map()
+	_computer.hovered = &"rock:a"
+	_overlay._refresh_tag(false)
+	assert_true(_overlay.tag.visible, "over a mark, the tag shows")
+	assert_string_contains(_overlay.tag.text, "KM")
+	_overlay._refresh_tag(true)
+	assert_false(_overlay.tag.visible, "over a panel, it hides")
+	assert_eq(_computer.hovered, &"", "and the stale hover is cleared")
+	_overlay._refresh_tag(false)
+	assert_false(_overlay.tag.visible, "back in the middle it stays hidden until a mark is hovered")
+
+func test_the_overlay_keeps_to_its_corners_whatever_the_order():
+	_ready_map()
+	assert_eq(_overlay.scale_label.grow_horizontal, Control.GROW_DIRECTION_BEGIN, "it grows leftwards from the margin")
+	assert_eq(_overlay.scale_label.offset_right, -ComputerOverlay.MARGIN)
+	assert_eq(_overlay.scale_label.offset_bottom, -ComputerOverlay.MARGIN)
+	var card := _overlay.card_lines[0].get_parent().get_parent() as Control
+	assert_eq(card.grow_vertical, Control.GROW_DIRECTION_BOTH, "the card is centred, not hung from the middle")

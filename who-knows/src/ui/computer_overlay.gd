@@ -73,7 +73,7 @@ func refresh() -> void:
 	var lit := page.lit(ctx).has(&"big")
 	action.disabled = not lit
 	action.text = page.prompt(&"big", ctx).to_upper() if lit else "NO ACTION"
-	_refresh_tag(computer)
+	_refresh_tag(get_viewport().gui_get_hovered_control() != null)
 
 ## The list's rows (spec §5.2): far out, the system -- the star, each planet
 ## with its moons under it, each cluster; near in, what is on the map at full
@@ -82,25 +82,30 @@ static func list_rows(map: MapPage, ctx: ComputerContext) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	var system := ctx.sensors.system if ctx.sensors != null else null
 	if MapPage.system_weight(map.scale_m) > 0.5 and system != null:
-		out.append(_row(map, ctx, BodyContacts.id_of(system.star), system.star.name, &"body", 0))
+		out.append(_system_row(map, ctx, BodyContacts.id_of(system.star), system.star.name, &"body", 0))
 		for planet in system.bodies:
 			if planet.kind != SystemBody.Kind.PLANET:
 				continue
-			out.append(_row(map, ctx, BodyContacts.id_of(planet), planet.name, &"body", 0))
+			out.append(_system_row(map, ctx, BodyContacts.id_of(planet), planet.name, &"body", 0))
 			for moon in system.bodies:
 				if moon.kind == SystemBody.Kind.MOON and moon.parent_id == planet.id:
-					out.append(_row(map, ctx, BodyContacts.id_of(moon), moon.name, &"moon", 1))
+					out.append(_system_row(map, ctx, BodyContacts.id_of(moon), moon.name, &"moon", 1))
 		for t in system.clusters:
-			out.append(_row(map, ctx, t.contact_id(), t.name, &"cluster", 0))
+			out.append(_system_row(map, ctx, t.contact_id(), t.name, &"cluster", 0))
 		return out
 	for c in map.targets(ctx):
-		out.append(_row(map, ctx, c.id, ContactText.line(c, ctx.relative(c.point).length()), c.kind, 0))
+		out.append(_row(map, ctx, c.id, ContactText.line(c, ctx.relative(c.point).length()), c.kind, 0, c))
 	return out
 
-static func _row(map: MapPage, ctx: ComputerContext, id: StringName, text: String, kind: StringName,
+## A row for a world of the system, which may or may not be a contact yet: the
+## sensors are asked for it. A near row already has its Contact from targets().
+static func _system_row(map: MapPage, ctx: ComputerContext, id: StringName, text: String, kind: StringName,
 		indent: int) -> Dictionary:
+	return _row(map, ctx, id, text, kind, indent, MapPage.contact_by_id(ctx, id))
+
+static func _row(map: MapPage, ctx: ComputerContext, id: StringName, text: String, kind: StringName,
+		indent: int, c: Contact) -> Dictionary:
 	var colour := MapPage.colour_for(kind)
-	var c := MapPage.contact_by_id(ctx, id)
 	if c != null:
 		colour = map.reach_colour(ctx, c)
 	if ctx.sensors != null and ctx.sensors.course == id:
@@ -130,7 +135,14 @@ func _on_row_pressed(b: Button) -> void:
 	if is_instance_valid(station):
 		station.computer.select(b.get_meta(&"id"))
 
-func _refresh_tag(computer: ShipComputer) -> void:
+## The tag for the mark under the cursor. The panels swallow mouse motion, so
+## the computer's `hovered` goes stale the moment the cursor slides off a mark
+## onto one: with `over_gui` (the cursor is over a control) the tag is hidden
+## and `hovered` cleared, so a later click cannot be taken for the mark.
+func _refresh_tag(over_gui: bool) -> void:
+	var computer := station.computer
+	if over_gui:
+		computer.hovered = &""
 	var c := MapPage.contact_by_id(computer.ctx, computer.hovered) if computer.hovered != &"" else null
 	tag.visible = c != null and computer.page() is MapPage
 	if tag.visible:
@@ -157,8 +169,7 @@ func _build() -> void:
 		top.add_child(t)
 		tabs.append(t)
 	var leave := _label("ESC  LEAVE", SMALL_SIZE)
-	leave.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	leave.position = Vector2(-MARGIN - 120.0, MARGIN)
+	_pin(leave, 1, 0)
 	root.add_child(leave)
 
 	_list_panel = _panel()
@@ -178,9 +189,16 @@ func _build() -> void:
 	list_box.add_child(list_title)
 
 	var card := _panel()
-	card.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
+	card.anchor_left = 1.0
+	card.anchor_right = 1.0
+	card.anchor_top = 0.5
+	card.anchor_bottom = 0.5
 	card.offset_left = -CARD_WIDTH - MARGIN
 	card.offset_right = -MARGIN
+	card.offset_top = 0.0
+	card.offset_bottom = 0.0
+	card.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	card.grow_vertical = Control.GROW_DIRECTION_BOTH
 	card.custom_minimum_size.x = CARD_WIDTH
 	root.add_child(card)
 	var card_box := VBoxContainer.new()
@@ -197,16 +215,31 @@ func _build() -> void:
 	card_box.add_child(action)
 
 	var hints := _label(HINTS, SMALL_SIZE)
-	hints.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	hints.position = Vector2(MARGIN, -MARGIN - 20.0)
+	_pin(hints, 0, 1)
 	root.add_child(hints)
 	scale_label = _label("", FONT_SIZE)
-	scale_label.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	scale_label.position = Vector2(-MARGIN - 160.0, -MARGIN - 24.0)
+	_pin(scale_label, 1, 1)
 	root.add_child(scale_label)
 	tag = _label("", SMALL_SIZE)
 	tag.visible = false
 	root.add_child(tag)
+
+## Pins `c` to a corner of its parent, MARGIN in from it: `x` and `y` are 0 for
+## the left or top and 1 for the right or bottom. It grows away from the
+## corner, so a longer text is never clipped, whatever order it is built in.
+func _pin(c: Control, x: int, y: int) -> void:
+	c.anchor_left = x
+	c.anchor_right = x
+	c.anchor_top = y
+	c.anchor_bottom = y
+	var sx := 1.0 if x == 0 else -1.0
+	var sy := 1.0 if y == 0 else -1.0
+	c.offset_left = sx * MARGIN
+	c.offset_right = sx * MARGIN
+	c.offset_top = sy * MARGIN
+	c.offset_bottom = sy * MARGIN
+	c.grow_horizontal = Control.GROW_DIRECTION_END if x == 0 else Control.GROW_DIRECTION_BEGIN
+	c.grow_vertical = Control.GROW_DIRECTION_END if y == 0 else Control.GROW_DIRECTION_BEGIN
 
 func _panel() -> PanelContainer:
 	var p := PanelContainer.new()
