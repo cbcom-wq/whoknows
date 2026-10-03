@@ -3,12 +3,14 @@ extends ComputerPage
 
 ## The map (docs/superpowers/specs/2026-09-25-bridge-computer-design.md §5):
 ## what the ship's sensors know, shrunk into the holo and turned with the
-## ship, at 2, 10, 50 or 500 km. ◀ and ▶ pick a contact, nearest first; the big
-## button sets or clears the course (§6) to a big rock or salvage. It shows
-## only what the sensors report: a ping where the ping says, a region as its
-## sphere, never the thing's true place.
+## ship. The map is one continuous scale (computer mode spec §4), zoomed a
+## notch of the wheel at a time, with RANGE stepping through the stops 2, 10,
+## 50 and 500 km and the whole system. ◀ and ▶ pick a contact, nearest first;
+## the big button sets or clears the course (§6) to a big rock or salvage. It
+## shows only what the sensors report: a ping where the ping says, a region as
+## its sphere, never the thing's true place.
 ##
-## On the SYSTEM range (docs/superpowers/specs/2026-09-28-warp-design.md §7)
+## On the SYSTEM stop (docs/superpowers/specs/2026-09-28-warp-design.md §7)
 ## it is drawn round the star, like an orrery: the ship's pip and heading,
 ## scale rings every 2,500 km, worlds by class, lit when your QE reaches them,
 ## each target's warp limit, and the charted warp's line; the big button
@@ -17,13 +19,30 @@ extends ComputerPage
 ## Every kind the sensors know is drawn in its own colour: rocks SKY, salvage
 ## QUANTUM, signs of life SIGNAL_GO (the HUD's green), and the course AMBER.
 
-const RANGES: Array[float] = [2000.0, 10000.0, 50000.0, 500000.0, 20000000.0]
-## The last range is the whole system (the system skeleton spec §10): it asks
-## the sensors for all of it, and is drawn round the star out to SYSTEM_REACH
-## (the warp spec §7.1). 500 km holds a planet and its moons (the world scale
-## spec §3.5).
+## The map's stops (the world scale spec §3.5): what RANGE steps through, 2,
+## 10, 50 and 500 km round the ship, and the whole system round the star.
+const STOPS: Array[float] = [2000.0, 10000.0, 50000.0, 500000.0, 9000000.0]
+## The last stop is the whole system (the system skeleton spec §10), drawn round
+## the star out to SYSTEM_REACH (the warp spec §7.1). 500 km holds a planet and
+## its moons.
 const SYSTEM_RANGE := 4
 const SYSTEM_REACH := 9000000.0
+## How far in and out the map zooms (computer mode spec §4.1), and how much one
+## notch of the wheel changes it.
+const SCALE_MIN := 1000.0
+const SCALE_MAX := SYSTEM_REACH
+const ZOOM_STEP := 1.3
+## How quickly the drawn scale catches up with the chosen one, seconds: RANGE
+## glides between stops instead of cutting.
+const GLIDE := 0.1
+## What the sensors are asked for: the whole system (each source stops at its
+## own reach).
+const QUERY := 20000000.0
+## The centre slides from the ship to the star between these scales (computer
+## mode spec §4.2): your planet and its moons round you up to 500 km, the
+## orrery from 3,000 km.
+const SHIP_CENTRED := 500000.0
+const STAR_CENTRED := 3000000.0
 ## Rings of faint ticks round the ship, every SCALE_RING out to the rim.
 const SCALE_RING := 2500000.0
 const SCALE_TICKS := 32
@@ -67,12 +86,18 @@ const PING_SHRINK := 0.4
 const PIN_SIZE := 0.016
 const TICK_SIZE := 0.01
 const BRACKET_GAP := 0.012
-## How often the marks are placed afresh at each range, seconds; in between
-## they are only turned with the ship (HoloVolume.set_turn). At 50 km there
-## are hundreds, and a ship at 300 m/s moves a pip 2 mm a second there.
-const PLACE_EVERY: Array[float] = [0.0, 0.0, 0.5, 0.5, 0.5]
 
-var range_index := OPEN_AT
+## The scale chosen: metres from the holo's centre to its edge.
+var scale_m := STOPS[OPEN_AT]
+## The nearest stop. Setting it jumps there with no glide (a restore, a test).
+var range_index: int:
+	get:
+		return stop_index()
+	set(value):
+		scale_m = STOPS[clampi(value, 0, STOPS.size() - 1)]
+		_shown_m = scale_m
+## The scale the holo is drawn at, easing towards scale_m.
+var _shown_m := STOPS[OPEN_AT]
 var selected: StringName = &""
 
 var _targets: Array[Contact] = []
@@ -84,12 +109,54 @@ var _placed_for := []
 var _placed_basis := Basis.IDENTITY
 
 func range_m() -> float:
-	return RANGES[range_index]
+	return scale_m
+
+func shown_m() -> float:
+	return _shown_m
+
+## How far the centre has slid from the ship to the star at `scale`: 0 up to
+## SHIP_CENTRED, 1 from STAR_CENTRED, smooth in log scale between.
+static func system_weight(scale: float) -> float:
+	return smoothstep(log(SHIP_CENTRED), log(STAR_CENTRED), log(scale))
 
 func title() -> String:
-	if range_index == SYSTEM_RANGE:
+	if system_weight(scale_m) >= 1.0:
 		return "MAP · SYSTEM"
-	return "MAP · %d KM" % roundi(range_m() / 1000.0)
+	if scale_m < 2000.0:
+		return "MAP · %.1f KM" % (scale_m / 1000.0)
+	return "MAP · %d KM" % roundi(scale_m / 1000.0)
+
+## The stop nearest the scale, in log terms.
+func stop_index() -> int:
+	var best := 0
+	for i in STOPS.size():
+		if absf(log(STOPS[i] / scale_m)) < absf(log(STOPS[best] / scale_m)):
+			best = i
+	return best
+
+## Where RANGE goes next: the first stop above the scale, or back to the first.
+func next_stop() -> int:
+	for i in STOPS.size():
+		if STOPS[i] > scale_m * 1.001:
+			return i
+	return 0
+
+## Zooms by `notches` of the wheel: in for negative, out for positive. The
+## selection stays while it is still on the map.
+func zoom(notches: float, ctx: ComputerContext) -> void:
+	scale_m = clampf(scale_m * pow(ZOOM_STEP, notches), SCALE_MIN, SCALE_MAX)
+	if selected_contact(ctx) == null:
+		reselect(ctx)
+
+## Whether the drawn scale is still catching up with the chosen one.
+func gliding() -> bool:
+	return absf(log(_shown_m / scale_m)) > 0.001
+
+func _glide(delta: float) -> void:
+	if not gliding():
+		_shown_m = scale_m
+		return
+	_shown_m = exp(lerpf(log(_shown_m), log(scale_m), 1.0 - exp(-delta / GLIDE)))
 
 ## The colour a contact of `kind` is drawn in.
 static func colour_for(kind: StringName) -> Color:
@@ -110,14 +177,14 @@ static func colour_for(kind: StringName) -> Color:
 ## 50 and 500 km ranges show big rocks and worlds only (§5.2), the system range worlds
 ## only (the system skeleton spec §10). Worked out once a frame.
 func targets(ctx: ComputerContext) -> Array[Contact]:
-	var key := [Engine.get_process_frames(), range_index, ctx.sensors]
+	var key := [Engine.get_process_frames(), scale_m, ctx.sensors]
 	if key == _targets_key:
 		return _targets
 	_targets_key = key
 	_targets = []
 	if ctx.sensors == null:
 		return _targets
-	for c in ctx.sensors.contacts(range_m()):
+	for c in ctx.sensors.contacts(QUERY if range_index == SYSTEM_RANGE else range_m()):
 		if range_index == SYSTEM_RANGE and not TARGET_KINDS.has(c.kind):
 			continue
 		if range_index >= 2 and range_index < SYSTEM_RANGE and not [&"rock", &"body", &"moon", &"cluster"].has(c.kind):
@@ -168,10 +235,10 @@ func big_colour(ctx: ComputerContext) -> StringName:
 func prompt(button: StringName, ctx: ComputerContext) -> String:
 	match button:
 		&"range":
-			var next := (range_index + 1) % RANGES.size()
+			var next := next_stop()
 			if next == SYSTEM_RANGE:
 				return "Range system"
-			return "Range %d km" % roundi(RANGES[next] / 1000.0)
+			return "Range %d km" % roundi(STOPS[next] / 1000.0)
 		&"prev":
 			return "Previous target"
 		&"next":
@@ -186,7 +253,7 @@ func prompt(button: StringName, ctx: ComputerContext) -> String:
 func press(button: StringName, ctx: ComputerContext) -> void:
 	match button:
 		&"range":
-			range_index = (range_index + 1) % RANGES.size()
+			scale_m = STOPS[next_stop()]
 			reselect(ctx)
 		&"prev", &"next":
 			var list := targets(ctx)
@@ -234,18 +301,27 @@ func lines(ctx: ComputerContext) -> PackedStringArray:
 func holo(volume: HoloVolume, ctx: ComputerContext, delta: float) -> void:
 	volume.clear_miniature()
 	volume.show_map_frame(true)
+	_glide(delta)
 	if selected_contact(ctx) == null:
 		reselect(ctx)
 	var frame := ctx.map_frame()
 	_placed_ago += delta
 	var course_id: StringName = ctx.sensors.course if ctx.sensors != null else &""
-	var placing_for := [range_index, selected, course_id, volume]
-	if _placed_ago >= PLACE_EVERY[range_index] or placing_for != _placed_for:
+	var placing_for := [_shown_m, selected, course_id, volume]
+	if _placed_ago >= place_every() or placing_for != _placed_for:
 		_place(volume, ctx, frame)
 		_placed_ago = 0.0
 		_placed_for = placing_for
 		_placed_basis = frame.basis
 	volume.set_turn(frame.basis * _placed_basis.inverse())
+
+## How often the marks are placed afresh, seconds: every frame up close, twice
+## a second further out, where there are hundreds (and a ship at 300 m/s moves
+## a pip 2 mm a second at 50 km). In between they are only turned with the ship
+## (HoloVolume.set_turn). Every frame too while the scale glides, since
+## placing_for holds the drawn scale.
+func place_every() -> float:
+	return 0.0 if _shown_m <= STOPS[1] * 1.001 else 0.5
 
 ## Places every mark afresh, in the map's frame as it is now.
 func _place(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D) -> void:
@@ -261,7 +337,7 @@ func _place(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D) -> voi
 		var placed := _placed(ctx, frame, c.point)
 		var at: Vector3 = placed["position"]
 		var pinned: bool = placed["pinned"]
-		var size := PIN_SIZE if pinned else mark_size(c, range_m(), time)
+		var size := PIN_SIZE if pinned else mark_size(c, _shown_m, time)
 		var colour := InteriorPalette.AMBER if course != null and c.id == course.id else _reach_colour(ctx, c)
 		if range_index == SYSTEM_RANGE and c.kind == &"cluster" and not pinned:
 			for o in [Vector3(-CLUMP, 0, 0), Vector3(CLUMP, 0, 0), Vector3(0, 0, CLUMP)]:
@@ -301,7 +377,7 @@ static func mark_shape(c: Contact, pinned: bool) -> StringName:
 static func mark_size(c: Contact, range_m: float, time: float) -> float:
 	var scale := HoloVolume.RADIUS / range_m
 	if c.kind == &"body" or c.kind == &"moon" or c.kind == &"cluster":
-		if range_m >= RANGES[SYSTEM_RANGE]:
+		if system_weight(range_m) > 0.5:
 			return MOON_SIZE if c.kind == &"moon" else CLASS_SIZE[size_class(c)]
 		return clampf(c.radius * 2.0 * scale, BODY_MIN, BODY_MAX)
 	match c.precision:
@@ -310,9 +386,9 @@ static func mark_size(c: Contact, range_m: float, time: float) -> float:
 			return PING_SIZE * lerpf(1.0, PING_SHRINK, age)
 		Contact.REGION:
 			return maxf(REGION_MIN, c.radius * 2.0 * scale)
-	if range_m <= RANGES[0]:
+	if range_m <= STOPS[0]:
 		return maxf(ROCK_MIN_NEAR, c.radius * 2.0 * scale)
-	if range_m <= RANGES[1]:
+	if range_m <= STOPS[1]:
 		return clampf(c.radius * 2.0 / ROCK_BIGGEST * ROCK_MAX_MID, ROCK_MIN_MID, ROCK_MAX_MID)
 	return ROCK_FAR
 
@@ -353,7 +429,7 @@ func _placed(ctx: ComputerContext, frame: Transform3D, point: UniversePoint) -> 
 	var system := ctx.sensors.system if ctx.sensors != null else null
 	if range_index == SYSTEM_RANGE and system != null:
 		return HoloVolume.place(ctx.relative_in(frame, point) - ctx.relative_in(frame, system.star.point), SYSTEM_REACH)
-	return HoloVolume.place(ctx.relative_in(frame, point), range_m())
+	return HoloVolume.place(ctx.relative_in(frame, point), _shown_m)
 
 ## Lit in the kind's colour if your QE reaches it, dim if not (the warp spec
 ## §7.1). Off the system range, or without a drive, always lit.
@@ -471,10 +547,15 @@ static func flying_text(metres: float) -> String:
 	return "%d MIN FLYING" % maxi(1, roundi(minutes))
 
 func save() -> Dictionary:
-	return {"range": range_index, "selected": String(selected)}
+	return {"scale": scale_m, "selected": String(selected)}
 
+## A save from before the computer mode holds a stop's index as "range".
 func restore(state: Dictionary) -> void:
-	range_index = clampi(int(state.get("range", OPEN_AT)), 0, RANGES.size() - 1)
+	if state.has("scale"):
+		scale_m = clampf(float(state["scale"]), SCALE_MIN, SCALE_MAX)
+	else:
+		scale_m = STOPS[clampi(int(state.get("range", OPEN_AT)), 0, STOPS.size() - 1)]
+	_shown_m = scale_m
 	selected = StringName(state.get("selected", ""))
 	_targets_key = []
 	_placed_for = []

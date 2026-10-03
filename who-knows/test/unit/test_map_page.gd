@@ -250,7 +250,7 @@ func test_between_placements_at_50_km_the_marks_turn_with_the_ship():
 	_page.holo(_holo, _ctx, 0.016)
 	var shown: Vector3 = _holo.turn() * _holo.mark_transform(&"ball", 0).origin
 	assert_almost_eq(shown, Vector3(20000, 0, 0) * (HoloVolume.RADIUS / 50000.0), Vector3.ONE * 0.001)
-	_page.holo(_holo, _ctx, MapPage.PLACE_EVERY[2])
+	_page.holo(_holo, _ctx, _page.place_every())
 	assert_true(_holo.turn().is_equal_approx(Basis.IDENTITY), "placed afresh")
 	assert_almost_eq(_holo.mark_transform(&"ball", 0).origin, shown, Vector3.ONE * 0.001)
 
@@ -289,7 +289,7 @@ func test_worlds_are_drawn_in_their_own_colour_by_class_on_the_system_range():
 	for r in [[15000.0, &"small"], [35000.0, &"medium"], [50000.0, &"large"]]:
 		c.radius = r[0]
 		assert_eq(MapPage.size_class(c), r[1])
-		assert_eq(MapPage.mark_size(c, MapPage.RANGES[MapPage.SYSTEM_RANGE], 0.0), MapPage.CLASS_SIZE[r[1]])
+		assert_eq(MapPage.mark_size(c, MapPage.STOPS[MapPage.SYSTEM_RANGE], 0.0), MapPage.CLASS_SIZE[r[1]])
 	c.id = &"body:star"
 	c.radius = 250000.0
 	assert_eq(MapPage.size_class(c), &"star")
@@ -399,11 +399,11 @@ func test_the_screen_gives_size_distance_time_and_cost():
 	assert_true(lines[2].begins_with("WARP ") or lines[2].begins_with("NEED ") or lines[2].begins_with("FLY")
 		or lines[2].begins_with("BLOCKED"), lines[2])
 
-func test_the_ranges_reach_a_planet_s_moons_and_the_whole_system():
-	assert_eq(MapPage.RANGES, [2000.0, 10000.0, 50000.0, 500000.0, 20000000.0] as Array[float])
-	assert_eq(MapPage.SYSTEM_RANGE, MapPage.RANGES.size() - 1)
-	assert_eq(MapPage.PLACE_EVERY.size(), MapPage.RANGES.size())
-	assert_gte(BodyContacts.RANGE, MapPage.RANGES[MapPage.SYSTEM_RANGE])
+func test_the_stops_reach_a_planet_s_moons_and_the_whole_system():
+	assert_eq(MapPage.STOPS, [2000.0, 10000.0, 50000.0, 500000.0, 9000000.0] as Array[float])
+	assert_eq(MapPage.SYSTEM_RANGE, MapPage.STOPS.size() - 1)
+	assert_eq(MapPage.SCALE_MAX, MapPage.STOPS[MapPage.SYSTEM_RANGE])
+	assert_gte(BodyContacts.RANGE, MapPage.QUERY)
 
 func test_flying_time_reads_in_minutes_then_hours():
 	assert_eq(MapPage.flying_text(72000.0), "10 MIN FLYING")
@@ -420,3 +420,68 @@ func test_a_moon_s_screen_says_moon_and_its_size():
 	_page.selected = BodyContacts.id_of(m)
 	var lines := _page.lines(_ctx)
 	assert_eq(lines[0], "%s · MOON · %d KM ACROSS" % [m.name, roundi(m.radius * 2.0 / 1000.0)])
+
+# --- the continuous scale (computer mode spec §4.1) ---------------------------
+
+## Computer mode spec §4.1: one continuous scale, a notch of the wheel at a
+## time, between its bounds.
+func test_the_scale_zooms_by_a_notch_and_stops_at_its_bounds():
+	_page.range_index = 1
+	_page.zoom(1.0, _ctx)
+	assert_almost_eq(_page.scale_m, 13000.0, 0.01)
+	_page.zoom(-2.0, _ctx)
+	assert_almost_eq(_page.scale_m, 10000.0 / 1.3, 0.01)
+	_page.zoom(-100.0, _ctx)
+	assert_eq(_page.scale_m, MapPage.SCALE_MIN)
+	_page.zoom(100.0, _ctx)
+	assert_eq(_page.scale_m, MapPage.SCALE_MAX)
+
+func test_range_steps_to_the_next_stop_from_any_scale_and_wraps():
+	_page.scale_m = 12000.0
+	assert_eq(_page.prompt(&"range", _ctx), "Range 50 km")
+	_page.press(&"range", _ctx)
+	assert_eq(_page.scale_m, 50000.0)
+	_page.press(&"range", _ctx)
+	assert_eq(_page.scale_m, 500000.0)
+	_page.press(&"range", _ctx)
+	assert_eq(_page.title(), "MAP · SYSTEM")
+	_page.press(&"range", _ctx)
+	assert_eq(_page.scale_m, 2000.0)
+
+func test_range_glides_the_drawn_scale_instead_of_cutting():
+	_page.range_index = 1
+	_page.press(&"range", _ctx)
+	assert_eq(_page.shown_m(), 10000.0, "not moved yet")
+	assert_true(_page.gliding())
+	_page.holo(_holo, _ctx, 0.05)
+	assert_between(_page.shown_m(), 10001.0, 49999.0, "part way")
+	for i in 30:
+		_page.holo(_holo, _ctx, 0.05)
+	assert_false(_page.gliding())
+	assert_eq(_page.shown_m(), 50000.0)
+
+func test_the_title_names_the_scale_and_the_system_from_3000_km():
+	_page.scale_m = 1300.0
+	assert_eq(_page.title(), "MAP · 1.3 KM")
+	_page.scale_m = 12345.0
+	assert_eq(_page.title(), "MAP · 12 KM")
+	_page.scale_m = 3100000.0
+	assert_eq(_page.title(), "MAP · SYSTEM")
+
+func test_an_old_save_s_range_loads_as_its_stop():
+	var again := MapPage.new()
+	again.restore({"range": 3, "selected": "body:x"})
+	assert_eq(again.scale_m, 500000.0)
+	assert_eq(again.shown_m(), 500000.0)
+	_page.scale_m = 77000.0
+	again.restore(_page.save())
+	assert_eq(again.scale_m, 77000.0)
+
+func test_the_centre_weight_is_the_ship_to_500_km_and_the_star_from_3000_km():
+	assert_eq(MapPage.system_weight(500000.0), 0.0)
+	assert_eq(MapPage.system_weight(3000000.0), 1.0)
+	var last := 0.0
+	for k in 21:
+		var w := MapPage.system_weight(500000.0 * pow(6.0, k / 20.0))
+		assert_true(w >= last, "only ever further towards the star")
+		last = w
