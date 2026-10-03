@@ -110,6 +110,12 @@ var range_index: int:
 var _shown_m := STOPS[OPEN_AT]
 var selected: StringName = &""
 
+## What the last placing put in the holo that a click can take (computer mode
+## spec §4.5): each target's {id, position}, in the frame the marks were
+## placed in -- HoloVolume.marks_to_global finds it in the world. Only
+## full-size targets: a mark still shrinking away is drawn but not pickable.
+var placed_marks: Array[Dictionary] = []
+
 var _targets: Array[Contact] = []
 var _targets_key := []
 var _shown: Array[Contact] = []
@@ -390,7 +396,11 @@ func _place(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D) -> voi
 	var time := ctx.sensors.time if ctx.sensors != null else ctx.time
 	var w := system_weight(_shown_m)
 	var bracketed := false
+	var target_ids := {}
+	for t in targets(ctx):
+		target_ids[t.id] = true
 	volume.begin_marks()
+	placed_marks.clear()
 	for i in list.size():
 		var c: Contact = list[i]
 		var placed := _placed(ctx, frame, c.point)
@@ -407,6 +417,8 @@ func _place(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D) -> voi
 				volume.add_mark(&"ball", colour, at + o, size)
 		else:
 			volume.add_mark(mark_shape(c, pinned), colour, at, size)
+		if target_ids.has(c.id):
+			placed_marks.append({"id": c.id, "position": at})
 		if not pinned and (i < STALKS or c.id == selected):
 			volume.add_mark(&"stalk", InteriorPalette.LIGHT_WARM, at, 0.0)
 			volume.add_mark(&"tick", InteriorPalette.LIGHT_WARM, Vector3(at.x, 0.0, at.z), TICK_SIZE)

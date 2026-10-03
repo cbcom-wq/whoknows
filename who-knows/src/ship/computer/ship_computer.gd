@@ -20,6 +20,11 @@ const HUM_DB := -30.0
 const BLIP_DB := -14.0
 ## Farther than this from the camera, the holo is not worth redrawing.
 const SEEN_WITHIN := 12.0
+## Picking with the mouse (computer mode spec §4.5): how far from a mark on
+## screen a click still takes it, and the gap inside which the nearer to the
+## camera wins.
+const PICK_RADIUS := 24.0
+const PICK_TIE := 2.0
 
 var cell := Vector3i.ZERO
 var holo: HoloVolume
@@ -27,6 +32,14 @@ var panels: Dictionary = {}   # StringName -> ReadoutPanel
 var pages: Array[ComputerPage] = []
 var page_index := 0
 var ctx := ComputerContext.new()
+## The contact under the cursor at a station, for the overlay's tag.
+var hovered: StringName = &""
+## The operator's spin of the holo at a station (spec §4.4).
+var spin := 0.0:
+	set(value):
+		spin = value
+		if holo != null:
+			holo.set_spin(value)
 
 var _label: Label3D
 var _unseen_for := 0.0
@@ -101,6 +114,75 @@ func press(button: StringName) -> void:
 		elif button == &"big" and ctx.sensors != null and ctx.sensors.course != course_before:
 			_play(&"course_clear" if ctx.sensors.course.is_empty() else &"course_set")
 	_refresh()
+
+## The id of the target nearest `screen`, as `camera` sees the holo, within
+## PICK_RADIUS; "" when there is none or the page is not the map.
+func mark_at(screen: Vector2, camera: Camera3D) -> StringName:
+	var map := page() as MapPage
+	if map == null or camera == null:
+		return &""
+	var best: StringName = &""
+	var best_off := INF
+	var best_depth := INF
+	for m: Dictionary in map.placed_marks:
+		var at := holo.marks_to_global(m["position"])
+		if camera.is_position_behind(at):
+			continue
+		var off := camera.unproject_position(at).distance_to(screen)
+		if off > PICK_RADIUS:
+			continue
+		var depth := camera.global_position.distance_to(at)
+		if off < best_off - PICK_TIE or (absf(off - best_off) <= PICK_TIE and depth < best_depth):
+			best = m["id"]
+			best_off = off
+			best_depth = depth
+	return best
+
+## Selects the mark under `screen`, if there is one; returns its id or "".
+func pick(screen: Vector2, camera: Camera3D) -> StringName:
+	var id := mark_at(screen, camera)
+	if id != &"":
+		select(id)
+	return id
+
+## Names the mark under `screen` in `hovered`, "" when there is none.
+func hover(screen: Vector2, camera: Camera3D) -> StringName:
+	hovered = mark_at(screen, camera)
+	return hovered
+
+## Selects contact `id` on the map: a click in the holo or on the overlay's list.
+func select(id: StringName) -> void:
+	var map := page() as MapPage
+	if map == null:
+		return
+	map.selected = id
+	if ctx.sensors != null:
+		ctx.sensors.forget_arrival()
+	_refresh()
+
+## What the big button would do (spec §5.3).
+func act() -> void:
+	press(&"big")
+
+## Zooms the map by `notches` of the wheel; any other page ignores it.
+func zoom(notches: float) -> void:
+	var map := page() as MapPage
+	if map != null:
+		map.zoom(notches, ctx)
+		_refresh()
+
+## Opens page `index`: the overlay's tabs.
+func tab(index: int) -> void:
+	if index == page_index or index < 0 or index >= pages.size():
+		return
+	page_index = index
+	page().opened(ctx)
+	_play(&"page")
+	_refresh()
+
+## Opens the next page, as the PAGE button does.
+func next_tab() -> void:
+	press(&"page")
 
 ## What pressing `button` would do, or "" when it would do nothing: the
 ## Interactor passes over a dark button.
