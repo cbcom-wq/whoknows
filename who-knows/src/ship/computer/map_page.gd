@@ -10,11 +10,13 @@ extends ComputerPage
 ## shows only what the sensors report: a ping where the ping says, a region as
 ## its sphere, never the thing's true place.
 ##
-## On the SYSTEM stop (docs/superpowers/specs/2026-09-28-warp-design.md §7)
-## it is drawn round the star, like an orrery: the ship's pip and heading,
-## scale rings every 2,500 km, worlds by class, lit when your QE reaches them,
-## each target's warp limit, and the charted warp's line; the big button
-## charts a warp.
+## Zoomed out (docs/superpowers/specs/2026-09-28-warp-design.md §7) the centre
+## slides from the ship to the star (§4.2) and it is drawn like an orrery: the
+## ship's pip and heading, scale rings every 2,500 km, worlds by class, lit
+## when your QE reaches them, each target's warp limit, and the charted warp's
+## line; the big button charts a warp. What the ship's neighbours are leaves
+## the map by shrinking as you zoom out (§4.3), and warp limits are drawn at
+## any scale.
 ##
 ## Every kind the sensors know is drawn in its own colour: rocks SKY, salvage
 ## QUANTUM, signs of life SIGNAL_GO (the HUD's green), and the course AMBER.
@@ -46,13 +48,13 @@ const STAR_CENTRED := 3000000.0
 ## Rings of faint ticks round the ship, every SCALE_RING out to the rim.
 const SCALE_RING := 2500000.0
 const SCALE_TICKS := 32
-## Each warp target's limit, as a ring of faint ticks.
+## Each warp target's limit, as a ring of faint ticks, at any scale.
 const LIMIT_TICKS := 24
 ## The charted warp's line.
 const LINE_TICKS := 24
 const SHIP_PIP := 0.014
 const HEADING_TICK := 0.025
-## Mark sizes by class on the system range (the warp spec §7.1).
+## Mark sizes by class once the map is round the star (the warp spec §7.1).
 const CLASS_SIZE := {&"star": 0.06, &"large": 0.04, &"medium": 0.03, &"small": 0.02, &"cluster": 0.01}
 ## A planet this big is large; this big, medium (the world scale spec §3.1).
 const LARGE := 45000.0
@@ -78,7 +80,7 @@ const REGION_MIN := 0.02
 ## A world's mark: sized by radius, but never lost nor overwhelming.
 const BODY_MIN := 0.012
 const BODY_MAX := 0.06
-## Each belt's ring of ticks on the system range.
+## Each belt's ring of ticks, once the scale is past 500 km.
 const BELT_TICKS := 48
 const PING_SIZE := 0.018
 ## A ping shrinks to this share of its size by its next refresh.
@@ -86,6 +88,14 @@ const PING_SHRINK := 0.4
 const PIN_SIZE := 0.016
 const TICK_SIZE := 0.01
 const BRACKET_GAP := 0.012
+## The bands things leave the map across as you zoom out (computer mode spec
+## §4.3): full size up to x, gone by y.
+const NEAR_BAND := Vector2(10000.0, 20000.0)
+const ROCK_BAND := Vector2(50000.0, 100000.0)
+## Belts and scale rings grow in across this band.
+const WIDE_BAND := Vector2(500000.0, 1000000.0)
+## A mark shrunk smaller than this is not placed.
+const SMALLEST := 0.001
 
 ## The scale chosen: metres from the holo's centre to its edge.
 var scale_m := STOPS[OPEN_AT]
@@ -118,6 +128,19 @@ func shown_m() -> float:
 ## SHIP_CENTRED, 1 from STAR_CENTRED, smooth in log scale between.
 static func system_weight(scale: float) -> float:
 	return smoothstep(log(SHIP_CENTRED), log(STAR_CENTRED), log(scale))
+
+## 1 up to band.x, 0 from band.y, smooth in log scale between.
+static func fade(scale: float, band: Vector2) -> float:
+	return 1.0 - smoothstep(log(band.x), log(band.y), log(scale))
+
+## How much of its size a contact's mark keeps at `scale`.
+static func shrink(c: Contact, scale: float) -> float:
+	match c.kind:
+		&"salvage", &"life":
+			return fade(scale, NEAR_BAND)
+		&"rock":
+			return fade(scale, ROCK_BAND)
+	return 1.0
 
 func title() -> String:
 	if system_weight(scale_m) >= 1.0:
@@ -173,9 +196,9 @@ static func colour_for(kind: StringName) -> Color:
 			return InteriorPalette.SKY
 	return InteriorPalette.LIGHT_WARM
 
-## What ◀ and ▶ step through: the contacts on this range, nearest first. The
-## 50 and 500 km ranges show big rocks and worlds only (§5.2), the system range worlds
-## only (the system skeleton spec §10). Worked out once a frame.
+## What ◀ and ▶ step through, and the overlay lists: the contacts inside the
+## holo at full size, nearest the ship first. Once the map is round the star,
+## worlds only. Worked out once a frame.
 func targets(ctx: ComputerContext) -> Array[Contact]:
 	var key := [Engine.get_process_frames(), scale_m, ctx.sensors]
 	if key == _targets_key:
@@ -184,10 +207,14 @@ func targets(ctx: ComputerContext) -> Array[Contact]:
 	_targets = []
 	if ctx.sensors == null:
 		return _targets
-	for c in ctx.sensors.contacts(QUERY if range_index == SYSTEM_RANGE else range_m()):
-		if range_index == SYSTEM_RANGE and not TARGET_KINDS.has(c.kind):
+	var frame := ctx.map_frame()
+	var system_view := system_weight(scale_m) > 0.5
+	for c in ctx.sensors.contacts(QUERY):
+		if system_view and not TARGET_KINDS.has(c.kind):
 			continue
-		if range_index >= 2 and range_index < SYSTEM_RANGE and not [&"rock", &"body", &"moon", &"cluster"].has(c.kind):
+		if shrink(c, scale_m) < 0.999:
+			continue
+		if _from_centre(ctx, frame, c.point, scale_m).length() > scale_m + c.radius:
 			continue
 		_targets.append(c)
 	return _targets
@@ -198,8 +225,8 @@ func selected_contact(ctx: ComputerContext) -> Contact:
 			return c
 	return null
 
-## After a change of page or range: the course if it is on this range, else
-## the nearest.
+## After a change of page or scale: the course if it is among the targets,
+## else the nearest.
 func reselect(ctx: ComputerContext) -> void:
 	_targets_key = []
 	var list := targets(ctx)
@@ -301,6 +328,7 @@ func lines(ctx: ComputerContext) -> PackedStringArray:
 func holo(volume: HoloVolume, ctx: ComputerContext, delta: float) -> void:
 	volume.clear_miniature()
 	volume.show_map_frame(true)
+	volume.show_chevron(system_weight(_shown_m) <= 0.01)
 	_glide(delta)
 	if selected_contact(ctx) == null:
 		reselect(ctx)
@@ -330,6 +358,7 @@ func _place(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D) -> voi
 	if course != null and not list.any(func(c: Contact) -> bool: return c.id == course.id):
 		list.append(course)   # always shown, pinned if it must be
 	var time := ctx.sensors.time if ctx.sensors != null else ctx.time
+	var w := system_weight(_shown_m)
 	var bracketed := false
 	volume.begin_marks()
 	for i in list.size():
@@ -337,9 +366,11 @@ func _place(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D) -> voi
 		var placed := _placed(ctx, frame, c.point)
 		var at: Vector3 = placed["position"]
 		var pinned: bool = placed["pinned"]
-		var size := PIN_SIZE if pinned else mark_size(c, _shown_m, time)
-		var colour := InteriorPalette.AMBER if course != null and c.id == course.id else _reach_colour(ctx, c)
-		if range_index == SYSTEM_RANGE and c.kind == &"cluster" and not pinned:
+		var size := PIN_SIZE if pinned else mark_size(c, _shown_m, time) * shrink(c, _shown_m)
+		if size < SMALLEST:
+			continue
+		var colour := InteriorPalette.AMBER if course != null and c.id == course.id else reach_colour(ctx, c)
+		if w > 0.5 and c.kind == &"cluster" and not pinned:
 			for o in [Vector3(-CLUMP, 0, 0), Vector3(CLUMP, 0, 0), Vector3(0, 0, CLUMP)]:
 				volume.add_mark(&"ball", colour, at + o, size)
 		else:
@@ -350,11 +381,12 @@ func _place(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D) -> voi
 		if c.id == selected:
 			volume.show_bracket(at, size + BRACKET_GAP, true)
 			bracketed = true
-	if range_index == SYSTEM_RANGE:
-		_place_belts(volume, ctx, frame)
+	_place_belts(volume, ctx, frame)
+	if w > 0.01:
 		_place_ship(volume, ctx, frame)
-		_place_limits(volume, ctx, frame, list)
-		_place_chart(volume, ctx, frame)
+	_place_rings(volume, ctx, frame)
+	_place_limits(volume, ctx, frame, list)
+	_place_chart(volume, ctx, frame)
 	volume.end_marks()
 	if not bracketed:
 		volume.show_bracket(Vector3.ZERO, 0.0, false)
@@ -371,9 +403,9 @@ static func mark_shape(c: Contact, pinned: bool) -> StringName:
 			return &"sphere"
 	return &"ball"
 
-## How big a contact's mark is at `range_m` (spec §5.2). A ping is full size
-## when it is taken and shrinks until the next: by scale, since the glow
-## material is shared and one mark cannot fade on its own.
+## How big a contact's mark is at the scale `range_m` (spec §5.2). A ping is
+## full size when it is taken and shrinks until the next: by scale, since the
+## glow material is shared and one mark cannot fade on its own.
 static func mark_size(c: Contact, range_m: float, time: float) -> float:
 	var scale := HoloVolume.RADIUS / range_m
 	if c.kind == &"body" or c.kind == &"moon" or c.kind == &"cluster":
@@ -392,10 +424,11 @@ static func mark_size(c: Contact, range_m: float, time: float) -> float:
 		return clampf(c.radius * 2.0 / ROCK_BIGGEST * ROCK_MAX_MID, ROCK_MIN_MID, ROCK_MAX_MID)
 	return ROCK_FAR
 
-## Each belt as a ring of ticks, on the system range.
+## Each belt as a ring of ticks, growing in past 500 km.
 func _place_belts(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D) -> void:
 	var system := ctx.sensors.system if ctx.sensors != null else null
-	if system == null:
+	var grow := 1.0 - fade(_shown_m, WIDE_BAND)
+	if system == null or grow * TICK_SIZE < SMALLEST:
 		return
 	for belt in system.belts:
 		for k in BELT_TICKS:
@@ -403,7 +436,7 @@ func _place_belts(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D) 
 			var point := belt.centre.plus(Vector3(cos(angle), 0.0, sin(angle)) * belt.radius)
 			var placed := _placed(ctx, frame, point)
 			if not placed["pinned"]:
-				volume.add_mark(&"tick", colour_for(&"rock"), placed["position"], TICK_SIZE)
+				volume.add_mark(&"tick", colour_for(&"rock"), placed["position"], TICK_SIZE * grow)
 
 ## A world's class, for its mark and the screen (the warp spec §7.1).
 static func size_class(c: Contact) -> StringName:
@@ -420,22 +453,29 @@ static func size_class_of_radius(radius: float) -> StringName:
 		return &"medium"
 	return &"small"
 
-## Where `point` sits in the holo: on the system range round the star, else
-## round the ship.
+## Where `point` sits in the holo at the scale shown: round the ship up close,
+## round the star far out, and between the two while the centre slides.
 func holo_position(ctx: ComputerContext, frame: Transform3D, point: UniversePoint) -> Vector3:
 	return _placed(ctx, frame, point)["position"]
 
-func _placed(ctx: ComputerContext, frame: Transform3D, point: UniversePoint) -> Dictionary:
+## `point` from the holo's centre, in the map's frame, at `scale`: the centre
+## slides from the ship to the star as the scale grows (spec §4.2).
+func _from_centre(ctx: ComputerContext, frame: Transform3D, point: UniversePoint, scale: float) -> Vector3:
+	var rel := ctx.relative_in(frame, point)
 	var system := ctx.sensors.system if ctx.sensors != null else null
-	if range_index == SYSTEM_RANGE and system != null:
-		return HoloVolume.place(ctx.relative_in(frame, point) - ctx.relative_in(frame, system.star.point), SYSTEM_REACH)
-	return HoloVolume.place(ctx.relative_in(frame, point), _shown_m)
+	var w := system_weight(scale)
+	if w > 0.0 and system != null:
+		rel -= ctx.relative_in(frame, system.star.point) * w
+	return rel
+
+func _placed(ctx: ComputerContext, frame: Transform3D, point: UniversePoint) -> Dictionary:
+	return HoloVolume.place(_from_centre(ctx, frame, point, _shown_m), _shown_m)
 
 ## Lit in the kind's colour if your QE reaches it, dim if not (the warp spec
-## §7.1). Off the system range, or without a drive, always lit.
-func _reach_colour(ctx: ComputerContext, c: Contact) -> Color:
+## §7.1). Before the map is round the star, or without a drive, always lit.
+func reach_colour(ctx: ComputerContext, c: Contact) -> Color:
 	var lit := colour_for(c.kind)
-	if range_index != SYSTEM_RANGE or ctx.warp == null or ctx.store == null or ctx.sensors == null:
+	if system_weight(_shown_m) <= 0.5 or ctx.warp == null or ctx.store == null or ctx.sensors == null:
 		return lit
 	var t := ctx.warp.target_for(c.id)
 	var focus := ctx.sensors.focus_point()
@@ -444,7 +484,7 @@ func _reach_colour(ctx: ComputerContext, c: Contact) -> Color:
 	var travel := t.point.minus(focus).length() - t.limit
 	return lit if WarpPlan.cost_of(travel) <= ctx.store.amount else InteriorPalette.HOLO_DIM
 
-## The ship's pip and heading, and scale rings round it every SCALE_RING.
+## The ship's pip and heading.
 func _place_ship(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D) -> void:
 	var focus := ctx.sensors.focus_point() if ctx.sensors != null else null
 	if focus == null:
@@ -452,16 +492,24 @@ func _place_ship(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D) -
 	var pip: Vector3 = _placed(ctx, frame, focus)["position"]
 	volume.add_mark(&"ball", InteriorPalette.LIGHT_WARM, pip, SHIP_PIP)
 	volume.add_mark(&"tick", InteriorPalette.LIGHT_WARM, pip + Vector3(0, 0, -HEADING_TICK), TICK_SIZE)
+
+## Faint rings round the ship every SCALE_RING, growing in past 500 km.
+func _place_rings(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D) -> void:
+	var focus := ctx.sensors.focus_point() if ctx.sensors != null else null
+	var grow := 1.0 - fade(_shown_m, WIDE_BAND)
+	if focus == null or grow * TICK_SIZE < SMALLEST:
+		return
 	var r := SCALE_RING
 	while r <= SYSTEM_REACH * 2.0:
 		for k in SCALE_TICKS:
 			var a := TAU * k / SCALE_TICKS
 			var placed := _placed(ctx, frame, focus.plus(frame.basis.inverse() * Vector3(cos(a), 0.0, sin(a)) * r))
 			if not placed["pinned"]:
-				volume.add_mark(&"tick", InteriorPalette.HOLO_DIM, placed["position"], TICK_SIZE)
+				volume.add_mark(&"tick", InteriorPalette.HOLO_DIM, placed["position"], TICK_SIZE * grow)
 		r += SCALE_RING
 
-## Each target's warp limit as a ring of ticks; the blocker's in CORAL.
+## Each target's warp limit as a ring of ticks, at any scale; the blocker's in
+## CORAL.
 func _place_limits(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D, list: Array[Contact]) -> void:
 	if ctx.warp == null:
 		return
@@ -492,9 +540,9 @@ func _place_chart(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D) 
 		if not placed["pinned"]:
 			volume.add_mark(&"tick", InteriorPalette.AMBER, placed["position"], TICK_SIZE)
 
-## The warp target selected on the system range, if there is a drive.
+## The warp target selected once the map is round the star, if there is a drive.
 func _warp_target(ctx: ComputerContext) -> WarpTarget:
-	if range_index != SYSTEM_RANGE or ctx.warp == null:
+	if system_weight(scale_m) <= 0.5 or ctx.warp == null:
 		return null
 	var c := selected_contact(ctx)
 	return ctx.warp.target_for(c.id) if c != null else null

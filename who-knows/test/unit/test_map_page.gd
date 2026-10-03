@@ -485,3 +485,92 @@ func test_the_centre_weight_is_the_ship_to_500_km_and_the_star_from_3000_km():
 		var w := MapPage.system_weight(500000.0 * pow(6.0, k / 20.0))
 		assert_true(w >= last, "only ever further towards the star")
 		last = w
+
+## Computer mode spec §4.3: what leaves the map as you zoom out leaves by
+## shrinking across a band.
+func test_salvage_and_life_shrink_away_past_10_km_and_big_rocks_past_50_km():
+	var salvage := Contact.new()
+	salvage.kind = &"salvage"
+	assert_eq(MapPage.shrink(salvage, 10000.0), 1.0)
+	assert_between(MapPage.shrink(salvage, 14000.0), 0.01, 0.99)
+	assert_eq(MapPage.shrink(salvage, 20000.0), 0.0)
+	var rock := Contact.new()
+	rock.kind = &"rock"
+	assert_eq(MapPage.shrink(rock, 50000.0), 1.0)
+	assert_eq(MapPage.shrink(rock, 100000.0), 0.0)
+	var world := Contact.new()
+	world.kind = &"body"
+	assert_eq(MapPage.shrink(world, 9000000.0), 1.0)
+
+func test_a_mark_shrunk_away_is_not_placed():
+	_add(&"salvage:b", Contact.PING, Vector3(0, 0, -4000), 0.0, 4)
+	_page.range_index = 2
+	_refresh()
+	_page.holo(_holo, _ctx, 0.0)
+	assert_eq(_holo.mark_count(&"diamond"), 0)
+
+func test_targets_are_what_is_inside_the_holo_at_full_size():
+	_add(&"rock:near", Contact.EXACT, Vector3(0, 0, -8000), 300.0)
+	_add(&"rock:far", Contact.EXACT, Vector3(0, 0, -28000), 300.0)
+	_add(&"body:p", Contact.EXACT, Vector3(0, 0, -300000), 30000.0, 0, &"body")
+	_page.range_index = 1
+	_refresh()
+	assert_eq(_page.targets(_ctx).map(func(c: Contact) -> StringName: return c.id), [&"rock:near"])
+	_page.restore({"scale": 45000.0})
+	_refresh()
+	assert_eq(_page.targets(_ctx).map(func(c: Contact) -> StringName: return c.id), [&"rock:near", &"rock:far"])
+	_page.range_index = 3
+	_refresh()
+	assert_eq(_page.targets(_ctx).map(func(c: Contact) -> StringName: return c.id), [&"body:p"], "the rocks are gone")
+
+func test_half_way_out_the_ship_and_the_star_sit_either_side_of_the_centre():
+	var s := _with_system()
+	_page.restore({"scale": sqrt(MapPage.SHIP_CENTRED * MapPage.STAR_CENTRED)})
+	var frame := _ctx.map_frame()
+	var star := _page.holo_position(_ctx, frame, s.star.point)
+	var ship := _page.holo_position(_ctx, frame, s.entry())
+	assert_almost_eq(star, -ship, Vector3.ONE * 0.0001)
+
+func test_the_ship_is_a_chevron_near_and_a_pip_far():
+	_page.range_index = 1
+	_refresh()
+	_page.holo(_holo, _ctx, 0.0)
+	assert_true(_holo.chevron_shown())
+	_with_system()
+	_page.holo(_holo, _ctx, 0.0)
+	assert_false(_holo.chevron_shown())
+	assert_gt(_holo.mark_count(&"ball", InteriorPalette.LIGHT_WARM), 0, "the pip")
+
+func test_warp_limits_are_drawn_near_a_world_not_only_on_the_system_range():
+	var s := _with_system()
+	var planet: SystemBody = null
+	for b in s.bodies:
+		if b.kind == SystemBody.Kind.PLANET:
+			planet = b
+			break
+	_universe.origin = planet.point.plus(Vector3(planet.warp_limit + 20000.0, 0, 0))
+	_page.range_index = 3
+	_refresh()
+	_page.holo(_holo, _ctx, 0.0)
+	assert_gt(_holo.mark_count(&"tick", InteriorPalette.HOLO_DIM), 0, "the planet's limit at 500 km")
+
+func test_belts_and_scale_rings_grow_in_past_500_km():
+	_with_system()
+	_page.range_index = 3
+	_refresh()
+	_page.holo(_holo, _ctx, 0.0)
+	assert_eq(_holo.mark_count(&"tick", MapPage.colour_for(&"rock")), 0, "no belt at 500 km")
+	_page.range_index = MapPage.SYSTEM_RANGE
+	_refresh()
+	_page.holo(_holo, _ctx, 0.0)
+	assert_gt(_holo.mark_count(&"tick", MapPage.colour_for(&"rock")), 0, "belts on the system range")
+
+func test_marks_are_placed_every_frame_while_the_scale_glides():
+	_add(&"rock:a", Contact.EXACT, Vector3(0, 0, -20000), 300.0)
+	_page.range_index = 2
+	_refresh()
+	_page.holo(_holo, _ctx, 0.0)
+	var before := _holo.mark_transform(&"ball", 0).origin
+	_page.zoom(-3.0, _ctx)
+	_page.holo(_holo, _ctx, 0.016)
+	assert_ne(_holo.mark_transform(&"ball", 0).origin, before, "placed afresh while zooming")
