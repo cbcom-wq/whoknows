@@ -21,6 +21,16 @@ func _status(c: ShipComputer) -> void:
 		if c.pages[i] is StatusPage:
 			c.page_index = i
 
+## Steps NEXT through the targets until a rock is selected, at most once round
+## the list, so a scale with no rock fails the test instead of freezing Godot.
+func _select_a_rock(c: ShipComputer, map: MapPage) -> bool:
+	map.reselect(c.ctx)
+	for i in map.targets(c.ctx).size():
+		if map.selected_contact(c.ctx) != null and map.selected_contact(c.ctx).kind == &"rock":
+			return true
+		c.press(&"next")
+	return map.selected_contact(c.ctx) != null and map.selected_contact(c.ctx).kind == &"rock"
+
 func test_the_starter_has_one_table_bound_to_its_ship():
 	var c := _computer()
 	assert_eq(c.cell, Vector3i(-1, 0, -3))
@@ -151,9 +161,9 @@ func test_the_course_marker_is_mounted_per_view():
 func test_setting_a_course_at_the_table_reaches_the_ship_s_sensors():
 	var c := _computer()
 	var map := c.pages[0] as MapPage
-	map.reselect(c.ctx)
-	while map.selected_contact(c.ctx).kind != &"rock":
-		c.press(&"next")
+	if not _select_a_rock(c, map):
+		fail_test("no rock to pick at the open scale")
+		return
 	var rock := map.selected
 	c.press(&"big")
 	assert_eq(_ship.sensors.course, rock)
@@ -167,9 +177,9 @@ func test_setting_a_course_at_the_table_reaches_the_ship_s_sensors():
 func test_a_course_to_where_you_are_arrives_and_the_table_says_so():
 	var c := _computer()
 	var map := c.pages[0] as MapPage
-	map.reselect(c.ctx)
-	while map.selected_contact(c.ctx).kind != &"rock":
-		c.press(&"next")
+	if not _select_a_rock(c, map):
+		fail_test("no rock to pick at the open scale")
+		return
 	var rock := map.selected_contact(c.ctx)
 	var off := rock.point.minus(_ship.sensors.focus_point()).length() - rock.radius
 	assert_lt(off, ShipSensors.ARRIVE_ROCK, "the start's rock is close")
@@ -180,3 +190,19 @@ func test_a_course_to_where_you_are_arrives_and_the_table_says_so():
 	assert_eq(_ship.sensors.course, &"")
 	c.update(0.016)
 	assert_eq(c.screen_text().split("\n")[2], "ARRIVED")
+
+## Computer mode spec §3.1: looking at the table top offers the computer, and
+## (test_looking_at_a_button...) the buttons still win when looked at.
+func test_looking_at_the_table_top_from_its_operator_s_spot_offers_the_computer():
+	await wait_physics_frames(2)
+	var c := _computer()
+	var spot := DeckPaths.floor_point(Vector3i(-1, 0, -2))
+	var eye := _ship.interior.global_transform * (spot + Vector3(0, 1.6, 0))
+	var target := c.station.global_transform * Vector3(0, 0.95, 0)
+	var query := PhysicsRayQueryParameters3D.create(eye, target, Interactor.MASK)
+	query.collide_with_areas = true
+	var hit := _ship.interior.get_world_3d().direct_space_state.intersect_ray(query)
+	assert_eq(hit.get("collider"), c.station)
+
+func test_the_station_finds_the_game_s_director():
+	assert_eq(_computer().station.director(), _root.get_node("CameraDirector"))

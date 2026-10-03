@@ -50,12 +50,36 @@ func test_marks_are_drawn_by_shape_and_colour():
 	_holo.show_marks([])
 	assert_eq(_holo.mark_count(&"ball"), 0, "an empty list clears them")
 
-func test_more_marks_than_it_holds_are_cut_off_not_crashed():
+## A group starts at CAPACITY and grows as a busy system needs, so a mark is
+## never dropped below MAX_CAPACITY.
+func test_a_group_grows_past_its_first_capacity():
 	var marks := []
-	for i in HoloVolume.CAPACITY + 10:
+	for i in HoloVolume.CAPACITY + 100:
 		marks.append(_mark(&"ball", Vector3.ZERO, 0.006))
 	_holo.show_marks(marks)
-	assert_eq(_holo.mark_count(&"ball"), HoloVolume.CAPACITY)
+	assert_eq(_holo.mark_count(&"ball"), HoloVolume.CAPACITY + 100)
+	assert_eq(_holo.dropped(), 0)
+
+func test_ticks_added_together_grow_their_group_too():
+	_holo.begin_marks()
+	var at := PackedVector3Array()
+	at.resize(HoloVolume.CAPACITY * 2)
+	_holo.add_ticks(InteriorPalette.HOLO_DIM, at, 0.01)
+	_holo.end_marks()
+	assert_eq(_holo.mark_count(&"tick"), HoloVolume.CAPACITY * 2)
+	assert_eq(_holo.dropped(), 0)
+
+## Past MAX_CAPACITY marks are cut off, never crashed on, and counted.
+func test_more_marks_than_it_can_ever_hold_are_cut_off_and_counted():
+	_holo.warn_on_drop = false
+	var marks := []
+	for i in HoloVolume.MAX_CAPACITY + 10:
+		marks.append(_mark(&"ball", Vector3.ZERO, 0.006))
+	_holo.show_marks(marks)
+	assert_eq(_holo.mark_count(&"ball"), HoloVolume.MAX_CAPACITY)
+	assert_eq(_holo.dropped(), 10)
+	_holo.show_marks([])
+	assert_eq(_holo.dropped(), 0, "counted afresh each time")
 
 func test_a_mark_is_scaled_to_its_size_where_it_is_put():
 	_holo.show_marks([_mark(&"ball", Vector3(0.1, 0.05, -0.2), 0.03)])
@@ -115,3 +139,64 @@ func test_the_miniature_shares_the_meshes_it_is_given():
 	_holo.clear_miniature()
 	assert_false(_holo.miniature_shown())
 	assert_eq(_holo.find_children("*", "MeshInstance3D", true, false).filter(func(n): return n.mesh == mesh).size(), 0)
+
+## Computer mode spec §4.4: the operator spins the holo's contents about its
+## upright, the ship's turn and all; the table and the ring stay put.
+func test_spin_turns_the_marks_about_the_holo_s_upright():
+	_holo.show_marks([_mark(&"ball", Vector3(0, 0, -0.2), 0.02)])
+	_holo.set_spin(PI * 0.5)
+	assert_almost_eq(_holo.spin(), PI * 0.5, 0.000001)
+	var expected := _holo.global_transform * (Basis(Vector3.UP, PI * 0.5) * Vector3(0, 0, -0.2))
+	assert_almost_eq(_holo.marks_to_global(Vector3(0, 0, -0.2)), expected, Vector3.ONE * 0.0001)
+
+func test_spin_comes_on_top_of_the_ship_s_turn():
+	_holo.set_turn(Basis(Vector3.UP, 0.3))
+	_holo.set_spin(0.2)
+	var expected := _holo.global_transform * (Basis(Vector3.UP, 0.5) * Vector3(0, 0, -0.2))
+	assert_almost_eq(_holo.marks_to_global(Vector3(0, 0, -0.2)), expected, Vector3.ONE * 0.0001)
+
+func test_the_chevron_hides_while_the_ring_stays():
+	_holo.show_map_frame(true)
+	_holo.show_chevron(false)
+	assert_false(_holo.chevron_shown())
+	assert_true(_holo.map_frame_shown())
+	_holo.show_map_frame(false)
+	_holo.show_chevron(true)
+	assert_false(_holo.chevron_shown(), "the frame hidden hides it too")
+
+func test_the_ring_stays_put_and_the_chevron_spins():
+	var map_frames = _holo.find_children("MapFrame", "MeshInstance3D", true, false)
+	var chevrons = _holo.find_children("Chevron", "MeshInstance3D", true, false)
+	for part in map_frames:
+		assert_eq(part.get_parent(), _holo, "every MapFrame part's parent is the HoloVolume itself")
+	var spin_node = _holo.get_node("Spin")
+	for part in chevrons:
+		assert_eq(part.get_parent(), spin_node, "every Chevron part's parent is the Spin node")
+
+func test_round_trip_chevron_visibility():
+	_holo.show_chevron(false)
+	_holo.show_map_frame(false)
+	_holo.show_map_frame(true)
+	assert_false(_holo.chevron_shown(), "chevron stays hidden through map frame on/off cycle")
+
+## inside() is place()'s pin test for a point already in the holo's metres: the
+## map's ticks use it instead of a Dictionary each.
+func test_inside_is_what_place_leaves_unpinned():
+	for rel in [Vector3(0, 0, -900), Vector3(1999, 0, 0), Vector3(2001, 0, 0), Vector3(1500, 0, 1500),
+			Vector3(0, 1199, 0), Vector3(0, 1201, 0), Vector3(-800, -900, 300)]:
+		var placed := HoloVolume.place(rel, 2000.0)
+		assert_eq(HoloVolume.inside(rel * (HoloVolume.RADIUS / 2000.0)), not placed["pinned"], "%s" % rel)
+
+## add_ticks draws what add_mark would, a tick at a time.
+func test_add_ticks_draws_what_add_mark_would():
+	var at := PackedVector3Array([Vector3(0.1, 0, 0), Vector3(0, 0.05, -0.2)])
+	_holo.begin_marks()
+	_holo.add_ticks(InteriorPalette.HOLO_DIM, at, 0.01)
+	_holo.end_marks()
+	var batched := [_holo.mark_transform(&"tick", 0), _holo.mark_transform(&"tick", 1)]
+	_holo.begin_marks()
+	for p in at:
+		_holo.add_mark(&"tick", InteriorPalette.HOLO_DIM, p, 0.01)
+	_holo.end_marks()
+	assert_eq(_holo.mark_count(&"tick", InteriorPalette.HOLO_DIM), 2)
+	assert_eq(batched, [_holo.mark_transform(&"tick", 0), _holo.mark_transform(&"tick", 1)])
