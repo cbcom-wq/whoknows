@@ -82,6 +82,21 @@ func test_a_new_game_starts_when_there_is_no_save():
 	assert_false(root.resumed)
 	_drop(root)
 
+## The dev reset (F9 twice): the save goes aside as .old, nothing more is
+## saved, and the scene built after it is a new game.
+func test_the_dev_reset_starts_a_new_game():
+	var root := _scene()
+	assert_true(root.save_now(), "saved")
+	root.new_game()
+	assert_false(FileAccess.file_exists(PATH), "the save is set aside")
+	assert_true(FileAccess.file_exists(PATH + ".old"), "kept as .old")
+	assert_false(root.save_now(), "nothing more is saved")
+	assert_false(FileAccess.file_exists(PATH), "still no save")
+	_drop(root)
+	var fresh := _scene()
+	assert_false(fresh.resumed, "a new game")
+	_drop(fresh)
+
 func test_walking_round_trips():
 	var a := _scene()
 	_live_a_little(a)

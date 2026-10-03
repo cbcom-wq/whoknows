@@ -76,6 +76,10 @@ const HOP_INSIDE := 200.0
 ## A save from another world generator brings every ship along, lined up this
 ## far apart beside the starter (many ships spec §6.3).
 const RESTART_ROW := 300.0
+## The dev reset (F9) asks twice: a second F9 inside this many seconds starts
+## a new game.
+const RESET_WINDOW := 3.0
+var _reset_armed_at := -INF
 
 ## The interior's own mood (spec §3.3): dim and warm, with bloom turning the
 ## thin lit strips into light. It goes on the interior camera, not the world,
@@ -705,6 +709,29 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			hop(-1 if key.shift_pressed else 1)
 		KEY_F8:
 			board_nearest()
+		KEY_F9:
+			_ask_reset()
+
+## The dev reset: the first F9 asks, a second inside RESET_WINDOW starts over.
+func _ask_reset() -> void:
+	var now := Time.get_ticks_msec() / 1000.0
+	if now - _reset_armed_at > RESET_WINDOW:
+		_reset_armed_at = now
+		if _saved_tag != null:
+			_saved_tag.say("F9 AGAIN: NEW GAME", RESET_WINDOW)
+		return
+	new_game()
+	get_tree().reload_current_scene.call_deferred()
+
+## Starts over, as a launch with `-- --new-game` would: the save is set aside
+## as .old (never deleted), and this scene saves nothing more, so the reload
+## that follows finds no save.
+func new_game() -> void:
+	if save_enabled:
+		if save_game == null:
+			save_game = SaveGame.new(save_path)
+		save_game.set_aside()
+	save_enabled = false
 
 ## How far off `b`'s surface the hop leaves you.
 static func hop_off(b: SystemBody) -> float:
