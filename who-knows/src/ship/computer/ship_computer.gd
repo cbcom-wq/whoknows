@@ -157,14 +157,29 @@ func hover(screen: Vector2, camera: Camera3D) -> StringName:
 	return hovered
 
 ## Selects contact `id` on the map: a click in the holo or on the overlay's list.
+## Between about 1,200 km and 9,000 km the list shows the whole system while a
+## distant world can lie outside the holo, where it is no target and the next
+## frame's reselect would undo the choice. So a contact that is not on the map
+## first takes the map out to the whole system (it glides there), where every
+## world is a target; one that is not a target even then (a contact that is not
+## a world) is left alone, and the scale with it.
 func select(id: StringName) -> void:
 	var map := page() as MapPage
 	if map == null:
 		return
+	if id != &"" and not _is_target(map, id):
+		var was := map.scale_m
+		map.scale_m = MapPage.STOPS[MapPage.SYSTEM_RANGE]
+		if not _is_target(map, id):
+			map.scale_m = was
+			return
 	map.selected = id
 	if ctx.sensors != null:
 		ctx.sensors.forget_arrival()
 	_refresh()
+
+func _is_target(map: MapPage, id: StringName) -> bool:
+	return map.targets(ctx).any(func(c: Contact) -> bool: return c.id == id)
 
 ## What the big button would do (spec §5.3).
 func act() -> void:

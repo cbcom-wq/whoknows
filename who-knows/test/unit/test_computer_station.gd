@@ -161,3 +161,11 @@ func test_a_mug_on_the_table_is_offered_before_the_computer():
 	await wait_physics_frames(3)
 	assert_eq(_avatar.interactor.get_collider(), station, "the ray lands on the station's box first")
 	assert_eq(_avatar.interactor.current(), mug, "the mug, not the computer")
+
+func test_the_overlay_follows_the_station_and_the_prompt_clears():
+	await _enter()
+	assert_true(_root.computer_overlay.visible)
+	assert_eq((_root.get_node("Prompt/Label") as Label).text, "")
+	_press(&"interact")
+	await wait_seconds(CameraDirector.SIT_DURATION + 0.2)
+	assert_false(_root.computer_overlay.visible)

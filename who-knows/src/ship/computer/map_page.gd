@@ -254,6 +254,10 @@ func shown(ctx: ComputerContext) -> Array[Contact]:
 		_shown.append(c)
 	return _shown
 
+## Contact `id` as the sensors know it, or null.
+static func contact_by_id(ctx: ComputerContext, id: StringName) -> Contact:
+	return ctx.sensors.contact(id) if ctx.sensors != null else null
+
 func selected_contact(ctx: ComputerContext) -> Contact:
 	for c in targets(ctx):
 		if c.id == selected:

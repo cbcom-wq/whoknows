@@ -54,6 +54,7 @@ var _interact_prompt := ""
 var _grasp_prompt := ""
 ## The computer mode (computer mode spec §3.3, §5): its input and its overlay.
 var computer_input: ComputerModeInput
+var computer_overlay: ComputerOverlay
 var _universe_readout: Label
 var _saved_tag: SavedTag
 var npc_debug: NpcDebug
@@ -402,12 +403,16 @@ func _wire_computer_mode() -> void:
 	computer_input.name = "ComputerModeInput"
 	computer_input.director = _director
 	add_child(computer_input)
+	computer_overlay = ComputerOverlay.new()
+	computer_overlay.name = "ComputerOverlay"
+	add_child(computer_overlay)
 	_director.station_changed.connect(_on_station_changed)
 
-func _on_station_changed(_station: ComputerStation) -> void:
+func _on_station_changed(station: ComputerStation) -> void:
 	_interact_prompt = ""
 	_grasp_prompt = ""
 	_show_prompt()
+	computer_overlay.show_for(station)
 
 ## Health and damage (docs/superpowers/specs/
 ## 2026-09-29-health-and-damage-design.md §7): the view's red edge and the
