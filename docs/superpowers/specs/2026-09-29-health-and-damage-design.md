@@ -106,7 +106,7 @@ A block's stage is read from the damage it has taken, against its definition's `
 |---|---|---|---|
 | **Intact** | under 50% of `hp` | fully | as now |
 | **Damaged** | 50% up to 100% | at **half** output: thrust, power, QE capacity, grav radius | scorched; sparks now and then |
-| **Wrecked** | 100% up to 150% | **not at all**; keeps its mass and collision | charred; its ceiling light flickers |
+| **Wrecked** | 100% up to 150% | **not at all**; keeps its mass and collision | charred; its ceiling light flickers (from under 20% health) |
 | **Gone** | 150% or more | removed with `ShipGrid.clear_block` | a burst, and a hole |
 
 The span from 100% to 150% is how much a wreck takes before it is knocked off. That way
@@ -372,7 +372,7 @@ practical lights, no procedural surface detail, and no fourth interior shader.
 
 | Stage | Hull, outside | Interior |
 |---|---|---|
-| Damaged | the block's colours darkened toward a new `HullPalette.SCORCH`; now and then a spark (in its parent's frame, as built) | the cell's dressing darkened toward `InteriorPalette.SCORCH`; sparks from the wall; its light steady (as built) |
+| Damaged | the block's colours darkened toward a new `HullPalette.SCORCH`; now and then a spark (in its parent's frame, as built) | the cell's dressing darkened toward `InteriorPalette.SCORCH`; sparks from the wall; its ceiling light steady until the block is **under 20% of its health** (`BlockDamage.FLICKER_AT`, the owner's call on 2026-10-03), then it flickers as a wreck's does |
 | Wrecked | toward `HullPalette.CHAR`; accents and emissives off | toward `InteriorPalette.CHAR`; screens `SCREEN_BACK`; its ceiling light **flickers**: 10% of full most of the time, with a short ragged burst at full every few seconds, about 93% of the time dim (`LightFlicker`; amended 2026-10-03, the owner's call: first it went dark and read as a hole) |
 | Gone | a burst of warm sparks and a few chunks for 2 s; then a hole | the hole shows the stars |
 

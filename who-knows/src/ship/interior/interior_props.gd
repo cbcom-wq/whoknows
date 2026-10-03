@@ -227,10 +227,11 @@ static func ceiling_light(kit: InteriorKit, ceiling_centre: Vector3) -> void:
 	kit.ring(SOLID, down, 0.3, CEILING_LIGHT_RIM, -0.02, 0.05, _c(InteriorPalette.TRIM))
 	var lamp := kit.light(ceiling_centre + Vector3(0, -0.9, 0), InteriorPalette.LIGHT_WARM, CELL_LIGHT_ENERGY,
 		CELL_LIGHT_RANGE, CELL_LIGHT_ROLE)
-	if kit.wear < 2:
+	if not kit.flicker:
 		kit.disc(GLOW, down * _at(Vector3(0, 0, 0.02)), 0.3, _lit(InteriorPalette.LIGHT_WARM, 0.9))
 		return
-	# Wrecked, it flickers (health and damage spec §9): its disc is its own
+	# Under 20% of its block's health it flickers (health and damage spec §9,
+	# BlockDamage.FLICKER_AT): its disc is its own
 	# mesh with its own copy of the glow material, which LightFlicker dims
 	# with the lamp. Unworn: the flicker is the damage, not the colour.
 	var own := InteriorKit.new(kit.root)

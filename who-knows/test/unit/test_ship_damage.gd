@@ -392,3 +392,25 @@ func test_a_wrecked_ceiling_light_flickers_and_a_mended_one_is_steady():
 	_ship.repair_cell(above, hp * 2.0)
 	await wait_process_frames(3)
 	assert_eq(_ship.find_children("Flicker", "LightFlicker", true, false).size(), 0, "mended: steady again")
+
+## Heavily damaged, under 20% of its health, it flickers too (owner,
+## 2026-10-03), though that is no stage change; mended past 20%, it steadies.
+func test_a_ceiling_light_flickers_under_a_fifth_of_its_health():
+	var above := Vector3i.ZERO
+	for c: Vector3i in _ship.interior_builder.walkable_coords():
+		var b := _ship.grid.get_block(c + Vector3i.UP)
+		if b != null and _ship.interior_builder.shows(c + Vector3i.UP):
+			above = c + Vector3i.UP
+			break
+	var hp := float(_ship.catalog.get_def(_ship.grid.get_block(above).block_id).hp)
+	_ship.take_damage(above, hp * 0.6)
+	await wait_process_frames(3)
+	assert_eq(_ship.find_children("Flicker", "LightFlicker", true, false).size(), 0, "40% health: steady")
+	_ship.take_damage(above, hp * 0.25)
+	await wait_process_frames(3)
+	assert_eq(BlockDamage.stage_of(_ship.grid.get_block(above), _ship.catalog.get_def(_ship.grid.get_block(above).block_id)),
+		BlockDamage.Stage.DAMAGED, "still damaged, not wrecked")
+	assert_gt(_ship.find_children("Flicker", "LightFlicker", true, false).size(), 0, "15% health: flickers")
+	_ship.repair_cell(above, hp * 0.1)
+	await wait_process_frames(3)
+	assert_eq(_ship.find_children("Flicker", "LightFlicker", true, false).size(), 0, "mended to 25%: steady")

@@ -69,6 +69,11 @@ var arrays: Dictionary = {}
 ## its glow goes dark). A builder sets it around the pieces of a hurt cell.
 var wear := 0
 
+## Whether a ceiling light built now flickers (health and damage spec §9):
+## the block it hangs from is under 20% of its health. A builder sets it with
+## `wear`.
+var flicker := false
+
 ## How far each wear leans toward its colour.
 const WEAR_MIX := [0.0, 0.35, 0.7]
 

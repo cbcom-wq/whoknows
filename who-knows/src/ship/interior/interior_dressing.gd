@@ -38,7 +38,7 @@ const _HORIZONTAL: Array[Vector3i] = [
 ## belongs to is (health and damage spec §9): 0 as made, 1 damaged, 2 wrecked.
 ## Without one, everything is as made.
 static func build(layout: InteriorLayout, body: StaticBody3D, canopy_material: Material,
-		wear_of := Callable()) -> Node3D:
+		wear_of := Callable(), flicker_of := Callable()) -> Node3D:
 	var root := Node3D.new()
 	root.name = "Dressing"
 	body.add_child(root)
@@ -50,8 +50,10 @@ static func build(layout: InteriorLayout, body: StaticBody3D, canopy_material: M
 			core_cells[fixture["coord"]] = true
 	for face in layout.faces():
 		kit.wear = wear_of.call(face["coord"], face["normal"]) if wear_of.is_valid() else 0
+		kit.flicker = flicker_of.call(face["coord"], face["normal"]) if flicker_of.is_valid() else kit.wear >= 2
 		_dress(kit, face, core_cells)
 	kit.wear = 0
+	kit.flicker = false
 	for group in layout.canopy_groups():
 		var pods: Array = group["pods"]
 		if pods.is_empty():

@@ -33,6 +33,16 @@ static func stage_at(damage: float, hp: float) -> Stage:
 		return Stage.DAMAGED
 	return Stage.INTACT
 
+## A ceiling light under a block this hurt flickers (health and damage spec
+## §9, the owner's call on 2026-10-03): under 20% of its health left, so late
+## in damaged and all through wrecked.
+const FLICKER_AT := 0.8
+
+static func flickers(inst: BlockInstance, def: BlockDefinition) -> bool:
+	if inst == null or def == null or def.hp <= 0:
+		return false
+	return inst.damage > float(def.hp) * FLICKER_AT
+
 static func stage_of(inst: BlockInstance, def: BlockDefinition) -> Stage:
 	if inst == null or def == null:
 		return Stage.INTACT

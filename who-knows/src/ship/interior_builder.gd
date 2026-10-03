@@ -133,7 +133,7 @@ func rebuild() -> void:
 
 	_build_structure()
 	_build_fixtures()
-	InteriorDressing.build(_layout, _physics_body, canopy_material, wear_at)
+	InteriorDressing.build(_layout, _physics_body, canopy_material, wear_at, flicker_at)
 	_compute_gravity()
 	_fill_felt_gravity()
 
@@ -141,12 +141,7 @@ func rebuild() -> void:
 ## InteriorKit.wear: the block behind it (a wall's hull, the hull under a
 ## floor), or, with none there, the cell's own (a deck, a fixture).
 func wear_at(coord: Vector3i, normal: Vector3i) -> int:
-	if _grid == null or _catalog == null:
-		return 0
-	var cell := coord + normal
-	if normal == Vector3i.ZERO or not _grid.has_block(cell):
-		cell = coord
-	var inst := _grid.get_block(cell)
+	var inst := _looked_onto(coord, normal)
 	if inst == null:
 		return 0
 	match BlockDamage.stage_of(inst, _catalog.get_def(inst.block_id)):
@@ -155,6 +150,22 @@ func wear_at(coord: Vector3i, normal: Vector3i) -> int:
 		BlockDamage.Stage.WRECKED, BlockDamage.Stage.GONE:
 			return 2
 	return 0
+
+## Whether the light on a face flickers (health and damage spec §9): the
+## block it looks onto, as wear_at() finds it, is under 20% of its health.
+func flicker_at(coord: Vector3i, normal: Vector3i) -> bool:
+	var inst := _looked_onto(coord, normal)
+	return inst != null and BlockDamage.flickers(inst, _catalog.get_def(inst.block_id))
+
+## The block a face looks onto: the one behind it, or with none there, the
+## cell's own.
+func _looked_onto(coord: Vector3i, normal: Vector3i) -> BlockInstance:
+	if _grid == null or _catalog == null:
+		return null
+	var cell := coord + normal
+	if normal == Vector3i.ZERO or not _grid.has_block(cell):
+		cell = coord
+	return _grid.get_block(cell)
 
 ## Whether anything aboard shows `coord`'s block: it is walkable, or next to
 ## a cell that is. A stage change anywhere else is only seen from outside.

@@ -369,7 +369,10 @@ func _rebuildable(cell: Vector3i) -> bool:
 
 ## Mends up to `hp` of the block at `cell`; returns what it used.
 func repair_cell(cell: Vector3i, hp: float) -> float:
-	return BlockDamage.repair(grid, catalog, cell, hp)
+	var was := _flickering([cell])
+	var used := BlockDamage.repair(grid, catalog, cell, hp)
+	_reflicker(was)
+	return used
 
 ## Puts back, wrecked, what the ship launched with at `cell` (§8.2).
 func rebuild_cell(cell: Vector3i) -> bool:
@@ -433,12 +436,36 @@ func take_damage_many(hits: Dictionary) -> Array[Vector3i]:
 		var none: Array[Vector3i] = []
 		return none
 	damage_log.note()
+	var was := _flickering(real.keys())
 	var removed := BlockDamage.apply_many(grid, catalog, real, inner_cells)
+	_reflicker(was)
 	if not removed.is_empty():
 		damage_show.lost(removed)
 		_shed_plate(removed)
 		blocks_lost.emit(removed)
 	return removed
+
+## Of `cells`, those seen from inside, each with whether its ceiling light
+## would flicker now (BlockDamage.flickers).
+func _flickering(cells: Array) -> Dictionary:
+	var out := {}
+	for cell: Vector3i in cells:
+		if interior_builder.shows(cell):
+			var inst := grid.get_block(cell)
+			out[cell] = inst != null and BlockDamage.flickers(inst, catalog.get_def(inst.block_id))
+	return out
+
+## A light starts or stops flickering partway through a stage, which no
+## block_staged reports: the interior is rebuilt for it, once, at the end of
+## the frame, as for a stage seen from inside.
+func _reflicker(was: Dictionary) -> void:
+	for cell: Vector3i in was:
+		var inst := grid.get_block(cell)
+		if inst == null:
+			continue
+		if BlockDamage.flickers(inst, catalog.get_def(inst.block_id)) != was[cell]:
+			_queue_rebuild()
+			return
 
 ## One scrap plate from the first block knocked off, if it had a face onto
 ## space: it drifts out from that face at SHED_SPEED (spec §8.1).
