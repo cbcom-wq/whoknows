@@ -95,7 +95,9 @@ func _end_station() -> void:
 ## you are awake and standing aboard its ship. A blackout, or a hole that puts
 ## you outside, changes you under the camera.
 func _station_usable() -> bool:
-	return is_instance_valid(_station) and _station.is_inside_tree() 		and _avatar.downed == null and _avatar.mode == Avatar.Mode.PLATING 		and ship_of(_station) == ship_of(_avatar)
+	return is_instance_valid(_station) and _station.is_inside_tree() \
+		and _avatar.downed == null and _avatar.mode == Avatar.Mode.PLATING \
+		and ship_of(_station) == ship_of(_avatar)
 
 ## The station can no longer be used: back to your head at once, with no move.
 ## Only what the station took comes back. Your controls do too, unless a
