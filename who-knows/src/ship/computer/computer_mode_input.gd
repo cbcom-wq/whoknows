@@ -58,6 +58,11 @@ func _mouse_button(event: InputEventMouseButton, station: ComputerStation) -> vo
 				station.computer.zoom(1.0)
 
 func _mouse_motion(event: InputEventMouseMotion, station: ComputerStation) -> void:
+	# A release the overlay swallowed, or a window that lost focus, leaves
+	# _pressed set; motion with the button up means it was let go.
+	if _pressed and not (event.button_mask & MOUSE_BUTTON_MASK_LEFT):
+		_pressed = false
+		_dragging = false
 	if not _pressed:
 		station.computer.hover(event.position, director.camera())
 		return
