@@ -169,3 +169,35 @@ func test_the_overlay_follows_the_station_and_the_prompt_clears():
 	_press(&"interact")
 	await wait_seconds(CameraDirector.SIT_DURATION + 0.2)
 	assert_false(_root.computer_overlay.visible)
+
+func _black_out() -> void:
+	var hit := Hit.make(Vector3.ZERO, Vector3.UP, Vector3.FORWARD, Vector3.ZERO, null)
+	hit.damage = Avatar.MAX_HEALTH * 2.0
+	_avatar.receive_hit(hit)
+
+## A mark hovered as you leave is not still tagged when you come back: hovered
+## changes only on mouse motion, and the wheel or a re-entry makes none.
+func test_leaving_forgets_the_hovered_mark():
+	var computer := _station().computer
+	computer.hovered = &"rock:somewhere"
+	_station().left()
+	assert_eq(computer.hovered, &"")
+
+## Out cold, you cannot step up to the computer.
+func test_not_while_blacked_out():
+	_black_out()
+	assert_not_null(_avatar.downed)
+	_station().interact(_avatar)
+	assert_false(_director.is_at_station)
+
+## Blacked out during the glide back from the table, the glide's end must not
+## give your controls back: waking does.
+func test_blacking_out_on_the_way_back_keeps_your_controls_off():
+	await _enter()
+	_press(&"interact")
+	assert_false(_director.is_at_station, "on the way back")
+	_black_out()
+	assert_not_null(_avatar.downed)
+	await wait_seconds(CameraDirector.SIT_DURATION + 0.2)
+	assert_not_null(_avatar.downed, "still out cold")
+	assert_false(_avatar.grasp.enabled, "no controls until you wake")

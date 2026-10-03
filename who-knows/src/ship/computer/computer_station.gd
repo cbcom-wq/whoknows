@@ -66,6 +66,9 @@ func recentre() -> void:
 	elevation = InteriorProps.HOLO_STATION_ELEVATION
 	computer.spin = 0.0
 
-## Called as you leave: walking past, the holo answers "which way?" again.
+## Called as you leave: walking past, the holo answers "which way?" again,
+## and no mark is still hovered (it changes only on mouse motion, so a tag
+## would survive the way back in).
 func left() -> void:
 	recentre()
+	computer.hovered = &""

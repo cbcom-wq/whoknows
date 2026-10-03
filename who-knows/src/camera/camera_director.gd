@@ -63,9 +63,11 @@ func camera() -> Camera3D:
 	return _interior_cam
 
 ## Steps you up to a computer (computer mode spec §3.1): your body stays where
-## it stood, the camera glides to the station's eye, the mouse is free.
+## it stood, the camera glides to the station's eye, the mouse is free. Not
+## seated, suited or blacked out.
 func use_station(station: ComputerStation) -> void:
-	if station == null or is_seated or is_at_station or _tween != null or _avatar.mode == Avatar.Mode.SUIT:
+	if station == null or is_seated or is_at_station or _tween != null or _avatar.mode == Avatar.Mode.SUIT \
+			or _avatar.downed != null:
 		return
 	_station = station
 	is_at_station = true
@@ -230,7 +232,10 @@ func _on_transition_finished() -> void:
 	else:
 		_interior_cam.reparent(_avatar.head, true)
 		_interior_cam.transform = Transform3D.IDENTITY
-		_avatar.set_control_enabled(true)
+		# Blacked out on the way back (from the helm or a station), waking
+		# gives your controls back, not the glide's end.
+		if _avatar.downed == null:
+			_avatar.set_control_enabled(true)
 		view = View.FOOT_FIRST
 	_apply_view()
 	transition_finished.emit()
