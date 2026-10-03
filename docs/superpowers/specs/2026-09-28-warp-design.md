@@ -17,6 +17,12 @@ quantum cruise** (§7 there). Jumps between stars (piece 6) are unchanged.
 > a planet. A planet's limit is its well + 14 km and past its ring, no longer at least its
 > neighbourhood. Travel is 18 s + 1 s per 350 km; the cost is 40 QE + 1 QE per 12.5 km
 > (`WARP_M_PER_QE`). The map's ranges are 2, 10, 50 and 500 km and the system.
+>
+> **Amended 2026-10-03 by the computer mode spec** (`2026-09-30-computer-mode-design.md` §4, built
+> on `computer-mode`): §7.1's SYSTEM range is no longer a separate framing. It is the far end of
+> one continuous map (1 km to 9,000 km), whose centre slides from the ship at 500 km to the star
+> at 3,000 km; marks by class and reach colouring apply once the centre is more than half way to
+> the star. Warp limits are drawn at every scale, not only on SYSTEM.
 
 ---
 

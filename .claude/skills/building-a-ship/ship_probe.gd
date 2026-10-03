@@ -491,6 +491,13 @@ func _run(scene: Node) -> void:
 		var bound := computer.ctx.sensors != null and computer.ctx.store != null and computer.ctx.stats != null
 		print("table   %s, used from %s%s%s" % [computer.cell, spot, "" if standable else "  <-- NOWHERE TO STAND",
 			"" if bound else "  <-- UNBOUND"])
+		# The computer mode's eye (computer mode spec §3.2, §4.4): it orbits the
+		# holo up to ELEVATION_MAX, and must stay under the ceiling's lights.
+		var eye := computer.station.eye_transform().origin
+		var floor_y := computer.station.global_position.y
+		var high := (computer.station.global_transform * InteriorProps.holo_station_eye(ComputerStation.ELEVATION_MAX)).origin.y
+		print("        eye %.2f m up, orbiting to %.2f m%s" % [eye.y - floor_y, high - floor_y,
+			"" if high - floor_y < InteriorProps.HEADROOM - 0.1 else "  <-- EYE IN THE CEILING"])
 
 	await _shot("spawn")
 	print("fps     %.0f standing at spawn" % await _fps(2.0))

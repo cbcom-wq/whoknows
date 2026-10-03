@@ -28,10 +28,10 @@ func test_the_flight_starts_at_the_system_s_entry_with_its_worlds_in_place():
 
 func test_the_sensors_know_every_world():
 	var system: SystemRecipe = _root.system
-	var ids := _ship.sensors.contacts(MapPage.RANGES[MapPage.SYSTEM_RANGE]).map(func(c: Contact) -> StringName: return c.id)
+	var ids := _ship.sensors.contacts(MapPage.QUERY).map(func(c: Contact) -> StringName: return c.id)
 	var worlds := 0
 	for b in system.bodies:
-		if _focus().minus(b.point).length() - b.radius <= MapPage.RANGES[MapPage.SYSTEM_RANGE]:
+		if _focus().minus(b.point).length() - b.radius <= MapPage.QUERY:
 			worlds += 1
 			assert_true(ids.has(BodyContacts.id_of(b)), "%s" % b.id)
 	assert_gt(worlds, 3)

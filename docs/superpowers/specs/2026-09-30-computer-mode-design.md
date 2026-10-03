@@ -1,7 +1,16 @@
 # Computer mode — stepping up to the bridge computer to use it
 
 **Date:** 2026-09-30
-**Status:** Design approved section by section by the owner on 2026-09-30. Not yet built.
+**Status:** Design approved section by section by the owner on 2026-09-30. **Built 2026-10-03** on
+branch `computer-mode`; §11 is what was built and how it differs. The renders await the owner's
+word.
+
+> **Amended 2026-10-02 by the owner, before planning:** `main` moved to the world scale
+> (`2026-09-30-world-scale-design.md`) and many ships (`2026-10-02-many-ships-design.md`) after
+> this was approved. The map's numbers are rescaled to the new world (§4: 1 km to 9,000 km, the
+> stops 2, 10, 50, 500 km and SYSTEM, the centre sliding from 500 to 3,000 km), warp limits are
+> drawn at every scale, and a station finds the game's one camera director through a group (§3.1).
+> The design is otherwise as approved.
 **Depends on:** the bridge computer (`2026-09-25-bridge-computer-design.md`), the system skeleton
 (`2026-09-27-system-skeleton-design.md`) and the warp (`2026-09-28-warp-design.md`), all on `main`
 at `1282fc5`, plus the button fix on this branch (`a6e7fa8`, §1).
@@ -89,7 +98,9 @@ Every row was decided by the owner on 2026-09-29/30, as recommended.
 - **The buttons still win.** They stand proud of the station's shape, so looking straight at one
   still offers that button. The station's shape stops short of the buttons' faces.
 - **Pressing F** calls `CameraDirector.use_station(station)`, as `PilotSeat.interact` calls
-  `sit`. The director:
+  `sit`. Tables are rebuilt with their ship and ships come and go (`Fleet`), so a station is never
+  handed the director: it finds the game's one director in group `CameraDirector.GROUP`. The
+  director:
   - turns off the avatar's control, so there is no walking, grasping or Interactor;
   - moves the camera, with the same 0.75 s cubic move as sitting, to the station's **eye**;
   - makes the mouse visible;
@@ -117,7 +128,7 @@ every event it uses as handled, so neither the avatar nor anything else sees it.
 | Left click on the holo | Picks the mark nearest the cursor (§4.5) |
 | Left click on the overlay | The overlay's own controls: a list row, a tab, the action button |
 | Left drag (more than 4 px) | Orbits (§4.4); a drag never also picks |
-| Scroll | Zooms, 15% of the scale per notch (§4.1) |
+| Scroll | Zooms, ×1.3 the scale a notch (§4.1) |
 | R | Recentre: spin 0, elevation back to the eye's, scale unchanged |
 | Tab | Next tab (MAP, STATUS) |
 | Enter | The action button (§5.3) |
@@ -140,10 +151,13 @@ every event it uses as handled, so neither the avatar nor anything else sees it.
 
 - **Saving** waits while the camera moves (`is_moving()`, as for the helm). A game saved in the
   mode loads with you standing at the table, not in the mode.
-- **A rebuild** of the ship while you are in the mode drops you out at once, with no move. The
-  station is rebuilt with the table.
+- **A rebuild** of the ship while you are in the mode, or the table wrecked (health and damage
+  spec), drops you out at once, with no move. The station is rebuilt with the table, if it still
+  stands.
 - **Warp:** the mode works during a warp. Charting is already allowed from anywhere (warp spec
   §4.1).
+- **Another ship's table** works the same way once you are aboard it (CLAUDE.md: every ship is
+  usable).
 - **Two tables** on one ship: each has its own station. Only one can be used at a time, since
   there is one camera.
 
@@ -154,9 +168,9 @@ every event it uses as handled, so neither the avatar nor anything else sees it.
 ### 4.1 Scale
 
 - `MapPage.range_index` becomes **`scale_m`**, the metres the holo's radius (0.5 m) shows, from
-  **1 km to 180 km** (`SYSTEM_REACH`).
-- **Scroll** multiplies or divides it by 1.15 a notch, clamped.
-- **The four stops** stay: 2, 10, 30 km and SYSTEM (180 km). The physical RANGE button steps to
+  **1 km to 9,000 km** (`SYSTEM_REACH`).
+- **Scroll** multiplies or divides it by 1.3 a notch, clamped: about 35 notches end to end.
+- **The five stops** stay: 2, 10, 50, 500 km and SYSTEM (9,000 km). The physical RANGE button steps to
   the next stop above the current scale, wrapping from SYSTEM to 2 km. It glides there over 0.4 s,
   smooth in log scale, instead of cutting.
 - **The title** reads *MAP · 12 KM* (rounded to 1 km, or 0.1 km under 2 km), or *MAP · SYSTEM*
@@ -167,12 +181,12 @@ every event it uses as handled, so neither the avatar nor anything else sees it.
 The holo's centre eases from the ship to the star as you zoom out:
 
 ```
-w = smoothstep(ln 30 km, ln 120 km, ln scale_m)
+w = smoothstep(ln 500 km, ln 3,000 km, ln scale_m)
 centre = ship + w · (star − ship)       (in the map's frame)
 ```
 
-At 30 km and nearer the map is round the ship, as today's three ranges are. From 120 km it is
-round the star, as today's SYSTEM range is. Between, it slides. The ship's pip and heading tick are
+At 500 km and nearer the map is round the ship, as today's nearer ranges are: your planet and its
+moons round you. From 3,000 km it is round the star, as today's SYSTEM range is. Between, it slides. The ship's pip and heading tick are
 drawn at every scale, so you can always find yourself. Without a system (a test scene), `w` is 0.
 
 ### 4.3 What is drawn at each scale
@@ -184,10 +198,10 @@ not placed.
 
 | Content | Full size up to | Gone by |
 |---|---|---|
-| Salvage, signs of life, small and mid rocks | 10 km | 20 km |
-| Big rocks | 30 km | 60 km |
-| Worlds, moons, clusters, the course, the charted line | always, while inside the holo | — |
-| Belts, warp limits, 50 km scale rings | grow in from 30 km | full by 60 km |
+| Salvage, signs of life | 10 km | 20 km |
+| Big rocks (the sensors know them to 30 km) | 50 km | 100 km |
+| Worlds, moons, clusters, the course, the charted line, warp limits | always, while inside the holo | — |
+| Belts, 2,500 km scale rings | grow in from 500 km | full by 1,000 km |
 
 - **Worlds** are drawn when they fall inside the holo. As today, only the course is pinned to the
   edge when it is outside.
@@ -195,8 +209,9 @@ not placed.
   near-range sizing.
 - **Reach colouring** (lit if your QE reaches it, dim if not) applies once `w` > 0.5, where warping
   is what you are choosing.
-- **Contacts** are asked of the sensors out to `scale_m`, as today's `range_m`. Body contacts are
-  always asked for the whole system.
+- **Contacts** are asked of the sensors out to the whole system (today's SYSTEM range,
+  20,000 km) at every scale. Each source already stops at its own reach (rocks 30 km), and the
+  bands decide what is drawn.
 
 ### 4.4 Orbit
 
@@ -236,9 +251,10 @@ between placements is handled by `set_turn`. **While the scale is changing** (a 
 glide), they are placed every frame, then at the usual rate again. `PLACE_EVERY` becomes a function
 of `scale_m`: 0 up to 10 km, 0.5 s beyond.
 
-**Risk:** the 30 km scale places hundreds of marks. The probe (§8.2) times a sweep from 1 km to
-180 km against the holo's budget (style guide §2.6). If it is over, placement while zooming drops
-to 15 Hz.
+**Risk:** the 50 km scale places hundreds of marks. The probe (§8.2) times a sweep from 1 km to
+9,000 km against the holo's budget (style guide §2.6). If it is over, placement while zooming drops
+to 15 Hz. (As built: it was over, and the 15 Hz fallback went in; once the placing was made cheap,
+it came out again. §11 has the figures.)
 
 ---
 
@@ -290,8 +306,11 @@ at 1080p, with capitalised labels as on the rim.
   - for the selected contact, the lines the rim screen shows (`MapPage.lines`, `warp_lines`), one
     per row;
   - under them, **the action button**: *SET COURSE*, *CLEAR COURSE*, *CHART WARP* or *CLEAR WARP*.
-    It is exactly what the big button would do, and it is disabled with the reason as its label
-    (*FLY · TOO CLOSE TO WARP*, *NEED 512 QE*) when it would do nothing.
+    It is exactly what the big button would do, the big button's own prompt, lit whenever the big
+    button is. It is disabled, reading *NO ACTION*, only when the big button is dark. A warp
+    target's reason (*FLY · TOO CLOSE TO WARP*, *NEED 512 QE · STORE 300*) stays on the card's third
+    line (`warp_lines`), as on the rim: charting is allowed anywhere (the warp spec §4.1), so the
+    button stays lit and the reason is not its label.
 - **Hover tag:** beside the cursor over a mark, the contact's name and distance, e.g.
   *ZESU · 140 KM*.
 - **Bottom:** the control hints, and the scale on the right.
@@ -320,7 +339,7 @@ state. Someone standing beside you sees what you are doing.
 | `src/ship/computer/computer_station.gd` | **New.** The interactable, the eye, and its `ShipComputer`. |
 | `src/ship/computer/computer_mode_input.gd` | **New.** The mode's input (§3.3). |
 | `src/ui/computer_overlay.gd` | **New.** The overlay (§5). Reads the page every frame and keeps no state of its own beyond hover. |
-| `src/ship/computer/ship_computer.gd` | `station`, `pick()`, `hover()`, `act()`, `set_spin()`, `tab()`. |
+| `src/ship/computer/ship_computer.gd` | `station`, `pick()`, `hover()`, `act()`, the `spin` property, `tab()`. |
 | `src/ship/computer/map_page.gd` | `scale_m`, `zoom(notches)`, `step_range()`, the centre blend, the shrink bands, the placed list, save migration. |
 | `src/ship/computer/holo_volume.gd` | `set_turn` takes the spin. |
 | `src/camera/camera_director.gd` | `use_station()`, `leave_station()`, `is_at_station`, `station_changed`, orbit of the camera round the station's holo. |
@@ -340,7 +359,7 @@ F at the table ─► ComputerStation.interact ─► CameraDirector.use_station
                          ┌────────────────────────┴───────────────┐
                  ComputerModeInput on                     ComputerOverlay shown
                          │ click ─► ShipComputer.pick ─► page.selected
-                         │ drag  ─► set_spin / director orbit
+                         │ drag  ─► spin / director orbit
                          │ wheel ─► page.zoom
                          │ Enter ─► ShipComputer.act ─► press(&"big")
                          │ Esc/F ─► CameraDirector.leave_station ─► station_changed(null)
@@ -371,8 +390,8 @@ F at the table ─► ComputerStation.interact ─► CameraDirector.use_station
 - saving waits during the move.
 
 **`test_map_page.gd` additions:**
-- the scale's bounds, and 1.15 a notch;
-- the centre is the ship at ≤ 30 km and the star at ≥ 120 km, and moves only one way between;
+- the scale's bounds, and 1.3 a notch;
+- the centre is the ship at ≤ 500 km and the star at ≥ 3,000 km, and moves only one way between;
 - each band's shrink is 1 at its full size and 0 by its gone size;
 - RANGE steps the stops in order and wraps;
 - the pick takes the nearest within 24 px, and nothing beyond;
@@ -390,8 +409,8 @@ F at the table ─► ComputerStation.interact ─► CameraDirector.use_station
 ### 8.2 Real-scene probes and renders
 
 - **`test/probes/computer_mode_render.gd`:** the real flight scene, in the mode, rendered at about
-  5 km, 30 km and 180 km, with the overlay. Sent to the owner.
-- The same probe **times a zoom sweep** from 1 km to 180 km and back, and reports the worst frame
+  5 km, 500 km and 9,000 km, with the overlay. Sent to the owner.
+- The same probe **times a zoom sweep** from 1 km to 9,000 km and back, and reports the worst frame
   against the holo budget.
 
 ### 8.3 Playtest checklist
@@ -423,3 +442,86 @@ F at the table ─► ComputerStation.interact ─► CameraDirector.use_station
 - **Gamepad** control of the mode.
 - **Picking in the holo without entering** the mode.
 - **More tabs** (log, trade, messages). A new `ComputerPage` gets a tab for free.
+
+---
+
+## 11. As built
+
+Built on `computer-mode` (2026-10-02 to 2026-10-03, nine tasks, plan
+`docs/superpowers/plans/2026-10-02-computer-mode.md`). Everything in §3 to §9 is in, with these
+differences, each ruled during the build:
+
+- **Drawn and picked are two sets.** `MapPage.shown()` is what is drawn at the scale shown, marks
+  shrinking across their band included; `targets()` is what ◀ ▶, the list and the mouse step
+  through, full size at the scale chosen (§4.5). The plan drew only targets, which left the shrink
+  bands dead: a mark popped out instead of shrinking. The course is always drawn at full size and
+  never shrinks away.
+- **Only targets are pickable** (`placed_marks` records a mark only if it is a target), so a
+  shrinking rock can be seen but not clicked.
+- **A station yields to items.** Its box covers the table's top, so the Interactor, landing on a
+  station, first offers an item near the line of sight (a mug set down on the table).
+- **Dropping out** (§3.5) is wider than a rebuild or a wrecked table: the director drops you out
+  whenever the avatar can no longer be at the station, blacked out, blown into the suit, or no
+  longer in the station's ship. F8 refuses at the station with *AT THE COMPUTER*.
+- **A drag cannot outlive its button.** Mouse motion with the left button up ends a drag, so a
+  release swallowed elsewhere leaves no phantom orbit.
+- **Overlay buttons take no keyboard focus** (a focused `Button` takes Tab and Enter before the
+  mode sees them), and the hover tag hides while the cursor is over a panel.
+- **A far world picked in the list** (one outside the holo between about 1,200 and 9,000 km, where
+  it is no target) zooms the map out to the whole system first, then selects it.
+- **The action button** reads the big button's own prompt (*SET COURSE*, *CHART WARP*...), lit
+  whenever the big button is, and says *NO ACTION* only when the big button is dark. The reason a
+  warp would not go (*FLY · TOO CLOSE TO WARP*, *NEED 512 QE · STORE 300*) is the card's third
+  line (`warp_lines`), not the button's label, as on the rim.
+- **The eye** is `InteriorProps.holo_station_eye(elevation)` with `HOLO_STATION_DISTANCE` 1.03 m
+  and `HOLO_STATION_ELEVATION` 29°, not `holo_table_station_eye()`; the station's box is
+  `HOLO_STATION_SIZE` (1.1 × 0.14 × 1.1 m, 0.93 m up).
+- **The spin is its own node.** §4.4's `set_turn(ship_turn * Basis(UP, spin))` is built as a
+  separate `Spin` root in `HoloVolume`, between the volume and the marks: `ShipComputer.spin` sets
+  it (`HoloVolume.set_spin`), and `set_turn` still takes the ship's turn alone. The chevron hangs
+  under the spin but not the turn, so it spins with the marks and never turns with the ship.
+- **Back on the map the selection is kept** (§3.4) while it is still a target, by a tab or by PAGE;
+  only when it has gone does `MapPage.opened()` take the course or the nearest.
+- **RANGE glides** in log scale with a 0.1 s time constant (`MapPage.GLIDE`), about half a second
+  to settle, rather than a fixed 0.4 s ease.
+- **The overlay's text is outlined** in `SCREEN_BACK`, and the action button is ruled in `TRIM`.
+  Both came from the first renders: the tabs and *ESC LEAVE* were cream on the bridge's cream
+  ceiling, and the action read as one more line of the card.
+
+**The zoom's cost** (§4.7, `test/probes/computer_mode_render.gd`, 1280 × 720 windowed on the
+build machine, the computer's own processing paused so each frame's holo update is the timed
+one). A placing costs more the farther out it is, mostly the belts', scale rings' and warp limits'
+ticks. As first built, every tick made a UniversePoint, worked the star's offset out again and
+undid the frame's basis: a placing took about 1 ms at 500 km, 4.5 ms at 1,000 km, 8 ms at 3,000
+km and 11.5 ms at 9,000 km (headless), and the sweep from 1 km to 9,000 km and back, one notch a
+frame, was:
+
+| Placement while gliding (as first built) | Worst frame | Where | Mean over the sweep |
+|---|---|---|---|
+| every frame (as planned) | 12.0-15.3 ms | 3,700-8,200 km drawn | 3.2 ms |
+| 15 Hz past 10 km (`GLIDE_PLACE_EVERY`, the fallback) | 10.1-10.3 ms | 3,800-5,200 km drawn | 1.1 ms |
+
+A still SYSTEM placing then cost 12 ms (14.8 ms at worst) twice a second, a rhythmic stutter.
+
+**The placing made cheap** (the final review). `MapPage._place` works out once a placing what
+every mark reads (`MapPage.Placing`: the frame, the centre, metres to the holo, whether the map is
+round the star, the ship's place). The map's frame is orthonormal, so a ring's or a limit's tick
+is its centre plus a unit circle times its radius, from static tables, with no UniversePoint and no
+basis undone; a belt's circle is turned into the map's frame once a placing; a scale ring wholly
+outside the holo is skipped; ticks go to the holo a ring at a time (`HoloVolume.add_ticks`), and
+`HoloVolume.inside` is `place`'s pin test without a Dictionary. A guard in `test_map_page.gd`
+holds every mark at SYSTEM and at 500 km where the old placing put it, to 1e-4. A placing now takes
+(headless) about 0.5 ms at 500 km, 0.7 ms at 1,000 km, 1.2 ms at 3,000 km and 1.9 ms at 9,000 km:
+
+| Windowed, three runs | Worst frame | Where | Mean |
+|---|---|---|---|
+| the sweep, placed every frame | 2.2-2.6 ms | 1,000-5,200 km drawn | 1.0-1.1 ms a frame |
+| a still SYSTEM placing (twice a second) | 2.8-3.4 ms | | 2.2-2.6 ms |
+
+The worst frame placing every frame is under 4 ms, so the 15 Hz fallback is gone and a glide
+places every frame, as §4.7 planned; the tick cache it allowed for was not needed.
+
+**Renders** (`computer_mode_render.gd`): `mode_5km`, `mode_500km`, `mode_system`, `mode_world`
+(the system, the nearest planet selected and the cursor's tag on it), `mode_orbit` and
+`mode_status`. The starter starts inside a belt cluster with no world within 500 km, so the
+500 km shot shows the ship and the cluster only. `fleet_play.gd` passes (ALL OK) on the branch.

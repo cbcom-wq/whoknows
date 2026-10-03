@@ -91,8 +91,34 @@ func test_its_state_survives_being_saved_and_restored():
 	assert_eq(again.page_index, 1)
 	assert_eq((again.pages[1] as OnePage).saved, {"n": 7})
 
-func test_nothing_it_builds_collides_but_its_buttons():
+func test_nothing_it_builds_collides_but_its_buttons_and_its_station():
 	var bodies := _computer.find_children("*", "CollisionObject3D", true, false)
-	assert_eq(bodies.size(), ShipComputer.BUTTONS.size())
+	assert_eq(bodies.size(), ShipComputer.BUTTONS.size() + 1)
 	for b in bodies:
-		assert_true(b is ReadoutPanel)
+		assert_true(b is ReadoutPanel or b == _computer.station)
+
+## Computer mode spec §3.1: each table builds its own station, in its frame.
+func test_it_builds_a_station_in_the_table_s_frame():
+	var f := Transform3D(Basis(Vector3.UP, PI * 0.5), Vector3(2, 0, 3))
+	var turned := ShipComputer.new()
+	turned.setup(f)
+	add_child_autofree(turned)
+	assert_not_null(turned.station)
+	assert_true(turned.station.transform.is_equal_approx(f))
+	assert_true(turned.station.is_in_group("interactable"))
+	assert_eq(turned.station.prompt_text(), "Use computer")
+	assert_eq(turned.station.computer, turned)
+
+func test_the_station_s_eye_orbits_and_recentres():
+	var s := _computer.station
+	var start := s.eye_transform()
+	s.orbit(30.0)
+	assert_almost_eq(s.elevation, InteriorProps.HOLO_STATION_ELEVATION + 30.0, 0.0001)
+	assert_gt(s.eye_transform().origin.y, start.origin.y)
+	s.orbit(1000.0)
+	assert_eq(s.elevation, ComputerStation.ELEVATION_MAX)
+	_computer.spin = 1.0
+	s.recentre()
+	assert_eq(s.elevation, InteriorProps.HOLO_STATION_ELEVATION)
+	assert_eq(_computer.spin, 0.0)
+	assert_true(s.eye_transform().is_equal_approx(start))

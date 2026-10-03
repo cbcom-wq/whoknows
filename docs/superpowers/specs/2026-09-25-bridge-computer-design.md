@@ -33,6 +33,15 @@ controls.
 > ship's pip and heading, scale rings every 50 km, worlds by class, lit when your QE reaches
 > them and dim (`HOLO_DIM`) when not, each warp target's limit, and the charted warp's line. Its
 > big button charts a warp. Moons are kind `&"moon"`, clusters `&"cluster"`.
+>
+> **Amended 2026-10-03 (the computer mode spec, `2026-09-30-computer-mode-design.md`, built on
+> `computer-mode`):** F at the table steps you up to it, through a **station**
+> (`ComputerStation`) over the table's top and rim; the five buttons still work without entering,
+> so §3.4's rim is no longer the only way to use the table. In the mode you orbit the holo and
+> spin its contents by hand (decision 4: on leaving, it is turned with the ship again), pick with
+> the mouse or a list, and act from a card. Decision 5's fixed ranges are now **one continuous
+> scale** from 1 km to 9,000 km, zoomed ×1.3 a wheel notch; RANGE glides between the stops 2, 10,
+> 50 and 500 km and the system.
 
 ---
 

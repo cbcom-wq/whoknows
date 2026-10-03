@@ -802,6 +802,26 @@ static func holo_table_buttons() -> Array[Transform3D]:
 static func holo_table_volume() -> Transform3D:
 	return _at(Vector3(0, HOLO_VOLUME_CENTRE, 0))
 
+## The bridge computer's station (computer mode spec §3.1, §3.2): a box over
+## the table's top and rim that offers "Use computer" -- above the table's
+## collider, under the holo, short of the buttons -- and the eye you use the
+## computer from: HOLO_STATION_DISTANCE from the holo's centre,
+## HOLO_STATION_ELEVATION degrees above its level, on the operator's side.
+const HOLO_STATION_SIZE := Vector3(1.1, 0.14, 1.1)
+const HOLO_STATION_DISTANCE := 1.03
+const HOLO_STATION_ELEVATION := 29.0
+
+static func holo_station_shape_centre() -> Vector3:
+	return Vector3(0, 0.93, 0)
+
+## The eye at `elevation_deg` above the holo's level, looking at its centre, in
+## the table's fixture frame.
+static func holo_station_eye(elevation_deg: float) -> Transform3D:
+	var e := deg_to_rad(elevation_deg)
+	var centre := holo_table_volume().origin
+	var eye := centre + Vector3(0, sin(e), -cos(e)) * HOLO_STATION_DISTANCE
+	return Transform3D(Basis.IDENTITY, eye).looking_at(centre, Vector3.UP)
+
 ## The quantum core's fixed parts (quantum energy spec §6.2), in a fixture
 ## frame: an octagonal plinth on a violet-glowing base, a glass column between
 ## two collars, a crown hanging from the ceiling with a warm lit band round it
