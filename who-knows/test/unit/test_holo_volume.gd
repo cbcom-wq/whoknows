@@ -154,3 +154,25 @@ func test_round_trip_chevron_visibility():
 	_holo.show_map_frame(false)
 	_holo.show_map_frame(true)
 	assert_false(_holo.chevron_shown(), "chevron stays hidden through map frame on/off cycle")
+
+## inside() is place()'s pin test for a point already in the holo's metres: the
+## map's ticks use it instead of a Dictionary each.
+func test_inside_is_what_place_leaves_unpinned():
+	for rel in [Vector3(0, 0, -900), Vector3(1999, 0, 0), Vector3(2001, 0, 0), Vector3(1500, 0, 1500),
+			Vector3(0, 1199, 0), Vector3(0, 1201, 0), Vector3(-800, -900, 300)]:
+		var placed := HoloVolume.place(rel, 2000.0)
+		assert_eq(HoloVolume.inside(rel * (HoloVolume.RADIUS / 2000.0)), not placed["pinned"], "%s" % rel)
+
+## add_ticks draws what add_mark would, a tick at a time.
+func test_add_ticks_draws_what_add_mark_would():
+	var at := PackedVector3Array([Vector3(0.1, 0, 0), Vector3(0, 0.05, -0.2)])
+	_holo.begin_marks()
+	_holo.add_ticks(InteriorPalette.HOLO_DIM, at, 0.01)
+	_holo.end_marks()
+	var batched := [_holo.mark_transform(&"tick", 0), _holo.mark_transform(&"tick", 1)]
+	_holo.begin_marks()
+	for p in at:
+		_holo.add_mark(&"tick", InteriorPalette.HOLO_DIM, p, 0.01)
+	_holo.end_marks()
+	assert_eq(_holo.mark_count(&"tick", InteriorPalette.HOLO_DIM), 2)
+	assert_eq(batched, [_holo.mark_transform(&"tick", 0), _holo.mark_transform(&"tick", 1)])

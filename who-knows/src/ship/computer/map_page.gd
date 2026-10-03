@@ -100,6 +100,9 @@ const ROCK_BAND := Vector2(50000.0, 100000.0)
 const WIDE_BAND := Vector2(500000.0, 1000000.0)
 ## A mark shrunk smaller than this is not placed.
 const SMALLEST := 0.001
+## How far outside the holo, metres, a whole scale ring must lie to be skipped
+## unplaced: a margin over float error, so no tick inside is ever lost.
+const OUTSIDE_MARGIN := 0.00001
 
 ## The scale chosen: metres from the holo's centre to its edge.
 var scale_m := STOPS[OPEN_AT]
@@ -403,6 +406,39 @@ func place_every() -> float:
 func _glide_capped() -> bool:
 	return gliding() and _shown_m > STOPS[1]
 
+## What a placing works out once and every mark it places reads: the map's
+## frame, where the holo's centre is (from the ship, in that frame), metres to
+## the holo, whether the map is round the star, and the ship's place, as a
+## point and from the centre. A tick then costs a multiply and an add, not a
+## UniversePoint and the centre worked out again.
+class Placing:
+	var frame: Transform3D
+	var centre: Vector3
+	var k: float
+	var system_view: bool
+	var focus: UniversePoint
+	var focus_rel: Vector3
+	## The ticks of one ring, gathered inside the holo and handed over at once
+	## (HoloVolume.add_ticks).
+	var ticks := PackedVector3Array()
+
+	## `point` from the holo's centre, in the map's frame.
+	func rel(ctx: ComputerContext, point: UniversePoint) -> Vector3:
+		return ctx.relative_in(frame, point) - centre
+
+## The rings' ticks as unit circles in the map's level, worked out once:
+## TAU * k / n round from +x towards +z.
+static var _unit_24: PackedVector3Array = _unit_circle(LIMIT_TICKS)
+static var _unit_32: PackedVector3Array = _unit_circle(SCALE_TICKS)
+static var _unit_48: PackedVector3Array = _unit_circle(BELT_TICKS)
+
+static func _unit_circle(n: int) -> PackedVector3Array:
+	var out := PackedVector3Array()
+	for k in n:
+		var a := TAU * k / n
+		out.append(Vector3(cos(a), 0.0, sin(a)))
+	return out
+
 ## Places every mark afresh, in the map's frame as it is now.
 func _place(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D) -> void:
 	var list: Array[Contact] = shown(ctx).duplicate()
@@ -411,6 +447,13 @@ func _place(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D) -> voi
 		list.append(course)   # always shown, pinned if it must be
 	var time := ctx.sensors.time if ctx.sensors != null else ctx.time
 	var w := system_weight(_shown_m)
+	var p := Placing.new()
+	p.frame = frame
+	p.centre = _centre(ctx, frame, _shown_m)
+	p.k = HoloVolume.RADIUS / _shown_m
+	p.system_view = w > 0.5
+	p.focus = ctx.sensors.focus_point() if ctx.sensors != null else null
+	p.focus_rel = p.rel(ctx, p.focus)
 	var bracketed := false
 	var target_ids := {}
 	for t in targets(ctx):
@@ -419,16 +462,16 @@ func _place(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D) -> voi
 	placed_marks.clear()
 	for i in list.size():
 		var c: Contact = list[i]
-		var placed := _placed(ctx, frame, c.point)
+		var placed := HoloVolume.place(p.rel(ctx, c.point), _shown_m)
 		var at: Vector3 = placed["position"]
 		var pinned: bool = placed["pinned"]
 		var is_course := course != null and c.id == course.id
 		# The course is always shown, so it never shrinks away.
-		var size := PIN_SIZE if pinned else mark_size(c, _shown_m, time) * (1.0 if is_course else shrink(c, _shown_m))
+		var size := PIN_SIZE if pinned else _mark_size(c, _shown_m, time, p.system_view) * (1.0 if is_course else shrink(c, _shown_m))
 		if size < SMALLEST:
 			continue
-		var colour := InteriorPalette.AMBER if is_course else reach_colour(ctx, c)
-		if w > 0.5 and c.kind == &"cluster" and not pinned:
+		var colour := InteriorPalette.AMBER if is_course else _reach_colour(ctx, c, p.system_view, p.focus)
+		if p.system_view and c.kind == &"cluster" and not pinned:
 			for o in [Vector3(-CLUMP, 0, 0), Vector3(CLUMP, 0, 0), Vector3(0, 0, CLUMP)]:
 				volume.add_mark(&"ball", colour, at + o, size)
 		else:
@@ -441,12 +484,12 @@ func _place(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D) -> voi
 		if c.id == selected:
 			volume.show_bracket(at, size + BRACKET_GAP, true)
 			bracketed = true
-	_place_belts(volume, ctx, frame)
+	_place_belts(volume, ctx, p)
 	if w > 0.01:
-		_place_ship(volume, ctx, frame)
-	_place_rings(volume, ctx, frame)
-	_place_limits(volume, ctx, frame, list)
-	_place_chart(volume, ctx, frame)
+		_place_ship(volume, p)
+	_place_rings(volume, p)
+	_place_limits(volume, ctx, p, list)
+	_place_chart(volume, ctx, p)
 	volume.end_marks()
 	if not bracketed:
 		volume.show_bracket(Vector3.ZERO, 0.0, false)
@@ -467,9 +510,13 @@ static func mark_shape(c: Contact, pinned: bool) -> StringName:
 ## full size when it is taken and shrinks until the next: by scale, since the
 ## glow material is shared and one mark cannot fade on its own.
 static func mark_size(c: Contact, range_m: float, time: float) -> float:
+	return _mark_size(c, range_m, time, system_weight(range_m) > 0.5)
+
+## mark_size, told whether the map is round the star: a placing knows already.
+static func _mark_size(c: Contact, range_m: float, time: float, system_view: bool) -> float:
 	var scale := HoloVolume.RADIUS / range_m
 	if c.kind == &"body" or c.kind == &"moon" or c.kind == &"cluster":
-		if system_weight(range_m) > 0.5:
+		if system_view:
 			return MOON_SIZE if c.kind == &"moon" else CLASS_SIZE[size_class(c)]
 		return clampf(c.radius * 2.0 * scale, BODY_MIN, BODY_MAX)
 	match c.precision:
@@ -484,19 +531,26 @@ static func mark_size(c: Contact, range_m: float, time: float) -> float:
 		return clampf(c.radius * 2.0 / ROCK_BIGGEST * ROCK_MAX_MID, ROCK_MIN_MID, ROCK_MAX_MID)
 	return ROCK_FAR
 
-## Each belt as a ring of ticks, growing in past 500 km.
-func _place_belts(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D) -> void:
+## Each belt as a ring of ticks, growing in past 500 km. A belt's ring lies in
+## the universe's level, not the map's, so its unit circle is turned into the
+## map's frame, once for every belt.
+func _place_belts(volume: HoloVolume, ctx: ComputerContext, p: Placing) -> void:
 	var system := ctx.sensors.system if ctx.sensors != null else null
 	var grow := 1.0 - fade(_shown_m, WIDE_BAND)
 	if system == null or grow * TICK_SIZE < SMALLEST:
 		return
+	var turned := PackedVector3Array()
+	turned.resize(BELT_TICKS)
+	for k in BELT_TICKS:
+		turned[k] = p.frame.basis * _unit_48[k]
 	for belt in system.belts:
+		var b_rel := p.rel(ctx, belt.centre)
+		p.ticks.clear()
 		for k in BELT_TICKS:
-			var angle := TAU * k / BELT_TICKS
-			var point := belt.centre.plus(Vector3(cos(angle), 0.0, sin(angle)) * belt.radius)
-			var placed := _placed(ctx, frame, point)
-			if not placed["pinned"]:
-				volume.add_mark(&"tick", colour_for(&"rock"), placed["position"], TICK_SIZE * grow)
+			var at := (b_rel + turned[k] * belt.radius) * p.k
+			if HoloVolume.inside(at):
+				p.ticks.append(at)
+		volume.add_ticks(colour_for(&"rock"), p.ticks, TICK_SIZE * grow)
 
 ## A world's class, for its mark and the screen (the warp spec §7.1).
 static func size_class(c: Contact) -> StringName:
@@ -516,16 +570,13 @@ static func size_class_of_radius(radius: float) -> StringName:
 ## Where `point` sits in the holo at the scale shown: round the ship up close,
 ## round the star far out, and between the two while the centre slides.
 func holo_position(ctx: ComputerContext, frame: Transform3D, point: UniversePoint) -> Vector3:
-	return _placed(ctx, frame, point)["position"]
-
-## `point` from the holo's centre, in the map's frame, at `scale`: the centre
-## slides from the ship to the star as the scale grows (spec §4.2).
-func _from_centre(ctx: ComputerContext, frame: Transform3D, point: UniversePoint, scale: float) -> Vector3:
-	return ctx.relative_in(frame, point) - _centre(ctx, frame, scale)
+	var rel := ctx.relative_in(frame, point) - _centre(ctx, frame, _shown_m)
+	return HoloVolume.place(rel, _shown_m)["position"]
 
 ## Where the holo's centre is at `scale`, from the ship, in the map's frame:
-## the ship's own place until the centre starts to slide, the star's at the end.
-## Worked out once for a loop over contacts, not once for each.
+## the ship's own place until the centre starts to slide, the star's at the end
+## (spec §4.2). Worked out once a loop over contacts, and once a placing
+## (Placing.centre), never once a point.
 func _centre(ctx: ComputerContext, frame: Transform3D, scale: float) -> Vector3:
 	var system := ctx.sensors.system if ctx.sensors != null else null
 	var w := system_weight(scale)
@@ -533,49 +584,62 @@ func _centre(ctx: ComputerContext, frame: Transform3D, scale: float) -> Vector3:
 		return ctx.relative_in(frame, system.star.point) * w
 	return Vector3.ZERO
 
-func _placed(ctx: ComputerContext, frame: Transform3D, point: UniversePoint) -> Dictionary:
-	return HoloVolume.place(_from_centre(ctx, frame, point, _shown_m), _shown_m)
-
 ## Lit in the kind's colour if your QE reaches it, dim if not (the warp spec
 ## §7.1). Before the map is round the star, or without a drive, always lit.
 func reach_colour(ctx: ComputerContext, c: Contact) -> Color:
+	var focus := ctx.sensors.focus_point() if ctx.sensors != null else null
+	return _reach_colour(ctx, c, system_weight(_shown_m) > 0.5, focus)
+
+## reach_colour, told whether the map is round the star and where the ship is:
+## a placing knows both already.
+func _reach_colour(ctx: ComputerContext, c: Contact, system_view: bool, focus: UniversePoint) -> Color:
 	var lit := colour_for(c.kind)
-	if system_weight(_shown_m) <= 0.5 or ctx.warp == null or ctx.store == null or ctx.sensors == null:
+	if not system_view or ctx.warp == null or ctx.store == null or ctx.sensors == null:
 		return lit
 	var t := ctx.warp.target_for(c.id)
-	var focus := ctx.sensors.focus_point()
 	if t == null or focus == null:
 		return lit
 	var travel := t.point.minus(focus).length() - t.limit
 	return lit if WarpPlan.cost_of(travel) <= ctx.store.amount else InteriorPalette.HOLO_DIM
 
 ## The ship's pip and heading.
-func _place_ship(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D) -> void:
-	var focus := ctx.sensors.focus_point() if ctx.sensors != null else null
-	if focus == null:
+func _place_ship(volume: HoloVolume, p: Placing) -> void:
+	if p.focus == null:
 		return
-	var pip: Vector3 = _placed(ctx, frame, focus)["position"]
+	var pip: Vector3 = HoloVolume.place(p.focus_rel, _shown_m)["position"]
 	volume.add_mark(&"ball", InteriorPalette.LIGHT_WARM, pip, SHIP_PIP)
 	volume.add_mark(&"tick", InteriorPalette.LIGHT_WARM, pip + Vector3(0, 0, -HEADING_TICK), TICK_SIZE)
 
-## Faint rings round the ship every SCALE_RING, growing in past 500 km.
-func _place_rings(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D) -> void:
-	var focus := ctx.sensors.focus_point() if ctx.sensors != null else null
+## Faint rings round the ship every SCALE_RING, growing in past 500 km, in the
+## map's level. The map's frame is orthonormal, so a tick is the ship's place
+## plus the ring's offset: no point made, no basis undone. A ring wholly outside
+## the holo is skipped, since its ticks would all be held at the edge, and a
+## held tick is never drawn.
+func _place_rings(volume: HoloVolume, p: Placing) -> void:
 	var grow := 1.0 - fade(_shown_m, WIDE_BAND)
-	if focus == null or grow * TICK_SIZE < SMALLEST:
+	if p.focus == null or grow * TICK_SIZE < SMALLEST:
 		return
+	var mid := p.focus_rel * p.k
+	if absf(mid.y) > HoloVolume.HALF_HEIGHT + OUTSIDE_MARGIN:
+		return
+	var off := Vector2(mid.x, mid.z).length()
 	var r := SCALE_RING
 	while r <= SYSTEM_REACH * 2.0:
-		for k in SCALE_TICKS:
-			var a := TAU * k / SCALE_TICKS
-			var placed := _placed(ctx, frame, focus.plus(frame.basis.inverse() * Vector3(cos(a), 0.0, sin(a)) * r))
-			if not placed["pinned"]:
-				volume.add_mark(&"tick", InteriorPalette.HOLO_DIM, placed["position"], TICK_SIZE * grow)
+		var ring := r * p.k
+		if ring - off > HoloVolume.RADIUS + OUTSIDE_MARGIN:
+			break   # this ring and every bigger one lie outside
+		if off - ring <= HoloVolume.RADIUS + OUTSIDE_MARGIN:
+			p.ticks.clear()
+			for k in SCALE_TICKS:
+				var at := (p.focus_rel + _unit_32[k] * r) * p.k
+				if HoloVolume.inside(at):
+					p.ticks.append(at)
+			volume.add_ticks(InteriorPalette.HOLO_DIM, p.ticks, TICK_SIZE * grow)
 		r += SCALE_RING
 
 ## Each target's warp limit as a ring of ticks, at any scale; the blocker's in
 ## CORAL.
-func _place_limits(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D, list: Array[Contact]) -> void:
+func _place_limits(volume: HoloVolume, ctx: ComputerContext, p: Placing, list: Array[Contact]) -> void:
 	if ctx.warp == null:
 		return
 	var blocker: WarpTarget = ctx.warp.plan.blocker if ctx.warp.plan.status == WarpPlan.Status.BLOCKED else null
@@ -584,26 +648,28 @@ func _place_limits(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D,
 		if t == null:
 			continue
 		var colour := InteriorPalette.CORAL if t == blocker else InteriorPalette.HOLO_DIM
+		var t_rel := p.rel(ctx, t.point)
+		p.ticks.clear()
 		for k in LIMIT_TICKS:
-			var a := TAU * k / LIMIT_TICKS
-			var placed := _placed(ctx, frame, t.point.plus(frame.basis.inverse() * Vector3(cos(a), 0.0, sin(a)) * t.limit))
-			if not placed["pinned"]:
-				volume.add_mark(&"tick", colour, placed["position"], TICK_SIZE)
+			var at := (t_rel + _unit_24[k] * t.limit) * p.k
+			if HoloVolume.inside(at):
+				p.ticks.append(at)
+		volume.add_ticks(colour, p.ticks, TICK_SIZE)
 
 ## The charted warp's line, from the ship to the drop-out point.
-func _place_chart(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D) -> void:
-	if ctx.warp == null or ctx.warp.target() == null or ctx.sensors == null:
+func _place_chart(volume: HoloVolume, ctx: ComputerContext, p: Placing) -> void:
+	if ctx.warp == null or ctx.warp.target() == null or p.focus == null:
 		return
-	var focus := ctx.sensors.focus_point()
 	var t := ctx.warp.target()
-	if focus == null:
-		return
-	var line := t.point.minus(focus)
-	var drop := focus.plus(line.normalized() * maxf(line.length() - t.limit, 0.0))
+	var line := t.point.minus(p.focus)
+	var drop := p.focus.plus(line.normalized() * maxf(line.length() - t.limit, 0.0))
+	var drop_rel := p.rel(ctx, drop)
+	p.ticks.clear()
 	for k in LINE_TICKS:
-		var placed := _placed(ctx, frame, focus.plus(drop.minus(focus) * (float(k) + 0.5) / LINE_TICKS))
-		if not placed["pinned"]:
-			volume.add_mark(&"tick", InteriorPalette.AMBER, placed["position"], TICK_SIZE)
+		var at := p.focus_rel.lerp(drop_rel, (float(k) + 0.5) / LINE_TICKS) * p.k
+		if HoloVolume.inside(at):
+			p.ticks.append(at)
+	volume.add_ticks(InteriorPalette.AMBER, p.ticks, TICK_SIZE)
 
 ## The warp target selected once the map is round the star, if there is a drive.
 func _warp_target(ctx: ComputerContext) -> WarpTarget:

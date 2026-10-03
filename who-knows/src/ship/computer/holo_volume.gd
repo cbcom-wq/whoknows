@@ -110,6 +110,12 @@ static func place(relative: Vector3, range_m: float) -> Dictionary:
 		t = minf(t, HALF_HEIGHT / absf(p.y))
 	return {"position": p * t, "pinned": t < 1.0}
 
+## Whether a point already in the holo's metres lies inside the volume: what
+## place() leaves unpinned. For the map's ticks, which are never drawn pinned
+## and are too many to make a Dictionary each.
+static func inside(p: Vector3) -> bool:
+	return p.x * p.x + p.z * p.z <= RADIUS * RADIUS and absf(p.y) <= HALF_HEIGHT
+
 ## Draws `marks`, each {shape, colour, position, size}; a shape and colour
 ## with none this time is emptied. For &"stalk", `position` is the top of the
 ## stalk, and it runs from there to the ship's level.
@@ -129,6 +135,19 @@ func add_mark(shape: StringName, colour: Color, position: Vector3, size: float) 
 	var placed: Array = _placed[_group(shape, colour)]
 	if placed.size() < CAPACITY:
 		placed.append(_transform(shape, position, size))
+
+## Many ticks of one colour and size at once, as add_mark would place them:
+## the map's rings, belts and limits, hundreds a placing, for one group looked
+## up and one basis made.
+func add_ticks(colour: Color, positions: PackedVector3Array, size: float) -> void:
+	if positions.is_empty():
+		return
+	var placed: Array = _placed[_group(&"tick", colour)]
+	var b := Basis.from_scale(Vector3.ONE * size)
+	for at in positions:
+		if placed.size() >= CAPACITY:
+			return
+		placed.append(Transform3D(b, at))
 
 ## Hands each group its transforms in one buffer, 12 floats apiece as
 ## MultiMesh.buffer lays them out: one call, not one per mark.
