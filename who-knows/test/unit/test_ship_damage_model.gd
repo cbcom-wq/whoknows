@@ -124,7 +124,7 @@ func test_the_view_darkens_exposed_blocks_first():
 	var share_e: float = _d.shown_damage(exposed) / _d.launch[exposed][2]
 	var share_s: float = _d.shown_damage(sheltered) / _d.launch[sheltered][2]
 	assert_gt(share_e, share_s)
-	assert_gte(share_s, 0.3, "never less than the section's own share")
+	assert_gte(share_s, 0.3 * ShipDamage.SHELTERED, "never far under the section's own share")
 	assert_lt(share_e, BlockDamage.GONE_AT, "shown, never gone")
 
 func test_a_component_s_blocks_show_its_share():

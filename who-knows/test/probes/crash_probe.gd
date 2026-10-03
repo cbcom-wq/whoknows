@@ -2,8 +2,8 @@ extends SceneTree
 
 # Crashes in the real starter (docs/superpowers/specs/
 # 2026-09-29-health-and-damage-design.md §5.2, §11.2): the ship driven into a
-# big still body at 3, 5 and 8 m/s, and what broke; then the cost of knocking
-# three blocks off at once. Headless is fine:
+# big still body at 3, 5 and 8 m/s, and what each section and component took;
+# then the cost of a whole section's pieces going at once. Headless is fine:
 #
 #   godot --headless --path who-knows --script res://test/probes/crash_probe.gd
 #
@@ -55,35 +55,27 @@ func _run() -> void:
 		ship.exterior.linear_velocity = -ship.exterior.global_basis.z * speed
 		ship.exterior.angular_velocity = Vector3.ZERO
 		await _physics(90)
-		var staged := {}
-		var hurt := 0
-		for coord: Vector3i in ship.grid.coords():
-			var inst := ship.grid.get_block(coord)
-			if inst.damage > 0.0:
-				hurt += 1
-				var stage: String = BlockDamage.Stage.keys()[BlockDamage.stage_of(inst, ship.catalog.get_def(inst.block_id))]
-				staged[stage] = staged.get(stage, 0) + 1
-		print("crash %.0f m/s: %d blocks hurt %s, %d knocked off, hull %d%%, crippled '%s'" % [
-			speed, hurt, staged, lost.size(), roundi(ship.hull_whole() * 100.0), ship.stats.crippled_reason])
+		var sections := []
+		for id in ShipDamage.SECTIONS:
+			if ship.damage.health(id) < 1.0:
+				sections.append("%s %d%%" % [id, roundi(ship.damage.health(id) * 100.0)])
+		var comps := []
+		for comp: StringName in ship.damage.component_damage:
+			if ship.damage.component_damage[comp] > 0.0:
+				comps.append("%s %d%%" % [comp, roundi(ship.damage.component_health(comp) * 100.0)])
+		print("crash %.0f m/s: sections %s, components %s, %d pieces off, hull %d%%, crippled '%s'" % [
+			speed, sections, comps, lost.size(), roundi(ship.hull_whole() * 100.0), ship.stats.crippled_reason])
 		scene.queue_free()
 		await _physics(3)
 
 	var scene := _scene()
 	await _physics(5)
 	var ship: Ship = scene.get_node("Ship")
-	var outer: Array[Vector3i] = []
-	for coord: Vector3i in ship.grid.coords():
-		if not ship.inner_cells.has(coord) and not ship.grid.has_block(coord + Vector3i(1, 0, 0)):
-			outer.append(coord)
-		if outer.size() == 3:
-			break
-	var hits := {}
-	for c in outer:
-		hits[c] = 100_000.0
 	var t0 := Time.get_ticks_usec()
-	var removed := ship.take_damage_many(hits)
+	ship.damage.section_damage[&"port_stern"] = ship.damage.section_hp[&"port_stern"]
+	var removed := ship._apply_view()
 	var took := (Time.get_ticks_usec() - t0) / 1000.0
-	print("three blocks off at once: %d removed, %.1f ms (one rebuild)" % [removed.size(), took])
+	print("a section to nothing at once: %d pieces off, %.1f ms (one rebuild)" % [removed.size(), took])
 	t0 = Time.get_ticks_usec()
 	ship._rebuild_everything()
 	print("one full rebuild alone: %.1f ms" % ((Time.get_ticks_usec() - t0) / 1000.0))

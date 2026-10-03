@@ -67,16 +67,20 @@ func test_a_damaged_computer_s_screen_glitches_then_steadies():
 func test_a_damaged_cockpit_is_sluggish_and_cracked():
 	var flight := _ship.flight_computer
 	assert_eq(flight.assist_strength, 1.0)
-	var cracks := _ship.canopy_overlay.get_node("Cracks") as CanopyCracks
+	var cracks := _root.get_node("HudRoot/Screen/CanopyCracks") as CanopyCracks
+	assert_not_null(cracks, "the HUD has the cracks")
+	cracks.render(flight.build_telemetry())
 	assert_eq(cracks.level, 0)
 	_hurt(&"cockpit", 0.6)
 	assert_eq(flight.assist_strength, 0.5)
 	assert_true(flight.assist_enabled, "still assisted")
+	cracks.render(flight.build_telemetry())
 	assert_eq(cracks.level, 1)
 	var t := flight.attitude_torque(Vector3(0, 1, 0), Vector3.ZERO)
 	_hurt(&"cockpit", 0.0)
 	var whole := flight.attitude_torque(Vector3(0, 1, 0), Vector3.ZERO)
 	assert_lte(absf(t.y), absf(whole.y), "it asks for less")
+	cracks.render(flight.build_telemetry())
 	assert_eq(cracks.level, 0)
 
 func test_a_wrecked_cockpit_turns_the_assist_off_and_the_hud_flickers():
@@ -86,7 +90,7 @@ func test_a_wrecked_cockpit_turns_the_assist_off_and_the_hud_flickers():
 	flight.assist_enabled = true
 	assert_false(flight.assist_enabled, "refused")
 	assert_true(flight.build_telemetry().hud_flicker)
-	assert_eq((_ship.canopy_overlay.get_node("Cracks") as CanopyCracks).level, 2)
+	assert_eq(flight.build_telemetry().cockpit_cracks, 2)
 	assert_false(_ship.stats.crippled, "still flyable")
 	_hurt(&"cockpit", 0.0)
 	flight.assist_enabled = true

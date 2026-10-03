@@ -50,23 +50,30 @@ Do these in order. Each one names the check that proves it.
      its buttons, and face it so the operator looks out of a window (the owner's wish, 2026-09-27:
      on the starter, the port front corner, facing aft). A console it displaces moves aft. The
      probe prints each table and where you stand to use it.
-3. **Damage** (`docs/superpowers/specs/2026-09-29-health-and-damage-design.md`):
-   - every block needs a sensible `hp` in its `.tres`: damage is taken against it, and a block
-     goes damaged at half, wrecked at all of it and is knocked off at one and a half;
-   - `core`, `pilot_seat` and every `airlock` are **kept**: wrecked, never knocked off;
-   - **the cabin keeps its shape:** every walkable cell and every block beside one (the cabin's
-     shell, `Ship.inner_cells`, from the launch layout) is wrecked but never knocked off. Only
-     the **buffer** outside the shell breaks away, so give a ship one: fairings, outer plating,
-     engines and thrusters. The probe's `damage` line counts it (the starter's is 49 of 110);
-   - a block knocked off takes with it every block no longer joined to the core. A loss that
-     would cut off part of the shell is refused (the block stays wrecked), but don't hang half
-     the buffer off one cell either (the probe counts the blocks one loss would cut off at
-     worst);
-   - the ship must not be **crippled as built** (forward thrust, every turning axis and a
-     working `quantum_core`): the probe's `damage` line says so;
+3. **Damage** (`docs/superpowers/specs/2026-10-03-ship-damage-sections-design.md`): a ship
+   takes damage as **six hull sections and four components**, not block by block (`ShipDamage`):
+   - **the sections** are the launch layout's thirds (bow, midship, stern) split port and
+     starboard; the centre line is in both. Every block that is not a component is in one: its
+     `hp` (in its `.tres`) adds to its section's. Hull damage changes only looks and pieces,
+     never what the ship can do;
+   - **the components** are the `thruster`s (as one, the engines), the `quantum_core`, the
+     `computer` and the cockpit (`pilot_seat` and every `canopy`). Damaged under half: half
+     thrust, half power, a glitching table and a 20 s warp spool, a cracked canopy and a sluggish
+     assist; wrecked: none, crippled, dark and no warp, assist off. They are mended where they
+     sit, so put the core and the table where the torch reaches them from walkable deck;
+   - **give each section pieces to lose:** plating and fairings (`ShipDamage.STRUCTURE`)
+     outside the cabin's shell (`Ship.inner_cells`), whose loss cuts nothing off. Below half a
+     section sheds them, outermost first, and welding brings them back. A section with none never
+     shows a hole; the probe's `damage` line prints each section's hp and pieces and flags `NO
+     PIECES`;
+   - **the cabin keeps its shape:** nothing in the shell is ever a piece; inside, the whole
+     cabin scorches below 50% HULL and chars, sparks and flickers below 20%;
+   - **the hull is mended from outside only** (`RepairTorch.SECTION_RATE`): a section a
+     spacewalker cannot reach the outside of cannot be mended;
+   - the ship must not be **crippled as built**: the probe's `damage` line says so;
    - **damage shows on the skin:** a hurt cell's plating, trim and glass are multiplied by its
      stage colour (`ExteriorBuilder.set_stage`, in place). A new hull piece must be marked to its
-     cell in `HullDressing` (`reference.md`), or it stays clean when its block is scorched.
+     cell in `HullDressing` (`reference.md`), or it stays clean when its section is scorched.
 4. **Propulsion:**
    - main `thruster`s oriented FORWARD (`o=0`), at the stern;
    - `rcs` in **opposed pairs** on every axis: pitch, yaw and roll both ways;
@@ -168,9 +175,10 @@ Do these in order. Each one names the check that proves it.
    groups on; the starter held 143–150 fps there on 2026-09-29, and 130 on 2026-10-02 (`main`
    and `many-ships` alike, the same box), with or without a second ship 300 m off. **Damage** (anything touching damage, its
    looks or the cabin's shell): render `test/probes/damage_review.gd` before merging. It shows
-   the hull intact and after a heavy port-bow hit (fill-lit; intact, scorched, charred and
-   knocked off in one view), and the cabin at eye height after it (the helm, the corridor, a
-   wrecked wall and its sparks). The cabin must keep its shape: same rooms, pod, helm and doors.
+   the hull intact and with the port sections at 70%, 35% and 0% (fill-lit: scorched in
+   patches, then pieces off), the cabin at eye height at 60%, 35% and 15% HULL, the bridge
+   computer intact, glitching and dark, and the seated view with the cockpit damaged and wrecked.
+   The cabin must keep its shape: same rooms, pod, helm and doors.
 11. **Fly it:** a steady turn on the arrow keys, a clicked heading 120° away, and a speed-locked
     turn at cruise. Compare them with the feel numbers you meant.
 
@@ -232,8 +240,10 @@ thrust.
 | The plating's vertex colour after main's livery took `COLOR` | The skin wrote `HullPalette.PLATE` into its `HULL` batch, which the livery ignored until the damage merge made it multiply by `COLOR.rgb`: every plate would have darkened by the plate colour | The plating's vertex colour is the cell's stage colour, `UNHURT` (white) when whole; `test_an_unhurt_cell_s_plating_is_white_so_the_livery_is_as_painted` |
 | Re-dressing the skin for one stage | Rebuilding the skin from the layout costs 53 ms on the starter, and would replace the lens meshes and window glow `ShipLights` holds | `set_stage` recolours the cell's vertex runs in arrays kept from the dressing and re-adds the touched surfaces once at the end of the frame (~1.5 ms). Never read a mesh's arrays back to do it: that stalls on the GPU (5–25 ms) |
 | Recolouring one interior cell | The dressing is a few merged meshes, so there is no one cell's mesh to tint | A stage seen from inside rebuilds the interior once, deferred (`Ship._queue_rebuild`), leaving the hull standing: ~125 ms on the dev Xeon |
-| Letting damage knock off cabin blocks | After a hard crash onto a planet the cabin had reshaped round the owner: a little room with the chair, and no way to sit back down to fly | The cabin's shell is held (`Ship.inner_cells`, `BlockDamage.apply_many(..., held)`); only the buffer breaks away, and a save missing shell blocks gets them back wrecked |
+| Letting damage knock off cabin blocks | After a hard crash onto a planet the cabin had reshaped round the owner: a little room with the chair, and no way to sit back down to fly | Nothing in the cabin's shell (`Ship.inner_cells`) is ever one of a section's pieces; a save missing shell blocks gets them back from the model on load |
 | Merging damage work on green tests | The cabin's shell went to `main` with no renders; the owner had to ask for them, and the first ones showed the cabin's sparks as chunky white tiles hanging in the air | Render `damage_review.gd` and show the owner before merging (step 10). Sparks are 1.5 × 5 cm and live 0.3 s |
+| Damage block by block | Every one of the starter's 110 blocks took damage and was welded on its own, inside and out; the owner found repairing "a little too tedious" (2026-10-03) | Six hull sections mended from outside and four components mended where they sit (`ShipDamage`). A new system breaks only if it is made a component, with the owner's say |
+| Holding a bridge computer across a stage change | The damage review kept a `ShipComputer` while the computer was damaged; the stage rebuilt the cabin, freed the table, and the script stopped on the freed object without quitting | Fetch tables (and anything else in the dressing) again from `interior_builder` after any damage seen from inside |
 | Clamping the QE store to its damaged capacity | A crash wrecked the cells and the owner's stored energy was gone for good, leaving the ship in low power with no way to tell why | A damaged cell lowers `capacity` only; the store keeps up to `QuantumStore.most` (pass `intact_quantum_capacity`), and the status page says *CELLS DAMAGED* |
 | A repeating world-space emitter in `Universe.HOLDS_SHIFT` | Every damaged block re-fired its sparks every second or two, so with a few damaged the floating origin would almost never have found a gap to shift in | Anything that repeats stays in its parent's frame (`local_coords`) and out of the group; only short one-shots outside hold the shift |
 | Letting go of a warp at 120 m/s with the assist on | The assist cancels velocity nobody asked for, so the ship braked to rest at the warp limit instead of coasting in | `WarpDrive` sets the speed lock to 120 m/s at drop-out; anything else that hands the hull a velocity with the assist on must do the same |
@@ -275,6 +285,9 @@ thrust.
   dev Xeon for the starter since the generated skin), and a stage seen from inside rebuilds the
   interior (~125 ms; the hull recolours in place). Fine for now; a hitch in a big fight.
 - **Debris and breaches.** A piece cut off vanishes in a burst; a hole has no air to lose.
+- **Damage beyond the four components.** RCS, cells, rooms and the airlock never break; a
+  section's health changes only looks and pieces. No per-section effect on flight, no repairing
+  a section from inside, no droid repairing the ship.
 - **Gravity and landing on a world.** Worlds are solid and you can skim and bump off them, but
   there is no gravity, landing gear or step-out yet (Planetfall's). Do not give a ship legs or
   skids that assume a pull.

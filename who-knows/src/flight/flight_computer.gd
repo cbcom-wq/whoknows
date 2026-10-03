@@ -390,5 +390,6 @@ func build_telemetry() -> VehicleTelemetry:
 		t.hull = status[0]
 		t.crippled_reason = status[1]
 		t.hud_flicker = status.size() > 2 and bool(status[2])
+		t.cockpit_cracks = int(status[3]) if status.size() > 3 else 0
 	t.tool_text = "BOOST −%d/S" % roundi(QuantumValues.BOOST_COST) if boosting else ""
 	return t

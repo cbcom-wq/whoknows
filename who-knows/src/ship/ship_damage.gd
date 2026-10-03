@@ -42,9 +42,14 @@ const STRUCTURE: Array[StringName] = [&"hull", &"hull_wedge", &"armour", &"fairi
 	&"fairing_corner_in"]
 ## A section starts losing pieces below this health, and has lost them all at 0.
 const BREAK_BELOW := 0.5
-## How much more an exposed block shows of its section's damage than a
-## sheltered one: shown share = section share × (1 + EXPOSED × exposure).
+## How much an exposed block shows of its section's damage against a
+## sheltered one: shown share = section share × (SHELTERED + EXPOSED ×
+## exposure), so a section scorches in patches, worst at its edges.
+const SHELTERED := 0.6
 const EXPOSED := 1.8
+## How much of a block's exposure is chance rather than open faces: enough
+## that neighbours differ.
+const PATCHY := 0.3
 ## A shown share never reaches gone: a piece is lost by present(), not by its
 ## own damage.
 const SHOWN_MOST := BlockDamage.GONE_AT - 0.01
@@ -109,7 +114,7 @@ static func build(layout: ShipGrid, catalog: BlockCatalog, held: Dictionary = {}
 		for n in ShipGrid.FACE_OFFSETS:
 			if not layout.has_block(coord + n):
 				open += 1
-		d.exposure[coord] = clampf(open / 4.0 + _jitter(coord) * 0.05, 0.0, 1.0)
+		d.exposure[coord] = clampf(minf(open / 4.0, 1.0) * (1.0 - PATCHY) + _jitter(coord) * PATCHY, 0.0, 1.0)
 	for comp: StringName in d.component_hp:
 		d.component_hp[comp] = maxf(d.component_hp[comp], COMPONENT_HP_MIN.get(comp, 0.0))
 		d.component_damage[comp] = 0.0
@@ -298,7 +303,7 @@ func shown_damage(coord: Vector3i) -> float:
 	var share := 0.0
 	for side: StringName in sections_of[coord]:
 		share = maxf(share, 1.0 - health(side))
-	return hp * minf(share * (1.0 + EXPOSED * exposure[coord]), SHOWN_MOST)
+	return hp * minf(share * (SHELTERED + EXPOSED * exposure[coord]), SHOWN_MOST)
 
 ## Whether the block at `coord` is there now (lost()).
 func present(coord: Vector3i) -> bool:

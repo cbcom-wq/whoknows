@@ -478,48 +478,53 @@ the ship exterior keep the flat starter, and only a new game gets the reshaped o
 Saved places outside are `UniversePoint`s (`SaveCodec.upoint`). The world's start comes from
 `AsteroidRecipe.find_start()` again, so keep it a pure function of the seed.
 
-## Damage (`docs/superpowers/specs/2026-09-29-health-and-damage-design.md`)
+## Damage (`docs/superpowers/specs/2026-10-03-ship-damage-sections-design.md`)
+
+A ship takes damage as **six hull sections and four components** (`ShipDamage`, `Ship.damage`).
+They are the truth; each block's `damage` in the grid is their view, written by
+`Ship._apply_view()` after every change.
 
 | API | Does |
 |---|---|
-| `BlockInstance.damage` | hp lost; 0 intact. Only `BlockDamage` writes it |
-| `BlockDamage.stage_of(inst, def)`, `stage_at(damage, hp)` | `INTACT` < 0.5 hp, `DAMAGED` < 1.0, `WRECKED` < 1.5, `GONE`; `output_of(stage)` 1, 0.5, 0, 0 |
-| `BlockDamage.apply(grid, catalog, coord, hp, held)` / `apply_many(grid, catalog, {coord: hp}, held)` | deals damage; `held` (coord -> true) is the cabin's shell, wrecked but never knocked off; `grid.block_staged(coord, stage)` on a stage change; removes the gone and anything cut off from the core in one `ShipGrid.remove_many` (one rebuild); returns what went |
-| `BlockDamage.repair(...)`, `rebuild(grid, catalog, coord, id, orientation)` | mends; puts a block back at `WRECKED_AT` × hp |
-| `BlockDamage.KEEP` | `core`, `pilot_seat`, `airlock`: never knocked off |
-| `Ship.inner_cells`, `Ship.inner_of(layout, catalog)` | the cabin's shell, from the launch layout: walkable cells and every block beside one. Passed as `held` to `BlockDamage.apply_many`: wrecked, never knocked off, and no loss may cut any of it off. `set_grid` puts missing shell blocks back, wrecked |
-| `DamageShow.spitting()`, `spitting_inside()` | hull spits (damaged, from a face onto space) and cabin spits (damaged or wrecked, from the wall into the cabin, at `Ship._inside_face`), all in their parent's frame (`local_coords`), never in `Universe.HOLDS_SHIFT`. `SPARKS` 6 a spit, `SPARK_LIFE` 0.3 s, every `SPIT_EVERY` 0.8–2.5 s; a spark is a 1.5 × 5 cm unshaded box in `HullPalette.SPARK` |
-| `DamageShow.lost(coords)` | a block gone: a world-space burst (`BURST_SPARKS` 32, 2 s, holds the shift) and 3–5 charred chunks in `EXTERIOR_SPACE`, freed after 2 s, at up to `MAX_BURSTS` 4 cells |
-| `Ship._queue_rebuild()` | a stage seen from inside (`InteriorBuilder.shows`): one deferred interior rebuild (`_rebuild_everything(false)`), the hull left standing |
-| `ShipStats.intact_forward`, `intact_torque`, `crippled`, `crippled_reason` | crippled below 25% of intact forward thrust or any intact turning axis, or with no working `quantum_core` |
-| `ShipCells.hull_cell(grid, body, shape, p, n)`, `interior_cell(grid, p, n)`, `interior_cell_at(p)` | which block a hit lands on: a hull collider's meta `&"cell"`; the block 0.35 m behind an interior face, else the one in front |
-| `Ship.take_damage(cell, hp)`, `take_damage_many`, `crash_damage(knock)` | crashes: nothing below `CRASH_FROM` 2 m/s of knock, then `CRASH_K` 12 × (knock − 2)² on the struck cell and half on its neighbours, dealt after the physics step |
-| `Ship.blocks_lost(coords)`, `plate_shed(item)` | a burst and chunks (`DamageShow`); one `scrap_plate` from a block with a face onto space, adopted as a stray |
-| `Ship.launch_blueprint`, `launch_block(cell)`, `launch_of(d)` | the layout it launched with, nothing hurt, saved as `"launch"`; what the torch rebuilds |
-| `Ship.cell_hit`, `missing_cell_along`, `repair_cell`, `rebuild_cell`, `cell_label`, `hull_whole()` | the repair torch's side, and HULL % in the band |
-| `Ship.wake_spots()` | where you wake after blacking out: the bunk room's cells first |
-| `ExteriorBuilder.set_stage(coord, stage)`, `stage_colour(stage)`, `instance_colour(coord)`, `skin_spans(coord)` | the cell's skin multiplied by `HullPalette.UNHURT` (white) / `SCORCH` / `CHAR`: the plating's vertex colour is the stage colour, trim and glass their colour times it; glows, lenses and beams stay lit. In place: the cell's vertices are recoloured in the kept arrays and the touched surfaces re-added to the same `ArrayMesh`es once at the end of the frame. On the starter (GTX 960 box) `set_stage` 0.03–0.08 ms, the upload 1.3–1.9 ms, five stages in one frame 1.4 ms; re-dressing the skin would be 53 ms. The alcove is not tinted |
-| `InteriorKit.wear`, `InteriorBuilder.wear_at(coord, normal)`, `shows(coord)` | interior dressing leans toward `InteriorPalette.SCORCH` / `CHAR`; a wreck's glow goes dark, except a wrecked ceiling light |
-| `BlockDamage.flickers(inst, def)`, `FLICKER_AT` 0.8; `InteriorBuilder.flicker_at(coord, normal)`; `InteriorKit.flicker` | a ceiling light flickers under 20% of its block's health, late in damaged and all through wrecked. Crossing 20% is no stage change, so `Ship.take_damage_many` and `repair_cell` queue the interior rebuild themselves (`_reflicker`) |
-| `LightFlicker.attach(lamp, disc, material)`, `level_at(t, phase)` | a flickering ceiling light (`InteriorProps.ceiling_light` with `kit.flicker`): its disc is its own mesh with its own copy of the glow material, and the lamp and disc sit at `DIM` 0.1 with a burst at full every `CYCLE` 3 s (none in a `QUIET` quarter), ~93% of the time dim. Gone when the interior is rebuilt mended |
+| `ShipDamage.build(launch_layout, catalog, held)` | the model, from the launch layout (so it never changes as pieces come and go). Sections: the z span in thirds, bow and then stern taking a row that does not divide; port x < centre, starboard x > centre; a centre-line block is in **both** of its third. Components: `engines` (every `thruster`, as one), `quantum_core`, `computer`, `cockpit` (`pilot_seat` + every `canopy`); everything else is a hull block |
+| `section_hp`, `section_damage`, `health(id)`, `hull_whole()` | a section's hp is its blocks' (a centre-line block half each side); health 1 → 0; HULL % is hp-weighted |
+| `component_hp`, `component_damage`, `component_health`, `component_stage(id)` | hp is its blocks', at least `COMPONENT_HP_MIN` (computer and cockpit 300); damaged under half, wrecked at 0. A component's blocks are never knocked off |
+| `hit(coord, amount, side_x)` | to the block's component, else its section; a centre-line hit to the side `side_x` says (< 0 port), half each at 0. Capped at hp |
+| `repair_section(id, share)`, `repair_component(id, hp)`, `part_of(coord, side_x)`, `label(part)` | the torch's side |
+| `shown_damage(coord)` | a component's blocks its share; a hull block its section's share × (`SHELTERED` 0.6 + `EXPOSED` 1.8 × exposure), exposure from open faces with `PATCHY` 0.3 of it chance, so a section scorches in patches, worst at its edges |
+| `pieces[id]`, `lost()`, `lost_count(id)`, `BREAK_BELOW` 0.5 | the pieces that break away: `STRUCTURE` blocks (plating, fairings) outside the shell whose loss with all the others cuts nothing off, most exposed first. Below half health a section loses them in that order, all at 0; welded up they come back in reverse |
+| `ShipDamage.degrades(block_id)` | only a component's blocks lose function in `ShipStats`: hull damage is looks and pieces, so RCS, cells and rooms always work |
+| `ShipDamage.cabin_level(hull)` | 0 over 50% HULL, 1 to 20% (scorched, `DamageShow.CABIN_SPITS` 3), 2 under (charred, 8 spits, every ceiling light flickers) |
+| `to_dict()`, `from_dict(d)`, `infer(grid)` | saved as the ship's `"damage"`; `set_grid` infers it from the grid's block damage first (a save from before sections), then `restore_aboard` takes the saved one |
+| `Ship.take_damage(cell, hp)`, `take_damage_many(hits, sides)` | route through the model, then `_apply_view()`: stages via `block_staged`, pieces removed and put back in one `ShipGrid.replace_many` (one rebuild); returns what went |
+| `Ship.part_hit(collider, shape, at, normal)`, `repair_section`, `repair_component`, `part_label(part)`, `missing_cell_along` | the torch: a section only from outside, `RepairTorch.SECTION_RATE` 4% a second for `SECTION_SCRAP` 100 a whole section (25 s, one plate); from inside *HULL 45% · WELD FROM OUTSIDE*; a component where it is at 25 hp/s, one scrap an hp. A hole is a piece of its section |
+| `BlockDamage.stage_at`, `stage_of`, `output_of`, `cut_off`, `KEEP` | stages by a block's share of its hp (`INTACT` < 0.5, `DAMAGED` < 1.0, `WRECKED` < 1.5); `apply_many`/`repair`/`rebuild` remain for the pure tests but the ship no longer calls them |
+| `Ship.inner_cells`, `Ship.inner_of(layout, catalog)` | the cabin's shell: never a piece, so the cabin keeps its shape |
+| `Ship._cabin_level`, `InteriorBuilder.hull_wear`, `hull_flicker`, `wear_at`, `flicker_at` | the cabin by HULL %, set before each rebuild; a face onto a component's block (the core, the computer, the helm) shows that component's own stage. Crossing 50% or 20% queues one interior rebuild |
+| `DamageShow.stage`, `cabin(level, walls)`, `lost(coords)`, `spitting()`, `spitting_inside()` | a damaged hull block spits from its face onto space; `CABIN_SPITS` of the shell's walls spit into the cabin; a lost piece bursts (world-space, 2 s, holds the shift) with chunks in `EXTERIOR_SPACE`. Spits are in their parent's frame, never in `Universe.HOLDS_SHIFT`; a spark is a 1.5 × 5 cm box living 0.3 s |
+| `ExteriorBuilder.set_stage(coord, stage)`, `stage_colour`, `instance_colour`, `skin_spans` | a cell's skin multiplied by `HullPalette.UNHURT` / `SCORCH` / `CHAR`, in place (~1.5 ms a frame of changes) |
+| `InteriorKit.wear` (`WEAR_MIX` 0, 0.5, 0.7), `InteriorKit.flicker`, `LightFlicker` | the dressing leans toward `InteriorPalette.SCORCH` / `CHAR`; a flickering ceiling light sits at `DIM` 0.1 with a ragged burst at full every `CYCLE` 3 s, ~93% of the time dim |
+| `WarpDrive.computer`, `spool_time()`, `DAMAGED_SPOOL` 20 s; `WarpPlan.Status.OFFLINE` | a damaged computer spools a warp 20 s (its sound at half pitch); a wrecked one refuses: *WARP · COMPUTER OFFLINE* |
+| `ShipComputer.offline()`, `_glitch` | wrecked: screens and holo dark, every button *Offline*; damaged: the screen jumps to a scrambled page for 0.15 s every 1–3 s |
+| `FlightComputer.assist_strength`, `assist_allowed`; `CanopyCracks.level`; `VehicleTelemetry.hud_flicker` | a damaged cockpit: the assist chases at half its gain, a few cracks over the canopy view; wrecked: assist off and refused, more cracks, the HUD dims in bursts (`HudRoot._flicker`). Never stranded |
+| `StatusPage.damage_line(ctx)` | *HULL 64% · ENGINES DAMAGED* (a wreck before a damaged one), or *ALL SYSTEMS OK* |
+| `ShipStats.intact_forward`, `intact_torque`, `crippled`, `crippled_reason` | crippled below 25% of intact forward thrust or any turning axis, or with no working `quantum_core`: wrecked engines or core |
+| `ShipCells.hull_cell`, `interior_cell`, `interior_cell_at` | which block a hit lands on |
+| `Ship.crash_damage(knock)` | nothing below `CRASH_FROM` 2 m/s, then `CRASH_K` 5.5 × (knock − 2)² on the struck cell and half on each neighbour, dealt after the physics step |
+| `Ship.blocks_lost(coords)`, `plate_shed(item)`, `wake_spots()`, `launch_blueprint` | as before: chunks and a plate from a lost piece; where you wake; the launch layout |
 
-Measured on the starter (crash probe, `test/probes/crash_probe.gd`, with the cabin's shell held,
-2026-10-02): 3 m/s nose-on hurts 3 blocks a little; 5 m/s damages 2 and wrecks 1, nothing
-knocked off; 8 m/s knocks 3 buffer blocks off. Not crippled by any. The buffer is 49 of 110
-blocks. A full rebuild is ~220 ms and an interior-only one ~125 ms (headless, dev Xeon).
+The starter (probe, 2026-10-03): sections port/starboard bow 1,430/1,490 hp with 3 pieces each,
+midship 1,965/2,005 with 6, stern 2,760 with 12; engines 750, core 250, computer 300, cockpit
+300. Crashes nose on (crash probe): 3 m/s takes the struck bow section and the cockpit to 99%,
+5 m/s to 92%, 8 m/s to 67%, no pieces off, not crippled. A section's pieces going at once costs
+one full rebuild, ~220 ms (headless, dev Xeon).
 
-On a world, the solid ground round the hull (`WorldSurface`'s chunks, `StaticBody3D`s on
-`BodyProxy.LAYER`) reaches `_on_hull_struck` like any body, so hitting the ground is a crash.
-The floor that lifts a hull out from under the ground (`WorldSurface.floor_fired`) deals
-nothing: it is a safety net against tunnelling, not a contact, so never rely on it to hurt a ship.
+On a world, the solid ground round the hull (`WorldSurface`'s chunks on `BodyProxy.LAYER`) is a
+crash like any body. The floor that lifts a hull out from under the ground deals nothing.
 
-A `quantum_cell` holds its 400 QE times its stage's output: half when damaged, none when wrecked.
-That is the store's `capacity`, so damaged cells stop it taking more; but what it holds is kept,
-up to `QuantumStore.most` (`ShipStats.intact_quantum_capacity`, every cell intact), on a rebuild
-and on loading a save. `room()` is never below 0 and `overfull()` says it holds more than its
-cells can. Pass the intact figure to `set_capacity(capacity, intact)` and `QuantumStore.new`, or a
-hit loses the energy. The low-power line (10% of capacity) moves with the capacity. The torch's
-prompt names a block's health as `40% H`, then its stage.
+A `quantum_cell` no longer takes damage of its own, so the store's capacity holds. The store still
+keeps up to `QuantumStore.most` if its capacity ever drops; pass the intact figure to
+`set_capacity(capacity, intact)`.
 
 ## The warp (`docs/superpowers/specs/2026-09-28-warp-design.md`)
 
@@ -575,11 +580,11 @@ solid under it with no wiring. A ghosted hull (mask 0, at warp) is never lifted.
   compiles shaders. In a worktree, give the worktree's copy of the script.
 - **The full suite** takes about 8 minutes: run it in the background, logged to a file.
 - **Damage probes** (`who-knows/test/probes/`, run like the ship probe):
-  - `damage_review.gd`: the renders to show the owner for any damage work (step 10);
-  - `damage_render.gd`: an interior wall intact, damaged and wrecked at eye height, and a block
-    knocked off;
-  - `torch_render.gd`: the repair torch in hand and welding;
-  - `crash_probe.gd` (headless is fine): nose-on crashes at 3, 5 and 8 m/s and the rebuild cost.
+  - `damage_review.gd`: the renders to show the owner for any damage work (step 10): the port
+    sections at 70%, 35% and 0% from outside, the cabin at 60%, 35% and 15% HULL;
+  - `torch_render.gd`: the repair torch in hand and welding the quantum core;
+  - `crash_probe.gd` (headless is fine): nose-on crashes at 3, 5 and 8 m/s, what each section
+    and component took, and the cost of a section's pieces going at once.
 - **Rendering without a GPU** (a cloud session): `xvfb-run -a -s "-screen 0 1280x720x24" <godot>
   --rendering-method gl_compatibility --rendering-driver opengl3 ...` renders through Mesa
   llvmpipe. Flatter than the owner's GPU, and an unlit hull is near-black: fill-light it.

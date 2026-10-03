@@ -1,6 +1,6 @@
 # Ship damage by sections and components — design
 
-**Status:** proposed, 2026-10-03. Amends `2026-09-29-health-and-damage-design.md` §4, §5.1,
+**Status:** approved and built, 2026-10-03 (as-built notes in §11). Amends `2026-09-29-health-and-damage-design.md` §4, §5.1,
 §8 and §9 for ships; your own health, NPCs, the pistol, the torch as an item and scrap plates
 are unchanged.
 
@@ -45,7 +45,7 @@ Ids and labels: `&"port_bow"` *PORT BOW*, `&"starboard_bow"`, `&"port_mid"` *POR
 Every block that is not part of a component is a **hull block** and belongs to its sections,
 whatever it is (hull, fairings, decks, rooms, RCS, cells, the core block). A section's **hp** is
 the sum of its blocks' `hp` (a centre-line block counts half on each side). On the starter that is
-about 1,800–2,800 per section.
+1,430–2,760 per section (§11).
 
 **Health** is `1 − damage / hp`, from 1 (whole) to 0. **HULL %** is the hp-weighted mean of
 the six, as the HUD band already shows (`Ship.hull_whole()`, now from the sections).
@@ -166,3 +166,25 @@ the grid is re-derived, which puts back any buffer piece the section's health sa
 
 Damage to RCS, cells or rooms; per-section effects on flight; repairing a section from inside;
 NPCs repairing; a ship-wide damage screen on the computer beyond the status line.
+
+## 11. As built (2026-10-03)
+
+- **The starter's sections** (ship probe): port/starboard bow 1,430/1,490 hp with 3 pieces each,
+  midship 1,965/2,005 with 6, stern 2,760 with 12. Components: engines 750, core 250, computer
+  300, cockpit 300.
+- **Crashes** (crash probe): `CRASH_K` went from 12 to **5.5**, so 8 m/s nose on takes the
+  struck bow section and the cockpit to 67%; 5 m/s to 92%; 3 m/s to 99%. No pieces off, never
+  crippled.
+- **The scorch in patches** (§4): a block shows its section's share × (0.6 + 1.8 × exposure),
+  exposure being 70% open faces and 30% seeded chance. The first renders, at 1 + 1.8 ×
+  exposure with almost no chance, darkened a whole side evenly at 70%.
+- **The cabin's scorch** (§5): `InteriorKit.WEAR_MIX` for damaged went from 0.35 to **0.5**: at
+  35% HULL the corridor read the same as at 60%.
+- **The torch** mends a hole as part of its section; there is no separate rebuild any more
+  (`REBUILD_COST`/`REBUILD_TIME` are gone). From inside, aimed at the hull, the prompt reads
+  *HULL 45% · WELD FROM OUTSIDE*.
+- **A wrecked cockpit** turns the assist off; mending it lets the assist be turned back on (it
+  does not come back on by itself).
+- **The damaged computer's spool sound** plays at half pitch, so it lasts the 20 s spool.
+- **Saving** adds `"damage"` to the ship's part; a load infers the sections from the grid first,
+  so an older save converts with no version change.

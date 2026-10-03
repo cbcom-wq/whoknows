@@ -32,9 +32,11 @@ const BLAST_EVERY := 0.5
 const BLAST_REACH := 50.0
 ## A crash (health and damage spec §5.2): nothing below CRASH_FROM m/s of
 ## knock, then CRASH_K × (knock − CRASH_FROM)² on the struck cell and half that
-## on each face neighbour. First values for the feel pass.
+## on each face neighbour, summed into the sections and components they are
+## part of. Tuned so 8 m/s nose on takes a third of the struck section (ship
+## damage sections spec §3; the crash probe).
 const CRASH_FROM := 2.0
-const CRASH_K := 12.0
+const CRASH_K := 5.5
 ## What a block knocked off the outside sheds, how far out and how fast.
 const SHED_ITEM := &"scrap_plate"
 const SHED_OUT := 1.4
@@ -228,8 +230,9 @@ func _ready() -> void:
 	exterior.set_meta(&"ship", self)
 	add_to_group(GROUP)
 	flight_computer.hull_status = func() -> Array:
+		var cockpit := damage.component_stage(&"cockpit") if damage != null else BlockDamage.Stage.INTACT
 		return [hull_whole(), stats.crippled_reason if stats != null else "",
-			damage != null and damage.component_stage(&"cockpit") == BlockDamage.Stage.WRECKED]
+			cockpit == BlockDamage.Stage.WRECKED, mini(int(cockpit), 2)]
 
 ## Every window's glass shows this ship's own canopy view (cockpit pod spec
 ## §3): one material per ship, fed by its own SubViewport, so each instance of
@@ -723,19 +726,12 @@ func _rebuild_everything(hull := true) -> void:
 	_apply_livery()
 
 ## The cockpit's stage reaches the helm (ship damage sections spec §2.2):
-## damaged, the assist chases at half strength and the canopy cracks; wrecked,
-## the assist is off and refused, and more cracks.
+## damaged, the assist chases at half strength; wrecked, it is off and refused.
+## The cracks and the HUD's flicker go by hull_status to the HUD.
 func _apply_cockpit() -> void:
 	var stage := damage.component_stage(&"cockpit") if damage != null else BlockDamage.Stage.INTACT
 	flight_computer.assist_strength = 0.5 if stage == BlockDamage.Stage.DAMAGED else 1.0
 	flight_computer.assist_allowed = stage != BlockDamage.Stage.WRECKED
-	var cracks := canopy_overlay.get_node_or_null("Cracks") as CanopyCracks if canopy_overlay != null else null
-	if cracks == null and canopy_overlay != null:
-		cracks = CanopyCracks.new()
-		cracks.name = "Cracks"
-		canopy_overlay.add_child(cracks)
-	if cracks != null:
-		cracks.level = 0 if stage == BlockDamage.Stage.INTACT else (1 if stage == BlockDamage.Stage.DAMAGED else 2)
 
 ## Keeps each bridge computer's page, range and selection across a rebuild,
 ## which frees the dressing and every table in it (bridge computer spec §10).

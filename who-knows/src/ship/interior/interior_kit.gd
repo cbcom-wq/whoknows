@@ -75,7 +75,7 @@ var wear := 0
 var flicker := false
 
 ## How far each wear leans toward its colour.
-const WEAR_MIX := [0.0, 0.35, 0.7]
+const WEAR_MIX := [0.0, 0.5, 0.7]
 
 func _init(root_node: Node3D, collision_body: CollisionObject3D = null,
 		portal: Material = null) -> void:

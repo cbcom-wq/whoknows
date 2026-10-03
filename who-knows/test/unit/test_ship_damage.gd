@@ -87,8 +87,8 @@ func test_a_bolt_on_an_interior_wall_hurts_the_hull_a_little():
 func test_crash_damage_curve():
 	assert_eq(Ship.crash_damage(1.0), 0.0)
 	assert_eq(Ship.crash_damage(Ship.CRASH_FROM), 0.0, "docking bumps are free")
-	assert_almost_eq(Ship.crash_damage(5.0), 108.0, 0.001)
-	assert_almost_eq(Ship.crash_damage(8.0), 432.0, 0.001)
+	assert_almost_eq(Ship.crash_damage(5.0), 49.5, 0.001)
+	assert_almost_eq(Ship.crash_damage(8.0), 198.0, 0.001, "about a third of a section, nose on (crash probe)")
 
 func test_a_crash_lands_on_the_cell_and_half_on_its_neighbours():
 	var cell := _outer_hull()

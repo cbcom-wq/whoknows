@@ -32,6 +32,11 @@ var _tween: Tween = null
 
 func _ready() -> void:
 	_screen.modulate.a = 0.0
+	# A hurt cockpit's cracks, under everything else on the screen.
+	var cracks := CanopyCracks.new()
+	cracks.name = "CanopyCracks"
+	_screen.add_child(cracks)
+	_screen.move_child(cracks, 0)
 
 ## Walks the whole subtree fresh each call. Elements may be nested inside
 ## layout containers, so a direct-children scan would miss them. Re-walking

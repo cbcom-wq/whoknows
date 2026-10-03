@@ -365,24 +365,22 @@ func _run(scene: Node) -> void:
 	var s := ShipStats.compute(ship.grid, ship.catalog)
 	print("mass    %.1f t, centre of mass %s" % [s.total_mass_kg / 1000.0, s.center_of_mass])
 	print("power   %.1f MW made, %.1f MW drawn" % [s.power_gen, s.power_draw])
-	# Damage (health and damage spec §4): what it can take, whether it is
-	# crippled before anything hits it, and the most one block's loss cuts off.
-	var total_hp := 0
-	var worst_cut := 0
-	var buffer := 0
-	for coord: Vector3i in ship.grid.coords():
-		var def := ship.catalog.get_def(ship.grid.get_block(coord).block_id)
-		if def == null:
-			continue
-		total_hp += def.hp
-		if not ship.inner_cells.has(coord) and not BlockDamage.KEEP.has(def.id):
-			buffer += 1
-		if not BlockDamage.KEEP.has(def.id):
-			var cut := BlockDamage.cut_off(ship.grid, [coord] as Array[Vector3i]).size()
-			worst_cut = maxi(worst_cut, cut)
-	print("damage  intact hp %d, crippled as built %s, buffer %d of %d can break away, one loss cuts off at most %d%s" % [
-		total_hp, "no" if not s.crippled else "YES: " + s.crippled_reason, buffer, ship.grid.size(), worst_cut,
-		"" if worst_cut <= 2 else "  <-- FRAGILE"])
+	# Damage (ship damage sections spec): its six sections' hp and the pieces
+	# each can lose, the four components, and whether it is crippled before
+	# anything hits it. A section with no pieces never shows a hole.
+	var d := ship.damage
+	var parts := []
+	var bare := []
+	for id in ShipDamage.SECTIONS:
+		parts.append("%s %d/%d" % [id, roundi(d.section_hp[id]), d.pieces[id].size()])
+		if d.pieces[id].is_empty():
+			bare.append(id)
+	var comps := []
+	for comp: StringName in ShipDamage.COMPONENTS:
+		comps.append("%s %s" % [comp, ("%d" % roundi(d.component_hp[comp])) if d.has_component(comp) else "none"])
+	print("damage  sections (hp/pieces) %s; components (hp) %s; crippled as built %s%s" % [
+		", ".join(parts), ", ".join(comps), "no" if not s.crippled else "YES: " + s.crippled_reason,
+		"" if bare.is_empty() else "  <-- NO PIECES: %s" % ", ".join(bare)])
 	var reach_km := (s.quantum_capacity - WarpPlan.WARP_BASE) * WarpPlan.WARP_M_PER_QE / 1000.0
 	print("warp    reach %.0f km on a full store (%d QE); drive %s" % [reach_km, s.quantum_capacity,
 		"yes" if ship.warp != null else "MISSING"])

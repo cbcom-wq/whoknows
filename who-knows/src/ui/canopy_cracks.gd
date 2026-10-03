@@ -1,9 +1,10 @@
 class_name CanopyCracks
-extends Control
+extends HudElement
 
-## Cracks over the canopy view of a hurt cockpit (ship damage sections spec
-## §7): flat lines in a palette colour, no new shader. `level` 1 (damaged)
-## draws a few from the corners; 2 (wrecked) more, across the glass. The same
+## Cracks over the pilot's view of a hurt cockpit (ship damage sections spec
+## §7): flat lines in a palette colour, no new shader, on the HUD's screen
+## (HudRoot adds one), so the seated view through the pod's glass shows them.
+## `level` 1 (damaged) draws a few from the edges; 2 (wrecked) more. The same
 ## cracks every time: they are seeded.
 
 const COLOUR := Color(HudPalette.READOUT, 0.55)
@@ -20,6 +21,9 @@ var level := 0:
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+func render(telemetry: VehicleTelemetry) -> void:
+	level = telemetry.cockpit_cracks if telemetry != null else 0
 
 func _draw() -> void:
 	var rng := RandomNumberGenerator.new()
