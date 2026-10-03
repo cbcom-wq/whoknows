@@ -203,6 +203,8 @@ func _ready() -> void:
 	warp.hull = exterior
 	warp.plant = quantum
 	warp.flight_computer = flight_computer
+	warp.computer = func() -> int:
+		return damage.component_stage(&"computer") if damage != null else BlockDamage.Stage.INTACT
 	add_child(warp)
 	flight_computer.warp = warp
 	quantum.warp = warp
@@ -226,7 +228,8 @@ func _ready() -> void:
 	exterior.set_meta(&"ship", self)
 	add_to_group(GROUP)
 	flight_computer.hull_status = func() -> Array:
-		return [hull_whole(), stats.crippled_reason if stats != null else ""]
+		return [hull_whole(), stats.crippled_reason if stats != null else "",
+			damage != null and damage.component_stage(&"cockpit") == BlockDamage.Stage.WRECKED]
 
 ## Every window's glass shows this ship's own canopy view (cockpit pod spec
 ## §3): one material per ship, fed by its own SubViewport, so each instance of
@@ -545,6 +548,7 @@ func _on_block_staged(coord: Vector3i, stage: int) -> void:
 	damage_show.stage(grid, coord, stage)
 	if damage == null or not damage.component_of.has(coord):
 		return   # a hull block's stage is looks only (ship damage sections spec §2.3)
+	_apply_cockpit()
 	if interior_builder.shows(coord):
 		# The dressing is merged meshes, so one cell can't be recoloured: the
 		# ship is rebuilt, once, at the end of the frame (as built, spec §4.3).
@@ -706,6 +710,7 @@ func _rebuild_everything(hull := true) -> void:
 		for panel in interior_builder.lights_panels():
 			panel.bind(lights)
 	_bind_computers()
+	_apply_cockpit()
 	if rcs_show != null:
 		rcs_show.rebuild(grid, catalog, stats.center_of_mass)
 	stats_changed.emit(stats)
@@ -716,6 +721,21 @@ func _rebuild_everything(hull := true) -> void:
 	_bind_crew()
 	_apply_own()
 	_apply_livery()
+
+## The cockpit's stage reaches the helm (ship damage sections spec §2.2):
+## damaged, the assist chases at half strength and the canopy cracks; wrecked,
+## the assist is off and refused, and more cracks.
+func _apply_cockpit() -> void:
+	var stage := damage.component_stage(&"cockpit") if damage != null else BlockDamage.Stage.INTACT
+	flight_computer.assist_strength = 0.5 if stage == BlockDamage.Stage.DAMAGED else 1.0
+	flight_computer.assist_allowed = stage != BlockDamage.Stage.WRECKED
+	var cracks := canopy_overlay.get_node_or_null("Cracks") as CanopyCracks if canopy_overlay != null else null
+	if cracks == null and canopy_overlay != null:
+		cracks = CanopyCracks.new()
+		cracks.name = "Cracks"
+		canopy_overlay.add_child(cracks)
+	if cracks != null:
+		cracks.level = 0 if stage == BlockDamage.Stage.INTACT else (1 if stage == BlockDamage.Stage.DAMAGED else 2)
 
 ## Keeps each bridge computer's page, range and selection across a rebuild,
 ## which frees the dressing and every table in it (bridge computer spec §10).
@@ -734,6 +754,7 @@ func _bind_computers() -> void:
 		context.hull = exterior
 		context.exterior_builder = exterior_builder
 		context.warp = warp
+		context.damage = damage
 		c.bind(context)
 		if _computer_state.has(c.cell):
 			c.restore(_computer_state[c.cell])

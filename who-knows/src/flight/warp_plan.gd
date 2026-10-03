@@ -11,7 +11,7 @@ extends RefCounted
 ## too little QE, the nose off the line; else ready. Where you are comes from
 ## Whereabouts (`inside`), never worked out here.
 
-enum Status { NONE, CREW, AIRLOCK, INSIDE, CLOSE, BLOCKED, LOW_POWER, NO_QE, ALIGN, READY }
+enum Status { NONE, CREW, AIRLOCK, INSIDE, CLOSE, BLOCKED, LOW_POWER, NO_QE, ALIGN, READY, OFFLINE }
 
 const WARP_BASE := 40
 ## One QE for every this many metres of travel (the world scale spec §3.4):
@@ -70,6 +70,9 @@ static func check(from: UniversePoint, nose: Vector3, p_target: WarpTarget, targ
 	if busy == &"airlock":
 		p.status = Status.AIRLOCK
 		return p
+	if busy == &"computer":
+		p.status = Status.OFFLINE
+		return p
 	if inside.has(p_target.id) or p.distance < MIN_TRAVEL:
 		p.status = Status.CLOSE
 		return p
@@ -112,6 +115,8 @@ func text() -> String:
 			return "WARP · CREW OUTSIDE"
 		Status.AIRLOCK:
 			return "WARP · AIRLOCK CYCLING"
+		Status.OFFLINE:
+			return "WARP · COMPUTER OFFLINE"
 		Status.INSIDE:
 			return "CLEAR OF %s IN %.1f KM" % [blocker.name, clear_in / 1000.0]
 		Status.CLOSE:

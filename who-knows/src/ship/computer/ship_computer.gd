@@ -29,6 +29,11 @@ var page_index := 0
 var ctx := ComputerContext.new()
 
 var _label: Label3D
+## A damaged table's screens glitch now and then (ship damage sections spec §7).
+const GLITCH_EVERY := Vector2(1.0, 3.0)
+const GLITCH_FOR := 0.15
+var _glitch_in := 1.0
+var _glitching := 0.0
 var _unseen_for := 0.0
 var _hum: AudioStreamPlayer3D
 var _blip: AudioStreamPlayer3D
@@ -87,7 +92,13 @@ func bind(context: ComputerContext) -> void:
 	holo.clear_miniature()
 	_refresh()
 
+## Wrecked, the table is dark (ship damage sections spec §2.2).
+func offline() -> bool:
+	return ctx.computer_stage() == BlockDamage.Stage.WRECKED
+
 func press(button: StringName) -> void:
+	if offline():
+		return
 	if button == &"page":
 		if pages.size() > 1:
 			page_index = (page_index + 1) % pages.size()
@@ -105,6 +116,8 @@ func press(button: StringName) -> void:
 ## What pressing `button` would do, or "" when it would do nothing: the
 ## Interactor passes over a dark button.
 func prompt(button: StringName) -> String:
+	if offline():
+		return "Offline"
 	if button == &"page":
 		return "Next page" if pages.size() > 1 else ""
 	if not page().lit(ctx).has(button):
@@ -135,6 +148,7 @@ func _on_pressed(role: StringName, panel: ReadoutPanel) -> void:
 func _process(delta: float) -> void:
 	ctx.time += delta
 	_unseen_for += delta
+	_glitch(delta)
 	if _seen():
 		update(_unseen_for)
 		_unseen_for = 0.0
@@ -145,8 +159,34 @@ func _process(delta: float) -> void:
 
 ## Redraws the holo and the rim, `delta` seconds since the last time.
 func update(delta: float) -> void:
-	page().holo(holo, ctx, delta)
+	if not offline():
+		page().holo(holo, ctx, delta)
 	_refresh()
+
+## Damaged, now and then the screen jumps for GLITCH_FOR to another page's
+## title and lines, scrambled.
+func _glitch(delta: float) -> void:
+	if ctx.computer_stage() != BlockDamage.Stage.DAMAGED:
+		_glitching = 0.0
+		return
+	if _glitching > 0.0:
+		_glitching -= delta
+		if _glitching <= 0.0:
+			_refresh()
+		return
+	_glitch_in -= delta
+	if _glitch_in > 0.0:
+		return
+	_glitch_in = randf_range(GLITCH_EVERY.x, GLITCH_EVERY.y)
+	_glitching = GLITCH_FOR
+	var other := pages[randi() % pages.size()]
+	var shown := PackedStringArray([other.title()])
+	shown.append_array(other.lines(ctx))
+	var text := "\n".join(shown)
+	for i in text.length():
+		if text[i] != "\n" and text[i] != " " and randf() < 0.3:
+			text[i] = char(33 + randi() % 60)
+	_label.text = text
 
 ## Whether anyone can see the table: the holo and the rim are redrawn only
 ## then. The 30 km map places hundreds of marks, and nobody at the helm or
@@ -166,6 +206,12 @@ func _seen() -> bool:
 	return false
 
 func _refresh() -> void:
+	holo.visible = not offline()
+	if offline():
+		_label.text = ""
+		for button: StringName in BUTTONS:
+			panels[button].set_readout(PackedStringArray(), &"")
+		return
 	var p := page()
 	var shown := PackedStringArray([p.title()])
 	shown.append_array(p.lines(ctx))

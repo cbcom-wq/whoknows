@@ -13,6 +13,9 @@ var hull: Node3D
 var exterior_builder: ExteriorBuilder
 ## The warp drive, for the map's SYSTEM range (the warp spec §7); null in tests.
 var warp: WarpDrive
+## The ship's damage, for the status page and the table's own state (ship
+## damage sections spec §7); null in tests.
+var damage: ShipDamage
 ## Whoever last pressed one of the table's buttons.
 var operator: Node
 var time := 0.0
@@ -34,3 +37,7 @@ func relative_in(frame: Transform3D, point: UniversePoint) -> Vector3:
 	if sensors == null or sensors.universe == null or hull == null or point == null:
 		return Vector3.ZERO
 	return frame * sensors.universe.to_engine(point)
+
+## The bridge computer's stage (BlockDamage.Stage): intact with no damage bound.
+func computer_stage() -> int:
+	return damage.component_stage(&"computer") if damage != null else BlockDamage.Stage.INTACT

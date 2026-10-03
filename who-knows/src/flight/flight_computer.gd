@@ -36,11 +36,21 @@ const HOLD_GAIN := 2.0
 
 @export var hull_path: NodePath
 
+## The share of RATE_GAIN the assist chases its rate with: half with a damaged
+## cockpit (ship damage sections spec §2.2), so turns start and stop sluggishly.
+var assist_strength := 1.0
+## False with the cockpit wrecked: the assist is off and refused.
+var assist_allowed := true:
+	set(on):
+		assist_allowed = on
+		if not on:
+			assist_enabled = false
+
 ## Turning assist off drops everything that needs it.
 var assist_enabled: bool = true:
 	set(on):
-		assist_enabled = on
-		if not on:
+		assist_enabled = on and assist_allowed
+		if not assist_enabled:
 			speed_locked = false
 			heading_hold = false
 
@@ -311,7 +321,7 @@ func attitude_torque(rotate_input: Vector3, local_angular_velocity: Vector3) -> 
 	if not assist_enabled:
 		return rotate_input * budget
 	var rate_error := rotate_input * ASSIST_TURN_RATE - local_angular_velocity
-	var wanted := rate_error * RATE_GAIN * inertia
+	var wanted := rate_error * RATE_GAIN * assist_strength * inertia
 	return Vector3(
 		clampf(wanted.x, -budget.x, budget.x),
 		clampf(wanted.y, -budget.y, budget.y),
@@ -379,5 +389,6 @@ func build_telemetry() -> VehicleTelemetry:
 		t.has_hull = true
 		t.hull = status[0]
 		t.crippled_reason = status[1]
+		t.hud_flicker = status.size() > 2 and bool(status[2])
 	t.tool_text = "BOOST −%d/S" % roundi(QuantumValues.BOOST_COST) if boosting else ""
 	return t

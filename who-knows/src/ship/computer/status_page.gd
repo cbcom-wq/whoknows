@@ -9,7 +9,19 @@ func title() -> String:
 	return "STATUS"
 
 func lines(ctx: ComputerContext) -> PackedStringArray:
-	return PackedStringArray([qe_line(ctx), power_line(ctx), suit_line(ctx)])
+	return PackedStringArray([qe_line(ctx), power_line(ctx), suit_line(ctx), damage_line(ctx)])
+
+## HULL % and the worst component (ship damage sections spec §7): "HULL 64% ·
+## ENGINES DAMAGED", a wreck before a damaged one, or "ALL SYSTEMS OK".
+static func damage_line(ctx: ComputerContext) -> String:
+	if ctx.damage == null:
+		return "HULL --"
+	var worst := ""
+	for wanted: int in [BlockDamage.Stage.WRECKED, BlockDamage.Stage.DAMAGED]:
+		for comp: StringName in ShipDamage.COMPONENTS:
+			if worst == "" and ctx.damage.has_component(comp) and ctx.damage.component_stage(comp) == wanted:
+				worst = "%s %s" % [ShipDamage.COMPONENT_LABELS[comp], BlockDamage.Stage.keys()[wanted]]
+	return "HULL %d%% · %s" % [roundi(ctx.damage.hull_whole() * 100.0), worst if worst != "" else "ALL SYSTEMS OK"]
 
 static func qe_line(ctx: ComputerContext) -> String:
 	if ctx.store == null:

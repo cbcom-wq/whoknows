@@ -79,6 +79,8 @@ var forward_on: bool = false
 var has_hull: bool = false
 var hull: float = 1.0
 var crippled_reason: String = ""
+## The cockpit is wrecked: the HUD flickers (ship damage sections spec §7).
+var hud_flicker := false
 
 ## Takes plain values rather than a body on purpose: it is the seam that lets
 ## every derivation here be tested headless, with no nodes and no physics

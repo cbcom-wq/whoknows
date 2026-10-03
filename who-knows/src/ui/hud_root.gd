@@ -88,6 +88,7 @@ func refresh() -> void:
 	for element in _descendants:
 		if is_instance_valid(element):
 			element.render(telemetry)
+	_flicker(telemetry != null and telemetry.hud_flicker)
 	# Purge freed registrants as we go, rather than re-testing a dead slot
 	# forever: is_instance_valid() alone would skip it every frame but never
 	# remove it.
@@ -97,6 +98,19 @@ func refresh() -> void:
 			element.render(telemetry)
 		else:
 			_registered.remove_at(i)
+
+## A wrecked cockpit's HUD drops out in short ragged bursts (ship damage
+## sections spec §7): the readouts dim to FLICKER_DIM while a LightFlicker
+## burst is on. Only the colour, so the fade's alpha is left alone.
+const FLICKER_DIM := 0.25
+
+func _flicker(on: bool) -> void:
+	if _screen == null:
+		return
+	var k := 1.0
+	if on and LightFlicker.level_at(Time.get_ticks_msec() / 1000.0, 0.37) >= 1.0:
+		k = FLICKER_DIM
+	_screen.modulate = Color(k, k, k, _screen.modulate.a)
 
 func _fade_to(alpha: float) -> void:
 	if _tween != null:
