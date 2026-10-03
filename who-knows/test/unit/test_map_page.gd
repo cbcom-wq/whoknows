@@ -504,10 +504,55 @@ func test_salvage_and_life_shrink_away_past_10_km_and_big_rocks_past_50_km():
 
 func test_a_mark_shrunk_away_is_not_placed():
 	_add(&"salvage:b", Contact.PING, Vector3(0, 0, -4000), 0.0, 4)
-	_page.range_index = 2
+	_page.restore({"scale": 25000.0})
 	_refresh()
 	_page.holo(_holo, _ctx, 0.0)
+	assert_false(_page.targets(_ctx).any(func(c: Contact) -> bool: return c.id == &"salvage:b"))
+	assert_false(_page.shown(_ctx).any(func(c: Contact) -> bool: return c.id == &"salvage:b"), "gone past 20 km")
 	assert_eq(_holo.mark_count(&"diamond"), 0)
+
+func test_a_mark_almost_shrunk_away_is_drawn_by_the_page_but_not_placed():
+	_add(&"salvage:b", Contact.PING, Vector3(0, 0, -4000), 0.0, 4)
+	_page.restore({"scale": 19900.0})
+	_refresh()
+	_page.holo(_holo, _ctx, 0.0)
+	assert_true(_page.shown(_ctx).any(func(c: Contact) -> bool: return c.id == &"salvage:b"), "still on the map")
+	assert_eq(_holo.mark_count(&"diamond"), 0, "smaller than SMALLEST, so not placed")
+
+## Spec §4.3: a rock past 50 km is not a target but is seen shrinking.
+func test_a_rock_inside_its_band_is_drawn_shrunk_and_is_not_a_target():
+	_add(&"rock:a", Contact.EXACT, Vector3(0, 0, -40000), 300.0)
+	_page.restore({"scale": 70000.0})
+	_refresh()
+	_page.holo(_holo, _ctx, 0.0)
+	assert_eq(_page.targets(_ctx).size(), 0, "not at full size")
+	assert_eq(_holo.mark_count(&"ball"), 1, "drawn")
+	var drawn := _holo.mark_transform(&"ball", 0).basis.get_scale().x
+	var full := MapPage.mark_size(_add_free_rock(300.0), 70000.0, 0.0)
+	assert_gt(drawn, 0.0)
+	assert_lt(drawn, full)
+	_page.restore({"scale": 45000.0})
+	_refresh()
+	_page.holo(_holo, _ctx, 0.0)
+	assert_almost_eq(_holo.mark_transform(&"ball", 0).basis.get_scale().x, full, 0.0001, "full size inside 50 km")
+
+## The course is always shown (§4.3 does not shrink it away).
+func test_the_course_does_not_shrink_away():
+	_add(&"rock:a", Contact.EXACT, Vector3(0, 0, -40000), 300.0)
+	_sensors.set_course(&"rock:a")
+	_page.restore({"scale": 150000.0})
+	_refresh()
+	_page.holo(_holo, _ctx, 0.0)
+	assert_eq(_holo.mark_count(&"ball", InteriorPalette.AMBER), 1, "the course, past its band")
+	assert_almost_eq(_holo.mark_transform(&"ball", 0, InteriorPalette.AMBER).basis.get_scale().x,
+		MapPage.ROCK_FAR, 0.0001, "at its full mark size")
+
+func _add_free_rock(radius: float) -> Contact:
+	var c := Contact.new()
+	c.kind = &"rock"
+	c.precision = Contact.EXACT
+	c.radius = radius
+	return c
 
 func test_targets_are_what_is_inside_the_holo_at_full_size():
 	_add(&"rock:near", Contact.EXACT, Vector3(0, 0, -8000), 300.0)

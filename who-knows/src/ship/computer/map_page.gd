@@ -112,6 +112,8 @@ var selected: StringName = &""
 
 var _targets: Array[Contact] = []
 var _targets_key := []
+var _shown: Array[Contact] = []
+var _shown_key := []
 ## When the marks were last placed, what they were placed for, and the map's
 ## frame then.
 var _placed_ago := INF
@@ -209,15 +211,42 @@ func targets(ctx: ComputerContext) -> Array[Contact]:
 		return _targets
 	var frame := ctx.map_frame()
 	var system_view := system_weight(scale_m) > 0.5
+	var centre := _centre(ctx, frame, scale_m)
 	for c in ctx.sensors.contacts(QUERY):
 		if system_view and not TARGET_KINDS.has(c.kind):
 			continue
 		if shrink(c, scale_m) < 0.999:
 			continue
-		if _from_centre(ctx, frame, c.point, scale_m).length() > scale_m + c.radius:
+		if (ctx.relative_in(frame, c.point) - centre).length() > scale_m + c.radius:
 			continue
 		_targets.append(c)
 	return _targets
+
+## What is drawn: every contact inside the holo at the scale shown that has
+## not shrunk away, nearest the ship first. Wider than targets(), which is only
+## what is at full size at the scale chosen, so a mark can be seen shrinking
+## across its band (spec §4.3) without ever being something ◀ and ▶ stop at.
+## Worked out once a frame.
+func shown(ctx: ComputerContext) -> Array[Contact]:
+	var key := [Engine.get_process_frames(), _shown_m, ctx.sensors]
+	if key == _shown_key:
+		return _shown
+	_shown_key = key
+	_shown = []
+	if ctx.sensors == null:
+		return _shown
+	var frame := ctx.map_frame()
+	var system_view := system_weight(_shown_m) > 0.5
+	var centre := _centre(ctx, frame, _shown_m)
+	for c in ctx.sensors.contacts(QUERY):
+		if system_view and not TARGET_KINDS.has(c.kind):
+			continue
+		if shrink(c, _shown_m) <= 0.0:
+			continue
+		if (ctx.relative_in(frame, c.point) - centre).length() > _shown_m + c.radius:
+			continue
+		_shown.append(c)
+	return _shown
 
 func selected_contact(ctx: ComputerContext) -> Contact:
 	for c in targets(ctx):
@@ -229,6 +258,7 @@ func selected_contact(ctx: ComputerContext) -> Contact:
 ## else the nearest.
 func reselect(ctx: ComputerContext) -> void:
 	_targets_key = []
+	_shown_key = []
 	var list := targets(ctx)
 	selected = &""
 	if list.is_empty():
@@ -353,7 +383,7 @@ func place_every() -> float:
 
 ## Places every mark afresh, in the map's frame as it is now.
 func _place(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D) -> void:
-	var list: Array[Contact] = targets(ctx).duplicate()
+	var list: Array[Contact] = shown(ctx).duplicate()
 	var course := ctx.sensors.course_contact() if ctx.sensors != null else null
 	if course != null and not list.any(func(c: Contact) -> bool: return c.id == course.id):
 		list.append(course)   # always shown, pinned if it must be
@@ -366,10 +396,12 @@ func _place(volume: HoloVolume, ctx: ComputerContext, frame: Transform3D) -> voi
 		var placed := _placed(ctx, frame, c.point)
 		var at: Vector3 = placed["position"]
 		var pinned: bool = placed["pinned"]
-		var size := PIN_SIZE if pinned else mark_size(c, _shown_m, time) * shrink(c, _shown_m)
+		var is_course := course != null and c.id == course.id
+		# The course is always shown, so it never shrinks away.
+		var size := PIN_SIZE if pinned else mark_size(c, _shown_m, time) * (1.0 if is_course else shrink(c, _shown_m))
 		if size < SMALLEST:
 			continue
-		var colour := InteriorPalette.AMBER if course != null and c.id == course.id else reach_colour(ctx, c)
+		var colour := InteriorPalette.AMBER if is_course else reach_colour(ctx, c)
 		if w > 0.5 and c.kind == &"cluster" and not pinned:
 			for o in [Vector3(-CLUMP, 0, 0), Vector3(CLUMP, 0, 0), Vector3(0, 0, CLUMP)]:
 				volume.add_mark(&"ball", colour, at + o, size)
@@ -461,12 +493,17 @@ func holo_position(ctx: ComputerContext, frame: Transform3D, point: UniversePoin
 ## `point` from the holo's centre, in the map's frame, at `scale`: the centre
 ## slides from the ship to the star as the scale grows (spec §4.2).
 func _from_centre(ctx: ComputerContext, frame: Transform3D, point: UniversePoint, scale: float) -> Vector3:
-	var rel := ctx.relative_in(frame, point)
+	return ctx.relative_in(frame, point) - _centre(ctx, frame, scale)
+
+## Where the holo's centre is at `scale`, from the ship, in the map's frame:
+## the ship's own place until the centre starts to slide, the star's at the end.
+## Worked out once for a loop over contacts, not once for each.
+func _centre(ctx: ComputerContext, frame: Transform3D, scale: float) -> Vector3:
 	var system := ctx.sensors.system if ctx.sensors != null else null
 	var w := system_weight(scale)
 	if w > 0.0 and system != null:
-		rel -= ctx.relative_in(frame, system.star.point) * w
-	return rel
+		return ctx.relative_in(frame, system.star.point) * w
+	return Vector3.ZERO
 
 func _placed(ctx: ComputerContext, frame: Transform3D, point: UniversePoint) -> Dictionary:
 	return HoloVolume.place(_from_centre(ctx, frame, point, _shown_m), _shown_m)
@@ -606,6 +643,7 @@ func restore(state: Dictionary) -> void:
 	_shown_m = scale_m
 	selected = StringName(state.get("selected", ""))
 	_targets_key = []
+	_shown_key = []
 	_placed_for = []
 
 ## Whether the big button does anything: a course can be set to, or cleared
