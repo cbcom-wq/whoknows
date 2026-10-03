@@ -122,7 +122,7 @@ func test_rolling_keeps_the_hold():
 	_pilot._process(0.016)
 	assert_true(_fc.heading_hold)
 
-func test_c_locks_the_speed():
+func test_x_locks_the_speed():
 	_hull.linear_velocity = Vector3(0.0, 0.0, -20.0)
 	_pilot.handle(_action(&"speed_lock", true))
 	assert_true(_fc.speed_locked)
@@ -132,6 +132,37 @@ func test_z_toggles_assist_and_drops_the_lock():
 	_pilot.handle(_action(&"toggle_assist", true))
 	assert_false(_fc.assist_enabled)
 	assert_false(_fc.speed_locked)
+
+## Holding C swings the chase camera round the ship; the mouse leaves the
+## stick alone, and letting go puts you back in the cockpit.
+func test_holding_c_orbits_the_camera_and_not_the_stick():
+	var director: CameraDirector = _root.get_node("CameraDirector")
+	director.sit_now(_root.get_node("Ship/Interior/PilotSeat"))
+	_pilot.handle(_motion(Vector2(30.0, 0.0)))
+	var stick := _pilot.stick.offset
+	var chase: Camera3D = _root.get_node("Ship/Exterior/ChaseCamera")
+	var rest := chase.transform
+	_pilot.handle(_action(&"orbit_camera", true))
+	assert_true(director.is_orbiting)
+	assert_true(chase.current, "you see the ship from outside")
+	_pilot.handle(_motion(Vector2(200.0, -80.0)))
+	assert_eq(_pilot.stick.offset, stick, "the stick did not move")
+	assert_false(chase.transform.origin.is_equal_approx(rest.origin), "the camera swung")
+	assert_almost_eq(chase.transform.origin.length(), rest.origin.length(), 0.001,
+		"it swings about the ship's centre")
+	_pilot.handle(_action(&"orbit_camera", false))
+	assert_false(director.is_orbiting)
+	assert_eq(director.view, CameraDirector.View.COCKPIT)
+	assert_true(chase.transform.is_equal_approx(rest), "the camera is back at rest")
+	_pilot.handle(_motion(Vector2(-30.0, 0.0)))
+	assert_ne(_pilot.stick.offset, stick, "the mouse flies again")
+
+func test_standing_up_ends_an_orbit():
+	var director: CameraDirector = _root.get_node("CameraDirector")
+	director.sit_now(_root.get_node("Ship/Interior/PilotSeat"))
+	_pilot.handle(_action(&"orbit_camera", true))
+	director.stand_now()
+	assert_false(director.is_orbiting)
 
 func test_nothing_happens_standing_up():
 	_pilot.set_seated(false)

@@ -12,7 +12,7 @@ const REQUIRED_ACTIONS := [
 	&"toggle_assist", &"cycle_camera",
 	&"use", &"throw", &"drop",
 	&"pitch_up", &"pitch_down", &"yaw_left", &"yaw_right",
-	&"point_mode", &"set_heading", &"speed_lock", &"toggle_controls",
+	&"point_mode", &"set_heading", &"speed_lock", &"orbit_camera", &"toggle_controls",
 	&"lights_flood", &"lights_forward",
 ]
 
@@ -67,13 +67,13 @@ func test_hand_actions_are_bound_to_the_mouse_and_g():
 	var drop_ev: InputEventKey = InputMap.action_get_events(&"drop")[0]
 	assert_eq(drop_ev.physical_keycode, KEY_G)
 
-## Flight controls spec §4: arrows turn, RMB points, LMB sets the heading, C
-## locks the speed, H shows the controls card.
+## Flight controls spec §4: arrows turn, RMB points, LMB sets the heading, X
+## locks the speed, C held orbits the camera, H shows the controls card.
 func test_flight_controls_are_bound_where_the_card_says():
 	var keys := {
 		&"pitch_up": KEY_UP, &"pitch_down": KEY_DOWN,
 		&"yaw_left": KEY_LEFT, &"yaw_right": KEY_RIGHT,
-		&"speed_lock": KEY_C, &"toggle_controls": KEY_H,
+		&"speed_lock": KEY_X, &"orbit_camera": KEY_C, &"toggle_controls": KEY_H,
 	}
 	for action in keys:
 		var ev: InputEventKey = InputMap.action_get_events(action)[0]

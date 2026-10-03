@@ -31,6 +31,10 @@ const SIT_DURATION := 0.75
 ## (computer mode spec §3.1), since tables are rebuilt and ships come and go.
 const GROUP := &"camera_director"
 const THIRD_PERSON_OFFSET := Vector3(0.5, 0.4, 2.5)
+## Holding C at the helm swings the chase camera around the ship: radians per
+## pixel of mouse travel, and how far over the top or under the keel it goes.
+const ORBIT_SENSITIVITY := 0.005
+const ORBIT_PITCH_LIMIT := deg_to_rad(80.0)
 
 @export var avatar_path: NodePath
 @export var flight_computer_path: NodePath
@@ -40,10 +44,19 @@ const THIRD_PERSON_OFFSET := Vector3(0.5, 0.4, 2.5)
 var view: View = View.FOOT_FIRST
 var is_seated: bool = false
 var is_at_station: bool = false
+## True while C is held at the helm: you look at the ship from outside and
+## the mouse swings the view, not the stick.
+var is_orbiting: bool = false
 
 var _seat: PilotSeat = null
 var _station: ComputerStation = null
 var _tween: Tween = null
+## The orbit: where the chase camera rests, the view to go back to, and how
+## far round it has swung.
+var _orbit_rest := Transform3D.IDENTITY
+var _orbit_return: View = View.COCKPIT
+var _orbit_yaw := 0.0
+var _orbit_pitch := 0.0
 
 @onready var _avatar: Avatar = get_node(avatar_path)
 @onready var _flight: FlightComputer = get_node(flight_computer_path)
@@ -166,8 +179,9 @@ static func ship_of(node: Node) -> Ship:
 	return node as Ship
 
 ## Points the views at `ship` (many ships spec §4.1): the flight computer you
-## let go of when you stand, and the chase camera C switches to.
+## let go of when you stand, and the chase camera V switches to.
 func bind(ship: Ship) -> void:
+	end_orbit()
 	_flight = ship.flight_computer
 	if _chase_cam == ship.chase_camera:
 		return
@@ -182,6 +196,7 @@ func bind(ship: Ship) -> void:
 func stand_now() -> void:
 	if not is_seated or _tween != null:
 		return
+	end_orbit()
 	is_seated = false
 	piloting_changed.emit(false)
 	_flight.clear_pilot_input()
@@ -195,6 +210,7 @@ func stand_now() -> void:
 func stand() -> void:
 	if not is_seated or _tween != null:
 		return
+	end_orbit()
 	is_seated = false
 	piloting_changed.emit(false)
 	_flight.clear_pilot_input()
@@ -240,8 +256,43 @@ func _on_transition_finished() -> void:
 	_apply_view()
 	transition_finished.emit()
 
+## Starts an orbit (C held at the helm): from the cockpit or the chase view,
+## you see through the chase camera, starting from where it rests.
+func begin_orbit() -> void:
+	if not is_seated or is_orbiting or _tween != null:
+		return
+	is_orbiting = true
+	_orbit_return = view
+	_orbit_rest = _chase_cam.transform
+	_orbit_yaw = 0.0
+	_orbit_pitch = 0.0
+	view = View.CHASE
+	_apply_view()
+
+## Swings the orbit by a mouse move: right swings the camera round to the
+## right, up raises it over the ship. The camera turns about the ship's centre,
+## so it keeps the ship framed as it was at rest.
+func orbit(relative: Vector2) -> void:
+	if not is_orbiting:
+		return
+	_orbit_yaw -= relative.x * ORBIT_SENSITIVITY
+	_orbit_pitch = clampf(_orbit_pitch - relative.y * ORBIT_SENSITIVITY,
+		-ORBIT_PITCH_LIMIT, ORBIT_PITCH_LIMIT)
+	var swing := Basis(Vector3.UP, _orbit_yaw) * Basis(Vector3.RIGHT, _orbit_pitch)
+	_chase_cam.transform = Transform3D(swing, Vector3.ZERO) * _orbit_rest
+
+## Lets go of C: the chase camera goes back to rest and you to the view you
+## were in.
+func end_orbit() -> void:
+	if not is_orbiting:
+		return
+	is_orbiting = false
+	_chase_cam.transform = _orbit_rest
+	view = _orbit_return
+	_apply_view()
+
 func cycle_view() -> void:
-	if _tween != null or is_at_station:
+	if _tween != null or is_at_station or is_orbiting:
 		return
 	if is_seated:
 		view = View.CHASE if view == View.COCKPIT else View.COCKPIT

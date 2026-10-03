@@ -30,7 +30,8 @@ func test_the_card_shows_each_rows_keys_from_the_input_map():
 		assert_eq(c.keys[i].text, ControlsCard.keys_text(row[0], row[2]))
 
 func test_key_names_come_from_the_bindings():
-	assert_eq(ControlsCard.key_name(&"speed_lock"), "C")
+	assert_eq(ControlsCard.key_name(&"speed_lock"), "X")
+	assert_eq(ControlsCard.key_name(&"orbit_camera"), "C")
 	assert_eq(ControlsCard.key_name(&"pitch_up"), "Up")
 	assert_eq(ControlsCard.key_name(&"point_mode"), "RMB")
 	assert_eq(ControlsCard.key_name(&"set_heading"), "LMB")
