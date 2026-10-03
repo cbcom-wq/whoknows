@@ -186,5 +186,8 @@ NPCs repairing; a ship-wide damage screen on the computer beyond the status line
 - **A wrecked cockpit** turns the assist off; mending it lets the assist be turned back on (it
   does not come back on by itself).
 - **The damaged computer's spool sound** plays at half pitch, so it lasts the 20 s spool.
+- **The canopy's cracks** are drawn on the HUD's screen (`CanopyCracks`, a `HudElement` that
+  `HudRoot` adds), not the canopy overlay: the seated view looks through the pod's own glass, and
+  the overlay is only seen on the cabin's windows, so the first render showed no cracks.
 - **Saving** adds `"damage"` to the ship's part; a load infers the sections from the grid first,
   so an older save converts with no version change.
