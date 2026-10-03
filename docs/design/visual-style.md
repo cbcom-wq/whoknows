@@ -114,6 +114,13 @@ while no camera can see it. At 30 km, a fresh placing of its ~415 marks costs ab
 second, and the sensors' 30 km read about 3 ms four times a second; in between the marks are only
 turned with the ship.
 
+The computer mode's continuous map (2026-10-03, on the build machine's CPU): a fresh placing costs
+(headless) about 1 ms at 500 km, 4.5 ms at 1,000 km, 8 ms at 3,000 km and 11.5 ms at 9,000 km,
+mostly the belts', scale rings' and warp limits' ticks. A zoom from 1 km to 9,000 km and back
+(`computer_mode_render.gd`, windowed) placing every frame had a worst frame of 12-15 ms, so past 10
+km a glide places at 15 Hz: worst 10.2 ms (one placing), mean 1.1 ms a frame. Holding still at the
+system, it places twice a second.
+
 The ship's exterior (2026-09-29, 1280 × 720 on the GTX 960, the probe's own runs). With the skin,
 the windows, the floods and forward lights and the outside's bloom, both light groups casting
 shadows:
@@ -375,6 +382,17 @@ The ship's computer (`docs/superpowers/specs/2026-09-25-bridge-computer-design.m
   plating and trim, and the windows and pod shell; every batch but the glows) in
   `InteriorMaterials.holo()`: `LIGHT_WARM`, lit and emissive, opaque. An unshaded one read as a
   flat cream silhouette; lit, its plates, chamfers and panel lines separate.
+- **The computer mode** (`docs/superpowers/specs/2026-09-30-computer-mode-design.md`, built
+  2026-10-03 and rendered for the owner): F at the table and the camera glides, as it does to the
+  helm, to an eye over the holo (1.85 m up, 29° above its level, 1.03 m off), and orbits it while
+  you drag. The holo stays the table's own kit geometry in the room; nothing about it changes. The
+  readable parts sit round it in a flat overlay at the screen's edges, in **the rim screen's look,
+  never the flight HUD's cyan**: `LIGHT_WARM` text on panels of `SCREEN_BACK` at 85%, ruled in
+  `TRIM`, accents by kind (worlds `WORLD`, rocks `SKY`, salvage `QUANTUM`, life `SIGNAL_GO`, the
+  course `AMBER`), out of reach in `HOLO_DIM`. Text outside a panel (the tabs, *ESC LEAVE*, the
+  hints, the scale) is outlined in `SCREEN_BACK`: plain cream on the bridge's cream ceiling could
+  not be read. Up close the ship is the holo's warm chevron; once the map leaves the ship for the
+  star, the chevron gives way to a pip with a heading tick.
 
 ### 3.8 The hull's outside
 

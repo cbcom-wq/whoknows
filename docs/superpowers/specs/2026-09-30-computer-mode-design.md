@@ -1,7 +1,9 @@
 # Computer mode — stepping up to the bridge computer to use it
 
 **Date:** 2026-09-30
-**Status:** Design approved section by section by the owner on 2026-09-30. Not yet built.
+**Status:** Design approved section by section by the owner on 2026-09-30. **Built 2026-10-03** on
+branch `computer-mode`; §11 is what was built and how it differs. The renders await the owner's
+word.
 
 > **Amended 2026-10-02 by the owner, before planning:** `main` moved to the world scale
 > (`2026-09-30-world-scale-design.md`) and many ships (`2026-10-02-many-ships-design.md`) after
@@ -126,7 +128,7 @@ every event it uses as handled, so neither the avatar nor anything else sees it.
 | Left click on the holo | Picks the mark nearest the cursor (§4.5) |
 | Left click on the overlay | The overlay's own controls: a list row, a tab, the action button |
 | Left drag (more than 4 px) | Orbits (§4.4); a drag never also picks |
-| Scroll | Zooms, 15% of the scale per notch (§4.1) |
+| Scroll | Zooms, ×1.3 the scale a notch (§4.1) |
 | R | Recentre: spin 0, elevation back to the eye's, scale unchanged |
 | Tab | Next tab (MAP, STATUS) |
 | Enter | The action button (§5.3) |
@@ -436,3 +438,63 @@ F at the table ─► ComputerStation.interact ─► CameraDirector.use_station
 - **Gamepad** control of the mode.
 - **Picking in the holo without entering** the mode.
 - **More tabs** (log, trade, messages). A new `ComputerPage` gets a tab for free.
+
+---
+
+## 11. As built
+
+Built on `computer-mode` (2026-10-02 to 2026-10-03, nine tasks, plan
+`docs/superpowers/plans/2026-10-02-computer-mode.md`). Everything in §3 to §9 is in, with these
+differences, each ruled during the build:
+
+- **Drawn and picked are two sets.** `MapPage.shown()` is what is drawn at the scale shown, marks
+  shrinking across their band included; `targets()` is what ◀ ▶, the list and the mouse step
+  through, full size at the scale chosen (§4.5). The plan drew only targets, which left the shrink
+  bands dead: a mark popped out instead of shrinking. The course is always drawn at full size and
+  never shrinks away.
+- **Only targets are pickable** (`placed_marks` records a mark only if it is a target), so a
+  shrinking rock can be seen but not clicked.
+- **A station yields to items.** Its box covers the table's top, so the Interactor, landing on a
+  station, first offers an item near the line of sight (a mug set down on the table).
+- **Dropping out** (§3.5) is wider than a rebuild or a wrecked table: the director drops you out
+  whenever the avatar can no longer be at the station, blacked out, blown into the suit, or no
+  longer in the station's ship. F8 refuses at the station with *AT THE COMPUTER*.
+- **A drag cannot outlive its button.** Mouse motion with the left button up ends a drag, so a
+  release swallowed elsewhere leaves no phantom orbit.
+- **Overlay buttons take no keyboard focus** (a focused `Button` takes Tab and Enter before the
+  mode sees them), and the hover tag hides while the cursor is over a panel.
+- **A far world picked in the list** (one outside the holo between about 1,200 and 9,000 km, where
+  it is no target) zooms the map out to the whole system first, then selects it.
+- **The action button** reads the big button's own prompt (*SET COURSE*, *CHART WARP*...), lit
+  whenever the big button is, and says *NO ACTION* only when the big button is dark. The reason a
+  warp would not go (*FLY · TOO CLOSE TO WARP*, *NEED 512 QE · STORE 300*) is the card's third
+  line (`warp_lines`), not the button's label, as on the rim.
+- **The eye** is `InteriorProps.holo_station_eye(elevation)` with `HOLO_STATION_DISTANCE` 1.03 m
+  and `HOLO_STATION_ELEVATION` 29°, not `holo_table_station_eye()`; the station's box is
+  `HOLO_STATION_SIZE` (1.1 × 0.14 × 1.1 m, 0.93 m up).
+- **RANGE glides** in log scale with a 0.1 s time constant (`MapPage.GLIDE`), about half a second
+  to settle, rather than a fixed 0.4 s ease.
+- **The overlay's text is outlined** in `SCREEN_BACK`, and the action button is ruled in `TRIM`.
+  Both came from the first renders: the tabs and *ESC LEAVE* were cream on the bridge's cream
+  ceiling, and the action read as one more line of the card.
+
+**The zoom's cost** (§4.7, `test/probes/computer_mode_render.gd`, 1280 × 720 windowed on the
+build machine, the computer's own processing paused so each frame's holo update is the timed
+one). A placing costs more the farther out it is, mostly the belts', scale rings' and warp limits'
+ticks: about 1 ms at 500 km, 4.5 ms at 1,000 km, 8 ms at 3,000 km and 11.5 ms at 9,000 km
+(headless). The sweep from 1 km to 9,000 km and back, one notch a frame:
+
+| Placement while gliding | Worst frame | Where | Mean over the sweep |
+|---|---|---|---|
+| every frame (as planned) | 12.0-15.3 ms | 3,700-4,200 km drawn | 3.2 ms |
+| 15 Hz past 10 km (`MapPage.GLIDE_PLACE_EVERY`, the fallback) | 10.2-10.3 ms | about 3,800 km drawn | 1.1 ms |
+
+The worst was over 8 ms, so the fallback is in. It makes the expensive placings rarer, not
+cheaper: one placing at the far scales is still over 8 ms, and the system view held still places
+twice a second. Making a placing cheaper (the star's offset is worked out again for every tick)
+is left for later.
+
+**Renders** (`computer_mode_render.gd`): `mode_5km`, `mode_500km`, `mode_system`, `mode_world`
+(the system, the nearest planet selected and the cursor's tag on it), `mode_orbit` and
+`mode_status`. The starter starts inside a belt cluster with no world within 500 km, so the
+500 km shot shows the ship and the cluster only. `fleet_play.gd` passes (ALL OK) on the branch.

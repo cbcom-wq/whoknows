@@ -16,6 +16,9 @@ extends CanvasLayer
 const FONT_SIZE := 18
 const SMALL_SIZE := 14
 const PANEL_ALPHA := 0.85
+## The dark edge round every letter: the tabs, ESC LEAVE, the hints and the
+## scale stand on the room itself, cream on a cream wall without it.
+const OUTLINE := 4
 const LIST_WIDTH := 320.0
 const CARD_WIDTH := 360.0
 const MARGIN := 24.0
@@ -209,6 +212,10 @@ func _build() -> void:
 		card_box.add_child(l)
 		card_lines.append(l)
 	action = _button("")
+	# Ruled like the panels, so it reads as a button and not a line of the card
+	# (spec §5.2's [CHART WARP]); dark, it is a line again.
+	for state in ["normal", "hover"]:
+		(action.get_theme_stylebox(state) as StyleBoxFlat).border_color = _alpha(InteriorPalette.TRIM, 0.5)
 	action.pressed.connect(func() -> void:
 		if is_instance_valid(station):
 			station.computer.act())
@@ -258,6 +265,8 @@ func _label(text: String, size: int) -> Label:
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	l.add_theme_font_size_override("font_size", size)
 	l.add_theme_color_override("font_color", InteriorPalette.LIGHT_WARM)
+	l.add_theme_color_override("font_outline_color", InteriorPalette.SCREEN_BACK)
+	l.add_theme_constant_override("outline_size", OUTLINE)
 	return l
 
 ## Every button here comes from this: no keyboard focus, so Tab and Enter reach
@@ -270,6 +279,8 @@ func _button(text: String) -> Button:
 	b.add_theme_color_override("font_color", InteriorPalette.LIGHT_WARM)
 	b.add_theme_color_override("font_pressed_color", InteriorPalette.AMBER)
 	b.add_theme_color_override("font_disabled_color", InteriorPalette.HOLO_DIM)
+	b.add_theme_color_override("font_outline_color", InteriorPalette.SCREEN_BACK)
+	b.add_theme_constant_override("outline_size", OUTLINE)
 	for state in ["normal", "hover", "pressed", "disabled"]:
 		var box := StyleBoxFlat.new()
 		box.bg_color = _alpha(InteriorPalette.SCREEN_BACK, 0.0 if state == "normal" else 0.6)

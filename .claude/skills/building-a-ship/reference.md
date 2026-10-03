@@ -252,6 +252,52 @@ every rebuild. Any blueprint gets its crew from its own layout:
   (0.004, 1.207, 0.124), torque imbalance (11,146, −6,192, 0) N·m, 31.3 MW drawn of 36.0; the
   droid reaches all 12 of its jobs.
 
+## Computer mode (`docs/superpowers/specs/2026-09-30-computer-mode-design.md`)
+
+F at the table steps you up to it: the camera glides over the holo, the mouse is free, and the
+overlay (`ComputerOverlay`, a `CanvasLayer` in the flight scene) frames it. Esc or F leaves.
+
+| Name | Value | What |
+|---|---|---|
+| `InteriorProps.HOLO_STATION_SIZE` | 1.1 × 0.14 × 1.1 m, centred 0.93 m up | the `ComputerStation`'s box over the top and rim; the buttons stand proud of it |
+| `InteriorProps.HOLO_STATION_DISTANCE` | 1.03 m | the eye from the holo's centre (1.35 m up) |
+| `InteriorProps.HOLO_STATION_ELEVATION` | 29° | where the eye starts and R returns it: 1.85 m up, 0.9 m behind the centre |
+| `InteriorProps.holo_station_eye(deg)` | | the eye in the table's fixture frame, looking at the holo's centre |
+| `ComputerStation.ELEVATION_MIN` / `MAX` | 10° / 75° | the orbit; at 75° the eye is 2.34 m up, under the 2.5 m `HEADROOM` |
+| `ShipComputer.PICK_RADIUS` / `PICK_TIE` | 24 px / 2 px | a click picks the nearest target mark within 24 px; within 2 px of each other, the nearer the camera |
+| `MapPage.STOPS` | 2, 10, 50, 500 km, 9,000 km | what RANGE steps to, gliding there in log scale (`GLIDE`, a 0.1 s time constant) |
+| `MapPage.SCALE_MIN` / `SCALE_MAX` | 1 km / 9,000 km (`SYSTEM_REACH`) | the metres the holo's 0.5 m radius shows |
+| `MapPage.ZOOM_STEP` | ×1.3 a wheel notch | about 35 notches end to end |
+| `MapPage.SHIP_CENTRED` / `STAR_CENTRED` | 500 km / 3,000 km | the centre slides from the ship to the star between them (`system_weight`) |
+| `MapPage.NEAR_BAND` | full ≤ 10 km, gone by 20 km | salvage and signs of life shrink away |
+| `MapPage.ROCK_BAND` | full ≤ 50 km, gone by 100 km | big rocks |
+| `MapPage.WIDE_BAND` | grow in from 500 km, full by 1,000 km | belts and the 2,500 km scale rings |
+| `MapPage.GLIDE_PLACE_EVERY` | 1/15 s | placing while the scale glides past 10 km; every frame nearer |
+| `CameraDirector.GROUP` | `&"camera_director"` | how a station finds the game's one director; never a path |
+
+- **Drawn vs picked:** `MapPage.shown()` is what is drawn at the scale shown (marks shrinking
+  across their band included); `targets()` is what ◀ ▶, the list and the mouse can pick, full size
+  at the scale chosen. Only targets are recorded in `placed_marks`. The course is always drawn,
+  full size.
+- **The director** (`use_station`, `leave_station`, `is_at_station`, `station_changed`) drops you
+  out at once when the table goes, or when the avatar blacks out, is blown into the suit or leaves
+  the station's ship. F8 refuses at the station (*AT THE COMPUTER*). Saving waits on
+  `is_moving()`; a game saved in the mode loads standing at the table.
+- **A station yields to items:** the Interactor, landing on a station, offers an item near the
+  line of sight first (a mug on the table).
+- **Input** (`ComputerModeInput`, beside the director): click picks, a drag over 4 px orbits (0.4°
+  a pixel of spin, 0.3° of elevation), the wheel zooms, R recentres, Tab pages, Enter acts, Esc or
+  F leaves. Motion with the left button up ends a drag. Overlay buttons are `FOCUS_NONE`.
+- **The overlay:** a list (the system once `system_weight` > 0.5, else what is near at full size),
+  the selected target's card and its action (the big button's prompt; *NO ACTION* only when the
+  big button is dark), tabs, hints and the scale. A far world picked in the list zooms the map out
+  to the system first. Colours from `InteriorPalette` only; text outlined in `SCREEN_BACK`.
+- **The cost** (2026-10-03, the build machine's CPU): a placing is (headless)
+  about 1 ms at 500 km, 4.5 ms at 1,000 km, 8 ms at 3,000 km and 11.5 ms at 9,000 km, mostly the
+  rings', belts' and limits' ticks. A 1 km to 9,000 km sweep
+  (`test/probes/computer_mode_render.gd`, windowed) placing every frame: worst 12-15 ms,
+  mean 3.2 ms; at 15 Hz past 10 km: worst 10.2 ms (one placing), mean 1.1 ms.
+
 ## The hull's outside (ship exterior spec, `docs/superpowers/specs/2026-09-28-ship-exterior-design.md`)
 
 The hull's outside is generated from the grid and the interior's layout, like the interior. The

@@ -610,12 +610,37 @@ func test_belts_and_scale_rings_grow_in_past_500_km():
 	_page.holo(_holo, _ctx, 0.0)
 	assert_gt(_holo.mark_count(&"tick", MapPage.colour_for(&"rock")), 0, "belts on the system range")
 
-func test_marks_are_placed_every_frame_while_the_scale_glides():
-	_add(&"rock:a", Contact.EXACT, Vector3(0, 0, -20000), 300.0)
-	_page.range_index = 2
+func test_marks_are_placed_every_frame_while_the_scale_glides_up_close():
+	_add(&"rock:a", Contact.EXACT, Vector3(0, 0, -4000), 300.0)
+	_page.range_index = 1
 	_refresh()
 	_page.holo(_holo, _ctx, 0.0)
 	var before := _holo.mark_transform(&"ball", 0).origin
 	_page.zoom(-3.0, _ctx)
 	_page.holo(_holo, _ctx, 0.016)
 	assert_ne(_holo.mark_transform(&"ball", 0).origin, before, "placed afresh while zooming")
+
+## Spec §4.7's fallback: past 10 km a placing is hundreds of ticks, so a
+## glide places at most every 1/15 s, and once more as it ends.
+func test_a_glide_at_50_km_places_at_most_every_fifteenth_of_a_second():
+	_add(&"rock:a", Contact.EXACT, Vector3(0, 0, -20000), 300.0)
+	_page.range_index = 2
+	_refresh()
+	_page.holo(_holo, _ctx, 0.0)
+	_page.zoom(1.0, _ctx)
+	var placed_at: Array[float] = []
+	var last := _holo.mark_transform(&"ball", 0).origin
+	var t := 0.0
+	while _page.gliding() and t < 2.0:
+		_page.holo(_holo, _ctx, 0.016)
+		t += 0.016
+		var now := _holo.mark_transform(&"ball", 0).origin
+		if not now.is_equal_approx(last):
+			placed_at.append(t)
+			last = now
+	assert_false(_page.gliding(), "the glide ended")
+	assert_gt(placed_at.size(), 1, "placed while gliding, not only at the end")
+	for i in range(1, placed_at.size() - 1):
+		assert_gte(placed_at[i] - placed_at[i - 1], MapPage.GLIDE_PLACE_EVERY - 0.001, "no faster than 15 Hz")
+	assert_almost_eq(last, Vector3(0, 0, -20000) * (HoloVolume.RADIUS / _page.scale_m), Vector3.ONE * 0.001,
+		"placed at the final scale as the glide ends")

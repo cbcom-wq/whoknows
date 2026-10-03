@@ -50,7 +50,10 @@ Do these in order. Each one names the check that proves it.
      its buttons (and with nothing solid between that eye and them:
      `test_looking_at_a_button_from_its_operator_s_spot_finds_the_button`), and face it so the operator looks out of a window (the owner's wish, 2026-09-27:
      on the starter, the port front corner, facing aft). A console it displaces moves aft. The
-     probe prints each table and where you stand to use it.
+     probe prints each table and where you stand to use it. Its station's eye (1.85 m up, 0.9 m
+     behind the holo's centre, up to 2.34 m while orbiting) must be clear of the ceiling and
+     walls; the probe prints it (`eye ... m up, orbiting to ... m`, flagged
+     `EYE IN THE CEILING`).
 3. **Damage** (`docs/superpowers/specs/2026-09-29-health-and-damage-design.md`):
    - every block needs a sensible `hp` in its `.tres`: damage is taken against it, and a block
      goes damaged at half, wrecked at all of it and is knocked off at one and a half;
@@ -270,6 +273,11 @@ thrust.
 | A GUT file that will not parse | GUT skips it, says nothing failed and exits 0 | Check the run's `Tests` count is there, not only the exit code |
 | Every ship writing its uniform into one shared material | Found in many ships' final review: each ship pushed its hull's `hull_inverse` into the one livery, so with two awake one ship's stripe was measured in the other's frame | Anything per ship in a shared material needs a copy per ship: `Ship.livery`, swapped on by `_apply_livery`. Render two ships at different attitudes |
 | A SubViewport that only turns off when its owner processes | A ship loaded asleep (processing disabled from the start) rendered its canopy view every frame, unseen | Start it `UPDATE_DISABLED` in the scene; whatever puts a ship to sleep turns it off too (`Fleet._hold`) |
+| Drawing only what a page can step to | The computer mode's map drew `targets()` (full size only), so a rock left the holo at once instead of shrinking across its band, and the bands' code was dead | Keep what is drawn (`MapPage.shown()`, at the scale drawn) apart from what ◀ ▶, the list and the mouse can pick (`targets()`, full size at the scale chosen). The course is always drawn, never shrunk |
+| Leaving a station only on Esc, F or a rebuild | Found in review: blacked out, blown into the suit, or carried off to another ship, you stayed in the computer's view with control off; F8 boarded from it | `CameraDirector` drops out whenever the avatar can no longer be at the station (`_station_usable`), restoring only what the station took; F8 says *AT THE COMPUTER*. Anything new that holds the camera does the same |
+| Trusting a button's release to reach you | A release eaten by the overlay or the window left the computer mode's drag running: the next mouse motion orbited with no button down | Motion with the left button up ends a drag (`ComputerModeInput`). Every overlay button is `FOCUS_NONE`: a focused `Button` takes Tab and Enter as `ui_focus_next` and `ui_accept` before `_unhandled_input` sees them |
+| Timing the holo's `update()` with the computer still processing | The computer's own `_process` updates the holo too, untimed, and took the placings: the sweep read 1.7 ms worst when a placing at 4,000 km costs 10-12 ms | `computer.set_process(false)` round a timed loop, as `computer_mode_render.gd` does |
+| Overlay text straight on the room | The computer mode's tabs and *ESC LEAVE* were cream on the bridge's cream ceiling: unreadable | Anything on screen outside a panel gets a `SCREEN_BACK` outline (`ComputerOverlay.OUTLINE`). Render it over the brightest wall it can sit on |
 
 ## Not built yet (plan for it; don't assume it works)
 
