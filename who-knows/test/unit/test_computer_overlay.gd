@@ -139,6 +139,56 @@ func test_no_button_takes_the_keyboard_focus():
 	assert_eq((_overlay.list_box.get_child(1) as Button).focus_mode, Control.FOCUS_NONE, "a row")
 	assert_eq(_overlay.action.focus_mode, Control.FOCUS_NONE, "the action")
 
+## Godot's default theme fills whatever state a button does not override: its
+## hover_pressed box is salmon red and its hover text near white. Every button
+## here overrides them all from the palette.
+func test_every_button_overrides_every_state_it_can_draw():
+	_ready_map()
+	_overlay.refresh()
+	var buttons := _overlay.find_children("*", "Button", true, false)
+	assert_gt(buttons.size(), 3, "the tabs, a row and the action")
+	for b: Button in buttons:
+		for state in ["normal", "hover", "pressed", "disabled", "hover_pressed"]:
+			assert_true(b.has_theme_stylebox_override(state), "%s's %s box" % [b.text, state])
+		for colour in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color",
+				"font_focus_color", "font_disabled_color"]:
+			assert_true(b.has_theme_color_override(colour), "%s's %s" % [b.text, colour])
+	var tab: Button = _overlay.tabs[0]
+	assert_eq(tab.get_theme_color("font_hover_color"), InteriorPalette.LIGHT_WARM)
+	assert_eq(tab.get_theme_color("font_hover_pressed_color"), InteriorPalette.AMBER)
+
+# --- the list's rows, frame to frame (the final review, item 3) ---------------
+
+func test_the_near_list_holds_the_nearest_thirty_at_most():
+	for i in 40:
+		_add(StringName("rock:%d" % i), &"rock", Vector3(0, 0, -1000.0 - i * 100.0))
+	_sensors.refresh(MapPage.QUERY)
+	_map().reselect(_computer.ctx)
+	var rows := ComputerOverlay.list_rows(_map(), _computer.ctx)
+	assert_eq(rows.size(), ComputerOverlay.NEAR_ROWS)
+	var nearest := _map().targets(_computer.ctx).slice(0, ComputerOverlay.NEAR_ROWS).map(
+		func(c: Contact) -> StringName: return c.id)
+	assert_eq(rows.map(func(r: Dictionary) -> StringName: return r["id"]), nearest, "nearest first")
+
+func test_the_system_list_is_not_capped():
+	var s := SystemRecipe.from_seed(1337)
+	_sensors.system = s
+	_sensors.add_source(BodyContacts.new(s))
+	_universe.origin = s.entry()
+	_map().range_index = MapPage.SYSTEM_RANGE
+	var rows := ComputerOverlay.list_rows(_map(), _computer.ctx)
+	assert_eq(rows.size(), s.bodies.size() + s.clusters.size(), "every world, however many")
+
+func test_a_row_is_rewritten_only_when_it_changes():
+	_ready_map()
+	_overlay.refresh()
+	var writes: int = _overlay.row_writes
+	_overlay.refresh()
+	assert_eq(_overlay.row_writes, writes, "nothing changed, nothing written")
+	_map().press(&"next", _computer.ctx)
+	_overlay.refresh()
+	assert_eq(_overlay.row_writes, writes + 2, "the selection's marker moved: two rows")
+
 # --- a world that is not on the map (select, spec §5.2) ---------------------
 
 func _far_system() -> SystemRecipe:

@@ -24,6 +24,9 @@ const CARD_WIDTH := 360.0
 const MARGIN := 24.0
 const CARD_LINES := 4
 const TAG_OFFSET := Vector2(16, -24)
+## The near list's rows at most, nearest first: at 50 km the targets can be
+## hundreds of big rocks. The system's list is never cut.
+const NEAR_ROWS := 30
 const HINTS := "DRAG ORBIT · SCROLL ZOOM · R RECENTRE · TAB PAGE · ENTER ACT"
 
 var station: ComputerStation
@@ -34,6 +37,10 @@ var card_lines: Array[Label] = []
 var action: Button
 var tag: Label
 var scale_label: Label
+
+## How many times a row's text or colour has been written: a row is written
+## only when one changes, since every colour override relayouts it. For tests.
+var row_writes := 0
 
 var _list_panel: PanelContainer
 
@@ -80,7 +87,7 @@ func refresh() -> void:
 
 ## The list's rows (spec §5.2): far out, the system -- the star, each planet
 ## with its moons under it, each cluster; near in, what is on the map at full
-## size, nearest first, with its distance.
+## size, nearest first, with its distance, NEAR_ROWS at most.
 static func list_rows(map: MapPage, ctx: ComputerContext) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	var system := ctx.sensors.system if ctx.sensors != null else null
@@ -97,6 +104,8 @@ static func list_rows(map: MapPage, ctx: ComputerContext) -> Array[Dictionary]:
 			out.append(_system_row(map, ctx, t.contact_id(), t.name, &"cluster", 0))
 		return out
 	for c in map.targets(ctx):
+		if out.size() >= NEAR_ROWS:
+			break
 		out.append(_row(map, ctx, c.id, ContactText.line(c, ctx.relative(c.point).length()), c.kind, 0, c))
 	return out
 
@@ -115,7 +124,8 @@ static func _row(map: MapPage, ctx: ComputerContext, id: StringName, text: Strin
 		colour = InteriorPalette.AMBER
 	return {"id": id, "text": text.to_upper(), "colour": colour, "indent": indent, "selected": map.selected == id}
 
-## One button per row, reused from frame to frame.
+## One button per row, reused from frame to frame, and written only where its
+## text or colour changed: the last of each is kept in the button's meta.
 func _fill_list(rows: Array[Dictionary]) -> void:
 	while list_box.get_child_count() - 1 < rows.size():
 		var b := _button("")
@@ -130,9 +140,16 @@ func _fill_list(rows: Array[Dictionary]) -> void:
 			continue
 		var row: Dictionary = rows[i - 1]
 		b.set_meta(&"id", row["id"])
-		b.text = "%s%s %s" % ["    " if row["indent"] > 0 else "", "▸" if row["selected"] else " ", row["text"]]
-		b.add_theme_color_override("font_color", row["colour"])
-		b.add_theme_color_override("font_hover_color", row["colour"])
+		var text := "%s%s %s" % ["    " if row["indent"] > 0 else "", "▸" if row["selected"] else " ", row["text"]]
+		var colour: Color = row["colour"]
+		if b.get_meta(&"text", "") == text and b.get_meta(&"colour", null) == colour:
+			continue
+		b.set_meta(&"text", text)
+		b.set_meta(&"colour", colour)
+		b.text = text
+		b.add_theme_color_override("font_color", colour)
+		b.add_theme_color_override("font_hover_color", colour)
+		row_writes += 1
 
 func _on_row_pressed(b: Button) -> void:
 	if is_instance_valid(station):
@@ -270,21 +287,26 @@ func _label(text: String, size: int) -> Label:
 	return l
 
 ## Every button here comes from this: no keyboard focus, so Tab and Enter reach
-## the mode's _unhandled_input.
+## the mode's _unhandled_input, and every state's box and text from the palette.
 func _button(text: String) -> Button:
 	var b := Button.new()
 	b.text = text
 	b.focus_mode = Control.FOCUS_NONE
 	b.add_theme_font_size_override("font_size", SMALL_SIZE)
 	b.add_theme_color_override("font_color", InteriorPalette.LIGHT_WARM)
+	b.add_theme_color_override("font_hover_color", InteriorPalette.LIGHT_WARM)
+	b.add_theme_color_override("font_focus_color", InteriorPalette.LIGHT_WARM)
 	b.add_theme_color_override("font_pressed_color", InteriorPalette.AMBER)
+	b.add_theme_color_override("font_hover_pressed_color", InteriorPalette.AMBER)
 	b.add_theme_color_override("font_disabled_color", InteriorPalette.HOLO_DIM)
 	b.add_theme_color_override("font_outline_color", InteriorPalette.SCREEN_BACK)
 	b.add_theme_constant_override("outline_size", OUTLINE)
-	for state in ["normal", "hover", "pressed", "disabled"]:
+	# Every state it can draw, hover_pressed too (the lit tab under the
+	# cursor): one left out falls back to Godot's default theme, a salmon box.
+	for state in ["normal", "hover", "pressed", "hover_pressed", "disabled"]:
 		var box := StyleBoxFlat.new()
 		box.bg_color = _alpha(InteriorPalette.SCREEN_BACK, 0.0 if state == "normal" else 0.6)
-		box.border_color = _alpha(InteriorPalette.TRIM, 0.5 if state == "pressed" else 0.0)
+		box.border_color = _alpha(InteriorPalette.TRIM, 0.5 if state.ends_with("pressed") else 0.0)
 		box.set_border_width_all(1)
 		box.set_content_margin_all(6)
 		b.add_theme_stylebox_override(state, box)
