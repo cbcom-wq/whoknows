@@ -94,9 +94,19 @@ func test_a_wrecked_cockpit_turns_the_assist_off_and_the_hud_flickers():
 	assert_eq(flight.build_telemetry().cockpit_cracks, 2)
 	assert_false(_ship.stats.crippled, "still flyable")
 	_hurt(&"cockpit", 0.0)
-	flight.assist_enabled = true
-	assert_true(flight.assist_enabled, "mended: the assist comes back on")
+	assert_true(flight.assist_enabled, "mended: the assist comes back on by itself")
 	assert_false(flight.build_telemetry().hud_flicker)
+
+## The owner's bug (2026-10-03): a rock wrecked the cockpit, the ship spun, and
+## it kept spinning even after the cockpit was mended.
+func test_a_ship_knocked_spinning_with_a_wrecked_cockpit_settles():
+	var flight := _ship.flight_computer
+	_hurt(&"cockpit", 1.0)
+	await wait_physics_frames(2)
+	_ship.exterior.angular_velocity = _ship.exterior.global_transform.basis * Vector3(0.6, -0.5, 0.8)
+	await wait_seconds(6.0)
+	assert_lt(_ship.exterior.angular_velocity.length(), 0.05, "the wrecked cockpit's damper stops the spin")
+	assert_false(flight.assist_enabled, "with the assist still refused")
 
 func test_the_status_page_names_the_hull_and_the_worst_component():
 	var ctx := ComputerContext.new()

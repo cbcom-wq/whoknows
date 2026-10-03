@@ -57,7 +57,7 @@ the six, as the HUD band already shows (`Ship.hull_whole()`, now from the sectio
 | **Engines** | every `thruster`, as one | outside: aim at any thruster | half forward thrust | no forward thrust: crippled |
 | **Quantum core** | the `quantum_core` | inside, at the core | half power | no power: crippled (as now) |
 | **Bridge computer** | the `computer` | inside, at the table | screens glitch; a warp spools 20 s, not 10 | dark: no map, no warp |
-| **Cockpit** | the `pilot_seat` and every `canopy` | inside, at the helm | cracks on the canopy; the assist chases its rate at half strength | assist off and refused; the HUD flickers; still flyable |
+| **Cockpit** | the `pilot_seat` and every `canopy` | inside, at the helm | cracks on the canopy; the assist chases its rate at half strength | assist off and refused, but a centred axis still damps its spin; the HUD flickers; still flyable |
 
 A component's hp is the sum of its blocks' (engines 750, core 250, computer 60, cockpit 240 on the
 starter). The computer's and cockpit's hp are raised to **300** each, or one stray bolt would wreck
@@ -183,8 +183,11 @@ NPCs repairing; a ship-wide damage screen on the computer beyond the status line
 - **The torch** mends a hole as part of its section; there is no separate rebuild any more
   (`REBUILD_COST`/`REBUILD_TIME` are gone). From inside, aimed at the hull, the prompt reads
   *HULL 45% · WELD FROM OUTSIDE*.
-- **A wrecked cockpit** turns the assist off; mending it lets the assist be turned back on (it
-  does not come back on by itself).
+- **A wrecked cockpit** turns the assist off; mending it brings the assist back on by itself if the
+  pilot had it on (`FlightComputer.assist_wanted`, kept and saved while it is refused). While it
+  is wrecked a centred stick still damps the spin on that axis at half the assist's gain
+  (`WRECKED_DAMPING`), so a ship knocked spinning settles. Changed 2026-10-03 at the owner's word:
+  a rock wrecked the cockpit, the ship spun, and it kept spinning after the cockpit was mended.
 - **The damaged computer's spool sound** plays at half pitch, so it lasts the 20 s spool.
 - **The canopy's cracks** are drawn on the HUD's screen (`CanopyCracks`, a `HudElement` that
   `HudRoot` adds), not the canopy overlay: the seated view looks through the pod's own glass, and

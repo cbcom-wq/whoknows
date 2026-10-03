@@ -36,20 +36,30 @@ const HOLD_GAIN := 2.0
 
 @export var hull_path: NodePath
 
+## With the assist refused, the share of RATE_GAIN a centred axis still damps
+## its spin with, so a ship knocked spinning with a wrecked cockpit settles.
+const WRECKED_DAMPING := 0.5
+
 ## The share of RATE_GAIN the assist chases its rate with: half with a damaged
 ## cockpit (ship damage sections spec §2.2), so turns start and stop sluggishly.
 var assist_strength := 1.0
-## False with the cockpit wrecked: the assist is off and refused.
+## False with the cockpit wrecked: the assist is off and refused. Mending it
+## brings back whatever the pilot last chose.
 var assist_allowed := true:
 	set(on):
 		assist_allowed = on
-		if not on:
-			assist_enabled = false
+		assist_enabled = assist_wanted
 
-## Turning assist off drops everything that needs it.
+## The pilot's own choice, kept while the assist is refused (and saved).
+var assist_wanted := true
+
+## Turning assist off drops everything that needs it. Refused, the toggle does
+## nothing.
 var assist_enabled: bool = true:
 	set(on):
-		assist_enabled = on and assist_allowed
+		if assist_allowed:
+			assist_wanted = on
+		assist_enabled = assist_wanted and assist_allowed
 		if not assist_enabled:
 			speed_locked = false
 			heading_hold = false
@@ -172,7 +182,7 @@ func clear_heading() -> void:
 ## next frame.
 func to_dict() -> Dictionary:
 	return {
-		"assist": assist_enabled,
+		"assist": assist_wanted,
 		"speed_locked": speed_locked,
 		"locked_speed": locked_speed,
 		"heading_hold": heading_hold,
@@ -182,8 +192,10 @@ func to_dict() -> Dictionary:
 	}
 
 func from_dict(d: Dictionary) -> void:
-	# Assist first: turning it off drops the locks.
-	assist_enabled = bool(d.get("assist", true))
+	# Assist first: turning it off drops the locks. The pilot's choice even if
+	# the cockpit is wrecked, so mending it after loading brings it back.
+	assist_wanted = bool(d.get("assist", true))
+	assist_enabled = assist_wanted
 	speed_locked = bool(d.get("speed_locked", false)) and assist_enabled
 	locked_speed = float(d.get("locked_speed", 0.0))
 	heading = SaveCodec.to_vec3(d.get("heading"), Vector3.FORWARD)
@@ -318,6 +330,16 @@ func attitude_torque(rotate_input: Vector3, local_angular_velocity: Vector3) -> 
 	# Low power halves the RCS's authority here too (spec §8.3): the ship
 	# still turns and brakes, just at half the rate.
 	var budget := torque_budget * _authority()
+	if not assist_allowed:
+		# Refused (a wrecked cockpit): each deflected axis is the stick's, raw,
+		# and each centred one still damps, at WRECKED_DAMPING of the gain.
+		var damp := -local_angular_velocity * RATE_GAIN * WRECKED_DAMPING * inertia
+		var raw := rotate_input * budget
+		return Vector3(
+			raw.x if not is_zero_approx(rotate_input.x) else clampf(damp.x, -budget.x, budget.x),
+			raw.y if not is_zero_approx(rotate_input.y) else clampf(damp.y, -budget.y, budget.y),
+			raw.z if not is_zero_approx(rotate_input.z) else clampf(damp.z, -budget.z, budget.z)
+		)
 	if not assist_enabled:
 		return rotate_input * budget
 	var rate_error := rotate_input * ASSIST_TURN_RATE - local_angular_velocity
