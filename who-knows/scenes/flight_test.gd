@@ -1,9 +1,8 @@
 extends Node3D
 
-## Builds the starter shuttle -- the blueprint from
-## docs/superpowers/specs/2026-08-23-starter-shuttle-art-direction.md §3 --
-## so flight_test.tscn always has a ship. Once the shipyard exists
-## (Task 20) this loads a saved blueprint instead.
+## Builds the starter shuttle from the ship library (data/ships/starter.json;
+## docs/superpowers/specs/2026-10-02-ship-library-design.md §3), so
+## flight_test.tscn always has a ship.
 ##
 ## It also keeps the one saved game (docs/superpowers/specs/
 ## 2026-09-26-saving-design.md): a launch resumes it, and it saves itself in
@@ -28,6 +27,9 @@ var fleet: Fleet
 var aboard: Ship
 ## On a spacewalk, which ship your suit belongs to (§4.3).
 var suit_tie: SuitTie
+## Every ship the game can build, from data/ships (ship library spec §3.2):
+## loaded first in _ready, or by _starter_grid() on a bare instance.
+var library: ShipLibrary
 
 ## The star system the flight is in (the system skeleton spec §4), from the
 ## world seed, and the node that draws its star, planets and moons.
@@ -100,22 +102,8 @@ const OUTSIDE_GLOW_BLOOM := 0.05
 ## night draws no visible halo round a lens, however strong the light is.
 const OUTSIDE_GLOW_BLEND := Environment.GLOW_BLEND_MODE_SCREEN
 
-## BlockOrientation values used below. `_FORWARDS` order is
-## [FORWARD, BACK, LEFT, RIGHT, UP, DOWN]; o = (forward_index << 2) | roll.
-## Roll never matters here because every use is either the identity roll
-## (0) or a 90-degree roll whose only job is to swap which local axis the
-## wedge's chamfer leans toward -- see block_orientation.gd.
-const O_FORWARD := 0     ## bow-facing: chamfers/canopy glass slope up-forward; thrust along -Z
-const O_STARBOARD_FWD := 1   ## FORWARD, rolled 90 deg: hull_wedge chamfer faces +X,-Z
-const O_PORT_FWD := 3        ## FORWARD, rolled 270 deg: hull_wedge chamfer faces -X,-Z
-const O_STERN := 4       ## BACK: hull_wedge chamfer faces +Z,+Y, for the tail taper
-const O_RCS_PORT := 8        ## LEFT: thrust along -X
-const O_RCS_STARBOARD := 12  ## RIGHT: thrust along +X
-const O_RCS_UP := 16         ## UP: thrust along +Y
-const O_RCS_DOWN := 20       ## DOWN: thrust along -Y
-const O_KEEL := 2        ## FORWARD rolled 180 deg: a half block's upper half, hung under a cell
-
 func _ready() -> void:
+	_load_library()
 	var saved := _read_save()
 	var starter_part := _part_named(saved, Fleet.STARTER)
 	var layout := Ship.layout_of(starter_part) if resumed else null
@@ -150,6 +138,13 @@ func _ready() -> void:
 	fleet.joined.connect(_wire_ship)
 	fleet.left.connect(_on_ship_left)
 	board(aboard, true)
+
+## The ship library (ship library spec §3.2). A file that would not load is an
+## error in the output, and left out.
+func _load_library() -> void:
+	library = ShipLibrary.load_from_dir()
+	for e in library.errors:
+		push_error("ShipLibrary: " + e)
 
 ## Every ship in the world (many ships spec §5): the starter first, aboard.
 func _make_fleet() -> void:
@@ -1039,211 +1034,13 @@ func _can_stand(pose: Transform3D) -> bool:
 	var def := aboard.catalog.get_def(aboard.grid.get_block(cell).block_id)
 	return def != null and def.is_walkable()
 
+## The starter shuttle, from data/ships/starter.json; why each block is where it
+## is: data/ships/starter.md. Most tests call this on a flight_test.gd that
+## never entered the tree, so it loads the library itself.
 func _starter_grid() -> ShipGrid:
-	var g := ShipGrid.new()
-
-	# --- y = 0, cabin (art direction §3.1): x -2..2, z -4..3 ---
-	for x in [-1, 0, 1]:
-		_put(g, Vector3i(x, 0, -4), &"canopy", O_FORWARD)
-	_put(g, Vector3i(-2, 0, -3), &"hull_wedge", O_PORT_FWD)
-	_put(g, Vector3i(2, 0, -3), &"hull_wedge", O_STARBOARD_FWD)
-	# The helm sits in the front row, facing the windshield: the cockpit pod
-	# juts out through the canopy face ahead of it (cockpit pod spec §7).
-	# The bridge computer's holo table in the port front corner, beside the
-	# helm, facing aft toward where you stand to use it: you look forward
-	# over it, out of the shoulder window (bridge computer spec §3.2, as
-	# amended 2026-09-27). The corner's console goes to the back corner
-	# (InteriorLayout._handed_consoles).
-	_put(g, Vector3i(-1, 0, -3), InteriorLayout.COMPUTER_ID, O_STERN)
-	_put(g, Vector3i(0, 0, -3), &"pilot_seat")
-	_put(g, Vector3i(1, 0, -3), &"deck")
-	for z in [-2, -1, 0, 1, 2]:
-		_put(g, Vector3i(-2, 0, z), &"hull")
-		_put(g, Vector3i(2, 0, z), &"hull")
-	# The quantum core stands at the bridge's centre, straight behind the
-	# helm, facing aft so its gauge faces the corridor (quantum energy spec
-	# §5.3); the quantum machine stands in the bridge's starboard back
-	# corner, facing forward with its back to the galley's wall.
-	_put(g, Vector3i(-1, 0, -2), &"deck")
-	_put(g, Vector3i(0, 0, -2), &"quantum_core", O_STERN)
-	_put(g, Vector3i(1, 0, -2), &"deck")
-	_put(g, Vector3i(-1, 0, -1), &"deck")
-	_put(g, Vector3i(0, 0, -1), &"deck")
-	_put(g, Vector3i(1, 0, -1), &"quantum_machine", O_FORWARD)
-	# Behind the bridge, a corridor down the centreline with rooms either side
-	# (interior redesign spec §7.5). Room blocks weigh and draw what deck
-	# does, so the flight balance measured below is unchanged.
-	for z in [0, 1, 2]:
-		_put(g, Vector3i(0, 0, z), &"deck")
-	_put(g, Vector3i(-1, 0, 0), &"bunk_room")
-	_put(g, Vector3i(-1, 0, 1), &"bunk_room")
-	_put(g, Vector3i(-1, 0, 2), &"bathroom")
-	_put(g, Vector3i(1, 0, 0), &"galley")
-	_put(g, Vector3i(1, 0, 1), &"weapon_room")
-	_put(g, Vector3i(1, 0, 2), &"closet")
-	_put(g, Vector3i(-2, 0, 3), &"hull")
-	_put(g, Vector3i(-1, 0, 3), &"bulkhead")
-	_put(g, Vector3i(0, 0, 3), &"airlock")
-	_put(g, Vector3i(1, 0, 3), &"bulkhead")
-	_put(g, Vector3i(2, 0, 3), &"hull")
-
-	# --- y = 0, engine pods (art direction §3.3): x = +-3 ---
-	for x in [-3, 3]:
-		_put(g, Vector3i(x, 0, 1), &"hull")
-		_put(g, Vector3i(x, 0, 2), &"hull")
-		_put(g, Vector3i(x, 0, 3), &"thruster", O_FORWARD)
-
-	# --- y = 1, equipment deck and roof (art direction §3.2) ---
-	_put(g, Vector3i(0, 1, -4), &"hull_wedge", O_FORWARD)
-	_put(g, Vector3i(-1, 1, -3), &"hull_wedge", O_FORWARD)
-	_put(g, Vector3i(1, 1, -3), &"hull_wedge", O_FORWARD)
-	_put(g, Vector3i(0, 1, -3), &"hull")
-	_put(g, Vector3i(-2, 1, -2), &"rcs", O_STERN)
-	_put(g, Vector3i(2, 1, -2), &"rcs", O_STERN)
-	for x in [-1, 0, 1]:
-		_put(g, Vector3i(x, 1, -2), &"hull")
-	for x in [-2, -1, 1, 2]:
-		_put(g, Vector3i(x, 1, -1), &"hull")
-	_put(g, Vector3i(0, 1, -1), &"core")
-	for x in [-2, 2]:
-		_put(g, Vector3i(x, 1, 0), &"hull")
-	# Quantum cell row: spec §3.2 places two (x=-1,+1). A third, centred at
-	# x=0, was added here -- see the block below on power and pitch
-	# balance for why. These three were reactors; the quantum core now
-	# generates the ship's power, and the cells keep their mass and hp,
-	# storing QE instead (quantum energy spec §5.1, §5.3).
-	_put(g, Vector3i(-1, 1, 0), &"quantum_cell")
-	_put(g, Vector3i(0, 1, 0), &"quantum_cell")
-	_put(g, Vector3i(1, 1, 0), &"quantum_cell")
-	for x in [-2, 2]:
-		_put(g, Vector3i(x, 1, 1), &"hull")
-	_put(g, Vector3i(0, 1, 1), &"hull")
-	_put(g, Vector3i(-1, 1, 1), &"grav_plating")
-	_put(g, Vector3i(1, 1, 1), &"grav_plating")
-	for x in [-2, -1, 0, 1, 2]:
-		_put(g, Vector3i(x, 1, 2), &"hull")
-	_put(g, Vector3i(-2, 1, 3), &"hull_wedge", O_STERN)
-	_put(g, Vector3i(2, 1, 3), &"hull_wedge", O_STERN)
-	# Stern roof (x=-1,0,1 at z=+3) is spec'd as plain hull. Converted to
-	# a second thruster bank instead -- see the note below.
-	for x in [-1, 0, 1]:
-		_put(g, Vector3i(x, 1, 3), &"thruster", O_FORWARD)
-
-	# --- Additions beyond art direction §3, all load-bearing on the
-	# blueprint's acceptance criteria (§3.4) rather than decorative:
-	#
-	# 1. RCS thrust authority. §3 places no RCS blocks anywhere, so as
-	#    literally specified the ship has thrust only along -Z (both main
-	#    pods fire straight aft) and ShipStats reads torque_budget from
-	#    the X/Y-thrusting blocks only. Zero RCS means zero rotational
-	#    authority: FlightComputer could not turn the ship at all,
-	#    mouse-steering included. Six RCS units sit in cells the nose
-	#    taper otherwise leaves empty, each face-adjacent to an
-	#    already-placed block so Rule 2 (ALL_CONNECTED) still holds.
-	#
-	#    They are laid out in opposed pairs, which ShipStats requires:
-	#    authority you only have one way is not authority, so each axis
-	#    counts the smaller of its two directions. Two lateral units at
-	#    the nose (one thrusting +X, one -X) give yaw both ways. Four
-	#    vertical units -- UP at z=-3, DOWN at z=-4, mirrored port and
-	#    starboard -- give pitch both ways, and, fired differentially
-	#    across the 8 m between them, roll both ways too. An earlier
-	#    layout had a single UP and a single DOWN unit on opposite sides:
-	#    both rolled the ship the *same* way, so roll authority was
-	#    effectively nil.
-	#
-	# 1b. Braking. Every main engine faces aft, so thrust_budget.reverse
-	#    was 0: S did nothing and, once burning, the ship could never be
-	#    slowed or stopped. Two RCS units at (+-2, 1, -2), thrusting +Z,
-	#    are the retro pair -- 500 kN, which stops the shuttle from its
-	#    2-second sprint speed of 32 m/s in about 6 s. They also give the
-	#    assist's drift correction something to spend along Z, which is
-	#    what cancels residual drift when the stick is centred.
-	#
-	# 2. Pitch balance. §3.4 flags the real risk directly: mounting both
-	#    main thrusters at y=0 while the equipment deck's mass sits at
-	#    y=+1 puts the centre of mass well above the thrust line, so full
-	#    forward burn induces a large pitch torque. Measured on this exact
-	#    grid at y=0-only thrust: torque_imbalance.x = 686,582 N*m against
-	#    a pitch authority (torque_budget.x) of only 160,000 N*m from the
-	#    two vertical RCS above -- nowhere near flyable. §3.4 explicitly
-	#    sanctions "moving equipment-deck mass or the pod row" to fix
-	#    this; the stern roof's three hull cells became a second thruster
-	#    bank instead (thrust higher, closer to the mass-weighted centre),
-	#    which alone brought it to -14,371 N*m. The nose RCS trim the
-	#    remainder: the grid then sat at +101,408 N*m, 3% of its own pitch
-	#    authority, so the assist held the nose through a full burn.
-	#
-	# 2b. The quantum core (quantum energy spec §5.1, §5.3, §5.4), added at
-	#    y=0 in the cabin itself rather than on the equipment deck, brings
-	#    the imbalance closer to zero rather than adding to it. Its 5 t sit
-	#    at cabin level, pulling the centre of mass down from 1.268 m to
-	#    1.206 m -- almost exactly the 1.2 m average height of the ship's
-	#    thrust (two nose pods at 0 m, three stern thrusters at 2 m). A full
-	#    burn now barely pitches the ship at all: torque_imbalance.x falls
-	#    from 101,408 to 9,278 N*m, well under 1% of pitch authority. The
-	#    quantum machine, standing starboard against the galley's wall,
-	#    introduces the only yaw imbalance the starter has: 3,093 N*m,
-	#    0.15% of yaw authority -- still negligible.
-	#
-	# 2c. The bridge computer (bridge computer spec §3.2), a 0.3 t holo table
-	#    in the port front corner, replaced a 0.4 t deck cell: the ship is
-	#    100 kg lighter, and the centre of mass edges 2 mm to starboard, so
-	#    the yaw imbalance doubles to 6,192 N*m -- 0.3% of yaw authority,
-	#    still negligible. Pitch moves to 11,146 N*m, 0.36% of authority.
-	#
-	# 3. Power margin. The extra stern thrusters draw 9.0 MW more than
-	#    §3.4's two-reactor estimate covers (that estimate assumed four
-	#    thrusters total, not five). Three reactors restored comfortable
-	#    margin; the quantum core now generates all 36 MW of it alone, and
-	#    the quantum machine's own draw (0.5 MW) is the only change to the
-	#    load side.
-	#
-	# Real numbers for this exact grid (via ShipStats/ShipValidator,
-	# res://data/blocks catalog), with the quantum core, the machine and the
-	# bridge computer aboard, the reactors replaced by quantum cells (quantum
-	# energy spec §5.4; bridge computer spec §3.2) and the 26 fairings of the
-	# shape below (ship exterior spec §8):
-	# 110 blocks, 104,700 kg, center_of_mass = (0.004, 1.301, 0.160),
-	# inertia = (2065526, 2865503, 1175422),
-	# torque_budget = (3080229, 2040115, 2174785),
-	# torque_imbalance = (151289, -5731, 0): pitch 4.9%, yaw 0.3%, roll 0%
-	# of authority,
-	# thrust_budget forward/reverse/lateral/vertical = 1500/500/500/1000 kN,
-	# power_gen = 36.0 MW (all from the quantum core), power_draw = 31.3 MW,
-	# quantum_capacity = 1200 QE, zero validation issues, can_launch = true.
-	# The fairings add 7.8 t and no power draw. Before them the ship was
-	# 96,900 kg with the centre of mass at y = 1.207 and pitch imbalance of
-	# 11,146 N*m (0.4%): 6.0 t of spine and fins sit above the cabin and only
-	# the 1.8 t keel below it, so the centre of mass rose 9 cm. Handling under
-	# assist is a little slower: torque_budget / inertia is pitch 1.49, yaw
-	# 0.71, roll 1.85 rad/s^2 (1.60 / 0.74 / 2.05 before), and forward,
-	# reverse and lateral thrust per tonne fall from 15.5 / 5.2 / 5.2 to
-	# 14.3 / 4.8 / 4.8 m/s^2. A full burn still holds the nose. See
-	# task-1-report.md and task-15-report.md for the earlier derivations.
-	_put(g, Vector3i(-1, 1, -4), &"rcs", O_RCS_STARBOARD)
-	_put(g, Vector3i(1, 1, -4), &"rcs", O_RCS_PORT)
-	_put(g, Vector3i(-2, 1, -3), &"rcs", O_RCS_UP)
-	_put(g, Vector3i(2, 1, -3), &"rcs", O_RCS_UP)
-	_put(g, Vector3i(-2, 1, -4), &"rcs", O_RCS_DOWN)
-	_put(g, Vector3i(2, 1, -4), &"rcs", O_RCS_DOWN)
-
-	# --- The shape (ship exterior spec §8): fairings, 0.3 t each, all outside
-	# the cabin row, so nothing inside moves. A dorsal spine a metre high,
-	# ramped up out of the roof toward the bow and down again over the stern
-	# bank; a fin rising aft on each engine pod; and a keel under the
-	# centreline for the floods to hang from.
-	for x in [-1, 0, 1]:
-		for z in [-1, 0, 1, 2]:
-			_put(g, Vector3i(x, 2, z), &"fairing_half")
-		_put(g, Vector3i(x, 2, -2), &"fairing_slope_long_low", O_FORWARD)
-		_put(g, Vector3i(x, 2, 3), &"fairing_slope_long_low", O_STERN)
-	for x in [-3, 3]:
-		_put(g, Vector3i(x, 1, 1), &"fairing_slope", O_FORWARD)
-	for z in [-3, -2, -1, 0, 1, 2]:
-		_put(g, Vector3i(0, -1, z), &"fairing_half", O_KEEL)
-
-	return g
+	if library == null:
+		library = ShipLibrary.load_from_dir()
+	return library.grid(ShipLibrary.STARTER)
 
 ## Stands you on the starter's deck to begin with (see _deck_spot). The
 ## avatar's scene position was authored for the hand-built room; deriving it
@@ -1308,9 +1105,3 @@ func _on_avatar_mode_changed(mode: Avatar.Mode) -> void:
 		_hud.set_active_vehicle(_avatar)
 	elif not _director.is_seated:
 		_hud.set_active_vehicle(null)
-
-func _put(g: ShipGrid, coord: Vector3i, id: StringName, orientation: int = 0) -> void:
-	var i := BlockInstance.new()
-	i.block_id = id
-	i.orientation = orientation
-	g.set_block(coord, i)

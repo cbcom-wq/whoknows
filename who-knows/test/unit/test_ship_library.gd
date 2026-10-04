@@ -108,14 +108,3 @@ func test_the_library_holds_the_starter_first():
 	assert_eq(lib.errors, [] as Array[String])
 	assert_eq(lib.ids()[0], ShipLibrary.STARTER)
 	assert_eq(lib.name_of(ShipLibrary.STARTER), "Starter shuttle")
-
-## Build order step 1 (spec §3.3): the file is the code's starter, block for
-## block. This lives only until _starter_grid() reads the file.
-func test_the_library_starter_is_the_code_starter():
-	var boot: Node = load("res://scenes/flight_test.gd").new()
-	var code: ShipGrid = boot._starter_grid()
-	boot.free()
-	var file := ShipLibrary.load_from_dir().grid(ShipLibrary.STARTER)
-	assert_not_null(file)
-	if file != null:
-		assert_true(_same(file, code), "the same blocks, turned the same way, and nothing else")
