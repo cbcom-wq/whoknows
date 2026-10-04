@@ -14,8 +14,9 @@ extends RefCounted
 ## ships or stores.
 
 const CAPACITY := 100.0
-## QE per m/s of Δv (§9): 2.5 QE a second at the suit's full thrust.
-const COST_PER_DV := 1.0
+## QE per m/s of Δv (§9): 0.625 QE a second at the suit's full thrust, so a
+## full cell lasts 160 s of continuous thrust (4x the original 1.0 per m/s).
+const COST_PER_DV := 0.25
 ## Below this the suit is low: the HUD turns amber and the chime sounds.
 const LOW := 25.0
 ## Below this the suit is critical, and the room panel refuses to

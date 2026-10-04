@@ -4,7 +4,8 @@ extends Node
 ## The pilot's hands on the ship (docs/superpowers/specs/
 ## 2026-09-25-flight-controls-design.md §4, §7): the virtual stick and the
 ## arrow keys, point mode and the heading click, the speed lock and the assist
-## toggle, turned into FlightComputer calls. While you sit it is the HUD's
+## toggle, turned into FlightComputer calls. Holding C hands the mouse to the
+## camera director's orbit instead: the stick stays where it was. While you sit it is the HUD's
 ## vehicle: its telemetry is the flight computer's, plus the stick and the
 ## pointer.
 
@@ -36,6 +37,8 @@ var director: CameraDirector
 ## Sitting down or standing up: the stick centres and point mode ends. A
 ## heading hold or a speed lock keeps running (spec §4.2).
 func set_seated(on: bool) -> void:
+	if not on and director != null:
+		director.end_orbit()
 	seated = on
 	stick.centre()
 	pointing = false
@@ -65,7 +68,9 @@ func handle(event: InputEvent) -> void:
 	if not seated:
 		return
 	var motion := event as InputEventMouseMotion
-	if motion != null:
+	if motion != null and _orbiting():
+		director.orbit(motion.relative)
+	elif motion != null:
 		var view := _view_size()
 		if view.y <= 0.0:
 			return
@@ -74,6 +79,12 @@ func handle(event: InputEvent) -> void:
 			pointer = (pointer + motion.relative / view.y).clamp(-half, half)
 		else:
 			stick.move(motion.relative, view.y)
+	elif event.is_action_pressed(&"orbit_camera"):
+		if director != null:
+			director.begin_orbit()
+	elif event.is_action_released(&"orbit_camera"):
+		if director != null:
+			director.release_orbit()
 	elif event.is_action_pressed(&"point_mode"):
 		pointing = true
 		pointer = Vector2.ZERO
@@ -97,6 +108,10 @@ func handle(event: InputEvent) -> void:
 		warp_pressed.emit()
 	elif event.is_action_pressed(&"toggle_assist"):
 		_flight.assist_enabled = not _flight.assist_enabled
+
+## True while C is held: the mouse swings the camera, not the stick.
+func _orbiting() -> bool:
+	return director != null and director.is_orbiting
 
 func _process(_delta: float) -> void:
 	if not seated:

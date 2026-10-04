@@ -211,3 +211,24 @@ func test_a_long_warp_keeps_the_origin_up_at_full_speed():
 					"the origin keeps up at %.0f km/s" % (_ship.warp.velocity().length() / 1000.0))
 			return
 	pass_test("no clear line of 5,000 km in this system")
+
+## The bridge computer plots the warp (ship damage sections spec §2.2):
+## damaged, a spool takes DAMAGED_SPOOL; wrecked, there is no warp.
+func test_a_hurt_computer_slows_the_warp_and_a_wrecked_one_refuses_it():
+	var t := _ready_above(WarpTarget.Kind.PLANET)
+	assert_not_null(t)
+	var comp: StringName = &"computer"
+	_ship.damage.component_damage[comp] = _ship.damage.component_hp[comp] * 0.6
+	assert_eq(_ship.warp.spool_time(), WarpDrive.DAMAGED_SPOOL)
+	_ship.warp.engage()
+	assert_eq(_ship.warp.stage, WarpDrive.Stage.SPOOLING)
+	assert_eq(_ship.warp.spool_left, WarpDrive.DAMAGED_SPOOL)
+	_ship.warp.abort("test")
+	_ship.damage.component_damage[comp] = _ship.damage.component_hp[comp]
+	assert_eq(_ship.warp.check().status, WarpPlan.Status.OFFLINE)
+	assert_eq(_ship.warp.plan.text(), "WARP · COMPUTER OFFLINE")
+	_ship.warp.engage()
+	assert_eq(_ship.warp.stage, WarpDrive.Stage.IDLE, "refused")
+	_ship.damage.component_damage[comp] = 0.0
+	assert_eq(_ship.warp.check().status, WarpPlan.Status.READY, "mended")
+	assert_eq(_ship.warp.spool_time(), WarpDrive.SPOOL)

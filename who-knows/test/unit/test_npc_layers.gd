@@ -27,7 +27,8 @@ func test_everything_that_should_meet_an_npc_does():
 	assert_true(Item.MASK & Npc.LAYER != 0, "items")
 	assert_true(AsteroidBody.MASK & Npc.LAYER != 0, "rock bodies")
 	assert_true(PlasmaBolt.RAY_MASK & Npc.LAYER != 0, "a bolt")
-	assert_true(PlasmaEmitter.RAY_MASK & Npc.LAYER != 0, "the pistol's aim")
+	assert_true(PlasmaBolt.SPACE_RAY_MASK & Npc.LAYER != 0, "a bolt outside")
+	assert_true(PlasmaBolt.mask(false) & Npc.LAYER != 0 and PlasmaBolt.mask(true) & Npc.LAYER != 0, "the pistol's aim")
 	var doors := _root.find_children("*", "SlidingDoor", true, false)
 	assert_gt(doors.size(), 0)
 	for door in doors:

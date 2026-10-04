@@ -59,7 +59,8 @@ static func compute(grid: ShipGrid, catalog: BlockCatalog) -> ShipStats:
 	return s
 
 ## Returns [{def, coord, center, force, output}] once so each pass can reuse
-## it. `output` is the block's share of its function by stage (spec §4.1);
+## it. `output` is the block's share of its function by stage (spec §4.1),
+## for a component's blocks only (ShipDamage.degrades);
 ## `force` is at full output, and the passes scale it.
 static func _gather(grid: ShipGrid, catalog: BlockCatalog) -> Array:
 	var out: Array = []
@@ -77,7 +78,9 @@ static func _gather(grid: ShipGrid, catalog: BlockCatalog) -> Array:
 			"coord": coord,
 			"center": ShipGrid.cell_center(coord),
 			"force": force,
-			"output": BlockDamage.output_of(BlockDamage.stage_of(inst, def)),
+			# Only a component's blocks lose function (ship damage sections spec
+			# §2.3): hull damage is looks and pieces.
+			"output": BlockDamage.output_of(BlockDamage.stage_of(inst, def)) if ShipDamage.degrades(def.id) else 1.0,
 		})
 	return out
 

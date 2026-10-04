@@ -107,6 +107,10 @@ var grasp: Grasp
 var hands: Hands
 ## The ray that finds interactables, when the scene gives the head one.
 var interactor: Interactor
+## True while the camera is at a computer station (computer mode spec §3.3):
+## Esc and a click are the station's, not for letting go of and taking back
+## the mouse, and the Interactor rests.
+var at_station := false
 
 ## Seconds since you last bumped a rock on a spacewalk.
 var since_bumped := INF
@@ -228,7 +232,14 @@ func set_control_enabled(enabled: bool) -> void:
 	if not enabled:
 		velocity = Vector3.ZERO
 
+func set_at_station(on: bool) -> void:
+	at_station = on
+	if interactor != null:
+		interactor.suspended = on
+
 func _unhandled_input(event: InputEvent) -> void:
+	if at_station:
+		return
 	# Mouse capture is released and regained regardless of who currently has
 	# control. This node captured the cursor, so it owns letting go of it --
 	# and being unable to release it while seated would trap the player.

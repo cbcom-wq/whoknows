@@ -5,7 +5,9 @@ extends Node3D
 ## §9.2, §9.3). Not a physics body: each tick it casts a ray from where it is
 ## to where it will be, so it cannot pass through a 0.1 m wall at any speed.
 ## Where it lands it pushes whatever is loose, tells anything that listens
-## (receive_hit), flashes, and is gone.
+## (receive_hit), flashes, and is gone. Fired on a spacewalk it is `outside`:
+## drawn and lit for the world, it hits what is out there, and it moves with the
+## floating origin (CLAUDE.md).
 
 signal struck(point: Vector3, collider: Object)
 
@@ -17,6 +19,9 @@ const PUSH := 6.0
 const DAMAGE := 10.0
 ## interior_geometry | items.
 const RAY_MASK := 2 | 32 | Npc.LAYER
+## Outside: exterior_hull | terrain | items | asteroids | npcs -- Item.SPACE_MASK
+## without the avatar.
+const SPACE_RAY_MASK := 1 | BodyProxy.LAYER | 32 | AsteroidBody.LAYER | Npc.LAYER
 ## Chunky enough to read at the far end of a corridor: at 0.06 m thick it was
 ## a hairline by four metres.
 const LENGTH := 0.5
@@ -30,6 +35,8 @@ var direction := Vector3.FORWARD
 var exclude: Array[RID] = []
 var source: Node = null
 var age := 0.0
+## Set before it enters the tree.
+var outside := false
 
 var _spent := false
 
@@ -38,18 +45,32 @@ func launch(from: Vector3, dir: Vector3) -> void:
 	var up := Vector3.UP if absf(direction.dot(Vector3.UP)) < 0.99 else Vector3.RIGHT
 	global_transform = Transform3D(Basis.looking_at(direction, up), from)
 
+## The rays it casts, for where it is.
+static func mask(out: bool) -> int:
+	return SPACE_RAY_MASK if out else RAY_MASK
+
+## What draws it and what its light falls on: the interior's aboard, the
+## world's outside (as the repair torch's sparks).
+static func render_layer(out: bool) -> int:
+	return Item.SPACE_LAYER if out else InteriorKit.LAYER
+
+static func light_mask(out: bool) -> int:
+	return (1 | ExteriorBuilder.OWN_HULL_LAYER) if out else InteriorKit.LAYER
+
 func _ready() -> void:
+	if outside:
+		add_to_group(Universe.EXTERIOR_SPACE)
 	var body := MeshInstance3D.new()
 	body.mesh = _shared_mesh()
 	body.material_override = InteriorMaterials.glow()
-	body.layers = InteriorKit.LAYER
+	body.layers = render_layer(outside)
 	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(body)
 	var light := OmniLight3D.new()
 	light.light_color = InteriorPalette.LIGHT_WARM
 	light.light_energy = LIGHT_ENERGY
 	light.omni_range = LIGHT_RANGE
-	light.light_cull_mask = InteriorKit.LAYER
+	light.light_cull_mask = light_mask(outside)
 	light.shadow_enabled = false
 	add_child(light)
 
@@ -63,7 +84,7 @@ func _physics_process(delta: float) -> void:
 		return
 	var from := global_position
 	var to := from + direction * SPEED * delta
-	var query := PhysicsRayQueryParameters3D.create(from, to, RAY_MASK, exclude)
+	var query := PhysicsRayQueryParameters3D.create(from, to, mask(outside), exclude)
 	var result := get_world_3d().direct_space_state.intersect_ray(query)
 	if result.is_empty():
 		global_position = to
@@ -88,7 +109,7 @@ func impact(result: Dictionary) -> void:
 	hit.shape = int(result.get("shape", -1))
 	Hit.deliver(collider, hit)
 	_tell_npcs(point, collider)
-	ImpactFlash.spawn(get_parent(), point, normal, ImpactFlash.Kind.IMPACT)
+	ImpactFlash.spawn(get_parent(), point, normal, ImpactFlash.Kind.IMPACT, outside)
 	struck.emit(point, collider)
 	queue_free()
 

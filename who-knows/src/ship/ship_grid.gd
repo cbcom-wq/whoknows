@@ -57,6 +57,24 @@ func remove_many(coords: Array) -> void:
 	if first != null:
 		cell_changed.emit(first)
 
+## Empties every cell in `remove` and fills every cell in `add` (coord ->
+## BlockInstance), then emits cell_changed once: a hull section losing some
+## pieces and getting others back costs one rebuild (ship damage sections
+## spec §4).
+func replace_many(remove: Array, add: Dictionary) -> void:
+	var first = null
+	for coord in remove:
+		if _cells.erase(coord) and first == null:
+			first = coord
+	for coord: Vector3i in add:
+		if add[coord] == null:
+			continue
+		_cells[coord] = add[coord]
+		if first == null:
+			first = coord
+	if first != null:
+		cell_changed.emit(first)
+
 func note_staged(coord: Vector3i, stage: int) -> void:
 	block_staged.emit(coord, stage)
 

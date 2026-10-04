@@ -1,11 +1,10 @@
 extends SceneTree
 
 # Damage on the real starter, for the owner (docs/superpowers/specs/
-# 2026-09-29-health-and-damage-design.md §4.5 as amended 2026-10-02, §9):
-# the hull before and after a heavy impact on the port side -- intact,
-# scorched, charred and knocked off in one picture -- then the cabin at eye
-# height (1.6 m) after it: the helm, the corridor and a wrecked wall. Run it
-# WITHOUT --headless so it renders:
+# 2026-10-03-ship-damage-sections-design.md §4, §5, §9): the hull with the port
+# sections at 70%, 35% and 0% (scorched from the edges in, then pieces off),
+# and the cabin at eye height (1.6 m) with HULL at 60%, 35% and 15%: the helm,
+# the corridor and a wall. Run it WITHOUT --headless so it renders:
 #
 #   godot --path who-knows --resolution 1280x720 --script res://test/probes/damage_review.gd -- <abs out dir>
 #
@@ -57,24 +56,12 @@ func _hull_shots(tag: String) -> void:
 	cam.current = false
 	cam.queue_free()
 
-## A heavy impact on the port side: the further to port and forward, the
-## harder each block is hit, from nothing on the starboard side to two and a
-## half times its hp at the port bow.
-func _impact() -> Dictionary:
-	var lo := INF
-	var hi := -INF
-	for coord: Vector3i in _ship.grid.coords():
-		lo = minf(lo, coord.x)
-		hi = maxf(hi, coord.x)
-	var hits := {}
-	for coord: Vector3i in _ship.grid.coords():
-		var port := 1.0 - (coord.x - lo) / maxf(hi - lo, 1.0)
-		var bow := clampf(0.5 - coord.z * 0.08, 0.0, 1.0)
-		var share := clampf(port * 2.4 + bow * 0.6 - 0.6, 0.0, 2.5)
-		var def := _ship.catalog.get_def(_ship.grid.get_block(coord).block_id)
-		if share > 0.0 and def != null:
-			hits[coord] = def.hp * share
-	return hits
+## The port sections at `port`, the starboard ones at `starboard` (health).
+func _sections(port: float, starboard: float) -> void:
+	for id in ShipDamage.SECTIONS:
+		var h := port if String(id).begins_with("port") else starboard
+		_ship.damage.section_damage[id] = _ship.damage.section_hp[id] * (1.0 - h)
+	_ship._apply_view()
 
 func _count() -> Dictionary:
 	var out := {}
@@ -97,13 +84,13 @@ func _run(scene: Node) -> void:
 	_ship.flight_computer.set_physics_process(false)
 	await _hull_shots("intact")
 
-	var before := _ship.grid.size()
-	var removed := _ship.take_damage_many(_impact())
-	print("impact  %d blocks before, %d knocked off, now %s" % [before, removed.size(), _count()])
-	await _frames(4)
-	await _hull_shots("hit")
+	for h in [0.7, 0.35, 0.0]:
+		_sections(h, 1.0)
+		print("port at %d%%: %d pieces off, now %s" % [roundi(h * 100.0), _ship.damage.lost().size(), _count()])
+		await _frames(4)
+		await _hull_shots("port%d" % roundi(h * 100.0))
 
-	# Inside, at eye height, after the same impact.
+	# Inside, at eye height, at each cabin level.
 	var avatar: Avatar = _ship.get_node("Interior/Avatar")
 	var acam: Camera3D = avatar.camera
 	var cam := Camera3D.new()
@@ -124,20 +111,36 @@ func _run(scene: Node) -> void:
 	var behind := helm + Vector3i(0, 0, 2)
 	_eye(cam, behind, Vector3.ZERO, helm + Vector3i(0, 0, -1), Vector3(0, 1.1, 0))
 	avatar.place(_ship.interior.global_transform * Transform3D(Basis.IDENTITY, DeckPaths.floor_point(behind) + Vector3(0, 0, 3)))
-	await _shot("cabin_bridge", 12)
-	# The corridor, from the bridge, looking aft.
-	_eye(cam, Vector3i(0, 0, -1), Vector3(0, 0, -0.5), Vector3i(0, 0, 2), Vector3(0, 1.0, 0))
-	await _shot("cabin_corridor", 12)
-	# A wrecked port wall, close: the char, and its sparks.
-	var wall_cell := Vector3i.ZERO
-	var wall_dir := Vector3i(-1, 0, 0)
-	for c: Vector3i in walk:
-		var w := _ship.grid.get_block(c + wall_dir)
-		if w != null and BlockDamage.stage_of(w, _ship.catalog.get_def(w.block_id)) == BlockDamage.Stage.WRECKED \
-				and _ship.interior_builder.layout().zone_at(c) == &"common":
-			wall_cell = c
-			break
-	_eye(cam, wall_cell, Vector3(0.6, 0, 0.9), wall_cell, Vector3(-1.0, 1.2, -0.3))
-	await _shot("cabin_wall", 12)
-	await _shot("cabin_wall_sparks", 20)
+	for hull in [0.6, 0.35, 0.15]:
+		_sections(hull, hull)
+		await _frames(4)
+		var tag := "hull%d" % roundi(hull * 100.0)
+		_eye(cam, behind, Vector3.ZERO, helm + Vector3i(0, 0, -1), Vector3(0, 1.1, 0))
+		await _shot("cabin_bridge_" + tag, 12)
+		_eye(cam, Vector3i(0, 0, -1), Vector3(0, 0, -0.5), Vector3i(0, 0, 2), Vector3(0, 1.0, 0))
+		await _shot("cabin_corridor_" + tag, 12)
+	_sections(1.0, 1.0)
+	# The bridge computer, intact, glitching and dark, from its operator's spot.
+	var table: ShipComputer = _ship.interior_builder.computers()[0]
+	var spot := table.cell + InteriorLayout.facing(_ship.grid.get_block(table.cell).orientation)
+	_eye(cam, spot, Vector3.ZERO, table.cell, Vector3(0, 1.0, 0))
+	for share in [0.0, 0.6, 1.0]:
+		_ship.damage.component_damage[&"computer"] = _ship.damage.component_hp[&"computer"] * share
+		_ship._apply_view()
+		await _frames(4)
+		# A stage seen from inside rebuilds the cabin, tables and all.
+		table = _ship.interior_builder.computers()[0]
+		if share == 0.6:
+			table._glitch_in = 0.0
+			table._glitch(0.01)
+		await _shot("computer_%d" % roundi((1.0 - share) * 100.0), 2)
+	_ship.damage.component_damage[&"computer"] = 0.0
+	# The helm, seated, with the cockpit damaged and wrecked: the canopy cracks.
+	var director: Node = _ship.get_parent().get_node("CameraDirector")
+	_ship.seat.interact(avatar)
+	await director.transition_finished
+	for share in [0.6, 1.0]:
+		_ship.damage.component_damage[&"cockpit"] = _ship.damage.component_hp[&"cockpit"] * share
+		_ship._apply_view()
+		await _shot("seated_cockpit_%d" % roundi((1.0 - share) * 100.0), 12)
 	quit(0)

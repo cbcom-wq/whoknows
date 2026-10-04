@@ -19,8 +19,12 @@ extends Node3D
 
 const RADIUS := 0.5
 const HALF_HEIGHT := 0.3
-## Marks of one shape and colour it can draw at once.
+## Marks of one shape and colour a group starts with room for. A busy system
+## needs more -- seed 2's 31 worlds draw about 840 faint ticks on the system
+## range -- so a group doubles as it fills, up to MAX_CAPACITY; past that,
+## marks are dropped, counted (dropped()) and warned of, never silently.
 const CAPACITY := 512
+const MAX_CAPACITY := 4096
 ## The miniature's longest side, metres (spec §7.1), and how fast it turns.
 const MINIATURE_SIZE := 0.8
 const SPIN := deg_to_rad(10.0)
@@ -39,6 +43,11 @@ const SHAPES: Array[StringName] = [&"ball", &"diamond", &"sphere", &"pin", &"sta
 const _GLOW := InteriorKit.Batch.GLOW
 
 var layer := InteriorKit.LAYER
+## Whether marks dropped past MAX_CAPACITY are warned of (once). A test that
+## means to overflow turns it off to keep its output clean.
+var warn_on_drop := true
+var _dropped := 0
+var _warned := false
 var _groups: Dictionary = {}   # StringName shape -> {Color: MultiMeshInstance3D}
 ## What each group was given this time. Kept here too: the renderer owns a
 ## MultiMesh's own copy, and a headless run keeps none to read back.
@@ -50,6 +59,12 @@ var _bracket_size := 0.0
 var _pivot: Node3D
 ## The marks and the bracket, turned as a whole by set_turn.
 var _marks_root: Node3D
+## Turned by the operator at a computer station (computer mode spec §4.4): the
+## marks, the bracket and the chevron, on top of the ship's turn.
+var _spin_root: Node3D
+var _chevron_parts: Array[MeshInstance3D] = []
+var _chevron_wanted := true
+var _frame_wanted := true
 var _mini_meshes: Array[Mesh] = []
 var _time := 0.0
 
@@ -58,14 +73,21 @@ var _time := 0.0
 func setup(render_layer := InteriorKit.LAYER) -> void:
 	layer = render_layer
 	var kit := _kit()
-	_chevron(kit)
 	_edge_ring(kit)
 	_frame_parts = kit.commit()
 	for part in _frame_parts:
 		part.name = "MapFrame"
+	_spin_root = Node3D.new()
+	_spin_root.name = "Spin"
+	add_child(_spin_root)
+	var chevron_kit := _kit(_spin_root)
+	_chevron(chevron_kit)
+	_chevron_parts = chevron_kit.commit()
+	for part in _chevron_parts:
+		part.name = "Chevron"
 	_marks_root = Node3D.new()
 	_marks_root.name = "Marks"
-	add_child(_marks_root)
+	_spin_root.add_child(_marks_root)
 	var bracket_kit := _kit()
 	bracket_kit.bevel_box(_GLOW, Transform3D.IDENTITY, Vector3.ONE, 0.25, InteriorKit.lit(InteriorPalette.AMBER, ENERGY))
 	var corners := MultiMesh.new()
@@ -97,6 +119,12 @@ static func place(relative: Vector3, range_m: float) -> Dictionary:
 		t = minf(t, HALF_HEIGHT / absf(p.y))
 	return {"position": p * t, "pinned": t < 1.0}
 
+## Whether a point already in the holo's metres lies inside the volume: what
+## place() leaves unpinned. For the map's ticks, which are never drawn pinned
+## and are too many to make a Dictionary each.
+static func inside(p: Vector3) -> bool:
+	return p.x * p.x + p.z * p.z <= RADIUS * RADIUS and absf(p.y) <= HALF_HEIGHT
+
 ## Draws `marks`, each {shape, colour, position, size}; a shape and colour
 ## with none this time is emptied. For &"stalk", `position` is the top of the
 ## stalk, and it runs from there to the ship's level.
@@ -109,21 +137,47 @@ func show_marks(marks: Array) -> void:
 ## The same, a mark at a time, with nothing allocated per mark: begin, add
 ## each, end. For the map, which draws hundreds every frame.
 func begin_marks() -> void:
+	_dropped = 0
 	for mmi in _placed:
 		(_placed[mmi] as Array).clear()
 
 func add_mark(shape: StringName, colour: Color, position: Vector3, size: float) -> void:
 	var placed: Array = _placed[_group(shape, colour)]
-	if placed.size() < CAPACITY:
+	if placed.size() < MAX_CAPACITY:
 		placed.append(_transform(shape, position, size))
+	else:
+		_dropped += 1
+
+## Many ticks of one colour and size at once, as add_mark would place them:
+## the map's rings, belts and limits, hundreds a placing, for one group looked
+## up and one basis made.
+func add_ticks(colour: Color, positions: PackedVector3Array, size: float) -> void:
+	if positions.is_empty():
+		return
+	var placed: Array = _placed[_group(&"tick", colour)]
+	var b := Basis.from_scale(Vector3.ONE * size)
+	for at in positions:
+		if placed.size() >= MAX_CAPACITY:
+			_dropped += 1
+			continue
+		placed.append(Transform3D(b, at))
 
 ## Hands each group its transforms in one buffer, 12 floats apiece as
-## MultiMesh.buffer lays them out: one call, not one per mark.
+## MultiMesh.buffer lays them out: one call, not one per mark. A group with
+## more marks than room doubles first.
 func end_marks() -> void:
+	if _dropped > 0 and warn_on_drop and not _warned:
+		push_warning("HoloVolume: %d marks past MAX_CAPACITY (%d) dropped" % [_dropped, MAX_CAPACITY])
+		_warned = true
 	for mmi: MultiMeshInstance3D in _placed:
 		var placed: Array = _placed[mmi]
+		var room := mmi.multimesh.instance_count
+		if placed.size() > room:
+			while room < placed.size():
+				room *= 2
+			mmi.multimesh.instance_count = mini(room, MAX_CAPACITY)
 		var buf := PackedFloat32Array()
-		buf.resize(CAPACITY * 12)
+		buf.resize(mmi.multimesh.instance_count * 12)
 		var i := 0
 		for xf: Transform3D in placed:
 			var b := xf.basis
@@ -142,6 +196,10 @@ func end_marks() -> void:
 			i += 12
 		mmi.multimesh.buffer = buf
 		mmi.multimesh.visible_instance_count = placed.size()
+
+## How many marks the last begin..end could not hold (past MAX_CAPACITY).
+func dropped() -> int:
+	return _dropped
 
 ## How many marks of `shape` are drawn, in any colour or in `colour` alone.
 func mark_count(shape: StringName, colour: Variant = null) -> int:
@@ -177,7 +235,7 @@ func bracket_position() -> Vector3:
 
 ## Turns every mark and the bracket together: for a map placed a moment ago,
 ## brought round to the way the ship faces now, without placing each mark
-## again. The chevron and the ring never turn.
+## again. The chevron spins with the marks but never turns with the ship.
 func set_turn(turn: Basis) -> void:
 	_marks_root.basis = turn
 
@@ -187,11 +245,37 @@ func turn() -> Basis:
 ## The ship's chevron and the edge ring, which the map shows and the status
 ## page doesn't.
 func show_map_frame(shown: bool) -> void:
+	_frame_wanted = shown
 	for part in _frame_parts:
 		part.visible = shown
+	_show_chevron_parts()
 
 func map_frame_shown() -> bool:
 	return not _frame_parts.is_empty() and _frame_parts[0].visible
+
+## The chevron alone: the map hides it once its centre has left the ship, and
+## draws the ship as a pip instead (computer mode spec §4.2).
+func show_chevron(shown: bool) -> void:
+	_chevron_wanted = shown
+	_show_chevron_parts()
+
+func chevron_shown() -> bool:
+	return not _chevron_parts.is_empty() and _chevron_parts[0].visible
+
+func _show_chevron_parts() -> void:
+	for part in _chevron_parts:
+		part.visible = _frame_wanted and _chevron_wanted
+
+func set_spin(angle: float) -> void:
+	_spin_root.basis = Basis(Vector3.UP, angle)
+
+func spin() -> float:
+	return _spin_root.basis.get_euler().y
+
+## A mark's place in the world, from where it was placed: through the ship's
+## turn and the operator's spin. For picking marks with the mouse.
+func marks_to_global(position: Vector3) -> Vector3:
+	return _marks_root.global_transform * position
 
 ## The ship in miniature (spec §7.1), from `meshes` shared as they are, and
 ## `bounds`, everything they draw in their own frame.
@@ -354,8 +438,8 @@ static func _edge_ring(kit: InteriorKit) -> void:
 	kit.annulus(_GLOW, Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), Vector3.ZERO), RADIUS - 0.006, RADIUS, dim)
 	kit.annulus(_GLOW, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3.ZERO), RADIUS - 0.006, RADIUS, dim)
 
-func _kit() -> InteriorKit:
-	var kit := InteriorKit.new(self)
+func _kit(root: Node3D = null) -> InteriorKit:
+	var kit := InteriorKit.new(root if root != null else self)
 	kit.layer = layer
 	kit.light_mask = layer
 	return kit

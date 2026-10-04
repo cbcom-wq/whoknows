@@ -13,11 +13,11 @@ func test_it_starts_empty_and_dry():
 	assert_eq(SuitCell.CAPACITY, 100.0)
 	assert_eq(SuitCell.GO_OUT_MIN, 10.0)
 
-func test_delta_v_costs_one_qe_per_metre_a_second():
+func test_delta_v_costs_a_quarter_qe_per_metre_a_second():
 	var cell := SuitCell.new()
 	cell.charge = 50.0
 	assert_true(cell.spend_dv(2.5))
-	assert_almost_eq(cell.charge, 47.5, 0.0001)
+	assert_almost_eq(cell.charge, 49.375, 0.0001)
 
 func test_the_last_step_empties_it_and_then_it_is_dry():
 	var cell := SuitCell.new()
@@ -43,9 +43,9 @@ func test_the_levels():
 		cell.charge = case[0]
 		assert_eq(cell.level(), case[1], "at %.2f" % case[0])
 
-## Spec §9: 2.5 QE a second at full thrust -- the suit's 2.5 m/s^2 -- assist
+## Spec §9: 0.625 QE a second at full thrust -- the suit's 2.5 m/s^2 -- assist
 ## on, as you fly.
-func test_full_thrust_for_a_second_costs_2_5():
+func test_full_thrust_for_a_second_costs_0_625():
 	var cell := SuitCell.new()
 	cell.charge = SuitCell.CAPACITY
 	var v := Vector3.ZERO
@@ -53,7 +53,7 @@ func test_full_thrust_for_a_second_costs_2_5():
 		var next := Suit.step(v, Vector3.ZERO, Vector3(0, 0, -1), Basis.IDENTITY, true, DT)
 		cell.spend_dv((next - v).length())
 		v = next
-	assert_almost_eq(SuitCell.CAPACITY - cell.charge, 2.5, 0.001)
+	assert_almost_eq(SuitCell.CAPACITY - cell.charge, 0.625, 0.001)
 
 ## Spec §9: holding station beside a drifting, slowly turning ship costs
 ## almost nothing -- only what it takes to follow the ship's turn.

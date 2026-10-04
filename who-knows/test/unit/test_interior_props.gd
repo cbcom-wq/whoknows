@@ -546,8 +546,9 @@ func test_nothing_solid_stands_in_the_holo():
 	var c := InteriorProps.HOLO_VOLUME_CENTRE
 	var volume := AABB(Vector3(-0.5, c - 0.3, -0.5), Vector3(1.0, 0.6, 1.0))
 	for shape: CollisionShape3D in _colliders():
+		# The console's collider is tilted with the console: bound it as placed.
 		var half := (shape.shape as BoxShape3D).size * 0.5
-		var box := AABB(shape.position - half, half * 2.0)
+		var box := shape.transform * AABB(-half, half * 2.0)
 		assert_false(box.intersects(volume), "a collider reaches into the holo")
 
 func test_the_console_faces_its_operator_and_its_buttons_run_left_to_right():
@@ -585,3 +586,23 @@ func test_the_holo_table_s_glass_is_clear():
 			assert_true(v.y <= glass_y + 0.0001, "a vertex above the glass at %s" % v)
 			if v.y > glass_y + 0.0001:
 				return
+
+## Computer mode spec §3.1-§3.2: the station's box offers the computer over the
+## table, under the holo; its eye stays under the ceiling however high it
+## orbits.
+func test_the_station_box_stays_under_the_holo():
+	var top := InteriorProps.holo_station_shape_centre().y + InteriorProps.HOLO_STATION_SIZE.y * 0.5
+	assert_lt(top, InteriorProps.HOLO_VOLUME_CENTRE - 0.3, "under the holo's floor")
+	assert_gt(top, InteriorProps.HOLO_TABLE_TOP + 0.05, "above the table's collider")
+
+func test_the_station_eye_looks_into_the_holo_from_the_operator_s_side():
+	var eye := InteriorProps.holo_station_eye(InteriorProps.HOLO_STATION_ELEVATION)
+	var centre := InteriorProps.holo_table_volume().origin
+	assert_almost_eq(eye.origin.distance_to(centre), InteriorProps.HOLO_STATION_DISTANCE, 0.0001)
+	assert_lt(eye.origin.z, 0.0, "on the operator's side, -z")
+	assert_almost_eq(-eye.basis.z, (centre - eye.origin).normalized(), Vector3.ONE * 0.0001, "looking at the centre")
+	assert_almost_eq(eye.origin.y, 1.85, 0.01)
+
+func test_the_station_eye_orbits_under_the_ceiling():
+	var high := InteriorProps.holo_station_eye(ComputerStation.ELEVATION_MAX)
+	assert_lt(high.origin.y, InteriorProps.HEADROOM - 0.1)

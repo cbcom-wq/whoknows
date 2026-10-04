@@ -65,6 +65,54 @@ func test_assist_off_does_not_damp():
 		_fc.attitude_torque(Vector3.ZERO, Vector3(1, 1, 1)), Vector3.ZERO, Vector3.ONE * 0.001
 	)
 
+## A wrecked cockpit (ship damage sections spec §2.2): the assist is refused,
+## but a centred axis still damps its spin, at WRECKED_DAMPING of the gain, so
+## a knock from a rock can be ridden out.
+func test_assist_refused_still_damps_a_centred_axis():
+	_fc.torque_budget = Vector3.ONE * 1e12
+	_fc.assist_allowed = false
+	var spin := Vector3(0.5, -0.5, 0.25)
+	var torque := _fc.attitude_torque(Vector3.ZERO, spin)
+	var gain := FlightComputer.RATE_GAIN * FlightComputer.WRECKED_DAMPING
+	assert_almost_eq(torque, -spin * gain * INERTIA, Vector3.ONE * 1.0)
+
+func test_assist_refused_hands_a_deflected_axis_straight_to_the_stick():
+	_fc.assist_allowed = false
+	var torque := _fc.attitude_torque(Vector3(1, 0, 0), Vector3(0.5, 0.5, 0))
+	assert_almost_eq(torque.x, BUDGET.x, 1.0, "pitch is the stick's, raw")
+	assert_lt(torque.y, 0.0, "yaw, centred, still damps")
+	assert_lte(absf(torque.y), BUDGET.y, "within the budget")
+
+func test_mending_the_assist_turns_it_back_on():
+	_fc.assist_allowed = false
+	assert_false(_fc.assist_enabled)
+	_fc.assist_allowed = true
+	assert_true(_fc.assist_enabled, "it was on when it was refused")
+
+func test_mending_leaves_an_assist_the_pilot_turned_off_off():
+	_fc.assist_enabled = false
+	_fc.assist_allowed = false
+	_fc.assist_allowed = true
+	assert_false(_fc.assist_enabled)
+
+func test_the_assist_refused_ignores_the_toggle():
+	_fc.assist_allowed = false
+	_fc.assist_enabled = true
+	assert_false(_fc.assist_enabled, "refused")
+	_fc.assist_enabled = false
+	_fc.assist_allowed = true
+	assert_true(_fc.assist_enabled, "pressing it while refused did not change the pilot's choice")
+
+func test_a_save_keeps_the_pilot_s_choice_while_the_assist_is_refused():
+	_fc.assist_allowed = false
+	var d := _fc.to_dict()
+	var again := FlightComputer.new()
+	again.from_dict(d)
+	again.assist_allowed = false
+	again.assist_allowed = true
+	assert_true(again.assist_enabled, "a wreck saved and mended after loading comes back assisted")
+	again.free()
+
 ## Translation (flight controls spec §5.3, §5.4).
 
 const MASS := 92_300.0

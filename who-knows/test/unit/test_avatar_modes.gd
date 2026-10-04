@@ -96,16 +96,16 @@ func test_the_suit_starts_empty():
 	assert_not_null(_avatar.suit_cell)
 	assert_eq(_avatar.suit_cell.charge, 0.0)
 
-## Spec §9: the thrusters' Δv is charged to the cell, 1 QE per m/s: full
-## thrust for a second costs 2.5.
-func test_full_thrust_for_a_second_costs_2_5():
+## Spec §9: the thrusters' Δv is charged to the cell, 0.25 QE per m/s: full
+## thrust for a second costs 0.625.
+func test_full_thrust_for_a_second_costs_0_625():
 	_out()
 	_ship.exterior.linear_velocity = Vector3.ZERO
 	_ship.exterior.angular_velocity = Vector3.ZERO
 	_avatar.velocity = Vector3.ZERO
 	for i in 60:
 		_avatar.suit_step(DT, Vector3(0, 0, -1))
-	assert_almost_eq(SuitCell.CAPACITY - _avatar.suit_cell.charge, 2.5, 0.001)
+	assert_almost_eq(SuitCell.CAPACITY - _avatar.suit_cell.charge, 0.625, 0.001)
 
 ## Spec §9: holding station beside a drifting, slowly turning ship costs
 ## almost nothing -- in the real scene, the physics running.

@@ -47,26 +47,37 @@ Do these in order. Each one names the check that proves it.
      Jobs it cannot reach are dropped; the probe prints the dock and names them `UNREACHABLE`.
    - **a `computer`** (optional) for the bridge computer's holo table, a quiet fixture: put the
      cell its frame faces (its operator's spot) on walkable deck, within the Interactor's 2.5 m of
-     its buttons, and face it so the operator looks out of a window (the owner's wish, 2026-09-27:
+     its buttons (and with nothing solid between that eye and them:
+     `test_looking_at_a_button_from_its_operator_s_spot_finds_the_button`), and face it so the operator looks out of a window (the owner's wish, 2026-09-27:
      on the starter, the port front corner, facing aft). A console it displaces moves aft. The
-     probe prints each table and where you stand to use it.
-3. **Damage** (`docs/superpowers/specs/2026-09-29-health-and-damage-design.md`):
-   - every block needs a sensible `hp` in its `.tres`: damage is taken against it, and a block
-     goes damaged at half, wrecked at all of it and is knocked off at one and a half;
-   - `core`, `pilot_seat` and every `airlock` are **kept**: wrecked, never knocked off;
-   - **the cabin keeps its shape:** every walkable cell and every block beside one (the cabin's
-     shell, `Ship.inner_cells`, from the launch layout) is wrecked but never knocked off. Only
-     the **buffer** outside the shell breaks away, so give a ship one: fairings, outer plating,
-     engines and thrusters. The probe's `damage` line counts it (the starter's is 49 of 110);
-   - a block knocked off takes with it every block no longer joined to the core. A loss that
-     would cut off part of the shell is refused (the block stays wrecked), but don't hang half
-     the buffer off one cell either (the probe counts the blocks one loss would cut off at
-     worst);
-   - the ship must not be **crippled as built** (forward thrust, every turning axis and a
-     working `quantum_core`): the probe's `damage` line says so;
+     probe prints each table and where you stand to use it. Its station's eye (1.85 m up, 0.9 m
+     behind the holo's centre, up to 2.34 m while orbiting) must be clear of the ceiling and
+     walls; the probe prints it (`eye ... m up, orbiting to ... m`, flagged
+     `EYE IN THE CEILING`).
+3. **Damage** (`docs/superpowers/specs/2026-10-03-ship-damage-sections-design.md`): a ship
+   takes damage as **six hull sections and four components**, not block by block (`ShipDamage`):
+   - **the sections** are the launch layout's thirds (bow, midship, stern) split port and
+     starboard; the centre line is in both. Every block that is not a component is in one: its
+     `hp` (in its `.tres`) adds to its section's. Hull damage changes only looks and pieces,
+     never what the ship can do;
+   - **the components** are the `thruster`s (as one, the engines), the `quantum_core`, the
+     `computer` and the cockpit (`pilot_seat` and every `canopy`). Damaged under half: half
+     thrust, half power, a glitching table and a 20 s warp spool, a cracked canopy and a sluggish
+     assist; wrecked: none, crippled, dark and no warp, assist off (a centred stick still damps a spin; mending it turns the assist back on). They are mended where they
+     sit, so put the core and the table where the torch reaches them from walkable deck;
+   - **give each section pieces to lose:** plating and fairings (`ShipDamage.STRUCTURE`)
+     outside the cabin's shell (`Ship.inner_cells`), whose loss cuts nothing off. Below half a
+     section sheds them, outermost first, and welding brings them back. A section with none never
+     shows a hole; the probe's `damage` line prints each section's hp and pieces and flags `NO
+     PIECES`;
+   - **the cabin keeps its shape:** nothing in the shell is ever a piece; inside, the whole
+     cabin scorches below 50% HULL and chars, sparks and flickers below 20%;
+   - **the hull is mended from outside only** (`RepairTorch.SECTION_RATE`): a section a
+     spacewalker cannot reach the outside of cannot be mended;
+   - the ship must not be **crippled as built**: the probe's `damage` line says so;
    - **damage shows on the skin:** a hurt cell's plating, trim and glass are multiplied by its
      stage colour (`ExteriorBuilder.set_stage`, in place). A new hull piece must be marked to its
-     cell in `HullDressing` (`reference.md`), or it stays clean when its block is scorched.
+     cell in `HullDressing` (`reference.md`), or it stays clean when its section is scorched.
 4. **Propulsion:**
    - main `thruster`s oriented FORWARD (`o=0`), at the stern;
    - `rcs` in **opposed pairs** on every axis: pitch, yaw and roll both ways;
@@ -168,9 +179,10 @@ Do these in order. Each one names the check that proves it.
    groups on; the starter held 143–150 fps there on 2026-09-29, and 130 on 2026-10-02 (`main`
    and `many-ships` alike, the same box), with or without a second ship 300 m off. **Damage** (anything touching damage, its
    looks or the cabin's shell): render `test/probes/damage_review.gd` before merging. It shows
-   the hull intact and after a heavy port-bow hit (fill-lit; intact, scorched, charred and
-   knocked off in one view), and the cabin at eye height after it (the helm, the corridor, a
-   wrecked wall and its sparks). The cabin must keep its shape: same rooms, pod, helm and doors.
+   the hull intact and with the port sections at 70%, 35% and 0% (fill-lit: scorched in
+   patches, then pieces off), the cabin at eye height at 60%, 35% and 15% HULL, the bridge
+   computer intact, glitching and dark, and the seated view with the cockpit damaged and wrecked.
+   The cabin must keep its shape: same rooms, pod, helm and doors.
 11. **Fly it:** a steady turn on the arrow keys, a clicked heading 120° away, and a speed-locked
     turn at cruise. Compare them with the feel numbers you meant.
 
@@ -232,13 +244,19 @@ thrust.
 | The plating's vertex colour after main's livery took `COLOR` | The skin wrote `HullPalette.PLATE` into its `HULL` batch, which the livery ignored until the damage merge made it multiply by `COLOR.rgb`: every plate would have darkened by the plate colour | The plating's vertex colour is the cell's stage colour, `UNHURT` (white) when whole; `test_an_unhurt_cell_s_plating_is_white_so_the_livery_is_as_painted` |
 | Re-dressing the skin for one stage | Rebuilding the skin from the layout costs 53 ms on the starter, and would replace the lens meshes and window glow `ShipLights` holds | `set_stage` recolours the cell's vertex runs in arrays kept from the dressing and re-adds the touched surfaces once at the end of the frame (~1.5 ms). Never read a mesh's arrays back to do it: that stalls on the GPU (5–25 ms) |
 | Recolouring one interior cell | The dressing is a few merged meshes, so there is no one cell's mesh to tint | A stage seen from inside rebuilds the interior once, deferred (`Ship._queue_rebuild`), leaving the hull standing: ~125 ms on the dev Xeon |
-| Letting damage knock off cabin blocks | After a hard crash onto a planet the cabin had reshaped round the owner: a little room with the chair, and no way to sit back down to fly | The cabin's shell is held (`Ship.inner_cells`, `BlockDamage.apply_many(..., held)`); only the buffer breaks away, and a save missing shell blocks gets them back wrecked |
+| Letting damage knock off cabin blocks | After a hard crash onto a planet the cabin had reshaped round the owner: a little room with the chair, and no way to sit back down to fly | Nothing in the cabin's shell (`Ship.inner_cells`) is ever one of a section's pieces; a save missing shell blocks gets them back from the model on load |
 | Merging damage work on green tests | The cabin's shell went to `main` with no renders; the owner had to ask for them, and the first ones showed the cabin's sparks as chunky white tiles hanging in the air | Render `damage_review.gd` and show the owner before merging (step 10). Sparks are 1.5 × 5 cm and live 0.3 s |
+| Damage block by block | Every one of the starter's 110 blocks took damage and was welded on its own, inside and out; the owner found repairing "a little too tedious" (2026-10-03) | Six hull sections mended from outside and four components mended where they sit (`ShipDamage`). A new system breaks only if it is made a component, with the owner's say |
+| A wrecked cockpit that only took the assist away | A rock wrecked the cockpit and knocked the ship spinning; with the assist off nothing damped it, and mending the cockpit left the assist off, so it spun until the owner reset the game (2026-10-03) | Refused, a centred axis still damps (`FlightComputer.WRECKED_DAMPING`); mended, the pilot's own choice comes back (`assist_wanted`). Anything that takes a flight aid away must hand it back and never leave the hull unrecoverable: `test_a_ship_knocked_spinning_with_a_wrecked_cockpit_settles` |
+| Holding a bridge computer across a stage change | The damage review kept a `ShipComputer` while the computer was damaged; the stage rebuilt the cabin, freed the table, and the script stopped on the freed object without quitting | Fetch tables (and anything else in the dressing) again from `interior_builder` after any damage seen from inside |
+| Clamping the QE store to its damaged capacity | A crash wrecked the cells and the owner's stored energy was gone for good, leaving the ship in low power with no way to tell why | A damaged cell lowers `capacity` only; the store keeps up to `QuantumStore.most` (pass `intact_quantum_capacity`), and the status page says *CELLS DAMAGED* |
 | A repeating world-space emitter in `Universe.HOLDS_SHIFT` | Every damaged block re-fired its sparks every second or two, so with a few damaged the floating origin would almost never have found a gap to shift in | Anything that repeats stays in its parent's frame (`local_coords`) and out of the group; only short one-shots outside hold the shift |
 | Letting go of a warp at 120 m/s with the assist on | The assist cancels velocity nobody asked for, so the ship braked to rest at the warp limit instead of coasting in | `WarpDrive` sets the speed lock to 120 m/s at drop-out; anything else that hands the hull a velocity with the assist on must do the same |
 | Letting the rest of the ship behave normally at warp | Found in the final review: you could cycle the airlock and step out mid-warp (stranded kilometres behind), the RCS kept its last command and puffed the whole way, and motion coupling read the frozen hull's placing as a 12 m/s² shove | Anything that acts on the hull's motion or lets someone outside asks `warp.is_spinning()` / `travelling()` first: `Airlock.warping()`, `FlightComputer`'s early return, `MotionCoupling._warp()` |
 | Writing a warp cost as 0.08 QE per km | `ceili(0.08 * 3000)` is 241, not 240: 0.08 is not exact in floating point | Price per whole units the other way round: `WarpPlan.WARP_M_PER_QE` (metres per QE) |
 | A camera outside with its own far plane | The far plane must hold `PROXY_AT` plus the biggest body's radius: a proxy just past `PROXY_AT` is drawn at nearly its true size, so at 400 km the star's disc was clipped | Use `BodyProxy.VIEW_FAR` (`PROXY_AT` + `SystemRecipe.STAR_RADIUS.y` + 50 km, 700 km) for any new outside camera |
+| An upright collider round a tilted console | The holo table's console lip was a box round the whole console, so it enclosed all five buttons: the Interactor's ray hit the table, every prompt was empty, and the computer could not be used at all in play. Its tests pressed the buttons in code and only measured distance | Give a tilted part its collider in its own frame, no farther out than its face, so its buttons stand proud of it. Test an interactable by casting the Interactor's ray at it from where you stand, not by distance |
+| A fixed mark capacity checked against one seed | The holo's 512-a-group cap held the shipped system's faint ticks with 6 to spare at the start, but 79% of seeds overflowed it at SYSTEM and the last worlds' limit rings vanished without a word | `HoloVolume` groups double as they fill (to `MAX_CAPACITY`), and a drop is counted and warned of. Test a budget against the busiest seed and more than one position, not the shipped seed where you start |
 | A test script that types a local from the untyped `_root.system` and loops its `warp_targets()` | Godot 4.5.1 segfaulted at exit (ObjectDB leak, GUT's own scripts included) though every test passed | Hold the system in a typed member set in `before_each`, as `test_warp_drive.gd` does; watch the run's exit code, not only its pass count |
 | An off-centre retro counted as steering | It would light up for yaw, but `ShipStats` never counts pure fore-and-aft thrust as authority | Steer with blocks that push across the hull; retros only brake |
 | A fairing in the cabin row | The interior sees a solid cell and builds a whole wall against it, but a slope or a half leaves the outside open, and a porthole outside lands on a slope or above a 1 m block | Fairings go above and below the cabin and at its ends. The cabin row keeps full blocks. Check the probe's `windows` line |
@@ -267,6 +285,12 @@ thrust.
 | A GUT file that will not parse | GUT skips it, says nothing failed and exits 0 | Check the run's `Tests` count is there, not only the exit code |
 | Every ship writing its uniform into one shared material | Found in many ships' final review: each ship pushed its hull's `hull_inverse` into the one livery, so with two awake one ship's stripe was measured in the other's frame | Anything per ship in a shared material needs a copy per ship: `Ship.livery`, swapped on by `_apply_livery`. Render two ships at different attitudes |
 | A SubViewport that only turns off when its owner processes | A ship loaded asleep (processing disabled from the start) rendered its canopy view every frame, unseen | Start it `UPDATE_DISABLED` in the scene; whatever puts a ship to sleep turns it off too (`Fleet._hold`) |
+| Drawing only what a page can step to | The computer mode's map drew `targets()` (full size only), so a rock left the holo at once instead of shrinking across its band, and the bands' code was dead | Keep what is drawn (`MapPage.shown()`, at the scale drawn) apart from what ◀ ▶, the list and the mouse can pick (`targets()`, full size at the scale chosen). The course is always drawn, never shrunk |
+| Leaving a station only on Esc, F or a rebuild | Found in review: blacked out, blown into the suit, or carried off to another ship, you stayed in the computer's view with control off; F8 boarded from it | `CameraDirector` drops out whenever the avatar can no longer be at the station (`_station_usable`), restoring only what the station took; F8 says *AT THE COMPUTER*. Anything new that holds the camera does the same |
+| Trusting a button's release to reach you | A release eaten by the overlay or the window left the computer mode's drag running: the next mouse motion orbited with no button down | Motion with the left button up ends a drag (`ComputerModeInput`). Every overlay button is `FOCUS_NONE`: a focused `Button` takes Tab and Enter as `ui_focus_next` and `ui_accept` before `_unhandled_input` sees them |
+| Timing the holo's `update()` with the computer still processing | The computer's own `_process` updates the holo too, untimed, and took the placings: the sweep read 1.7 ms worst when a placing at 4,000 km cost 10-12 ms (as first built) | `computer.set_process(false)` round a timed loop, as `computer_mode_render.gd` does |
+| Overlay text straight on the room | The computer mode's tabs and *ESC LEAVE* were cream on the bridge's cream ceiling: unreadable | Anything on screen outside a panel gets a `SCREEN_BACK` outline (`ComputerOverlay.OUTLINE`). Render it over the brightest wall it can sit on |
+| Working a tick out like a contact | Every one of the map's ~600 far ticks made a UniversePoint, worked the star's offset out again (three logs), undid the frame's basis and got a Dictionary back from `HoloVolume.place`: 12 ms a still SYSTEM placing, twice a second, a rhythmic stutter | Work out once a placing what every mark reads (`MapPage.Placing`); a ring's tick is its centre plus a unit circle times its radius, in the map's frame; test inside with `HoloVolume.inside` and hand ticks over with `add_ticks`. Guard a cost refactor with a recording of every mark (`test_map_page.gd`'s placing guard) before touching it |
 
 ## Not built yet (plan for it; don't assume it works)
 
@@ -274,6 +298,9 @@ thrust.
   dev Xeon for the starter since the generated skin), and a stage seen from inside rebuilds the
   interior (~125 ms; the hull recolours in place). Fine for now; a hitch in a big fight.
 - **Debris and breaches.** A piece cut off vanishes in a burst; a hole has no air to lose.
+- **Damage beyond the four components.** RCS, cells, rooms and the airlock never break; a
+  section's health changes only looks and pieces. No per-section effect on flight, no repairing
+  a section from inside, no droid repairing the ship.
 - **Gravity and landing on a world.** Worlds are solid and you can skim and bump off them, but
   there is no gravity, landing gear or step-out yet (Planetfall's). Do not give a ship legs or
   skids that assume a pull.

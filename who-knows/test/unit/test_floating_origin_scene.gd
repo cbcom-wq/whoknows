@@ -196,3 +196,22 @@ func test_everything_outside_is_covered_beside_a_world():
 	assert_not_null(surface)
 	surface.finish()
 	assert_eq(_uncovered(), [], "every chunk of ground shifts too")
+
+## The pistol on a spacewalk: the bolt and its flashes are outside, so they
+## are covered too.
+func test_a_shot_on_a_spacewalk_is_covered():
+	var pistol: Item = null
+	for node in get_tree().get_nodes_in_group(Item.GROUP):
+		if _root.is_ancestor_of(node) and (node as Item).definition.id == &"plasma_pistol":
+			pistol = node
+	assert_not_null(pistol, "the pistol is aboard")
+	if pistol == null:
+		return
+	assert_true(_avatar.grasp.take(pistol))
+	_out(Vector3(0, 0, 12))
+	await wait_physics_frames(2)
+	assert_true(_avatar.grasp.use(), "it fires outside")
+	var shots := _root.find_children("*", "Node3D", true, false).filter(func(n): return n is PlasmaBolt)
+	assert_eq(shots.size(), 1)
+	assert_false(_in_an_interior(shots[0]), "the bolt is outside")
+	assert_eq(_uncovered(), [], "and covered")

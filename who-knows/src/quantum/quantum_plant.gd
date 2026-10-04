@@ -24,7 +24,7 @@ extends Node
 ##
 ## Each machine's charge plate charges a suit from the store (spec §7.3, §9):
 ## pressed, it moves CHARGE_RATE QE a second into the presser's `suit_cell`,
-## one for one, down to 0 and in low power too, while they stay within the
+## SUIT_PER_STORE of suit for each QE the store pays, down to 0 and in low power too, while they stay within the
 ## plate's reach -- the screen counting up, the plate glowing and a tone
 ## rising. A charge is kept by the machine's cell, so a rebuild never stops it.
 
@@ -49,6 +49,9 @@ const PLAYER_UNIT_SIZE := 3.0
 const PLAYER_MAX_DISTANCE := 30.0
 ## The charge plate (spec §7.3): QE a second into the suit.
 const CHARGE_RATE := 50.0
+## Suit QE gained per QE the store pays: the suit's thrusters cost a quarter
+## of what they did, so its cell is worth four times as much.
+const SUIT_PER_STORE := 4.0
 ## The charge tone's pitch from an empty suit to a full one: it rises as the
 ## suit fills.
 const CHARGE_PITCH_FROM := 0.8
@@ -391,7 +394,7 @@ func plate_prompt(actor: Variant) -> String:
 		return "Suit charged"
 	if not _can_charge(suit):
 		return "Store empty"
-	return "Charge suit (+%d QE)" % maxi(roundi(minf(suit.room(), _can_give())), 1)
+	return "Charge suit (+%d QE)" % maxi(roundi(minf(suit.room(), _can_give() * SUIT_PER_STORE)), 1)
 
 ## The machine's screen while its plate charges a suit `percent` full, over a
 ## store of `stored` QE.
@@ -446,12 +449,12 @@ func _charge(machine: QuantumMachine, delta: float) -> void:
 	if suit != null:
 		var give := _can_give()
 		var want := minf(CHARGE_RATE * delta, suit.room())
-		if want >= give:
+		if want >= give * SUIT_PER_STORE:
 			# All the store has left: settle exactly, to the last QE.
-			suit.add(maxf(give, 0.0))
+			suit.add(maxf(give, 0.0) * SUIT_PER_STORE)
 			_charge_owed = float(store.amount)
 		else:
-			_charge_owed += suit.add(want)
+			_charge_owed += suit.add(want) / SUIT_PER_STORE
 		var whole := mini(floori(_charge_owed + OWED_SNAP), store.amount)
 		store.spend(whole, &"suit")
 		_charge_owed = maxf(_charge_owed - whole, 0.0)

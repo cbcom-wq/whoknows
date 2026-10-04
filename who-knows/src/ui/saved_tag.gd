@@ -12,6 +12,7 @@ const LOCKED_TEXT := "SAVE LOCKED: NEWER VERSION"
 const MARGIN := 16.0
 
 var _shown_for := -1.0
+var _fade := FADE
 
 func _ready() -> void:
 	text = TEXT
@@ -28,7 +29,12 @@ func _ready() -> void:
 
 ## A save was written: fade SAVED in and out.
 func flash() -> void:
-	text = TEXT
+	say(TEXT, FADE)
+
+## Fades `note` in and out over `seconds`, in place of SAVED.
+func say(note: String, seconds: float) -> void:
+	text = note
+	_fade = seconds
 	_shown_for = 0.0
 
 ## The save on disk is from a newer game and will not be written over.
@@ -42,7 +48,7 @@ func _process(delta: float) -> void:
 	if _shown_for < 0.0:
 		return
 	_shown_for += delta
-	modulate.a = sin(clampf(_shown_for / FADE, 0.0, 1.0) * PI)
-	if _shown_for >= FADE:
+	modulate.a = sin(clampf(_shown_for / _fade, 0.0, 1.0) * PI)
+	if _shown_for >= _fade:
 		_shown_for = -1.0
 		modulate.a = 0.0

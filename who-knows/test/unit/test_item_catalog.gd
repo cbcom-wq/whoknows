@@ -190,6 +190,9 @@ func test_the_repair_torch():
 	assert_almost_eq(t.grip_point, Vector3(0, -0.02, 0.085), Vector3.ONE * 0.0001)
 	assert_almost_eq(t.use_point, Vector3(0, 0.012, -0.14), Vector3.ONE * 0.0001)
 
+func test_the_pistol_works_outside():
+	assert_true(_cat.get_def(&"plasma_pistol").works_outside, "it fires on a spacewalk")
+
 func test_no_starter_item_is_an_eva_tool():
 	for id in _cat.ids():
 		assert_false(_cat.get_def(id).eva_tool, "%s is not an EVA tool" % id)

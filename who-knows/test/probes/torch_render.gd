@@ -1,8 +1,9 @@
 extends SceneTree
 
-# The repair torch and the knocked-out droid in the real starter, at eye
-# height (1.6 m), for the owner (docs/superpowers/specs/
-# 2026-09-29-health-and-damage-design.md §8, §11.2). Run it WITHOUT
+# The repair torch welding the quantum core and the knocked-out droid in the
+# real starter, at eye height (1.6 m), for the owner (docs/superpowers/specs/
+# 2026-09-29-health-and-damage-design.md §8, §11.2;
+# 2026-10-03-ship-damage-sections-design.md §6). Run it WITHOUT
 # --headless so it renders:
 #
 #   godot --path who-knows --resolution 1280x720 --script res://test/probes/torch_render.gd -- <abs out dir>
@@ -40,18 +41,18 @@ func _run(scene: Node) -> void:
 	for node in _ship.items.get_children():
 		if node is Item and node.definition.id == &"repair_torch":
 			torch = node
-	# A hull wall: stand a metre from it, looking at it, the torch in hand.
-	var layout := _ship.interior_builder.layout()
+	# The quantum core, a component mended from inside (ship damage sections
+	# spec §6): stand in the cell beside it, facing it, the torch in hand.
 	var coord := Vector3i.ZERO
 	var normal := Vector3i.ZERO
-	for face in layout.faces():
-		var n: Vector3i = face["normal"]
-		if face["kind"] == InteriorLayout.Kind.WALL and face["owner"] and n.y == 0 \
-				and layout.zone_at(face["coord"]) == &"common" \
-				and _ship.grid.has_block(face["coord"] + n) and _ship.grid.get_block(face["coord"] + n).block_id == &"hull":
-			coord = face["coord"]
-			normal = n
-			break
+	for c: Vector3i in _ship.damage.component_of:
+		if _ship.damage.component_of[c] != &"quantum_core":
+			continue
+		for n: Vector3i in ShipGrid.FACE_OFFSETS:
+			if n.y == 0 and _ship.interior_builder.walkable_coords().has(c + n):
+				coord = c + n
+				normal = -n
+				break
 	var feet := DeckPaths.floor_point(coord) - Vector3(normal) * 0.1
 	var facing := Basis.looking_at(Vector3(normal), Vector3.UP)
 	_avatar.place(_ship.interior.global_transform * Transform3D(facing, feet))

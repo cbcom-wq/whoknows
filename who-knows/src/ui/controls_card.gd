@@ -24,6 +24,7 @@ const ROWS := [
 	[[&"lights_flood"], "Floods", " "],
 	[[&"lights_forward"], "Forward lights", " "],
 	[[&"cycle_camera"], "Camera", " "],
+	[[&"orbit_camera"], "Hold: look around the ship", " "],
 	[[&"interact"], "Stand up", " "],
 	[[&"toggle_controls"], "Hide this card", " "],
 ]

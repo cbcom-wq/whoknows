@@ -237,12 +237,12 @@ static func ceiling_light(kit: InteriorKit, ceiling_centre: Vector3) -> void:
 	kit.ring(SOLID, down, 0.3, CEILING_LIGHT_RIM, -0.02, 0.05, _c(InteriorPalette.TRIM))
 	var lamp := kit.light(ceiling_centre + Vector3(0, -0.9, 0), InteriorPalette.LIGHT_WARM, CELL_LIGHT_ENERGY,
 		CELL_LIGHT_RANGE, CELL_LIGHT_ROLE)
-	if kit.wear < 2:
+	if not kit.flicker:
 		kit.disc(GLOW, down * _at(Vector3(0, 0, 0.02)), 0.3, _lit(InteriorPalette.LIGHT_WARM, 0.9))
 		return
-	# Wrecked, it flickers (health and damage spec §9): its disc is its own
-	# mesh with its own copy of the glow material, which LightFlicker dims
-	# with the lamp. Unworn: the flicker is the damage, not the colour.
+	# With the hull under 20% it flickers (ship damage sections spec §5,
+	# InteriorKit.flicker): its disc is its own mesh with its own copy of the
+	# glow material, which LightFlicker dims with the lamp. Unworn: the flicker is the damage, not the colour.
 	var own := InteriorKit.new(kit.root)
 	own.disc(GLOW, down * _at(Vector3(0, 0, 0.02)), 0.3, _lit(InteriorPalette.LIGHT_WARM, 0.9))
 	var material := InteriorMaterials.glow().duplicate() as ShaderMaterial
@@ -769,8 +769,12 @@ static func holo_table(kit: InteriorKit, f: Transform3D, _variety: float) -> voi
 	var console := f * holo_table_console()
 	kit.bevel_box(SOLID, console * _at(Vector3(0, 0, -0.03)), Vector3(0.8, 0.3, 0.06), 0.02, trim)
 	# Solid where you'd walk into it; nothing reaches the holo above 1.05 m.
+	# The console's collider is the console itself, in its own tilted frame and
+	# no farther out than its face: the buttons stand proud of it, where the
+	# Interactor's ray can land on them. An upright box round the console once
+	# swallowed all five, and the table could not be used.
 	kit.collider(f * _at(Vector3(0, 0.475, 0)), Vector3(1.0, 0.95, 1.0))
-	kit.collider(f * _at(Vector3(0, 0.97, -0.55)), Vector3(0.8, 0.14, 0.2))
+	kit.collider(console * _at(Vector3(0, 0, -0.03)), Vector3(0.8, 0.3, 0.06))
 
 ## The rim console's frame in the table's fixture frame: origin on its face,
 ## +z out toward the operator's eyes, +x to the operator's right (fixture -x,
@@ -797,6 +801,26 @@ static func holo_table_buttons() -> Array[Transform3D]:
 ## turned with the ship, not the table (spec §5.1).
 static func holo_table_volume() -> Transform3D:
 	return _at(Vector3(0, HOLO_VOLUME_CENTRE, 0))
+
+## The bridge computer's station (computer mode spec §3.1, §3.2): a box over
+## the table's top and rim that offers "Use computer" -- above the table's
+## collider, under the holo, short of the buttons -- and the eye you use the
+## computer from: HOLO_STATION_DISTANCE from the holo's centre,
+## HOLO_STATION_ELEVATION degrees above its level, on the operator's side.
+const HOLO_STATION_SIZE := Vector3(1.1, 0.14, 1.1)
+const HOLO_STATION_DISTANCE := 1.03
+const HOLO_STATION_ELEVATION := 29.0
+
+static func holo_station_shape_centre() -> Vector3:
+	return Vector3(0, 0.93, 0)
+
+## The eye at `elevation_deg` above the holo's level, looking at its centre, in
+## the table's fixture frame.
+static func holo_station_eye(elevation_deg: float) -> Transform3D:
+	var e := deg_to_rad(elevation_deg)
+	var centre := holo_table_volume().origin
+	var eye := centre + Vector3(0, sin(e), -cos(e)) * HOLO_STATION_DISTANCE
+	return Transform3D(Basis.IDENTITY, eye).looking_at(centre, Vector3.UP)
 
 ## The quantum core's fixed parts (quantum energy spec §6.2), in a fixture
 ## frame: an octagonal plinth on a violet-glowing base, a glass column between

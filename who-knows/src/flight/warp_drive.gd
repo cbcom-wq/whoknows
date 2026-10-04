@@ -22,6 +22,9 @@ signal aborted(why: String)
 enum Stage { IDLE, SPOOLING, TRAVELLING }
 
 const SPOOL := 10.0
+## A damaged bridge computer plots it slower (ship damage sections spec §2.2):
+## the spool takes this long, its sound played at half pitch to last it.
+const DAMAGED_SPOOL := 20.0
 ## Swinging further than this off the line while spooling aborts it.
 const ABORT_ANGLE := deg_to_rad(10.0)
 ## The dust streaks the velocity over this shutter, metres (§5.2).
@@ -46,6 +49,9 @@ var store: QuantumStore
 var flight_computer: FlightComputer
 ## Returns &"crew" while someone is outside, &"airlock" while one cycles, or &"".
 var busy := Callable()
+## Returns the bridge computer's stage (BlockDamage.Stage): damaged, the spool
+## is DAMAGED_SPOOL; wrecked, there is no warp. Unset, it is intact.
+var computer := Callable()
 
 ## The target charted, by WarpTarget id; empty for none.
 var charted: StringName = &""
@@ -134,6 +140,8 @@ func check() -> WarpPlan:
 		return plan
 	var inside: Array[StringName] = whereabouts.limits() if whereabouts != null else []
 	var why: StringName = busy.call() if busy.is_valid() else &""
+	if why == &"" and _computer() == BlockDamage.Stage.WRECKED:
+		why = &"computer"
 	plan = WarpPlan.check(universe.to_universe(hull.global_position), -hull.global_basis.z, t,
 		system.warp_targets(), inside, the_store(), why)
 	return plan
@@ -145,8 +153,8 @@ func engage() -> void:
 			check()
 			if plan.status == WarpPlan.Status.READY:
 				stage = Stage.SPOOLING
-				spool_left = SPOOL
-				_play(&"warp_spool")
+				spool_left = spool_time()
+				_play(&"warp_spool", SPOOL / spool_left)
 				stage_changed.emit(stage)
 		Stage.SPOOLING:
 			abort("WARP · ABORTED")
@@ -194,7 +202,7 @@ func velocity() -> Vector3:
 func streak() -> Vector3:
 	match stage:
 		Stage.SPOOLING:
-			return plan.direction * SPOOL_STREAK * (1.0 - spool_left / SPOOL)
+			return plan.direction * SPOOL_STREAK * (1.0 - spool_left / spool_time())
 		Stage.TRAVELLING:
 			return velocity() * STREAK_SHUTTER
 	return Vector3.ZERO
@@ -279,8 +287,16 @@ func _facing() -> Basis:
 		up = Vector3.RIGHT
 	return Basis.looking_at(_dir, up)
 
-func _play(sound: StringName) -> void:
+func _play(sound: StringName, pitch := 1.0) -> void:
 	var s := Synth.sound(sound)
 	if s != null and _player != null and _player.is_inside_tree():
 		_player.stream = s
+		_player.pitch_scale = pitch
 		_player.play()
+
+## How long a spool takes now: SPOOL, or DAMAGED_SPOOL with the computer hurt.
+func spool_time() -> float:
+	return DAMAGED_SPOOL if _computer() == BlockDamage.Stage.DAMAGED else SPOOL
+
+func _computer() -> int:
+	return computer.call() if computer.is_valid() else BlockDamage.Stage.INTACT

@@ -72,3 +72,44 @@ func test_each_shot_flashes_at_the_muzzle():
 	var muzzles := _world.get_children().filter(
 		func(n): return n is ImpactFlash and n.kind == ImpactFlash.Kind.MUZZLE)
 	assert_eq(muzzles.size(), 1)
+
+## Outside (health and damage spec §8.3): the bolt and its flashes are drawn
+## for outside and move with the floating origin.
+func test_outside_a_shot_is_drawn_for_outside_and_shifts():
+	_pistol.set_space(true)
+	assert_true(_pistol.use(Transform3D.IDENTITY, _world, null))
+	var bolt: PlasmaBolt = _bolts()[0]
+	var muzzle: ImpactFlash = _world.get_children().filter(func(n): return n is ImpactFlash)[0]
+	for node: Node3D in [bolt, muzzle]:
+		assert_true(node.is_in_group(Universe.EXTERIOR_SPACE), "%s shifts" % node)
+		for mesh: MeshInstance3D in node.find_children("*", "MeshInstance3D", true, false):
+			assert_eq(mesh.layers, Item.SPACE_LAYER, "%s drawn outside" % node)
+		for light: OmniLight3D in node.find_children("*", "OmniLight3D", true, false):
+			assert_eq(light.light_cull_mask, 1 | ExteriorBuilder.OWN_HULL_LAYER, "%s lights outside" % node)
+
+func test_aboard_a_shot_stays_aboard():
+	_pistol.use(Transform3D.IDENTITY, _world, null)
+	var bolt: PlasmaBolt = _bolts()[0]
+	assert_false(bolt.is_in_group(Universe.EXTERIOR_SPACE))
+	for mesh: MeshInstance3D in bolt.find_children("*", "MeshInstance3D", true, false):
+		assert_eq(mesh.layers, InteriorKit.LAYER)
+
+func _hull(z: float, layer: int) -> void:
+	_slab(z)
+	(_world.get_children().back() as StaticBody3D).collision_layer = layer
+
+func test_outside_a_bolt_strikes_the_hull_and_rocks():
+	for layer in [1, AsteroidBody.LAYER]:
+		var emitter: PlasmaEmitter = _pistol.use_node
+		emitter._cooldown = 0.0
+		for n in _world.get_children():
+			if n is StaticBody3D:
+				n.free()
+		_hull(-3.0, layer)
+		_pistol.set_space(true)
+		await wait_physics_frames(2)
+		assert_true(_pistol.use(Transform3D.IDENTITY, _world, null))
+		var hits := []
+		(_bolts().back() as PlasmaBolt).struck.connect(func(_p, c): hits.append(c))
+		await wait_physics_frames(10)
+		assert_eq(hits.size(), 1, "layer %d stops a bolt" % layer)

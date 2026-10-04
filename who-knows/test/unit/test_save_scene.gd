@@ -82,6 +82,21 @@ func test_a_new_game_starts_when_there_is_no_save():
 	assert_false(root.resumed)
 	_drop(root)
 
+## The dev reset (F9 twice): the save goes aside as .old, nothing more is
+## saved, and the scene built after it is a new game.
+func test_the_dev_reset_starts_a_new_game():
+	var root := _scene()
+	assert_true(root.save_now(), "saved")
+	root.new_game()
+	assert_false(FileAccess.file_exists(PATH), "the save is set aside")
+	assert_true(FileAccess.file_exists(PATH + ".old"), "kept as .old")
+	assert_false(root.save_now(), "nothing more is saved")
+	assert_false(FileAccess.file_exists(PATH), "still no save")
+	_drop(root)
+	var fresh := _scene()
+	assert_false(fresh.resumed, "a new game")
+	_drop(fresh)
+
 func test_walking_round_trips():
 	var a := _scene()
 	_live_a_little(a)
@@ -243,26 +258,18 @@ func test_a_newer_save_is_left_alone_and_the_game_starts_new():
 
 ## Health and damage spec §4.2, §8.2: damage and holes are kept, and so is the
 ## layout the ship launched with, which a rebuild puts back from.
+## Ship damage sections spec §8: the sections and components are saved, and
+## the grid comes back showing them, pieces lost and all.
 func test_damage_and_the_launch_layout_round_trip():
 	var a := _scene()
 	var ship: Ship = a.get_node("Ship")
-	var hurt := Vector3i.ZERO
-	var gone := Vector3i.ZERO
-	var found := 0
-	for coord: Vector3i in ship.grid.coords():
-		if ship.grid.get_block(coord).block_id == &"hull" and not ship.grid.has_block(coord + Vector3i(1, 0, 0)) \
-				and not ship.inner_cells.has(coord):
-			if found == 0:
-				hurt = coord
-			else:
-				gone = coord
-			found += 1
-			if found == 2:
-				break
-	assert_eq(found, 2)
-	ship.take_damage(hurt, 90.0)
-	ship.take_damage(gone, 10_000.0)
-	assert_false(ship.grid.has_block(gone))
+	ship.damage.section_damage[&"port_stern"] = ship.damage.section_hp[&"port_stern"] * 0.8
+	ship.damage.section_damage[&"starboard_bow"] = 123.0
+	ship.damage.component_damage[&"engines"] = 200.0
+	ship._apply_view()
+	var lost := ship.damage.lost().keys()
+	assert_gt(lost.size(), 0, "port stern lost pieces")
+	var saved := ship.damage.to_dict()
 	ship.damage_log.since = DamageLog.CALM
 	assert_true(a.save_now(), "saved")
 	_drop(a)
@@ -270,9 +277,11 @@ func test_damage_and_the_launch_layout_round_trip():
 	var b := _scene()
 	assert_true(b.resumed)
 	var ship_b: Ship = b.get_node("Ship")
-	assert_eq(ship_b.grid.get_block(hurt).damage, 90.0, "the damage is kept")
-	assert_false(ship_b.grid.has_block(gone), "and the hole")
-	assert_eq(ship_b.launch_block(gone), [&"hull", 0], "the launch layout still has it")
+	assert_eq(ship_b.damage.to_dict(), saved, "the damage is kept")
+	for coord in lost:
+		assert_false(ship_b.grid.has_block(coord), "and the holes")
+		assert_false(ship_b.launch_block(coord).is_empty(), "the launch layout still has them")
+	assert_eq(ship_b.grid.size(), ship_b.damage.launch.size() - lost.size())
 	assert_eq(ship_b.launch_blueprint.damage_values.max(), 0.0, "nothing hurt in it")
 	_drop(b)
 

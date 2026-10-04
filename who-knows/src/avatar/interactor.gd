@@ -10,7 +10,9 @@ extends RayCast3D
 ## The ray alone asks for a precise aim at a 9 cm mug, so when it is not on
 ## anything usable, the item nearest the line of sight is offered instead:
 ## within ASSIST_ANGLE of it, within reach, and in plain view (spec §7.2, as
-## amended 2026-09-24). Looking straight at something still wins.
+## amended 2026-09-24). Looking straight at something still wins, except a
+## computer station (computer mode spec §3.1): its box covers its table top,
+## so an item set down there is offered before it.
 
 signal prompt_changed(text: String)
 
@@ -21,6 +23,10 @@ const MASK := 2 | 32
 const SUIT_MASK := 16
 ## How far from the line of sight an item can be and still be offered.
 const ASSIST_ANGLE := deg_to_rad(8.0)
+
+## True while the avatar is using something that owns the view (a computer
+## station): the ray reports nothing, and F is not the Interactor's.
+var suspended := false
 
 var _current: Node = null
 var _text := ""
@@ -40,10 +46,21 @@ func current() -> Node:
 	return _current
 
 func _physics_process(_delta: float) -> void:
+	if suspended:
+		if _current != null or _text != "":
+			_current = null
+			_text = ""
+			prompt_changed.emit("")
+		return
 	_ignore_held()
 	var hit := _usable(get_collider() if is_colliding() else null)
 	if hit == null:
 		hit = _item_near_the_line_of_sight()
+	elif hit is ComputerStation:
+		# A station's box covers its table top and would hide a mug set down there.
+		var item := _item_near_the_line_of_sight()
+		if item != null:
+			hit = item
 	# A prompt can change while you look at the same thing -- an airlock panel's
 	# Depressurize becomes Reverse mid-cycle -- so it is read every frame.
 	var text := "" if hit == null else "[F] %s" % hit.prompt_text()
@@ -53,6 +70,8 @@ func _physics_process(_delta: float) -> void:
 		prompt_changed.emit(text)
 
 func _unhandled_input(event: InputEvent) -> void:
+	if suspended:
+		return
 	if event.is_action_pressed("interact") and _current != null:
 		_current.interact(owner)
 

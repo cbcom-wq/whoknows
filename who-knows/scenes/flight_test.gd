@@ -52,6 +52,9 @@ var resumed := false
 var _reticle: Reticle
 var _interact_prompt := ""
 var _grasp_prompt := ""
+## The computer mode (computer mode spec §3.3, §5): its input and its overlay.
+var computer_input: ComputerModeInput
+var computer_overlay: ComputerOverlay
 var _universe_readout: Label
 var _saved_tag: SavedTag
 var npc_debug: NpcDebug
@@ -76,6 +79,10 @@ const HOP_INSIDE := 200.0
 ## A save from another world generator brings every ship along, lined up this
 ## far apart beside the starter (many ships spec §6.3).
 const RESTART_ROW := 300.0
+## The dev reset (F9) asks twice: a second F9 inside this many seconds starts
+## a new game.
+const RESET_WINDOW := 3.0
+var _reset_armed_at := -INF
 
 ## The interior's own mood (spec §3.3): dim and warm, with bloom turning the
 ## thin lit strips into light. It goes on the interior camera, not the world,
@@ -130,6 +137,7 @@ func _ready() -> void:
 	_set_outside_mood()
 	_wire_hud()
 	_wire_prompt()
+	_wire_computer_mode()
 	_wire_hands()
 	_wire_hurt()
 	_wire_universe(saved)
@@ -315,11 +323,13 @@ func board_nearest() -> bool:
 	board_at_helm(target)
 	return true
 
-## Why F8 must wait, or "": on a spacewalk, mid-sit, during a warp, or while an
-## airlock of the ship you are aboard cycles.
+## Why F8 must wait, or "": on a spacewalk, at a computer, mid-sit, during a
+## warp, or while an airlock of the ship you are aboard cycles.
 func _board_refusal() -> String:
 	if _avatar.mode == Avatar.Mode.SUIT:
 		return "NOT ON A SPACEWALK"
+	if _director.is_at_station:
+		return "AT THE COMPUTER"
 	if _director.is_moving():
 		return "SITTING DOWN"
 	for ship in fleet.ships():
@@ -384,6 +394,25 @@ func _wire_prompt() -> void:
 
 func _show_prompt() -> void:
 	_prompt.text = _grasp_prompt if _grasp_prompt != "" else _interact_prompt
+
+## The computer mode (docs/superpowers/specs/2026-09-30-computer-mode-design.md):
+## the mouse and keys at a station, and the on-foot prompt cleared while you
+## are there. Wired here so src/ship/computer never learns about the scene.
+func _wire_computer_mode() -> void:
+	computer_input = ComputerModeInput.new()
+	computer_input.name = "ComputerModeInput"
+	computer_input.director = _director
+	add_child(computer_input)
+	computer_overlay = ComputerOverlay.new()
+	computer_overlay.name = "ComputerOverlay"
+	add_child(computer_overlay)
+	_director.station_changed.connect(_on_station_changed)
+
+func _on_station_changed(station: ComputerStation) -> void:
+	_interact_prompt = ""
+	_grasp_prompt = ""
+	_show_prompt()
+	computer_overlay.show_for(station)
 
 ## Health and damage (docs/superpowers/specs/
 ## 2026-09-29-health-and-damage-design.md §7): the view's red edge and the
@@ -705,6 +734,29 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			hop(-1 if key.shift_pressed else 1)
 		KEY_F8:
 			board_nearest()
+		KEY_F9:
+			_ask_reset()
+
+## The dev reset: the first F9 asks, a second inside RESET_WINDOW starts over.
+func _ask_reset() -> void:
+	var now := Time.get_ticks_msec() / 1000.0
+	if now - _reset_armed_at > RESET_WINDOW:
+		_reset_armed_at = now
+		if _saved_tag != null:
+			_saved_tag.say("F9 AGAIN: NEW GAME", RESET_WINDOW)
+		return
+	new_game()
+	get_tree().reload_current_scene.call_deferred()
+
+## Starts over, as a launch with `-- --new-game` would: the save is set aside
+## as .old (never deleted), and this scene saves nothing more, so the reload
+## that follows finds no save.
+func new_game() -> void:
+	if save_enabled:
+		if save_game == null:
+			save_game = SaveGame.new(save_path)
+		save_game.set_aside()
+	save_enabled = false
 
 ## How far off `b`'s surface the hop leaves you.
 static func hop_off(b: SystemBody) -> float:

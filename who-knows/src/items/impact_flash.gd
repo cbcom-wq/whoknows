@@ -5,7 +5,8 @@ extends Node3D
 ## 2026-09-23-hands-and-items-design.md §9): at the muzzle when the pistol
 ## fires, and where a bolt lands. It grows and shrinks to nothing -- by scale,
 ## so the shared glow material is never touched -- with a warm light fading
-## beside it, then frees itself.
+## beside it, then frees itself. `outside`, it is drawn for the world and
+## moves with the floating origin, as the bolt does.
 
 enum Kind { MUZZLE, IMPACT }
 
@@ -17,23 +18,27 @@ const LIGHT_RANGE := 3.0
 static var _mesh: Mesh
 
 var kind: Kind = Kind.IMPACT
+var outside := false
 var _age := 0.0
 var _burst: MeshInstance3D
 var _light: OmniLight3D
 
-static func spawn(parent: Node, at: Vector3, normal: Vector3, flash_kind: Kind) -> ImpactFlash:
+static func spawn(parent: Node, at: Vector3, normal: Vector3, flash_kind: Kind, out := false) -> ImpactFlash:
 	var flash := ImpactFlash.new()
 	flash.kind = flash_kind
+	flash.outside = out
 	parent.add_child(flash)
 	var up := Vector3.UP if absf(normal.dot(Vector3.UP)) < 0.99 else Vector3.RIGHT
 	flash.global_transform = Transform3D(Basis.looking_at(-normal, up), at + normal * 0.01)
 	return flash
 
 func _ready() -> void:
+	if outside:
+		add_to_group(Universe.EXTERIOR_SPACE)
 	_burst = MeshInstance3D.new()
 	_burst.mesh = _shared_mesh()
 	_burst.material_override = InteriorMaterials.glow()
-	_burst.layers = InteriorKit.LAYER
+	_burst.layers = PlasmaBolt.render_layer(outside)
 	_burst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_burst.scale = Vector3.ONE * 0.001
 	add_child(_burst)
@@ -41,7 +46,7 @@ func _ready() -> void:
 	_light.light_color = InteriorPalette.LIGHT_WARM
 	_light.light_energy = LIGHT_ENERGY
 	_light.omni_range = LIGHT_RANGE
-	_light.light_cull_mask = InteriorKit.LAYER
+	_light.light_cull_mask = PlasmaBolt.light_mask(outside)
 	_light.shadow_enabled = false
 	add_child(_light)
 
