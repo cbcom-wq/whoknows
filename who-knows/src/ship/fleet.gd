@@ -113,13 +113,13 @@ func remove(ship: Ship) -> bool:
 	ship.queue_free()
 	return true
 
-## The awake ship whose hull is nearest `point`, other than `except`; null if
-## there is none.
+## The awake ship whose hull is nearest `point`, other than `except` and any
+## still arriving; null if there is none.
 func nearest(point: Vector3, except: Ship = null) -> Ship:
 	var best: Ship = null
 	var best_d := INF
 	for ship in awake():
-		if ship == except:
+		if ship == except or arriving(ship):
 			continue
 		var d := point.distance_to(ship.exterior.global_position)
 		if d < best_d:
@@ -129,6 +129,18 @@ func nearest(point: Vector3, except: Ship = null) -> Ship:
 
 func sleeping(ship: Ship) -> bool:
 	return _asleep.has(ship)
+
+## True while `ship` arrives out of warp (ship library spec §6.3): not yet a
+## ship to board, remove, sleep, tie a suit to or save.
+func arriving(ship: Ship) -> bool:
+	return WarpArrival.of(ship.exterior) != null
+
+## Why a save must wait on the fleet itself, or "": a ship still arriving.
+func busy() -> String:
+	for ship in awake():
+		if arriving(ship):
+			return "a ship arriving"
+	return ""
 
 ## Where `ship` is in the universe, asleep or awake.
 func place_of(ship: Ship) -> UniversePoint:
@@ -148,6 +160,8 @@ func check_sleep() -> void:
 		if ship == mine:
 			if _asleep.has(ship):
 				wake(ship)
+			continue
+		if arriving(ship):
 			continue
 		var d := place_of(ship).minus(here).length()
 		if not _asleep.has(ship) and d > SLEEP_AT:

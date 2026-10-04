@@ -699,6 +699,9 @@ func warp_busy_for(ship: Ship) -> StringName:
 ## Why a save must wait on any ship (many ships spec §6.4), or "". Not a
 ## sleeping one: frozen mid-cycle, it would hold the save forever.
 func _fleet_busy() -> String:
+	var arriving := fleet.busy()
+	if arriving != "":
+		return arriving
 	for ship in fleet.awake():
 		var why := ship.busy()
 		if why != "":

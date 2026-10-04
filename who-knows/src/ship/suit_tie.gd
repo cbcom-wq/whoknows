@@ -31,7 +31,11 @@ func _physics_process(delta: float) -> void:
 func check() -> void:
 	if avatar == null or fleet == null or avatar.mode != Avatar.Mode.SUIT:
 		return
-	var ships := fleet.awake()
+	# A ship still arriving out of warp is no ship to belong to yet.
+	var ships: Array[Ship] = []
+	for ship in fleet.awake():
+		if not fleet.arriving(ship):
+			ships.append(ship)
 	var gaps: Array[float] = []
 	for ship in ships:
 		gaps.append(gap(ship, avatar.global_position))
