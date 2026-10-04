@@ -1,8 +1,8 @@
 # Ship library — ships as files, one set of rules, and a spawn that warps them in
 
 **Date:** 2026-10-02
-**Status:** Designed with the owner on 2026-10-02. Amended while planning, 2026-10-03, against
-`main` at `2476498` (§11). Not built.
+**Status:** Designed with the owner on 2026-10-02; amended while planning 2026-10-03, against
+`main` at `2476498` (§11); built 2026-10-03 on branch `ship-library` (§12).
 **Project 2 of 3** toward a ship-designer agent (many ships spec §1.2). Project 1, many ships, is
 built and merged (`docs/superpowers/specs/2026-10-02-many-ships-design.md`); project 3, the agent,
 gets its own spec.
@@ -356,3 +356,46 @@ before the plan named it.
 | (not said) | a held key's repeats do nothing; a shift mid-arrival carries the spot; the suit's tie skips an arriving ship; `arrived` fires at the stop, before the flash ends | Found writing the plan's tests |
 | Load errors: bad JSON, newer format, not five values, wrong id | also **two rows in one cell, a fractional number, an orientation outside 0–23** | An agent writing JSON will make these; the first would silently overwrite a block, the last crash `BlockOrientation` |
 | (not tested) | broken copies for **`CANNOT_THRUST`, `NO_AUTHORITY` and `CRIPPLED`** too | Every rule gets its own broken copy |
+
+## 12. What was built (2026-10-03)
+
+Built natively from `docs/superpowers/plans/2026-10-03-ship-library.md`, eleven tasks, on branch
+`ship-library`.
+
+- **The library:** `src/ship/ship_library.gd`; `data/ships/starter.json` (110 rows, written from
+  the old `_starter_grid()` and matched block for block before the code went) and `starter.md`;
+  `_starter_grid()` reads the library. `test_starter_shuttle.gd` pins the file: 110 blocks and the
+  SHA-256 of its rows.
+- **The rules:** `src/ship/ship_rules.gd`, all fifteen codes and three notes of §4 as amended in
+  §11; `test_ship_rules.gd` breaks each with its own copy of the starter (18 tests).
+  `.claude/skills/building-a-ship/ship_check.gd` runs them on one file in about 2 s; the probe
+  prints `rules   0 broken` for the starter.
+- **The catalog:** `test_ship_catalog.gd` holds every library ship to no load errors, no rules, a
+  note, and usable in the real scene (F8, a burn, standing and walking, a save and load).
+- **The arrival:** `src/flight/warp_arrival.gd`, `SpacePalette.WARP`, `Fleet.arriving` and
+  `Fleet.busy`; F8, Delete and the suit's tie skip an arriving ship, it never sleeps, and the save
+  waits.
+- **The spawn:** `src/ship/spawn_spot.gd`, `src/ui/spawn_panel.gd`, and the flight scene's
+  `spawn_from_library` and `remove_nearest_spawned`. `fleet_play.gd` spawns through F6 for real
+  (18 of 18 checks).
+
+**Changed at the renders** (the owner to approve, §6.2):
+
+- **It comes in across your view.** As designed, the ship flew in along its nose, straight at
+  you: from the seat its wake hid behind it. A spawn now comes in along
+  `SpawnSpot.arrival_line`, 60° off the line to you, nose first, and turns to face you over the
+  last 0.5 s (`WarpArrival.SWING`). `play()` takes the line as an optional fourth argument; with
+  none it flies along its nose as §6 said.
+- **The wake is 3 m across, at 0.45; the flash at 0.5.** A 0.6 m wake was under a pixel from
+  400 m; at 0.8 it was a hard white bar.
+- **The flash measures what shows.** It had counted the hidden light beams (a 134 m mesh) and
+  swallowed the view.
+- **The flight computer rests while its hull arrives,** as during a warp: the arriving ship's
+  RCS had puffed all the way in, a dotted trail along its line.
+
+**Figures:** the worst view (seated by a big rock's night side, both light groups on) holds 130
+fps; 150 m off the rock, 137 still and 131 while a ship arrives. The starter's balance is
+unchanged (pitch 4.91%). `test/probes/arrival_render.gd` renders an arrival from the seat, the
+chase view and side-on, and the panel.
+
+**The owner's verdict on the arrival:** not yet given (renders sent 2026-10-03).

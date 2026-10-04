@@ -14,8 +14,8 @@ lights. Building a ship means choosing
 blocks and orientations, then **proving** the generated result launches, flies, can be walked
 and looks right. Green tests prove structure, not looks or feel.
 
-The worked example is the starter shuttle: `_starter_grid()` in `who-knows/scenes/flight_test.gd`.
-Its comments explain every block that isn't obvious. Read it before you design.
+The worked example is the starter shuttle: `who-knows/data/ships/starter.json`, with
+`starter.md` beside it explaining every block that isn't obvious. Read both before you design.
 
 **Read first:** `CLAUDE.md` (the style guide is binding; the floating origin; no `#` comments in
 `.tscn`), `docs/design/visual-style.md` §3 and §6, and `reference.md` beside this file (blocks,
@@ -25,6 +25,12 @@ orientation codes, numbers, APIs).
 
 Do these in order. Each one names the check that proves it.
 
+0. **A ship is a file** (`docs/superpowers/specs/2026-10-02-ship-library-design.md`):
+   `who-knows/data/ships/<id>.json` plus `<id>.md` beside it, the id the file's name, one row
+   `[x, y, z, block, orientation]` per line (`ShipLibrary.write` writes the form). Run
+   `ship_check.gd` on it until it exits 0: it runs every rule (`ShipRules`) in seconds.
+   `test_ship_catalog.gd` then holds it to the rules and to being usable, with no test of its
+   own. F6 in the game spawns it.
 1. **Lay out the decks.** −Z is the bow, +X starboard, +Y up. The proven pattern is y=0 a
    walkable cabin and y=+1 a solid equipment deck (core, reactors, grav plating). **Shape the
    outside with fairings, outside the cabin row** (`fairing_*`, 0.3 t each: a spine above, a keel
@@ -154,6 +160,7 @@ Do these in order. Each one names the check that proves it.
    - the validator, the stats, the `balance` line (each axis's imbalance as a share of authority,
      flagged `OVER 5%`), and the feel numbers;
    - any `rcs` whose exhaust is `BLOCKED`;
+   - the `rules` line (`0 broken`, or each `<-- CODE`) and the notes;
    - rooms, pods and airlocks;
    - **the hull:** `skin` (plates, chamfers, corners, facets, nozzles), `windows N outside for N
      inside` (with `UNMATCHED` naming any inside window that has no place outside), and `lights  5
@@ -291,6 +298,12 @@ thrust.
 | Timing the holo's `update()` with the computer still processing | The computer's own `_process` updates the holo too, untimed, and took the placings: the sweep read 1.7 ms worst when a placing at 4,000 km cost 10-12 ms (as first built) | `computer.set_process(false)` round a timed loop, as `computer_mode_render.gd` does |
 | Overlay text straight on the room | The computer mode's tabs and *ESC LEAVE* were cream on the bridge's cream ceiling: unreadable | Anything on screen outside a panel gets a `SCREEN_BACK` outline (`ComputerOverlay.OUTLINE`). Render it over the brightest wall it can sit on |
 | Working a tick out like a contact | Every one of the map's ~600 far ticks made a UniversePoint, worked the star's offset out again (three logs), undid the frame's basis and got a Dictionary back from `HoloVolume.place`: 12 ms a still SYSTEM placing, twice a second, a rhythmic stutter | Work out once a placing what every mark reads (`MapPage.Placing`); a ring's tick is its centre plus a unit circle times its radius, in the map's frame; test inside with `HoloVolume.inside` and hand ticks over with `add_ticks`. Guard a cost refactor with a recording of every mark (`test_map_page.gd`'s placing guard) before touching it |
+| A rule that failed the starter | `NO_STAND` as first written wanted the cell behind the helm free, but the starter's quantum core stands there; the seat stands you up beside it | Check a new rule on the starter first; `ShipRules.stand_cell` is where you stand up to |
+| Testing a rule with a broken copy that can't break it | Two solid cells behind a porthole remove the porthole rather than leave it unmatched | Check each broken copy breaks its rule on the real starter before writing the test |
+| `-gtest=` to run one test file | With this `.gutconfig.json` it ran the whole suite; and GUT exits 0 on a file that fails to parse | `-gselect=<file>.gd`, and read the summary: `Tests` must be above 0. After adding a `class_name`, run `godot --headless --import` first or nothing can see it |
+| A ship arriving straight at you | The first arrival flew in along its nose, toward the viewer: from the seat its wake hid behind it, and a 0.6 m wake was under a pixel from 400 m | A spawn comes in across your view (`SpawnSpot.arrival_line`, 60°) and turns to face you; judge effects outside at the distances they happen |
+| Measuring a hull by every mesh under it | The light beams are hidden meshes reaching 140 m ahead: the arrival's flash swallowed the view | Count only what shows (`WarpArrival.bounds_of`), or use `ExteriorBuilder.bounds()` where you have the ship |
+| A hull moved by something new, with its flight computer still steering | The arriving ship's RCS puffed all the way in, a dotted trail along its line | Anything that flies a hull for it rests the flight computer, as the warp and `WarpArrival` do (`FlightComputer._physics_process`) |
 
 ## Not built yet (plan for it; don't assume it works)
 
@@ -306,7 +319,10 @@ thrust.
   skids that assume a pull.
 
 - **Multi-storey interiors.** A `ladder` passes the validator, but every walkable cell still gets
-  a solid floor and ceiling, so you can't climb.
+  a solid floor and ceiling, so you can't climb. **Multi-level ships** can be written and checked
+  now and are usable once ladders climb: `CUT_OFF` names every storey the helm can't reach
+  ("ladders don't climb yet"). The climbing project gives `DeckPaths` its vertical links, and the
+  same rule then passes.
 - **The bubble canopy** pod variant.
 - **Light blocks** placed by hand. The generator places every light; a shipyard that wants its own
   comes with its own spec.

@@ -440,6 +440,15 @@ made.
 - **Outside is dark, so the lights uncover things.** `SpacePalette.AMBIENT` on the world
   environment, and a gentle bloom (`glow` on, Screen blend) so lenses, windows and strips halo
   against it. The interior keeps its own environment on its camera (§2.3).
+- **A ship arriving out of warp** (`WarpArrival`, ship library spec §6) is the one effect outside
+  that is not a light: a wake 3 m across behind its stern, as long as the way it came in the last
+  0.15 s, and a soft shell of light round the hull as it stops, growing from 1.0 to 1.6 of its
+  shown bounds over 0.4 s while it fades. Both are engine `StandardMaterial3D`, unshaded and
+  additive (wake at 0.45, flash at 0.5), in `SpacePalette.WARP`, a warm white near the work
+  lights that bloom halos. No new shader. A spawn comes in across your view, 60° off the line to
+  you: straight at you, the wake hides behind the ship. Tuned at the renders on 2026-10-03 (a
+  0.6 m wake was under a pixel from 400 m; at 0.8 it was a hard white bar); the owner's verdict is
+  in the ship library spec §12.
 
 ## 4. Adding something new
 
