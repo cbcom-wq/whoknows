@@ -19,6 +19,7 @@ extends SceneTree
 # probe_star_bloom_{off,on}, probe_seated_lit, and, parked beside a rock's
 # night side, probe_seated_rock_{dark,lit} and probe_rock_*. Every ship gets
 # probe_hull_* (the skin, fill-lit) and prints skin, windows, lights and tint lines.
+# It prints the rules line (ShipRules: every rule broken, or 0) and the notes.
 # Then a two-ship pass (docs/superpowers/specs/2026-10-02-many-ships-design.md
 # §8.2): fps in the worst view with a second ship 300 m off,
 # probe_fleet_from_starter{,_dark}.png, F8 to its helm, probe_fleet_from_second
@@ -421,6 +422,14 @@ func _run(scene: Node) -> void:
 			blocked.append(b["coord"])
 	print("rcs     %d blocks%s" % [rcs.size(),
 		"" if blocked.is_empty() else ", exhaust BLOCKED at %s" % [blocked]])
+	# The rules every ship must pass (ship library spec §4): the checker the
+	# catalog test and ship_check.gd use.
+	var found := ShipRules.check(ship.grid, ship.catalog)
+	print("rules   %d broken" % found["rules"].size())
+	for r in found["rules"]:
+		print("        <-- %s %s" % [r["code"], r["text"]])
+	for n in found["notes"]:
+		print("note    %s %s" % [n["code"], n["text"]])
 
 	# The ship's part of a save must bring back the same grid and store.
 	var universe: Universe = scene.get_node_or_null("Universe")
