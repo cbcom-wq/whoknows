@@ -71,6 +71,8 @@ var course_chime: AudioStreamPlayer
 ## The warp on the HUD (the warp spec §7.3): its panel in the band, and a
 ## bracket per world, one per view.
 var warp_panel: WarpPanel
+## The spawn panel (ship library spec §5): F6.
+var spawn_panel: SpawnPanel
 var body_markers: Array[BodyMarker] = []
 ## Which body the debug hop last put you by (F7), in the system's order.
 var hop_index := -1
@@ -132,6 +134,7 @@ func _ready() -> void:
 	_wire_npcs()
 	_wire_sensors()
 	_wire_warp()
+	_wire_spawn()
 	_wire_saving()
 	for ship in fleet.ships():
 		_wire_ship(ship)
@@ -695,6 +698,82 @@ func warp_busy_for(ship: Ship) -> StringName:
 		if airlock.busy() != "" or airlock.cycle.open_side() == AirlockCycle.Door.OUTER:
 			return &"airlock"
 	return &""
+
+## The spawn panel (ship library spec §5): F6 lists the library; a number
+## spawns that ship ahead of you, arriving out of warp; Delete removes the
+## nearest spawned one.
+func _wire_spawn() -> void:
+	spawn_panel = SpawnPanel.new()
+	spawn_panel.name = "SpawnPanel"
+	var lines: Array[String] = []
+	for id in library.ids():
+		lines.append("%s   %s" % [library.name_of(id), library.description_of(id)])
+	spawn_panel.entries = lines
+	spawn_panel.spawn_asked.connect(func(i: int) -> void:
+		spawn_panel.say(spawn_from_library(library.ids()[i])))
+	spawn_panel.remove_asked.connect(func() -> void: spawn_panel.say(remove_nearest_spawned()))
+	$Prompt.add_child(spawn_panel)
+
+## Spawns library ship `id` ahead of you, arriving out of warp (§5, §6), as the
+## panel's number keys do: ahead of where you will be when it lands, so a spawn
+## while cruising does not land in your path. Says what it did, or why not.
+func spawn_from_library(id: StringName) -> String:
+	if not library.has(id):
+		return "NO SHIP CALLED %s" % id
+	for ship in fleet.ships():
+		if ship.warp.is_spinning():
+			return "WARP ENGAGED"
+	if fleet.busy() != "":
+		return "A SHIP IS ARRIVING"
+	if fleet.ships().size() >= fleet.max_ships:
+		return "THE FLEET IS FULL"
+	var view := _spawn_view()
+	var others: Array[Vector3] = []
+	for ship in fleet.awake():
+		others.append(ship.exterior.global_position)
+	var spot: Variant = SpawnSpot.find(view.translated(_spawn_velocity() * WarpArrival.DURATION), others, _rock_near)
+	if spot == null:
+		return "NO CLEAR SPOT NEAR"
+	var place: Transform3D = spot
+	var grid := library.grid(id)
+	var ship := fleet.spawn(grid, place, true, "", ShipBlueprint.from_grid(grid, library.name_of(id)))
+	WarpArrival.play(ship.exterior, place)
+	return "SPAWNED %s · %s · %d m away" % [ship.name, library.name_of(id), roundi(view.origin.distance_to(place.origin))]
+
+## Removes the nearest spawned ship (any but the starter, awake and arrived)
+## other than the one you are aboard, as the panel's Delete does (§5). Says
+## what it did, or why not.
+func remove_nearest_spawned() -> String:
+	var here := _spawn_view().origin
+	var spawned := 0
+	var best: Ship = null
+	for ship in fleet.awake():
+		if ship.name == Fleet.STARTER or fleet.arriving(ship):
+			continue
+		spawned += 1
+		if ship == aboard:
+			continue
+		if best == null or here.distance_to(ship.exterior.global_position) < here.distance_to(best.exterior.global_position):
+			best = ship
+	if spawned == 0:
+		return "NO SPAWNED SHIP"
+	if best == null:
+		return "YOU ARE ABOARD IT"
+	var what := "%s · %s" % [best.name, best.launch_blueprint.ship_name]
+	fleet.remove(best)
+	return "REMOVED " + what
+
+## Where you look from: the hull you are aboard, or your view on a spacewalk.
+func _spawn_view() -> Transform3D:
+	return _avatar.camera.global_transform if _avatar.mode == Avatar.Mode.SUIT else aboard.exterior.global_transform
+
+func _spawn_velocity() -> Vector3:
+	return _avatar.velocity if _avatar.mode == Avatar.Mode.SUIT else aboard.exterior.linear_velocity
+
+## True when a rock is too near `p` for a ship to arrive there, as for a
+## warp's drop-out (§5).
+func _rock_near(p: Vector3) -> bool:
+	return WarpPlan.rock_near(_stream.recipe, _universe.to_universe(p))
 
 ## Why a save must wait on any ship (many ships spec §6.4), or "". Not a
 ## sleeping one: frozen mid-cycle, it would hold the save forever.
