@@ -102,3 +102,20 @@ func test_a_written_file_has_one_row_per_line_in_order():
 
 func test_reading_a_missing_file_says_so():
 	assert_string_contains(ShipLibrary.read(OUT.path_join("nope.json")).get("error", ""), "no such file")
+
+func test_the_library_holds_the_starter_first():
+	var lib := ShipLibrary.load_from_dir()
+	assert_eq(lib.errors, [] as Array[String])
+	assert_eq(lib.ids()[0], ShipLibrary.STARTER)
+	assert_eq(lib.name_of(ShipLibrary.STARTER), "Starter shuttle")
+
+## Build order step 1 (spec §3.3): the file is the code's starter, block for
+## block. This lives only until _starter_grid() reads the file.
+func test_the_library_starter_is_the_code_starter():
+	var boot: Node = load("res://scenes/flight_test.gd").new()
+	var code: ShipGrid = boot._starter_grid()
+	boot.free()
+	var file := ShipLibrary.load_from_dir().grid(ShipLibrary.STARTER)
+	assert_not_null(file)
+	if file != null:
+		assert_true(_same(file, code), "the same blocks, turned the same way, and nothing else")
