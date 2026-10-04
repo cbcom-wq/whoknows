@@ -737,7 +737,7 @@ func spawn_from_library(id: StringName) -> String:
 	var place: Transform3D = spot
 	var grid := library.grid(id)
 	var ship := fleet.spawn(grid, place, true, "", ShipBlueprint.from_grid(grid, library.name_of(id)))
-	WarpArrival.play(ship.exterior, place)
+	WarpArrival.play(ship.exterior, place, Vector3.ZERO, SpawnSpot.arrival_line(place))
 	return "SPAWNED %s · %s · %d m away" % [ship.name, library.name_of(id), roundi(view.origin.distance_to(place.origin))]
 
 ## Removes the nearest spawned ship (any but the starter, awake and arrived)

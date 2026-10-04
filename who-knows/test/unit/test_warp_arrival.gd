@@ -114,6 +114,36 @@ func test_a_shift_mid_arrival_carries_the_spot():
 	_run(a, WarpArrival.DURATION)
 	assert_almost_eq(_hull.global_position, _spot.origin - Vector3(1000, 0, 0), Vector3.ONE * 0.001)
 
+## A ship's light beams are hidden meshes reaching 140 m ahead: counted, the
+## flash swallowed the view.
+func test_its_bounds_are_what_shows():
+	var beam := MeshInstance3D.new()
+	var long := BoxMesh.new()
+	long.size = Vector3(40, 40, 300)
+	beam.mesh = long
+	beam.visible = false
+	_hull.add_child(beam)
+	var box := WarpArrival.bounds_of(_hull)
+	assert_almost_eq(box.size, Vector3(6, 3, 16), Vector3.ONE * 0.001)
+
+## Seen from where it will face, a ship rushing at you shows no wake: it can
+## come in along a line of its own, nose first, and turn to face as `at` does
+## over the last SWING seconds.
+func test_along_a_line_it_comes_in_nose_first_and_turns_at_the_end():
+	var along := Vector3(1, 0, 0)
+	var a := WarpArrival.play(_hull, _spot, Vector3.ZERO, along)
+	a.set_physics_process(false)
+	_run(a, 0.5)
+	var d := WarpArrival.distance_at(a.elapsed)
+	assert_almost_eq(_hull.global_position, _spot.origin - along * d, Vector3.ONE * 0.01, "on its line")
+	assert_almost_eq(-_hull.global_basis.z, along, Vector3.ONE * 0.001, "nose first")
+	var wake := a.get_child(0) as MeshInstance3D
+	var behind := (wake.global_position - _hull.global_position).normalized()
+	assert_almost_eq(behind.dot(-along), 1.0, 0.01, "the wake streams back along its line")
+	_run(a, WarpArrival.DURATION)
+	assert_almost_eq(_hull.global_position, _spot.origin, Vector3.ONE * 0.001)
+	assert_almost_eq(_hull.global_basis.z, _spot.basis.z, Vector3.ONE * 0.0001, "facing as it was asked to")
+
 func test_a_hull_freed_mid_arrival_takes_it_along():
 	var body := _body()
 	add_child(body)

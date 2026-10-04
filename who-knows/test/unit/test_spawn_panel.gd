@@ -69,6 +69,8 @@ func test_1_spawns_the_starter_ahead_arriving_out_of_warp():
 	var ship := _open_and_spawn()
 	assert_eq(_fleet.ships().size(), 2)
 	assert_true(_fleet.arriving(ship), "it arrives out of warp")
+	assert_almost_eq(WarpArrival.of(ship.exterior).along, SpawnSpot.arrival_line(expected), Vector3.ONE * 0.0001,
+		"across your view")
 	assert_eq(ship.launch_blueprint.ship_name, "Starter shuttle")
 	assert_eq(_last_line(), "SPAWNED %s · Starter shuttle · %d m away" % [ship.name,
 		roundi(view.origin.distance_to(expected.origin))])
@@ -163,6 +165,21 @@ func test_on_a_spacewalk_tied_to_the_only_spawned_ship_delete_says_so():
 	_key(KEY_DELETE)
 	assert_eq(_fleet.ships().size(), 2)
 	assert_eq(_last_line(), "YOU ARE ABOARD IT")
+
+## Seen at the renders: its RCS puffed all the way in, a dotted trail along its
+## line. Nothing fires while it arrives, as nothing does during a warp.
+func test_its_thrusters_rest_while_it_arrives():
+	var ship := _open_and_spawn()
+	WarpArrival.of(ship.exterior).set_physics_process(false)
+	var fc := ship.flight_computer
+	fc.set_pilot_input(Vector3(1, 0, 0), Vector3.ZERO, false)
+	await wait_physics_frames(2)
+	assert_eq(fc.commanded_force_local, Vector3.ZERO, "no thrust while it arrives")
+	assert_eq(fc.commanded_torque_local, Vector3.ZERO)
+	_land(ship)
+	await wait_physics_frames(2)
+	assert_ne(fc.commanded_force_local, Vector3.ZERO, "its own again once it has arrived")
+	fc.set_pilot_input(Vector3.ZERO, Vector3.ZERO, false)
 
 func test_the_save_waits_for_an_arrival():
 	var ship := _open_and_spawn()

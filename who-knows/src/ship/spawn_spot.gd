@@ -14,6 +14,9 @@ const STEP_DEG := 45.0
 const CLEAR := 60.0
 ## The steps round you in the order tried: ahead, then each side, behind last.
 const STEPS: Array[int] = [0, 1, -1, 2, -2, 3, -3, 4]
+## How far off the line to you a spawned ship comes in, so its wake streams
+## across your view.
+const ACROSS_DEG := 60.0
 
 ## The spot, or null when nowhere is clear. `from` is where you look from, its
 ## -z the way you face; `ships` every other ship's hull position; `rock_near`
@@ -29,6 +32,12 @@ static func find(from: Transform3D, ships: Array[Vector3], rock_near: Callable) 
 				continue
 			return Transform3D(Basis.looking_at(-dir, up), p)
 	return null
+
+## The way a ship spawned at `spot` travels in (WarpArrival's line): toward
+## you, ACROSS_DEG to one side. Straight at you, its wake would hide behind it.
+static func arrival_line(spot: Transform3D) -> Vector3:
+	var up := spot.basis.y.normalized()
+	return (-spot.basis.z.normalized()).rotated(up, deg_to_rad(ACROSS_DEG))
 
 static func _near_a_ship(p: Vector3, ships: Array[Vector3]) -> bool:
 	for s in ships:

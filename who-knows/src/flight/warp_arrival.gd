@@ -2,10 +2,13 @@ class_name WarpArrival
 extends Node3D
 
 ## A ship arriving as if out of warp (docs/superpowers/specs/
-## 2026-10-02-ship-library-design.md §6): its hull rushes in along its nose
-## from FROM back, braking hard onto `at`, a wake streaming behind it; a flash
-## as it stops; then it moves at `end_velocity`. Anything that brings a ship in
-## uses it: a spawn now, NPC ships and wingmen one day.
+## 2026-10-02-ship-library-design.md §6): its hull rushes in nose first along
+## a line from FROM back, braking hard onto `at`, a wake streaming behind it,
+## and turns to face as `at` does over the last SWING seconds; a flash as it
+## stops; then it moves at `end_velocity`. The line is its own nose unless
+## another is given: a ship rushing straight at you shows no wake, so a spawn
+## brings it in across your view. Anything that brings a ship in uses it: a
+## spawn now, NPC ships and wingmen one day.
 ##
 ## While it arrives the hull is ghosted, as a ship at warp is (the warp spec
 ## §5): frozen kinematic, on no collision layer or mask, so it passes through
@@ -19,13 +22,17 @@ signal arrived
 
 const DURATION := 1.5
 const FROM := 2000.0
-const WAKE_WIDTH := 0.6
+## Tuned at the renders: 0.6 m was under a pixel across from 400 m.
+const WAKE_WIDTH := 3.0
 const WAKE_SECONDS := 0.15
-const WAKE_ALPHA := 0.8
+## Tuned at the renders: at 0.8 the wake was a hard white bar.
+const WAKE_ALPHA := 0.45
 ## The flash grows from x to y times the hull's bounds while it fades.
 const FLASH_SCALE := Vector2(1.0, 1.6)
 const FLASH_TIME := 0.4
-const FLASH_ALPHA := 0.7
+const FLASH_ALPHA := 0.5
+## Seconds at the end it turns from its line to face as `at` does.
+const SWING := 0.5
 ## Moved farther than this between two placings, the hull was shifted by the
 ## floating origin, which moves it by Universe.STEP at least.
 const SHIFTED := 1.0
@@ -33,6 +40,8 @@ const SHIFTED := 1.0
 var hull: RigidBody3D
 var at: Transform3D
 var end_velocity := Vector3.ZERO
+## The way it travels in, a unit vector; ZERO for along its nose.
+var along := Vector3.ZERO
 ## Seconds since it began.
 var elapsed := 0.0
 
@@ -47,13 +56,16 @@ var _bounds := AABB()
 var _wake: MeshInstance3D
 var _flash: MeshInstance3D
 
-## Starts `p_hull` arriving at `p_at`, to move at `p_end_velocity` once it has.
-static func play(p_hull: RigidBody3D, p_at: Transform3D, p_end_velocity := Vector3.ZERO) -> WarpArrival:
+## Starts `p_hull` arriving at `p_at` along `p_along` (its nose when ZERO), to
+## move at `p_end_velocity` once it has.
+static func play(p_hull: RigidBody3D, p_at: Transform3D, p_end_velocity := Vector3.ZERO,
+		p_along := Vector3.ZERO) -> WarpArrival:
 	var a := WarpArrival.new()
 	a.name = "WarpArrival"
 	a.hull = p_hull
 	a.at = p_at
 	a.end_velocity = p_end_velocity
+	a.along = p_along.normalized()
 	a._bounds = bounds_of(p_hull)
 	p_hull.add_child(a)
 	return a
@@ -74,13 +86,16 @@ static func of(p_hull: Node) -> WarpArrival:
 static func distance_at(t: float) -> float:
 	return FROM * pow(1.0 - clampf(t / DURATION, 0.0, 1.0), 3.0)
 
-## The box round every mesh under `body`, in its own frame.
+## The box round every mesh that shows under `body`, in its own frame. Not a
+## hidden one: a ship's light beams reach 140 m ahead of it.
 static func bounds_of(body: Node3D) -> AABB:
 	var box := AABB()
 	var first := true
 	var to_body := body.global_transform.affine_inverse()
 	for node in body.find_children("*", "MeshInstance3D", true, false):
 		var mesh := node as MeshInstance3D
+		if not mesh.is_visible_in_tree():
+			continue
 		var b := (to_body * mesh.global_transform) * mesh.get_aabb()
 		box = b if first else box.merge(b)
 		first = false
@@ -128,19 +143,30 @@ func _ghost() -> void:
 	hull.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
 	hull.freeze = true
 
-## The hull distance_at(elapsed) back from the spot along its line, and the
-## wake behind its stern as long as the way it came in the last WAKE_SECONDS.
+## The hull distance_at(elapsed) back from the spot along its line, nose first
+## and turning to face as `at` does at the end, and the wake behind its stern
+## along the line, as long as the way it came in the last WAKE_SECONDS.
 func _place() -> void:
 	_follow_shift()
+	var line := _line()
 	var d := distance_at(elapsed)
-	hull.global_transform = Transform3D(at.basis, at.origin + at.basis.z * d)
+	var up := at.basis.y if absf(at.basis.y.dot(line)) < 0.99 else at.basis.z
+	var travel := Basis.looking_at(line, up)
+	var turn := clampf((elapsed - (DURATION - SWING)) / SWING, 0.0, 1.0)
+	var facing := travel.slerp(at.basis.orthonormalized(), turn) if turn > 0.0 else travel
+	hull.global_transform = Transform3D(facing, at.origin - line * d)
 	_placed = hull.global_position
 	_has_placed = true
 	var length := distance_at(elapsed - WAKE_SECONDS) - d
 	_wake.visible = length > 0.01
-	_wake.scale = Vector3(1.0, 1.0, maxf(length, 0.01))
 	var centre := _bounds.get_center()
-	_wake.position = Vector3(centre.x, centre.y, _bounds.end.z + length * 0.5)
+	var stern := hull.global_transform * Vector3(centre.x, centre.y, _bounds.end.z)
+	_wake.global_transform = Transform3D(travel * Basis.from_scale(Vector3(1.0, 1.0, maxf(length, 0.01))),
+		stern - line * length * 0.5)
+
+## The way it travels in: `along`, or its nose.
+func _line() -> Vector3:
+	return along if along != Vector3.ZERO else -at.basis.z.normalized()
 
 ## The floating origin moves a ghosted hull and nothing else does, so whatever
 ## moved it since it was last placed moved the spot too.

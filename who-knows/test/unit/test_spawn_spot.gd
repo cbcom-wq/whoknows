@@ -43,5 +43,15 @@ func test_blocked_all_round_it_goes_farther_out():
 	var spot: Transform3D = SpawnSpot.find(_from, _no_ships, rocks)
 	assert_almost_eq(spot.origin, _from.origin + _ahead() * SpawnSpot.FARTHER, Vector3.ONE * 0.001)
 
+## Coming straight at you, its wake would hide behind it: it comes in across
+## your view instead, toward you and to one side, level with the spot's up.
+func test_it_comes_in_across_your_view():
+	var spot: Transform3D = SpawnSpot.find(_from, _no_ships, _no_rocks)
+	var line := SpawnSpot.arrival_line(spot)
+	var toward_you := (_from.origin - spot.origin).normalized()
+	assert_almost_eq(line.length(), 1.0, 0.0001)
+	assert_almost_eq(rad_to_deg(line.angle_to(toward_you)), SpawnSpot.ACROSS_DEG, 0.01)
+	assert_almost_eq(line.dot(spot.basis.y), 0.0, 0.0001)
+
 func test_with_nothing_clear_it_refuses():
 	assert_null(SpawnSpot.find(_from, _no_ships, func(_p: Vector3) -> bool: return true))
