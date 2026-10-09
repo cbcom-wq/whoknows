@@ -34,6 +34,8 @@ var universe: Universe
 ## The ship you are aboard (a Callable returning a Ship): never removed.
 var aboard: Callable
 var max_ships := MAX_SHIPS
+## The interior slots, shared with every base (habitat modules spec §9.3).
+var slots := InteriorSlots.new()
 ## The number the next spawned ship's name takes (Ship2, Ship3 ...). It only
 ## goes up, so a name is never used twice in one game: a droid's ledger record
 ## is named for its ship (§6.2).
@@ -73,6 +75,7 @@ func adopt(ship: Ship) -> void:
 	if _ships.has(ship):
 		return
 	_ships.append(ship)
+	slots.take(ship.interior_slot)
 	joined.emit(ship)
 
 ## A new ship built from `grid`, its hull at `place`, at rest; null past the
@@ -84,9 +87,13 @@ func spawn(grid: ShipGrid, place: Transform3D, stock := true, ship_name := "",
 	if _ships.size() >= max_ships:
 		push_warning("Fleet: already %d ships, the most there can be" % max_ships)
 		return null
+	var slot := slots.claim()
+	if slot < 0:
+		push_warning("Fleet: no interior slot free")
+		return null
 	var ship: Ship = SHIP_SCENE.instantiate()
 	ship.name = ship_name if ship_name != "" else _next_name()
-	ship.interior_slot = _free_slot()
+	ship.interior_slot = slot
 	ship.outside_path = NodePath("../%s" % home.get_path_to(outside))
 	ship.launch_blueprint = launch
 	home.add_child(ship)
@@ -108,6 +115,7 @@ func remove(ship: Ship) -> bool:
 		return false
 	_ships.erase(ship)
 	_asleep.erase(ship)
+	slots.release(ship.interior_slot)
 	left.emit(ship)
 	ship.get_parent().remove_child(ship)
 	ship.queue_free()
@@ -250,13 +258,3 @@ func _next_name() -> String:
 		n = "Ship%d" % next_number
 		next_number += 1
 	return n
-
-## The lowest interior slot no ship holds.
-func _free_slot() -> int:
-	var used := {}
-	for ship in _ships:
-		used[ship.interior_slot] = true
-	var slot := 0
-	while used.has(slot):
-		slot += 1
-	return slot
