@@ -128,6 +128,17 @@ func test_the_ghost_stays_up_every_tick_while_it_is_aimed():
 			gone += 1
 	assert_eq(gone, 0, "the 10 Hz refit does not flicker the ghost")
 
+## A ghost is not there (spec §5.2): see-through, and it casts no shadow.
+func test_the_ghost_casts_no_shadow():
+	var item := _package()
+	var aim: Variant = _fitting_aim(item)
+	assert_not_null(aim)
+	(item.use_node as PackageUse).refit(item, aim, _root.get_node("Outside"))
+	var meshes := _ghost().find_children("*", "GeometryInstance3D", true, false)
+	assert_eq(meshes.size(), 5, "a body and four legs")
+	for g: GeometryInstance3D in meshes:
+		assert_eq(g.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, String(g.name))
+
 func test_the_ghost_goes_when_the_package_leaves_the_hand():
 	var item := _package()
 	item.state = Item.State.HELD

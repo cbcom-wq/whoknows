@@ -23,11 +23,14 @@ func _ready() -> void:
 	_body = MeshInstance3D.new()
 	_body.mesh = BoxMesh.new()
 	_body.material_override = _material
+	# A ghost is not there: it casts no shadow on the rock.
+	_body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_body)
 	for i in 4:
 		var leg := MeshInstance3D.new()
 		leg.mesh = BoxMesh.new()
 		leg.material_override = _material
+		leg.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(leg)
 		_legs.append(leg)
 	visible = false

@@ -151,7 +151,7 @@ func tick_unfold(delta: float) -> void:
 		return
 	unfold_left = maxf(unfold_left - delta, 0.0)
 	var t := 1.0 - unfold_left / HabitatValues.UNFOLD
-	exterior_look.unfold(unfolding, t, site)
+	exterior_look.unfold(unfolding, t, site, livery)
 	var legs_down := HabitatValues.FLY + HabitatValues.SETTLE + HabitatValues.LEGS
 	if not _stamped and t * HabitatValues.UNFOLD >= legs_down:
 		# The legs are down and the walls start: the stamp, and the unfolding's sound.

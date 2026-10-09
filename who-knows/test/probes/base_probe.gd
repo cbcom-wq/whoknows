@@ -96,19 +96,50 @@ func _look_at_ghost(eye: Transform3D, r: Planting.Result) -> void:
 	var n := eye.basis.z
 	_look(r.body.origin + n * 7.0 + eye.basis.x * 12.0, r.body.origin, n)
 
-## Of the base frame's two front quarters (frame-local, horizontal, unit; the
-## front is +z, where the hatch is), the one that faces the sun more.
+## Of the base frame's four quarters (frame-local, horizontal, unit), the
+## one the sun shines on most: a view from there sees the lit side.
 func _sunward(scene: Node, frame: Transform3D) -> Vector3:
 	var sun: DirectionalLight3D = scene.get_node("DirectionalLight3D")
 	var toward := frame.basis.inverse() * sun.global_basis.z
+	toward.y = 0.0
 	var best := Vector3.BACK
 	var best_dot := -INF
-	for q in [Vector3(1, 0, 1), Vector3(-1, 0, 1)]:
+	for q in [Vector3(1, 0, 1), Vector3(-1, 0, 1), Vector3(1, 0, -1), Vector3(-1, 0, -1)]:
 		var d: float = (q as Vector3).normalized().dot(toward)
 		if d > best_dot:
 			best_dot = d
 			best = (q as Vector3).normalized()
 	return best
+
+## Stands the avatar on its floor 1.1-1.8 m from `target`, on a side of it
+## (along `room`'s axes) where it fits and nothing is between its eye and
+## `target`, looking at it. False if there is no such place.
+func _stand_facing(avatar: Avatar, target: Vector3, room: Basis) -> bool:
+	var up := room.y.normalized()
+	var space := avatar.get_world_3d().direct_space_state
+	for dist in [1.4, 1.8, 1.1]:
+		for d: Vector3 in [room.z, -room.z, room.x, -room.x]:
+			var dir := d.normalized()
+			var feet: Vector3 = target + dir * dist
+			feet += up * (avatar.global_position - feet).dot(up)
+			var pose := Transform3D(Basis.looking_at(-dir, up), feet)
+			if not avatar.can_stand_at(pose):
+				continue
+			var eye: Vector3 = feet + up * 1.6
+			var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(eye, target, 0xFFFFFFFF,
+				[avatar.get_rid()]))
+			if not hit.is_empty() and (hit["position"] as Vector3).distance_to(target) > 0.35:
+				continue
+			avatar.place(pose)
+			avatar.set_head_pitch(atan2((target - eye).dot(up), dist))
+			return true
+	return false
+
+## True if nothing stands between `p` and the sun (the avatar aside).
+func _sunlit(scene: Node, avatar: Avatar, p: Vector3) -> bool:
+	var sun: DirectionalLight3D = scene.get_node("DirectionalLight3D")
+	var query := PhysicsRayQueryParameters3D.create(p, p + sun.global_basis.z * 3000.0, 0xFFFFFFFF, [avatar.get_rid()])
+	return avatar.get_world_3d().direct_space_state.intersect_ray(query).is_empty()
 
 func _ghost_shown(outside: Node3D) -> bool:
 	var ghost := outside.get_node_or_null("PackageGhost") as Node3D
@@ -166,6 +197,9 @@ func _run(scene: Node) -> void:
 		and machine.bay.item.definition.id == &"hub_package", 5.0)
 	_check(made, "the machine makes a hub package")
 	_check(ship.quantum.store.amount == 1200 - 800, "for 800 QE")
+	_check(_stand_facing(avatar, machine.bay.item.global_position, ship.interior.global_basis),
+		"somewhere to stand with the bay in view")
+	await _frames(3)
 	await _shot("package_in_the_bay")
 
 	# 2. Out on a spacewalk with it.
@@ -188,7 +222,9 @@ func _run(scene: Node) -> void:
 		var r := use.refit(package, eye, outside)
 		if r == null:
 			continue
-		if r.fit == Planting.Fit.OK and green == null:
+		# The hub goes where it fits and the sun reaches it: under the ship's
+		# shadow the plain-sun views would show only a black shape.
+		if r.fit == Planting.Fit.OK and green == null and _sunlit(scene, avatar, r.body.origin):
 			green = eye
 			_look_at_ghost(eye, r)
 			await _shot("ghost_green")
@@ -198,7 +234,7 @@ func _run(scene: Node) -> void:
 			_look_at_ghost(eye, r)
 			await _shot("ghost_coral")
 			_check(_ghost_shown(outside), "the coral ghost stays shown while aimed: %s" % coral)
-	_check(green != null, "somewhere on the near face takes a hub")
+	_check(green != null, "somewhere on the near face, in the sun, takes a hub")
 	print("coral   %s" % (coral if coral != "" else "(none found)"))
 
 	# 4. Plant it, and watch it unfold.

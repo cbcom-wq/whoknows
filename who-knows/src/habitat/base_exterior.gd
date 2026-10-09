@@ -98,8 +98,10 @@ func leg_count() -> int:
 
 ## Module `index` at `t` of its unfolding (0..1): the case flies in and
 ## settles, the legs punch down, the shell grows from the case. At 1 the show
-## is gone and the shell the rebuild made stands in its place.
-func unfold(index: int, t: float, site: BaseSite) -> void:
+## is gone and the shell the rebuild made stands in its place. `livery` is the
+## base's own copy of the hull livery (GridHome.livery), so the growing shell
+## wears its stripe where the finished one will.
+func unfold(index: int, t: float, site: BaseSite, livery: Material = null) -> void:
 	if _show != null:
 		_show.queue_free()
 		_show = null
@@ -114,7 +116,8 @@ func unfold(index: int, t: float, site: BaseSite) -> void:
 	var full := Vector3(_size(site, index)) * ShipGrid.CELL_SIZE
 	var kit := InteriorKit.new(_show)
 	kit.layer = LAYER
-	kit.materials = {InteriorKit.Batch.HULL: HullMaterials.livery(), InteriorKit.Batch.SOLID: HullMaterials.trim()}
+	kit.materials = {InteriorKit.Batch.HULL: livery if livery != null else HullMaterials.trim(),
+		InteriorKit.Batch.SOLID: HullMaterials.trim()}
 	var fly := clampf(at / (u.FLY + u.SETTLE), 0.0, 1.0)
 	var grow := clampf((at - u.FLY - u.SETTLE - u.LEGS) / u.WALLS, 0.0, 1.0)
 	var size := CASE_SIZE.lerp(full, grow * grow * (3.0 - 2.0 * grow))
