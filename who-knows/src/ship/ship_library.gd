@@ -75,6 +75,20 @@ static func read(path: String) -> Dictionary:
 	return {"id": StringName(id), "name": str(d.get("name", id)), "description": str(d.get("description", "")),
 		"grid": grid}
 
+## The ship `what` names (ship designer spec §7.2): a library id, or a res://
+## or absolute path to a ship file, read as read() reads one; {error} when it
+## names none. `library` is asked for ids, loaded from DIR when not given.
+static func resolve(what: String, library: ShipLibrary = null) -> Dictionary:
+	if what.ends_with(".json"):
+		return read(what)
+	if library == null:
+		library = load_from_dir()
+	var id := StringName(what)
+	if not library.has(id):
+		return {"error": "no library ship called \"%s\"" % what}
+	return {"id": id, "name": library.name_of(id), "description": library.description_of(id),
+		"grid": library.grid(id)}
+
 ## Every ship's id, sorted, the starter first.
 func ids() -> Array[StringName]:
 	var out: Array[StringName] = []

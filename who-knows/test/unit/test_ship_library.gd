@@ -108,3 +108,18 @@ func test_the_library_holds_the_starter_first():
 	assert_eq(lib.errors, [] as Array[String])
 	assert_eq(lib.ids()[0], ShipLibrary.STARTER)
 	assert_eq(lib.name_of(ShipLibrary.STARTER), "Starter shuttle")
+
+func test_resolve_finds_a_library_id():
+	var found := ShipLibrary.resolve("starter")
+	assert_eq(found.get("id"), &"starter")
+	assert_eq(found.get("name"), "Starter shuttle")
+	assert_eq((found["grid"] as ShipGrid).size(), 110)
+
+func test_resolve_reads_a_ship_file():
+	var found := ShipLibrary.resolve("res://test/fixtures/ships/alpha.json")
+	assert_eq(found.get("id"), &"alpha")
+	assert_false(found.has("error"))
+
+func test_resolve_says_when_it_names_no_ship():
+	assert_eq(ShipLibrary.resolve("nope").get("error"), "no library ship called \"nope\"")
+	assert_string_contains(ShipLibrary.resolve("res://nowhere/nope.json").get("error", ""), "no such file")
