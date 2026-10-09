@@ -191,6 +191,7 @@ func _make_bases() -> void:
 	bases.slots = fleet.slots
 	bases.clock = func() -> float: return play_time
 	bases.inside = func() -> Base: return home as Base
+	bases.ship_near = func(p: Vector3) -> Ship: return fleet.nearest(p)
 	bases.joined.connect(_wire_base)
 	add_child(bases)
 

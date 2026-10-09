@@ -13,6 +13,7 @@ const SHADER_DIR := "res://data/materials/interior/"
 ## vertex colours rather than choosing colours.
 const PAINTING_FILES := [
 	"res://src/ui/computer_overlay.gd",
+	"res://src/habitat/link_panel.gd",
 	"res://src/ship/interior/interior_props.gd",
 	"res://src/ship/interior/interior_dressing.gd",
 	"res://src/ship/interior/interior_materials.gd",

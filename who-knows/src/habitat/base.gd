@@ -18,6 +18,8 @@ var site: BaseSite
 var unfolding := -1
 var unfold_left := 0.0
 var exterior_look: BaseExterior
+## The hub's link panel (§6.1), rebuilt with the interior; null with no hub.
+var link: LinkPanel
 
 var _stamped := false
 ## Through the suit (outside is vacuum): the legs' stamp, and the walls folding
@@ -156,6 +158,26 @@ func rebuild() -> void:
 	exterior.set_meta(AsteroidStream.ANCHOR_RADIUS, reach + ShipGrid.CELL_SIZE * 0.87)
 	_apply_own()
 	_apply_livery()
+	_place_link(shown)
+
+## The link panel on the first hub's deck beside its airlock (§6.1).
+func _place_link(shown: BaseSite) -> void:
+	if link != null:
+		link.queue_free()
+		link = null
+	var hubs := shown.hubs()
+	if hubs.is_empty():
+		return
+	var m: Dictionary = shown.modules[hubs[0]]
+	var spot := (m["cell"] as Vector3i) + ModuleDefinition.turn_cell(Vector3i(0, 0, 1), m["turns"],
+		ModuleCatalog.get_def(ModuleCatalog.HUB).size)
+	link = LinkPanel.new()
+	link.name = "LinkPanel"
+	var at := InteriorBuilder.interior_center(spot)
+	at.y = InteriorBuilder.floor_y(spot)
+	link.transform = Transform3D(Basis(Vector3.UP, PI * 0.5 * m["turns"]), at + Vector3(0, 0, -0.5))
+	interior.add_child(link)
+	link.setup(self)
 
 ## Starts module `index` unfolding (§5.3); it is already in the site.
 func begin_unfold(index: int) -> void:

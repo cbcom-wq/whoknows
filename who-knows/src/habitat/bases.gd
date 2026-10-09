@@ -27,6 +27,8 @@ var clock: Callable
 ## The base you are in, or whose suit you wear: never asleep. A Callable
 ## returning a Base, or null.
 var inside: Callable
+## The nearest awake ship to a point (engine space), or null: the quantum link's other end.
+var ship_near: Callable
 ## The number the next base's name takes (Base1, Base2 ...); it only goes up.
 var next_number := 1
 
