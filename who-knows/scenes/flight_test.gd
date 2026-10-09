@@ -133,7 +133,6 @@ func _ready() -> void:
 		_starter.restore_aboard(starter_part)
 	_make_fleet()
 	_make_bases()
-	bases.from_dict(saved.get("bases", {}))
 	_make_suit_tie()
 	_place_avatar_on_deck()
 	_set_interior_mood()
@@ -576,6 +575,10 @@ func _wire_universe(saved: Dictionary) -> void:
 	if resumed and not same_world:
 		push_warning("FlightTest: the save's asteroids are another version; back to the start")
 	if same_world:
+		# The bases first, before anything wakes; a world started over drops
+		# them, as it drops strays: their rocks are gone (habitat modules spec
+		# §11).
+		bases.from_dict(saved.get("bases", {}))
 		_restore_places(saved)
 	else:
 		_universe.origin = start

@@ -114,3 +114,48 @@ func test_the_gate_waits_while_a_module_unfolds():
 	root.bases.plant(ModuleCatalog.HUB, r, Ground.new(at.y))
 	assert_eq(root.bases.busy(), "unfolding")
 	_drop(root)
+
+## A load that starts the world over (a generator changed) drops the bases, as
+## it drops strays: the rocks they stood on are gone.
+func test_a_world_started_over_drops_the_bases():
+	var root := _scene()
+	_plant(root)
+	assert_true(root.save_now())
+	_drop(root)
+	var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(PATH))
+	data["generators"]["asteroids"] = int(data["generators"]["asteroids"]) + 1
+	var f := FileAccess.open(PATH, FileAccess.WRITE)
+	f.store_string(JSON.stringify(data, "", false, true))
+	f.close()
+	var again := _scene()
+	await wait_physics_frames(2)
+	assert_true(again.resumed, "it loaded")
+	assert_true(again.bases.sites().is_empty(), "no base left")
+	assert_eq(again.bases.next_number, 1)
+	assert_same(again.home, again.aboard, "you are aboard your ship")
+	assert_engine_error("another version", "the world started over, and it says so")
+	_drop(again)
+
+## A spacewalk tied to a base comes back tied to it: the base wakes, and your
+## suit's hull is its exterior.
+func test_a_spacewalk_tied_to_a_base_comes_back_tied_to_it():
+	var root := _scene()
+	var base := _plant(root)
+	var ship: Ship = root.get_node("Ship")
+	var avatar: Avatar = root.get_node("Ship/Interior/Avatar")
+	var lock: Airlock = base.airlocks.values()[0]
+	var near_base := base.exterior.global_transform * (lock.alcove.outer_frame * Vector3(0, 0.3, -6.0))
+	avatar.enter_suit(base.outside, Transform3D(Basis.IDENTITY, near_base), Vector3.ZERO, ship.exterior)
+	root.suit_tie.check()
+	assert_same(root.home, base, "tied to the base")
+	assert_true(root.save_now())
+	_drop(root)
+	var again := _scene()
+	await wait_physics_frames(2)
+	var back: Base = again.bases.named(&"Base1")
+	assert_not_null(back)
+	assert_eq(again._avatar.mode, Avatar.Mode.SUIT, "on a spacewalk")
+	assert_same(again.home, back, "tied to the base")
+	assert_same(again._avatar.hull, back.exterior)
+	assert_same(again._avatar.beacon_source.get_object(), back.airlocks.values()[0], "home is its airlock")
+	_drop(again)
