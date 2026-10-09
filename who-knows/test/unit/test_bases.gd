@@ -65,6 +65,7 @@ func test_a_base_sleeps_far_off_and_wakes_near_with_everything_in_it():
 	var universe: Universe = _root.get_node("Universe")
 	universe.origin = universe.origin.plus(Vector3(25000, 0, 0))
 	_bases.check_sleep()
+	await wait_frames(1)
 	assert_null(_bases.named(&"Base1"), "asleep: no nodes")
 	assert_false(_bases.slots.is_held(slot), "its slot is free")
 	assert_eq(_bases.site_named(&"Base1").store, 77)
@@ -89,6 +90,7 @@ func test_a_base_that_cannot_get_a_slot_stays_asleep_and_wakes_later():
 	var universe: Universe = _root.get_node("Universe")
 	universe.origin = universe.origin.plus(Vector3(25000, 0, 0))
 	_bases.check_sleep()
+	await wait_frames(1)
 	var held: Array[int] = []
 	while _bases.slots.free_count() > 0:
 		held.append(_bases.slots.claim())

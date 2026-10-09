@@ -13,10 +13,13 @@ var world_seed := 0
 var reach := 350.0 + NpcDirector.DEMOTE_MARGIN
 ## Whether a point on a rock is too near a working drill for a herd to keep
 ## its home there (habitat modules spec §8.4): a Callable (site id, engine
-## point) -> bool, or none.
+## point) -> bool, or none. Asked once, when a rock's herds are first offered
+## (it comes into detail), so skitters already out are not taken away in view:
+## the herd has moved away the next time the rock loads.
 var quiet: Callable
 
 var _sites := {}   # rock id -> RockSite
+var _offered := {}   # rock id -> the site's records that were not quiet when it was built
 
 func _init(p_stream: AsteroidStream) -> void:
 	stream = p_stream
@@ -36,14 +39,19 @@ func records(director: NpcDirector) -> Array:
 			if site == null or site.detail != detail:
 				site = RockSite.new(detail, world_seed)
 				_sites[id] = site
+				var kept: Array = []
+				for r in site.records:
+					if quiet.is_valid() and quiet.call(site.id, site.frame() * r.home):
+						continue
+					kept.append(r)
+				_offered[id] = kept
 			site.director = director
-			for r in site.records:
-				if quiet.is_valid() and quiet.call(site.id, site.frame() * r.home):
-					continue
+			for r in _offered[id]:
 				out.append([r, site])
 	for id in _sites.keys():
 		if not seen.has(id):
 			_sites.erase(id)
+			_offered.erase(id)
 	return out
 
 ## The site for a rock, if its herds are on offer.

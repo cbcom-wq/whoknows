@@ -34,6 +34,16 @@ func before_each():
 	_base = _root.bases.plant(ModuleCatalog.HUB, r, _ground)
 	_base.tick_unfold(HabitatValues.UNFOLD + 0.1)
 
+## Plants `kind`, then lets the unfold take `unfold_clock` seconds of the clock.
+func _plant_slowly(kind: StringName, local: Vector3, unfold_clock: float) -> int:
+	var frame: Transform3D = _root.bases.frame_of(_base.site)
+	var r := Planting.fit(_ground, ModuleCatalog.get_def(kind), frame * local, Vector3.FORWARD, 0, _base.site, frame)
+	assert_eq(r.fit, Planting.Fit.OK)
+	_root.bases.plant(kind, r, _ground)
+	_clock += unfold_clock
+	_base.tick_unfold(HabitatValues.UNFOLD + 0.1)
+	return _base.site.modules.size() - 1
+
 func _plant(kind: StringName, local: Vector3) -> int:
 	var frame: Transform3D = _root.bases.frame_of(_base.site)
 	var r := Planting.fit(_ground, ModuleCatalog.get_def(kind), frame * local, Vector3.FORWARD, 0, _base.site, frame)
@@ -47,6 +57,11 @@ func test_a_planted_drill_knows_its_rock_s_ore():
 	var drill: Dictionary = _base.site.modules[i]["drill"]
 	assert_true(drill["veined"])
 	assert_eq(float(drill["credited_at"]), 1000.0)
+
+func test_it_earns_from_when_it_stands_not_from_when_it_was_planted():
+	var i := _plant_slowly(ModuleCatalog.DRILL, Vector3(10, -2, 0), 20.0)
+	assert_eq(float(_base.site.modules[i]["drill"]["credited_at"]), 1020.0)
+	assert_eq(_base.credit_drills(), 0, "the unfolding earned nothing")
 
 func test_it_fills_the_base_s_store_by_the_clock():
 	var i := _plant(ModuleCatalog.DRILL, Vector3(10, -2, 0))
@@ -65,6 +80,7 @@ func test_a_sleeping_base_is_credited_when_it_wakes():
 	var universe: Universe = _root.get_node("Universe")
 	universe.origin = universe.origin.plus(Vector3(25000, 0, 0))
 	_root.bases.check_sleep()
+	await wait_frames(1)
 	assert_null(_root.bases.named(&"Base1"))
 	_clock += 600.0
 	universe.origin = universe.origin.plus(Vector3(-25000, 0, 0))

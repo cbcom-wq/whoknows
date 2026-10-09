@@ -180,6 +180,9 @@ func tick_unfold(delta: float) -> void:
 	if unfold_left <= 0.0:
 		var done := unfolding
 		unfolding = -1
+		# A drill starts earning when it stands, not when it was planted.
+		if site.modules[done].has("drill") and clock.is_valid():
+			site.modules[done]["drill"]["credited_at"] = float(clock.call())
 		rebuild()
 		unfolded.emit(done)
 
