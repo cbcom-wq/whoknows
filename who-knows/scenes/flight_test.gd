@@ -30,6 +30,11 @@ var suit_tie: SuitTie
 ## Every ship the game can build, from data/ships (ship library spec §3.2):
 ## loaded first in _ready, or by _starter_grid() on a bare instance.
 var library: ShipLibrary
+## Which ship you start aboard (ship designer spec §7.2): a library id, or a
+## res:// or absolute path to a ship file. Anything but the starter is for a
+## probe or a render, so it turns saving off: the owner's game is never
+## touched. Set before the scene enters the tree.
+var starter_ship := String(ShipLibrary.STARTER)
 
 ## The star system the flight is in (the system skeleton spec §4), from the
 ## world seed, and the node that draws its star, planets and moons.
@@ -106,6 +111,8 @@ const OUTSIDE_GLOW_BLEND := Environment.GLOW_BLEND_MODE_SCREEN
 
 func _ready() -> void:
 	_load_library()
+	if starter_ship != String(ShipLibrary.STARTER):
+		save_enabled = false
 	var saved := _read_save()
 	var starter_part := _part_named(saved, Fleet.STARTER)
 	var layout := Ship.layout_of(starter_part) if resumed else null
@@ -117,7 +124,10 @@ func _ready() -> void:
 	if resumed:
 		_starter.launch_blueprint = Ship.launch_of(starter_part)
 		npc_ledger.from_dict(saved.get("npcs", {}))
-	_starter.set_grid(layout if resumed else _starter_grid(), not resumed)
+	var chosen := {} if resumed else _starter_file()
+	if not resumed and starter_ship != String(ShipLibrary.STARTER):
+		_starter.launch_blueprint = ShipBlueprint.from_grid(chosen["grid"], chosen["name"])
+	_starter.set_grid(layout if resumed else chosen["grid"], not resumed)
 	if resumed:
 		_starter.restore_aboard(starter_part)
 	_make_fleet()
@@ -1118,13 +1128,22 @@ func _can_stand(pose: Transform3D) -> bool:
 	var def := aboard.catalog.get_def(aboard.grid.get_block(cell).block_id)
 	return def != null and def.is_walkable()
 
-## The starter shuttle, from data/ships/starter.json; why each block is where it
-## is: data/ships/starter.md. Most tests call this on a flight_test.gd that
-## never entered the tree, so it loads the library itself.
-func _starter_grid() -> ShipGrid:
+## The ship starter_ship names, {id, name, description, grid}; the starter's,
+## with an error in the output, when it names none. The starter's file is
+## data/ships/starter.json, why each block is where it is data/ships/starter.md.
+## Most tests call _starter_grid() on a flight_test.gd that never entered the
+## tree, so it loads the library itself.
+func _starter_file() -> Dictionary:
 	if library == null:
 		library = ShipLibrary.load_from_dir()
-	return library.grid(ShipLibrary.STARTER)
+	var found := ShipLibrary.resolve(starter_ship, library)
+	if found.has("error"):
+		push_error("FlightTest: %s; starting in the starter" % found["error"])
+		found = ShipLibrary.resolve(String(ShipLibrary.STARTER), library)
+	return found
+
+func _starter_grid() -> ShipGrid:
+	return _starter_file()["grid"]
 
 ## Stands you on the starter's deck to begin with (see _deck_spot). The
 ## avatar's scene position was authored for the hand-built room; deriving it
