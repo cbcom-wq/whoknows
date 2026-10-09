@@ -20,11 +20,12 @@ fix this file.
 | id | occupancy | t | MW made | MW drawn | kN | notes |
 |---|---|---|---|---|---|---|
 | core | solid | 4.0 | | 2.0 | | exactly one; everything connects to it |
-| reactor | solid | 5.0 | 12 | | | |
+| quantum_core | mount | 5.0 | 36 | | | the only power source; a quiet fixture on the walkable storey; a ship may have several (the plant runs any number) |
+| quantum_cell | solid | 5.0 | | | | stores 400 QE (warp reach) |
+| quantum_machine | mount | 0.5 | | 0.5 | | a quiet fixture |
 | thruster | solid | 2.5 | | 3.0 | 300 | main engine |
-| rcs | solid | 1.0 | | 1.0 | 250 | steering; also retro, lateral, vertical |
-| grav_plating | solid | 1.5 | | 1.5 | | `grav_radius` 6 m |
-| battery | solid | 2.0 | | | | |
+| rcs | solid | 1.0 | | 1.0 | 250 | steering; also retro, lateral, vertical; can be an outer hull cell itself, exhaust face open |
+| grav_plating | solid | 1.5 | | 1.5 | | `grav_radius` 6 m; only mass and power in play today |
 | hull | solid | 1.0 | | | | |
 | hull_wedge | solid | 0.6 | | | | chamfer set by orientation roll; the same wedge as `fairing_slope` |
 | armour | solid | 3.0 | | | | |
@@ -50,6 +51,12 @@ balance. `test_starter_shuttle.gd` holds this.
 The six fairings are STRUCTURE at 0.3 t against 1.0 t for `hull`, so reshaping a blueprint moves
 its balance only a little. They have no `mesh` of their own: `test_block_data.gd`'s "every block
 has a mesh" skips ids that start `fairing_`. Their orientation works as `hull_wedge`'s does.
+
+**Slopes along a flank** (found by the first designed ships, 2026-10-09): `fairing_slope` at 1 or 3
+makes a sawtooth, every block still rising aft. A chamfer running the ship's length faces the slope
+outward: **8 / 12** chamfer a roof edge on the port / starboard side, **10 / 14** a belly edge on
+the port / starboard side (`Fs8`, `Fs12`, `Fs10`, `Fs14` in a deck plan; the Lamplighter and the
+Warden use them).
 
 ## Orientation codes
 

@@ -34,7 +34,7 @@ Do these in order. Each one names the check that proves it.
    `test_ship_catalog.gd` then holds it to the rules and to being usable, with no test of its
    own. F6 in the game spawns it.
 1. **Lay out the decks.** −Z is the bow, +X starboard, +Y up. The proven pattern is y=0 a
-   walkable cabin and y=+1 a solid equipment deck (core, reactors, grav plating). **Shape the
+   walkable cabin and y=+1 a solid equipment deck (core, quantum cells, grav plating). **Shape the
    outside with fairings, outside the cabin row** (`fairing_*`, 0.3 t each: a spine above, a keel
    below, fins on the pods, ramps at the ends); the skin chamfers every other convex edge for
    free. The cabin row keeps its full blocks, so nothing inside moves.
@@ -229,7 +229,7 @@ thrust.
 | Engines only at y=0, mass at y=+1 | 686,582 N·m pitch under burn against 160,000 of authority: unflyable | Raise the thrust line (a stern-roof thruster bank) or lower the mass |
 | One UP + one DOWN RCS on opposite sides | Both rolled the same way: no roll authority | Mirror each vertical pair port and starboard |
 | All engines facing aft | `reverse` = 0: the ship could never slow down | A retro RCS pair facing BACK |
-| More thrusters, same reactors | A brownout warning on a starter ship | Add a reactor (12 MW each) |
+| More thrusters, same power | A brownout warning on a starter ship | Add a quantum core (36 MW each); reactors are gone |
 | Seat position hard-coded in the `.tscn` | The collider and the drawn chair drifted apart | `fixture_frame`, the one source for both |
 | Stand-up at a fixed offset from the chair | Wedged between the chair and the pod glass | `PilotSeat.STAND_SPOTS` + `Avatar.can_stand_at`; keep the cell behind the helm walkable |
 | `ShipGrid.cell_center().y` for interior things | Off by the storey offset (storeys are 2.6 m, cells 2 m) | `InteriorBuilder.floor_y()` / `interior_center()` |

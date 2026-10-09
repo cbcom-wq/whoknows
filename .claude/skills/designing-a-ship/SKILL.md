@@ -33,8 +33,8 @@ path) and `$k = <worktree>\.claude\skills\building-a-ship`:
 In a fresh worktree run `godot --headless --path . --import` once first, or every class is
 "not declared".
 
-**A probe passes** when its first line is `ship    probing <id>: <name>` (or it probed something
-else), no line holds `<--`, `MISMATCH`, `MISSING`, `REFUSED`, `NOT FOUND`, `UNREACHABLE`,
+**A probe passes** when its first line after the engine's banner is `ship    probing <id>: <name>`
+(or it probed something else), no line holds `<--`, `MISMATCH`, `MISSING`, `REFUSED`, `NOT FOUND`, `UNREACHABLE`,
 `SHADER ERROR` or `SCRIPT ERROR`, and every `fps` line is at least 120. `exhaust BLOCKED` is a
 note: the starter has six.
 
@@ -107,20 +107,36 @@ is mostly hold; an asymmetric hull (and its balance fixed by mass, not by weaker
 
 ## 4. The method
 
-Draw and check **one layer at a time** (`to-json`, then `ship_check`), never all at the end:
+Draw and check **one layer at a time** (`to-json`, then `ship_check`), never all at the end.
+`to-json` is free; a `ship_check` is a round. **If `to-json` exits non-zero, stop there:** the old
+ship file is still on disk, and a `ship_check` after it checks the stale ship and can say 0 broken.
 
 1. **The walkable storey:** the helm (`S`) looking at the canopy (`C`); the cell behind it walkable
    deck (you stand up into it); the corridor; the airlock (`A`) with one face to space and deck
-   through its other; the rooms, each touching walkable space; a closet (`Cl`) for the droid; every
-   porthole, console and fixture it tends reachable on foot. One walkable storey for now: ladders
-   don't climb yet (`CUT_OFF`).
-2. **The equipment storey** over or under it: the core (`K`), quantum cells, grav plating.
+   through its other (any outer edge works, not only the stern); the rooms, each touching walkable
+   space; a closet (`Cl`) for the droid; every porthole, console and fixture it tends reachable on
+   foot. **Draw a bridge two rows deep:** `DeckPaths` never crosses a fixture, so a one-row bridge
+   is cut in two at the helm. One walkable storey for now: ladders don't climb yet (`CUT_OFF`).
+   Walkable cells need nothing above or below them: the skin plates them, which is how a big ship
+   stays light.
+2. **The equipment storey** over or under it: the core (`K`), quantum cells, grav plating (only mass
+   and power in play today: it decides nothing else).
 3. **Power** (§5).
 4. **Engines and rcs** sized to the targets: main thrusters at the stern pushing forward, a retro
    pair, rcs in opposed pairs on every axis, port and starboard mirrored, every rcs's exhaust face
-   open (the probe and `ship_check` say `RCS_BLOCKED`).
-5. **The outside:** wedges and fairings outside the cabin row; the skin chamfers for free.
-6. **Mirror port and starboard** unless the twist says otherwise.
+   open (`ship_check` notes `RCS_BLOCKED`). **Set rcs flush, as outer hull cells,** not as pods
+   stuck on: pods read as clutter, and a flush rcs puffs as well when its exhaust face is open.
+5. **The outside:** wedges and fairings outside the cabin row; the skin chamfers for free. A
+   chamfer along a flank faces the slope outward: `Fs8` / `Fs12` on a roof edge to port /
+   starboard, `Fs10` / `Fs14` on a belly edge. `Fs1` / `Fs3` make a sawtooth.
+6. **Mirror port and starboard** unless the twist says otherwise, and keep heavy blocks (quantum
+   cores and cells, 5 t) on the centreline or in mirrored pairs: one core 4 m off-centre put a
+   260 t ship's yaw imbalance at 3%.
+7. **Probe while you design, to see the shape:** green rules prove nothing about looks, and a first
+   draft can pass every rule and look like a shuttle on a pole. Write the `.md` last.
+
+Windows: a walkable cell facing space gets a porthole, and so does a quiet fixture (core, machine,
+computer) on an outer side wall; a cell beside a canopy gets consoles, not glass.
 
 ## 5. Budgets
 
@@ -130,8 +146,9 @@ Draw and check **one layer at a time** (`to-json`, then `ship_check`), never all
   armour draw nothing. **The starter already draws 31.3 of its core's 36 MW** (its five thrusters,
   eight rcs and two grav plates are most of it), so one core leaves room for about a dozen more
   cabin cells and nothing else: **most new ships need a second quantum core.** Put it on the
-  walkable storey beside the corridor, never in it (a quiet fixture; `Qk4` faces aft). The quantum
-  plant runs any number.
+  walkable storey beside the corridor, never in it (a quiet fixture). Face its gauge into the room:
+  `Qk4` (aft) behind a helm as on the starter, but in a corner beside a room turn it inboard
+  (`Qk12` on the port side, `Qk8` on starboard). The quantum plant runs any number.
 - **Mass** (t): quantum core and cell 5, core 4, armour 3, thruster 2.5, grav plating 1.5, airlock
   1.2, hull and rcs 1, bulkhead 0.8, door and wedge 0.6, canopy and seat 0.5, deck and rooms 0.4,
   fairings 0.3.
@@ -204,3 +221,9 @@ z 2   Fh2
 | 600 blocks | The first limit; probed, its worst view fell to 116 fps (109 with a second ship), under the 120 floor | The limit is 400, which holds 121; size costs frames |
 | RCS only at the bow of a long ship | The 43-row draft turned 0.06 / 0.03 / 0.42 rad/s² | Rcs pairs at both ends; the lever arm is free authority |
 | Probing in a fresh worktree | Every class "not declared", no output at all | `godot --headless --path . --import` once first |
+| `ship_check` after a failed `to-json` | The Lamplighter's plan had `Fs12.` (no space): `to-json` refused it, the old file stayed, and `ship_check` passed the stale ship | A round stops when `to-json` exits non-zero |
+| `Fs1` / `Fs3` for a flank chamfer | A sawtooth: every block still rose aft | `Fs8` / `Fs12` on a roof edge, `Fs10` / `Fs14` on a belly edge |
+| Rcs as pods on the hull | The Warden's first draft read as clutter at the bow | Rcs as outer hull cells, exhaust face open |
+| A quantum core off the centreline | 3% yaw imbalance on a 260 t ship | Centre it, or mirror two |
+| Judging shape from `ship_check` alone | A first draft broke no rule and looked like a shuttle on a pole | Probe inside the design loop; the `.md` last |
+| The arrival render to judge looks | At 200–400 m the new ship is a few pixels | It proves the arrival; judge the ship from the probe's hull views |

@@ -388,4 +388,21 @@ and 221 in the chase views, 122 with a second ship 300 m off. Rules 0.3 s, a spa
 - **The sending session makes the worktree** (§5 step 2): the agent could not, under this
   harness's guard, and for "be creative" the id is not known when it is sent.
 
-**Acceptance:** not yet run (Task 11).
+**Acceptance** (Task 11, 2026-10-09): both runs finished unattended, every proof passing, each
+ship's branch holding only its two files.
+
+| Run | Ship | Blocks, t | Turns p / y / r | Fwd, side, brake | Worst fps | Rounds |
+|---|---|---|---|---|---|---|
+| "Be creative" | **Lamplighter** (`ship-lamplighter`, `3bf6018`): an explorer, a hammerhead bridge 22 m wide | 131, 125.7 | 1.94 / 0.64 / 2.70 | 11.9, 8.0, 8.0 | 128 | 5 |
+| The owner's frigate brief and concept image | **Warden** (`ship-warden`, `0cfb2de`): a patrol frigate, long spine, a wall of 19 engines | 296, 260.4 | 1.08 / 0.61 / 1.39 | 21.9, 7.7, 5.8 | 128 | 3 |
+
+Sent as general-purpose Opus agents following `.claude/agents/ship-designer.md` (the session
+predated the agent type), each working in its worktree by `Set-Location`, which the guard
+allowed. What they taught went into the two skills: a failed `to-json` leaves the old file for
+`ship_check` to pass; flank chamfers are `Fs8`/`Fs12`/`Fs10`/`Fs14`, not `Fs1`/`Fs3`; rcs flush in
+the hull; heavy blocks on the centreline; a bridge two rows deep; probe inside the design loop;
+`reference.md`'s stale reactor and battery rows. Left for later work (the tools, not the agent):
+`ship_check` printing each axis's balance and the blocked rcs; the probe's panel shots and fleet
+labels using the starter's cells; a closer arrival shot for judging a ship; and the blocks they
+wished for (turrets, a sensor dome, armour that reads as armour, side glass, a big engine bell, a
+thin wing fairing, climbing ladders, a bay door).

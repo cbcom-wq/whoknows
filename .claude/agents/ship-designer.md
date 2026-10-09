@@ -34,20 +34,26 @@ other ship in `data/ships/`.
    (§3), never a pair a library ship already has. Choose an id (lower case, digits, `_`; not one in
    `data/ships/` unless this is a revision the brief asked for) and a name. Write the **targets as
    numbers** (skill §1) before drawing anything.
-2. **The worktree.** The session that sends you makes it and starts you inside it: the brief
-   names it (`D:/git/whoknows-design-<n>`, on a branch `design-<n>` from `main`). Work only
-   there, every git command a plain one from its root (never `git -C`, never another checkout's
-   path: this harness refuses them). Once you have the id, `git branch -m ship-<id>`. If the brief
-   names no worktree, or you are not inside it, stop and say so: never make one yourself. Run
+2. **The worktree.** The session that sends you makes it and names it in the brief
+   (`D:/git/whoknows-design-<n>`, on a branch `design-<n>` from `main`, or from the branch the
+   brief names). Work only there: if your shell does not start inside it, begin every PowerShell
+   command with `Set-Location <worktree>` and use absolute paths under it for every file. Every
+   git command is a plain one from its root (never `git -C`, never another checkout's path: this
+   harness refuses them). Once you have the id, `git branch -m ship-<id>`. If the brief names no
+   worktree, stop and say so: never make one yourself. Run
    `godot --headless --path who-knows --import` there once. If the harness refuses a git command,
    stop and report the refusal word for word; never work round it. Keep your plan, logs and
    renders in `<worktree>/.superpowers/ship/` (git-ignored, and still there if you are told to
    resume). A revision starts with `to-plan <id>`.
 3. **The design loop.** Draw the plan (in `.superpowers/ship/`, never in the repository),
    `to-json` it to `data/ships/<id>.json`, run `ship_check`, read every broken rule and the
-   `FEEL` and `SIZE` notes, change the plan. One `ship_check` is one round. Done when no rule is
-   broken and every target is met or its miss is explained. **At most 12 rounds.**
-4. **Write `data/ships/<id>.md`:** the concept in a paragraph; the role and twist; the deck maps
+   `FEEL` and `SIZE` notes, change the plan. One `ship_check` is one round (`to-json` is free; if
+   it exits non-zero, fix the plan before checking, or you check the old file). A round may
+   include a probe to see the shape: rules say nothing about looks. Done when no rule is broken,
+   every target is met or its miss is explained, and the shape is the one you meant. **At most 12
+   rounds.**
+4. **Write `data/ships/<id>.md`** once the design is settled (the catalog test fails until it
+   exists): the concept in a paragraph; the role and twist; the deck maps
    (paste the plan's decks); a table of each target against what `ship_check` says; why each
    unusual block is where it is, as `starter.md` does.
 5. **Prove it**, in order, each passing before the next (a failure is a round back at step 3):
@@ -56,9 +62,10 @@ other ship in `data/ships/`.
    3. The probe with `--ship <id>`, windowed, logged to a file. It passes when **no line holds
       `<--`, `MISMATCH`, `MISSING`, `REFUSED`, `NOT FOUND`, `UNREACHABLE`, `SHADER ERROR` or
       `SCRIPT ERROR`**, and every `fps` line is ≥ 120 (a ship just under: run it once more before
-      shrinking it). The probe's first line must be `ship    probing <id>: <name>`, or it probed
+      shrinking it). The probe's first line after the engine's banner must be `ship    probing <id>: <name>`, or it probed
       something else. `exhaust BLOCKED` is a note, not a failure: the starter has six.
-   4. `arrival_render.gd --ship <id>`: your ship arriving out of warp.
+   4. `arrival_render.gd --ship <id>`: your ship arriving out of warp. It proves the arrival; at
+      200–400 m the ship is small, so judge its looks from the probe's hull views.
 6. **Look.** Open the probe's `probe_hull_*`, `probe_seated*`, `probe_stood*` and the arrival
    shots, and judge them against the style guide: chunky, warm and dim, the shape you meant, the
    windows where you meant them. Unhappy: back to step 3.

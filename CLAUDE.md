@@ -40,9 +40,12 @@ draft in seconds (`docs/superpowers/specs/2026-10-02-ship-library-design.md`).
 **A new ship is designed by the `ship-designer` agent** (`.claude/agents/ship-designer.md`, with
 the `designing-a-ship` skill): from a description or "be creative", start to finish, never merged
 by the agent; at most 400 blocks (`docs/superpowers/specs/2026-10-09-ship-designer-design.md`).
-**To send it,** make its worktree first, since a subagent cannot leave the session's checkout:
-`git worktree add ../whoknows-design-<n> -b design-<n> main`, move the session into it, then
-dispatch `ship-designer` with the brief and that path. It renames the branch `ship-<id>`.
+**To send it,** make its worktree first (`git worktree add ../whoknows-design-<n> -b design-<n>
+main`), then dispatch `ship-designer` with the brief and that path; it works there by
+`Set-Location`, never in your checkout, and renames the branch `ship-<id>`. Several can run at once
+in separate worktrees, but their probes then share the GPU: a reading under 120 fps is re-run
+alone. A session started before `.claude/agents/ship-designer.md` existed does not know the agent
+type; send a general-purpose Opus agent told to follow that file instead.
 
 ## NPCs: use and keep the `building-an-npc` skill current
 
