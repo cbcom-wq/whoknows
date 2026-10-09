@@ -22,6 +22,9 @@ signal prompt_changed(text: String)
 ## An item was taken, from `from` (its global transform before it went into
 ## the hands). Hands swipes it in from there.
 signal taken(item: Item, from: Transform3D)
+## EVA cargo let go on a spacewalk (habitat modules spec §4.1): already in the
+## space you are in. The holder makes it a stray.
+signal let_go(item: Item)
 
 enum Mode { EMPTY, CARRYING, WIELDING }
 
@@ -87,12 +90,15 @@ func busy() -> String:
 		return item.use_node.busy()
 	return ""
 
-## Whether the held item can be used now: wielded, in your own view, and
-## aboard, or out on a spacewalk if it works there (health and damage spec
-## §8.3).
+## Whether the held item can be used now: in your own view and wielded aboard,
+## or out on a spacewalk if it works there (health and damage spec §8.3); or
+## carried EVA cargo, anywhere (habitat modules spec §4.1).
 func can_use() -> bool:
-	return enabled and first_person and mode == Mode.WIELDING and item != null \
-		and (not suspended or item.definition.works_outside)
+	if not enabled or not first_person or item == null:
+		return false
+	if mode == Mode.CARRYING:
+		return item.definition.eva_cargo
+	return mode == Mode.WIELDING and (not suspended or item.definition.works_outside)
 
 func set_enabled(on: bool) -> void:
 	enabled = on
@@ -116,6 +122,21 @@ func let_fall(into: Node3D) -> Item:
 	_release()
 	world_root = was
 	changed.emit()
+	return it
+
+## Lets go of held EVA cargo on a spacewalk, into the space you are in, where
+## it floats (habitat modules spec §4.1). Null, holding on, for anything else.
+func let_go_outside() -> Item:
+	if not suspended or item == null or not item.definition.eva_cargo:
+		return null
+	var it := item
+	var was := world_root
+	world_root = use_world()
+	_release()
+	world_root = was
+	it.set_space(true)
+	changed.emit()
+	let_go.emit(it)
 	return it
 
 func _active() -> bool:
@@ -235,6 +256,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event.is_action_pressed(&"use"):
 		use()
+		return
+	if suspended and event.is_action_pressed(&"drop"):
+		let_go_outside()
 		return
 	if not _active():
 		return

@@ -46,3 +46,9 @@ enum Grip {
 ## damage spec §8.1): the repair torch. Taking, dropping and throwing still
 ## wait until you are back aboard.
 @export var works_outside: bool = false
+## Cargo for a spacewalk (habitat modules spec §4.1): a module package. Carried
+## out, used and let go outside, though hands are otherwise suspended there;
+## made and converted like any other item.
+@export var eva_cargo: bool = false
+## For a package: the module it unfolds into (ModuleCatalog).
+@export var module: StringName = &""

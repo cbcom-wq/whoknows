@@ -156,6 +156,7 @@ func _ready() -> void:
 	hands = Hands.new()
 	camera.add_child(hands)
 	grasp.bind(self, head, hands.wield_socket, hands.carry_socket)
+	grasp.let_go.connect(func(item: Item) -> void: let_fall.emit(item, true))
 	hands.bind(grasp, self)
 	var sounds := SuitSounds.new()
 	sounds.name = "SuitSounds"
@@ -513,7 +514,9 @@ func suit_step(delta: float, input: Vector3) -> void:
 		velocity = Suit.home_step(velocity, v_ref, _to_home(), delta)
 		thrusting = false
 		return
-	var v := Suit.step(velocity, v_ref, input, head.global_basis, suit_assist, delta)
+	var cargo := grasp.item.definition.mass_kg if grasp.item != null and grasp.item.definition.eva_cargo else 0.0
+	var v := Suit.step(velocity, v_ref, input, head.global_basis, suit_assist, delta,
+		Suit.cargo_accel(SUIT_MASS, cargo))
 	suit_cell.spend_dv((v - velocity).length())
 	velocity = v
 	thrusting = input.length() > 0.01
