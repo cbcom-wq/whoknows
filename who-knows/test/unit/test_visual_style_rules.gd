@@ -61,6 +61,7 @@ const PAINTING_FILES := [
 	"res://src/world/belt_look.gd",
 	"res://src/world/space_dust.gd",
 	"res://src/flight/rcs_show.gd",
+	"res://src/flight/warp_arrival.gd",
 	"res://src/ship/interior/readout_panel.gd",
 	"res://src/quantum/quantum_core.gd",
 	"res://src/quantum/quantum_machine.gd",

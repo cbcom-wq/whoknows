@@ -227,3 +227,50 @@ func test_the_save_waits_on_every_ship():
 	assert_eq(_root._fleet_busy(), "")
 	ship.since_struck = 0.0
 	assert_eq(_root._fleet_busy(), "hull struck")
+
+## Ship library spec §6.3: a ship arriving out of warp is not yet one to use.
+## The arrival is stepped by hand.
+func _arriving(off := OFF) -> Array:
+	var ship := _spawn(off)
+	var a := WarpArrival.play(ship.exterior, ship.exterior.global_transform)
+	a.set_physics_process(false)
+	return [ship, a]
+
+func test_a_ship_is_arriving_until_it_stops():
+	var pair := _arriving()
+	assert_true(_fleet.arriving(pair[0]))
+	assert_false(_fleet.arriving(_starter))
+	(pair[1] as WarpArrival)._physics_process(WarpArrival.DURATION + 0.01)
+	assert_false(_fleet.arriving(pair[0]))
+
+func test_f8_skips_a_ship_still_arriving():
+	var pair := _arriving()
+	assert_null(_fleet.nearest(_starter.exterior.global_position, _starter))
+	assert_false(_root.board_nearest())
+	(pair[1] as WarpArrival)._physics_process(WarpArrival.DURATION + 0.01)
+	assert_same(_fleet.nearest(_starter.exterior.global_position, _starter), pair[0])
+
+func test_a_ship_arriving_never_sleeps():
+	var pair := _arriving(Vector3(0, 0, 25000))
+	_fleet.check_sleep()
+	assert_false(_fleet.sleeping(pair[0]))
+
+func test_the_save_waits_for_an_arrival():
+	var pair := _arriving()
+	assert_eq(_fleet.busy(), "a ship arriving")
+	assert_eq(_root._fleet_busy(), "a ship arriving")
+	(pair[1] as WarpArrival)._physics_process(WarpArrival.DURATION + 0.01)
+	assert_eq(_fleet.busy(), "")
+
+func test_the_suit_is_not_tied_to_a_ship_still_arriving():
+	var pair := _arriving(Vector3(0, 0, -600))
+	var a: WarpArrival = pair[1]
+	a._physics_process(WarpArrival.DURATION - 0.1)
+	var avatar: Avatar = _root.get_node("Ship/Interior/Avatar")
+	var near_it := (pair[0] as Ship).exterior.global_position + Vector3(20, 0, 0)
+	avatar.enter_suit(_root.get_node("Outside"), Transform3D(Basis.IDENTITY, near_it), Vector3.ZERO, _starter.exterior)
+	_root.suit_tie.check()
+	assert_same(_root.aboard, _starter, "not tied to it while it arrives")
+	a._physics_process(0.2)
+	_root.suit_tie.check()
+	assert_same(_root.aboard, pair[0], "tied to it once it has arrived")

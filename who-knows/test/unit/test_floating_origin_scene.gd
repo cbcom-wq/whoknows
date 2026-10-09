@@ -215,3 +215,15 @@ func test_a_shot_on_a_spacewalk_is_covered():
 	assert_eq(shots.size(), 1)
 	assert_false(_in_an_interior(shots[0]), "the bolt is outside")
 	assert_eq(_uncovered(), [], "and covered")
+
+## Ship library spec §6.2: a ship arriving out of warp, its wake and its flash,
+## is covered.
+func test_a_ship_arriving_is_covered():
+	var place := Transform3D(Basis.IDENTITY, _ship.exterior.global_position + Vector3(300, 0, 0))
+	var ship: Ship = _root.fleet.spawn(_root._starter_grid(), place)
+	var a := WarpArrival.play(ship.exterior, place)
+	a.set_physics_process(false)
+	a._physics_process(0.3)
+	assert_eq(_uncovered(), [], "flying in, its wake behind it")
+	a._physics_process(WarpArrival.DURATION)
+	assert_eq(_uncovered(), [], "and its flash")

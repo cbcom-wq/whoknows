@@ -1,0 +1,10 @@
+{
+	"id": "alpha",
+	"name": "Alpha",
+	"description": "Two blocks, for the library's tests.",
+	"format": 1,
+	"cells": [
+		[0, 0, 0, "core", 0],
+		[0, 0, 1, "hull", 4]
+	]
+}

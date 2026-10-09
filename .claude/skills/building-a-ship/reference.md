@@ -126,8 +126,9 @@ How `FlightComputer` spends the budgets (`src/flight/flight_computer.gd`):
   `vertical` budget (`DRIFT_AUTHORITY` = 1.0). Fore and aft, it catches up with `forward` (the main
   engines) and slows with `reverse`, which also holds a speed lock.
 
-A test to pin a new ship. `_grid` comes from wherever the blueprint is built; see
-`test_starter_shuttle.gd` for how it gets `_starter_grid()`:
+A test to pin a ship's numbers, beyond the rules `test_ship_catalog.gd` already holds every
+library ship to. `_grid` is `ShipLibrary.load_from_dir().grid(&"<id>")`; `test_starter_shuttle.gd`
+pins the starter this way, and its file by a hash of `ShipLibrary.rows_text`:
 
 ```gdscript
 func test_the_new_ship_flies():
@@ -509,8 +510,87 @@ _hud.set_active_vehicle(ship.pilot if piloting and ship != null else null)
 **Measured** (2026-10-02, the owner's box, 1280 × 720): seated 60 m off a rock's night side, both
 light groups on, **130 fps with one ship and 130 with a second 300 m off**; `main` gave the same
 130 that day. The probe prints `fleet   2 ships, aboard Ship2, own layer ok, asleep 0`;
-`test/probes/fleet_play.gd` plays F8, a cycle out, the crossing and a cycle in, and prints
-`play    ALL OK`.
+`test/probes/fleet_play.gd` spawns its second ship through the F6 panel, then plays F8, a cycle
+out, the crossing and a cycle in, and prints `play    ALL OK`.
+
+## The ship library and the rules (`docs/superpowers/specs/2026-10-02-ship-library-design.md`)
+
+**A ship file**, `who-knows/data/ships/<id>.json`, named for its id, with `<id>.md` beside it
+holding the reasoning:
+
+    {
+    	"id": "starter",
+    	"name": "Starter shuttle",
+    	"description": "One line.",
+    	"format": 1,
+    	"cells": [
+    		[-3, 0, 1, "hull", 0],
+    		...
+    	]
+    }
+
+Rows are `[x, y, z, block, orientation]`, sorted by x, y, z, one per line; no damage; `y` any
+storey. A load error names the file and row: bad JSON, a newer format, a row that is not five
+values (whole numbers, a block name, orientation 0–23), two rows in one cell, an id that is not the
+file's name.
+
+| `ShipLibrary` (`src/ship/ship_library.gd`) | |
+|---|---|
+| `load_from_dir(path := "res://data/ships")`, `errors` | every `*.json`; broken files are in `errors` and left out |
+| `read(path)` | one file: `{id, name, description, grid}` or `{error}` |
+| `ids()`, `has`, `name_of`, `description_of`, `grid(id)` | sorted, the starter first; a fresh intact grid each call |
+| `write(path, id, name, description, grid)`, `rows_text(grid)` | the one-row-per-line form; the starter's pin hashes `rows_text` |
+| `STARTER`, `FORMAT`, `DIR` | `&"starter"`, 1, `res://data/ships` |
+
+The flight scene's `library` is loaded first in `_ready`; `_starter_grid()` reads it, loading it
+itself on a bare `flight_test.gd`.
+
+**`ShipRules.check(grid, catalog)`** → `{rules, notes}`, each `{code, text, cell}` (`cell` a
+`Vector3i` or null). A library ship breaks no rule:
+
+| Code | Broken when |
+|---|---|
+| `UNKNOWN_BLOCK` | a block id is not in `data/blocks` (nothing else is checked) |
+| `VALIDATOR` | `ShipValidator.validate` reports anything, warnings too |
+| `POWER_MARGIN` | power made ≤ drawn × 1.1 |
+| `CANNOT_THRUST`, `CANNOT_BRAKE` | no forward, or no reverse, thrust |
+| `NO_AUTHORITY` | no pitch, yaw or roll authority |
+| `UNBALANCED` | a full burn's imbalance ≥ 5% of an axis's authority |
+| `CRIPPLED` | crippled as built |
+| `NO_POD` | no helm looks straight at a canopy |
+| `NO_STAND` | none of the cells behind and beside the helm is open floor (`ShipRules.stand_cell`) |
+| `NO_AIRLOCK` | no airlock cycles with a way through its inner hatch |
+| `CUT_OFF` | a walkable cell (not a fixture or the airlock), or an airlock's inner cell, can't be reached on foot from where you stand up; another storey says "ladders don't climb yet" |
+| `WINDOW_UNMATCHED` | an inside window has no place outside (`HullLayout.unmatched`) |
+| `DROID` | 12+ walkable cells and no dock, or a job the droid can't reach from it |
+| `NO_PIECES` | a hull section has no plating or fairing outside the shell to lose |
+
+Notes, never failing: `RCS_BLOCKED` (per block; the starter has 6), `FEEL`, `SIZE`.
+
+**`ship_check.gd`** (beside the probe): `<godot> --headless --path who-knows --script
+<abs>/ship_check.gd -- <abs or res:// path>.json`. Prints `rules   N broken`, each `<--   CODE text
+at (x, y, z)`, then `note` lines; exits 0 with none broken, 1 otherwise or on a `load` error. About
+2 s.
+
+**The F6 panel** (`src/ui/spawn_panel.gd`; the flight scene's `spawn_from_library(id)` and
+`remove_nearest_spawned()`): 1–9 spawn that library ship 200 m ahead of where you will be in
+1.5 s, facing you (`SpawnSpot`: 45° steps round rocks, `WarpPlan.rock_near`, ships 60 m clear and
+the next 30 s of your path 60 m clear, then 400 m); Delete removes the nearest spawned ship but yours. Refusals: `WARP ENGAGED`,
+`A SHIP IS ARRIVING`, `THE FLEET IS FULL`, `NO CLEAR SPOT NEAR` (within 300 m of a big rock there is
+none), `NO SPAWNED SHIP`, `YOU ARE ABOARD IT`. A spawned ship's `launch_blueprint.ship_name` is its
+library name, kept through saves.
+
+**`WarpArrival.play(hull, at, end_velocity := ZERO, along := ZERO)`** (`src/flight/warp_arrival.gd`):
+1.5 s in from 2 km back along `along` (its nose when ZERO), distance `(1 − t)³`, nose first, turning
+to face as `at` does over the last 0.5 s (`SWING`); a 3 m wake and a flash 1.0–1.6 × the hull's
+shown bounds in `SpacePalette.WARP`; ghosted (frozen kinematic, layer and mask 0) until it stops,
+then `arrived`. A spawn comes in along `SpawnSpot.arrival_line`, 60° off the line to you, so its
+wake crosses your view. `WarpArrival.of(hull)` is the arrival still flying in; meanwhile
+`Fleet.arriving(ship)` is true: F8, Delete and the suit skip it, it never sleeps, its flight
+computer rests, and `Fleet.busy()` holds the save (`"a ship arriving"`). Anything that sets a
+hull's layer, mask or freeze must check this as it does `warp.travelling()`. It costs about 4 fps
+in the worst view (137 → 131); `test/probes/arrival_render.gd` renders it from the seat, the chase
+view and side-on.
 
 ## Saving (`docs/superpowers/specs/2026-09-26-saving-design.md`)
 
@@ -628,7 +708,11 @@ solid under it with no wiring. A ghosted hull (mask 0, at warp) is never lifted.
 
 ## Commands
 
-- **Tests:** `who-knows/run_tests.ps1`, or `-gselect=test_name` for one file (PowerShell).
+- **Tests:** `who-knows/run_tests.ps1`, or `'-gselect=test_name.gd'` for one file (PowerShell;
+  quote it). `-gtest` runs the whole suite with this config, and GUT exits 0 on a file that fails
+  to parse: read the summary's `Tests` count.
+- **Check a ship file:** `<godot> --headless --path who-knows --script <abs>/ship_check.gd --
+  <abs or res:// path>.json` (exit 0: no rule broken).
 - **After adding a `class_name`:** `<godot> --headless --path who-knows --import`.
 - **Probe:** `<godot> --path who-knows --resolution 1280x720 --script <abs>/ship_probe.gd --
   <abs out dir>`. Use absolute paths, and don't pass `--headless`: headless never renders or

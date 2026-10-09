@@ -1,0 +1,9 @@
+{
+	"id": "tiny",
+	"name": "Tiny",
+	"description": "One block.",
+	"format": 1,
+	"cells": [
+		[-2, 3, 1, "deck", 17]
+	]
+}
