@@ -15,7 +15,7 @@ const SHIP_SCENE: PackedScene = preload("res://scenes/ship.tscn")
 ## The starter's name. The save's ship of that name is always built into the
 ## scene's own /Ship, and it is never removed (§6.2).
 const STARTER := &"Ship"
-## Interiors stand Ship.SLOT_SPACING apart on x: slot 15 is 30 km out, where a
+## Interiors stand GridHome.SLOT_SPACING apart on x: slot 15 is 30 km out, where a
 ## float still holds about 2 mm.
 const MAX_SHIPS := 16
 ## A ship you are not aboard farther than this from the universe's focus

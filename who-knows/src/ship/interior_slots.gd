@@ -3,7 +3,7 @@ extends RefCounted
 
 ## One pool of interior slots for ships and bases (docs/superpowers/specs/
 ## 2026-09-26-habitat-modules-design.md §9.3). Interiors stand
-## Ship.SLOT_SPACING apart on x: slot 15 is 30 km out, where a float still
+## GridHome.SLOT_SPACING apart on x: slot 15 is 30 km out, where a float still
 ## holds about 2 mm, so there are MAX of them. Slot 0 is the starter's.
 
 const MAX := 16
