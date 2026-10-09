@@ -100,3 +100,29 @@ func test_r_turns_the_ghost():
 	use.turn()
 	assert_eq(use.turns, 1)
 	assert_true(InputMap.has_action(&"turn_module"))
+
+func _ghost() -> PackageGhost:
+	return _root.get_node("Outside").get_node_or_null("PackageGhost") as PackageGhost
+
+func test_the_ghost_goes_when_the_package_leaves_the_hand():
+	var item := _package()
+	item.state = Item.State.HELD
+	var use: PackageUse = item.use_node
+	var aim: Variant = _fitting_aim(item)
+	assert_not_null(aim)
+	use.refit(item, aim, _root.get_node("Outside"))
+	assert_true(_ghost().visible, "shown while aimed in the hand")
+	item.state = Item.State.LOOSE
+	await wait_physics_frames(1)
+	assert_false(_ghost().visible, "dropped, thrown or stowed: the ghost is gone")
+
+func test_the_ghost_goes_when_nothing_refits_it():
+	var item := _package()
+	item.state = Item.State.HELD
+	var use: PackageUse = item.use_node
+	var aim: Variant = _fitting_aim(item)
+	assert_not_null(aim)
+	use.refit(item, aim, _root.get_node("Outside"))
+	assert_true(_ghost().visible)
+	await wait_physics_frames(PackageUse.STALE_AFTER + 2)
+	assert_false(_ghost().visible, "aim_text stopped (aiming at a stow point): the ghost is gone")

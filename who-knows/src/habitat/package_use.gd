@@ -16,10 +16,25 @@ var _ghost: PackageGhost
 var _last: Planting.Result
 var _surface: PlantSurface
 var _since := INF
+var _shown_at := -1000
+
+## Physics ticks the ghost may go without a fresh fit before it is hidden.
+const STALE_AFTER := 3
 
 func _exit_tree() -> void:
 	if is_instance_valid(_ghost):
 		_ghost.queue_free()
+
+## The ghost belongs to a package being aimed: hide it when the item leaves the
+## hand (dropped, thrown, stowed) or nothing has refitted it for a few ticks
+## (aimed at a stow point, or off the rock).
+func _physics_process(_delta: float) -> void:
+	if _ghost == null or not is_instance_valid(_ghost) or not _ghost.visible:
+		return
+	var item := get_parent() as Item
+	if item == null or item.state != Item.State.HELD \
+			or Engine.get_physics_frames() - _shown_at > STALE_AFTER:
+		_ghost.hide_fit()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed(&"turn_module") and _ghost != null and _ghost.visible:
@@ -61,6 +76,8 @@ func refit(item: Item, aim: Transform3D, space: Node3D) -> Planting.Result:
 	_surface = null
 	var bases := _bases()
 	if bases == null or not is_inside_tree():
+		if _ghost != null and is_instance_valid(_ghost):
+			_ghost.hide_fit()
 		return null
 	var from := aim.origin
 	var to := from - aim.basis.z * HabitatValues.PLANT_REACH
@@ -85,6 +102,7 @@ func _show(space: Node3D) -> void:
 		_ghost = PackageGhost.new()
 		_ghost.name = "PackageGhost"
 		space.add_child(_ghost)
+	_shown_at = Engine.get_physics_frames()
 	_ghost.show_fit(_last)
 
 func _module(item: Item) -> ModuleDefinition:
