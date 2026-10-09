@@ -153,6 +153,7 @@ func take(candidate: Item) -> bool:
 		candidate.stow_point.release()
 	_end_grace(candidate)
 	item = candidate
+	candidate.consumed.connect(_on_held_consumed)
 	_ignore(candidate, true)
 	candidate.set_held()
 	if candidate.definition.grip == ItemDefinition.Grip.WIELD:
@@ -273,10 +274,9 @@ func _physics_process(delta: float) -> void:
 	if _body == null:
 		return
 	_tick_grace(delta)
-	if item != null and not is_instance_valid(item):
-		item = null
-		mode = Mode.EMPTY
-		changed.emit()
+	# A freed item compares equal to null, so test the mode, not the item.
+	if mode != Mode.EMPTY and not is_instance_valid(item):
+		_forget_freed()
 	if charge >= 0.0:
 		charge = minf(charge + delta / CHARGE_TIME, 1.0)
 	holding = hold_now(delta, Input.is_action_pressed(&"use") and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED)
@@ -289,11 +289,25 @@ func hold_now(delta: float, pressed: bool) -> bool:
 		return false
 	return item.use_node.hold(item, aim(), use_world(), _body, delta)
 
+## The held item was freed under us: empty hands.
+func _forget_freed() -> void:
+	item = null
+	mode = Mode.EMPTY
+	charge = -1.0
+	changed.emit()
+
+## The held item is being used up (Item.consume, a planted package): the hands
+## let go of it now, before it is freed, so nothing reads a freed item.
+func _on_held_consumed() -> void:
+	item.consumed.disconnect(_on_held_consumed)
+	_forget_freed()
+
 ## Lets go: the item goes back into the world loose, at a point a ray from the
 ## eye proves is clear of walls, still ignoring its holder until the two no
 ## longer overlap.
 func _release() -> void:
 	var it := item
+	it.consumed.disconnect(_on_held_consumed)
 	item = null
 	mode = Mode.EMPTY
 	charge = -1.0

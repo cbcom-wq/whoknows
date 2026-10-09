@@ -22,6 +22,9 @@ var _aimed_at := -1000
 ## Physics ticks the ghost may go without aim_text being called before it is hidden.
 const STALE_AFTER := 3
 
+## Planted: the package is used up at the end of the frame, and plants nothing more.
+var _spent := false
+
 func _exit_tree() -> void:
 	if is_instance_valid(_ghost):
 		_ghost.queue_free()
@@ -46,6 +49,8 @@ func turn() -> void:
 	_since = INF
 
 func aim_text(item: Item, aim: Transform3D, holder: CollisionObject3D) -> String:
+	if _spent:
+		return ""
 	if not _outside(holder):
 		if _ghost != null:
 			_ghost.hide_fit()
@@ -58,7 +63,7 @@ func aim_text(item: Item, aim: Transform3D, holder: CollisionObject3D) -> String
 	return Planting.prompt(_last, _module(item)) if _last != null else ""
 
 func use(item: Item, aim: Transform3D, world: Node3D, holder: CollisionObject3D) -> bool:
-	if holder != null and not _outside(holder):
+	if _spent or (holder != null and not _outside(holder)):
 		return false
 	var r := refit(item, aim, world)
 	if r == null or r.fit != Planting.Fit.OK:
@@ -68,7 +73,10 @@ func use(item: Item, aim: Transform3D, world: Node3D, holder: CollisionObject3D)
 		return false
 	if _ghost != null:
 		_ghost.hide_fit()
-	Item.consume(item)
+	_spent = true
+	# Deferred: this runs inside the item's own use(), and an object cannot be
+	# freed while one of its methods is running.
+	Item.consume.call_deferred(item)
 	return true
 
 ## The fit where `aim` looks now, with the ghost shown in `space` (the space

@@ -10,6 +10,13 @@ class CountingUse extends ItemUse:
 		count += 1
 		return true
 
+## Uses its item up, as a planted package does (PackageUse): from inside the
+## item's own use(), so the free has to wait.
+class UsedUp extends ItemUse:
+	func use(item: Item, _aim: Transform3D, _world: Node3D, _holder: CollisionObject3D) -> bool:
+		Item.consume.call_deferred(item)
+		return true
+
 var _world: Node3D
 var _body: CharacterBody3D
 var _head: Node3D
@@ -336,3 +343,28 @@ func test_on_a_spacewalk_what_you_use_acts_where_you_are():
 	_grasp.suspended = true
 	assert_true(_grasp.use())
 	assert_eq(recorder.world, _world, "outside: where the body is")
+
+## An item used up in the hand (habitat modules spec §5.3, a planted package)
+## leaves it empty the moment it goes, so nothing reads a freed item; and is
+## really freed, not left orphaned.
+func test_an_item_used_up_in_the_hand_leaves_it_empty():
+	var item := _item()
+	item.definition.eva_cargo = true
+	var use := UsedUp.new()
+	item.use_node = use
+	item.add_child(use)
+	_grasp.take(item)
+	assert_true(_grasp.use())
+	await wait_physics_frames(1)
+	assert_freed(item, "the used-up item")
+	assert_null(_grasp.item)
+	assert_eq(_grasp.mode, Grasp.Mode.EMPTY)
+
+## Freed in the hand some other way: the next tick lets go of it.
+func test_an_item_freed_in_the_hand_is_let_go():
+	var item := _item()
+	_grasp.take(item)
+	item.free()
+	await wait_physics_frames(1)
+	assert_eq(_grasp.mode, Grasp.Mode.EMPTY)
+	assert_null(_grasp.item)
