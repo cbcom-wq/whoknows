@@ -83,3 +83,33 @@ func test_unfolding_waits_then_builds_and_stamps():
 func test_it_stands_on_legs():
 	var base := _base()
 	assert_eq(base.exterior_look.leg_count(), 4)
+
+## Spec §8.1: a base wears rounded shells, not the ship's box skin, which it
+## keeps only for its colliders; the shell leaves the hatch face bare, and
+## carries a porthole for each of the hull layout's.
+func test_it_wears_a_shell_not_the_box_skin():
+	var base := _base()
+	assert_false(base.exterior_builder.skin().visible, "the box skin is hidden")
+	assert_false(base.exterior_builder.collider_coords().is_empty(), "its colliders stay")
+	var shell := base.exterior_look.get_node_or_null(^"Shell")
+	assert_not_null(shell)
+	var meshes := shell.find_children("*", "MeshInstance3D", true, false)
+	assert_false(meshes.is_empty())
+	var hatch: AirlockAlcove = base.airlocks.values()[0].alcove
+	var face := hatch.outer_frame.origin
+	for mi: MeshInstance3D in meshes:
+		assert_true(mi.layers == ExteriorBuilder.OWN_HULL_LAYER or mi.layers == 1, "on the hull's layers")
+		if mi.name == InteriorKit.BATCH_NAMES[InteriorKit.Batch.HULL]:
+			var hits := 0
+			var faces := (mi.mesh as ArrayMesh).get_faces()
+			for i in range(0, faces.size(), 3):
+				var c := (faces[i] + faces[i + 1] + faces[i + 2]) / 3.0
+				if c.distance_to(face) < 0.6:
+					hits += 1
+			assert_eq(hits, 0, "no plating over the hatch")
+	var portholes := base.exterior_builder.layout().windows.filter(func(w: Dictionary) -> bool: return w["round"])
+	var glass := shell.get_node_or_null(^"DressingGlass") as MeshInstance3D
+	if portholes.is_empty():
+		assert_null(glass)
+	else:
+		assert_not_null(glass, "a porthole on the shell")

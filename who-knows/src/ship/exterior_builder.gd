@@ -146,6 +146,11 @@ func _upload_stale() -> void:
 	_stale = {}
 	_upload(meshes)
 
+## The skin's node: a base hides it and draws its own shell (BaseExterior),
+## keeping the colliders.
+func skin() -> Node3D:
+	return _skin
+
 ## Each airlock that can cycle is an open alcove here -- the hull's copy of
 ## its room (airlock spec §7.2) -- by cell.
 func alcoves() -> Dictionary:

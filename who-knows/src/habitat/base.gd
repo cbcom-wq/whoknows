@@ -20,6 +20,11 @@ var unfold_left := 0.0
 var exterior_look: BaseExterior
 
 var _stamped := false
+## Through the suit (outside is vacuum): the legs' stamp, and the walls folding
+## up. Two players, because both start on the same tick and one would cut the
+## other off.
+var _thud: AudioStreamPlayer3D
+var _fold: AudioStreamPlayer3D
 
 ## A base for `p_site` in interior slot `slot`, its outside `p_outside_path`
 ## (relative to the base), unfolding module `p_unfolding` if not -1. Add it to
@@ -86,6 +91,8 @@ func _ready() -> void:
 	exterior_look = BaseExterior.new()
 	exterior_look.name = "BaseExterior"
 	exterior.add_child(exterior_look)
+	_thud = _player("Thud")
+	_fold = _player("Fold")
 	set_own(false)
 	rebuild()
 
@@ -114,7 +121,16 @@ func rebuild() -> void:
 	_reseat(stowed)
 	var stats := ShipStats.compute(grid, catalog)
 	quantum.bind(interior_builder.quantum_cores(), interior_builder.quantum_machines(), stats)
-	exterior_look.build(shown)
+	# The box skin is the ship's look; a base wears its shell (§8.1) instead,
+	# over the same colliders.
+	if exterior_builder.skin() != null:
+		exterior_builder.skin().visible = false
+	var openings := []
+	var alcoves := exterior_builder.alcoves()
+	for at: Vector3i in alcoves:
+		openings.append([at, (alcoves[at] as AirlockAlcove).hatch_normal])
+	var layout := exterior_builder.layout()
+	exterior_look.build(shown, layout.windows if layout != null else [], openings)
 	var reach := 0.0
 	for c: Vector3i in grid.coords():
 		reach = maxf(reach, ShipGrid.cell_center(c).length())
@@ -138,8 +154,10 @@ func tick_unfold(delta: float) -> void:
 	exterior_look.unfold(unfolding, t, site)
 	var legs_down := HabitatValues.FLY + HabitatValues.SETTLE + HabitatValues.LEGS
 	if not _stamped and t * HabitatValues.UNFOLD >= legs_down:
+		# The legs are down and the walls start: the stamp, and the unfolding's sound.
 		_stamped = true
 		stamp(unfolding)
+		_play(_fold, &"unfold", exterior.global_transform * site.centre_of(unfolding))
 	if unfold_left <= 0.0:
 		var done := unfolding
 		unfolding = -1
@@ -152,6 +170,24 @@ func stamp(index: int) -> void:
 	var at := exterior.global_transform * site.centre_of(index)
 	StimulusBus.send(exterior, Stimulus.make(Stimulus.VIBRATION, at, HabitatValues.STAMP_STRENGTH,
 		HabitatValues.STAMP_RADIUS, exterior, site.site_id), 0.5)
+	_play(_thud, &"leg_stamp", at)
+
+func _player(player_name: String) -> AudioStreamPlayer3D:
+	var p := AudioStreamPlayer3D.new()
+	p.name = player_name
+	p.bus = AudioBuses.SUIT
+	p.max_distance = 40.0
+	exterior.add_child(p)
+	return p
+
+## Plays `sound_name` on `player` at `at` (engine space); quiet until Synth is warm.
+func _play(player: AudioStreamPlayer3D, sound_name: StringName, at: Vector3) -> void:
+	var s := Synth.sound(sound_name)
+	if s == null or player == null or not player.is_inside_tree():
+		return
+	player.global_position = at
+	player.stream = s
+	player.play()
 
 ## Why a save must wait on it, or "": unfolding, or anything GridHome waits on.
 func busy() -> String:

@@ -22,10 +22,11 @@ const NAMES: Array[StringName] = [
 	&"droid_beep", &"holo_hum", &"page", &"course_set", &"course_clear", &"course_arrived",
 	&"warp_spool", &"warp_travel", &"warp_drop",
 	&"light_switch",
+	&"unfold", &"leg_stamp", &"drill_hum",
 ]
 ## Sounds that play as seamless loops.
 const LOOPED: Array[StringName] = [&"ship_hum", &"breath", &"thruster_puff", &"core_hum", &"charge", &"droid_whir",
-	&"holo_hum", &"warp_travel"]
+	&"holo_hum", &"warp_travel", &"drill_hum"]
 
 static var _cache: Dictionary = {}
 static var _mutex := Mutex.new()
@@ -120,6 +121,12 @@ static func build(sound_name: StringName) -> AudioStreamWAV:
 			x = _warp_travel()
 		&"warp_drop":
 			x = _warp_drop()
+		&"unfold":
+			x = _unfold()
+		&"leg_stamp":
+			x = _leg_stamp()
+		&"drill_hum":
+			x = _drill_hum()
 		_:
 			push_error("Synth: no sound called %s" % sound_name)
 			return null
@@ -377,6 +384,46 @@ static func _warp_drop() -> PackedFloat32Array:
 		phase += TAU * lerpf(70.0, 32.0, minf(t / 0.5, 1.0)) / MIX_RATE
 		x[i] = sin(phase) * exp(-t / 0.3) + rush[i] * exp(-t / 0.5) * 1.5
 	return _gain(x, 0.6)
+
+## A module unfolding (habitat modules spec §5.3, §8.5): three soft clunks as
+## its walls fold up, under a shimmer rising to the end.
+static func _unfold() -> PackedFloat32Array:
+	var n := _len(2.0)
+	var x := PackedFloat32Array()
+	x.resize(n)
+	var phase := 0.0
+	for i in n:
+		var t := float(i) / MIX_RATE
+		phase += TAU * lerpf(300.0, 900.0, t / 2.0) / MIX_RATE
+		x[i] = sin(phase) * 0.15 * minf(t / 1.5, 1.0) * exp(-maxf(t - 1.8, 0.0) / 0.05)
+		for k in 3:
+			var at := 0.2 + k * 0.6
+			if t >= at:
+				x[i] += sin(TAU * 70.0 * (t - at)) * exp(-(t - at) / 0.08)
+	return _gain(x, 0.6)
+
+## Legs punching into rock: a short, heavy stamp.
+static func _leg_stamp() -> PackedFloat32Array:
+	var n := _len(0.4)
+	var rumble := _lowpass(_noise(n, 31), 300.0)
+	var x := PackedFloat32Array()
+	x.resize(n)
+	for i in n:
+		var t := float(i) / MIX_RATE
+		x[i] = sin(TAU * 55.0 * t) * exp(-t / 0.1) + rumble[i] * exp(-t / 0.05) * 1.8
+	return _gain(x, 0.7)
+
+## A drill working (§6.2, §8.5): a low grinding loop, quieter than the air
+## handler. 60 and 90 Hz both fit whole cycles in 3 s, so it loops cleanly.
+static func _drill_hum() -> PackedFloat32Array:
+	var n := _len(3.0)
+	var grind := _lowpass(_noise(n, 37), 180.0)
+	var x := PackedFloat32Array()
+	x.resize(n)
+	for i in n:
+		var t := float(i) / MIX_RATE
+		x[i] = sin(TAU * 60.0 * t) * 0.5 + sin(TAU * 90.0 * t) * 0.25 + grind[i] * 1.2
+	return _gain(x, 0.18)
 
 ## Converting (spec §13): a rising shimmer -- filtered noise swept up and a
 ## sine gliding up an octave and more over the convert's 1.2 s -- ending in a

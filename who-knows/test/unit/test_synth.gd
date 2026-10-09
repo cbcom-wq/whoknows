@@ -11,6 +11,7 @@ const LENGTHS := {
 	&"holo_hum": 2.0, &"page": 0.08, &"course_set": 0.3, &"course_clear": 0.3, &"course_arrived": 0.6,
 	&"warp_spool": 10.0, &"warp_travel": 4.0, &"warp_drop": 1.6,
 	&"light_switch": 0.12,
+	&"unfold": 2.0, &"leg_stamp": 0.4, &"drill_hum": 3.0,
 }
 
 func test_every_sound_builds_at_its_length():
