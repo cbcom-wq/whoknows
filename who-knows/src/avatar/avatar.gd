@@ -87,6 +87,9 @@ var hull: RigidBody3D
 var thrusting := false
 ## Returns where home is -- the airlock you left -- for the suit's HUD.
 var beacon_source: Callable
+## The other kind of home's airlock (habitat modules spec §5.5): returns
+## {at: Vector3, label: String}, or {} when there is none.
+var other_beacon_source: Callable
 ## The suit's quantum cell (quantum energy spec §9): empty at the start,
 ## charged at the quantum machine's plate, spent by the suit's thrusters.
 var suit_cell := SuitCell.new()
@@ -483,6 +486,12 @@ func build_telemetry() -> VehicleTelemetry:
 	if beacon_source.is_valid():
 		t.has_beacon = true
 		t.beacon = beacon_source.call()
+	if other_beacon_source.is_valid():
+		var other: Dictionary = other_beacon_source.call()
+		if not other.is_empty():
+			t.has_other_beacon = true
+			t.other_beacon = other["at"]
+			t.other_label = other["label"]
 	t.has_energy = true
 	t.energy = floori(suit_cell.charge)
 	t.energy_capacity = int(SuitCell.CAPACITY)

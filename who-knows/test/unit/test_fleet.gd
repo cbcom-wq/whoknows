@@ -70,9 +70,13 @@ func test_names_never_repeat_and_slots_are_reused():
 func test_the_starter_and_the_ship_aboard_stay():
 	assert_false(_fleet.remove(_starter), "the starter stays")
 	var ship := _spawn()
+	# Aboard is `home` too: in a base the fleet holds no ship for you
+	# (habitat modules spec §9.3).
 	_root.aboard = ship
+	_root.home = ship
 	assert_false(_fleet.remove(ship), "the ship you are aboard stays")
 	_root.aboard = _starter
+	_root.home = _starter
 
 func test_no_more_than_the_cap():
 	_fleet.max_ships = 2
