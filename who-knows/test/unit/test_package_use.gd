@@ -104,25 +104,52 @@ func test_r_turns_the_ghost():
 func _ghost() -> PackageGhost:
 	return _root.get_node("Outside").get_node_or_null("PackageGhost") as PackageGhost
 
+## Something that is not the player's avatar to hold the package: aim_text
+## reads it as outside, with the Outside space as its parent.
+func _holder() -> StaticBody3D:
+	var h := StaticBody3D.new()
+	_root.get_node("Outside").add_child(h)
+	return h
+
+func test_the_ghost_stays_up_every_tick_while_it_is_aimed():
+	var item := _package()
+	item.state = Item.State.HELD
+	var use: PackageUse = item.use_node
+	var aim: Variant = _fitting_aim(item)
+	assert_not_null(aim)
+	var holder := _holder()
+	use.aim_text(item, aim, holder)
+	assert_true(_ghost().visible, "up at the first fit")
+	var gone := 0
+	for i in 75:
+		await wait_physics_frames(1)
+		use.aim_text(item, aim, holder)
+		if not _ghost().visible:
+			gone += 1
+	assert_eq(gone, 0, "the 10 Hz refit does not flicker the ghost")
+
 func test_the_ghost_goes_when_the_package_leaves_the_hand():
 	var item := _package()
 	item.state = Item.State.HELD
 	var use: PackageUse = item.use_node
 	var aim: Variant = _fitting_aim(item)
 	assert_not_null(aim)
-	use.refit(item, aim, _root.get_node("Outside"))
+	var holder := _holder()
+	use.aim_text(item, aim, holder)
+	await wait_physics_frames(1)
+	use.aim_text(item, aim, holder)
 	assert_true(_ghost().visible, "shown while aimed in the hand")
 	item.state = Item.State.LOOSE
 	await wait_physics_frames(1)
 	assert_false(_ghost().visible, "dropped, thrown or stowed: the ghost is gone")
 
-func test_the_ghost_goes_when_nothing_refits_it():
+func test_the_ghost_goes_when_aim_text_stops():
 	var item := _package()
 	item.state = Item.State.HELD
 	var use: PackageUse = item.use_node
 	var aim: Variant = _fitting_aim(item)
 	assert_not_null(aim)
-	use.refit(item, aim, _root.get_node("Outside"))
+	use.aim_text(item, aim, _holder())
 	assert_true(_ghost().visible)
 	await wait_physics_frames(PackageUse.STALE_AFTER + 2)
-	assert_false(_ghost().visible, "aim_text stopped (aiming at a stow point): the ghost is gone")
+	assert_false(_ghost().visible, "aimed at a stow point: aim_text is not called, the ghost is gone")

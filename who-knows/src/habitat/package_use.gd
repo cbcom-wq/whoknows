@@ -16,9 +16,10 @@ var _ghost: PackageGhost
 var _last: Planting.Result
 var _surface: PlantSurface
 var _since := INF
-var _shown_at := -1000
+## The physics tick aim_text last ran on: the ghost is only for a package being aimed.
+var _aimed_at := -1000
 
-## Physics ticks the ghost may go without a fresh fit before it is hidden.
+## Physics ticks the ghost may go without aim_text being called before it is hidden.
 const STALE_AFTER := 3
 
 func _exit_tree() -> void:
@@ -26,14 +27,14 @@ func _exit_tree() -> void:
 		_ghost.queue_free()
 
 ## The ghost belongs to a package being aimed: hide it when the item leaves the
-## hand (dropped, thrown, stowed) or nothing has refitted it for a few ticks
+## hand (dropped, thrown, stowed) or aim_text has not run for a few ticks
 ## (aimed at a stow point, or off the rock).
 func _physics_process(_delta: float) -> void:
 	if _ghost == null or not is_instance_valid(_ghost) or not _ghost.visible:
 		return
 	var item := get_parent() as Item
 	if item == null or item.state != Item.State.HELD \
-			or Engine.get_physics_frames() - _shown_at > STALE_AFTER:
+			or Engine.get_physics_frames() - _aimed_at > STALE_AFTER:
 		_ghost.hide_fit()
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -49,6 +50,7 @@ func aim_text(item: Item, aim: Transform3D, holder: CollisionObject3D) -> String
 		if _ghost != null:
 			_ghost.hide_fit()
 		return ""
+	_aimed_at = Engine.get_physics_frames()
 	_since += get_physics_process_delta_time()
 	if _since >= HabitatValues.FIT_EVERY:
 		_since = 0.0
@@ -102,7 +104,6 @@ func _show(space: Node3D) -> void:
 		_ghost = PackageGhost.new()
 		_ghost.name = "PackageGhost"
 		space.add_child(_ghost)
-	_shown_at = Engine.get_physics_frames()
 	_ghost.show_fit(_last)
 
 func _module(item: Item) -> ModuleDefinition:
