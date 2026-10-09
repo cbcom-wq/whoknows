@@ -132,15 +132,23 @@ Spec `docs/superpowers/specs/2026-09-24-quantum-energy-design.md`, plan
 
 ---
 
-**Designed, awaiting the owner's review of the written spec: habitat modules** (2026-09-26, revised
-2026-10-08). The quantum machine makes module packages; you carry one out and plant it on a big
-rock, where it levels on legs and unfolds. Modules share one grid, one interior slot (from a pool
-shared with `Fleet`) and one store, and are joined by corridors you pull on a spacewalk. Inside you
-walk in gravity. A hub, a drill that mines QE by the play-time clock, a store, a fabricator, a suit
-bay and a ship builder (the shipyard's home) give QE a progression. Bases sleep as ships do and
-save in format 3. Spec `docs/superpowers/specs/2026-09-26-habitat-modules-design.md`; all seventeen
-decisions in its §2 are taken. There is no plan and nothing is built. Phase D (corridors) waits on
-quantum energy's hose (Task 9).
+**Built on branch `habitat-modules`, Phases A–C: habitat modules** (spec 2026-09-26, revised and
+approved 2026-10-08; built 2026-10-08 to 2026-10-09). The quantum machine makes a hub package
+(800 QE); you carry it out on a spacewalk and aim it at a big rock, where a green or coral ghost
+says whether it fits and R turns it. Planted, it lands on four levelling legs and unfolds into a
+drum in 5.5 s, scattering the skitters near. You cycle in through its airlock and walk inside in
+gravity; the base is a grid like a ship's (`GridHome`), boarded as `home` while your ship stays
+`aboard`. A drill (600 QE) and a store (500 QE) plant beside the hub a cell apart: the drill
+earns QE into the base's store by play time, asleep or awake, and herds near a working drill move
+away; the store adds 1,000 QE. The hub's link panel moves 50 QE a press between your ship and the
+base within 1 km. Bases sleep past 20 km, share the 16 interior slots with the fleet, and save in
+format 3. `test/probes/base_probe.gd` plays it all in the real game: 39 checks, 0 fails; inside
+the hub 135 fps, outside with three modules 281 fps on the GTX 960. Not yet: corridors (so a drill
+or store can't be walked into), the fabricator, suit bay and ship builder (Phase D, waiting on
+quantum energy's hose, Task 9); holding the link's buttons; and any way to see a base from afar
+(the owner's call: lights, a beacon or a sensor contact). Spec
+`docs/superpowers/specs/2026-09-26-habitat-modules-design.md` §19 says what was built and why it
+differs.
 
 ---
 

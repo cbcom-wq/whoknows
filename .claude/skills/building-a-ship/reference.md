@@ -1,6 +1,7 @@
 # Ship building reference
 
-The facts behind `SKILL.md`, checked against the code on 2026-09-29. Paths are relative to
+The facts behind `SKILL.md`, checked against the code on 2026-09-29 (*Bases*, `GridHome` and
+the many-ships rows they touch re-checked 2026-10-09). Paths are relative to
 `who-knows/` unless they start with `docs/`. If a name here no longer exists, trust the code and
 fix this file.
 
@@ -43,6 +44,8 @@ fix this file.
 | pilot_seat | mount | 0.5 | | 0.5 | | the helm |
 | computer | mount | 0.3 | | 0.3 | | the bridge computer's holo table; a quiet fixture, optional |
 | ladder | mount | 0.3 | | | | vertical link in `DeckGraph` only (see SKILL.md) |
+| quantum_cell | solid | 5.0 | | | | 400 QE of store (`quantum_capacity`); the hub's store |
+| quantum_tank | solid | 5.0 | | | | 1,000 QE; the store module's (habitat modules). A copy of `quantum_cell.tres`; its mesh sub-resource is still named `BoxMesh_quantum_cell` |
 
 Room blocks weigh and draw exactly what `deck` does, so swapping deck for rooms never moves the
 balance. `test_starter_shuttle.gd` holds this.
@@ -169,8 +172,9 @@ touches no nodes.
 - **Storeys:** 2.6 m (`STOREY_HEIGHT`), with 2.5 m of headroom. The floor is anchored to the grid.
   Storey 0's floor top is at interior y −0.95 (`floor_y`).
 - **Interior space:**
-  - it sits at `Ship.INTERIOR_WORLD_BASE` (0, −5000, 0) + `interior_slot` × 2000 m on x, and
-    never moves;
+  - it sits at `GridHome.INTERIOR_WORLD_BASE` (0, −5000, 0) + `interior_slot` ×
+    `GridHome.SLOT_SPACING` (2000 m) on x, and never moves. Slots come from `InteriorSlots`,
+    shared by ships and bases (see *Bases*);
   - interior-local equals hull-local on storey 0.
 - **The pilot seat and standing up:**
   - the seat's interactable box is 1.4 × 1.6 × 1.4 m;
@@ -497,13 +501,15 @@ _hud.set_active_vehicle(ship.pilot if piloting and ship != null else null)
 | `Fleet.ships()`, `awake()`, `named(n)`, `nearest(p, except)`, `sleeping(s)`, `place_of(s)` | |
 | `Fleet.MAX_SHIPS` 16, `SLEEP_AT` 20 km, `WAKE_AT` 18 km, `CHECK_EVERY` 1 s, `ASLEEP`, `STARTER` `&"Ship"`, `next_number` | a ship asleep is out of `EXTERIOR_SPACE` and `SPACE_ANCHOR`, held as a `UniversePoint`, `PROCESS_MODE_DISABLED`, hidden, its emitters stopped |
 | `Fleet.capture(universe)`, `to_dict()`, `from_dict(d)`, `restore_hull(ship, part)` | the save's `"ships"` and `"fleet"`; a far ship loads asleep |
-| flight scene `aboard`, `board(ship, force)`, `board_nearest()` (F8), `board_at_helm(ship)`, `_wire_ship(ship)`, `aboard_changed` | the ship you are in; the one switch; F8's hop; everything one ship needs from the game |
-| `Ship.own`, `set_own(on)` | the own render layer and the interior shown, for the ship aboard only; re-applied after every rebuild |
-| `Ship.livery`, `_apply_livery()` | the ship's own copy of `HULL_LIVERY_MATERIAL`, swapped onto every piece painted with the shared one after each rebuild; `_process` pushes its hull's `hull_inverse` into it |
+| flight scene `aboard`, `board(ship, force)`, `board_nearest()` (F8), `board_at_helm(ship)`, `_wire_ship(ship)`, `aboard_changed` | `aboard` is **your ship**: the one you are in, or the one you came from while you are in a base (its helm, warp and sensors are still yours); `board(ship)` makes it `aboard` and `home`, returning early only when it is both already; F8's hop; everything one ship needs from the game |
+| flight scene `home`, `board_base(base, force)`, `home_changed(home)` | `home` is **where you are**, a `GridHome`: your ship, the base you are in, or the one your suit is tied to on a spacewalk. `board_base` makes a base `home` (its interior shown, its hull your own, no ship's), points `grasp.world_root` at its items and the origin's focus at it (or at you in the suit); `aboard` does not change |
+| `Fleet.aboard` (a Callable) | the flight scene answers `aboard if home == aboard else null`: **null while you are in a base**, so your ship may sleep past 20 km. `Fleet.remove` no longer refuses your ship then (F6 Delete still skips `aboard` itself) |
+| `GridHome.own`, `set_own(on)` (on `Ship` and `Base`) | the own render layer and the interior shown, for `home` only (the ship aboard, or the base you are in); re-applied after every rebuild |
+| `GridHome.livery`, `_apply_livery()` | each home's own copy of `HULL_LIVERY_MATERIAL`, swapped onto every piece painted with the shared one after each rebuild; `_process` pushes its hull's `hull_inverse` into it |
 | `Ship.pilot`, `seat`, `motion`, `chase_camera`, `canopy_camera`, `canopy_overlay`, `helm_cell()`, `airlock_crossed` | |
 | `CameraDirector.bind(ship)`, `seat_ship()`, `stand_now()`, `ship_of(node)` | |
 | `PilotControls.bind_director(d)`, `PilotSeat.director`, `Avatar.move_aboard(interior, pose)` | |
-| `SuitTie.choose`, `gap`, `SWITCH_MARGIN` 10 m, `REACH` 500 m, `EVERY` 0.25 s | your suit belongs to the nearest ship |
+| `SuitTie.choose`, `gap`, `SWITCH_MARGIN` 10 m, `REACH` 500 m, `EVERY` 0.25 s, `bases`, `tied(home)` | your suit belongs to the nearest **home**: every awake ship not still arriving (`fleet.arriving`) and every awake base not unfolding; `tied` hands the flight scene a ship (`board`) or a base (`board_base`) |
 | `CanopyPortal.sync` | with no viewer inside, the canopy camera rests at the helm's eye on the hull |
 | Save format 2 | `"ships"` (each `Ship.to_dict` + `"name"`), `"aboard"`, `"fleet"`; format 1 migrates. The save file is shared by every checkout of the project, so playing a format-2 branch makes `main` (format 1) refuse it |
 
@@ -512,6 +518,147 @@ light groups on, **130 fps with one ship and 130 with a second 300 m off**; `mai
 130 that day. The probe prints `fleet   2 ships, aboard Ship2, own layer ok, asleep 0`;
 `test/probes/fleet_play.gd` spawns its second ship through the F6 panel, then plays F8, a cycle
 out, the crossing and a cycle in, and prints `play    ALL OK`.
+
+## Bases (`docs/superpowers/specs/2026-09-26-habitat-modules-design.md`, §19 *As built*)
+
+A base is a grid that never flies: modules planted on a big rock from packages made at the
+quantum machine, built by the same builders and airlock code as a ship. Everything under
+`src/habitat/` unless stated.
+
+**`GridHome`** (`src/ship/grid_home.gd`, `extends Node3D`): what a ship and a base share. `Ship`
+and `Base` both extend it; `Airlock`, the avatar's `hull` and boarding take a `GridHome`.
+
+- **Moved out of `Ship`** (Task 2, no change to the ship): the signal `airlock_crossed`; the
+  constants `INTERIOR_WORLD_BASE` (0, −5000, 0), `SLOT_SPACING` 2000 m, `RESEAT_TOLERANCE`,
+  `WAKE_ROOM`, `HULL_LIVERY_MATERIAL`, `CANOPY_SHADER`, `OWN_ONLY`; `interior_slot`,
+  `outside_path`, `grid`, `outside`, `catalog`, `item_catalog`, `items`, `airlocks`, `quantum`,
+  `own`, `livery`; `_process` (the livery's `hull_inverse` push); `_make_canopy_material`,
+  `_apply_livery`, `interior_slot_origin`, `set_own`, `_apply_own`, `wake_spots`,
+  `_bind_airlocks`, `_stowed_items`, `_reseat`, `_stock`, `restore_item`. New: `_setup_home()`
+  (slot, outside, catalogues, the `Items` and `Airlocks` holders), `is_warping()` (false; a
+  ship's says whether its warp spins), `home_busy()` (airlocks, the quantum plant, a bolt in
+  flight), `items_to_dict()`.
+- **The four nodes a home must have**, by these names: `Exterior` (a `RigidBody3D`) with
+  `Exterior/ExteriorBuilder` under it, and `Interior` (a `Node3D`) with
+  `Interior/InteriorBuilder` under it. A subclass calls `_setup_home()` first in its own
+  `_ready`; `GridHome` has no `_ready`. `_make_canopy_material` returns early without a `Canopy`
+  node, so a home without one is fine.
+
+**`InteriorSlots`** (`src/ship/interior_slots.gd`): one pool for ships and bases. `MAX` 16 (slot
+15 is 30 km out, where a float still holds about 2 mm); `claim()` the lowest free (−1 when full),
+`take(slot)` (the starter's 0), `release`, `is_held`, `free_count`. `Fleet.slots` owns it and the
+flight scene hands the same one to `Bases.slots`. A ship asleep keeps its slot; a base asleep
+gives its slot back.
+
+**`Base`** (`base.gd`, `extends GridHome`), made in code by `Base.make(site, slot, outside_path,
+unfolding)`, never from a `.tscn`:
+
+- its exterior is a frozen static `RigidBody3D` (layer 1, mask 0, zero gravity) in
+  `Universe.EXTERIOR_SPACE` and `AsteroidStream.SPACE_ANCHOR`, with meta `&"base"`; a `Canopy`
+  SubViewport (`UPDATE_DISABLED`) and `CanopyPortal` so its portholes show the outside;
+- its `QuantumPlant` starts empty (`start_fraction` 0) and makes nothing (`can_make` false);
+  its capacity is its blocks': 400 for a hub's `quantum_cell`, +1,000 for each store's
+  `quantum_tank`;
+- `place(frame)` stands base cell (0, 0, 0)'s centre at `frame` (y the base's up);
+  `rebuild()` builds hull, interior, airlocks, legs and the shell from the site, leaving out a
+  module still unfolding, keeping the store, the airlocks and every item; it **hides the box
+  skin** (`ExteriorBuilder.skin()`) and has `BaseExterior` build the drum shell over the same
+  colliders; then `_place_link`;
+- `begin_unfold(i)`, `tick_unfold(dt)` (the show, then `stamp(i)` as the legs land, then at the
+  end `rebuild()`, a drill's `credited_at` reset to now, and `unfolded(i)`), `unfolding`,
+  `unfold_left`;
+- `clock` (play time), `credit_drills()` every `CREDIT_EVERY` 5 s, `hum()` every `HUM_EVERY` 3 s
+  (the drill's vibration, and the `Grind` loop heard inside while it is `own`);
+- `busy()` (`"unfolding"` or `home_busy()`), `capture()` (store, airlocks, items into the site),
+  `restore_inside()` (back, then the drills credited for the time it slept);
+- `link`: the hub's `LinkPanel`, rebuilt with the interior.
+
+**`Bases`** (`bases.gd`, a node of the flight scene, group `Bases.GROUP`): every base is a
+`BaseSite` always and a `Base` node only while awake. `plant(kind, r, surface)` founds a base
+(a hub on bare ground; named `Base1`, `Base2`..., `next_number` never reused) or joins the
+ground's base; `on(site_id)`, `frame_of(site)`, `nearest(p)`, `named`, `site_named`, `awake()`,
+`sites()`, `wake(id)`, `sleep(id)`, `check_sleep()` every `CHECK_EVERY` 1 s: a base sleeps past
+`HabitatValues.SLEEP_AT` (20 km) of the universe's focus when calm and not yours (`inside`),
+wakes inside `WAKE_AT` (18 km) in the current `system`; a base that cannot get a slot stays
+asleep and tries again next check. `quiet(site_id, p)` for the herds; `busy()`, `to_dict()`
+(`{"next", "sites"}`), `from_dict(d)`. The flight scene sets `home`, `outside`, `universe`,
+`slots`, `clock` (play time), `inside` (`home as Base`) and `ship_near` (`fleet.nearest`).
+
+**`BaseSite`** (`base_site.gd`): `id`, `system`, `at` (`UniversePoint`), `turn`, `rock`,
+`site_id`, `modules` (`{kind, cell, turns, legs, drill}`), `store`, `airlocks`, `items`;
+`add`, `remove`, `cells_of`, `occupied`, `grid()`, `centre_of`, `hubs`, `drills`, `to_dict`,
+`from_dict`.
+
+**`BaseValidator.validate(site, catalog)`**: the ship validator's structural rules, none of its
+flight ones, each module on its own until corridors:
+
+| Code | Broken when |
+|---|---|
+| `HAS_HUB` | the base has no hub |
+| `MODULE_CONNECTED` | a module's cells are in pieces |
+| `APART` | two modules touch face to face (they would merge interiors) |
+| `AIRLOCK_HATCH` | a hub's airlock has not exactly one horizontal face onto open space |
+| `REACHABLE` | a walkable cell of a hub can't be reached on foot from its airlock |
+
+**`ModuleCatalog`** (`module_catalog.gd`, modules in code, not `.tres`; orientation 0 faces −z, 4
+faces +z; storey 0 is the floor, storey 1 the roof):
+
+| Module | Size (x, storeys, z) | Blocks | Package |
+|---|---|---|---|
+| `hub` | 3 × 2 × 2 | storey 0: `quantum_machine` (o 4), `deck`, `quantum_core` (o 4) at the back; `deck`, `airlock`, `deck` at the front (the airlock opens out of +z). Storey 1: `hull`, `grav_plating`, `quantum_cell` (over the core), then three `hull` | `hub_package` (800 QE) |
+| `drill` | 1 × 2 × 2 | `deck`, `deck`; `grav_plating`, `hull` | `drill_package` |
+| `store` | 1 × 3 × 1 | `deck`; `grav_plating`; `quantum_tank` (its body is 6 m tall) | `store_package` |
+
+`ModuleDefinition.turned(turns)`, `turned_size`, `turn_cell` ((x, z) → (z, w−1−x) a quarter
+turn, matching `Basis(UP, PI/2 × turns)`), `turn_orientation`, `floor_cells`.
+`InteriorPalette.MODULE_COLOURS`: hub `SKY`, drill `COPPER`, store `LAVENDER` (the shell's band).
+
+**`HabitatValues`** (every number of the spec, and nowhere else):
+
+| Group | Constants |
+|---|---|
+| Planting | `PLANT_REACH` 8 m, `LEG_MIN` 0.3, `LEG_MAX` 2.5, `LEG_SPARE` 0.4, `MAX_TILT` 25°, `FROM_BASE` 24 m, `FROM_SHIP` 20 m, `FIT_EVERY` 0.1 s, `CAST_SPARE` 4 m |
+| Unfolding, s | `FLY` 0.6, `SETTLE` 0.4, `LEGS` 1.0, `WALLS` 2.0, `LIGHTS` 1.5; `UNFOLD` 5.5 |
+| Stores | `HUB_STORE` 400, `STORE_ADDS` 1000 |
+| The link | `LINK_REACH` 1000 m, `LINK_STEP` 50 QE a press, `LINK_RATE` 100 QE/s held (unused: press only) |
+| The drill | `DRILL_PERIOD` 10 s, `RICHNESS_MIN` 0.5, `RICHNESS_MAX` 3.0, `VEIN_FACTOR` 2.0, `SURVEY` 60 s, `CREDIT_EVERY` 5 s |
+| Skitters | `STAMP_STRENGTH` 1.0, `STAMP_RADIUS` 60 m, `HUM_STRENGTH` 0.2, `HUM_RADIUS` 80 m, `HUM_EVERY` 3 s, `QUIET_AFTER` 600 s, `QUIET_RADIUS` 80 m |
+| Sleeping | `SLEEP_AT` 20 km, `WAKE_AT` 18 km (as ships) |
+
+**Planting** (`planting.gd`, pure): `Planting.fit(surface, module, aim, facing, turns, site,
+frame, ship_gap, slots_free) -> Result` (`fit`, `frame`, `cell`, `turns`, `body`, `size`, `legs`,
+`feet`). A new hub founds a frame (the ground's up, turned to face you); anything else snaps to
+its base's grid at the lowest storey whose legs reach. Fits: `OK`, `NO_GROUND`, `TOO_STEEP`,
+`LEGS_CANT_REACH`, `BLOCKED`, `TOO_FAR`, `HUB_FIRST`, `NEAR_SHIP`, `NO_ROOM`;
+`Planting.prompt(r, module)`. `PlantSurface` is the ground's contract; `RockSurface` the big
+rock's (`cast`, `up_at`, `blocked` with `_buried`, `site_id`, `rock`, `ore`).
+**`PackageUse`** (the packages' `ItemUse`): on a spacewalk, aimed within `PLANT_REACH`, a
+`PackageGhost` (green or coral, no shadow) re-fitted every `FIT_EVERY`; R (`turn_module`) turns
+it; use plants it and the package is consumed deferred.
+
+**`BaseExterior`** (`base_exterior.gd`, on the own-hull layer like a ship's skin): per module a
+drum shell (ends bulged `END_BULGE` 0.4 m into arcs, `SHELL_BEVEL` 0.3 m roof and floor rims,
+ribs, the module's colour band, portholes where the layout has round windows, the hatch face
+left open), four sleeved legs with pads, and the unfold show (`unfold(i, t, site, livery)`).
+**`ExteriorBuilder.skin()`** returns the skin node (`HullDressing`'s), which a base hides.
+
+**`LinkPanel`** (`link_panel.gd`): a pedestal in the hub's deck cell beside the airlock, its back
+to the front wall (`FROM_CENTRE` 0.65 m from the cell's centre), facing into the room, turned
+with the hub. A screen (*SHIP 400 · BASE 32*, then *DRILL 1 · ORE 2.8×* per drill, or *NO
+LINK*) with its lamp lit while linked, and two buttons: ◀ `to_ship` on the left, ▶ `to_base` on
+the right, `LINK_STEP` a press. `QuantumLink.move(from, to, n)` (lossless, never past what
+`from` holds or `to` has room for) and `in_reach(base, hull)`. **`DrillYield`**: `fresh(ore,
+now)`, `rate`, `surveyed`, `gauge` (*SURVEYING*, then *VEIN* or *ORE* and the richness),
+`credit(drill, now, store)`.
+
+**Saving:** save format 3: `"bases"` (`Bases.to_dict`) and `"home"` (`{"base": name}` when you
+are in one). A load that starts the world over drops the bases, as it drops strays.
+
+**The probe:** `test/probes/base_probe.gd` (windowed, like the ship probe) plays it all: make,
+carry, ghosts, plant, unfold, in through the airlock, a drill and a store beside the hub, the
+ship 25 km off until the base sleeps and back after 90 s, the link pressed both ways through the
+Interactor. 39 checks, 0 fails on 2026-10-09; GTX 960, 1280 × 720: inside the hub 135 fps,
+outside the hub 291, three modules in view 281.
 
 ## The ship library and the rules (`docs/superpowers/specs/2026-10-02-ship-library-design.md`)
 

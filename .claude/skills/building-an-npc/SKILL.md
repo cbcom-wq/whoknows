@@ -77,7 +77,10 @@ Do these in order. Each names the check that proves it.
 5. **Senses and emitters.** Set the species' senses. Anything new in the world that an NPC should
    notice gets **one line**: `StimulusBus.send(self, Stimulus.make(kind, pos, strength, radius,
    source, site))`, or joins `StimulusBus.LIGHTS` with the four light methods. Proof:
-   `test_perception.gd`-style tests with a fake site.
+   `test_perception.gd`-style tests with a fake site. **A new vibration source on a rock:** check
+   its strength against `Scatter`'s 0.45 threshold (`behaviours/scatter.gd`): above it every
+   skitter it reaches bolts (a base's planting stamp, 1.0, is meant to); below it, as a drill's
+   hum at 0.2, it is felt and never startles. Say which you meant in the emitter's comment.
 6. **Behaviours** from `templates/behaviour.gd`, one file each in `src/npc/behaviours/<id>.gd`
    (the file name *is* the id). Scores from `Curves` on needs and `ctx.recent(...)`; the site's
    helpers through `ctx.places` / `ctx.extra`. Proof: each scored from a made-up context
@@ -180,6 +183,8 @@ Do these in order. Each names the check that proves it.
 | Health on the record | Recipes make records afresh on every review, so a wound set on an `NpcRecord` was gone next review | Keep what must stick in `NpcLedger`, read in `amend` and `promote` |
 | Reposing the look without its scale | The look is scaled to the species' size when built; setting its transform dropped that | `Npc._look_scale`, kept by every pose; lift a body on its back by its height |
 | A Variant-typed `:=` | GDScript treats the warning as an error; the whole script fails to load | Type it: `var x: Variant = ...` |
+| Filtering a population every review | `RockHerdSource.quiet` (herds keep away from a working drill, habitat modules spec §8.4) first dropped records on every `records()` call, so skitters already out vanished in view the moment a drill passed 10 minutes | Ask a "has this place changed" question once, when the site is (re)built (`RockHerdSource._offered`): live NPCs stay, and the herd is gone the next time the rock loads |
+| Trusting the director to demote before a place goes | A rock leaving detail all at once (a 25 km jump, the F7 hop) is freed before the next review (0.25 s); every skitter on it stepped on freed ground and `SurfaceCrawler` raised script errors each tick (found by the base probe, 2026-10-09) | `Npc._physics_process` steps nothing while `site.alive()` is false, as `DeckWalker` already checked; `test_a_place_gone_stops_it_stepping_at_once` |
 | Taking `stream.details.live.values()[0]` as the start rock | Once rocks moved into belts (system skeleton spec §6), a neighbour was in detail too and had no herds | `stream.details.nearest(ship.exterior.global_position)`; and count only its own site's contacts |
 
 ## Not built yet (plan for it; don't assume it works)

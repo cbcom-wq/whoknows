@@ -1,10 +1,12 @@
 # Habitat modules: a base you print, plant and plug together
 
 **Date:** 2026-09-26, revised 2026-10-08
-**Status:** Designed with the owner. **Every decision in §2 was taken on 2026-10-08**, after a
-review that brought the 2026-09-26 draft up to date with saving, NPCs, the bridge computer, star
-systems, the warp, world scale, health and damage, and many ships (§18). Awaiting the owner's
-review of this written spec. No plan exists and no code has changed.
+**Status:** Phases A–C built on branch `habitat-modules`; Phase D waits on the hose. **Every
+decision in §2 was taken on 2026-10-08**, after a review that brought the 2026-09-26 draft up to
+date with saving, NPCs, the bridge computer, star systems, the warp, world scale, health and
+damage, and many ships (§18); the owner approved this spec the same day. The plan is
+`docs/superpowers/plans/2026-10-08-habitat-modules.md`; §19 says what was built and where it
+differs.
 **Depends on:** `main` at `2476498`, which has quantum energy's Tasks 1–8 (the store, the machine,
 the suit cell, the near cloud), the asteroids' fixed big rocks (asteroids spec §18) in belts
 (system skeleton §6), the airlock, the floating origin, saving (format 2), NPCs, health and
@@ -811,3 +813,148 @@ The review with the owner:
   in detail whatever the ship does (§9.3);
 - renamed the draft's "moons (mid-size rocks)" to **mid-size rocks**, since moons are now bodies
   4–15 km across, and used the airlock's real class names (`Airlock`, `AirlockSite`).
+
+---
+
+## 19. As built (Phases A–C)
+
+Built on branch `habitat-modules` (2026-10-08 to 2026-10-09) from
+`docs/superpowers/plans/2026-10-08-habitat-modules.md`, in 15 tasks. `main` (the ship library) was
+merged in first. Phase D (corridors, the fabricator, the suit bay, the ship builder, packing a
+module up) is not built: it waits on quantum energy's hose and line (Task 9).
+
+### 19.1 What works
+
+- **A hub package** (800 QE) is made at the ship's quantum machine, carried out in both hands on a
+  spacewalk (EVA cargo, the suit at 150 kg), and aimed at a big rock: a green ghost where it fits,
+  a coral one with the reason (*Legs can't reach*, *Too steep*, *Blocked*, *Too close to a ship*
+  ...) where it doesn't; R turns it. Use plants it: the case lands, four legs stamp down (a
+  vibration that scatters the skitters near), the walls grow into a drum, the lights come on, 5.5 s
+  in all, with sound.
+- **The base is a grid like a ship's**, built by the same builders: you glide to its airlock,
+  cycle in and walk inside in gravity, with your hands free. Entering it boards it (`home`); your
+  ship stays `aboard`, and may fall asleep while you are in the base.
+- **A drill and a store** (packages made at the machine for 600 and 500 QE) plant
+  beside the hub on its grid, a cell apart. The drill earns QE into the base's store by the
+  play-time clock, asleep or awake, at its rock's richness (*SURVEYING* for its first minute); the
+  store adds 1,000 QE of capacity (the `quantum_tank` block). Herds near a drill that has run 10
+  minutes are gone the next time their rock loads.
+- **The hub's link panel** moves 50 QE a press between your ship's store and the base's, either
+  way, without loss, while the ship is within 1 km, and shows both stores and each drill's gauge.
+- **Bases sleep** past 20 km and wake inside 18 km, sharing the 16 interior slots with the fleet;
+  **they save** (format 3, `"bases"` and `"home"`), and a load can put you back inside one.
+
+### 19.2 Where the plan settled what this spec left open, or departed from it
+
+The plan's eleven plan-level choices (its *Global Constraints*), each with its reason:
+
+1. **`GridInterior` is a base class, `GridHome`**, that `Ship` and `Base` both extend. `Airlock`,
+   the avatar's `hull` and boarding need one type for "a ship or a base"; it is also §5.5's common
+   `Home`.
+2. **The universe clock is the flight scene's `play_time`**, which already existed, was saved,
+   and advanced every physics tick through warps and blackouts. No new `Universe.clock`.
+3. **Modules are defined in code** (`ModuleCatalog`), not `data/modules/*.tres`, because of
+   CLAUDE.md's `.tres` comment hazard.
+4. **The hub is 3 × 2 cells, not 2 × 2.** `AirlockSite` needs an airlock with exactly one
+   horizontal face onto open space, and a corner of a 2 × 2 has two.
+5. **Modules stand at least one empty cell apart.** Face-touching modules would merge their
+   interiors with no corridor.
+6. **The ghost turns on R** (a new action, `turn_module`), not Q/E, which roll the suit.
+7. **The store module's capacity is a new block, `quantum_tank`** (1,000 QE), since
+   `quantum_cell` holds 400.
+8. **`EnergyPanel` is unchanged.** §10 says both "gains the base's store" and "aboard on foot the
+   HUD stays dark"; the hub's link panel and the drill's gauge are the instruments, as §10's last
+   sentence says.
+9. **Herds drift away from a drill** by `RockHerdSource` leaving out a herd whose home is within
+   80 m of a drill that has run 10 minutes (§8.4's "rounds drift away"). No behaviour changes; the
+   scatter at planting is the existing `VIBRATION` path.
+10. **Modules on a base connect only by corridors (Phase D).** Until then a drill or store beside
+    the hub works but can't be walked into; `BaseValidator` checks each module on its own.
+11. **The drills' gauges read on the hub's link panel** (*DRILL 1 · ORE 2.8×*), not in the
+    drill's own room, which can't be reached until corridors; the room's own gauge comes with
+    Phase D. The link may ship press-only (it did: see 19.4).
+
+The rulings made while building, each with its reason (the plan's ledger,
+`.superpowers/sdd/2026-10-08-habitat-modules/progress.md`):
+
+- **R1. `main` merged in before Task 1.** The plan was written against `2476498`; `main` had the
+  ship library. A local merge commit; nothing lost if wrong.
+- **R2. SuitTie keeps `main`'s `fleet.arriving(ship)` filter.** A ship still arriving out of warp
+  is no home; `board_base` and the suit's tie respect it as `board` does. The plan's SuitTie
+  rewrite predated it.
+- **R3. The plan's snippets of `flight_test.gd`, `fleet.gd` and `suit_tie.gd` are by intent, not
+  line.** The ship library rewrote parts of them (the starter from JSON, F6 spawning, arrivals);
+  each edit was adapted to the merged code, keeping the plan's behaviour.
+- **R4. Renders went to the owner after Task 12 and Phase C carried on** under continuous
+  execution. Phase C does not touch the look, so look changes land as follow-ups.
+- **R5. Task 12 (the probe, renders, frame time) ran before Task 11 (saving)**, because the owner
+  asked for renders and gameplay tests then, and the probe needs nothing from saving.
+- **`RockSurface.blocked` adds a ray check, `_buried()`** (Task 5). The rock's
+  `ConcavePolygonShape3D` is one-sided, so a shape query misses a box whose centre is inside;
+  changing `AsteroidDetail`'s collision would touch every ship and body. Watch for a false
+  *Blocked* under an overhang at playtest.
+- **Commit trailers name the model that did the work** (Task 6), not always the plan's: honest
+  attribution, no history rewrite.
+- **`Bases._wake` stays quiet on a full slot pool** (Task 8): GUT counts a `push_warning` as an
+  unexpected error, and it would log every second while a base waits.
+- **The package's case is shorter** (`ItemLooks.PACKAGE_HANDLE_ROOM`, Task 9) so its handle fits
+  the 0.35 m item box that `test_item_looks` requires.
+- **`board()` returns early only when the ship is both `aboard` and `home`** (Task 10). With the
+  plan's guard, walking back into your own ship from a base left the base `home`.
+- **§8.1's "warm points from a few kilometres" is not met and no mechanism was added** (Task 12).
+  A 0.6 m porthole is 0.16 px at 2 km (the starter's windows don't show either). Meeting it needs
+  base lights, a beacon or a HUD/sensor contact (§10's base contact waits on quantum energy's
+  Task 10): the owner's design call (19.4).
+- **A load that starts the world over drops the saved bases** (Task 11), as it drops strays:
+  their rocks no longer exist, and they would float rockless at the new start.
+- **Quiet herds are filtered when a rock's site is (re)built**, not on every review (Task 13):
+  §8.4 says "drift away over time", and skitters already out must never vanish in view. A herd
+  lingers near a drill until its rock reloads.
+- **The link ships press-only** (Task 14): the Interactor has no held callback, so
+  `LinkPanel.hold` exists unused (19.4).
+
+Fixed in Task 15, found by the probe in the real game:
+
+- **The link panel faced the hub's front wall**, mid-cell, with its back to the room 0.6 m from
+  the quantum machine's face, and its offset did not turn with the hub. It now stands against the
+  front wall facing in, turned with the hub, and its buttons carry ◀ and ▶ as §6.1 says.
+- **Skitters stepped on a rock that had gone.** A rock leaving detail all at once (the probe's
+  25 km jump, or the F7 hop) is freed before the NPC director's next review, and each skitter on
+  it raised script errors until then. An `Npc` now steps nothing while its site is gone.
+
+### 19.3 The probe
+
+`who-knows/test/probes/base_probe.gd`, windowed, plays it all in the real game and prints each
+check: the machine makes a hub package for 800 QE; it is carried out; a green ghost and a coral
+one (*Legs can't reach*) stay shown while aimed; it is planted with `grasp.use()` and used up; it
+unfolds; the suit ties to the hub, the outer hatch opens, the suit glides in, the inner hatch
+opens on air, and you walk in gravity; a drill (base cell (5, 0, 0)) and a store (cell (−4, 0,
+0)) are planted beside the hub (made in code, aimed from above), each unfolding; the store makes the capacity 1,400; your ship
+flies 25 km off with you aboard, the origin following it, and the base sleeps; after 90 s of play
+the ship comes back, the base wakes where it stood, and its drill has earned (5 → 32 QE, richness
+2.8×); inside the hub, the Interactor offers each link button aimed at, and each press moves 50 QE
+(to the base, then to the ship) with none lost; the panel reads *SHIP 400 · BASE 32 / DRILL 1 ·
+ORE 2.8×*; and you board your ship again. **39 checks, 0 fails** (2026-10-09). Renders: the
+package in the bay, both ghosts, mid-unfold, inside the hub, the hub from 20 m (plain and
+fill-lit), its front and end, from 2 km, three modules (plain and fill-lit), and the link panel at
+eye height.
+
+**Frame times** (GTX 960, 1280 × 720, vsync off, 300 frames each): inside the hub **7.4 ms mean
+(135 fps), worst 9.9**; outside, the hub and the rock, 3.4 ms (291 fps), worst 6.3; outside with
+three modules in view, 3.6 ms (281 fps), worst 6.2. Above §12's 120 fps budget everywhere.
+
+### 19.4 Gaps and open questions
+
+- **Hold-to-move:** the link is press-only, 50 QE a press: moving 1,000 QE takes 20 presses until
+  the Interactor gets a held press (`LinkPanel.hold` and `LINK_RATE` are ready for it).
+- **Seeing a base from afar (§8.1, open, the owner's call):** a base can't be found from more
+  than a few hundred metres: its portholes are far under a pixel at 2 km and, under a high sun,
+  its walls are near black. Options: base floodlights or a warm beacon on the hub, or a sensor
+  contact for your bases (§10, waiting on quantum energy's Task 10).
+- **The drill module shows no drill head**, and a drill's own room and gauge come with corridors.
+- **The hub's quantum machine makes nothing** (`can_make` false); the fabricator is Phase D.
+- **The shell is visual:** its bulged ends stand up to 0.8 m past the box colliders.
+- **Deferred minors** are listed per task in the ledger (`progress.md`), among them: no
+  save/load round-trip test of a drill's state, `drill_hum`'s loop seam not listened to, F6/F7/F8
+  reasoning from `aboard` while you are in a base, and `Fleet.remove` no longer guarding your ship
+  while you are in a base.
