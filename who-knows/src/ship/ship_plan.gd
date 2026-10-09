@@ -21,6 +21,7 @@ const BASE := {
 	&"ladder": "L", &"fairing_slope": "Fs", &"fairing_half": "Fh",
 	&"fairing_corner_in": "Fi", &"fairing_corner_out": "Fo",
 	&"fairing_slope_long_high": "Fl", &"fairing_slope_long_low": "Fk",
+	&"helm": "Hm", &"captain_chair": "Cc", &"crew_station": "Cs",
 }
 ## The rcs pushes drawn as arrows, standing in for R4, R8, R12, R16 and R20:
 ## aft (a retro), to port, to starboard, up and down.

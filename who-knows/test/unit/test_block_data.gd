@@ -5,9 +5,9 @@ var _cat: BlockCatalog
 func before_all():
 	_cat = BlockCatalog.load_from_dir("res://data/blocks")
 
-func test_all_twenty_nine_blocks_load():
-	assert_eq(_cat.ids().size(), 29,
-		"21 minus retired reactor and battery, plus the three quantum blocks, the bridge computer and the six fairings")
+func test_all_thirty_two_blocks_load():
+	assert_eq(_cat.ids().size(), 32,
+		"21 minus retired reactor and battery, plus the three quantum blocks, the bridge computer, the six fairings and the three bridge seats")
 
 func test_required_ids_exist():
 	for id in [&"hull", &"hull_wedge", &"armour", &"core",
@@ -16,7 +16,8 @@ func test_required_ids_exist():
 			&"bunk_room", &"galley", &"bathroom", &"closet", &"weapon_room",
 			&"quantum_core", &"quantum_machine", &"quantum_cell", &"computer",
 			&"fairing_slope", &"fairing_slope_long_low", &"fairing_slope_long_high",
-			&"fairing_corner_out", &"fairing_corner_in", &"fairing_half"]:
+			&"fairing_corner_out", &"fairing_corner_in", &"fairing_half",
+			&"helm", &"captain_chair", &"crew_station"]:
 		assert_true(_cat.has(id), "missing block definition: %s" % id)
 
 func test_reactor_and_battery_are_retired():
@@ -64,7 +65,7 @@ func test_walkable_blocks_are_exactly_the_interior_traversables():
 	walkable.sort()
 	var expected := [&"airlock", &"deck", &"door", &"ladder", &"pilot_seat",
 		&"bunk_room", &"galley", &"bathroom", &"closet", &"weapon_room",
-		&"quantum_core", &"quantum_machine", &"computer"]
+		&"quantum_core", &"quantum_machine", &"computer", &"helm", &"captain_chair", &"crew_station"]
 	expected.sort()
 	assert_eq(walkable, expected)
 
@@ -141,3 +142,12 @@ func test_fairings_are_light_structure():
 		assert_eq(def.hp, 40)
 		assert_eq(def.power_draw, 0.0)
 		assert_eq(HullShapes.shape_of(id), HullShapes.BY_ID[id])
+
+func test_the_bridge_seats_are_fixtures():
+	for id in [&"helm", &"captain_chair", &"crew_station"]:
+		var def := _cat.get_def(id)
+		assert_eq(def.occupancy, BlockDefinition.Occupancy.MOUNT, "%s is walkable furniture" % id)
+		assert_eq(def.hp, 60)
+	assert_almost_eq(_cat.get_def(&"helm").power_draw, 0.5, 0.001)
+	assert_almost_eq(_cat.get_def(&"captain_chair").power_draw, 0.2, 0.001)
+	assert_almost_eq(_cat.get_def(&"crew_station").power_draw, 0.3, 0.001)
