@@ -3,8 +3,9 @@ extends RefCounted
 
 ## The modules of Phases B and C (habitat modules spec §6.1-§6.3), in code so
 ## no hand-written .tres can drop a line (CLAUDE.md). Orientation 0 faces -z;
-## 4 faces +z. Storey 1 is the roof: gravity plating and storage live there,
-## above the walkable floor.
+## 4 faces +z. Storey 1 is the roof: gravity plating lives there, above the
+## walkable floor, and storage sits in the roof or above it (the store's tank
+## is on storey 2, over its plating).
 
 const HUB := &"hub"
 const DRILL := &"drill"
