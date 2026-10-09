@@ -393,6 +393,13 @@ Built natively from `docs/superpowers/plans/2026-10-03-ship-library.md`, eleven 
 - **The flight computer rests while its hull arrives,** as during a warp: the arriving ship's
   RCS had puffed all the way in, a dotted trail along its line.
 
+**Changed at the final review:**
+
+- **A spawn keeps clear of your path.** Ahead of where you will be was not enough: at cruise it
+  was parked dead ahead, hit 1.7 s after it landed, with the brakes needing 25 s. A spot within
+  60 m of the next 30 s of your path (`SpawnSpot.PATH_SECONDS`) is skipped like a rock, so
+  cruising it lands 45° to one side.
+
 **Figures:** the worst view (seated by a big rock's night side, both light groups on) holds 130
 fps; 150 m off the rock, 137 still and 131 while a ship arrives. The starter's balance is
 unchanged (pitch 4.91%). `test/probes/arrival_render.gd` renders an arrival from the seat, the

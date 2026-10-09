@@ -574,8 +574,8 @@ at (x, y, z)`, then `note` lines; exits 0 with none broken, 1 otherwise or on a 
 
 **The F6 panel** (`src/ui/spawn_panel.gd`; the flight scene's `spawn_from_library(id)` and
 `remove_nearest_spawned()`): 1–9 spawn that library ship 200 m ahead of where you will be in
-1.5 s, facing you (`SpawnSpot`: 45° steps round rocks, `WarpPlan.rock_near`, and ships 60 m clear,
-then 400 m); Delete removes the nearest spawned ship but yours. Refusals: `WARP ENGAGED`,
+1.5 s, facing you (`SpawnSpot`: 45° steps round rocks, `WarpPlan.rock_near`, ships 60 m clear and
+the next 30 s of your path 60 m clear, then 400 m); Delete removes the nearest spawned ship but yours. Refusals: `WARP ENGAGED`,
 `A SHIP IS ARRIVING`, `THE FLEET IS FULL`, `NO CLEAR SPOT NEAR` (within 300 m of a big rock there is
 none), `NO SPAWNED SHIP`, `YOU ARE ABOARD IT`. A spawned ship's `launch_blueprint.ship_name` is its
 library name, kept through saves.

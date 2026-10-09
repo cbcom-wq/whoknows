@@ -33,6 +33,14 @@ func test_a_rock_ahead_moves_it_one_step_round():
 	assert_almost_eq(_angle_off_ahead(spot), SpawnSpot.STEP_DEG, 0.01)
 	assert_almost_eq(spot.origin.distance_to(_from.origin), SpawnSpot.AHEAD, 0.001)
 
+func test_moving_ahead_it_steps_out_of_your_path():
+	var spot: Transform3D = SpawnSpot.find(_from, _no_ships, _no_rocks, _ahead() * 120.0)
+	assert_almost_eq(_angle_off_ahead(spot), SpawnSpot.STEP_DEG, 0.01)
+
+func test_drifting_slowly_it_is_still_straight_ahead():
+	var spot: Transform3D = SpawnSpot.find(_from, _no_ships, _no_rocks, _ahead() * 1.0)
+	assert_almost_eq(_angle_off_ahead(spot), 0.0, 0.01)
+
 func test_a_ship_ahead_moves_it_too():
 	var ships: Array[Vector3] = [_from.origin + _ahead() * (SpawnSpot.AHEAD + SpawnSpot.CLEAR - 5.0)]
 	var spot: Transform3D = SpawnSpot.find(_from, ships, _no_rocks)

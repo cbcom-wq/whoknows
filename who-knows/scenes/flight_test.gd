@@ -715,8 +715,9 @@ func _wire_spawn() -> void:
 	$Prompt.add_child(spawn_panel)
 
 ## Spawns library ship `id` ahead of you, arriving out of warp (§5, §6), as the
-## panel's number keys do: ahead of where you will be when it lands, so a spawn
-## while cruising does not land in your path. Says what it did, or why not.
+## panel's number keys do: ahead of where you will be when it lands, and clear
+## of the way you are going, so a spawn while cruising is not parked in your
+## path. Says what it did, or why not.
 func spawn_from_library(id: StringName) -> String:
 	if not library.has(id):
 		return "NO SHIP CALLED %s" % id
@@ -731,7 +732,8 @@ func spawn_from_library(id: StringName) -> String:
 	var others: Array[Vector3] = []
 	for ship in fleet.awake():
 		others.append(ship.exterior.global_position)
-	var spot: Variant = SpawnSpot.find(view.translated(_spawn_velocity() * WarpArrival.DURATION), others, _rock_near)
+	var v := _spawn_velocity()
+	var spot: Variant = SpawnSpot.find(view.translated(v * WarpArrival.DURATION), others, _rock_near, v)
 	if spot == null:
 		return "NO CLEAR SPOT NEAR"
 	var place: Transform3D = spot

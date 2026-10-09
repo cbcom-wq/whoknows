@@ -84,10 +84,36 @@ func test_spawned_while_cruising_it_lands_ahead_of_where_you_will_be():
 	_starter.exterior.linear_velocity = -_starter.exterior.global_basis.z * 120.0
 	var view := _starter.exterior.global_transform
 	var led := view.translated(_starter.exterior.linear_velocity * WarpArrival.DURATION)
-	var expected: Transform3D = SpawnSpot.find(led, [view.origin] as Array[Vector3], Callable(_root, "_rock_near"))
+	var expected: Transform3D = SpawnSpot.find(led, [view.origin] as Array[Vector3], Callable(_root, "_rock_near"),
+		_starter.exterior.linear_velocity)
 	var ship := _open_and_spawn()
 	_land(ship)
 	assert_almost_eq(ship.exterior.global_position, expected.origin, Vector3.ONE * 0.01)
+
+## Parked dead ahead it would be hit 1.7 s after it landed: at cruise the
+## brakes need 25 s.
+func test_spawned_while_cruising_it_lands_clear_of_your_path():
+	_face_where_straight_ahead_is_clear(120.0)
+	var v := -_starter.exterior.global_basis.z * 120.0
+	_starter.exterior.linear_velocity = v
+	var from := _starter.exterior.global_position
+	var ship := _open_and_spawn()
+	_land(ship)
+	var p := ship.exterior.global_position
+	var t := clampf((p - from).dot(v) / v.length_squared(), 0.0, SpawnSpot.PATH_SECONDS)
+	assert_gt(p.distance_to(from + v * t), SpawnSpot.CLEAR)
+
+## Turns the starter in 45° steps until, moving at `speed`, nothing but your
+## path would stop a ship arriving straight ahead: the scene has a rock ahead.
+func _face_where_straight_ahead_is_clear(speed: float) -> void:
+	for step in 8:
+		_starter.exterior.global_basis = Basis(Vector3.UP, deg_to_rad(45.0 * step))
+		var view := _starter.exterior.global_transform
+		var led := view.translated(-view.basis.z * speed * WarpArrival.DURATION)
+		var spot: Transform3D = SpawnSpot.find(led, [view.origin] as Array[Vector3], Callable(_root, "_rock_near"))
+		if (spot.origin - led.origin).angle_to(-view.basis.z) < 0.01:
+			return
+	fail_test("no clear way ahead in the scene")
 
 func test_on_a_spacewalk_it_lands_ahead_of_your_view():
 	var avatar: Avatar = _root.get_node("Ship/Interior/Avatar")
