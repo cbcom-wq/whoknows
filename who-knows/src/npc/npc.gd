@@ -190,7 +190,9 @@ func _physics_process(delta: float) -> void:
 	if down:
 		_tick_down(delta)
 		return
-	if active == null or site == null:
+	# A place gone all at once (a rock out of detail after a jump) waits on the
+	# director's next review to demote its NPCs: until then nothing steps on it.
+	if active == null or site == null or not site.alive():
 		return
 	_move_time += delta
 	_move_tick += 1
