@@ -610,7 +610,7 @@ ship, saving off; `ProbeArgs` reads `--ship` for the probe and `arrival_render.g
 | `ship_probe.gd -- <out dir> --ship <id or ship .json>` | the probe on that ship |
 | `arrival_render.gd -- <out dir> --ship <id>` | that library ship arriving |
 
-**Measured at the limit** (`test/fixtures/ships/big.json`, 400 blocks, 351 t, a stretched starter
+**Measured at the limit** (`test/fixtures/size/big.json`, 400 blocks, 351 t, a stretched starter
 with a second quantum core; `test_big_ship.gd`): rules 0.3 s, a spawn 1.2 s (accepted, guard 3 s),
 a save 42 KB; probe fps 286 standing, 138 seated, 133 seated with both light groups, **121 seated
 by a rock with both** (the starter 130), 208 and 221 in the chase views, 122 with a second ship

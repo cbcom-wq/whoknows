@@ -33,6 +33,11 @@ path) and `$k = <worktree>\.claude\skills\building-a-ship`:
 In a fresh worktree run `godot --headless --path . --import` once first, or every class is
 "not declared".
 
+**A probe passes** when its first line is `ship    probing <id>: <name>` (or it probed something
+else), no line holds `<--`, `MISMATCH`, `MISSING`, `REFUSED`, `NOT FOUND`, `UNREACHABLE`,
+`SHADER ERROR` or `SCRIPT ERROR`, and every `fps` line is at least 120. `exhaust BLOCKED` is a
+note: the starter has six.
+
 ## The plan
 
 One map per storey, **seen from above, bow up, port on the left**: rows run z from the bow (−z) to

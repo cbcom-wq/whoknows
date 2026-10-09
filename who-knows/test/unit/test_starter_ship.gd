@@ -4,7 +4,7 @@ extends GutTest
 ## 2026-10-09-ship-designer-design.md §7.2): how the probe and the renders work
 ## on any ship. Never the player's: anything but the starter saves nothing.
 
-const BIG := "res://test/fixtures/ships/big.json"
+const BIG := "res://test/fixtures/size/big.json"
 const SAVE := "user://test_starter_ship/game.json"
 
 func after_each():

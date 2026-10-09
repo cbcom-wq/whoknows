@@ -39,7 +39,7 @@ watches it arrive, boards it, flies it, and it feels like what was asked for.
 |---|---|---|
 | 1 | **Existing blocks only** | The owner's choice. The agent designs with the blocks in `data/blocks/`; new blocks are separate work the owner commissions. A ship that wanted something missing says so in its report |
 | 2 | **Start to finish, no check-in** | The owner's choice. The agent designs, builds, proves and renders without stopping; the owner judges the finished ship |
-| 3 | **Each ship on its own branch** | The owner's choice. A sibling worktree `D:/git/whoknows-ship-<id>`, branch `ship-<id>`, committed and never merged by the agent. A bad ship never touches `main` |
+| 3 | **Each ship on its own branch** | The owner's choice. A sibling worktree, branch `ship-<id>`, committed and never merged by the agent. A bad ship never touches `main`. As built (§11): the sending session makes the worktree, `D:/git/whoknows-design-<n>` on `design-<n>`, before the id is known, and the agent renames the branch |
 | 4 | **The agent draws deck plans** (§4) | The owner's choice of three. A ship is 100–400 blocks with 24 orientations each; as JSON rows the agent cannot see symmetry, a continuous cabin or a mirrored RCS pair. A map shows them |
 | 5 | **The JSON stays the one canonical file** | The plan is the agent's scratch; `ship_plan.gd` converts both ways and round-trips byte for byte, so the two never drift. The `.md` holds the printed maps for people |
 | 6 | **Up to 400 blocks** | The owner's choice (2026-10-09): "I want to allow for pretty large ships. I'd set the first limit to 600 and see how that goes". At the build 600 fell under the 120 fps floor (§9), and the owner lowered it to 400 the same day. The starter is 110 |
@@ -63,7 +63,7 @@ letting the agent add blocks (§2.1).
 | The design skill | `.claude/skills/designing-a-ship/` | Brief to concept to deck plan (§6). Hands off to `building-a-ship` to build and prove |
 | The plan tool | `.claude/skills/building-a-ship/ship_plan.gd` | Plan to library JSON and back (§4) |
 | `--ship <id>` | `scenes/flight_test.gd`, `ship_probe.gd`, `test/probes/arrival_render.gd` | Starts you aboard library ship `<id>` instead of the starter, so the probe and the renders work on any ship (§7.2) |
-| The size proof | a fixture as big as a ship may be (400 blocks) under `test/fixtures/ships/` and its test | §7.4 |
+| The size proof | a fixture as big as a ship may be (400 blocks) in `test/fixtures/size/` (not `ships/`, which `test_ship_library.gd` loads as a library) and its test | §7.4 |
 
 `ship_plan.gd` sits beside `ship_check.gd` because building a ship by hand uses it too; the
 `building-a-ship` skill documents it.
@@ -167,8 +167,11 @@ The agent's file lists these steps; the design skill says how to do the hard one
    the skill's lists (§6.3). Pick an id and a name (for a revision, the ship's own). Write down
    **feel targets as numbers** (§6.2): what each axis turns, how hard it brakes, how fast it
    slides onto the nose, how big.
-2. **The worktree.** `D:/git/whoknows-ship-<id>` on branch `ship-<id>` from `main`; a revision
-   prints the ship's plan with `to-plan` first. An id already in the library is a revision only if
+2. **The worktree.** Made by the sending session before the agent starts (a subagent cannot leave
+   the session's checkout here): `D:/git/whoknows-design-<n>` on branch `design-<n>` from `main`,
+   the session moved into it and the path in the brief; the agent renames the branch `ship-<id>`
+   and keeps its plan, logs and renders in the worktree's git-ignored `.superpowers/ship/`. A
+   revision prints the ship's plan with `to-plan` first. An id already in the library is a revision only if
    the owner asked for one; otherwise the agent picks another id.
 3. **The design loop.** Draw the plan, `to-json`, `ship_check`; read the broken rules and the feel
    numbers; change the plan; again. Done when no rule is broken and every target is met or its
@@ -278,7 +281,7 @@ ship. Never a player feature: there is no key for it.
 
 ### 7.4 The size limit
 
-A fixture ship as big as a ship may be (`test/fixtures/ships/big.json`, made with `ship_plan`, not
+A fixture ship as big as a ship may be (`test/fixtures/size/big.json`, made with `ship_plan`, not
 in the library) that passes `ShipRules`. Measured and pinned: `ship_check` time; spawn and build
 time (a hitch the owner would feel); save size; probe fps in the worst view. Anything that fails at
 the limit is fixed in this project, or, if the fix is large, the limit is lowered with the owner's
@@ -346,7 +349,7 @@ acceptance, after the review).
 - **`ship_plan.gd`** beside `ship_check.gd`, and `ShipLibrary.resolve` (an id or a ship file).
   `to-plan starter` then `to-json` reproduces `starter.json` exactly (`fc /b`).
 - **`TOO_BIG`** and `ShipRules.MOST_BLOCKS`, now **400** (§9); the size fixture
-  `test/fixtures/ships/big.plan` and `big.json` (400 blocks, 351 t, a second quantum core), and
+  `test/fixtures/size/big.plan` and `big.json` (400 blocks, 351 t, a second quantum core), and
   `test_big_ship.gd`: as big as a ship may be, its plan, no rule broken in under 3 s, one block more
   is `TOO_BIG`, a spawn under 3 s and a save under 256 KB, usable. The usable check is shared with
   the catalog test (`test/unit/helpers/ship_use.gd`).
@@ -373,5 +376,16 @@ and 221 in the chase views, 122 with a second ship 300 m off. Rules 0.3 s, a spa
   the scene made but never in the tree crashed the engine on the way out (exit -1073741819, not 1).
 - The limit went from 600 to 400 (the owner's call, §9); the skill and the agent say 400 where
   the plan's text said 600.
+
+**Changed at the final review** (a fresh reviewer, Opus):
+
+- **A `--ship` naming nothing is refused** (last, empty, or followed by another flag:
+  `ProbeArgs.refused`): the probe and the arrival render had fallen back to the starter and exited
+  0, which would pass the starter's renders off as the agent's ship.
+- **The agent's probe gate is every failure the probe prints** (`<--`, `MISMATCH`, `MISSING`,
+  `REFUSED`, `NOT FOUND`, `UNREACHABLE`, `SHADER ERROR`, `SCRIPT ERROR`) and the `probing <id>`
+  line, not four of them; the starter's and the fixture's logs pass it.
+- **The sending session makes the worktree** (§5 step 2): the agent could not, under this
+  harness's guard, and for "be creative" the id is not known when it is sent.
 
 **Acceptance:** not yet run (Task 11).

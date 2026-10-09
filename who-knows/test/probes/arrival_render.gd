@@ -19,6 +19,10 @@ var _ship := ShipLibrary.STARTER
 
 func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
+	if ProbeArgs.refused(args) != "":
+		print("arrival %s" % ProbeArgs.refused(args))
+		quit(1)
+		return
 	_out = ProbeArgs.positional(args)[0]
 	var ship := ProbeArgs.ship(args)
 	if ship != "":

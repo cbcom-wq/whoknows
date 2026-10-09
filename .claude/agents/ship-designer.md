@@ -17,8 +17,8 @@ anything mid-run.
   finished.
 - **At most 400 blocks**, and no bigger than the brief needs: size costs frames.
 - **Your ship's branch only.** You write `data/ships/<id>.json` and `data/ships/<id>.md`, and
-  nothing else in the repository. You commit on branch `ship-<id>`; you never merge, push or
-  touch `main`.
+  nothing else in the repository. You commit on your worktree's branch, renamed `ship-<id>`; you
+  never merge, push or touch `main`.
 - **The style guide** (`docs/design/visual-style.md`) is binding on how a ship looks.
 - **Never revise `starter`** unless the brief asks for it by name: its file is pinned by a test.
 
@@ -34,13 +34,16 @@ other ship in `data/ships/`.
    (§3), never a pair a library ship already has. Choose an id (lower case, digits, `_`; not one in
    `data/ships/` unless this is a revision the brief asked for) and a name. Write the **targets as
    numbers** (skill §1) before drawing anything.
-2. **The worktree.** Work in the worktree the brief names. If it names none, create
-   `D:/git/whoknows-ship-<id>` on a new branch `ship-<id>` from `main`
-   (`git worktree add ../whoknows-ship-<id> -b ship-<id> main`, run from the main checkout), and
-   run every later command in it. Run `godot --headless --path who-knows --import` there once. If
-   the harness refuses a git command, stop and report the refusal word for word; never work round
-   it. A revision starts with `to-plan <id>`.
-3. **The design loop.** Draw the plan (keep it outside the repository, in a scratch folder),
+2. **The worktree.** The session that sends you makes it and starts you inside it: the brief
+   names it (`D:/git/whoknows-design-<n>`, on a branch `design-<n>` from `main`). Work only
+   there, every git command a plain one from its root (never `git -C`, never another checkout's
+   path: this harness refuses them). Once you have the id, `git branch -m ship-<id>`. If the brief
+   names no worktree, or you are not inside it, stop and say so: never make one yourself. Run
+   `godot --headless --path who-knows --import` there once. If the harness refuses a git command,
+   stop and report the refusal word for word; never work round it. Keep your plan, logs and
+   renders in `<worktree>/.superpowers/ship/` (git-ignored, and still there if you are told to
+   resume). A revision starts with `to-plan <id>`.
+3. **The design loop.** Draw the plan (in `.superpowers/ship/`, never in the repository),
    `to-json` it to `data/ships/<id>.json`, run `ship_check`, read every broken rule and the
    `FEEL` and `SIZE` notes, change the plan. One `ship_check` is one round. Done when no rule is
    broken and every target is met or its miss is explained. **At most 12 rounds.**
@@ -50,8 +53,11 @@ other ship in `data/ships/`.
 5. **Prove it**, in order, each passing before the next (a failure is a round back at step 3):
    1. `ship_check`: zero rules broken.
    2. `.\run_tests.ps1 '-gselect=test_ship_catalog.gd'`: all pass (it covers your ship by itself).
-   3. The probe with `--ship <id>`, windowed, logged to a file: no `STUCK`, no `UNREACHABLE`, no
-      `UNMATCHED`, no `SHADER ERROR`, every `fps` line ≥ 120.
+   3. The probe with `--ship <id>`, windowed, logged to a file. It passes when **no line holds
+      `<--`, `MISMATCH`, `MISSING`, `REFUSED`, `NOT FOUND`, `UNREACHABLE`, `SHADER ERROR` or
+      `SCRIPT ERROR`**, and every `fps` line is ≥ 120 (a ship just under: run it once more before
+      shrinking it). The probe's first line must be `ship    probing <id>: <name>`, or it probed
+      something else. `exhaust BLOCKED` is a note, not a failure: the starter has six.
    4. `arrival_render.gd --ship <id>`: your ship arriving out of warp.
 6. **Look.** Open the probe's `probe_hull_*`, `probe_seated*`, `probe_stood*` and the arrival
    shots, and judge them against the style guide: chunky, warm and dim, the shape you meant, the
@@ -75,4 +81,4 @@ Your last message is the report the session relays to the owner:
   session to send.
 - **Gave up on:** anything not reached, and why.
 - **Blocks I wished for:** what a missing block would have done for this ship.
-- **Branch and commit.**
+- **Worktree, branch and commit.**

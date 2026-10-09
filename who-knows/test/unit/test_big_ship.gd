@@ -7,8 +7,8 @@ extends GutTest
 ## accepted for now (the owner, 2026-10-09); this guard fails if it grows.
 
 const ShipUse := preload("res://test/unit/helpers/ship_use.gd")
-const PLAN := "res://test/fixtures/ships/big.plan"
-const FILE := "res://test/fixtures/ships/big.json"
+const PLAN := "res://test/fixtures/size/big.plan"
+const FILE := "res://test/fixtures/size/big.json"
 const SAVE := "user://test_big_ship/game.json"
 const RULES_MS := 3000
 const SPAWN_MS := 3000

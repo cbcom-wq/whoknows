@@ -37,6 +37,10 @@ var _out := ""
 
 func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
+	if ProbeArgs.refused(args) != "":
+		print("ship    %s" % ProbeArgs.refused(args))
+		quit(1)
+		return
 	var given := ProbeArgs.positional(args)
 	_out = given[0]
 	# Vsync would cap the frame rate at the monitor's; measure the real one.

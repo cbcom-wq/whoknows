@@ -38,9 +38,11 @@ If a name in the skill no longer exists, fix the skill. The owner asked for this
 draft in seconds (`docs/superpowers/specs/2026-10-02-ship-library-design.md`).
 
 **A new ship is designed by the `ship-designer` agent** (`.claude/agents/ship-designer.md`, with
-the `designing-a-ship` skill): from a description or "be creative", start to finish, on its own
-branch `ship-<id>` in `D:/git/whoknows-ship-<id>`, never merged by the agent; at most 400 blocks
-(`docs/superpowers/specs/2026-10-09-ship-designer-design.md`).
+the `designing-a-ship` skill): from a description or "be creative", start to finish, never merged
+by the agent; at most 400 blocks (`docs/superpowers/specs/2026-10-09-ship-designer-design.md`).
+**To send it,** make its worktree first, since a subagent cannot leave the session's checkout:
+`git worktree add ../whoknows-design-<n> -b design-<n> main`, move the session into it, then
+dispatch `ship-designer` with the brief and that path. It renames the branch `ship-<id>`.
 
 ## NPCs: use and keep the `building-an-npc` skill current
 
