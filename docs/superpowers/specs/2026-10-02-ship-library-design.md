@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-02
 **Status:** Designed with the owner on 2026-10-02; amended while planning 2026-10-03, against
-`main` at `2476498` (§11); built 2026-10-03 on branch `ship-library` (§12).
+`main` at `2476498` (§11); built 2026-10-03 on branch `ship-library` (§12); merged to `main` 2026-10-08.
 **Project 2 of 3** toward a ship-designer agent (many ships spec §1.2). Project 1, many ships, is
 built and merged (`docs/superpowers/specs/2026-10-02-many-ships-design.md`); project 3, the agent,
 gets its own spec.
@@ -379,7 +379,7 @@ Built natively from `docs/superpowers/plans/2026-10-03-ship-library.md`, eleven 
   `spawn_from_library` and `remove_nearest_spawned`. `fleet_play.gd` spawns through F6 for real
   (18 of 18 checks).
 
-**Changed at the renders** (the owner to approve, §6.2):
+**Changed at the renders** (approved by the owner 2026-10-08, §6.2):
 
 - **It comes in across your view.** As designed, the ship flew in along its nose, straight at
   you: from the seat its wake hid behind it. A spawn now comes in along
@@ -405,4 +405,4 @@ fps; 150 m off the rock, 137 still and 131 while a ship arrives. The starter's b
 unchanged (pitch 4.91%). `test/probes/arrival_render.gd` renders an arrival from the seat, the
 chase view and side-on, and the panel.
 
-**The owner's verdict on the arrival:** not yet given (renders sent 2026-10-03).
+**The owner's verdict on the arrival:** "looks good enough for now" (2026-10-08), approving the changes made at the renders and at the final review; open to revisiting later.

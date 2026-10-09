@@ -447,7 +447,7 @@ made.
   additive (wake at 0.45, flash at 0.5), in `SpacePalette.WARP`, a warm white near the work
   lights that bloom halos. No new shader. A spawn comes in across your view, 60° off the line to
   you: straight at you, the wake hides behind the ship. Tuned at the renders on 2026-10-03 (a
-  0.6 m wake was under a pixel from 400 m; at 0.8 it was a hard white bar); the owner's verdict is
+  0.6 m wake was under a pixel from 400 m; at 0.8 it was a hard white bar); the owner approved it "good enough for now" on 2026-10-08, recorded
   in the ship library spec §12.
 
 ## 4. Adding something new
