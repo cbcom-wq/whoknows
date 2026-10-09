@@ -132,13 +132,15 @@ Spec `docs/superpowers/specs/2026-09-24-quantum-energy-design.md`, plan
 
 ---
 
-**Drafted, awaiting the owner's answers: habitat modules** (2026-09-26). The quantum machine makes
-module packages; you carry one out and plant it on a big rock, where it levels on legs and unfolds.
-Modules share one grid, one interior slot and one store, and are joined by corridors you pull on a
-spacewalk. Inside you walk in gravity. A hub, a drill that mines QE, a store, a fabricator, a suit
-bay and a ship builder (the shipyard's home) give QE a progression. Spec
-`docs/superpowers/specs/2026-09-26-habitat-modules-design.md`. Its §2 recommends thirteen decisions,
-none taken yet. There is no plan and nothing is built.
+**Designed, awaiting the owner's review of the written spec: habitat modules** (2026-09-26, revised
+2026-10-08). The quantum machine makes module packages; you carry one out and plant it on a big
+rock, where it levels on legs and unfolds. Modules share one grid, one interior slot (from a pool
+shared with `Fleet`) and one store, and are joined by corridors you pull on a spacewalk. Inside you
+walk in gravity. A hub, a drill that mines QE by the play-time clock, a store, a fabricator, a suit
+bay and a ship builder (the shipyard's home) give QE a progression. Bases sleep as ships do and
+save in format 3. Spec `docs/superpowers/specs/2026-09-26-habitat-modules-design.md`; all seventeen
+decisions in its §2 are taken. There is no plan and nothing is built. Phase D (corridors) waits on
+quantum energy's hose (Task 9).
 
 ---
 
