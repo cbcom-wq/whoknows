@@ -8,6 +8,12 @@ extends Node3D
 ## LINK_REACH. Built from the kit and ReadoutPanels, in InteriorPalette.
 
 const PEDESTAL := Vector3(0.5, 1.05, 0.3)
+const BUTTON := Vector3(0.12, 0.12, 0.04)
+const BUTTON_X := 0.13
+const BUTTON_Y := PEDESTAL.y - 0.15
+## How far it stands from its deck cell's centre toward the hub's front wall,
+## facing in: its back near the wall, the floor in front of it clear.
+const FROM_CENTRE := 0.65
 
 var base: Base
 var _screen: ReadoutPanel
@@ -20,18 +26,24 @@ func setup(p_base: Base) -> void:
 	var kit := InteriorKit.new(self)
 	kit.bevel_box(InteriorKit.Batch.SOLID, InteriorKit.at(Vector3(0, PEDESTAL.y * 0.5, 0)), PEDESTAL, 0.04,
 		InteriorKit.solid(InteriorPalette.TRIM))
+	# A dark arrow on each button's face, as on the quantum machine's: ◀ to the
+	# ship, ▶ to the base.
+	for side in [-1.0, 1.0]:
+		var face := Vector3(side * BUTTON_X, BUTTON_Y, PEDESTAL.z * 0.5 + BUTTON.z + 0.016)
+		kit.tri(InteriorKit.Batch.SOLID, face + Vector3(side * 0.028, 0, 0), face + Vector3(-side * 0.018, 0.026, 0),
+			face + Vector3(-side * 0.018, -0.026, 0), Vector3.BACK, InteriorKit.solid(InteriorPalette.SCREEN_BACK))
 	kit.commit()
 	_screen = ReadoutPanel.new()
 	_screen.setup(&"link", InteriorKit.LAYER)
 	_screen.transform = Transform3D(Basis(Vector3.RIGHT, -0.5), Vector3(0, PEDESTAL.y + 0.2, 0.05))
 	add_child(_screen)
-	_to_ship = _button(&"to_ship", -0.13)
-	_to_base = _button(&"to_base", 0.13)
+	_to_ship = _button(&"to_ship", -BUTTON_X)
+	_to_base = _button(&"to_base", BUTTON_X)
 
 func _button(role: StringName, x: float) -> ReadoutPanel:
 	var b := ReadoutPanel.new()
-	b.setup(role, InteriorKit.LAYER, InteriorKit.LAYER, Vector3(0.12, 0.12, 0.04), false)
-	b.transform = Transform3D(Basis.IDENTITY, Vector3(x, PEDESTAL.y - 0.15, PEDESTAL.z * 0.5))
+	b.setup(role, InteriorKit.LAYER, InteriorKit.LAYER, BUTTON, false)
+	b.transform = Transform3D(Basis.IDENTITY, Vector3(x, BUTTON_Y, PEDESTAL.z * 0.5))
 	b.prompt_source = func() -> String: return _prompt(role)
 	b.pressed.connect(press)
 	add_child(b)

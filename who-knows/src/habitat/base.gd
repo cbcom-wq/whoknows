@@ -175,7 +175,9 @@ func _place_link(shown: BaseSite) -> void:
 	link.name = "LinkPanel"
 	var at := InteriorBuilder.interior_center(spot)
 	at.y = InteriorBuilder.floor_y(spot)
-	link.transform = Transform3D(Basis(Vector3.UP, PI * 0.5 * m["turns"]), at + Vector3(0, 0, -0.5))
+	# Back to the hub's front wall, facing into the room, turned with the hub.
+	var turn := Basis(Vector3.UP, PI * 0.5 * m["turns"])
+	link.transform = Transform3D(turn * Basis(Vector3.UP, PI), at + turn * Vector3(0, 0, LinkPanel.FROM_CENTRE))
 	interior.add_child(link)
 	link.setup(self)
 
