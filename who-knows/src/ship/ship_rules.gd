@@ -17,9 +17,10 @@ const IMBALANCE_MOST := 0.05
 ## Power made must beat power drawn by this much, so a ship we give the player
 ## never browns out at its first addition.
 const POWER_HEADROOM := 1.1
-## The most blocks a ship may have (ship designer spec §2.6): the owner's first
-## limit, "and see how that goes".
-const MOST_BLOCKS := 600
+## The most blocks a ship may have (ship designer spec §2.6, §9): the owner's
+## first limit was 600, "and see how that goes"; at 600 the worst view fell to
+## 116 fps, under the 120 floor, so the owner lowered it to 400 (2026-10-09).
+const MOST_BLOCKS := 400
 ## The validator's issues that name a cell.
 const _CELL_ISSUES: Array[StringName] = [&"ALL_CONNECTED", &"MOUNTS_REACHABLE", &"AIRLOCK_HATCH"]
 const _AXES: Array[String] = ["pitch", "yaw", "roll"]

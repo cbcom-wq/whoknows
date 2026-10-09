@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - **Existing blocks only:** no new `.tres` in `data/blocks/`, no new meshes or props.
-- **Up to 600 blocks:** `ShipRules.MOST_BLOCKS := 600`; a ship over it breaks `TOO_BIG`.
+- **Up to 400 blocks:** `ShipRules.MOST_BLOCKS := 400` (600 at planning; lowered by the owner at Task 7, spec §9); a ship over it breaks `TOO_BIG`. Where a later task's text says 600, read the limit.
 - **The JSON is canonical:** every ship file is written by `ShipLibrary.write`; a plan is scratch.
 - **Every ship is usable** (CLAUDE.md): boarded, flown and saved; ships only through `Fleet`.
 - **Saving is off whenever `starter_ship` is not the starter**, so no probe touches the owner's game.

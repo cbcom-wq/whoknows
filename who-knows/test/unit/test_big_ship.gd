@@ -1,9 +1,9 @@
 extends GutTest
 
-## The 600-block fixture (docs/superpowers/specs/2026-10-09-ship-designer-design.md
+## The 400-block fixture (docs/superpowers/specs/2026-10-09-ship-designer-design.md
 ## §7.4, §9): the biggest a ship may be passes the rules and is usable, and
-## stays within what was measured on 2026-10-09 (the rules 0.6 s, a spawn
-## 1.9 s, a save 63 KB), each pinned with room to spare. The spawn's freeze is
+## stays within what was measured on 2026-10-09 (the rules 0.3 s, a spawn
+## 1.2 s, a save 42 KB), each pinned with room to spare. The spawn's freeze is
 ## accepted for now (the owner, 2026-10-09); this guard fails if it grows.
 
 const ShipUse := preload("res://test/unit/helpers/ship_use.gd")
@@ -29,7 +29,7 @@ func after_each():
 func _grid() -> ShipGrid:
 	return ShipLibrary.read(FILE)["grid"]
 
-func test_it_is_600_blocks_and_its_plan():
+func test_it_is_as_big_as_a_ship_may_be_and_its_plan():
 	var ship := ShipLibrary.read(FILE)
 	assert_false(ship.has("error"), str(ship.get("error", "")))
 	assert_eq((ship["grid"] as ShipGrid).size(), ShipRules.MOST_BLOCKS)

@@ -39,9 +39,9 @@ watches it arrive, boards it, flies it, and it feels like what was asked for.
 | 1 | **Existing blocks only** | The owner's choice. The agent designs with the blocks in `data/blocks/`; new blocks are separate work the owner commissions. A ship that wanted something missing says so in its report |
 | 2 | **Start to finish, no check-in** | The owner's choice. The agent designs, builds, proves and renders without stopping; the owner judges the finished ship |
 | 3 | **Each ship on its own branch** | The owner's choice. A sibling worktree `D:/git/whoknows-ship-<id>`, branch `ship-<id>`, committed and never merged by the agent. A bad ship never touches `main` |
-| 4 | **The agent draws deck plans** (§4) | The owner's choice of three. A ship is 100–600 blocks with 24 orientations each; as JSON rows the agent cannot see symmetry, a continuous cabin or a mirrored RCS pair. A map shows them |
+| 4 | **The agent draws deck plans** (§4) | The owner's choice of three. A ship is 100–400 blocks with 24 orientations each; as JSON rows the agent cannot see symmetry, a continuous cabin or a mirrored RCS pair. A map shows them |
 | 5 | **The JSON stays the one canonical file** | The plan is the agent's scratch; `ship_plan.gd` converts both ways and round-trips byte for byte, so the two never drift. The `.md` holds the printed maps for people |
-| 6 | **Up to 600 blocks** | The owner's choice (2026-10-09): "I want to allow for pretty large ships. I'd set the first limit to 600 and see how that goes". The starter is 110; §7 proves 600 holds |
+| 6 | **Up to 400 blocks** | The owner's choice (2026-10-09): "I want to allow for pretty large ships. I'd set the first limit to 600 and see how that goes". At the build 600 fell under the 120 fps floor (§9), and the owner lowered it to 400 the same day. The starter is 110 |
 | 7 | **It can revise a library ship** as well as design a new one | "Make the hauler longer" starts from that ship's plan |
 | 8 | **One walkable storey** while ladders don't climb | `ShipRules`' `CUT_OFF` already refuses a second walkable storey with the reason; equipment decks above and below are fine. The plan format and the agent are storey-agnostic, so multi-level ships need no change here once climbing exists |
 
@@ -62,7 +62,7 @@ letting the agent add blocks (§2.1).
 | The design skill | `.claude/skills/designing-a-ship/` | Brief to concept to deck plan (§6). Hands off to `building-a-ship` to build and prove |
 | The plan tool | `.claude/skills/building-a-ship/ship_plan.gd` | Plan to library JSON and back (§4) |
 | `--ship <id>` | `scenes/flight_test.gd`, `ship_probe.gd`, `test/probes/arrival_render.gd` | Starts you aboard library ship `<id>` instead of the starter, so the probe and the renders work on any ship (§7.2) |
-| The size proof | a 600-block fixture under `test/fixtures/ships/` and its test | §7.4 |
+| The size proof | a fixture as big as a ship may be (400 blocks) under `test/fixtures/ships/` and its test | §7.4 |
 
 `ship_plan.gd` sits beside `ship_check.gd` because building a ship by hand uses it too; the
 `building-a-ship` skill documents it.
@@ -153,7 +153,7 @@ A headless tool beside `ship_check.gd`, run as it is:
   each deck cropped to the ship's extent on that storey. How the
   agent reads the starter as its worked example, and how a revision starts.
 - **The round trip is exact:** `to-plan` then `to-json` reproduces the JSON byte for byte. A test
-  pins it on the starter and on the 600-block fixture.
+  pins it on the starter and on the size fixture (§7.4).
 
 The parse and print live in a class (`ShipPlan`, `src/ship/ship_plan.gd`) the tool calls, so they
 are tested by GUT like `ShipLibrary`.
@@ -275,13 +275,13 @@ ship. Never a player feature: there is no key for it.
   the seat at its helm) with saving off; an unknown id is refused.
 - **The agent and the skill** are prose; they are proven by the acceptance runs (§7.5).
 
-### 7.4 600 blocks
+### 7.4 The size limit
 
-A fixture ship of about 600 blocks (`test/fixtures/ships/big.json`, made with `ship_plan`, not in
-the library) that passes `ShipRules`. Measured and pinned: `ship_check` time; spawn and build time
-(a hitch the owner would feel); save size; probe fps in the worst view. Anything that fails at
-600 is fixed in this project, or, if the fix is large, the limit is lowered with the owner's
-agreement and the reason recorded here.
+A fixture ship as big as a ship may be (`test/fixtures/ships/big.json`, made with `ship_plan`, not
+in the library) that passes `ShipRules`. Measured and pinned: `ship_check` time; spawn and build
+time (a hitch the owner would feel); save size; probe fps in the worst view. Anything that fails at
+the limit is fixed in this project, or, if the fix is large, the limit is lowered with the owner's
+agreement and the reason recorded here. It was: 600 to 400 (§9).
 
 ### 7.5 Acceptance
 
@@ -312,8 +312,14 @@ starter 0.3 s).
   quantum plant already runs (it holds any number). The design skill says so.
 - **Long ships turn slowly:** inertia grows with length squared; the draft turns 0.06 / 0.03 /
   0.42 rad/s² with the starter's bow RCS. The design skill says to put RCS at both ends.
-- **`TOO_BIG`:** a ship over 600 blocks breaks a new `ShipRules` rule, so the catalog test holds
+- **`TOO_BIG`:** a ship over the limit breaks a new `ShipRules` rule, so the catalog test holds
   the limit, not only the agent.
+- **Lowered to 400 at the build** (the owner, 2026-10-09). Probed windowed, the 600-block fixture
+  held 116 fps in the worst view (seated by a big rock's night side, both light groups on) and 109
+  with a second ship 300 m off, under the 120 floor; the starter held 130 and 130 the same
+  session. Rebuilt at 400 blocks (20 rows stretched, the second quantum core kept), it holds 121
+  and 122, and measures: the rules 0.3 s, a spawn 1.2 s, a save 42 KB. Faster rendering of big
+  ships joins the faster builds as later work; the limit can rise then.
 - **`starter_ship` takes a ship file as well as an id** (`ShipLibrary.resolve`), so the fixture
   and a draft can be probed before they are in the library. `arrival_render --ship` takes a
   library id only, since it spawns through the F6 path.
