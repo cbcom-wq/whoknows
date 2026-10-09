@@ -4,10 +4,13 @@ extends SceneTree
 # 2026-09-26-habitat-modules-design.md §5): a hub package made at the ship's
 # quantum machine; carried out on a spacewalk; a green ghost and a coral one
 # found on the big rock; planted, and watched unfolding; then over to its
-# airlock, a full cycle in, and standing inside in gravity. Every step prints
+# airlock, a full cycle in, and standing inside in gravity; then a drill and a
+# store planted beside it (§6.2, §6.3), your ship flown 25 km off until the
+# base sleeps and back after 90 s of play to find its drill has earned, and
+# the hub's link panel pressed both ways (§6.1). Every step prints
 # what it found, the key moments are rendered (eye height 1.6 m where it
 # stands on something), and the frame time is measured inside the hub and
-# outside it. Run it WITHOUT --headless:
+# outside it, and with three modules in view. Run it WITHOUT --headless:
 #
 #   godot --path who-knows --resolution 1280x720 \
 #     --script <abs path>/test/probes/base_probe.gd -- <abs out dir>
@@ -24,7 +27,7 @@ func _initialize() -> void:
 	scene.save_enabled = false
 	root.add_child(scene)
 	# A script error mid-run stops _run without quitting: never hang.
-	create_timer(300.0).timeout.connect(func() -> void:
+	create_timer(480.0).timeout.connect(func() -> void:
 		print("probe   TIMED OUT")
 		quit(1))
 	_run.call_deferred(scene)
@@ -140,6 +143,16 @@ func _sunlit(scene: Node, avatar: Avatar, p: Vector3) -> bool:
 	var sun: DirectionalLight3D = scene.get_node("DirectionalLight3D")
 	var query := PhysicsRayQueryParameters3D.create(p, p + sun.global_basis.z * 3000.0, 0xFFFFFFFF, [avatar.get_rid()])
 	return avatar.get_world_3d().direct_space_state.intersect_ray(query).is_empty()
+
+## After the ship is moved far in one go: the origin follows it at once, and
+## the worlds and rocks there are ready, as the flight scene's hop() does.
+func _arrive(scene: Node, u: Universe) -> void:
+	u.check()
+	var star_system: StarSystem = scene.get("star_system")
+	star_system.place_all()
+	star_system.whereabouts.look()
+	(scene.get_node("AsteroidStream") as AsteroidStream).update(0.0, true)
+	await _frames(5)
 
 func _ghost_shown(outside: Node3D) -> bool:
 	var ghost := outside.get_node_or_null("PackageGhost") as Node3D
@@ -323,6 +336,118 @@ func _run(scene: Node) -> void:
 	await _shot("hub_from_2_km")
 	avatar.camera.make_current()
 	_reticle.visible = true
+
+	# 7. A drill and a store beside the hub, planted as the hub was, the ghost
+	# snapping to the base's grid; each unfolds before the next.
+	for kind: StringName in [&"drill_package", &"store_package"]:
+		var item := Item.new()
+		item.setup(ship.item_catalog.get_def(kind))
+		outside.add_child(item)
+		var item_use: PackageUse = item.use_node
+		var planted := false
+		for ring in [Vector3(10, 0, 0), Vector3(-8, 0, 0), Vector3(0, 0, 10), Vector3(0, 0, -8),
+				Vector3(12, 0, 6), Vector3(-10, 0, 6), Vector3(10, 0, -6), Vector3(-10, 0, -6)]:
+			var over := hull * (ring as Vector3) + up * 4.0
+			var aim := Transform3D(Basis.looking_at(-up, hull.basis.z), over)
+			var r := item_use.refit(item, aim, outside)
+			if r != null and r.fit == Planting.Fit.OK:
+				planted = item_use.use(item, aim, outside, null)
+				print("plant   %s at base cell %s" % [kind, r.cell])
+				break
+		_check(planted, "a %s planted beside the hub" % kind)
+		await _frames(1)
+		_check(base.unfolding >= 0, "and unfolding")
+		await _until(func() -> bool: return base.unfolding < 0, 7.0)
+		_check(base.unfolding < 0, "and unfolded")
+	_check(base.site.modules.size() == 3, "hub, drill and store")
+	_check(base.quantum.store.capacity == HabitatValues.HUB_STORE + HabitatValues.STORE_ADDS,
+		"the store module adds 1,000: %d" % base.quantum.store.capacity)
+	# All three in view: from the sunnier quarter, 6 m up, back far enough.
+	var mid := Vector3.ZERO
+	for i in base.site.modules.size():
+		mid += base.site.centre_of(i)
+	mid = hull * (mid / base.site.modules.size())
+	var wide := mid + hull.basis * (_sunward(scene, hull) * 30.0) + up * 6.0
+	_look(wide, mid, up)
+	await _shot("three_modules")
+	var fill3 := DirectionalLight3D.new()
+	fill3.light_cull_mask = 1 | ExteriorBuilder.OWN_HULL_LAYER
+	fill3.light_energy = 1.4
+	scene.add_child(fill3)
+	fill3.global_basis = _cam.global_basis * Basis.from_euler(Vector3(deg_to_rad(-22), deg_to_rad(28), 0))
+	await _shot("three_modules_fill_lit")
+	fill3.queue_free()
+	await _frame_time(300, "outside, three modules")
+
+	# 8. Away until it sleeps, back after 90 s of play, and it has earned. Your
+	# ship goes, with you aboard it; where it was is kept as a universe point,
+	# since the origin follows it.
+	var site := base.site
+	var before := base.quantum.store.amount
+	var played := float(scene.get("play_time"))
+	avatar.move_aboard(ship.interior, ship.wake_spots()[0])
+	scene.call("board", ship, true)
+	await _frames(2)
+	var u: Universe = scene.get_node("Universe")
+	var ship_at := u.to_universe(ship.exterior.global_position)
+	var off := (ship.exterior.global_position - hull.origin).normalized()
+	ship.exterior.linear_velocity = Vector3.ZERO
+	ship.exterior.angular_velocity = Vector3.ZERO
+	ship.exterior.global_position += off * 25000.0
+	await _arrive(scene, u)
+	var focus_off := u.to_universe(ship.exterior.global_position).minus(site.at).length()
+	_check(focus_off > HabitatValues.SLEEP_AT and ship.exterior.global_position.length() < Universe.FORCE_AT,
+		"25 km off (%.0f m), the origin with the ship" % focus_off)
+	bases.check_sleep()
+	# Freed at the end of the frame.
+	await _frames(2)
+	_check(bases.named(site.id) == null and not is_instance_valid(base), "25 km off, the base sleeps")
+	await _seconds(90.0)
+	ship.exterior.linear_velocity = Vector3.ZERO
+	ship.exterior.global_position = u.to_engine(ship_at)
+	await _arrive(scene, u)
+	bases.check_sleep()
+	var back := bases.named(site.id)
+	_check(back != null, "back within 18 km, it wakes")
+	print("store   %d before, %d after %.0f s of play" % [before, back.quantum.store.amount if back != null else -1,
+		float(scene.get("play_time")) - played])
+	_check(back != null and back.quantum.store.amount > before, "and its drill earned while it slept")
+	await _frames(5)
+	_check(back != null and back.exterior.global_transform.origin.distance_to(bases.frame_of(site).origin) < 0.01,
+		"it wakes where it stood")
+
+	# 9. The link: inside the hub, 50 QE each way with its two buttons.
+	avatar.move_aboard(back.interior, back.wake_spots()[0])
+	scene.call("board_base", back, true)
+	avatar.camera.make_current()
+	await _frames(5)
+	_check(QuantumLink.in_reach(back.exterior.global_position, ship.exterior.global_position),
+		"your ship within the link's reach")
+	for press: Array in [[&"to_base", "to the base"], [&"to_ship", "to the ship"]]:
+		var button := back.link.get_node("Panel_%s" % press[0]) as ReadoutPanel
+		_check(_stand_facing(avatar, button.global_position, back.link.global_basis),
+			"somewhere to stand facing the %s button" % press[0])
+		await _frames(4)
+		_check(avatar.interactor.current() == button, "aimed, the %s button is the one offered: %s"
+			% [press[0], button.prompt_text()])
+		var ship_was := ship.quantum.store.amount
+		var base_was := back.quantum.store.amount
+		if avatar.interactor.current() != null:
+			avatar.interactor.current().interact(avatar)
+		var to_ship: bool = press[0] == &"to_ship"
+		var moved: int = ship.quantum.store.amount - ship_was if to_ship else back.quantum.store.amount - base_was
+		_check(moved == HabitatValues.LINK_STEP and ship.quantum.store.amount + back.quantum.store.amount \
+			== ship_was + base_was, "the link moves %d QE %s, none lost" % [HabitatValues.LINK_STEP, press[1]])
+	# The panel at eye height, as you come up to it.
+	_check(_stand_facing(avatar, back.link.global_transform * Vector3(0, LinkPanel.PEDESTAL.y + 0.1, 0),
+		back.link.global_basis), "somewhere to stand facing the link panel")
+	await _frames(5)
+	print("screen  %s" % " / ".join(back.link.lines()))
+	await _shot("link_panel")
+	avatar.move_aboard(ship.interior, ship.wake_spots()[0])
+	scene.call("board", ship, true)
+	await _frames(2)
+	_check(scene.get("home") == ship, "and back aboard your ship")
 
 	print("probe   done, %d fails" % _fails)
 	quit(_fails)
