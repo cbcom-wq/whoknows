@@ -107,10 +107,26 @@ func plant(kind: StringName, r: Planting.Result, surface: PlantSurface) -> Base:
 		base.begin_unfold(i)
 	return base
 
-## What a new module of `site` keeps from the ground it was planted on. The
-## drill fills this in (Task 13).
-func _on_planted(_site: BaseSite, _index: int, _surface: PlantSurface) -> void:
-	pass
+## What a new module of `site` keeps from the ground it was planted on: a
+## drill, its rock's ore and the time it started (§6.2).
+func _on_planted(site: BaseSite, index: int, surface: PlantSurface) -> void:
+	if site.modules[index]["kind"] == ModuleCatalog.DRILL:
+		site.modules[index]["drill"] = DrillYield.fresh(surface.ore(), clock.call() if clock.is_valid() else 0.0)
+
+## True if a drill on `site_id`'s base has run QUIET_AFTER and stands within
+## QUIET_RADIUS of `point` (engine space): its herds have moved away (§8.4).
+func quiet(site_id: StringName, point: Vector3) -> bool:
+	var site := on(site_id)
+	if site == null:
+		return false
+	var frame := frame_of(site)
+	for i in site.drills():
+		var drill: Dictionary = site.modules[i]["drill"]
+		if float(drill.get("ran", 0.0)) < HabitatValues.QUIET_AFTER:
+			continue
+		if (frame * site.centre_of(i)).distance_to(point) <= HabitatValues.QUIET_RADIUS:
+			return true
+	return false
 
 func wake(id: StringName) -> Base:
 	if _awake.has(id):
@@ -124,6 +140,7 @@ func _wake(site: BaseSite, unfolding: int) -> Base:
 		# Stays asleep, whole, and tries again at the next check; no log, it would repeat every second.
 		return null
 	var base := Base.make(site, slot, NodePath("../%s" % home.get_path_to(outside)), unfolding)
+	base.clock = clock
 	home.add_child(base)
 	base.place(frame_of(site))
 	base.restore_inside()

@@ -414,16 +414,18 @@ static func _leg_stamp() -> PackedFloat32Array:
 	return _gain(x, 0.7)
 
 ## A drill working (§6.2, §8.5): a low grinding loop, quieter than the air
-## handler. 60 and 90 Hz both fit whole cycles in 3 s, so it loops cleanly.
+## handler. 60 and 90 Hz both fit whole cycles in 3 s; the noise is run on
+## past the loop and crossfaded into its start, so there is no seam.
 static func _drill_hum() -> PackedFloat32Array:
 	var n := _len(3.0)
-	var grind := _lowpass(_noise(n, 37), 180.0)
+	var total := n + n / 10
+	var grind := _lowpass(_noise(total, 37), 180.0)
 	var x := PackedFloat32Array()
-	x.resize(n)
-	for i in n:
+	x.resize(total)
+	for i in total:
 		var t := float(i) / MIX_RATE
 		x[i] = sin(TAU * 60.0 * t) * 0.5 + sin(TAU * 90.0 * t) * 0.25 + grind[i] * 1.2
-	return _gain(x, 0.18)
+	return _gain(_loopable(x, n), 0.18)
 
 ## Converting (spec §13): a rising shimmer -- filtered noise swept up and a
 ## sine gliding up an octave and more over the convert's 1.2 s -- ending in a

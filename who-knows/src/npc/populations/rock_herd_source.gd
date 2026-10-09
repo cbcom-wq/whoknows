@@ -11,6 +11,10 @@ var stream: AsteroidStream
 var world_seed := 0
 ## A rock's herds are offered while its surface is within this of an anchor.
 var reach := 350.0 + NpcDirector.DEMOTE_MARGIN
+## Whether a point on a rock is too near a working drill for a herd to keep
+## its home there (habitat modules spec §8.4): a Callable (site id, engine
+## point) -> bool, or none.
+var quiet: Callable
 
 var _sites := {}   # rock id -> RockSite
 
@@ -34,6 +38,8 @@ func records(director: NpcDirector) -> Array:
 				_sites[id] = site
 			site.director = director
 			for r in site.records:
+				if quiet.is_valid() and quiet.call(site.id, site.frame() * r.home):
+					continue
 				out.append([r, site])
 	for id in _sites.keys():
 		if not seen.has(id):

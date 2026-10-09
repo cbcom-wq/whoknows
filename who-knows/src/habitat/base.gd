@@ -25,6 +25,12 @@ var _stamped := false
 ## other off.
 var _thud: AudioStreamPlayer3D
 var _fold: AudioStreamPlayer3D
+## Seconds of play, for the drills (Bases.clock).
+var clock: Callable
+var _credit_in := 0.0
+var _hum_in := 0.0
+## The drill heard from inside (§8.5): quieter than the ship's own hum.
+var _grind: AudioStreamPlayer
 
 ## A base for `p_site` in interior slot `slot`, its outside `p_outside_path`
 ## (relative to the base), unfolding module `p_unfolding` if not -1. Add it to
@@ -93,12 +99,25 @@ func _ready() -> void:
 	exterior.add_child(exterior_look)
 	_thud = _player("Thud")
 	_fold = _player("Fold")
+	_grind = AudioStreamPlayer.new()
+	_grind.name = "Grind"
+	_grind.bus = AudioBuses.SHIP
+	_grind.volume_db = -22.0
+	add_child(_grind)
 	set_own(false)
 	rebuild()
 
 func _physics_process(delta: float) -> void:
 	if unfolding >= 0:
 		tick_unfold(delta)
+	_credit_in -= delta
+	if _credit_in <= 0.0:
+		_credit_in = HabitatValues.CREDIT_EVERY
+		credit_drills()
+	_hum_in -= delta
+	if _hum_in <= 0.0:
+		_hum_in = HabitatValues.HUM_EVERY
+		hum()
 
 ## Stands its frame at `frame` (engine space): cell (0, 0, 0)'s centre, up y.
 func place(frame: Transform3D) -> void:
@@ -172,6 +191,34 @@ func stamp(index: int) -> void:
 		HabitatValues.STAMP_RADIUS, exterior, site.site_id), 0.5)
 	_play(_thud, &"leg_stamp", at)
 
+## Credits every drill that is not unfolding up to now. Returns what it paid.
+func credit_drills() -> int:
+	if not clock.is_valid() or quantum == null or quantum.store == null:
+		return 0
+	var now: float = clock.call()
+	var paid := 0
+	for i in site.drills():
+		if i != unfolding:
+			paid += DrillYield.credit(site.modules[i]["drill"], now, quantum.store)
+	return paid
+
+## Each working drill's hum through the rock (§8.4): too faint to startle.
+func hum() -> void:
+	for i in site.drills():
+		if i == unfolding:
+			continue
+		var at := exterior.global_transform * site.centre_of(i)
+		StimulusBus.send(exterior, Stimulus.make(Stimulus.VIBRATION, at, HabitatValues.HUM_STRENGTH,
+			HabitatValues.HUM_RADIUS, exterior, site.site_id), HabitatValues.HUM_EVERY)
+	var working := site.drills().any(func(i: int) -> bool: return i != unfolding)
+	if own and working and not _grind.playing:
+		var s := Synth.sound(&"drill_hum")
+		if s != null:
+			_grind.stream = s
+			_grind.play()
+	elif (not own or not working) and _grind.playing:
+		_grind.stop()
+
 func _player(player_name: String) -> AudioStreamPlayer3D:
 	var p := AudioStreamPlayer3D.new()
 	p.name = player_name
@@ -216,3 +263,5 @@ func restore_inside() -> void:
 	for d in site.items:
 		if d is Dictionary:
 			restore_item(d)
+	# The time it slept: a drill earns as if you were there.
+	credit_drills()

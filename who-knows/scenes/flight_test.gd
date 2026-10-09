@@ -672,7 +672,9 @@ func _wire_npcs() -> void:
 	exterior_npcs.catalog = _starter.npc_director.catalog
 	exterior_npcs.bus = npc_bus
 	exterior_npcs.cameras = [aboard.chase_camera, aboard.canopy_camera, _avatar.camera]
-	exterior_npcs.sources = [RockHerdSource.new(_stream)]
+	var herds := RockHerdSource.new(_stream)
+	herds.quiet = bases.quiet
+	exterior_npcs.sources = [herds]
 	exterior_npcs.ledger = npc_ledger
 	add_child(exterior_npcs)
 	npc_debug = NpcDebug.new()
