@@ -41,6 +41,7 @@ const PAINTING_FILES := [
 	"res://src/ship/airlock/airlock_room.gd",
 	"res://src/ship/airlock/airlock_show.gd",
 	"res://src/habitat/base_exterior.gd",
+	"res://src/habitat/package_ghost.gd",
 	"res://src/world/rock_mesh.gd",
 	"res://src/world/asteroid_recipe.gd",
 	"res://src/world/asteroid_stream.gd",

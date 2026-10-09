@@ -27,6 +27,8 @@ var fleet: Fleet
 var aboard: Ship
 ## On a spacewalk, which ship your suit belongs to (§4.3).
 var suit_tie: SuitTie
+## Every base (habitat modules spec §9.1).
+var bases: Bases
 ## Every ship the game can build, from data/ships (ship library spec §3.2):
 ## loaded first in _ready, or by _starter_grid() on a bare instance.
 var library: ShipLibrary
@@ -121,6 +123,7 @@ func _ready() -> void:
 	if resumed:
 		_starter.restore_aboard(starter_part)
 	_make_fleet()
+	_make_bases()
 	_make_suit_tie()
 	_place_avatar_on_deck()
 	_set_interior_mood()
@@ -160,6 +163,19 @@ func _make_fleet() -> void:
 	add_child(fleet)
 	fleet.adopt(_starter)
 	aboard = _starter
+
+## Every base (habitat modules spec §9.3): sharing the fleet's interior slots,
+## and play time as the drills' clock. Its system is set in _wire_universe,
+## once the system exists.
+func _make_bases() -> void:
+	bases = Bases.new()
+	bases.name = "Bases"
+	bases.home = self
+	bases.outside = $Outside
+	bases.universe = _universe
+	bases.slots = fleet.slots
+	bases.clock = func() -> float: return play_time
+	add_child(bases)
 
 ## Everything one ship needs from the game, once (many ships spec §5.2): every
 ## ship at the end of _ready, and each the fleet takes in after.
@@ -497,6 +513,7 @@ func _wire_universe(saved: Dictionary) -> void:
 	# first belt's first group: the universe's origin goes there, and the
 	# rocks around it load before the first frame.
 	system = SystemRecipe.from_seed(_stream.seed)
+	bases.system = system.seed
 	_stream.shapes = system.asteroid_shapes()
 	var start := system.entry()
 	var same_world := resumed and _same_generator(saved, "asteroids") and _same_generator(saved, "system")
@@ -917,6 +934,7 @@ func _wire_saving() -> void:
 	save_gate.add_source(func() -> String: return "sitting" if _director.is_moving() else "")
 	save_gate.add_source(_fleet_busy)
 	save_gate.add_source(_avatar.busy)
+	save_gate.add_source(func() -> String: return bases.busy())
 	save_gate.settle()
 	_saved_tag = SavedTag.new()
 	_saved_tag.name = "SavedTag"

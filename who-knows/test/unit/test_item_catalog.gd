@@ -169,10 +169,10 @@ func test_the_salvage_set_stows_and_sits_in_the_hand_as_authored():
 		assert_almost_eq(def.grip_point, want[1], Vector3.ONE * 0.0001, "%s's grip point" % id)
 		assert_almost_eq(def.hold_rotation, want[2], Vector3.ONE * 0.0001, "%s's hold rotation" % id)
 
-## The sixteen aboard, the six salvage kinds and the repair torch (health and
-## damage spec §8.1). Ruling R4: the hose nozzle will make it 24.
-func test_the_catalogue_has_23_kinds():
-	assert_eq(_cat.ids().size(), 23)
+## The sixteen aboard, the six salvage kinds, the repair torch (health and
+## damage spec §8.1) and the three module packages (habitat modules spec §4.1).
+func test_the_catalogue_has_26_kinds():
+	assert_eq(_cat.ids().size(), 26)
 
 ## Health and damage spec §8.1, read back from its .tres.
 func test_the_repair_torch():
