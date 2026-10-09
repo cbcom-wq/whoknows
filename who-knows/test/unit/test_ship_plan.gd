@@ -163,3 +163,77 @@ func test_the_header_comes_first():
 
 func test_the_file_names_itself_in_errors():
 	_refused(ShipPlan.parse(HEAD + "z 0  H\n", _cat, "hauler.plan"), "hauler.plan:4:1:", "a row before any deck line")
+
+const OUT_DIR := "user://test_ship_plan"
+
+## The starter as to_text prints it: the design skill's worked example.
+const STARTER_PLAN := """ship   starter
+name   Starter shuttle
+desc   Two decks: a bridge with a cockpit pod, five rooms, an airlock aft.
+
+deck y=2    x: -1 .. 1
+z -2  Fk  Fk  Fk
+z -1  Fh  Fh  Fh
+z 0   Fh  Fh  Fh
+z 1   Fh  Fh  Fh
+z 2   Fh  Fh  Fh
+z 3   Fk4 Fk4 Fk4
+
+deck y=1    x: -3 .. 3
+z -4  .  Rv R> W  R< Rv .
+z -3  .  R^ W  H  W  R^ .
+z -2  .  Rb H  H  H  Rb .
+z -1  .  H  H  K  H  H  .
+z 0   .  H  Qc Qc Qc H  .
+z 1   Fs H  G  H  G  H  Fs
+z 2   .  H  H  H  H  H  .
+z 3   .  W4 T  T  T  W4 .
+
+deck y=0    x: -3 .. 3
+z -4  .   .   C   C   C   .   .
+z -3  .   W3  Cp4 S   D   W1  .
+z -2  .   H   D   Qk4 D   H   .
+z -1  .   H   D   D   Qm  H   .
+z 0   .   H   Bk  D   Gy  H   .
+z 1   H   H   Bk  D   Wr  H   H
+z 2   H   H   Ba  D   Cl  H   H
+z 3   T   H   B   A   B   H   T
+
+deck y=-1    x: 0 .. 0
+z -3  Fh2
+z -2  Fh2
+z -1  Fh2
+z 0   Fh2
+z 1   Fh2
+z 2   Fh2
+"""
+
+func _lf(s: String) -> String:
+	return s.replace("\r\n", "\n")
+
+func _starter_text() -> String:
+	var lib := ShipLibrary.load_from_dir()
+	return ShipPlan.to_text(&"starter", lib.name_of(&"starter"), lib.description_of(&"starter"), lib.grid(&"starter"))
+
+func test_the_starter_prints_as_the_skill_shows_it():
+	assert_eq(_starter_text(), STARTER_PLAN)
+
+func test_the_starter_round_trips_byte_for_byte():
+	var back := ShipPlan.parse(_starter_text(), _cat)
+	DirAccess.make_dir_recursive_absolute(OUT_DIR)
+	var out := OUT_DIR + "/starter.json"
+	assert_eq(ShipLibrary.write(out, back["id"], back["name"], back["description"], back["grid"]), OK)
+	assert_eq(_lf(FileAccess.get_file_as_string(out)), _lf(FileAccess.get_file_as_string("res://data/ships/starter.json")))
+
+func test_storeys_of_different_extents_print_back():
+	var text := HEAD + "\ndeck y=1    x: 1 .. 1\nz 0  K\n\ndeck y=0    x: 0 .. 2\nz -1  . C .\nz 0   H D H\n"
+	var found := ShipPlan.parse(text, _cat)
+	var printed := ShipPlan.to_text(found["id"], found["name"], found["description"], found["grid"])
+	assert_eq(printed, text)
+
+func test_a_name_with_a_hash_and_an_accent_round_trips():
+	var grid: ShipGrid = ShipPlan.parse(HEAD + "deck y=0  x: 0 .. 0\nz 0  H\n", _cat)["grid"]
+	var text := ShipPlan.to_text(&"elan", "Élan #2", "Fast — and #1", grid)
+	var back := ShipPlan.parse(text, _cat)
+	assert_eq(back["name"], "Élan #2")
+	assert_eq(back["description"], "Fast — and #1")

@@ -221,3 +221,57 @@ static func _tokens(line: String) -> Array:
 		elif not gap and start < 0:
 			start = i
 	return out
+
+## `grid` drawn as a plan in default tokens under its header: every storey from
+## the top down, cropped to the ship's extent on it, every z in that a row,
+## the tokens padded into columns. parse() reads it back to the same grid.
+static func to_text(id: StringName, ship_name: String, description: String, grid: ShipGrid) -> String:
+	var lines := PackedStringArray(["ship   %s" % id, "name   %s" % ship_name, "desc   %s" % description])
+	var storeys := {}
+	for c: Vector3i in grid.coords():
+		storeys[c.y] = true
+	var ys: Array = storeys.keys()
+	ys.sort()
+	ys.reverse()
+	for y: int in ys:
+		var first := true
+		var x0 := 0
+		var x1 := 0
+		var z0 := 0
+		var z1 := 0
+		var width := 1
+		for c: Vector3i in grid.coords():
+			if c.y != y:
+				continue
+			if first:
+				x0 = c.x
+				x1 = c.x
+				z0 = c.z
+				z1 = c.z
+				first = false
+			x0 = mini(x0, c.x)
+			x1 = maxi(x1, c.x)
+			z0 = mini(z0, c.z)
+			z1 = maxi(z1, c.z)
+			width = maxi(width, _token_at(grid, c).length())
+		var label := 0
+		for z in range(z0, z1 + 1):
+			label = maxi(label, ("z %d" % z).length())
+		lines.append("")
+		lines.append("deck y=%d    x: %d .. %d" % [y, x0, x1])
+		for z in range(z0, z1 + 1):
+			var row := PackedStringArray()
+			for x in range(x0, x1 + 1):
+				row.append(_token_at(grid, Vector3i(x, y, z)).rpad(width))
+			lines.append((("z %d" % z).rpad(label) + "  " + " ".join(row)).strip_edges(false, true))
+	return "\n".join(lines) + "\n"
+
+static func _token_at(grid: ShipGrid, c: Vector3i) -> String:
+	if not grid.has_block(c):
+		return EMPTY
+	var b := grid.get_block(c)
+	var token := default_token(b.block_id, b.orientation)
+	if token == "":
+		push_error("ShipPlan: %s has no token" % b.block_id)
+		return "?"
+	return token
