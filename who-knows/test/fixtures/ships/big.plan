@@ -1,0 +1,179 @@
+ship   big
+name   Big
+desc   A stretched starter.
+
+deck y=2    x: -1 .. 1
+z -2  Fk  Fk  Fk
+z -1  Fh  Fh  Fh
+z 0   Fh  Fh  Fh
+z 1   Fh  Fh  Fh
+z 2   Fh  Fh  Fh
+z 3   Fh  Fh  Fh
+z 4   Fh  Fh  Fh
+z 5   Fh  Fh  Fh
+z 6   Fh  Fh  Fh
+z 7   Fh  Fh  Fh
+z 8   Fh  Fh  Fh
+z 9   Fh  Fh  Fh
+z 10  Fh  Fh  Fh
+z 11  Fh  Fh  Fh
+z 12  Fh  Fh  Fh
+z 13  Fh  Fh  Fh
+z 14  Fh  Fh  Fh
+z 15  Fh  Fh  Fh
+z 16  Fh  Fh  Fh
+z 17  Fh  Fh  Fh
+z 18  Fh  Fh  Fh
+z 19  Fh  Fh  Fh
+z 20  Fh  Fh  Fh
+z 21  Fh  Fh  Fh
+z 22  Fh  Fh  Fh
+z 23  Fh  Fh  Fh
+z 24  Fh  Fh  Fh
+z 25  Fh  Fh  Fh
+z 26  Fh  Fh  Fh
+z 27  Fh  Fh  Fh
+z 28  Fh  Fh  Fh
+z 29  Fh  Fh  Fh
+z 30  Fh  Fh  Fh
+z 31  Fh  Fh  Fh
+z 32  Fh  Fh  Fh
+z 33  Fh  Fh  Fh
+z 34  Fh  Fh  Fh
+z 35  Fh  Fh  Fh
+z 36  Fh  Fh  Fh
+z 37  Fh  Fh  Fh
+z 38  Fk4 Fk4 Fk4
+
+deck y=1    x: -3 .. 3
+z -4  .  Rv R> W  R< Rv .
+z -3  .  R^ W  H  W  R^ .
+z -2  .  Rb H  H  H  Rb .
+z -1  .  H  H  K  H  H  .
+z 0   .  H  Qc Qc Qc H  .
+z 1   .  H  H  H  H  H  .
+z 2   .  H  H  H  H  H  .
+z 3   .  H  H  H  H  H  .
+z 4   .  H  H  H  H  H  .
+z 5   .  H  G  H  G  H  .
+z 6   .  H  Qc Qc Qc H  .
+z 7   .  H  H  H  H  H  .
+z 8   .  H  H  H  H  H  .
+z 9   .  H  H  H  H  H  .
+z 10  .  H  H  H  H  H  .
+z 11  .  H  G  H  G  H  .
+z 12  .  H  Qc Qc Qc H  .
+z 13  .  H  H  H  H  H  .
+z 14  .  H  H  H  H  H  .
+z 15  .  H  H  H  H  H  .
+z 16  .  H  H  H  H  H  .
+z 17  .  H  G  H  G  H  .
+z 18  .  H  Qc Qc Qc H  .
+z 19  .  H  H  H  H  H  .
+z 20  .  H  H  H  H  H  .
+z 21  .  H  H  H  H  H  .
+z 22  .  H  H  H  H  H  .
+z 23  .  H  G  H  G  H  .
+z 24  .  H  Qc Qc Qc H  .
+z 25  .  H  H  H  H  H  .
+z 26  .  H  H  H  H  H  .
+z 27  .  H  H  H  H  H  .
+z 28  .  H  H  H  H  H  .
+z 29  .  H  G  H  G  H  .
+z 30  .  H  Qc Qc Qc H  .
+z 31  .  H  H  H  H  H  .
+z 32  .  H  H  H  H  H  .
+z 33  .  H  H  H  H  H  .
+z 34  .  H  H  H  H  H  .
+z 35  .  H  Qc Qc Qc H  .
+z 36  Fs H  G  H  G  H  Fs
+z 37  .  H  H  H  H  H  .
+z 38  .  W4 T  T  T  W4 .
+
+deck y=0    x: -3 .. 3
+z -4  .   .   C   C   C   .   .
+z -3  .   W3  Cp4 S   D   W1  .
+z -2  .   H   D   Qk4 D   H   .
+z -1  .   H   D   D   Qm  H   .
+z 0   .   H   Bk  D   Gy  H   .
+z 1   .   H   Ba  D   Wr  H   .
+z 2   .   H   D   D   D   H   .
+z 3   .   H   Bk  D   Gy  H   .
+z 4   .   H   Ba  D   Wr  H   .
+z 5   .   H   D   D   D   H   .
+z 6   .   H   Bk  D   Gy  H   .
+z 7   .   H   Ba  D   Wr  H   .
+z 8   .   H   D   D   D   H   .
+z 9   .   H   Bk  D   Gy  H   .
+z 10  .   H   Ba  D   Wr  H   .
+z 11  .   H   D   D   D   H   .
+z 12  .   H   Bk  D   Gy  H   .
+z 13  .   H   Ba  D   Wr  H   .
+z 14  .   H   D   D   D   H   .
+z 15  .   H   Bk  D   Gy  H   .
+z 16  .   H   Ba  D   Wr  H   .
+z 17  .   H   Qk4 D   D   H   .
+z 18  .   H   Bk  D   Gy  H   .
+z 19  .   H   Ba  D   Wr  H   .
+z 20  .   H   D   D   D   H   .
+z 21  .   H   Bk  D   Gy  H   .
+z 22  .   H   Ba  D   Wr  H   .
+z 23  .   H   D   D   D   H   .
+z 24  .   H   Bk  D   Gy  H   .
+z 25  .   H   Ba  D   Wr  H   .
+z 26  .   H   D   D   D   H   .
+z 27  .   H   Bk  D   Gy  H   .
+z 28  .   H   Ba  D   Wr  H   .
+z 29  .   H   D   D   D   H   .
+z 30  .   H   Bk  D   Gy  H   .
+z 31  .   H   Ba  D   Wr  H   .
+z 32  .   H   D   D   D   H   .
+z 33  .   H   Bk  D   Gy  H   .
+z 34  .   H   Ba  D   Wr  H   .
+z 35  .   H   Bk  D   Gy  H   .
+z 36  H   H   Bk  D   Wr  H   H
+z 37  H   H   Ba  D   Cl  H   H
+z 38  T   H   B   A   B   H   T
+
+deck y=-1    x: 0 .. 0
+z -3  Fh2
+z -2  Fh2
+z -1  Fh2
+z 0   Fh2
+z 1   Fh2
+z 2   Fh2
+z 3   Fh2
+z 4   Fh2
+z 5   Fh2
+z 6   Fh2
+z 7   Fh2
+z 8   Fh2
+z 9   Fh2
+z 10  Fh2
+z 11  Fh2
+z 12  Fh2
+z 13  Fh2
+z 14  Fh2
+z 15  Fh2
+z 16  Fh2
+z 17  Fh2
+z 18  Fh2
+z 19  Fh2
+z 20  Fh2
+z 21  Fh2
+z 22  Fh2
+z 23  Fh2
+z 24  Fh2
+z 25  Fh2
+z 26  Fh2
+z 27  Fh2
+z 28  Fh2
+z 29  Fh2
+z 30  Fh2
+z 31  Fh2
+z 32  Fh2
+z 33  Fh2
+z 34  Fh2
+z 35  Fh2
+z 36  Fh2
+z 37  Fh2

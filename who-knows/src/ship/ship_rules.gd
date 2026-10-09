@@ -17,6 +17,9 @@ const IMBALANCE_MOST := 0.05
 ## Power made must beat power drawn by this much, so a ship we give the player
 ## never browns out at its first addition.
 const POWER_HEADROOM := 1.1
+## The most blocks a ship may have (ship designer spec §2.6): the owner's first
+## limit, "and see how that goes".
+const MOST_BLOCKS := 600
 ## The validator's issues that name a cell.
 const _CELL_ISSUES: Array[StringName] = [&"ALL_CONNECTED", &"MOUNTS_REACHABLE", &"AIRLOCK_HATCH"]
 const _AXES: Array[String] = ["pitch", "yaw", "roll"]
@@ -33,6 +36,8 @@ static func check(grid: ShipGrid, catalog: BlockCatalog) -> Dictionary:
 			rules.append(item(&"UNKNOWN_BLOCK", "no block called \"%s\" in data/blocks" % id, coord))
 	if not rules.is_empty():
 		return {"rules": rules, "notes": notes}
+	if grid.size() > MOST_BLOCKS:
+		rules.append(item(&"TOO_BIG", "%d blocks: a ship may have %d" % [grid.size(), MOST_BLOCKS]))
 	for issue in ShipValidator.validate(grid, catalog):
 		var cell: Variant = null
 		if _CELL_ISSUES.has(issue.code):
