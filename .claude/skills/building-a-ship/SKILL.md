@@ -16,6 +16,8 @@ and looks right. Green tests prove structure, not looks or feel.
 
 The worked example is the starter shuttle: `who-knows/data/ships/starter.json`, with
 `starter.md` beside it explaining every block that isn't obvious. Read both before you design.
+`ship_plan.gd` (beside this file) prints any ship as a deck plan and turns a plan into a ship file;
+designing one from a brief is the `designing-a-ship` skill's, and the `ship-designer` agent's.
 
 **Read first:** `CLAUDE.md` (the style guide is binding; the floating origin; no `#` comments in
 `.tscn`), `docs/design/visual-style.md` §3 and §6, and `reference.md` beside this file (blocks,
@@ -152,11 +154,12 @@ Do these in order. Each one names the check that proves it.
      - **a ghosted hull** (mask 0, at warp) is never lifted by the floor: it passes through
        everything on purpose, so do not give it a mask to "protect" it. The probe prints
        `worlds  hull is a space anchor yes; speed limit knows where it is yes`;
-8. **Run the full suite** (`who-knows/run_tests.ps1`). It takes **about 8 minutes**, longer than a
+8. **Run the full suite** (`who-knows/run_tests.ps1`). It takes **about 17 minutes**, longer than a
    single command's timeout: run it in the background, logged to a file, and wait for the end. Add
    ship-specific tests: launches, stats, rooms, and the pod and airlock present.
-9. **Probe the real scene:** run `ship_probe.gd` (in this folder) **without** `--headless`. It
-   prints:
+9. **Probe the real scene:** run `ship_probe.gd` (in this folder) **without** `--headless`.
+   `--ship <id or ship .json>` probes that ship instead of the starter (saving off); the two-ship
+   pass then parks the real starter beside it. It prints:
    - the validator, the stats, the `balance` line (each axis's imbalance as a share of authority,
      flagged `OVER 5%`), and the feel numbers;
    - any `rcs` whose exhaust is `BLOCKED`;
@@ -304,6 +307,10 @@ thrust.
 | A ship arriving straight at you | The first arrival flew in along its nose, toward the viewer: from the seat its wake hid behind it, and a 0.6 m wake was under a pixel from 400 m | A spawn comes in across your view (`SpawnSpot.arrival_line`, 60°) and turns to face you; judge effects outside at the distances they happen |
 | Measuring a hull by every mesh under it | The light beams are hidden meshes reaching 140 m ahead: the arrival's flash swallowed the view | Count only what shows (`WarpArrival.bounds_of`), or use `ExteriorBuilder.bounds()` where you have the ship |
 | A hull moved by something new, with its flight computer still steering | The arriving ship's RCS puffed all the way in, a dotted trail along its line | Anything that flies a hull for it rests the flight computer, as the warp and `WarpArrival` do (`FlightComputer._physics_process`) |
+| One quantum core for a big ship | A 600-block draft drew 92.8 MW against 36 made: the starter already draws 31.3 of its core's 36 | Count power while drawing; a second `quantum_core` beside the corridor (the plant runs any number); grav plating sparingly (1.5 MW each) |
+| RCS only at the bow of a long ship | A 43-row stretched starter turned 0.06 / 0.03 / 0.42 rad/s²: inertia grows with length squared | Rcs pairs at both ends; the lever arm is free authority |
+| 600 blocks | Probed, the worst view fell to 116 fps (109 with a second ship), under the 120 floor | `ShipRules.MOST_BLOCKS` is 400, which holds 121; a big ship costs frames |
+| Quitting a probe with its scene made but not in the tree | `--ship nope` printed its error, then the engine crashed on the way out (exit -1073741819, not 1) | Check arguments before `instantiate()`, as `ship_probe.gd` does |
 
 ## Not built yet (plan for it; don't assume it works)
 

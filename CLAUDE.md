@@ -37,6 +37,11 @@ If a name in the skill no longer exists, fix the skill. The owner asked for this
 `test_ship_catalog.gd` checks every one, and `.claude/skills/building-a-ship/ship_check.gd` checks a
 draft in seconds (`docs/superpowers/specs/2026-10-02-ship-library-design.md`).
 
+**A new ship is designed by the `ship-designer` agent** (`.claude/agents/ship-designer.md`, with
+the `designing-a-ship` skill): from a description or "be creative", start to finish, on its own
+branch `ship-<id>` in `D:/git/whoknows-ship-<id>`, never merged by the agent; at most 400 blocks
+(`docs/superpowers/specs/2026-10-09-ship-designer-design.md`).
+
 ## NPCs: use and keep the `building-an-npc` skill current
 
 `.claude/skills/building-an-npc/` is how NPCs are built here: creatures, droids, crew, and new

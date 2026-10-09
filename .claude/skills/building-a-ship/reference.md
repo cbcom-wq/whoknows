@@ -592,6 +592,30 @@ hull's layer, mask or freeze must check this as it does `warp.travelling()`. It 
 in the worst view (137 → 131); `test/probes/arrival_render.gd` renders it from the seat, the chase
 view and side-on.
 
+## Deck plans (`ShipPlan`, `ship_plan.gd`)
+
+`ShipPlan.parse(text, catalog, file) -> {id, name, description, grid, notes} | {error}` and
+`ShipPlan.to_text(id, name, description, grid) -> String`, exact both ways
+(`docs/superpowers/specs/2026-10-09-ship-designer-design.md` §4). An error is
+`<file>:<line>:<column>: <what>`. The token table is `ShipPlan.BASE` (the `designing-a-ship` skill
+prints it): a block's base token, then its orientation unless 0; rcs pushes are arrows (`R<`, `R>`,
+`R^`, `Rv`, `Rb`). `ShipLibrary.resolve(what)` reads a library id or a ship file.
+`ShipRules.MOST_BLOCKS` is 400 (`TOO_BIG`). `flight_test.gd`'s `starter_ship` starts you aboard any
+ship, saving off; `ProbeArgs` reads `--ship` for the probe and `arrival_render.gd`.
+
+| Command | |
+|---|---|
+| `ship_plan.gd -- to-plan <id or ship .json> <out.plan>` | print a ship as a plan |
+| `ship_plan.gd -- to-json <plan> <out\<id>.json>` | a plan to a ship file, refusing with line:column |
+| `ship_probe.gd -- <out dir> --ship <id or ship .json>` | the probe on that ship |
+| `arrival_render.gd -- <out dir> --ship <id>` | that library ship arriving |
+
+**Measured at the limit** (`test/fixtures/ships/big.json`, 400 blocks, 351 t, a stretched starter
+with a second quantum core; `test_big_ship.gd`): rules 0.3 s, a spawn 1.2 s (accepted, guard 3 s),
+a save 42 KB; probe fps 286 standing, 138 seated, 133 seated with both light groups, **121 seated
+by a rock with both** (the starter 130), 208 and 221 in the chase views, 122 with a second ship
+300 m off. At 600 blocks it was 116 and 109, which is why the limit is 400.
+
 ## Saving (`docs/superpowers/specs/2026-09-26-saving-design.md`)
 
 One autosaved game at `user://save/game.json`, JSON, written only when `SaveGate` says it is calm.
@@ -715,9 +739,13 @@ solid under it with no wiring. A ghosted hull (mask 0, at warp) is never lifted.
   <abs or res:// path>.json` (exit 0: no rule broken).
 - **After adding a `class_name`:** `<godot> --headless --path who-knows --import`.
 - **Probe:** `<godot> --path who-knows --resolution 1280x720 --script <abs>/ship_probe.gd --
-  <abs out dir>`. Use absolute paths, and don't pass `--headless`: headless never renders or
-  compiles shaders. In a worktree, give the worktree's copy of the script.
-- **The full suite** takes about 8 minutes: run it in the background, logged to a file.
+  <abs out dir> [--ship <id or ship .json>]`. Use absolute paths, and don't pass `--headless`:
+  headless never renders or compiles shaders. In a worktree, give the worktree's copy of the
+  script, and run `--import` there once first.
+- **Deck plans:** `<godot> --headless --path who-knows --script <abs>/ship_plan.gd -- to-plan
+  <id or ship .json> <abs out.plan>`, and `-- to-json <abs plan> <abs out\<id>.json>`.
+- **The full suite** takes about 17 minutes (2,033 tests on 2026-10-08): run it in the background,
+  logged to a file.
 - **Damage probes** (`who-knows/test/probes/`, run like the ship probe):
   - `damage_review.gd`: the renders to show the owner for any damage work (step 10): the port
     sections at 70%, 35% and 0% from outside, the cabin at 60%, 35% and 15% HULL;

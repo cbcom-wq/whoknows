@@ -1,7 +1,8 @@
 # Ship designer — an agent that designs, builds and proves a ship
 
 **Date:** 2026-10-09
-**Status:** Designed with the owner on 2026-10-09; amended while planning the same day (§9).
+**Status:** Designed with the owner on 2026-10-09; amended while planning the same day (§9);
+built 2026-10-09 on branch `ship-designer` (§11).
 **Project 3 of 3** toward a ship-designer agent (many ships spec §1.2). Projects 1 (many ships,
 `docs/superpowers/specs/2026-10-02-many-ships-design.md`) and 2 (the ship library,
 `docs/superpowers/specs/2026-10-02-ship-library-design.md`) are built and merged.
@@ -332,3 +333,45 @@ starter 0.3 s).
 - **Ladders that climb** and so walkable multi-level ships (§2.8).
 - **A shipyard in the game** or player-drawn plans: the plan format may serve one later.
 - **NPC ships flying themselves:** the arrival is reusable, the pilot is not built.
+
+## 11. What was built (2026-10-09)
+
+Built natively from `docs/superpowers/plans/2026-10-09-ship-designer.md` (11 tasks; the 11th is
+acceptance, after the review).
+
+- **`ShipPlan`** (`src/ship/ship_plan.gd`): the tokens (every block and orientation one token;
+  `R8` and `W0` are refused with the token meant), `parse` (every refusal of §4.3 with
+  file:line:column, comments, CRLF and tabs), `to_text`. The starter prints as the design skill
+  shows it and round-trips byte for byte; 35 tests.
+- **`ship_plan.gd`** beside `ship_check.gd`, and `ShipLibrary.resolve` (an id or a ship file).
+  `to-plan starter` then `to-json` reproduces `starter.json` exactly (`fc /b`).
+- **`TOO_BIG`** and `ShipRules.MOST_BLOCKS`, now **400** (§9); the size fixture
+  `test/fixtures/ships/big.plan` and `big.json` (400 blocks, 351 t, a second quantum core), and
+  `test_big_ship.gd`: as big as a ship may be, its plan, no rule broken in under 3 s, one block more
+  is `TOO_BIG`, a spawn under 3 s and a save under 256 KB, usable. The usable check is shared with
+  the catalog test (`test/unit/helpers/ship_use.gd`).
+- **`starter_ship`** on the flight scene, saving off for anything but the starter; an unknown ship
+  starts you in the starter with one error.
+- **`--ship`** on the probe (an id or a ship file; checked before the scene is made) and on the
+  arrival render (a library id); `ProbeArgs`. The probe's two-ship pass parks the real starter
+  beside the ship probed.
+- **The `designing-a-ship` skill** and **the `ship-designer` agent**; the ship skill, its
+  reference, and `CLAUDE.md` name them.
+
+**Figures at 400 blocks** (probe, windowed, this machine): 286 fps standing, 138 seated, 133 seated
+with both light groups, 121 seated by a rock with both (the starter 130 the same session), 208
+and 221 in the chase views, 122 with a second ship 300 m off. Rules 0.3 s, a spawn 1.2 s, a save
+42 KB.
+
+**Rulings made in the build** (the ledger's):
+
+- The skill's `task-start`/`task-done` scripts cannot run under the worktree guard; each task's
+  final test run was made by hand and ledgered.
+- Script `.uid` files the plan's commit lists missed (`test_ship_plan.gd`, and `arrival_render.gd`
+  since the ship library) were committed: the repository tracks every one.
+- The probe checks `--ship` before making the scene, not after as the plan had it: quitting with
+  the scene made but never in the tree crashed the engine on the way out (exit -1073741819, not 1).
+- The limit went from 600 to 400 (the owner's call, §9); the skill and the agent say 400 where
+  the plan's text said 600.
+
+**Acceptance:** not yet run (Task 11).
