@@ -6,7 +6,10 @@ extends SceneTree
 # --headless so it renders (and shaders compile):
 #
 #   godot --path who-knows --resolution 1280x720 \
-#     --script <abs path>/ship_probe.gd -- <abs out dir> [scene path]
+#     --script <abs path>/ship_probe.gd -- <abs out dir> [scene path] [--ship <id or ship .json>]
+#
+# --ship probes that ship instead of the starter (ship designer spec §7.2): a
+# library id, or a ship file, such as a draft not yet in the library.
 #
 # The scene defaults to res://scenes/flight_test.tscn. It must hold a Ship at
 # Ship, with Interior/Avatar and Interior/PilotSeat, and a CameraDirector at
@@ -34,13 +37,26 @@ var _out := ""
 
 func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
-	_out = args[0]
+	var given := ProbeArgs.positional(args)
+	_out = given[0]
 	# Vsync would cap the frame rate at the monitor's; measure the real one.
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
-	var path := args[1] if args.size() > 1 else "res://scenes/flight_test.tscn"
+	var path := given[1] if given.size() > 1 else "res://scenes/flight_test.tscn"
+	# Checked before the scene is made: quitting with it never in the tree
+	# crashes the engine on the way out.
+	var ship := ProbeArgs.ship(args)
+	if ship != "":
+		var found := ShipLibrary.resolve(ship)
+		if found.has("error"):
+			print("ship    %s" % found["error"])
+			quit(1)
+			return
+		print("ship    probing %s: %s" % [found["id"], found["name"]])
 	var scene: Node = load(path).instantiate()
 	if &"save_enabled" in scene:
 		scene.save_enabled = false
+	if ship != "":
+		scene.starter_ship = ship
 	root.add_child(scene)
 	_run.call_deferred(scene)
 
@@ -268,7 +284,7 @@ func _fleet_pass(scene: Node) -> void:
 	var avatar: Avatar = scene.get_tree().get_first_node_in_group(Avatar.GROUP)
 	director.sit_now(first.seat)
 	var behind := first.exterior.global_transform * Vector3(0, 0, 300)
-	var second := fleet.spawn(scene.call("_starter_grid"), Transform3D(first.exterior.global_basis, behind))
+	var second := fleet.spawn(scene.library.grid(ShipLibrary.STARTER), Transform3D(first.exterior.global_basis, behind))
 	if await _park_by_a_rock(scene, first, 60.0):
 		second.exterior.global_position = first.exterior.global_transform * Vector3(0, 0, 300)
 		_lights(first, true, true)

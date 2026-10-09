@@ -8,15 +8,25 @@ extends SceneTree
 # arriving. Run it WITHOUT --headless:
 #
 #   godot --path who-knows --resolution 1280x720 \
-#     --script <abs path>/test/probes/arrival_render.gd -- <abs out dir>
+#     --script <abs path>/test/probes/arrival_render.gd -- <abs out dir> [--ship <library id>]
 #
-# Saving is off before the scene enters the tree, so the owner's game is never
-# touched.
+# --ship brings that library ship in instead of the starter (ship designer
+# spec §7.1): a library id, since it spawns through the F6 path. Saving is off
+# before the scene enters the tree, so the owner's game is never touched.
 
 var _out := ""
+var _ship := ShipLibrary.STARTER
 
 func _initialize() -> void:
-	_out = OS.get_cmdline_user_args()[0]
+	var args := OS.get_cmdline_user_args()
+	_out = ProbeArgs.positional(args)[0]
+	var ship := ProbeArgs.ship(args)
+	if ship != "":
+		if not ShipLibrary.load_from_dir().has(StringName(ship)):
+			print("arrival no library ship called \"%s\"" % ship)
+			quit(1)
+			return
+		_ship = StringName(ship)
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	var scene: Node = load("res://scenes/flight_test.tscn").instantiate()
 	scene.save_enabled = false
@@ -62,7 +72,7 @@ func _press(code: Key) -> void:
 func _watch(scene: Node, tag: String, side_on := false) -> void:
 	var fleet: Fleet = scene.get("fleet")
 	var start := Time.get_ticks_msec()
-	var said: String = scene.call("spawn_from_library", ShipLibrary.STARTER)
+	var said: String = scene.call("spawn_from_library", _ship)
 	print("arrival %s: %s" % [tag, said])
 	if not said.begins_with("SPAWNED"):
 		return
@@ -152,7 +162,7 @@ func _run(scene: Node) -> void:
 		# the spot behind you is.
 		await _park_by_a_rock(scene, starter, 150.0)
 		print("fps     %.0f the same, 150 m off it" % await _fps(2.0))
-		var said: String = scene.call("spawn_from_library", ShipLibrary.STARTER)
+		var said: String = scene.call("spawn_from_library", _ship)
 		print("fps     %.0f the same, a ship arriving (%s)" % [await _fps(1.4), said])
 	else:
 		print("fps     no big rock in range")
