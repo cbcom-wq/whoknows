@@ -73,6 +73,12 @@ var items: Node3D
 var item_catalog: ItemCatalog
 ## One MachineCycle per machine, by the machine's cell, across rebuilds.
 var cycles: Dictionary = {}   # Vector3i -> MachineCycle
+## How full a new store starts (spec §3.2): half aboard a ship; a base's
+## starts empty (habitat modules spec §6.1).
+var start_fraction := 0.5
+## False for a base's hub terminal (habitat modules spec §6.1): it converts and
+## charges, never makes.
+var can_make := true
 
 var _last_state: StringName = &""
 var _makeable: Array = []
@@ -101,7 +107,8 @@ func bind(new_cores: Array[QuantumCore], new_machines: Array[QuantumMachine], st
 	cores = new_cores
 	machines = new_machines
 	if store == null:
-		store = QuantumStore.new(stats.quantum_capacity, stats.quantum_capacity / 2, stats.intact_quantum_capacity)
+		store = QuantumStore.new(stats.quantum_capacity, roundi(stats.quantum_capacity * start_fraction),
+			stats.intact_quantum_capacity)
 		store.changed.connect(_on_store_changed)
 		store.low_power_changed.connect(func(low: bool) -> void: low_power_changed.emit(low))
 	else:
@@ -225,6 +232,8 @@ func _bind_machines() -> void:
 				item.set_loose()
 
 func _makeable_list() -> Array:
+	if not can_make:
+		return []
 	if item_catalog != _makeable_from:
 		_makeable_from = item_catalog
 		_makeable = QuantumValues.makeable(item_catalog) if item_catalog != null else []
