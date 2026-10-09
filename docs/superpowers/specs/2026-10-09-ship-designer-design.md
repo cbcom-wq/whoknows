@@ -1,7 +1,7 @@
 # Ship designer — an agent that designs, builds and proves a ship
 
 **Date:** 2026-10-09
-**Status:** Designed with the owner on 2026-10-09.
+**Status:** Designed with the owner on 2026-10-09; amended while planning the same day (§9).
 **Project 3 of 3** toward a ship-designer agent (many ships spec §1.2). Projects 1 (many ships,
 `docs/superpowers/specs/2026-10-02-many-ships-design.md`) and 2 (the ship library,
 `docs/superpowers/specs/2026-10-02-ship-library-design.md`) are built and merged.
@@ -298,7 +298,29 @@ teach goes into the two skills' *Mistakes already made* before this project is c
 - `CLAUDE.md`: one line that ships are designed with the `ship-designer` agent and the
   `designing-a-ship` skill.
 
-## 9. Not in this project
+## 9. Amended while planning (2026-10-09)
+
+Measured on a 600-block draft, a stretched starter with a second quantum core (it became the §7.4
+fixture): it breaks no rule; `ShipRules.check` takes 0.6 s (`ship_check` 2.7 s with the engine's
+start); its save is 63 KB (the starter's 13 KB); **a spawn builds it in 1.9 s, one frame** (the
+starter 0.3 s).
+
+- **The freeze is accepted for now** (the owner, 2026-10-09). A guard fails above 3 s; faster or
+  spread-out builds are a later project, when big ships are common.
+- **Power limits size.** Only `quantum_core` makes power (36 MW); every walkable cell draws 0.1,
+  grav plating 1.5, an rcs 1 and a thruster 3. A big ship needs a second quantum core, which the
+  quantum plant already runs (it holds any number). The design skill says so.
+- **Long ships turn slowly:** inertia grows with length squared; the draft turns 0.06 / 0.03 /
+  0.42 rad/s² with the starter's bow RCS. The design skill says to put RCS at both ends.
+- **`TOO_BIG`:** a ship over 600 blocks breaks a new `ShipRules` rule, so the catalog test holds
+  the limit, not only the agent.
+- **`starter_ship` takes a ship file as well as an id** (`ShipLibrary.resolve`), so the fixture
+  and a draft can be probed before they are in the library. `arrival_render --ship` takes a
+  library id only, since it spawns through the F6 path.
+- **`#` is not a comment in the `name` and `desc` lines**, which take the rest of the line as
+  written, so a name can hold one and still round-trip.
+
+## 10. Not in this project
 
 - **New blocks** (§2.1): separate work, commissioned by the owner from the agent's wish lists.
 - **Ladders that climb** and so walkable multi-level ships (§2.8).
