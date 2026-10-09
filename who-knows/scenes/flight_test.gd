@@ -31,6 +31,9 @@ var aboard: Ship
 ## base you are in, or the one your suit belongs to on a spacewalk. A ship
 ## here is always `aboard`.
 var home: GridHome
+## The base a loaded game had you in (habitat modules spec §11.2): woken in
+## _restore_places, boarded at the end of _ready; null aboard a ship.
+var _loaded_home: Base
 ## On a spacewalk, which ship your suit belongs to (§4.3).
 var suit_tie: SuitTie
 ## Every base (habitat modules spec §9.1).
@@ -130,6 +133,7 @@ func _ready() -> void:
 		_starter.restore_aboard(starter_part)
 	_make_fleet()
 	_make_bases()
+	bases.from_dict(saved.get("bases", {}))
 	_make_suit_tie()
 	_place_avatar_on_deck()
 	_set_interior_mood()
@@ -151,6 +155,8 @@ func _ready() -> void:
 	fleet.joined.connect(_wire_ship)
 	fleet.left.connect(_on_ship_left)
 	board(aboard, true)
+	if _loaded_home != null:
+		board_base(_loaded_home, true)
 
 ## The ship library (ship library spec §3.2). A file that would not load is an
 ## error in the output, and left out.
@@ -1034,6 +1040,8 @@ func capture() -> Dictionary:
 		"salvage": salvage.to_dict(),
 		"strays": strays.to_dict(),
 		"npcs": _capture_npcs(),
+		"bases": bases.to_dict(),
+		"home": {"base": String(home.name)} if home is Base else {},
 	}
 
 ## The dead, and the health of every NPC awake now and asleep (health and
@@ -1068,7 +1076,7 @@ func _capture_you() -> Dictionary:
 			d["airlock"] = SaveCodec.cell_key(airlock.coord)
 	else:
 		d["mode"] = "seated" if _director.is_seated else "walking"
-		d["place"] = SaveCodec.transform(aboard.interior.global_transform.affine_inverse() * _avatar.global_transform)
+		d["place"] = SaveCodec.transform(home.interior.global_transform.affine_inverse() * _avatar.global_transform)
 	if _avatar.grasp.item != null:
 		d["held"] = _avatar.grasp.item.to_dict(Transform3D.IDENTITY)
 	return d
@@ -1078,8 +1086,8 @@ static func _same_generator(saved: Dictionary, which: String) -> bool:
 	var theirs: Dictionary = saved.get("generators", {})
 	return int(theirs.get(which, -1)) == int(SaveGame.generators()[which])
 
-## The origin near where you were, then every ship and you (§6.1; many ships
-## spec §6.3).
+## The origin near where you were, then every ship, the base you were in, and
+## you (§6.1; many ships spec §6.3; habitat modules spec §11.2).
 func _restore_places(saved: Dictionary) -> void:
 	var you: Dictionary = saved.get("avatar", {})
 	var first := _part_named(saved, String(saved.get("aboard", Fleet.STARTER)))
@@ -1088,11 +1096,22 @@ func _restore_places(saved: Dictionary) -> void:
 	var focus := SaveCodec.to_upoint(first.get("hull", {}).get("at"))
 	if String(you.get("mode", "")) == "suit":
 		focus = SaveCodec.to_upoint(you.get("at"))
+	# In a base, the origin goes to it: your ship may be far off, asleep.
+	var in_base := String(saved.get("home", {}).get("base", ""))
+	var site := bases.site_named(StringName(in_base)) if in_base != "" else null
+	if site != null and String(you.get("mode", "")) != "suit":
+		focus = site.at
 	_universe.origin = UniversePoint.at(
 		roundi(focus.x / Universe.STEP) * int(Universe.STEP),
 		roundi(focus.y / Universe.STEP) * int(Universe.STEP),
 		roundi(focus.z / Universe.STEP) * int(Universe.STEP))
 	_restore_fleet(saved, true)
+	if site != null:
+		_loaded_home = bases.wake(site.id)
+		# The rocks round the base, not round your far ship, load before the
+		# first frame (_stream.start); a spacewalk's focus is you, below.
+		if _loaded_home != null:
+			_universe.set_focus(_loaded_home.exterior)
 	_restore_you(you, true)
 
 ## Every saved ship but the starter, spawned under its own name, unstocked,
@@ -1133,26 +1152,28 @@ static func _part_named(saved: Dictionary, ship_name: String) -> Dictionary:
 ## You as the save had you (§6.3). With `outside_too` false -- the world
 ## started over -- a spacewalk comes back aboard, standing.
 func _restore_you(d: Dictionary, outside_too: bool) -> void:
+	var where: GridHome = _loaded_home if _loaded_home != null else aboard
 	_avatar.suit_cell.from_dict(d.get("suit", {}))
 	_avatar.suit_assist = bool(d.get("suit_assist", true))
 	_avatar.health.from_dict(d.get("health", {}))
 	var mode := String(d.get("mode", "walking"))
 	if mode != "suit":
-		# Into the ship you were aboard (many ships spec §6.3), where you
-		# stood, or on its deck if that is no place to stand any more.
-		var pose := aboard.interior.global_transform * SaveCodec.to_transform(d.get("place"))
-		if _can_stand(pose):
+		# Into the ship you were aboard or the base you were in (many ships
+		# spec §6.3; habitat modules spec §11.2), where you stood, or
+		# somewhere to stand in it if that is no place to stand any more.
+		var pose := where.interior.global_transform * SaveCodec.to_transform(d.get("place"))
+		if _can_stand(pose, where):
 			pose = Transform3D(Basis(Vector3.UP, pose.basis.get_euler().y), pose.origin)
 		else:
-			pose = aboard.interior.global_transform * _deck_spot(aboard)
-		_avatar.move_aboard(aboard.interior, pose)
+			pose = _stand_spot(where)
+		_avatar.move_aboard(where.interior, pose)
 		_avatar.set_head_pitch(float(d.get("pitch", 0.0)))
 	elif not outside_too:
-		_avatar.move_aboard(aboard.interior, aboard.interior.global_transform * _deck_spot(aboard))
+		_avatar.move_aboard(where.interior, _stand_spot(where))
 	# Hands work only aboard and standing, so the held item is taken first.
 	var held: Variant = d.get("held")
 	if held is Dictionary:
-		var item := aboard.restore_item(held)
+		var item := where.restore_item(held)
 		if item != null and not _avatar.grasp.take(item):
 			item.set_loose()
 	if mode == "seated":
@@ -1161,31 +1182,40 @@ func _restore_you(d: Dictionary, outside_too: bool) -> void:
 		_restore_spacewalk(d)
 
 func _restore_spacewalk(d: Dictionary) -> void:
-	var airlock: Airlock = aboard.airlocks.get(SaveCodec.to_cell(String(d.get("airlock", ""))))
+	var where: GridHome = _loaded_home if _loaded_home != null else aboard
+	var airlock: Airlock = where.airlocks.get(SaveCodec.to_cell(String(d.get("airlock", ""))))
 	if airlock == null or not is_instance_valid(airlock.alcove):
-		for a: Airlock in aboard.airlocks.values():
+		for a: Airlock in where.airlocks.values():
 			if is_instance_valid(a.alcove):
 				airlock = a
 				break
 	var pose := Transform3D(SaveCodec.to_basis(d.get("turn")), _universe.to_engine(SaveCodec.to_upoint(d.get("at"))))
-	_avatar.enter_suit(aboard.outside, pose, SaveCodec.to_vec3(d.get("v")), aboard.exterior)
+	_avatar.enter_suit(where.outside, pose, SaveCodec.to_vec3(d.get("v")), where.exterior)
 	_avatar.set_head_pitch(float(d.get("pitch", 0.0)))
 	if airlock != null:
 		_avatar.beacon_source = airlock.beacon
 		_avatar.home_source = airlock.home
 	_universe.set_focus(_avatar)
 
-## Whether a saved standing place is still somewhere to stand: a walkable
-## block under it, so a changed layout never leaves you in a wall (§6.3).
-func _can_stand(pose: Transform3D) -> bool:
-	var local := aboard.interior.global_transform.affine_inverse() * pose.origin
+## Whether a saved standing place in `where` is still somewhere to stand: a
+## walkable block under it, so a changed layout never leaves you in a wall
+## (§6.3).
+func _can_stand(pose: Transform3D, where: GridHome) -> bool:
+	var local := where.interior.global_transform.affine_inverse() * pose.origin
 	var cell := Vector3i(roundi(local.x / ShipGrid.CELL_SIZE),
 		roundi((local.y - InteriorBuilder.floor_y(Vector3i.ZERO)) / InteriorBuilder.STOREY_HEIGHT),
 		roundi(local.z / ShipGrid.CELL_SIZE))
-	if not aboard.grid.has_block(cell):
+	if not where.grid.has_block(cell):
 		return false
-	var def := aboard.catalog.get_def(aboard.grid.get_block(cell).block_id)
+	var def := where.catalog.get_def(where.grid.get_block(cell).block_id)
 	return def != null and def.is_walkable()
+
+## Somewhere to stand in `where`: a ship's deck by the helm, a base's first
+## wake spot.
+func _stand_spot(where: GridHome) -> Transform3D:
+	if where is Ship:
+		return where.interior.global_transform * _deck_spot(where as Ship)
+	return where.wake_spots()[0]
 
 ## The starter shuttle, from data/ships/starter.json; why each block is where it
 ## is: data/ships/starter.md. Most tests call this on a flight_test.gd that
