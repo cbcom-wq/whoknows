@@ -1,0 +1,201 @@
+---
+name: designing-a-ship
+description: Use when designing a new ship for the who-knows Godot project, or reshaping a library ship, from a description or "be creative" - choosing its role, size, decks, rooms and flight feel, and drawing it as a deck plan. The ship-designer agent runs on it; building-a-ship then builds and proves the result.
+---
+
+# Designing a ship
+
+## Overview
+
+This is the judgment half of making a ship: a brief becomes **numbers to hit** and a **deck plan**.
+`building-a-ship` (beside this skill) is how to build and prove one, its checklist and its
+*Mistakes already made*. Read both; this skill never repeats that one. The spec is
+`docs/superpowers/specs/2026-10-09-ship-designer-design.md`.
+
+**Existing blocks only** (`who-knows/data/blocks/`). A ship that wants a block the game lacks says
+so in its report ("blocks I wished for"); never add one. **Every ship is usable:** boarded, flown,
+walked and saved. **At most 400 blocks** (`ShipRules.MOST_BLOCKS`; more breaks `TOO_BIG`).
+
+## The tools
+
+From the worktree's `who-knows` folder, with `godot` the console exe (`run_tests.ps1` has its
+path) and `$k = <worktree>\.claude\skills\building-a-ship`:
+
+| Do | Command |
+|---|---|
+| Print a ship as a plan | `godot --headless --path . --script $k\ship_plan.gd -- to-plan <id or ship .json> <abs out.plan>` |
+| Plan to ship file | `godot --headless --path . --script $k\ship_plan.gd -- to-json <abs plan> <abs out\<id>.json>` |
+| Check it (about 2 s) | `godot --headless --path . --script $k\ship_check.gd -- <abs or res:// ship .json>` |
+| Probe it, windowed | `godot --path . --resolution 1280x720 --script $k\ship_probe.gd -- <abs out dir> --ship <id>` |
+| Watch it arrive | `godot --path . --resolution 1280x720 --script test\probes\arrival_render.gd -- <abs out dir> --ship <id>` |
+| Prove it usable | `.\run_tests.ps1 '-gselect=test_ship_catalog.gd'` |
+
+In a fresh worktree run `godot --headless --path . --import` once first, or every class is
+"not declared".
+
+## The plan
+
+One map per storey, **seen from above, bow up, port on the left**: rows run z from the bow (−z) to
+the stern, columns x from port (−x) to starboard. Each deck line gives its y and x range; each row
+starts `z <n>` and holds one token per cell; `.` is empty. `#` starts a comment, except on the
+`ship`, `name` and `desc` lines.
+
+**Tokens.** Every block and orientation has one: the block's base token, then the orientation
+unless it is 0 (`W3`, `Fh2`, `Cp4`).
+
+| Token | Block | Token | Block | Token | Block |
+|---|---|---|---|---|---|
+| `H` | hull | `D` | deck | `K` | core |
+| `S` | pilot_seat | `C` | canopy | `A` | airlock |
+| `B` | bulkhead | `O` | door | `T` | thruster |
+| `R` | rcs | `W` | hull_wedge | `Bk` | bunk_room |
+| `Gy` | galley | `Ba` | bathroom | `Wr` | weapon_room |
+| `Cl` | closet | `Cp` | computer | `Qk` | quantum_core |
+| `Qm` | quantum_machine | `Qc` | quantum_cell | `G` | grav_plating |
+| `Ar` | armour | `L` | ladder | `Fs` | fairing_slope |
+| `Fh` | fairing_half | `Fi` | fairing_corner_in | `Fo` | fairing_corner_out |
+| `Fl` | fairing_slope_long_high | `Fk` | fairing_slope_long_low | | |
+
+The rcs pushes are arrows: `R<` to port (8), `R>` to starboard (12), `R^` up (16), `Rv` down (20),
+`Rb` aft, a retro (4). `T` pushes forward (a main engine at the stern). Orientation codes are in
+`building-a-ship/reference.md`. A `legend` section before the first deck can name its own tokens
+(`X  fairing_half 2`).
+
+## 1. The brief becomes numbers
+
+Write the targets down **before** drawing, as `ship_check`'s `FEEL` and `SIZE` notes print them.
+The starter is the yardstick: **110 blocks, 104.7 t; turns 1.49 / 0.71 / 1.85 rad/s² (pitch / yaw
+/ roll); side 4.8, vertical 9.6, brake 4.8, forward 14.3 m/s²; 36 MW made, 31.3 drawn; 14,500 km
+of warp.**
+
+| The brief says | Means | Moved by |
+|---|---|---|
+| nimble, agile, a fighter | every turn above the starter's | rcs far from the centre of mass, less mass |
+| heavy, a freighter | turns below 0.5, forward 3–8 | mass; but brake and side stay ≥ 2 or it can't stop or settle |
+| fast | forward above 14 | thrusters (300 kN each) per tonne |
+| steady, doesn't slide | side ≥ 5 | lateral rcs pairs (250 kN each) per tonne |
+| long range | warp above 14,500 km | quantum cells (400 QE each) |
+| roomy, comfortable | more rooms than the starter's five, windows | walkable cells, rooms at the hull |
+
+A turn rate is `torque / inertia`: inertia grows with the **square** of length, so a long ship
+turns slowly unless it has rcs at **both ends**.
+
+## 2. Roles
+
+| Role | Shape | Leans on | Watch for |
+|---|---|---|---|
+| shuttle | the starter: one cabin storey, an equipment storey over it | — | — |
+| fighter | short, canopy forward, little inside | rcs, thrusters, a small cabin | too small for the airlock, the stand cell behind the helm and the droid's closet |
+| hauler | long, a hold of open deck or rooms | quantum cells, lateral rcs | mass above the thrust line (pitch under burn); power for every walkable cell |
+| explorer | bunks, galley, a computer, long reach | quantum cells, `Cp` facing a window | power |
+| yacht | rooms with windows, comfort over speed | rooms at the hull, `Ba`, `Gy` | the droid reaching every porthole |
+
+## 3. Be creative
+
+Pick one role and one twist, say which, and read the `.md` of every ship in `data/ships/` first:
+never the same pair as one already there.
+
+Twists: a ventral bridge (the helm on a lower storey); twin engine pods on outriggers; a long spine
+with the cabin at the bow; a stubby brick with huge engines; a ring of rooms round the quantum
+core; a hammerhead bow wider than the hull; a stern bridge looking back over the ship; a ship that
+is mostly hold; an asymmetric hull (and its balance fixed by mass, not by weaker rcs).
+
+## 4. The method
+
+Draw and check **one layer at a time** (`to-json`, then `ship_check`), never all at the end:
+
+1. **The walkable storey:** the helm (`S`) looking at the canopy (`C`); the cell behind it walkable
+   deck (you stand up into it); the corridor; the airlock (`A`) with one face to space and deck
+   through its other; the rooms, each touching walkable space; a closet (`Cl`) for the droid; every
+   porthole, console and fixture it tends reachable on foot. One walkable storey for now: ladders
+   don't climb yet (`CUT_OFF`).
+2. **The equipment storey** over or under it: the core (`K`), quantum cells, grav plating.
+3. **Power** (§5).
+4. **Engines and rcs** sized to the targets: main thrusters at the stern pushing forward, a retro
+   pair, rcs in opposed pairs on every axis, port and starboard mirrored, every rcs's exhaust face
+   open (the probe and `ship_check` say `RCS_BLOCKED`).
+5. **The outside:** wedges and fairings outside the cabin row; the skin chamfers for free.
+6. **Mirror port and starboard** unless the twist says otherwise.
+
+## 5. Budgets
+
+- **Power:** only `quantum_core` makes power, **36 MW** each, with 10% to spare (`POWER_MARGIN`).
+  Draws: thruster 3, core 2, grav plating 1.5, rcs 1, airlock 0.6, pilot seat 0.5, quantum machine
+  0.5, door 0.3, computer 0.3, **every walkable or room cell 0.1**. Hull, fairings, cells and
+  armour draw nothing. **The starter already draws 31.3 of its core's 36 MW** (its five thrusters,
+  eight rcs and two grav plates are most of it), so one core leaves room for about a dozen more
+  cabin cells and nothing else: **most new ships need a second quantum core.** Put it on the
+  walkable storey beside the corridor, never in it (a quiet fixture; `Qk4` faces aft). The quantum
+  plant runs any number.
+- **Mass** (t): quantum core and cell 5, core 4, armour 3, thruster 2.5, grav plating 1.5, airlock
+  1.2, hull and rcs 1, bulkhead 0.8, door and wedge 0.6, canopy and seat 0.5, deck and rooms 0.4,
+  fairings 0.3.
+- **Size:** 400 blocks at most. A 400-block ship builds in about 1.2 s when it spawns, a freeze the
+  owner accepted for now; its rules take 0.3 s; it holds 121 fps in the worst view, just over the
+  120 floor, so **a big ship costs frames**: keep it no bigger than the brief needs.
+
+## 6. Worked example: the starter
+
+`to-plan starter` prints it:
+
+```
+ship   starter
+name   Starter shuttle
+desc   Two decks: a bridge with a cockpit pod, five rooms, an airlock aft.
+
+deck y=2    x: -1 .. 1
+z -2  Fk  Fk  Fk
+z -1  Fh  Fh  Fh
+z 0   Fh  Fh  Fh
+z 1   Fh  Fh  Fh
+z 2   Fh  Fh  Fh
+z 3   Fk4 Fk4 Fk4
+
+deck y=1    x: -3 .. 3
+z -4  .  Rv R> W  R< Rv .
+z -3  .  R^ W  H  W  R^ .
+z -2  .  Rb H  H  H  Rb .
+z -1  .  H  H  K  H  H  .
+z 0   .  H  Qc Qc Qc H  .
+z 1   Fs H  G  H  G  H  Fs
+z 2   .  H  H  H  H  H  .
+z 3   .  W4 T  T  T  W4 .
+
+deck y=0    x: -3 .. 3
+z -4  .   .   C   C   C   .   .
+z -3  .   W3  Cp4 S   D   W1  .
+z -2  .   H   D   Qk4 D   H   .
+z -1  .   H   D   D   Qm  H   .
+z 0   .   H   Bk  D   Gy  H   .
+z 1   H   H   Bk  D   Wr  H   H
+z 2   H   H   Ba  D   Cl  H   H
+z 3   T   H   B   A   B   H   T
+
+deck y=-1    x: 0 .. 0
+z -3  Fh2
+z -2  Fh2
+z -1  Fh2
+z 0   Fh2
+z 1   Fh2
+z 2   Fh2
+```
+
+- **y = 0, the cabin.** The canopy row (z −4) ahead of the helm `S`; the bridge computer `Cp4` to
+  port facing aft; the quantum core `Qk4` straight behind the helm, so you stand up to its
+  starboard side; the machine `Qm`; the corridor down x = 0 with a bunk room (two cells), bathroom,
+  galley, weapon room and closet beside it; the airlock `A` at the stern between bulkheads; engine
+  pods at x = ±3 with a thruster each.
+- **y = 1, equipment and roof.** The core `K`, three quantum cells, grav plating, a roof thruster
+  bank at the stern, the rcs at the bow.
+- **y = 2 and y = −1:** a fairing spine above and a keel below.
+
+`data/ships/starter.md` says why each block is where it is: read it before your first design.
+
+## Mistakes already made (don't repeat)
+
+| Mistake | What happened | Do instead |
+|---|---|---|
+| One quantum core for a big ship | A 600-block draft drew 92.8 MW against 36 made | Count power while drawing the cabin; a second `Qk` beside the corridor; grav plating sparingly (1.5 MW each) |
+| 600 blocks | The first limit; probed, its worst view fell to 116 fps (109 with a second ship), under the 120 floor | The limit is 400, which holds 121; size costs frames |
+| RCS only at the bow of a long ship | The 43-row draft turned 0.06 / 0.03 / 0.42 rad/s² | Rcs pairs at both ends; the lever arm is free authority |
+| Probing in a fresh worktree | Every class "not declared", no output at all | `godot --headless --path . --import` once first |
