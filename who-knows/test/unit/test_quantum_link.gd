@@ -89,3 +89,27 @@ func test_the_panel_faces_into_the_hub_however_it_is_turned():
 
 static func _cell_of(p: Vector3) -> Vector3i:
 	return Vector3i(roundi(p.x / ShipGrid.CELL_SIZE), roundi(p.y / ShipGrid.CELL_SIZE), roundi(p.z / ShipGrid.CELL_SIZE))
+
+## Each drill's gauge is numbered among the drills, 1 up, not by its module's
+## place in the base, and a drill still unfolding has none yet (the final
+## review).
+func test_the_panel_numbers_the_drills_and_skips_one_unfolding():
+	var root: Node = load("res://scenes/flight_test.tscn").instantiate()
+	add_child_autofree(root)
+	var ship: Ship = root.get_node("Ship")
+	var at := ship.exterior.global_position + Vector3(0, -40, 60)
+	var ground := Ground.new(at.y)
+	var r := Planting.fit(ground, ModuleCatalog.get_def(ModuleCatalog.HUB), at, Vector3.FORWARD, 0)
+	var base: Base = root.bases.plant(ModuleCatalog.HUB, r, ground)
+	base.tick_unfold(HabitatValues.UNFOLD + 0.1)
+	var frame: Transform3D = root.bases.frame_of(base.site)
+	for pair: Array in [[ModuleCatalog.STORE, Vector3(-6, -2, 0)], [ModuleCatalog.DRILL, Vector3(10, -2, 0)]]:
+		var m := Planting.fit(ground, ModuleCatalog.get_def(pair[0]), frame * (pair[1] as Vector3), Vector3.FORWARD, 0,
+			base.site, frame)
+		assert_eq(m.fit, Planting.Fit.OK)
+		root.bases.plant(pair[0], m, ground)
+		if pair[0] == ModuleCatalog.DRILL:
+			assert_eq(base.link.lines().size(), 1, "a drill unfolding has no gauge yet")
+		base.tick_unfold(HabitatValues.UNFOLD + 0.1)
+	assert_eq(base.site.drills(), [2] as Array[int], "the drill is the base's third module")
+	assert_eq(base.link.lines()[1], "DRILL 1 · SURVEYING")

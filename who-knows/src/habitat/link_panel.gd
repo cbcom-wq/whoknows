@@ -66,8 +66,12 @@ func lines() -> PackedStringArray:
 	var ship := _ship()
 	var out := PackedStringArray()
 	out.append("NO LINK" if ship == null else "SHIP %d · BASE %d" % [ship.quantum.store.amount, base.quantum.store.amount])
-	for i in base.site.drills():
-		out.append("DRILL %d · %s" % [i, DrillYield.gauge(base.site.modules[i]["drill"])])
+	# Numbered among the drills, 1 up; one still unfolding has no gauge yet.
+	var drills := base.site.drills()
+	for n in drills.size():
+		var i := drills[n]
+		if i != base.unfolding:
+			out.append("DRILL %d · %s" % [n + 1, DrillYield.gauge(base.site.modules[i]["drill"])])
 	return out
 
 func _prompt(role: StringName) -> String:
