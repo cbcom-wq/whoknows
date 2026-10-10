@@ -164,3 +164,25 @@ func test_the_ghost_goes_when_aim_text_stops():
 	assert_true(_ghost().visible)
 	await wait_physics_frames(PackageUse.STALE_AFTER + 2)
 	assert_false(_ghost().visible, "aimed at a stow point: aim_text is not called, the ghost is gone")
+
+## One module unfolds at a time (the final review): while the hub unfolds, a
+## drill aimed at its rock says to wait, and use plants nothing and keeps it.
+func test_a_drill_waits_while_the_hub_unfolds():
+	var hub := _package()
+	var aim: Variant = _fitting_aim(hub)
+	assert_not_null(aim)
+	assert_true((hub.use_node as PackageUse).use(hub, aim, _root.get_node("Outside"), null))
+	await wait_physics_frames(1)
+	var base: Base = _root.bases.awake()[0]
+	assert_gte(base.unfolding, 0, "the hub unfolds")
+	var drill := _package(&"drill_package")
+	var use: PackageUse = drill.use_node
+	var r := use.refit(drill, aim, _root.get_node("Outside"))
+	assert_not_null(r)
+	assert_eq(r.fit, Planting.Fit.UNFOLDING)
+	assert_eq(Planting.prompt(r, ModuleCatalog.get_def(&"drill")), "Wait: unfolding")
+	assert_false(use.use(drill, aim, _root.get_node("Outside"), null), "nothing planted")
+	await wait_physics_frames(1)
+	assert_true(is_instance_valid(drill), "the package is kept")
+	assert_eq(base.site.modules.size(), 1)
+	assert_eq(base.unfolding, 0, "the hub's unfolding goes on")

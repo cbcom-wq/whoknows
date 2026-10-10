@@ -8,7 +8,7 @@ extends RefCounted
 ## lowest storey whose legs all reach the ground. Each module stands on four
 ## legs at its footprint's corners.
 
-enum Fit { OK, NO_GROUND, TOO_STEEP, LEGS_CANT_REACH, BLOCKED, TOO_FAR, HUB_FIRST, NEAR_SHIP, NO_ROOM }
+enum Fit { OK, NO_GROUND, TOO_STEEP, LEGS_CANT_REACH, BLOCKED, TOO_FAR, HUB_FIRST, NEAR_SHIP, NO_ROOM, UNFOLDING }
 
 const PROMPTS := {
 	Fit.NO_GROUND: "",
@@ -19,6 +19,7 @@ const PROMPTS := {
 	Fit.HUB_FIRST: "Plant a hub first",
 	Fit.NEAR_SHIP: "Too close to a ship",
 	Fit.NO_ROOM: "No room",
+	Fit.UNFOLDING: "Wait: unfolding",
 }
 ## The legs stand this far in from the footprint's corners.
 const LEG_INSET := 0.25
@@ -46,9 +47,12 @@ static func prompt(r: Result, module: ModuleDefinition) -> String:
 ## The fit of `module` turned `turns` quarter turns, aimed at `aim` (a point on
 ## the ground, engine space) from `facing`. `site` and `frame` are the base it
 ## would join, or null for none; `ship_gap` is how far `aim` is from the
-## nearest hull; `slots_free` whether a new base could get an interior slot.
+## nearest hull; `slots_free` whether a new base could get an interior slot;
+## `unfolding` whether the base it would join is unfolding a module now: one
+## unfolds at a time.
 static func fit(surface: PlantSurface, module: ModuleDefinition, aim: Vector3, facing: Vector3, turns: int,
-		site: BaseSite = null, frame := Transform3D.IDENTITY, ship_gap := INF, slots_free := true) -> Result:
+		site: BaseSite = null, frame := Transform3D.IDENTITY, ship_gap := INF, slots_free := true,
+		unfolding := false) -> Result:
 	var r := Result.new()
 	r.turns = posmod(turns, 4)
 	var size := module.turned_size(r.turns)
@@ -58,6 +62,9 @@ static func fit(surface: PlantSurface, module: ModuleDefinition, aim: Vector3, f
 		return r
 	if site == null and not slots_free:
 		r.fit = Fit.NO_ROOM
+		return r
+	if site != null and unfolding:
+		r.fit = Fit.UNFOLDING
 		return r
 	if site == null:
 		if not _found(surface, size, aim, facing, r):

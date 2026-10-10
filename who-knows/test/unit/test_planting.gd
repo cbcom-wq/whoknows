@@ -130,3 +130,13 @@ func test_no_room_for_a_new_base():
 		INF, false)
 	assert_eq(r.fit, Planting.Fit.NO_ROOM)
 	assert_eq(Planting.prompt(r, _hub), "No room")
+
+## One module unfolds at a time (the final review): while the base unfolds,
+## the fit waits, whatever else would be said, with no ghost (as for a hub
+## first).
+func test_wait_while_the_base_unfolds():
+	var hub := Planting.fit(Ground.new(), _hub, Vector3.ZERO, Vector3.FORWARD, 0)
+	var aim := hub.frame * Vector3(10.3, -2.0, 0.4)
+	var r := Planting.fit(Ground.new(), _drill, aim, Vector3.FORWARD, 0, _hub_site(hub), hub.frame, INF, true, true)
+	assert_eq(r.fit, Planting.Fit.UNFOLDING)
+	assert_eq(Planting.prompt(r, _drill), "Wait: unfolding")

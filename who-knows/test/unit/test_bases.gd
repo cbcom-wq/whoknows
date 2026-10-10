@@ -57,6 +57,49 @@ func test_a_drill_joins_the_rock_s_base():
 	assert_eq(base.site.modules.size(), 2)
 	assert_eq(base.unfolding, 1)
 
+## A drill's fit beside `base`, on its grid (the fit itself knows nothing of
+## an unfolding: PackageUse tells it).
+func _drill_fit(base: Base) -> Planting.Result:
+	var frame := _bases.frame_of(base.site)
+	var r := Planting.fit(Ground.new(), ModuleCatalog.get_def(ModuleCatalog.DRILL), frame * Vector3(10, -2, 0),
+		Vector3.FORWARD, 0, base.site, frame)
+	assert_eq(r.fit, Planting.Fit.OK)
+	return r
+
+## Planted beside a sleeping base, a module wakes it first (the final review):
+## with no slot to wake into, nothing changes and the package is kept; with
+## one, the module joins and unfolds.
+func test_a_module_planted_by_a_sleeping_base_wakes_it_first():
+	var base := _plant_hub()
+	base.tick_unfold(HabitatValues.UNFOLD + 0.1)
+	var site := base.site
+	var r := _drill_fit(base)
+	# Asleep by hand, and kept so: near, its own check would wake it at once.
+	_bases.set_physics_process(false)
+	_bases.sleep(&"Base1")
+	await wait_frames(1)
+	var held: Array[int] = []
+	while _bases.slots.free_count() > 0:
+		held.append(_bases.slots.claim())
+	assert_null(_bases.plant(ModuleCatalog.DRILL, r, Ground.new()), "no slot: it cannot wake")
+	assert_eq(site.modules.size(), 1, "and nothing was added")
+	assert_null(_bases.named(&"Base1"), "still asleep")
+	_bases.slots.release(held.pop_back())
+	var woke := _bases.plant(ModuleCatalog.DRILL, r, Ground.new())
+	assert_not_null(woke, "a slot: awake")
+	assert_eq(site.modules.size(), 2, "the drill joined once")
+	assert_eq(woke.unfolding, 1, "and unfolds")
+
+## One module unfolds at a time (the final review): a second planted meanwhile
+## would take over the unfolding and lose the first's stamp.
+func test_nothing_more_is_planted_while_a_module_unfolds():
+	var base := _plant_hub()
+	assert_eq(base.unfolding, 0)
+	var r := _drill_fit(base)
+	assert_null(_bases.plant(ModuleCatalog.DRILL, r, Ground.new()), "refused while the hub unfolds")
+	assert_eq(base.site.modules.size(), 1)
+	assert_eq(base.unfolding, 0, "the hub's unfolding goes on")
+
 func test_a_base_sleeps_far_off_and_wakes_near_with_everything_in_it():
 	var base := _plant_hub()
 	base.tick_unfold(HabitatValues.UNFOLD + 0.1)

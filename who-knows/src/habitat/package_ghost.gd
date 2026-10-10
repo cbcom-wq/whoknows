@@ -36,7 +36,7 @@ func _ready() -> void:
 	visible = false
 
 func show_fit(r: Planting.Result) -> void:
-	if r == null or r.fit == Planting.Fit.NO_GROUND or r.fit == Planting.Fit.HUB_FIRST:
+	if r == null or r.fit in [Planting.Fit.NO_GROUND, Planting.Fit.HUB_FIRST, Planting.Fit.UNFOLDING]:
 		hide_fit()
 		return
 	visible = true

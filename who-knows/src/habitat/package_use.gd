@@ -100,8 +100,9 @@ func refit(item: Item, aim: Transform3D, space: Node3D) -> Planting.Result:
 	_surface = RockSurface.new(hit["collider"])
 	var site := bases.on(_surface.site_id())
 	var frame := bases.frame_of(site) if site != null else Transform3D.IDENTITY
+	var base := bases.named(site.id) if site != null else null
 	_last = Planting.fit(_surface, _module(item), hit["position"], -aim.basis.z, turns, site, frame,
-		_ship_gap(hit["position"]), bases.slots.free_count() > 0)
+		_ship_gap(hit["position"]), bases.slots.free_count() > 0, base != null and base.unfolding >= 0)
 	_show(space)
 	return _last
 

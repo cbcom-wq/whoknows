@@ -85,11 +85,14 @@ func nearest(point: Vector3) -> Base:
 	return best
 
 ## Plants a module where `r` fits on `surface` (§5.3): a hub on bare ground
-## founds a base; anything else joins the ground's base. Returns the base,
-## which is unfolding the new module, or null if it could not wake.
+## founds a base; anything else joins the ground's base, waking it first.
+## Returns the base, which is unfolding the new module, or null with nothing
+## changed: no slot to wake into, or another module still unfolding.
 func plant(kind: StringName, r: Planting.Result, surface: PlantSurface) -> Base:
 	var site := on(surface.site_id())
 	if site == null:
+		if slots.free_count() == 0:
+			return null
 		site = BaseSite.new()
 		site.id = StringName("Base%d" % next_number)
 		next_number += 1
@@ -102,11 +105,14 @@ func plant(kind: StringName, r: Planting.Result, surface: PlantSurface) -> Base:
 		_on_planted(site, first, surface)
 		_sites[site.id] = site
 		return _wake(site, first)
+	# Awake before the module is added: a base that cannot wake keeps its site
+	# as it was, and the package stays in your hands.
+	var base := wake(site.id)
+	if base == null or base.unfolding >= 0:
+		return null
 	var i := site.add(kind, r.cell, r.turns, r.legs)
 	_on_planted(site, i, surface)
-	var base := named(site.id)
-	if base != null:
-		base.begin_unfold(i)
+	base.begin_unfold(i)
 	return base
 
 ## What a new module of `site` keeps from the ground it was planted on: a
