@@ -29,6 +29,8 @@ var line: HoseLine
 var _winding: Item = null
 var _wind_t := 0.0
 var _wind_from := Transform3D.IDENTITY
+## True once this reel has been stocked: it is stocked once in its life.
+var _stocked := false
 
 func _init() -> void:
 	super()
@@ -43,12 +45,15 @@ func anchor() -> Vector3:
 func is_out() -> bool:
 	return is_free()
 
-## Makes a nozzle of `def` and secures it here, once. The nozzle is drawn for
-## outside from the start and never a floating-origin member: it lives under
-## this reel, which is on the hull, or in your hands.
+## Makes a nozzle of `def` and secures it here, once per reel: a hull-keeping
+## rebuild binds the same reel again while the nozzle may be out, and a free
+## reel is then not an empty one. The nozzle is drawn for outside from the
+## start and never a floating-origin member: it lives under this reel, which is
+## on the hull, or in your hands.
 func stock_nozzle(def: ItemDefinition) -> void:
-	if not is_free() or def == null:
+	if _stocked or not is_free() or def == null:
 		return
+	_stocked = true
 	var nozzle := Item.new()
 	nozzle.setup(def)
 	nozzle.set_space(true)

@@ -97,3 +97,18 @@ func test_a_second_release_while_the_line_is_out_does_not_make_a_second_line():
 	_reel.secure(nozzle)
 	_reel.release()
 	assert_eq(_reel.line, line, "the line that is paying out is reused")
+
+## A hull-keeping rebuild binds the same reel again (Airlock._bind_reel) while
+## the nozzle is out; a free reel is not an empty one, so it makes no second.
+func test_a_second_stock_while_the_nozzle_is_out_makes_no_second_nozzle():
+	_reel.release()
+	assert_true(_reel.is_out())
+	_reel.stock_nozzle(_def())
+	assert_true(_reel.is_out(), "nothing new was secured")
+	assert_null(_reel.item)
+	var nozzles := 0
+	for child in _reel.get_children():
+		if child is Item:
+			nozzles += 1
+	# release() does not reparent: the one nozzle is still a child until a hand takes it.
+	assert_eq(nozzles, 1, "the nozzle that is out, and no second")

@@ -81,7 +81,9 @@ func bind(new_room: AirlockRoom, new_alcove: AirlockAlcove = null) -> void:
 
 ## Gives the alcove's reel what only the home knows (quantum energy spec
 ## §11.1): whose store a swallow credits, where the line lives, and a nozzle.
-## Every rebuild makes a new alcove and so a new reel; bind runs again for it.
+## A hull rebuild makes a new alcove and so a new reel, stocked fresh. A
+## rebuild that keeps the hull binds the same reel again, which stocks only
+## once (HoseReel.stock_nozzle), so a nozzle that is out gets no second one.
 func _bind_reel() -> void:
 	if not is_instance_valid(alcove) or alcove.reel == null or _ship == null:
 		return

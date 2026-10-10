@@ -40,6 +40,14 @@ func _settled() -> void:
 			break
 		await wait_physics_frames(1)
 
+## How many nozzles (Items) hang under `reel` right now.
+func _items_under(reel: HoseReel) -> int:
+	var n := 0
+	for child in reel.get_children():
+		if child is Item:
+			n += 1
+	return n
+
 func _loose(id: StringName, at: Vector3) -> Item:
 	var item := Item.new()
 	item.setup(_ship.item_catalog.get_def(id))
@@ -165,3 +173,21 @@ func test_a_full_store_pulls_nothing_toward_the_mouth():
 	assert_true(is_instance_valid(chunk))
 	assert_almost_eq(chunk.global_position, start, Vector3.ONE * 0.01)
 	assert_eq(nozzle.use_node.aim_text(nozzle, Transform3D.IDENTITY, null), "Store full")
+
+## A rebuild that keeps the hull (damage staged while you are out, a cabin-level
+## change) binds the same reel again: the nozzle that is out gets no second one.
+func test_a_rebuild_that_keeps_the_hull_does_not_stock_a_second_nozzle():
+	await _out()
+	var nozzle := _reel.item
+	_avatar.grasp.take(nozzle)
+	await _settled()
+	_ship._rebuild_everything(false)
+	await wait_physics_frames(4)
+	assert_eq(_airlock.alcove.reel, _reel, "the reel survived")
+	assert_null(_reel.item, "still out")
+	assert_eq(_items_under(_reel), 0, "no second nozzle was made")
+	assert_eq(_avatar.grasp.item, nozzle, "not used up: its reel is still there")
+	_avatar.grasp.let_go_outside()
+	await wait_physics_frames(90)
+	assert_eq(_reel.item, nozzle)
+	assert_eq(_items_under(_reel), 1, "the one nozzle, home again")
