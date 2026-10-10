@@ -114,3 +114,14 @@ func test_f8_from_a_station_boards_the_other_helm():
 	assert_true(_root.board_nearest())
 	assert_same(_director.seat(), other.seat)
 	assert_true(_director.piloting())
+
+## Standing from the captain's chair puts you on the bridge floor behind the
+## ramp, never balanced at dais height on its edge to drop off it.
+func test_standing_from_the_captain_puts_you_on_the_floor_behind_the_ramp():
+	var chair := _ship.seat_at(Vector3i(0, 0, -2))
+	await _sit(chair)
+	_director.stand()
+	var floor_at := InteriorDressing.floor_frame(_ship.interior_builder.layout(), chair.cell)
+	var local := floor_at.affine_inverse() * (_ship.interior.global_transform.affine_inverse() * _avatar.global_position)
+	assert_almost_eq(local.y, 0.0, 0.05, "on the floor, not at the dais's height")
+	assert_gt(local.z, InteriorProps.BAY * 0.5 + 0.3, "clear of the ramp's foot")

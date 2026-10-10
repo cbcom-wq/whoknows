@@ -42,11 +42,15 @@ func prompt_text() -> String:
 ## sat down from, so it is never left wedged against the chair or the glass.
 func stand_spot(avatar: Avatar) -> Transform3D:
 	var facing := global_basis.orthonormalized()
-	for spot in STAND_SPOTS:
+	for spot in stand_spots():
 		var pose := Transform3D(facing, to_global(spot))
 		if avatar.can_stand_at(pose):
 			return pose
 	return avatar.global_transform
+
+## This seat's stand spots, best first: STAND_SPOTS unless it stands raised.
+func stand_spots() -> Array[Vector3]:
+	return STAND_SPOTS
 
 func interact(_avatar: Avatar) -> void:
 	var d := director
