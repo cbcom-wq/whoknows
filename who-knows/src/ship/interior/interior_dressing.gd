@@ -56,10 +56,15 @@ static func build(layout: InteriorLayout, body: StaticBody3D, canopy_material: M
 	kit.flicker = false
 	for group in layout.canopy_groups():
 		var pods: Array = group["pods"]
-		if pods.is_empty():
+		if group["band"]:
+			_band(kit, group)
+		elif pods.is_empty():
 			_nose(kit, group, canopy_material)
 		else:
 			_cockpit(kit, layout, group)
+	for fixture in layout.fixtures():
+		if fixture["id"] == InteriorLayout.BRIDGE_HELM:
+			_helm_lights_panel(kit, layout, fixture["coord"])
 	# Cores first: each machine's conduit runs to one on its own storey.
 	var cores := {}   # Vector3i -> QuantumCore
 	for fixture in layout.fixtures():
@@ -169,6 +174,27 @@ static func _nose(kit: InteriorKit, group: Dictionary, material: Material) -> vo
 	var origin := across * ((lo + hi) * 0.5) + n * plane + Vector3.UP * floor_y(first)
 	InteriorProps.nose(kit, Transform3D(Basis(across, Vector3.UP, -n), origin), hi - lo, material)
 
+## A bridge's band (ship bridge spec §4.2): a pane on every face of the group,
+## each with a BandPane marker for tests.
+static func _band(kit: InteriorKit, group: Dictionary) -> void:
+	var normal: Vector3i = group["normal"]
+	for coord: Vector3i in group["coords"]:
+		InteriorProps.band_pane(kit, wall_frame(coord, normal), face_variety({"coord": coord, "normal": normal}))
+		var marker := Node3D.new()
+		marker.name = "BandPane_%d_%d_%d_%d" % [coord.x, coord.y, coord.z, normal.x * 3 + normal.z]
+		marker.transform = wall_frame(coord, normal)
+		kit.root.add_child(marker)
+
+## A band ship's lights panel, on its helm's desk (there are no shoulders).
+static func _helm_lights_panel(kit: InteriorKit, layout: InteriorLayout, coord: Vector3i) -> void:
+	var f := fixture_frame(layout, coord) * InteriorProps.helm_panel_frame()
+	InteriorProps.lights_panel(kit, f)
+	var panel := LightsPanel.new()
+	panel.name = "LightsPanel_%d_%d_%d" % [coord.x, coord.y, coord.z]
+	panel.cell = coord
+	panel.transform = f
+	panel.setup(kit.layer)
+	kit.root.add_child(panel)
 ## A windshield with a helm behind it: the pod out through the helm's face,
 ## with a CockpitPod marker at its frame, and a shoulder on every other face.
 static func _cockpit(kit: InteriorKit, layout: InteriorLayout, group: Dictionary) -> void:

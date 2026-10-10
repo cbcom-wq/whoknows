@@ -134,6 +134,11 @@ const HELM_FORWARD := 0.25
 ## A pod shoulder's window, floor-relative, and its half width.
 const SHOULDER_WINDOW_LOW := 1.15
 const SHOULDER_WINDOW_HIGH := 1.95
+## A bridge's band of glass (ship bridge spec §4.2): one pane per canopy face,
+## from the sill to its top, between posts at the cell edges.
+const BAND_SILL := 0.85
+const BAND_TOP := 2.3
+const BAND_POST := 0.08
 const SHOULDER_WINDOW_HALF := 0.55
 
 ## The seated pilot's eye in the captain's chair's fixture frame (origin on
@@ -661,6 +666,37 @@ static func shoulder(kit: InteriorKit, f: Transform3D, variety: float, with_cons
 	wall_trim(kit, f)
 	if with_console:
 		console(kit, f, variety, false)
+
+## One pane of a bridge's band, in a wall frame (origin on the floor at the
+## face's centre, +z into the room): the wall under the sill and over the top,
+## the glass between half-posts at both cell edges, a sill ledge with a lit
+## strip, and the wall's trim. A row of these reads as one strip of glass.
+static func band_pane(kit: InteriorKit, f: Transform3D, variety: float) -> void:
+	var wall := _c(InteriorPalette.WALL)
+	var trim := _c(InteriorPalette.TRIM)
+	var back := -WALL_THICKNESS * 0.5
+	var n := (f.basis * Vector3.BACK).normalized()
+	var half := BAY * 0.5
+	var w := half - BAND_POST
+	for band: Vector2 in [Vector2(0.0, BAND_SILL), Vector2(BAND_TOP, HEADROOM)]:
+		kit.quad(SOLID, f * Vector3(-half, band.x, back), f * Vector3(half, band.x, back),
+			f * Vector3(half, band.y, back), f * Vector3(-half, band.y, back), n, wall)
+	kit.quad(PORTAL, f * Vector3(-w, BAND_SILL, back), f * Vector3(w, BAND_SILL, back),
+		f * Vector3(w, BAND_TOP, back), f * Vector3(-w, BAND_TOP, back), n, _c(InteriorPalette.GLASS))
+	var tall := BAND_TOP - BAND_SILL
+	for x in [-half + BAND_POST * 0.5, half - BAND_POST * 0.5]:
+		kit.bevel_box(SOLID, f * _at(Vector3(x, (BAND_SILL + BAND_TOP) * 0.5, 0.0)),
+			Vector3(BAND_POST, tall + 0.1, 0.12), 0.02, trim)
+	kit.bevel_box(SOLID, f * _at(Vector3(0, BAND_SILL - 0.03, 0.1)), Vector3(BAY, 0.06, 0.24), 0.02, trim)
+	kit.box(GLOW, f * _at(Vector3(0, BAND_SILL - 0.07, 0.22)), Vector3(BAY - 0.2, 0.02, 0.02),
+		_lit(InteriorPalette.LIGHT_WARM, 1.6))
+	kit.bevel_box(SOLID, f * _at(Vector3(0, BAND_TOP + 0.04, 0.03)), Vector3(BAY, 0.08, 0.1), 0.02, trim)
+	wall_trim(kit, f)
+
+## Where a band ship's lights panel stands, in the helm's fixture frame: on the
+## desk's starboard wing, tilted up toward the pilot.
+static func helm_panel_frame() -> Transform3D:
+	return Transform3D(Basis(Vector3.RIGHT, deg_to_rad(-60.0)), Vector3(0.72, 0.8, -0.62))
 
 ## The captain's chair and helm console, in a fixture frame: origin on the
 ## floor under the seat, -z the way it faces, +y up (cockpit pod spec §5). A

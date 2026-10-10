@@ -120,7 +120,7 @@ static func plan(grid: ShipGrid, catalog: BlockCatalog, walkable: Array) -> Inte
 			if _id_at(grid, neighbour) == CANOPY_ID:
 				layout._faces.append(_record(coord, normal, Kind.CANOPY, zone))
 				var key := "%s:%d:%d" % [normal, _along(neighbour, normal), coord.y]
-				groups.get_or_add(key, {"normal": normal, "coords": [], "pods": []})["coords"].append(coord)
+				groups.get_or_add(key, {"normal": normal, "coords": [], "pods": [], "band": false})["coords"].append(coord)
 				continue
 			var face := _record(coord, normal, Kind.WALL, zone)
 			face["skin_flank"] = normal.x != 0 and _is_outer_skin(grid, coord, normal)
@@ -142,6 +142,7 @@ static func plan(grid: ShipGrid, catalog: BlockCatalog, walkable: Array) -> Inte
 			var inst := grid.get_block(coord)
 			layout._fixtures.append({"coord": coord, "id": inst.block_id, "orientation": inst.orientation})
 	layout._mark_pods()
+	layout._mark_bands()
 	return layout
 
 func faces() -> Array[Dictionary]:
@@ -303,6 +304,15 @@ func _mark_pods() -> void:
 					var coords: Array = group["coords"]
 					if group["normal"] == normal and coords.has(coord):
 						group["pods"].append(coord)
+
+## A ship flown from a bridge helm glazes every canopy group as one band
+## (ship bridge spec §4.1); a pod ship keeps its pod, shoulders and nose.
+func _mark_bands() -> void:
+	for fixture in _fixtures:
+		if fixture["id"] == BRIDGE_HELM:
+			for group in _groups:
+				group["band"] = true
+			return
 
 ## Finds every room, gives each one doorway and each room cell a feature wall.
 func _resolve_rooms() -> void:

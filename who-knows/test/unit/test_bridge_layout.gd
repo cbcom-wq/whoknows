@@ -68,3 +68,35 @@ func test_the_droid_docks_and_the_crew_scans_the_seats():
 func test_damage_keeps_the_helm_and_counts_it_cockpit():
 	assert_true(BlockDamage.KEEP.has(&"helm"))
 	assert_true(ShipDamage.COMPONENTS[&"cockpit"].has(&"helm"))
+
+func test_every_group_of_a_helm_ship_is_a_band():
+	assert_gt(_layout.canopy_groups().size(), 2, "the front and both sides")
+	for g in _layout.canopy_groups():
+		assert_true(g["band"])
+
+func test_the_starter_has_no_band():
+	var starter := ShipLibrary.load_from_dir().grid(&"starter")
+	var l := InteriorLayout.plan(starter, _cat, DeckGraph.build(starter, _cat).walkable_coords())
+	for g in l.canopy_groups():
+		assert_false(g["band"])
+
+func _dressed() -> Node3D:
+	var body := StaticBody3D.new()
+	add_child_autofree(body)
+	return InteriorDressing.build(_layout, body, null)
+
+func test_a_pane_on_every_canopy_face():
+	var faces := 0
+	for g in _layout.canopy_groups():
+		faces += (g["coords"] as Array).size()
+	var root := _dressed()
+	assert_eq(root.find_children("BandPane_*", "", true, false).size(), faces)
+	assert_null(root.find_child("CockpitPod", true, false), "no pod")
+
+func test_the_lights_panel_is_on_the_helm_desk():
+	var root := _dressed()
+	var panels := root.find_children("LightsPanel_*", "LightsPanel", true, false)
+	assert_eq(panels.size(), 1)
+	var helm := InteriorDressing.fixture_frame(_layout, Vector3i(0, 0, -4))
+	var expect := helm * InteriorProps.helm_panel_frame()
+	assert_almost_eq((panels[0] as Node3D).transform.origin, expect.origin, Vector3.ONE * 0.001)
