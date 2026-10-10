@@ -277,6 +277,50 @@ func _toilet_shots(ship: Ship, avatar: Avatar) -> void:
 ## from the starter's seat, sunlit and then dark with its floods on; F8 to its
 ## helm and the starter from there; a 1.5 s burn, short of the starter; standing
 ## and walking; a spacewalk between the two. Prints the fleet line.
+## Every seat aboard (ship bridge spec §6.2): sat in, its view rendered, stood
+## up from, and a step walked; and, on a ship with a captain's chair, the
+## bridge from the dais at a standing eye. Prints a seats line.
+func _seat_pass(scene: Node, ship: Ship, director: CameraDirector, avatar: Avatar) -> void:
+	var seats := ship.seats()
+	var counts := {}
+	for s in seats:
+		var kind := "helm" if s.flies else ("chair" if s is CaptainChair else "station")
+		counts[kind] = int(counts.get(kind, 0)) + 1
+	print("seats   %d: %s" % [seats.size(), counts])
+	for s in seats:
+		var tag := "%d_%d_%d" % [s.cell.x, s.cell.y, s.cell.z]
+		director.sit_now(s)
+		await _process_frames(5)
+		await _shot("seat_%s" % tag)
+		if not s.flies:
+			director.look(Vector2(-500, 0))
+			await _shot("seat_%s_left" % tag)
+		director.stand_now()
+		await _process_frames(10)
+		var from := avatar.global_position
+		var stood := s.global_transform.affine_inverse() * from
+		Input.action_press("move_back")
+		for i in 45:
+			await physics_frame
+		Input.action_release("move_back")
+		var walked := from.distance_to(avatar.global_position)
+		# The droid walks the ship meanwhile: say how near it came, so a walk it
+		# blocked reads as that, not as a seat you cannot leave.
+		var droid := INF
+		for npc in ship.interior.find_children("*", "", true, false):
+			if npc is Npc:
+				droid = minf(droid, (npc as Node3D).global_position.distance_to(avatar.global_position))
+		print("seat    %s at %s: stood at %s (seat frame), walked %.2f m, nearest npc %.1f m%s" % [
+			s.get_class() if s.get_script() == null else s.get_script().get_global_name(),
+			s.cell, stood.snapped(Vector3.ONE * 0.01), walked, droid,
+			"" if walked > 0.8 else ("  (an npc was in the way)" if droid < 1.0 else "  <-- STUCK")])
+	for s in seats:
+		if s is CaptainChair:
+			var dais := ship.interior.global_transform * InteriorDressing.floor_frame(ship.interior_builder.layout(), s.cell)
+			avatar.place(Transform3D(dais.basis, dais * Vector3(0, InteriorProps.DAIS_HEIGHT, -0.5)))
+			await _process_frames(10)
+			await _shot("bridge_from_dais")
+
 func _fleet_pass(scene: Node) -> void:
 	var fleet: Fleet = scene.get("fleet")
 	if fleet == null:
@@ -580,6 +624,7 @@ func _run(scene: Node) -> void:
 	Input.action_release("move_back")
 	var walked := from.distance_to(avatar.global_position)
 	print("walked  %.2f m in 1 s after standing%s" % [walked, "" if walked > 1.0 else "  <-- STUCK"])
+	await _seat_pass(scene, ship, director, avatar)
 	await _panel_shots(ship, avatar)
 	await _toilet_shots(ship, avatar)
 	await _fleet_pass(scene)

@@ -111,7 +111,7 @@ func _plan_windows(interior: InteriorLayout) -> void:
 			for coord: Vector3i in group["coords"]:
 				wanted += 1
 				_window_on(coord + normal, coord, normal, InteriorProps.BAND_SILL, InteriorProps.BAND_TOP,
-					InteriorProps.BAY - 2.0 * InteriorProps.BAND_POST, false, 0.0)
+					InteriorProps.BAND_GLASS_WIDTH, false, 0.0)
 			continue
 		if group_pods.is_empty():
 			_nose_windows(group)

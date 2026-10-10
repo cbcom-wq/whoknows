@@ -144,7 +144,12 @@ const SHOULDER_WINDOW_HIGH := 1.95
 ## from the sill to its top, between posts at the cell edges.
 const BAND_SILL := 0.85
 const BAND_TOP := 2.3
+## A post between two panes: each pane draws half of it at each edge, so
+## neighbours share one (tuned at the renders: whole posts at both edges made a
+## double post right in the pilot's view).
 const BAND_POST := 0.08
+## The glass of one pane, across: the cell less half a post at each edge.
+const BAND_GLASS_WIDTH := BAY - BAND_POST
 const SHOULDER_WINDOW_HALF := 0.55
 
 ## The seated pilot's eye in the captain's chair's fixture frame (origin on
@@ -683,19 +688,21 @@ static func band_pane(kit: InteriorKit, f: Transform3D, variety: float) -> void:
 	var back := -WALL_THICKNESS * 0.5
 	var n := (f.basis * Vector3.BACK).normalized()
 	var half := BAY * 0.5
-	var w := half - BAND_POST
+	var w := BAND_GLASS_WIDTH * 0.5
 	for band: Vector2 in [Vector2(0.0, BAND_SILL), Vector2(BAND_TOP, HEADROOM)]:
 		kit.quad(SOLID, f * Vector3(-half, band.x, back), f * Vector3(half, band.x, back),
 			f * Vector3(half, band.y, back), f * Vector3(-half, band.y, back), n, wall)
 	kit.quad(PORTAL, f * Vector3(-w, BAND_SILL, back), f * Vector3(w, BAND_SILL, back),
 		f * Vector3(w, BAND_TOP, back), f * Vector3(-w, BAND_TOP, back), n, _c(InteriorPalette.GLASS))
 	var tall := BAND_TOP - BAND_SILL
-	for x in [-half + BAND_POST * 0.5, half - BAND_POST * 0.5]:
+	for x in [-half + BAND_POST * 0.25, half - BAND_POST * 0.25]:
 		kit.bevel_box(SOLID, f * _at(Vector3(x, (BAND_SILL + BAND_TOP) * 0.5, 0.0)),
-			Vector3(BAND_POST, tall + 0.1, 0.12), 0.02, trim)
+			Vector3(BAND_POST * 0.5, tall + 0.1, 0.12), 0.01, trim)
 	kit.bevel_box(SOLID, f * _at(Vector3(0, BAND_SILL - 0.03, 0.1)), Vector3(BAY, 0.06, 0.24), 0.02, trim)
-	kit.box(GLOW, f * _at(Vector3(0, BAND_SILL - 0.07, 0.22)), Vector3(BAY - 0.2, 0.02, 0.02),
-		_lit(InteriorPalette.LIGHT_WARM, 1.6))
+	# Tuned at the renders: at 1.6 the strip was a hard white bar across the
+	# pilot's view.
+	kit.box(GLOW, f * _at(Vector3(0, BAND_SILL - 0.07, 0.22)), Vector3(BAY - 0.2, 0.015, 0.015),
+		_lit(InteriorPalette.LIGHT_WARM, 0.6))
 	kit.bevel_box(SOLID, f * _at(Vector3(0, BAND_TOP + 0.04, 0.03)), Vector3(BAY, 0.08, 0.1), 0.02, trim)
 	wall_trim(kit, f)
 

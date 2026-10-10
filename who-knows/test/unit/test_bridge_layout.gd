@@ -117,7 +117,7 @@ func test_every_pane_has_its_window_outside():
 		var c: Vector3i = w["coord"]
 		if _grid.has_block(c) and _grid.get_block(c).block_id == &"canopy":
 			got[c] = 1 + int(got.get(c, 0))
-			assert_almost_eq((w["size"] as Vector2).x, InteriorProps.BAY - 2.0 * InteriorProps.BAND_POST, 0.001,
+			assert_almost_eq((w["size"] as Vector2).x, InteriorProps.BAND_GLASS_WIDTH, 0.001,
 				"a pane's width at %s" % c)
 	assert_eq(got, wanted)
 
