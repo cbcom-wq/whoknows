@@ -12,6 +12,7 @@ const LENGTHS := {
 	&"warp_spool": 10.0, &"warp_travel": 4.0, &"warp_drop": 1.6,
 	&"light_switch": 0.12,
 	&"unfold": 2.0, &"leg_stamp": 0.4, &"drill_hum": 3.0,
+	&"hose_draw": 1.0, &"hose_gulp": 0.25,
 }
 
 func test_every_sound_builds_at_its_length():
@@ -25,7 +26,7 @@ func test_every_sound_builds_at_its_length():
 		assert_almost_eq(s.get_length(), LENGTHS[sound_name], 0.01, sound_name)
 
 func test_sounds_are_the_same_every_time():
-	for sound_name in [&"hiss_out", &"bolt_clunk", &"breath", &"core_hum", &"convert", &"materialize", &"charge"]:
+	for sound_name in [&"hiss_out", &"bolt_clunk", &"breath", &"core_hum", &"convert", &"materialize", &"charge", &"hose_draw"]:
 		assert_eq(Synth.build(sound_name).data, Synth.build(sound_name).data, sound_name)
 
 func test_every_sound_is_audible_and_never_clips():

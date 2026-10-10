@@ -559,6 +559,10 @@ func _wire_hands() -> void:
 	_reticle = Reticle.new()
 	_reticle.name = "Reticle"
 	$Prompt.add_child(_reticle)
+	var toast := QuantumToast.new()
+	toast.name = "QuantumToast"
+	$Prompt.add_child(toast)
+	_avatar.toast.connect(toast.say)
 	_director.view_changed.connect(_on_view_changed)
 	_on_view_changed(_director.view, false)
 

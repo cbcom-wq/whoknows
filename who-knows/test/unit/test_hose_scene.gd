@@ -217,3 +217,14 @@ func test_a_spawned_ship_has_its_own_reel_and_credits_its_own_store():
 	assert_true(reel.sink.call(chunk))
 	assert_eq(_ship.quantum.store.amount, mine, "not the starter's store")
 	assert_eq(other.quantum.store.amount, theirs + worth, "its own")
+
+## The toast (quantum energy spec §12): what the nozzle swallows shows near the
+## reticle, as the flight scene's own QuantumToast, wired to the avatar.
+func test_the_toast_is_wired_to_the_avatar():
+	_avatar.toast.emit("+7 QE · TEST")
+	var toast: QuantumToast = _root.find_child("QuantumToast", true, false)
+	assert_not_null(toast)
+	if toast == null:
+		return
+	assert_true(toast.visible)
+	assert_eq(toast.text(), "+7 QE · TEST")

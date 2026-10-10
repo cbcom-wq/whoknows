@@ -23,10 +23,11 @@ const NAMES: Array[StringName] = [
 	&"warp_spool", &"warp_travel", &"warp_drop",
 	&"light_switch",
 	&"unfold", &"leg_stamp", &"drill_hum",
+	&"hose_draw", &"hose_gulp",
 ]
 ## Sounds that play as seamless loops.
 const LOOPED: Array[StringName] = [&"ship_hum", &"breath", &"thruster_puff", &"core_hum", &"charge", &"droid_whir",
-	&"holo_hum", &"warp_travel", &"drill_hum"]
+	&"holo_hum", &"warp_travel", &"drill_hum", &"hose_draw"]
 
 static var _cache: Dictionary = {}
 static var _mutex := Mutex.new()
@@ -127,6 +128,10 @@ static func build(sound_name: StringName) -> AudioStreamWAV:
 			x = _leg_stamp()
 		&"drill_hum":
 			x = _drill_hum()
+		&"hose_draw":
+			x = _hose_draw()
+		&"hose_gulp":
+			x = _hose_gulp()
 		_:
 			push_error("Synth: no sound called %s" % sound_name)
 			return null
@@ -426,6 +431,31 @@ static func _drill_hum() -> PackedFloat32Array:
 		var t := float(i) / MIX_RATE
 		x[i] = sin(TAU * 60.0 * t) * 0.5 + sin(TAU * 90.0 * t) * 0.25 + grind[i] * 1.2
 	return _gain(_loopable(x, n), 0.18)
+
+## The hose drawing (quantum energy spec §13): low filtered noise with a soft
+## hum under it, looped while suction runs, on the Suit bus.
+static func _hose_draw() -> PackedFloat32Array:
+	var n := _len(1.0)
+	var total := n + n / 10
+	var rush := _lowpass(_noise(total, 71), 520.0)
+	var x := PackedFloat32Array()
+	x.resize(total)
+	for i in total:
+		var t := float(i) / MIX_RATE
+		x[i] = rush[i] * 1.6 + sin(TAU * 140.0 * t) * 0.12
+	return _gain(_loopable(x, n), 0.2)
+
+## A swallow (§13): a short falling gulp.
+static func _hose_gulp() -> PackedFloat32Array:
+	var n := _len(0.25)
+	var x := PackedFloat32Array()
+	x.resize(n)
+	var phase := 0.0
+	for i in n:
+		var t := float(i) / MIX_RATE
+		phase += TAU * lerpf(420.0, 150.0, minf(t / 0.2, 1.0)) / MIX_RATE
+		x[i] = sin(phase) * _ramp(t, 0.01, 0.25, 0.08)
+	return _gain(x, 0.35)
 
 ## Converting (spec §13): a rising shimmer -- filtered noise swept up and a
 ## sine gliding up an octave and more over the convert's 1.2 s -- ending in a
