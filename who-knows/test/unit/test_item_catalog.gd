@@ -170,9 +170,20 @@ func test_the_salvage_set_stows_and_sits_in_the_hand_as_authored():
 		assert_almost_eq(def.hold_rotation, want[2], Vector3.ONE * 0.0001, "%s's hold rotation" % id)
 
 ## The sixteen aboard, the six salvage kinds, the repair torch (health and
-## damage spec §8.1) and the three module packages (habitat modules spec §4.1).
-func test_the_catalogue_has_26_kinds():
-	assert_eq(_cat.ids().size(), 26)
+## damage spec §8.1), the three module packages (habitat modules spec §4.1)
+## and the hose's nozzle (quantum energy spec §11.1).
+func test_the_catalogue_has_27_kinds():
+	assert_eq(_cat.ids().size(), 27)
+
+func test_the_hose_nozzle():
+	var n := _cat.get_def(&"hose_nozzle")
+	assert_not_null(n)
+	assert_true(n.eva_tool, "never converted or made")
+	assert_true(n.works_outside, "usable on a spacewalk")
+	assert_eq(n.grip, ItemDefinition.Grip.WIELD)
+	assert_eq(n.stow_class, &"hose")
+	assert_eq(n.quantum_value, 0, "an EVA tool has no value")
+	assert_not_null(n.use, "it draws")
 
 ## Health and damage spec §8.1, read back from its .tres.
 func test_the_repair_torch():
@@ -193,6 +204,7 @@ func test_the_repair_torch():
 func test_the_pistol_works_outside():
 	assert_true(_cat.get_def(&"plasma_pistol").works_outside, "it fires on a spacewalk")
 
-func test_no_starter_item_is_an_eva_tool():
+func test_the_hose_nozzle_is_the_only_eva_tool():
 	for id in _cat.ids():
-		assert_false(_cat.get_def(id).eva_tool, "%s is not an EVA tool" % id)
+		assert_eq(_cat.get_def(id).eva_tool, id == &"hose_nozzle",
+			"%s: only the hose nozzle is an EVA tool" % id)
