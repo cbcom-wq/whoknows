@@ -577,7 +577,9 @@ func _wire_universe(saved: Dictionary) -> void:
 	var start := system.entry()
 	var same_world := resumed and _same_generator(saved, "asteroids") and _same_generator(saved, "system")
 	if resumed and not same_world:
-		push_warning("FlightTest: the save's asteroids are another version; back to the start")
+		var lost: Array = saved.get("bases", {}).get("sites", [])
+		push_warning("FlightTest: the save's asteroids are another version; back to the start%s"
+			% ("; its bases are dropped" if not lost.is_empty() else ""))
 	if same_world:
 		# The bases first, before anything wakes; a world started over drops
 		# them, as it drops strays: their rocks are gone (habitat modules spec
@@ -1144,7 +1146,10 @@ func _restore_places(saved: Dictionary) -> void:
 func _restore_fleet(saved: Dictionary, in_place: bool) -> void:
 	fleet.from_dict(saved.get("fleet", {}))
 	if in_place:
-		_starter.restore_hull(_part_named(saved, Fleet.STARTER), _universe)
+		# Through the fleet, as every other ship: a starter left far off (you
+		# were in a base, or aboard another ship) is held asleep there, never
+		# put in engine space 25 km out for a second.
+		fleet.restore_hull(_starter, _part_named(saved, Fleet.STARTER))
 	var row := 0
 	for part in saved.get("ships", []):
 		if not (part is Dictionary) or String(part.get("name", "")) == Fleet.STARTER:

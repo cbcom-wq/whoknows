@@ -84,6 +84,51 @@ func test_a_base_round_trips():
 	assert_eq(again.bases.next_number, 2)
 	_drop(again)
 
+## A drill's state survives a save and a load (the final review): its ore,
+## how long it has run, when it was last credited and the fraction it is owed;
+## and what it earned before the save is not paid again after the load.
+func test_a_drill_s_state_round_trips_and_pays_nothing_twice():
+	var root := _scene()
+	var base := _plant(root)
+	var frame: Transform3D = root.bases.frame_of(base.site)
+	var ground := Ground.new((root.get_node("Ship") as Ship).exterior.global_position.y - 40.0)
+	var r := Planting.fit(ground, ModuleCatalog.get_def(ModuleCatalog.DRILL), frame * Vector3(10, -2, 0),
+		Vector3.FORWARD, 0, base.site, frame)
+	assert_eq(r.fit, Planting.Fit.OK)
+	root.bases.plant(ModuleCatalog.DRILL, r, ground)
+	base.tick_unfold(HabitatValues.UNFOLD + 0.1)
+	var i: int = base.site.drills()[0]
+	root.play_time = 5000.0
+	var drill: Dictionary = base.site.modules[i]["drill"]
+	drill.merge({"richness": 2.75, "veined": true, "ran": 900.0, "credited_at": 4000.0, "owed": 0.25}, true)
+	var paid := base.credit_drills()
+	assert_eq(paid, floori(0.25 + 1000.0 * 2.75 / HabitatValues.DRILL_PERIOD + 1e-6), "earned up to the save")
+	var stored := base.quantum.store.amount
+	var kept: Dictionary = (base.site.modules[i]["drill"] as Dictionary).duplicate()
+	assert_true(root.save_now())
+	_drop(root)
+	var again := _scene()
+	await wait_physics_frames(2)
+	var back: Base = again.bases.named(&"Base1")
+	assert_not_null(back, "awake: it is near")
+	# Two ticks of play have passed since the load, and it has been credited
+	# for them: a few hundredths of a QE.
+	var loaded: Dictionary = back.site.modules[i]["drill"]
+	assert_almost_eq(float(loaded["richness"]), 2.75, 1e-6, "richness")
+	assert_eq(loaded["veined"], true, "veined")
+	assert_almost_eq(float(loaded["credited_at"]), again.play_time, 1e-6, "credited up to now")
+	assert_almost_eq(float(loaded["ran"]), float(kept["ran"]) + again.play_time - 5000.0, 1e-3, "ran")
+	assert_almost_eq(float(loaded["owed"]),
+		float(kept["owed"]) + (again.play_time - 5000.0) * 2.75 / HabitatValues.DRILL_PERIOD, 1e-3, "owed")
+	assert_lt(again.play_time - 5000.0, 1.0, "the clock went on from the save")
+	assert_eq(back.quantum.store.amount, stored, "the store as saved: nothing paid twice at the wake")
+	assert_eq(back.credit_drills(), 0, "nor after it")
+	var owed := float(loaded["owed"])
+	again.play_time += 60.0
+	assert_eq(back.credit_drills(), floori(owed + 60.0 * 2.75 / HabitatValues.DRILL_PERIOD + 1e-6),
+		"and on from there")
+	_drop(again)
+
 func test_a_save_inside_a_base_loads_you_inside_it_with_the_ship_asleep():
 	var root := _scene()
 	var base := _plant(root)
@@ -133,7 +178,8 @@ func test_a_world_started_over_drops_the_bases():
 	assert_true(again.bases.sites().is_empty(), "no base left")
 	assert_eq(again.bases.next_number, 1)
 	assert_same(again.home, again.aboard, "you are aboard your ship")
-	assert_engine_error("another version", "the world started over, and it says so")
+	assert_engine_error("another version; back to the start; its bases are dropped",
+		"the world started over, and it says so, bases and all")
 	_drop(again)
 
 ## A spacewalk tied to a base comes back tied to it: the base wakes, and your
