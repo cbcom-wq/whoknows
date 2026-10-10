@@ -147,6 +147,18 @@ func busy() -> String:
 		return "charging suit"
 	return ""
 
+## The hose's sink (quantum energy spec §11.4): credits what `item` is worth,
+## whole or not at all. False for a thing with no value, an EVA tool, or a
+## store without room for it (§3.2's STORE FULL): the item stays where it is.
+func credit_item(item: Item) -> bool:
+	var def := item.definition
+	if store == null or def.eva_tool or def.quantum_value <= 0:
+		return false
+	if not store.credit(def.quantum_value, &"hose"):
+		return false
+	credited.emit(def.quantum_value, &"hose")
+	return true
+
 ## The positional player `key` (&"bay" or &"panel") of the machine at `cell`.
 func player(cell: Vector3i, key: StringName) -> AudioStreamPlayer3D:
 	return _players.get(cell, {}).get(key)
