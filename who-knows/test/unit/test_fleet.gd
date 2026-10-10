@@ -85,6 +85,15 @@ func test_no_more_than_the_cap():
 	assert_engine_error("the most there can be", "and it says why")
 	assert_eq(Fleet.MAX_SHIPS, 16)
 
+## Ships and bases share one slot pool (habitat modules spec §9.3): with every
+## slot held by bases, no ship, under the ship cap or not.
+func test_a_full_slot_pool_spawns_nothing():
+	while _fleet.slots.free_count() > 0:
+		_fleet.slots.claim()
+	assert_null(_spawn(), "no slot free: none")
+	assert_engine_error("no interior slot free", "and it says why")
+	assert_eq(_fleet.ships().size(), 1)
+
 func test_nearest():
 	var a := _spawn()
 	var b := _spawn(Vector3(0, 0, 900))

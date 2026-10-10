@@ -807,6 +807,9 @@ func spawn_from_library(id: StringName) -> String:
 		return "A SHIP IS ARRIVING"
 	if fleet.ships().size() >= fleet.max_ships:
 		return "THE FLEET IS FULL"
+	# Bases hold interior slots too (habitat modules spec §9.3).
+	if fleet.slots.free_count() == 0:
+		return "NO BERTH FREE"
 	var view := _spawn_view()
 	var others: Array[Vector3] = []
 	for ship in fleet.awake():
@@ -818,6 +821,8 @@ func spawn_from_library(id: StringName) -> String:
 	var place: Transform3D = spot
 	var grid := library.grid(id)
 	var ship := fleet.spawn(grid, place, true, "", ShipBlueprint.from_grid(grid, library.name_of(id)))
+	if ship == null:
+		return "NO BERTH FREE"
 	WarpArrival.play(ship.exterior, place, Vector3.ZERO, SpawnSpot.arrival_line(place))
 	return "SPAWNED %s · %s · %d m away" % [ship.name, library.name_of(id), roundi(view.origin.distance_to(place.origin))]
 

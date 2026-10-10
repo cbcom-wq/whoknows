@@ -154,6 +154,15 @@ func test_refused_when_the_fleet_is_full():
 	assert_eq(_fleet.ships().size(), 1)
 	assert_eq(_last_line(), "THE FLEET IS FULL")
 
+## Bases hold slots too (habitat modules spec §9.3, §6.5): with none free,
+## F6 says so, and nothing crashes.
+func test_refused_when_no_berth_is_free():
+	while _fleet.slots.free_count() > 0:
+		_fleet.slots.claim()
+	_open_and_spawn()
+	assert_eq(_fleet.ships().size(), 1)
+	assert_eq(_last_line(), "NO BERTH FREE")
+
 func test_refused_during_a_warp():
 	_starter.warp.stage = WarpDrive.Stage.SPOOLING
 	_open_and_spawn()
