@@ -43,3 +43,18 @@ func restore(_state: Dictionary) -> void:
 ## How hard using it kicks the hand back, 0 to 1. Only a gun kicks.
 func recoil() -> float:
 	return 0.0
+
+## A short line for the HUD's status line while this item is held (the hose:
+## *HOSE 12 M*), or "".
+func tool_text() -> String:
+	return ""
+
+## What ties the holder to the world while this is held, in engine space:
+## {"anchor": Vector3, "length": float} (the hose's line), or {}.
+func tether() -> Dictionary:
+	return {}
+
+## Sends the item back where it belongs when it is let go, instead of
+## dropping it (the hose winds home to its reel). True if it took it.
+func go_home(_item: Item) -> bool:
+	return false

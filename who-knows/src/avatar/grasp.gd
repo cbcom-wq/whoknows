@@ -122,12 +122,19 @@ func let_fall(into: Node3D) -> Item:
 	_release()
 	world_root = was
 	changed.emit()
-	return it
+	# An EVA tool went home to its reel: it is not something to land as a stray.
+	return it if it.state != Item.State.HELD else null
 
 ## Lets go of held EVA cargo on a spacewalk, into the space you are in, where
 ## it floats (habitat modules spec §4.1). Null, holding on, for anything else.
 func let_go_outside() -> Item:
-	if not suspended or item == null or not item.definition.eva_cargo:
+	if not suspended or item == null:
+		return null
+	if item.definition.eva_tool:
+		_release()
+		changed.emit()
+		return null
+	if not item.definition.eva_cargo:
 		return null
 	var it := item
 	var was := world_root
@@ -143,7 +150,11 @@ func _active() -> bool:
 	return enabled and not suspended
 
 func can_take(candidate: Item) -> bool:
-	return _active() and mode == Mode.EMPTY and candidate != null and candidate.state != Item.State.HELD
+	if candidate == null or mode != Mode.EMPTY or candidate.state == Item.State.HELD:
+		return false
+	# On a spacewalk hands are suspended, but an EVA tool (the hose nozzle) may
+	# still be taken, and nothing else.
+	return _active() or (enabled and suspended and candidate.definition.eva_tool)
 
 func take(candidate: Item) -> bool:
 	if not can_take(candidate) or candidate.definition.mass_kg > Item.LIFT_LIMIT_KG:
@@ -214,6 +225,10 @@ func throw(amount: float) -> void:
 	var thrown := item
 	var direction := -aim().basis.z
 	_release()
+	if thrown.state == Item.State.HELD:
+		# An EVA tool went home to its reel; it is not thrown.
+		changed.emit()
+		return
 	thrown.linear_velocity = direction * throw_speed(thrown.mass, amount) + _body.velocity
 	thrown.watch_first_impact(throw_speed(thrown.mass, amount))
 	changed.emit()
@@ -259,6 +274,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		use()
 		return
 	if suspended and event.is_action_pressed(&"drop"):
+		let_go_outside()
+		return
+	if suspended and event.is_action_pressed(&"throw") and item != null and item.definition.eva_tool:
 		let_go_outside()
 		return
 	if not _active():
@@ -311,6 +329,9 @@ func _release() -> void:
 	item = null
 	mode = Mode.EMPTY
 	charge = -1.0
+	if it.definition.eva_tool and it.use_node != null and it.use_node.go_home(it):
+		_ignore(it, false)
+		return
 	var size := it.definition.size
 	var at := _clear_point(it.global_position, maxf(size.x, maxf(size.y, size.z)) * 0.5)
 	it.reparent(world_root, true)
