@@ -13,6 +13,11 @@ extends Node3D
 ## block's mesh and box collider. Hull-local and interior-local coordinates are
 ## the same numbers on storey 0; above it they differ by the storey offset
 ## (InteriorBuilder.storey_offset), which is taken off here.
+##
+## It also carries the hose's reel (quantum energy spec §11.1) on the jamb
+## opposite the hull panel: the cradle, the drum and the HoseReel stow point
+## that holds the nozzle. Airlock.bind gives the reel its sink and stocks it,
+## and a hull rebuild frees the reel with the alcove.
 
 const LAYER := ExteriorBuilder.OWN_HULL_LAYER
 ## Lights here light the hull layer and anything of the world's on layer 1 --

@@ -838,6 +838,47 @@ exact than the text above, or differs from it:
   - **The 0.5 m drum straddles the cell seam by about 9 cm,** because the free jamb is only 0.34 m
     wide (the cell edge to the hatch frame's post). Shrink the drum to 0.34 m, or shift it to
     x −0.75 (flush with the cell edge, its front then over the post's face).
+- **The nozzle emits no particles at the mouth** (the final review): §11.4's "particles are local to
+  it" is not built, so there is nothing of the nozzle's for `Universe.HOLDS_SHIFT` to wait on. The
+  glow and the shrinking swallow are its whole show.
+- **`QuantumToast` is a `Control`** added under the flight scene's `$Prompt` (`_wire_hands`, wired to
+  `Avatar.toast`), not a `HudElement` as §12 names it. It is built in code, as the reticle is.
+- **A base module finishing its unfold frees the base's reel.** `Base.tick_unfold` ends in
+  `rebuild()` (`base.gd`, near line 210), which frees the reel, so a base nozzle that is out within
+  5.5 s (`HabitatValues.UNFOLD`) of planting a module is used up: your hands are empty and the new
+  reel is stocked with a new nozzle. There is no error. Handing the old nozzle to the new reel is
+  not built; do it later if wanted.
+- **The docked nozzle renders on layer 1,** the world's, not the own-hull layer 4 that §14.2's table
+  gives for the reel and the docked nozzle: `set_space(true)` draws it for outside from its first
+  build. It can therefore show through your own windows, where the drum (layer 4) is hidden. This is
+  unlikely on the current ships.
+- **The render probe swallows one item.** `hose_render.gd` takes the nozzle, pays the line out and
+  draws in one rock chunk. §15.2's hose probe also asks for three kinds swallowed, a tether hit at
+  30 m and a reel-home in real time: those are covered by the headless tests only
+  (`test_hose_nozzle.gd`, which swallows rock and ice chunks, and `test_hose_scene.gd`), and no probe
+  plays them in the real game.
+- **The wind home and the hands' grab swipe keep their frame** (a fix from the final review). The
+  wind home runs in the reel's own frame, and the swipe, on a spacewalk, starts relative to you;
+  aboard the swipe is unchanged, as the interior never moves. A drifting ship and a floating-origin
+  shift therefore do not disturb either. Before, a hull drifting at 10 m/s pulled the nozzle 2.5 m
+  off its way home, and a shift put it a kilometre off with the line stretched after it. The tests
+  are in `test_hose_reel.gd` and `test_hands.gd`.
+
+**Known limits** (not fixed; recorded by the final review):
+
+- **The tether holds you in the frame of the ship you went out from** (`Avatar.hull`), not the
+  reel's own hull. That is wrong if you take another ship's nozzle, or a base's, while the two move
+  relative to each other.
+- **The spacewalk Interactor's `16 | 32` mask** (spec-mandated, §14.2) lets a loose item between
+  your eye and the hull panel hide the panel's prompt. And `_in_plain_view` ignores the hull, so the
+  nozzle can be offered through plating within 2.5 m.
+- **The drum and the cradle have no collider:** you float through the drum, but bump the nozzle.
+- **The gulp is keyed on `Avatar.toast`,** so any future toast would gulp too. Key it on the
+  nozzle's `swallowed` signal (`HoseNozzle.swallowed`) instead.
+- **`Grasp` infers "it went home" from `state == HELD`** after `_release`. A `_release() -> bool`
+  would make it explicit.
+- **There is no ship-probe check for the drum's side cell.** The drum reaches 9 cm into the
+  neighbouring cell: safe on every current ship, but a block there would clip it.
 
 ---
 

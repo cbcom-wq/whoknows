@@ -9,6 +9,10 @@ extends Node
 ##
 ## The same chime warns as the suit's cell falls below 25 and again below 10
 ## (quantum energy spec §9), once each time it crosses.
+##
+## The hose adds two more (quantum energy spec §13): a draw loop while the
+## nozzle you hold is pulling, and a gulp when it swallows something (the
+## avatar's toast).
 
 const BREATH_DB := -16.0
 const THRUSTER_DB := -12.0

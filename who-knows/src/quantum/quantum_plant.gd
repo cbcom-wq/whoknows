@@ -30,7 +30,7 @@ extends Node
 
 signal low_power_changed(low: bool)
 ## A credit landed: how much, and from where (spec §3.2's sources):
-## &"pilot", &"convert"; later the hose.
+## &"pilot", &"convert" and &"hose" (what the nozzle swallows, credit_item).
 signal credited(amount: int, source: StringName)
 
 ## The big button's colours (MachineCycle.button_colour) as ReadoutPanel's

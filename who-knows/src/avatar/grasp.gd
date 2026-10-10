@@ -22,8 +22,10 @@ signal prompt_changed(text: String)
 ## An item was taken, from `from` (its global transform before it went into
 ## the hands). Hands swipes it in from there.
 signal taken(item: Item, from: Transform3D)
-## EVA cargo let go on a spacewalk (habitat modules spec §4.1): already in the
-## space you are in. The holder makes it a stray.
+## EVA cargo, or an EVA tool with nowhere to go (its reel is gone), let go on a
+## spacewalk (habitat modules spec §4.1): already in the space you are in. The
+## holder makes it a stray. An EVA tool that winds home to its reel is not
+## reported: it is no stray.
 signal let_go(item: Item)
 
 enum Mode { EMPTY, CARRYING, WIELDING }
@@ -56,8 +58,11 @@ var item: Item = null
 var charge := -1.0
 var enabled := true
 ## On a spacewalk (airlock spec §7.4): hold on to whatever you have, but take,
-## drop, throw, stow and use nothing. Unlike set_enabled(false), which lets a
-## carried crate go, this keeps it.
+## drop, throw, stow and use nothing -- save an EVA tool (the hose nozzle),
+## which may be taken and let go (let_go_outside), EVA cargo, which may be
+## carried, used and let go, and a held item that works_outside, which may be
+## used. Unlike set_enabled(false), which lets a carried crate go, this keeps
+## it.
 var suspended := false
 ## Use and throw need the reticle, so they work only in first person.
 var first_person := true
