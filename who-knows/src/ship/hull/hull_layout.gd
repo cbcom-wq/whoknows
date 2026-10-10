@@ -106,6 +106,13 @@ func _plan_windows(interior: InteriorLayout) -> void:
 	for group in interior.canopy_groups():
 		var normal: Vector3i = group["normal"]
 		var group_pods: Array = group["pods"]
+		# A bridge's band (ship bridge spec §4.3): a window outside every pane.
+		if group.get("band", false):
+			for coord: Vector3i in group["coords"]:
+				wanted += 1
+				_window_on(coord + normal, coord, normal, InteriorProps.BAND_SILL, InteriorProps.BAND_TOP,
+					InteriorProps.BAY - 2.0 * InteriorProps.BAND_POST, false, 0.0)
+			continue
 		if group_pods.is_empty():
 			_nose_windows(group)
 			continue

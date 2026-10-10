@@ -100,3 +100,23 @@ func test_the_lights_panel_is_on_the_helm_desk():
 	var helm := InteriorDressing.fixture_frame(_layout, Vector3i(0, 0, -4))
 	var expect := helm * InteriorProps.helm_panel_frame()
 	assert_almost_eq((panels[0] as Node3D).transform.origin, expect.origin, Vector3.ONE * 0.001)
+
+func test_every_pane_has_its_window_outside():
+	var hull := HullLayout.plan(_grid, _cat, _layout)
+	assert_eq(hull.unmatched, [] as Array[Dictionary], "no pane without glass outside")
+	# One window on the canopy cell outside each face, and no other (a nose's
+	# three windows per group happen to make the same count on this ship, so
+	# the count alone proves nothing).
+	var wanted := {}
+	for g in _layout.canopy_groups():
+		for c: Vector3i in g["coords"]:
+			var out: Vector3i = c + (g["normal"] as Vector3i)
+			wanted[out] = 1 + int(wanted.get(out, 0))
+	var got := {}
+	for w in hull.windows:
+		var c: Vector3i = w["coord"]
+		if _grid.has_block(c) and _grid.get_block(c).block_id == &"canopy":
+			got[c] = 1 + int(got.get(c, 0))
+			assert_almost_eq((w["size"] as Vector2).x, InteriorProps.BAY - 2.0 * InteriorProps.BAND_POST, 0.001,
+				"a pane's width at %s" % c)
+	assert_eq(got, wanted)
