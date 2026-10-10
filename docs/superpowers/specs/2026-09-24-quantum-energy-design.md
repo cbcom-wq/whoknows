@@ -818,6 +818,9 @@ exact than the text above, or differs from it:
   `Airlock._bind_reel`): nothing is drawn toward a mouth that cannot take it, and the prompt reads
   *Store full*. The refusal at the mouth stays as defence in depth. An item freed by another system
   mid-swallow is dropped from the shrink without error.
+- **The swallow's order differs from §11.4's list:** `HoseNozzle._swallow` credits the store first,
+  whole or not at all, and only then freezes the item and shrinks it into the mouth. A refused item
+  is never half-eaten.
 - **The tether holds you in your ship's frame,** not the world's: a drifting ship is not braked
   against space. With the suit's assist on at the end of the line, the assist cancels the tether's
   pull as charged thruster work (1 m/s² at 0.25 QE per m/s, about 0.25 QE/s, §9). Only the tether's
@@ -828,6 +831,13 @@ exact than the text above, or differs from it:
 - **Not built:** the mouth's glow is always on, not only while drawing (§11.4): glowing only while
   drawing needs a per-item emissive toggle the item kit does not have. The owner's call after the
   renders.
+- **Open (the owner's call), two visual findings from the renders** (`hose_render.gd`, 2026-10-10):
+  - **The line is hard to see.** At 5 cm (`HoseLine.GIRTH`) it is near-black wherever the sun does
+    not reach it, and reads as a dark cord rather than §11.3's "chunky ribbed segments": the ribs
+    show only on a lit edge. A faint emission on `HoseLine`'s material would fix it.
+  - **The 0.5 m drum straddles the cell seam by about 9 cm,** because the free jamb is only 0.34 m
+    wide (the cell edge to the hatch frame's post). Shrink the drum to 0.34 m, or shift it to
+    x −0.75 (flush with the cell edge, its front then over the post's face).
 
 ---
 

@@ -371,10 +371,11 @@ thrust.
   now and are usable once ladders climb: `CUT_OFF` names every storey the helm can't reach
   ("ladders don't climb yet"). The climbing project gives `DeckPaths` its vertical links, and the
   same rule then passes.
-- **Bases beyond Phase C** (habitat modules spec §19): no corridors between modules yet (Phase D,
-  waiting on the hose), so a drill or store beside the hub can't be walked into; the link moves
-  50 QE a press, with no hold; nothing makes a base visible from afar (no lights, beacon or sensor
-  contact: the owner's call); a hub's machine makes nothing (`can_make` false).
+- **Bases beyond Phase C** (habitat modules spec §19): no corridors between modules yet (Phase D;
+  its hose prerequisite is built, `HoseLine` and `HoseRope`), so a drill or store beside the hub
+  can't be walked into; the link moves 50 QE a press, with no hold; nothing makes a base visible
+  from afar (no lights, beacon or sensor contact: the owner's call); a hub's machine makes nothing
+  (`can_make` false).
 - **The bubble canopy** pod variant.
 - **Light blocks** placed by hand. The generator places every light; a shipyard that wants its own
   comes with its own spec.

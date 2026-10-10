@@ -22,7 +22,8 @@ extends SceneTree
 # probe_star_bloom_{off,on}, probe_seated_lit, and, parked beside a rock's
 # night side, probe_seated_rock_{dark,lit} and probe_rock_*. Every ship gets
 # probe_hull_* (the skin, fill-lit) and prints skin, windows, lights and tint lines.
-# It prints the rules line (ShipRules: every rule broken, or 0) and the notes.
+# It prints the rules line (ShipRules: every rule broken, or 0) and the notes,
+# and a hose line per airlock (its alcove's reel, and the nozzle stocked on it).
 # Then a two-ship pass (docs/superpowers/specs/2026-10-02-many-ships-design.md
 # §8.2): fps in the worst view with a second ship 300 m off,
 # probe_fleet_from_starter{,_dark}.png, F8 to its helm, probe_fleet_from_second
