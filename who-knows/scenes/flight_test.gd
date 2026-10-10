@@ -35,6 +35,9 @@ var library: ShipLibrary
 ## probe or a render, so it turns saving off: the owner's game is never
 ## touched. Set before the scene enters the tree.
 var starter_ship := String(ShipLibrary.STARTER)
+## A test that saves aboard another ship sets this, with a save_path of its own
+## (ship bridge spec §3.5): starter_ship then leaves saving as it is.
+var keep_saving := false
 
 ## The star system the flight is in (the system skeleton spec §4), from the
 ## world seed, and the node that draws its star, planets and moons.
@@ -111,7 +114,7 @@ const OUTSIDE_GLOW_BLEND := Environment.GLOW_BLEND_MODE_SCREEN
 
 func _ready() -> void:
 	_load_library()
-	if starter_ship != String(ShipLibrary.STARTER):
+	if starter_ship != String(ShipLibrary.STARTER) and not keep_saving:
 		save_enabled = false
 	var saved := _read_save()
 	var starter_part := _part_named(saved, Fleet.STARTER)
@@ -1010,6 +1013,8 @@ func _capture_you() -> Dictionary:
 			d["airlock"] = SaveCodec.cell_key(airlock.coord)
 	else:
 		d["mode"] = "seated" if _director.is_seated else "walking"
+		if _director.is_seated:
+			d["seat"] = SaveCodec.cell_key(_director.seat().cell)
 		d["place"] = SaveCodec.transform(aboard.interior.global_transform.affine_inverse() * _avatar.global_transform)
 	if _avatar.grasp.item != null:
 		d["held"] = _avatar.grasp.item.to_dict(Transform3D.IDENTITY)
@@ -1097,7 +1102,11 @@ func _restore_you(d: Dictionary, outside_too: bool) -> void:
 		if item != null and not _avatar.grasp.take(item):
 			item.set_loose()
 	if mode == "seated":
-		_director.sit_now(aboard.seat)
+		# The seat you sat in (ship bridge spec §3.5), or the helm if it is gone.
+		var seat: Seat = null
+		if d.has("seat"):
+			seat = aboard.seat_at(SaveCodec.to_cell(String(d["seat"])))
+		_director.sit_now(seat if seat != null else aboard.seat)
 	elif mode == "suit" and outside_too:
 		_restore_spacewalk(d)
 

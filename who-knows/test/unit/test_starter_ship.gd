@@ -55,3 +55,13 @@ func test_an_unknown_ship_starts_you_in_the_starter():
 	await wait_process_frames(2)
 	assert_push_error("no library ship called \"nope\"")
 	assert_eq(root.aboard.grid.size(), 110)
+
+func test_keep_saving_keeps_saving_on():
+	var root: Node = load("res://scenes/flight_test.tscn").instantiate()
+	root.save_enabled = true
+	root.keep_saving = true
+	root.save_path = SAVE
+	root.starter_ship = BIG
+	add_child_autofree(root)
+	await wait_process_frames(2)
+	assert_true(root.save_enabled)

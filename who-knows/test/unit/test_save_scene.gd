@@ -424,3 +424,47 @@ func test_a_spacewalk_tied_to_the_second_ship_comes_back_tied_to_it():
 	assert_same(back.hull, again.exterior)
 	assert_same(back.beacon_source.get_object(), again.airlocks.values()[0])
 	_drop(b)
+
+func test_seated_at_a_station_comes_back_at_the_station():
+	var a := _bridge_scene()
+	await wait_process_frames(2)
+	var station: Seat = a.aboard.seat_at(Vector3i(2, 0, -4))
+	a.get_node("CameraDirector").sit_now(station)
+	assert_true(a.save_now())
+	_drop(a)
+	var b := _bridge_scene()
+	await wait_process_frames(2)
+	var director: CameraDirector = b.get_node("CameraDirector")
+	assert_true(director.is_seated)
+	assert_eq(director.seat().cell, Vector3i(2, 0, -4))
+	assert_false(director.piloting())
+	_drop(b)
+
+func test_a_seat_that_is_gone_seats_you_at_the_helm():
+	var a := _bridge_scene()
+	await wait_process_frames(2)
+	a.get_node("CameraDirector").sit_now(a.aboard.seat_at(Vector3i(2, 0, -4)))
+	assert_true(a.save_now())
+	_drop(a)
+	var saved := JSON.parse_string(FileAccess.get_file_as_string(PATH)) as Dictionary
+	saved["avatar"]["seat"] = SaveCodec.cell_key(Vector3i(9, 9, 9))
+	var f := FileAccess.open(PATH, FileAccess.WRITE)
+	f.store_string(JSON.stringify(saved))
+	f.close()
+	var b := _bridge_scene()
+	await wait_process_frames(2)
+	var director: CameraDirector = b.get_node("CameraDirector")
+	assert_same(director.seat(), b.aboard.seat)
+	_drop(b)
+
+## A saving scene aboard the bridge fixture: saving kept on, with a path of
+## the test's own, though starter_ship names another ship. A resumed game
+## builds its ship from the save, so the second scene is the bridge again.
+func _bridge_scene() -> Node:
+	var root: Node = load("res://scenes/flight_test.tscn").instantiate()
+	root.starter_ship = "res://test/fixtures/bridge/bridge.json"
+	root.keep_saving = true
+	root.save_enabled = true
+	root.save_path = PATH
+	add_child(root)
+	return root
