@@ -1312,8 +1312,6 @@ func _wire_other_marker() -> void:
 	marker.other = true
 	marker.set_anchors_preset(Control.PRESET_FULL_RECT)
 	$HudRoot/Screen.add_child(marker)
-	if not _hud.is_ancestor_of(marker):
-		_hud.register_element(marker)
 	_avatar.other_beacon_source = func() -> Dictionary:
 		var to: GridHome = aboard if home is Base else bases.nearest(_avatar.global_position)
 		if to == null or (to is Ship and fleet.sleeping(to)):

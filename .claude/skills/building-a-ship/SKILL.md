@@ -121,8 +121,9 @@ Do these in order. Each one names the check that proves it.
      sources and its crew's ledger. `Ship` makes the `RcsShow` puffs, `ShipLights` and the
      bridge's lights panel itself;
    - **every ship is usable** (the owner's rule, 2026-10-02): you can board it (F8 to the nearest
-     other helm, or any ship's airlock from a spacewalk), fly it, and it saves. Only the ship you
-     are aboard (`aboard`) draws its hull on `OWN_HULL_LAYER` (`Ship.set_own`). The probe's
+     other helm, or any ship's airlock from a spacewalk), fly it, and it saves. Only where you are
+     (`home`: the ship you stand in, or a base you are in) draws its hull on `OWN_HULL_LAYER`
+     (`GridHome.set_own`). The probe's
      `fleet` line and `test/probes/fleet_play.gd` prove it;
    - the avatar's starting spot from `InteriorBuilder.floor_y(cell)` (the flight scene's
      `_deck_spot`);
@@ -289,7 +290,7 @@ thrust.
 | A reach test with the eye where the brief said | The lights panel is on the shoulder's front wall, about 3.1 m from the cell behind, past the Interactor's 2.5 m; the test failed | Stand the test's eye in the shoulder's own cell (1.3 m from the panel) and remember the desk is 0.4 m deep |
 | Running a test or the probe from the main checkout | `run_tests.ps1` resolves from the current directory, so a shell that started in another tree ran that tree's code and reported a pass | Check the directory before every command when working in a worktree |
 | A new `class_name` without `--import` and its `.uid` | Tests fail to find the class, and the generated `.uid` is not committed | Run `--import`, then commit the `.uid` files (the repo tracks them) |
-| Every hull on `OWN_HULL_LAYER` | Found while designing many ships: the canopy and every window leave that layer out, so a second ship would have been invisible from your seat | `Ship.set_own`: only the ship you are aboard draws there; `board()` moves it and lets every other ship go |
+| Every hull on `OWN_HULL_LAYER` | Found while designing many ships: the canopy and every window leave that layer out, so a second ship would have been invisible from your seat | `GridHome.set_own`: only `home` draws there (the ship you stand in, or the base you are in); `board()` and `board_base()` move it and let every other ship and base go |
 | Each `PilotControls` listening to the one director | Sitting in any seat would have handed every ship the stick | `bind_director`; controls take the stick only when `director.seat_ship()` is their ship |
 | An airlock that let in only its own suit (`avatar.hull == hull`) | No way to board another ship from a spacewalk | Any suit; `Ship.airlock_crossed` boards that ship |
 | A canopy camera left where nobody looks through it | A second ship's canopy camera sat at the world's origin, then (first fix) at the hull's origin, where the velocity marker aims at rest: `unproject_position` hit depth 0 the frame you boarded | Unused, `CanopyPortal` rests the camera at the helm's eye on the hull |

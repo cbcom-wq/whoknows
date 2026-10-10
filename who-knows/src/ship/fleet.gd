@@ -31,7 +31,9 @@ const ASLEEP := &"ships_asleep"
 var home: Node
 var outside: Node3D
 var universe: Universe
-## The ship you are aboard (a Callable returning a Ship): never removed.
+## The ship you stand in (a Callable returning a Ship): never removed, never
+## asleep. Null while you are in a base (habitat modules spec §9.3): your ship
+## is then a ship like any other here, and may sleep.
 var aboard: Callable
 var max_ships := MAX_SHIPS
 ## The interior slots, shared with every base (habitat modules spec §9.3).
@@ -107,7 +109,7 @@ func spawn(grid: ShipGrid, place: Transform3D, stock := true, ship_name := "",
 	return ship
 
 ## Lets `ship` go, freeing it and its slot. Refuses the starter and the ship
-## you are aboard. True if it went.
+## you stand in (`aboard`; in a base, none). True if it went.
 func remove(ship: Ship) -> bool:
 	if ship == null or not _ships.has(ship) or ship.name == STARTER:
 		return false
@@ -157,8 +159,8 @@ func place_of(ship: Ship) -> UniversePoint:
 	return universe.to_universe(ship.exterior.global_position)
 
 ## Puts to sleep every ship past SLEEP_AT of the focus and wakes every one
-## back inside WAKE_AT (many ships spec §5.1). The ship you are aboard never
-## sleeps.
+## back inside WAKE_AT (many ships spec §5.1). The ship you stand in
+## (`aboard`) never sleeps; in a base there is none, and yours may.
 func check_sleep() -> void:
 	if universe == null or not is_instance_valid(universe.focus):
 		return

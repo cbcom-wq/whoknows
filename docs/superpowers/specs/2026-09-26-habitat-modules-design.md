@@ -954,7 +954,10 @@ three modules in view, 3.6 ms (281 fps), worst 6.2. Above §12's 120 fps budget 
 - **The drill module shows no drill head**, and a drill's own room and gauge come with corridors.
 - **The hub's quantum machine makes nothing** (`can_make` false); the fabricator is Phase D.
 - **The shell is visual:** its bulged ends stand up to 0.8 m past the box colliders.
-- **Deferred minors** are listed per task in the ledger (`progress.md`), among them: no
-  save/load round-trip test of a drill's state, `drill_hum`'s loop seam not listened to, F6/F7/F8
-  reasoning from `aboard` while you are in a base, and `Fleet.remove` no longer guarding your ship
-  while you are in a base.
+- **No *PACKAGE · HUB* in the band** (§10): on a spacewalk with a package, only the ghost and
+  its prompt at the reticle say what you carry. Not built and not planned in Phases A–C.
+- **Deferred minors** are listed per task in the ledger (`progress.md`), among them:
+  `drill_hum`'s loop seam not listened to, and `Fleet.remove` no longer guarding your ship while
+  you are in a base (the F6 panel's Delete still skips it). The final review's fixes (F6/F7/F8
+  reasoning from where you are, a drill's state through a save, one unfolding at a time, a
+  module planted by a sleeping base) are in the ledger's final-fix report.
