@@ -72,3 +72,12 @@ func test_it_ends_when_the_nozzle_is_freed():
 	await wait_physics_frames(2)
 	# finish() queue_frees the line: ended means gone from the tree.
 	assert_null(_outside.get_node_or_null("HoseLine"), "the line is gone from the tree")
+
+func test_it_is_not_culled_when_the_hull_is_far_from_the_origin():
+	_hull.global_position = Vector3(500, 0, 0)
+	var line := _out_with_a_line()
+	var shown := line.get_node("Segments") as MultiMeshInstance3D
+	# Headless, MultiMesh instance data is not kept, so the bounds cannot be read
+	# back here. What culls a far line is a custom box about the node: there is none.
+	assert_gt(line.rope.points[0].x, 400.0, "the hose lies 500 m out, far from the node")
+	assert_false(shown.multimesh.custom_aabb.has_volume(), "no custom box about the node: the instances bound it")

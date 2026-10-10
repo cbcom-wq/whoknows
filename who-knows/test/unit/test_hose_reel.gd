@@ -32,10 +32,23 @@ func before_each():
 
 func test_it_accepts_the_hose_class_only():
 	assert_eq(_reel.accepts, &"hose")
+	# A free reel, so only the class decides: a hose part fits, a mug does not.
+	var empty := HoseReel.new()
+	add_child_autofree(empty)
+	var def := ItemDefinition.new()
+	def.id = &"test_hose_part"
+	def.look = &"spanner"
+	def.size = Vector3(0.1, 0.12, 0.3)
+	def.mass_kg = 1.0
+	def.stow_class = &"hose"
+	var hose_part := Item.new()
+	hose_part.setup(def)
+	add_child_autofree(hose_part)
 	var mug := Item.new()
 	mug.setup(ItemCatalog.load_from_dir().get_def(&"mug"))
 	add_child_autofree(mug)
-	assert_false(_reel.fits(mug))
+	assert_true(empty.fits(hose_part))
+	assert_false(empty.fits(mug))
 
 func test_stocking_secures_a_nozzle_and_does_it_once():
 	var first := _reel.item
@@ -73,10 +86,14 @@ func test_a_stowed_nozzle_follows_the_reel_as_the_hull_moves():
 	var nozzle := _reel.item
 	_hull.global_position = Vector3(40, -3, 12)
 	await wait_physics_frames(2)
-	assert_almost_eq(nozzle.global_position, _reel.item_transform(nozzle).origin, Vector3.ONE * 0.001)
+	# The physics body, not the node: a body that did not follow its parent would fail here.
+	var body: Transform3D = PhysicsServer3D.body_get_state(nozzle.get_rid(), PhysicsServer3D.BODY_STATE_TRANSFORM)
+	assert_almost_eq(body.origin, _reel.item_transform(nozzle).origin, Vector3.ONE * 0.001)
 
-func test_a_second_release_does_not_make_a_second_line():
+func test_a_second_release_while_the_line_is_out_does_not_make_a_second_line():
+	var nozzle := _reel.item
 	_reel.release()
 	var line := _reel.line
+	_reel.secure(nozzle)
 	_reel.release()
-	assert_eq(_reel.line, line)
+	assert_eq(_reel.line, line, "the line that is paying out is reused")

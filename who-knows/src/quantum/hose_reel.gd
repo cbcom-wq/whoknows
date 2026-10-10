@@ -8,9 +8,9 @@ extends StowPoint
 ## anything off a rack.
 ##
 ## AirlockAlcove builds it, with the hull; Airlock.bind gives it the home's
-## `sink` and `line_parent` and stocks it. The hull is rebuilt whenever a block
-## changes, which frees the reel and its nozzle: a nozzle held then notices its
-## reel is gone and uses itself up (HoseNozzle).
+## `sink`, `room` and `line_parent` and stocks it. The hull is rebuilt whenever
+## a block changes, which frees the reel and its nozzle: a nozzle held then
+## notices its reel is gone and uses itself up (HoseNozzle).
 
 const STOW_CLASS := &"hose"
 ## Home along the line, seconds.
@@ -18,6 +18,9 @@ const WIND_TIME := 1.0
 
 ## Credits an item to the home's store: `func(item: Item) -> bool`.
 var sink: Callable
+## How much QE the home's store can still take: `func() -> int`. Invalid means
+## unlimited (a test without a store).
+var room: Callable
 ## Where the line lives: the home's Outside, which never moves itself.
 var line_parent: Node3D
 ## The line, while the nozzle is out.
@@ -96,10 +99,6 @@ func _physics_process(delta: float) -> void:
 			secure(home)
 			if line != null and is_instance_valid(line):
 				line.finish()
-	elif not is_free():
-		# Stowed on a hull that moves: a frozen body does not follow its
-		# parent by itself in every case, so it is kept where it belongs.
-		item.global_transform = item_transform(item)
 
 func _exit_tree() -> void:
 	if line != null and is_instance_valid(line):

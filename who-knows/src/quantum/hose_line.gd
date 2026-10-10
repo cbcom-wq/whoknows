@@ -64,8 +64,7 @@ func _build() -> void:
 	_multi.transform_format = MultiMesh.TRANSFORM_3D
 	_multi.mesh = mesh
 	_multi.instance_count = HoseRope.SEGMENTS
-	# Never culled while any of it shows: the line is 30 m about its node.
-	_multi.custom_aabb = AABB(Vector3.ONE * -HoseRope.LENGTH * 2.0, Vector3.ONE * HoseRope.LENGTH * 4.0)
+	# No custom AABB: the rope lies wherever the hull is (up to SHIFT_AT from this node), so the engine's bounds from the instances are the right ones.
 	_instances = MultiMeshInstance3D.new()
 	_instances.name = "Segments"
 	_instances.multimesh = _multi

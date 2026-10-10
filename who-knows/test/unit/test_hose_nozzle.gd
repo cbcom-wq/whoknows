@@ -28,6 +28,7 @@ func before_each():
 	_reel.line_parent = _outside
 	_reel.sink = func(item: Item) -> bool:
 		return _store.credit(item.definition.quantum_value, &"hose")
+	_reel.room = func() -> int: return _store.room()
 	_reel.stock_nozzle(_catalog.get_def(&"hose_nozzle"))
 	_nozzle = _reel.item
 	_use = _nozzle.use_node as HoseNozzle
@@ -75,14 +76,21 @@ func test_the_toast_text_names_it_and_says_what_it_was_worth():
 	await _hold(30)
 	assert_signal_emitted_with_parameters(_use, "swallowed", ["ICE CHUNK", value])
 
-func test_a_full_store_refuses_the_item_and_says_so():
+func test_a_full_store_stops_suction_and_says_so():
 	_store = QuantumStore.new(100, 100)
-	var chunk := _loose(&"rock_chunk", Vector3(0, 0, -0.5))
+	var chunk := _loose(&"rock_chunk", Vector3(0, 0, -3))
 	await _hold(30)
-	assert_true(is_instance_valid(chunk), "still there, nothing consumed")
+	assert_almost_eq(chunk.global_position.z, -3.0, 0.01, "not pulled")
 	assert_eq(chunk.state, Item.State.LOOSE)
 	assert_eq(_use.aim_text(_nozzle, Transform3D.IDENTITY, null), "Store full")
 	assert_eq(_store.amount, 100)
+
+func test_an_item_the_store_has_no_room_for_is_left_where_it_is():
+	_store = QuantumStore.new(100, 95)
+	var chunk := _loose(&"rock_chunk", Vector3(0, 0, -3))
+	await _hold(30)
+	assert_almost_eq(chunk.global_position.z, -3.0, 0.01, "5 QE of room, a 10 QE chunk: not pulled")
+	assert_eq(_use.aim_text(_nozzle, Transform3D.IDENTITY, null), "Store full")
 
 func test_a_thing_too_big_is_not_pulled_and_the_prompt_says_so():
 	# The catalogue's crate is within the limits, so the fixture is made here:
@@ -135,3 +143,12 @@ func test_it_hands_the_avatar_a_tether_to_the_reel_30_m_long():
 
 func test_a_save_waits_while_it_is_out():
 	assert_eq(_use.busy(), "hose out")
+
+func test_an_item_freed_from_under_the_shrink_raises_no_error():
+	var chunk := _loose(&"rock_chunk", Vector3(0, 0, -0.2))
+	await _hold(1)
+	assert_eq(chunk.state, Item.State.HELD, "swallowed and shrinking")
+	chunk.get_parent().remove_child(chunk)
+	chunk.free()
+	await wait_physics_frames(30)
+	assert_eq(_use._shrinking.size(), 0, "the dead entry was dropped without an error")

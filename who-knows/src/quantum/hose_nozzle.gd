@@ -57,6 +57,11 @@ func hold(item: Item, _aim: Transform3D, _world: Node3D, holder: CollisionObject
 		if Suction.too_big(def):
 			_refusal = "Too big"
 			continue
+		# A store with no room for it stops the pull too: nothing is drawn
+		# toward a mouth that cannot take it.
+		if reel.room.is_valid() and int(reel.room.call()) < def.quantum_value:
+			_refusal = "Store full"
+			continue
 		if to.length() <= Suction.SWALLOW:
 			if _swallow(other):
 				_pulled = true
@@ -91,18 +96,20 @@ func _physics_process(delta: float) -> void:
 		# The hull was rebuilt under us: the reel is gone. Use it up, so a hand
 		# never holds a nozzle with no line.
 		_orphan_handled = true
-		Item.consume.call_deferred(nozzle)
+		_use_up.call_deferred(nozzle)
 	_tick_shrinking(delta, nozzle)
 
 ## Each swallowed item shrinks into the mouth over SHRINK, then is consumed
-## (which tells the salvage ledger it is taken).
+## (which tells the salvage ledger it is taken). An item freed from under the
+## shrink by another system is simply dropped from the list.
 func _tick_shrinking(delta: float, nozzle: Item) -> void:
 	for i in range(_shrinking.size() - 1, -1, -1):
 		var entry: Array = _shrinking[i]
-		var thing := entry[0] as Item
-		if not is_instance_valid(thing):
+		var held: Variant = entry[0]
+		if not is_instance_valid(held):
 			_shrinking.remove_at(i)
 			continue
+		var thing := held as Item
 		entry[1] = float(entry[1]) - delta
 		if nozzle != null and is_instance_valid(nozzle):
 			thing.global_position = nozzle.global_transform * nozzle.definition.use_point
@@ -111,11 +118,16 @@ func _tick_shrinking(delta: float, nozzle: Item) -> void:
 			_shrinking.remove_at(i)
 			Item.consume(thing)
 
+## Uses a nozzle up if it is still there when the deferred call runs.
+static func _use_up(item: Item) -> void:
+	if is_instance_valid(item):
+		Item.consume(item)
+
 func _exit_tree() -> void:
 	for entry in _shrinking:
-		var thing := entry[0] as Item
-		if is_instance_valid(thing) and thing.is_inside_tree():
-			Item.consume(thing)
+		var held: Variant = entry[0]
+		if is_instance_valid(held) and (held as Item).is_inside_tree():
+			Item.consume(held as Item)
 	_shrinking.clear()
 
 ## *Too big* or *Store full* while that is what the trigger is meeting.
