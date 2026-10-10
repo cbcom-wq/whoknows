@@ -130,6 +130,12 @@ const POD_SEAT_DEPTH := 0.7
 ## How far forward of its cell's centre a bridge helm stands (ship bridge spec
 ## §4.2): its eye 1.2 m behind the glass.
 const HELM_FORWARD := 0.25
+## The captain's dais (ship bridge spec §5.1): a platform over its cell, a ramp
+## across its back edge (27 degrees, under the avatar's 45), and the chair
+## CAPTAIN_FORWARD forward of the cell's centre, on the flat.
+const DAIS_HEIGHT := 0.25
+const DAIS_RAMP := 0.5
+const CAPTAIN_FORWARD := 0.25
 
 ## A pod shoulder's window, floor-relative, and its half width.
 const SHOULDER_WINDOW_LOW := 1.15
@@ -764,6 +770,88 @@ static func pilot_station(kit: InteriorKit, f: Transform3D, variety: float) -> v
 			_lit(buttons[i], 1.6, 0.4 if i == 3 else 1.0))
 	kit.collider(f * _at(Vector3(0, 0.4, -0.72)), Vector3(1.1, 0.8, 0.3))
 	kit.light(f * Vector3(0, 0.9, -0.3), InteriorPalette.LIGHT_WARM, 0.35, 1.6, &"helm")
+
+## The captain's dais in its cell's floor frame (-z the way the chair faces):
+## the platform, a rail on the front and both flanks, the ramp across the back,
+## a lit strip round its foot. Its colliders are the platform, the ramp and the
+## rails.
+static func captain_dais(kit: InteriorKit, f: Transform3D) -> void:
+	var trim := _c(InteriorPalette.TRIM)
+	var low := _c(InteriorPalette.WALL_LOW)
+	var flat := BAY - DAIS_RAMP
+	var flat_centre := Vector3(0, DAIS_HEIGHT * 0.5, -DAIS_RAMP * 0.5)
+	kit.bevel_box(SOLID, f * _at(flat_centre), Vector3(BAY, DAIS_HEIGHT, flat), 0.03, low)
+	kit.collider(f * _at(flat_centre), Vector3(BAY, DAIS_HEIGHT, flat))
+	var slope := atan2(DAIS_HEIGHT, DAIS_RAMP)
+	var length := sqrt(DAIS_HEIGHT * DAIS_HEIGHT + DAIS_RAMP * DAIS_RAMP)
+	# Turned about +x by +slope, the ramp's +z (back) end goes down to the floor
+	# and its -z end meets the platform.
+	var ramp := f * Transform3D(Basis(Vector3.RIGHT, slope), Vector3(0, DAIS_HEIGHT * 0.5, BAY * 0.5 - DAIS_RAMP * 0.5))
+	kit.bevel_box(SOLID, ramp * _at(Vector3(0, -0.025, 0)), Vector3(BAY, 0.05, length), 0.01, low)
+	kit.collider(ramp * _at(Vector3(0, -0.025, 0)), Vector3(BAY, 0.05, length))
+	kit.box(GLOW, f * _at(Vector3(0, 0.02, -BAY * 0.5 + 0.02)), Vector3(BAY - 0.1, 0.02, 0.02),
+		_lit(InteriorPalette.LIGHT_WARM, 1.8))
+	var rail_y := DAIS_HEIGHT + 0.9
+	var rails: Array[Array] = [
+		[Vector3(0, rail_y, -BAY * 0.5 + 0.06), Vector3(BAY, 0.06, 0.06)],
+		[Vector3(-BAY * 0.5 + 0.06, rail_y, -DAIS_RAMP * 0.5), Vector3(0.06, 0.06, flat)],
+		[Vector3(BAY * 0.5 - 0.06, rail_y, -DAIS_RAMP * 0.5), Vector3(0.06, 0.06, flat)],
+	]
+	for r in rails:
+		kit.bevel_box(SOLID, f * _at(r[0]), r[1], 0.02, trim)
+		kit.collider(f * _at(Vector3(r[0].x, DAIS_HEIGHT + 0.45, r[0].z)), Vector3(r[1].x, 0.9, r[1].z))
+	for post: Vector3 in [Vector3(-0.9, 0, -0.94), Vector3(0.9, 0, -0.94), Vector3(-0.94, 0, 0.2), Vector3(0.94, 0, 0.2)]:
+		kit.tube_between(SOLID, f * Vector3(post.x, DAIS_HEIGHT, post.z), f * Vector3(post.x, rail_y, post.z), 0.025, trim)
+
+## The captain's chair in its fixture frame (on the dais): the pilot's chair
+## made bigger and plainer, armrest pads but no stick or throttle, and no
+## console ahead: the captain looks over the front row.
+static func captain_chair(kit: InteriorKit, f: Transform3D, variety: float) -> void:
+	var trim := _c(InteriorPalette.TRIM)
+	var low := _c(InteriorPalette.WALL_LOW)
+	var seat := _c(InteriorPalette.SEAT)
+	kit.bevel_box(SOLID, f * _at(Vector3(0, 0.06, 0.25)), Vector3(0.8, 0.1, 0.8), 0.04, trim)
+	kit.tube_between(SOLID, f * Vector3(0, 0.1, 0.25), f * Vector3(0, 0.34, 0.25), 0.11, low)
+	kit.bevel_box(SOLID, f * _at(Vector3(0, 0.37, 0.26)), Vector3(0.84, 0.08, 0.72), 0.03, low)
+	kit.bevel_box(SOLID, f * _at(Vector3(0, 0.48, 0.25)), Vector3(0.76, 0.16, 0.66), 0.07, seat)
+	var back := f * Transform3D(Basis(Vector3.RIGHT, deg_to_rad(10.0)), Vector3(0, 1.0, 0.7))
+	kit.bevel_box(SOLID, back * _at(Vector3(0, 0, 0.06)), Vector3(0.82, 1.0, 0.1), 0.04, low)
+	kit.bevel_box(SOLID, back, Vector3(0.74, 0.94, 0.14), 0.07, seat)
+	kit.bevel_box(SOLID, back * _at(Vector3(0, 0.58, 0.0)), Vector3(0.5, 0.22, 0.15), 0.07, seat)
+	for side in [-1.0, 1.0]:
+		var x: float = side * 0.47
+		kit.bevel_box(SOLID, f * _at(Vector3(x, 0.55, 0.4)), Vector3(0.1, 0.34, 0.1), 0.02, low)
+		kit.bevel_box(SOLID, f * _at(Vector3(x, 0.74, 0.18)), Vector3(0.16, 0.09, 0.64), 0.04, trim)
+		var pad := f * Transform3D(Basis(Vector3.RIGHT, deg_to_rad(-20.0)), Vector3(x, 0.79, -0.04))
+		kit.bevel_box(SOLID, pad, Vector3(0.16, 0.03, 0.2), 0.01, _c(InteriorPalette.SCREEN_BACK))
+		kit.screen(pad * Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), Vector3(0, 0.016, 0.02)),
+			Vector2(0.12, 0.09), InteriorKit.Screen.DOTS, fposmod(variety + side * 0.3, 1.0))
+
+## A crew station in its fixture frame: a seat like the pilot's without stick
+## or throttle, at a console ahead with two screens and lit buttons, all for
+## show until a job takes them (ship bridge spec §3.3).
+static func crew_station(kit: InteriorKit, f: Transform3D, variety: float) -> void:
+	var trim := _c(InteriorPalette.TRIM)
+	var low := _c(InteriorPalette.WALL_LOW)
+	var seat := _c(InteriorPalette.SEAT)
+	kit.bevel_box(SOLID, f * _at(Vector3(0, 0.06, 0.25)), Vector3(0.56, 0.1, 0.56), 0.04, trim)
+	kit.tube_between(SOLID, f * Vector3(0, 0.1, 0.25), f * Vector3(0, 0.34, 0.25), 0.08, low)
+	kit.bevel_box(SOLID, f * _at(Vector3(0, 0.46, 0.25)), Vector3(0.58, 0.14, 0.54), 0.06, seat)
+	var back := f * Transform3D(Basis(Vector3.RIGHT, deg_to_rad(12.0)), Vector3(0, 0.9, 0.62))
+	kit.bevel_box(SOLID, back, Vector3(0.56, 0.72, 0.12), 0.06, seat)
+	kit.bevel_box(SOLID, f * _at(Vector3(0, 0.36, -0.72)), Vector3(1.3, 0.56, 0.3), 0.05, trim)
+	var face := f * Transform3D(Basis(Vector3.RIGHT, deg_to_rad(-55.0)), Vector3(0, 0.7, -0.64))
+	kit.bevel_box(SOLID, face, Vector3(1.3, 0.3, 0.05), 0.02, trim)
+	kit.bevel_box(SOLID, face * _at(Vector3(0, 0, 0.03)), Vector3(1.2, 0.24, 0.012), 0.005,
+		_c(InteriorPalette.SCREEN_BACK))
+	var first := int(variety * 3.0)
+	kit.screen(face * _at(Vector3(-0.3, 0, 0.038)), Vector2(0.52, 0.19), _mode(first), variety)
+	kit.screen(face * _at(Vector3(0.3, 0, 0.038)), Vector2(0.52, 0.19), _mode(first + 2),
+		fposmod(variety + 0.37, 1.0))
+	for i in 4:
+		kit.bevel_box(GLOW, f * _at(Vector3(-0.27 + i * 0.18, 0.5, -0.565)), Vector3(0.08, 0.05, 0.02), 0.008,
+			_lit([InteriorPalette.SKY, InteriorPalette.AMBER, InteriorPalette.LIGHT_WARM, InteriorPalette.CORAL][i], 1.6))
+	kit.collider(f * _at(Vector3(0, 0.4, -0.72)), Vector3(1.3, 0.8, 0.3))
 
 ## The bridge computer's holo table (bridge computer spec §3.3).
 const HOLO_TABLE_TOP := 0.9

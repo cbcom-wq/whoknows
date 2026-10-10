@@ -84,7 +84,8 @@ static func build(layout: InteriorLayout, body: StaticBody3D, canopy_material: M
 ## Whether the dressing draws this MOUNT block itself, as a prop. The builder
 ## draws a block's own mesh only for the fixtures this leaves out.
 static func draws_fixture(id: StringName) -> bool:
-	return InteriorLayout.HELM_IDS.has(id) or id in [QUANTUM_CORE_ID, QUANTUM_MACHINE_ID, InteriorLayout.COMPUTER_ID]
+	return InteriorLayout.HELM_IDS.has(id) or InteriorLayout.SEAT_IDS.has(id) \
+		or id in [QUANTUM_CORE_ID, QUANTUM_MACHINE_ID, InteriorLayout.COMPUTER_ID]
 
 ## A fixture's frame (cockpit pod spec §5): origin on the floor under it, -z
 ## the way it faces, +y up. A helm with a pod ahead stands POD_SEAT_DEPTH
@@ -104,6 +105,18 @@ static func fixture_frame(layout: InteriorLayout, coord: Vector3i) -> Transform3
 	var id := StringName(_fixture_id(layout, coord))
 	if id == InteriorLayout.BRIDGE_HELM:
 		origin += Vector3(facing) * InteriorProps.HELM_FORWARD
+	elif id == &"captain_chair":
+		origin += Vector3(facing) * InteriorProps.CAPTAIN_FORWARD + Vector3.UP * InteriorProps.DAIS_HEIGHT
+	return Transform3D(Basis.looking_at(Vector3(facing), Vector3.UP), origin)
+
+## A fixture's cell floor centre, facing as the fixture does.
+static func floor_frame(layout: InteriorLayout, coord: Vector3i) -> Transform3D:
+	var facing := Vector3i(0, 0, -1)
+	for fixture in layout.fixtures():
+		if fixture["coord"] == coord:
+			facing = _upright_facing(fixture["orientation"])
+	var origin := ShipGrid.cell_center(coord)
+	origin.y = floor_y(coord)
 	return Transform3D(Basis.looking_at(Vector3(facing), Vector3.UP), origin)
 
 static func _fixture_id(layout: InteriorLayout, coord: Vector3i) -> String:
@@ -265,6 +278,11 @@ static func _fixture(kit: InteriorKit, layout: InteriorLayout, fixture: Dictiona
 	var variety := face_variety({"coord": coord, "normal": Vector3i.ZERO})
 	if InteriorLayout.HELM_IDS.has(fixture["id"]):
 		InteriorProps.pilot_station(kit, fixture_frame(layout, coord), variety)
+	elif fixture["id"] == &"captain_chair":
+		InteriorProps.captain_dais(kit, floor_frame(layout, coord))
+		InteriorProps.captain_chair(kit, fixture_frame(layout, coord), variety)
+	elif fixture["id"] == &"crew_station":
+		InteriorProps.crew_station(kit, fixture_frame(layout, coord), variety)
 	elif fixture["id"] == QUANTUM_CORE_ID:
 		var f := fixture_frame(layout, coord)
 		InteriorProps.quantum_core(kit, f, variety)

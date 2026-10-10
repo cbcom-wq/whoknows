@@ -120,3 +120,21 @@ func test_every_pane_has_its_window_outside():
 			assert_almost_eq((w["size"] as Vector2).x, InteriorProps.BAY - 2.0 * InteriorProps.BAND_POST, 0.001,
 				"a pane's width at %s" % c)
 	assert_eq(got, wanted)
+
+func test_the_captain_sits_on_the_dais():
+	var f := InteriorDressing.fixture_frame(_layout, Vector3i(0, 0, -2))
+	assert_almost_eq(f.origin.y, InteriorDressing.floor_y(Vector3i(0, 0, -2)) + InteriorProps.DAIS_HEIGHT, 0.001)
+
+func test_the_dais_and_its_ramp_are_solid_where_drawn():
+	var body := StaticBody3D.new()
+	add_child_autofree(body)
+	InteriorDressing.build(_layout, body, null)
+	await wait_physics_frames(2)
+	var floor_at := InteriorDressing.floor_frame(_layout, Vector3i(0, 0, -2))
+	var space := body.get_world_3d().direct_space_state
+	var top := floor_at * Vector3(0, 0, -0.3)
+	var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(top + Vector3.UP, top + Vector3.DOWN))
+	assert_almost_eq(float(hit.get("position", Vector3.ZERO).y), floor_at.origin.y + InteriorProps.DAIS_HEIGHT, 0.03)
+	var ramp := floor_at * Vector3(0, 0, 1.0 - InteriorProps.DAIS_RAMP * 0.5)
+	hit = space.intersect_ray(PhysicsRayQueryParameters3D.create(ramp + Vector3.UP, ramp + Vector3.DOWN))
+	assert_almost_eq(float(hit.get("position", Vector3.ZERO).y), floor_at.origin.y + InteriorProps.DAIS_HEIGHT * 0.5, 0.04)
