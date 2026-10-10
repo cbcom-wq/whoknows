@@ -9,10 +9,16 @@ extends Node
 ##
 ## The same chime warns as the suit's cell falls below 25 and again below 10
 ## (quantum energy spec §9), once each time it crosses.
+##
+## The hose adds two more (quantum energy spec §13): a draw loop while the
+## nozzle you hold is pulling, and a gulp when it swallows something (the
+## avatar's toast).
 
 const BREATH_DB := -16.0
 const THRUSTER_DB := -12.0
 const CHIME_DB := -8.0
+const HOSE_DB := -14.0
+const GULP_DB := -10.0
 ## The suit's levels that chime as the cell falls into them (SuitCell.level).
 const CHIME_LEVELS: Array[StringName] = [&"low", &"critical"]
 const _LEVEL_RANK := {&"ok": 0, &"low": 1, &"critical": 2, &"dry": 3}
@@ -21,6 +27,8 @@ var _avatar: Avatar
 var _breath: AudioStreamPlayer
 var _thruster: AudioStreamPlayer
 var _chime: AudioStreamPlayer
+var _hose: AudioStreamPlayer
+var _gulp: AudioStreamPlayer
 var _alarm := false
 var _level: StringName = &"ok"
 
@@ -30,6 +38,9 @@ func bind(avatar: Avatar) -> void:
 	_breath = _player("Breath", BREATH_DB)
 	_thruster = _player("Thruster", THRUSTER_DB)
 	_chime = _player("Chime", CHIME_DB)
+	_hose = _player("Hose", HOSE_DB)
+	_gulp = _player("Gulp", GULP_DB)
+	avatar.toast.connect(_on_swallowed)
 
 func _physics_process(_delta: float) -> void:
 	tick()
@@ -41,6 +52,9 @@ func tick() -> void:
 	var out := _avatar.mode == Avatar.Mode.SUIT
 	_loop(_breath, out, &"breath")
 	_loop(_thruster, out and _avatar.thrusting, &"thruster_puff")
+	var drawing := out and _avatar.grasp.holding and _avatar.grasp.item != null \
+		and _avatar.grasp.item.use_node is HoseNozzle
+	_loop(_hose, drawing, &"hose_draw")
 	var alarm := false
 	if out and is_instance_valid(_avatar.hull):
 		var hull := _avatar.hull
@@ -59,6 +73,12 @@ func _play_chime() -> void:
 	if s != null:
 		_chime.stream = s
 		_chime.play()
+
+func _on_swallowed(_text: String) -> void:
+	var s := Synth.sound(&"hose_gulp")
+	if s != null:
+		_gulp.stream = s
+		_gulp.play()
 
 func breathing() -> bool:
 	return _breath.playing

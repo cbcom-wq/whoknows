@@ -144,9 +144,9 @@ away; the store adds 1,000 QE. The hub's link panel moves 50 QE a press between 
 base within 1 km. Bases sleep past 20 km, share the 16 interior slots with the fleet, and save in
 format 3. `test/probes/base_probe.gd` plays it all in the real game: 39 checks, 0 fails; inside
 the hub 135 fps, outside with three modules 281 fps on the GTX 960. Not yet: corridors (so a drill
-or store can't be walked into), the fabricator, suit bay and ship builder (Phase D, waiting on
-quantum energy's hose, Task 9); holding the link's buttons; and any way to see a base from afar
-(the owner's call: lights, a beacon or a sensor contact). Spec
+or store can't be walked into), the fabricator, suit bay and ship builder (Phase D; its hose
+prerequisite is built, quantum energy spec §11.5); holding the link's buttons; and any way to
+see a base from afar (the owner's call: lights, a beacon or a sensor contact). Spec
 `docs/superpowers/specs/2026-09-26-habitat-modules-design.md` §19 says what was built and why it
 differs.
 

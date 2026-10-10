@@ -271,3 +271,96 @@ func test_with_a_base_and_a_package_adrift_everything_outside_is_covered():
 	_universe.origin = _universe.origin.plus(Vector3(25000, 0, 0))
 	_root.bases.check_sleep()
 	assert_null(_root.find_child("Base1", true, false), "asleep, no node of it is left")
+
+## The hose out on a spacewalk (quantum energy spec §11.3, §14.2): the nozzle
+## is never a member, the line is, and a shift keeps both where they were
+## relative to you.
+func test_everything_outside_is_covered_with_the_hose_out():
+	var airlock: Airlock = _ship.airlocks.values()[0]
+	var reel: HoseReel = airlock.alcove.reel
+	# Held out of the reel, `reel.item` is null: keep the nozzle itself.
+	var nozzle := reel.item
+	_avatar.suit_cell.charge = SuitCell.CAPACITY
+	# A hatch frame's +z points INTO its room: 3 m outside is -3 on z.
+	_out(airlock.alcove.outer_hatch.global_transform * Vector3(0, 1.0, -3.0))
+	await wait_physics_frames(2)
+	assert_true(_avatar.grasp.take(nozzle))
+	# Hands' grab swipe takes 0.3 s and moves the nozzle: wait it out.
+	await wait_physics_frames(30)
+	assert_eq(_avatar.grasp.item, nozzle, "still in your hand")
+	assert_eq(_uncovered(), [])
+	assert_not_null(reel.line)
+	assert_true(reel.line.is_in_group(Universe.EXTERIOR_SPACE))
+	assert_false(nozzle.is_in_group(Universe.EXTERIOR_SPACE), "the nozzle is never a member")
+
+func test_a_shift_with_the_hose_out_keeps_it_where_it_was_relative_to_you():
+	var airlock: Airlock = _ship.airlocks.values()[0]
+	var reel: HoseReel = airlock.alcove.reel
+	_avatar.suit_cell.charge = SuitCell.CAPACITY
+	# A hatch frame's +z points INTO its room: 3 m outside is -3 on z.
+	_out(airlock.alcove.outer_hatch.global_transform * Vector3(0, 1.0, -3.0))
+	await wait_physics_frames(2)
+	_avatar.grasp.take(reel.item)
+	# Hands' grab swipe takes 0.3 s and moves the nozzle: wait it out.
+	await wait_physics_frames(30)
+	var to_reel := reel.anchor() - _avatar.global_position
+	var to_tail := reel.line.tail() - _avatar.global_position
+	assert_lte(_line_reach(reel), HoseRope.LENGTH + 1.0, "the line lies along its own reel")
+	_universe.shift(Vector3(2000, 0, 4000))
+	# At once, before the next tick pins its ends again (which would hide a
+	# line left behind): the line's own points went with the hull.
+	assert_lte(_line_reach(reel), HoseRope.LENGTH + 1.0, "the line moved with the hull")
+	await wait_physics_frames(2)
+	assert_almost_eq(reel.anchor() - _avatar.global_position, to_reel, Vector3.ONE * 0.05)
+	assert_almost_eq(reel.line.tail() - _avatar.global_position, to_tail, Vector3.ONE * 0.05)
+	assert_lte(_line_reach(reel), HoseRope.LENGTH + 1.0, "and it stays there")
+	assert_eq(_uncovered(), [])
+
+## How far the farthest point of the hose's line lies from its reel, in the
+## world: a line left behind by a shift has its middle kilometres away while
+## both its ends are pinned to the hull and the nozzle.
+func _line_reach(reel: HoseReel) -> float:
+	var far := 0.0
+	for p in reel.line.rope.points:
+		far = maxf(far, reel.line.to_global(p).distance_to(reel.anchor()))
+	return far
+
+## Habitat modules spec §9.1, quantum energy spec §11.1: a base's hub has an
+## airlock, so a reel and a nozzle too; it draws into the base's own store, and
+## its line lives in the base's outside, covered like the ship's.
+func test_a_bases_reel_has_a_nozzle_and_credits_the_bases_own_store():
+	var at := _ship.exterior.global_position + Vector3(0, -40, 60)
+	var r := Planting.fit(Ground.new(at.y), ModuleCatalog.get_def(ModuleCatalog.HUB), at, Vector3.FORWARD, 0)
+	var base: Base = _root.bases.plant(ModuleCatalog.HUB, r, Ground.new(at.y))
+	assert_not_null(base)
+	if base == null:
+		return
+	base.tick_unfold(HabitatValues.UNFOLD + 0.1)
+	assert_eq(base.airlocks.size(), 1, "the hub's airlock")
+	var airlock: Airlock = base.airlocks.values()[0]
+	assert_not_null(airlock.alcove, "its alcove on the base's hull")
+	var reel: HoseReel = airlock.alcove.reel
+	assert_not_null(reel, "a reel on it")
+	if reel == null:
+		return
+	assert_not_null(reel.item, "a nozzle stocked")
+	assert_eq(reel.item.definition.id, &"hose_nozzle")
+	assert_eq(reel.item.state, Item.State.STOWED)
+	assert_false(reel.item.is_in_group(Universe.EXTERIOR_SPACE), "the nozzle is never a member")
+	assert_not_null(base.outside)
+	assert_eq(reel.line_parent, base.outside, "the line lives in the base's outside")
+	assert_true(reel.sink.is_valid())
+	assert_true(reel.room.is_valid())
+	assert_ne(reel, (_ship.airlocks.values()[0] as Airlock).alcove.reel, "not the ship's reel")
+	assert_eq(_uncovered(), [], "the base's reel and nozzle are covered, on its hull")
+	var ship_store := _ship.quantum.store.amount
+	var base_store := base.quantum.store.amount
+	var chunk := Item.new()
+	chunk.setup(_ship.item_catalog.get_def(&"rock_chunk"))
+	var worth := chunk.definition.quantum_value
+	assert_gt(worth, 0, "salvage is worth something")
+	assert_gt(base.quantum.store.room(), worth - 1, "the base's store has room for it")
+	assert_true(reel.sink.call(chunk))
+	assert_eq(base.quantum.store.amount, base_store + worth, "the base's store")
+	assert_eq(_ship.quantum.store.amount, ship_store, "not the ship's")
+	chunk.free()

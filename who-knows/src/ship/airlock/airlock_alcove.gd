@@ -13,6 +13,11 @@ extends Node3D
 ## block's mesh and box collider. Hull-local and interior-local coordinates are
 ## the same numbers on storey 0; above it they differ by the storey offset
 ## (InteriorBuilder.storey_offset), which is taken off here.
+##
+## It also carries the hose's reel (quantum energy spec §11.1) on the jamb
+## opposite the hull panel: the cradle, the drum and the HoseReel stow point
+## that holds the nozzle. Airlock.bind gives the reel its sink and stocks it,
+## and a hull rebuild frees the reel with the alcove.
 
 const LAYER := ExteriorBuilder.OWN_HULL_LAYER
 ## Lights here light the hull layer and anything of the world's on layer 1 --
@@ -41,6 +46,9 @@ var outer_hatch: AirlockHatch
 ## Shown shut: nothing is behind it out here.
 var inner_hatch: AirlockHatch
 var hull_panel: AirlockPanel
+## The hose's reel (quantum energy spec §11.1); Airlock.bind gives it its sink
+## and stocks it.
+var reel: HoseReel
 var show: AirlockShow
 ## Every collider this alcove put on the hull body, for whoever clears it.
 var colliders: Array[CollisionShape3D] = []
@@ -103,6 +111,7 @@ func _build(body: CollisionObject3D, grid: ShipGrid) -> void:
 	hull_panel.setup(&"outer", 16, LAYER)
 	hull_panel.transform = face * InteriorKit.at(Vector3(0.84, 1.2, PLATE_OUT))
 	add_child(hull_panel)
+	_build_reel(kit, face)
 	for normal in _ALL:
 		if normal != hatch_normal and not grid.has_block(coord + normal):
 			_plate_face(centre, normal)
@@ -112,6 +121,26 @@ func _build(body: CollisionObject3D, grid: ShipGrid) -> void:
 	var none: Array[Transform3D] = []
 	show.setup(room_frame, none, null, LAYER, true)
 	kit.commit()
+
+## The hose's reel (quantum energy spec §11.1), on the jamb opposite the hull
+## panel: a cream cradle plate, a drum in the HOSE grey-green, and the stow
+## point for the nozzle, turned so the nozzle lies flat against the hull with
+## its mouth up. The stow point is the HoseReel node; Airlock.bind gives it its
+## sink and stocks it.
+func _build_reel(kit: InteriorKit, face: Transform3D) -> void:
+	var spot := face * InteriorKit.at(Vector3(-0.84, 1.0, PLATE_OUT + 0.03))
+	reel = HoseReel.new()
+	reel.transform = spot * Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3.ZERO)
+	add_child(reel)
+	var cradle := InteriorKit.solid(HullPalette.TRIM)
+	var drum := InteriorKit.solid(HullPalette.HOSE)
+	var solid := InteriorKit.Batch.SOLID
+	kit.bevel_box(solid, face * InteriorKit.at(Vector3(-0.84, 1.05, PLATE_OUT + 0.02)),
+		Vector3(0.3, 0.7, 0.04), 0.01, cradle)
+	kit.bevel_box(solid, face * InteriorKit.at(Vector3(-0.84, 0.62, PLATE_OUT + 0.13)),
+		Vector3(0.5, 0.5, 0.2), 0.05, drum)
+	kit.bevel_box(solid, face * InteriorKit.at(Vector3(-0.84, 0.62, PLATE_OUT + 0.25)),
+		Vector3(0.16, 0.16, 0.05), 0.015, cradle)
 
 ## Floor, ceiling and walls: boxes and colliders like InteriorBuilder's, cut to
 ## the grid cell's own height, with openings for both hatches.

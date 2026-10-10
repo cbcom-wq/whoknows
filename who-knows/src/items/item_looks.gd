@@ -18,7 +18,7 @@ const LOOKS: Array[StringName] = [&"plasma_pistol", &"mug", &"canister", &"crate
 	&"toolbox", &"spare_helmet", &"power_cell", &"o2_tank", &"spanner", &"spare_module", &"medkit",
 	&"ration_tin", &"rock_sample", &"hand_lamp", &"flare", &"datapad",
 	&"rock_chunk", &"ice_chunk", &"scrap_plate", &"wire_coil", &"broken_module", &"quantum_shard",
-	&"repair_torch", &"package_hub", &"package_drill", &"package_store"]
+	&"repair_torch", &"package_hub", &"package_drill", &"package_store", &"hose_nozzle"]
 ## Salvage (quantum energy spec §10.5): the looks that glint outside.
 const GLINTS: Array[StringName] = [&"rock_chunk", &"ice_chunk", &"scrap_plate", &"wire_coil",
 	&"broken_module", &"quantum_shard"]
@@ -76,6 +76,8 @@ static func build(kit: InteriorKit, look: StringName, size: Vector3, variety: fl
 			spanner(kit, size)
 		&"repair_torch":
 			repair_torch(kit, size)
+		&"hose_nozzle":
+			hose_nozzle(kit, size)
 		&"spare_module":
 			spare_module(kit, size)
 		&"medkit":
@@ -275,6 +277,20 @@ static func repair_torch(kit: InteriorKit, size: Vector3) -> void:
 	kit.bevel_box(SOLID, k * _at(Vector3(0, 0.012, -0.04)), Vector3(0.036, 0.034, 0.03), 0.006, nozzle)
 	kit.tube_between(SOLID, k * Vector3(0, 0.012, -0.055), k * Vector3(0, 0.012, -0.13), 0.009, nozzle)
 	kit.disc(GLOW, k * Transform3D(up, Vector3(0, 0.0375, 0.02)), 0.007, _lit(InteriorPalette.AMBER, 1.8))
+
+## The hose's nozzle (quantum energy spec §11.1): a gunmetal body on a pistol
+## grip, a cream flared collar, a QUANTUM mouth that reads as lit, and a ring
+## at the back where the line joins. The mouth looks along -z. Designed at
+## 0.1 x 0.12 x 0.3.
+static func hose_nozzle(kit: InteriorKit, size: Vector3) -> void:
+	var k := _scale(size, Vector3(0.1, 0.12, 0.3))
+	var body := _c(InteriorPalette.GUNMETAL)
+	var trim := _c(InteriorPalette.TRIM)
+	kit.bevel_box(SOLID, k * _at(Vector3(0, 0.0, 0.06)), Vector3(0.07, 0.08, 0.16), 0.012, body)
+	kit.bevel_box(SOLID, k * _at(Vector3(0, -0.045, 0.07)), Vector3(0.04, 0.03, 0.05), 0.008, body)
+	kit.bevel_box(SOLID, k * _at(Vector3(0, 0.0, -0.05)), Vector3(0.1, 0.11, 0.06), 0.014, trim)
+	kit.bevel_box(SOLID, k * _at(Vector3(0, 0.0, 0.13)), Vector3(0.05, 0.05, 0.03), 0.006, trim)
+	kit.box(GLOW, k * _at(Vector3(0, 0.0, -0.081)), Vector3(0.07, 0.08, 0.004), _lit(InteriorPalette.QUANTUM, 1.8))
 
 ## A spare module: an olive circuit board with gunmetal chips, a trim edge
 ## connector and two lit indicator dots. Designed at 0.18 x 0.03 x 0.12.

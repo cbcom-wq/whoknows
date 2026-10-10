@@ -68,6 +68,7 @@ func bind(new_room: AirlockRoom, new_alcove: AirlockAlcove = null) -> void:
 	_restore_environment()
 	room = new_room
 	alcove = new_alcove
+	_bind_reel()
 	show = AirlockShow.new()
 	room.add_child(show)
 	show.setup(room.room_frame, room.nozzles, room.ceiling_light, InteriorKit.LAYER)
@@ -77,6 +78,24 @@ func bind(new_room: AirlockRoom, new_alcove: AirlockAlcove = null) -> void:
 		if not panel.pressed.is_connected(_on_pressed):
 			panel.pressed.connect(_on_pressed)
 	_apply()
+
+## Gives the alcove's reel what only the home knows (quantum energy spec
+## §11.1): whose store a swallow credits, where the line lives, and a nozzle.
+## A hull rebuild makes a new alcove and so a new reel, stocked fresh. A
+## rebuild that keeps the hull binds the same reel again, which stocks only
+## once (HoseReel.stock_nozzle), so a nozzle that is out gets no second one.
+func _bind_reel() -> void:
+	if not is_instance_valid(alcove) or alcove.reel == null or _ship == null:
+		return
+	var reel := alcove.reel
+	reel.line_parent = _ship.outside
+	if _ship.quantum != null:
+		reel.sink = _ship.quantum.credit_item
+		# Suction stops before an item flies in that the store cannot take
+		# (spec §11.4): the nozzle asks how much room is left.
+		reel.room = func() -> int: return _ship.quantum.store.room()
+	if _ship.item_catalog != null:
+		reel.stock_nozzle(_ship.item_catalog.get_def(&"hose_nozzle"))
 
 ## What pressing panel `role` would do now, or "": the cycle's prompt, unless
 ## the room panel is refusing to let an empty suit out.

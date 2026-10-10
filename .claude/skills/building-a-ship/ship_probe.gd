@@ -22,7 +22,8 @@ extends SceneTree
 # probe_star_bloom_{off,on}, probe_seated_lit, and, parked beside a rock's
 # night side, probe_seated_rock_{dark,lit} and probe_rock_*. Every ship gets
 # probe_hull_* (the skin, fill-lit) and prints skin, windows, lights and tint lines.
-# It prints the rules line (ShipRules: every rule broken, or 0) and the notes.
+# It prints the rules line (ShipRules: every rule broken, or 0) and the notes,
+# and a hose line per airlock (its alcove's reel, and the nozzle stocked on it).
 # Then a two-ship pass (docs/superpowers/specs/2026-10-02-many-ships-design.md
 # §8.2): fps in the worst view with a second ship 300 m off,
 # probe_fleet_from_starter{,_dark}.png, F8 to its helm, probe_fleet_from_second
@@ -514,6 +515,13 @@ func _run(scene: Node) -> void:
 		print("room    %s %s doorway %s" % [room["zone"], room["coords"], room["doorway"]])
 	print("pods    %s" % [layout.pods()])
 	print("locks   %s" % [layout.airlocks()])
+	# The hose (quantum energy spec §11.1): every airlock that can cycle has a
+	# reel on its hull alcove, with a nozzle stocked on it.
+	for coord: Vector3i in ship.airlocks:
+		var lock: Airlock = ship.airlocks[coord]
+		var reel: HoseReel = lock.alcove.reel if is_instance_valid(lock.alcove) else null
+		print("hose    airlock %s: reel %s, nozzle %s" % [coord, "yes" if reel != null else "NONE  <-- NO REEL",
+			"yes" if reel != null and reel.item != null else "NONE  <-- NO NOZZLE"])
 	# The skin (ship exterior spec §3): every interior window must have one outside
 	# and none may be UNMATCHED; the lights are the generator's, 5 floods and 2
 	# forward on the starter.

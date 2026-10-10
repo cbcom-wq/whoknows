@@ -38,3 +38,7 @@ const SCORCH := Color("9e8472")
 const CHAR := Color("4a3c34")
 ## Sparks off a damaged block, and the burst when one is knocked off.
 const SPARK := Color("ffe2a8")
+
+## The hose's line and its reel's drum (quantum energy spec §11.1): a dull
+## ribbed grey-green, the one cool hue on the plate.
+const HOSE := Color("5f7a70")

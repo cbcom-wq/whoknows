@@ -22,8 +22,10 @@ signal prompt_changed(text: String)
 ## An item was taken, from `from` (its global transform before it went into
 ## the hands). Hands swipes it in from there.
 signal taken(item: Item, from: Transform3D)
-## EVA cargo let go on a spacewalk (habitat modules spec §4.1): already in the
-## space you are in. The holder makes it a stray.
+## EVA cargo, or an EVA tool with nowhere to go (its reel is gone), let go on a
+## spacewalk (habitat modules spec §4.1): already in the space you are in. The
+## holder makes it a stray. An EVA tool that winds home to its reel is not
+## reported: it is no stray.
 signal let_go(item: Item)
 
 enum Mode { EMPTY, CARRYING, WIELDING }
@@ -56,8 +58,11 @@ var item: Item = null
 var charge := -1.0
 var enabled := true
 ## On a spacewalk (airlock spec §7.4): hold on to whatever you have, but take,
-## drop, throw, stow and use nothing. Unlike set_enabled(false), which lets a
-## carried crate go, this keeps it.
+## drop, throw, stow and use nothing -- save an EVA tool (the hose nozzle),
+## which may be taken and let go (let_go_outside), EVA cargo, which may be
+## carried, used and let go, and a held item that works_outside, which may be
+## used. Unlike set_enabled(false), which lets a carried crate go, this keeps
+## it.
 var suspended := false
 ## Use and throw need the reticle, so they work only in first person.
 var first_person := true
@@ -122,18 +127,27 @@ func let_fall(into: Node3D) -> Item:
 	_release()
 	world_root = was
 	changed.emit()
-	return it
+	# An EVA tool went home to its reel: it is not something to land as a stray.
+	return it if it.state != Item.State.HELD else null
 
-## Lets go of held EVA cargo on a spacewalk, into the space you are in, where
-## it floats (habitat modules spec §4.1). Null, holding on, for anything else.
+## Lets go of held EVA cargo, or an EVA tool that has nowhere to go, on a
+## spacewalk, into the space you are in, where it floats (habitat modules spec
+## §4.1): either becomes a stray. An EVA tool that went home to its reel is no
+## stray: null. Null, holding on, for anything else.
 func let_go_outside() -> Item:
-	if not suspended or item == null or not item.definition.eva_cargo:
+	if not suspended or item == null:
+		return null
+	if not (item.definition.eva_cargo or item.definition.eva_tool):
 		return null
 	var it := item
 	var was := world_root
 	world_root = use_world()
 	_release()
 	world_root = was
+	if it.state == Item.State.HELD:
+		# An EVA tool went home to its reel: nothing to report, never a stray.
+		changed.emit()
+		return null
 	it.set_space(true)
 	changed.emit()
 	let_go.emit(it)
@@ -143,7 +157,11 @@ func _active() -> bool:
 	return enabled and not suspended
 
 func can_take(candidate: Item) -> bool:
-	return _active() and mode == Mode.EMPTY and candidate != null and candidate.state != Item.State.HELD
+	if candidate == null or mode != Mode.EMPTY or candidate.state == Item.State.HELD:
+		return false
+	# On a spacewalk hands are suspended, but an EVA tool (the hose nozzle) may
+	# still be taken, and nothing else.
+	return _active() or (enabled and suspended and candidate.definition.eva_tool)
 
 func take(candidate: Item) -> bool:
 	if not can_take(candidate) or candidate.definition.mass_kg > Item.LIFT_LIMIT_KG:
@@ -214,6 +232,10 @@ func throw(amount: float) -> void:
 	var thrown := item
 	var direction := -aim().basis.z
 	_release()
+	if thrown.state == Item.State.HELD:
+		# An EVA tool went home to its reel; it is not thrown.
+		changed.emit()
+		return
 	thrown.linear_velocity = direction * throw_speed(thrown.mass, amount) + _body.velocity
 	thrown.watch_first_impact(throw_speed(thrown.mass, amount))
 	changed.emit()
@@ -259,6 +281,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		use()
 		return
 	if suspended and event.is_action_pressed(&"drop"):
+		let_go_outside()
+		return
+	if suspended and event.is_action_pressed(&"throw") and item != null and item.definition.eva_tool:
 		let_go_outside()
 		return
 	if not _active():
@@ -311,6 +336,9 @@ func _release() -> void:
 	item = null
 	mode = Mode.EMPTY
 	charge = -1.0
+	if it.definition.eva_tool and it.use_node != null and it.use_node.go_home(it):
+		_ignore(it, false)
+		return
 	var size := it.definition.size
 	var at := _clear_point(it.global_position, maxf(size.x, maxf(size.y, size.z)) * 0.5)
 	it.reparent(world_root, true)

@@ -30,7 +30,7 @@ extends Node
 
 signal low_power_changed(low: bool)
 ## A credit landed: how much, and from where (spec §3.2's sources):
-## &"pilot", &"convert"; later the hose.
+## &"pilot", &"convert" and &"hose" (what the nozzle swallows, credit_item).
 signal credited(amount: int, source: StringName)
 
 ## The big button's colours (MachineCycle.button_colour) as ReadoutPanel's
@@ -146,6 +146,18 @@ func busy() -> String:
 	if not _charges.is_empty():
 		return "charging suit"
 	return ""
+
+## The hose's sink (quantum energy spec §11.4): credits what `item` is worth,
+## whole or not at all. False for a thing with no value, an EVA tool, or a
+## store without room for it (§3.2's STORE FULL): the item stays where it is.
+func credit_item(item: Item) -> bool:
+	var def := item.definition
+	if store == null or def.eva_tool or def.quantum_value <= 0:
+		return false
+	if not store.credit(def.quantum_value, &"hose"):
+		return false
+	credited.emit(def.quantum_value, &"hose")
+	return true
 
 ## The positional player `key` (&"bay" or &"panel") of the machine at `cell`.
 func player(cell: Vector3i, key: StringName) -> AudioStreamPlayer3D:

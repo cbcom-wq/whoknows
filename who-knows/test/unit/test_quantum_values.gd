@@ -13,9 +13,14 @@ func test_make_cost_is_twice_the_value():
 	assert_eq(QuantumValues.make_cost(_cat.get_def(&"plasma_pistol")), 240)
 	assert_eq(QuantumValues.make_cost(_cat.get_def(&"power_cell")), 300)
 
-func test_makeable_lists_every_item_in_the_catalogue_cheapest_first():
+func test_makeable_lists_every_makeable_item_in_the_catalogue_cheapest_first():
 	var list := QuantumValues.makeable(_cat)
-	assert_eq(list.size(), _cat.ids().size(), "every item has a value, salvage included")
+	var makeable_ids := _cat.ids().filter(func(id: StringName) -> bool:
+		var def := _cat.get_def(id)
+		return not def.eva_tool and def.quantum_value > 0)
+	assert_eq(list.size(), makeable_ids.size(), "every item with a value, EVA tools left out (spec §4.3)")
+	var listed: Array = list.map(func(d: ItemDefinition) -> StringName: return d.id)
+	assert_false(listed.has(&"hose_nozzle"), "the nozzle is an EVA tool, never made (spec §4.3)")
 	assert_eq(list[0].id, &"mug", "the cheapest thing to make")
 	assert_eq(list[-1].id, &"hub_package", "the dearest thing to make, at 800 (habitat modules spec §4.1)")
 	for i in range(1, list.size()):

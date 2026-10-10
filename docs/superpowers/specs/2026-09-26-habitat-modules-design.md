@@ -1,7 +1,8 @@
 # Habitat modules: a base you print, plant and plug together
 
 **Date:** 2026-09-26, revised 2026-10-08
-**Status:** Phases A–C built on branch `habitat-modules`; Phase D waits on the hose. **Every
+**Status:** Phases A–C built on branch `habitat-modules`; Phase D is not built, and the hose it
+waited on is now built (quantum energy spec §11.5). **Every
 decision in §2 was taken on 2026-10-08**, after a review that brought the 2026-09-26 draft up to
 date with saving, NPCs, the bridge computer, star systems, the warp, world scale, health and
 damage, and many ships (§18); the owner approved this spec the same day. The plan is
@@ -11,7 +12,8 @@ differs.
 the suit cell, the near cloud), the asteroids' fixed big rocks (asteroids spec §18) in belts
 (system skeleton §6), the airlock, the floating origin, saving (format 2), NPCs, health and
 damage, and many ships (`Fleet`). **Phase D also needs quantum energy's hose and its line
-(Task 9)**, not yet built: corridors reuse the line. A base's sensor contact needs its Task 10.
+(Task 9)**, now built (quantum energy spec §11.5): corridors reuse the line. A base's sensor
+contact needs its Task 10.
 **Governed by:** `docs/design/visual-style.md`, and CLAUDE.md's rules on the floating origin and
 on every ship being usable.
 **Builds on:**
@@ -721,7 +723,8 @@ Targeted test files only during the build; the full suite only with the owner's 
 ## 14. Build order
 
 Each phase ends playable. Phases A–C need only what is on `main` now; Phase D needs quantum
-energy's hose line (Task 9), and a base's sensor contact needs its Task 10.
+energy's hose line (Task 9, now built: quantum energy spec §11.5), and a base's sensor contact
+needs its Task 10.
 
 - **Phase A: `GridInterior` and `InteriorSlots`.** Extract what `Ship` and a base share, and the
   slot pool from `Fleet`, with no behaviour change, proven by the parity test, the ship probe and
@@ -821,7 +824,8 @@ The review with the owner:
 Built on branch `habitat-modules` (2026-10-08 to 2026-10-09) from
 `docs/superpowers/plans/2026-10-08-habitat-modules.md`, in 15 tasks. `main` (the ship library) was
 merged in first. Phase D (corridors, the fabricator, the suit bay, the ship builder, packing a
-module up) is not built: it waits on quantum energy's hose and line (Task 9).
+module up) is not built: it waited on quantum energy's hose and line (Task 9), now built (quantum
+energy spec §11.5).
 
 ### 19.1 What works
 
@@ -945,6 +949,9 @@ three modules in view, 3.6 ms (281 fps), worst 6.2. Above §12's 120 fps budget 
 
 ### 19.4 Gaps and open questions
 
+- **Phase D's prerequisite, the hose and its line, is built** (`HoseLine`, `HoseReel`; quantum
+  energy spec §11.5). Corridors may reuse `HoseRope` and the shape of `HoseLine.setup(reel,
+  nozzle)`.
 - **Hold-to-move:** the link is press-only, 50 QE a press: moving 1,000 QE takes 20 presses until
   the Interactor gets a held press (`LinkPanel.hold` and `LINK_RATE` are ready for it).
 - **Seeing a base from afar (§8.1, open, the owner's call):** a base can't be found from more

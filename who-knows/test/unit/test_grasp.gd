@@ -17,6 +17,16 @@ class UsedUp extends ItemUse:
 		Item.consume.call_deferred(item)
 		return true
 
+## Takes an item home when it is let go, as the hose reel does.
+class HomingUse extends ItemUse:
+	var homed: Array[Item] = []
+	var takes := true
+	func go_home(item: Item) -> bool:
+		if not takes:
+			return false
+		homed.append(item)
+		return true
+
 var _world: Node3D
 var _body: CharacterBody3D
 var _head: Node3D
@@ -368,3 +378,88 @@ func test_an_item_freed_in_the_hand_is_let_go():
 	await wait_physics_frames(1)
 	assert_eq(_grasp.mode, Grasp.Mode.EMPTY)
 	assert_null(_grasp.item)
+
+## An EVA tool: allowed to be taken on a spacewalk, never dropped in space.
+func _tool(takes := true, outside := true) -> Item:
+	var def := ItemDefinition.new()
+	def.id = &"test_tool"
+	def.look = &"spanner"
+	def.display_name = "Test tool"
+	def.mass_kg = 1.0
+	def.size = Vector3(0.1, 0.1, 0.3)
+	def.grip = ItemDefinition.Grip.WIELD
+	def.eva_tool = true
+	def.works_outside = true
+	def.use = HomingUse
+	var item := Item.new()
+	item.setup(def)
+	item.set_space(outside)
+	_world.add_child(item)
+	(item.use_node as HomingUse).takes = takes
+	return item
+
+func test_an_eva_tool_can_be_taken_on_a_spacewalk_and_a_mug_cannot():
+	_grasp.suspended = true
+	var tool := _tool()
+	assert_true(_grasp.can_take(tool), "an EVA tool passes the suspension")
+	var mug_def := ItemCatalog.load_from_dir().get_def(&"mug")
+	var mug := Item.new()
+	mug.setup(mug_def)
+	_world.add_child(mug)
+	assert_false(_grasp.can_take(mug), "nothing else does")
+	assert_true(_grasp.take(tool))
+	assert_eq(_grasp.item, tool)
+
+func test_a_held_eva_tool_can_be_used_on_a_spacewalk():
+	_grasp.suspended = true
+	_grasp.take(_tool())
+	assert_true(_grasp.can_use())
+
+func test_letting_go_of_an_eva_tool_sends_it_home_and_never_makes_a_stray():
+	_grasp.suspended = true
+	var tool := _tool()
+	_grasp.take(tool)
+	watch_signals(_grasp)
+	assert_null(_grasp.let_go_outside(), "no stray to report")
+	assert_eq((tool.use_node as HomingUse).homed, [tool])
+	assert_null(_grasp.item)
+	assert_signal_not_emitted(_grasp, "let_go")
+
+func test_throwing_an_eva_tool_sends_it_home_instead():
+	_grasp.suspended = true
+	var tool := _tool()
+	_grasp.take(tool)
+	_grasp.throw(1.0)
+	assert_eq((tool.use_node as HomingUse).homed, [tool])
+	assert_eq(tool.linear_velocity, Vector3.ZERO, "it was not thrown")
+
+func test_blacking_out_with_an_eva_tool_returns_it_and_reports_no_stray():
+	_grasp.suspended = true
+	var tool := _tool()
+	_grasp.take(tool)
+	assert_null(_grasp.let_fall(_world))
+	assert_eq((tool.use_node as HomingUse).homed, [tool])
+
+func test_a_tool_with_nowhere_to_go_drops_loose():
+	_grasp.suspended = true
+	var tool := _tool(false)
+	_grasp.take(tool)
+	_grasp.let_go_outside()
+	assert_null(_grasp.item)
+	assert_eq(tool.state, Item.State.LOOSE)
+
+## Nowhere to go on a spacewalk: it floats where you are, as a stray, not in the
+## interior you left (world_root is the interior; use_world() is the space).
+func test_a_tool_with_nowhere_to_go_floats_where_you_are_and_becomes_a_stray():
+	_grasp.suspended = true
+	var aboard := Node3D.new()
+	add_child_autofree(aboard)
+	_grasp.world_root = aboard
+	var tool := _tool(false, false)
+	_grasp.take(tool)
+	watch_signals(_grasp)
+	assert_eq(_grasp.let_go_outside(), tool, "reported as a stray")
+	assert_eq(tool.get_parent(), _world, "the space you are in, not the interior")
+	assert_true(tool.in_space, "outside the hull")
+	assert_eq(tool.state, Item.State.LOOSE)
+	assert_signal_emitted_with_parameters(_grasp, "let_go", [tool])

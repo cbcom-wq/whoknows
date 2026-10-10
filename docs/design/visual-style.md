@@ -195,8 +195,8 @@ Sound follows the look: **soft and warm, never harsh.**
   - **Suit**, for what you hear inside your helmet.
 - **Air carries sound.** In the airlock the Ship bus closes down with the pressure, to 300 Hz and
   −18 dB at vacuum.
-- **Space is silent:** on a spacewalk you hear only your breathing, your thrusters and the
-  warning chime.
+- **Space is silent:** on a spacewalk you hear only your breathing, your thrusters, the warning
+  chime and the tool in your hands: the hose's draw and gulp, on the Suit bus.
 - Interior sounds are positional, heard by the current camera. On a spacewalk that camera is 5 km
   from interior space, so the ship falls silent by itself.
 

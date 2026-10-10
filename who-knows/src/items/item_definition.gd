@@ -36,11 +36,15 @@ enum Grip {
 @export var hold_rotation: Vector3 = Vector3.ZERO
 ## What this kind is worth in quantum energy (quantum energy spec §4.2), set
 ## by hand on each item .tres following the rule of thumb in §4.1. 0 means
-## the item has no value yet (a hand-built test definition; every catalogue
-## item on disk has one).
+## the item has no value: a hand-built test definition, or an EVA tool (the hose
+## nozzle), which is worth nothing and is never credited. Every other
+## catalogue item on disk has one.
 @export var quantum_value: int = 0
-## An EVA tool (the hose nozzle, spec §11): never converted or made, however
-## it fills quantum_value (spec §4.2's table).
+## An EVA tool (the hose nozzle, spec §11): never converted, made or credited
+## (it has no quantum_value, spec §4.2's table). The one thing hands may take on
+## a spacewalk, though they are otherwise suspended; let go, it winds home to its
+## reel (ItemUse.go_home) instead of drifting off, and is a stray only if it has
+## no reel to go to.
 @export var eva_tool: bool = false
 ## Can be used on a spacewalk, where hands are otherwise suspended (health and
 ## damage spec §8.1): the repair torch. Taking, dropping and throwing still

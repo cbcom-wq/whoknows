@@ -42,7 +42,7 @@ func test_the_suit_takes_you_outside():
 	assert_eq(_avatar.velocity, Vector3(1, 0, 0))
 	assert_eq(_avatar.motion_mode, CharacterBody3D.MOTION_MODE_FLOATING)
 	assert_eq(_avatar.collision_mask, Avatar.SUIT_MASK, "your own hull, and items")
-	assert_eq(_avatar.interactor.collision_mask, Interactor.SUIT_MASK, "the hull panel")
+	assert_eq(_avatar.interactor.collision_mask, Interactor.SUIT_MASK, "the hull panel and the hose's nozzle")
 	assert_null(_avatar.camera.environment, "the world's look")
 	assert_true(_avatar.camera.current, "still your view")
 	assert_true(_avatar.grasp.suspended, "hands idle, but still holding")

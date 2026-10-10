@@ -77,6 +77,8 @@ signal downed_changed(is_down: bool)
 ## What you held as you blacked out, let go where you fell. `outside` when it
 ## fell on a spacewalk: it is in space now, for the flight scene to adopt.
 signal let_fall(item: Item, outside: bool)
+## A line for the toast near the reticle: what the hose just swallowed.
+signal toast(text: String)
 
 var mode: Mode = Mode.PLATING
 ## The suit's assist (Z on a spacewalk): holds you still relative to `hull`.
@@ -160,6 +162,7 @@ func _ready() -> void:
 	camera.add_child(hands)
 	grasp.bind(self, head, hands.wield_socket, hands.carry_socket)
 	grasp.let_go.connect(func(item: Item) -> void: let_fall.emit(item, true))
+	grasp.taken.connect(_on_item_taken)
 	hands.bind(grasp, self)
 	var sounds := SuitSounds.new()
 	sounds.name = "SuitSounds"
@@ -177,6 +180,15 @@ func take_item(item: Item) -> void:
 
 func can_take_item(item: Item) -> bool:
 	return grasp.can_take(item)
+
+## An item with a `swallowed` signal (the hose's nozzle) tells the toast.
+func _on_item_taken(item: Item, _from: Transform3D) -> void:
+	var use := item.use_node
+	if use != null and use.has_signal(&"swallowed") and not use.is_connected(&"swallowed", _on_swallowed):
+		use.connect(&"swallowed", _on_swallowed)
+
+func _on_swallowed(label: String, value: int) -> void:
+	toast.emit("+%d QE · %s" % [value, label])
 
 ## Whether you fit standing at `pose` (feet at its origin, upright): nothing
 ## in your body's way, and a floor underfoot.
@@ -445,6 +457,7 @@ func enter_suit(outside: Node3D, pose: Transform3D, start_velocity: Vector3, shi
 ## the world -- from exactly there, easing back to your head.
 func enter_plating(interior: Node3D, pose: Transform3D, pitch: float, start_velocity: Vector3,
 		righting: Quaternion, eye_from := Vector3.INF) -> void:
+	_let_go_tool()
 	_camera_home = camera.position
 	_move_to(interior)
 	remove_from_group(Universe.EXTERIOR_SPACE)
@@ -498,6 +511,8 @@ func build_telemetry() -> VehicleTelemetry:
 	t.energy_line = 0
 	t.energy_label = &"SUIT"
 	t.energy_state = suit_cell.level()
+	if grasp != null and grasp.item != null and grasp.item.use_node != null:
+		t.tool_text = grasp.item.use_node.tool_text()
 	return t
 
 ## Eases the view upright after floating in (enter_plating).
@@ -520,6 +535,7 @@ func tick_righting(delta: float) -> void:
 func suit_step(delta: float, input: Vector3) -> void:
 	var v_ref := _hull_velocity_at(global_position)
 	if suit_cell.is_dry():
+		_let_go_tool()
 		velocity = Suit.home_step(velocity, v_ref, _to_home(), delta)
 		thrusting = false
 		return
@@ -529,6 +545,26 @@ func suit_step(delta: float, input: Vector3) -> void:
 	suit_cell.spend_dv((v - velocity).length())
 	velocity = v
 	thrusting = input.length() > 0.01
+	_tether(delta)
+
+## An EVA tool in hand goes home: the suit ran dry, or you are coming aboard.
+func _let_go_tool() -> void:
+	if grasp != null and grasp.item != null and grasp.item.definition.eva_tool:
+		grasp.let_go_outside()
+
+## The held tool's tether (the hose's line): outward velocity removed at its
+## length and a pull back, after the suit's own step, so it costs the cell
+## nothing.
+func _tether(delta: float) -> void:
+	if grasp.item == null or grasp.item.use_node == null:
+		return
+	var t := grasp.item.use_node.tether()
+	if t.is_empty():
+		return
+	# The reel rides the hull, so the line holds you in your ship's frame, not
+	# the world's: a ship drifting at 5 m/s must not be braked against space.
+	var v_ref := _hull_velocity_at(global_position)
+	velocity = v_ref + Tether.constrain(_collider.global_position, velocity - v_ref, t["anchor"], t["length"], delta)
 
 ## From the middle of you to where a dry suit takes you, or zero -- hold
 ## station -- with nowhere to go.
