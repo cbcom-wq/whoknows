@@ -33,6 +33,12 @@ var hull_origin: Vector3 = Vector3.ZERO
 ## (airlock spec §8.3). Set after from_state(); the ship has none.
 var has_beacon: bool = false
 var beacon: Vector3 = Vector3.ZERO
+## The other kind of home on a spacewalk (habitat modules spec §5.5): your
+## ship's airlock when your suit is a base's, the nearest base's when it is a
+## ship's.
+var has_other_beacon: bool = false
+var other_beacon: Vector3 = Vector3.ZERO
+var other_label: String = ""
 ## What the flight computer is holding (flight controls spec §5.5). Set after
 ## from_state(); off for anything that holds nothing, like the suit.
 var heading_hold: bool = false

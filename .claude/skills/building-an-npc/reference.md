@@ -1,6 +1,7 @@
 # NPC building reference
 
-The facts behind `SKILL.md`, checked against the code on 2026-09-26. Paths are relative to
+The facts behind `SKILL.md`, checked against the code on 2026-09-26 (bases' vibrations and
+`RockHerdSource.quiet` added 2026-10-09). Paths are relative to
 `who-knows/` unless they start with `docs/` or `.claude/`. If a name here no longer exists,
 trust the code and fix this file.
 
@@ -64,7 +65,8 @@ NPCs heal `HEAL_RATE` 0.1 hp/s after `HEAL_AFTER` 10 s, only while live.
 
 **`NpcSite`:** `id`; `frame() -> Transform3D` (site to engine; outside, a node that the floating
 origin moves); `gravity(local) -> Vector3`; `alive() -> bool`; `start_pose(record, time) ->
-Transform3D` (site-local, feet on the ground); `tint() -> Color` (the look's colour; default
+Transform3D` (site-local, feet on the ground; while `alive()` is false the `Npc` steps nothing
+until the director's next review demotes it); `tint() -> Color` (the look's colour; default
 `SpacePalette.UNTINTED`); `fill(ctx, npc)`.
 
 **`Locomotor`:** `id`; `enter(npc)`; `step(npc, intent, delta)`; `exit(npc)`; `handover(npc) ->
@@ -131,6 +133,19 @@ percepts), then the site's `fill`:
 | `Ship._jolt_rock` (hull strike) | vibration knock / 4, rock radius × 2, the rock |
 | `Ship._blast_rock` (burn over 10 % within 50 m of a rock, 2 Hz) | vibration 0.6, 40 m |
 | `MotionCoupling.drive_felt_gravity` (shove changes > 3 m/s² in a tick) | shake, shove / 12 |
+| `Base.stamp` (a module's legs landing as it unfolds) | vibration 1.0 (`HabitatValues.STAMP_STRENGTH`), 60 m (`STAMP_RADIUS`), the rock's site: scatters the herds near |
+| `Base.hum` (each working drill, every `HUM_EVERY` 3 s) | vibration 0.2 (`HUM_STRENGTH`), 80 m (`HUM_RADIUS`), the rock's site: under `Scatter`'s 0.45, felt but never startling |
+
+Bases give off `VIBRATION` on the rock they stand on (habitat modules spec §8.4): the planting
+stamp and each drill's hum, both sent from the base's exterior with the base's `site.site_id`
+(its rock's `RockHerds.site_of`), so only that rock's skitters feel them.
+
+**Herds keep away from a drill** (`RockHerdSource.quiet`, a Callable `(site id, engine point) ->
+bool`, wired by the flight scene to `Bases.quiet`): true when a drill on that rock's base has run
+`HabitatValues.QUIET_AFTER` (600 s) and stands within `QUIET_RADIUS` (80 m) of the point. It is
+asked **once per record when the rock's `RockSite` is (re)built** (`_offered`, keyed by rock id,
+cleared when the rock leaves), never on every review: live skitters never vanish in view, and the
+herd is gone the next time the rock comes into detail. No behaviour changes.
 
 `RockHerds.site_of(rock)` names a rock as a site (`&"rock:x_y_z_w"`); vibrations carry it.
 

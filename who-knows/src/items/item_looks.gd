@@ -18,10 +18,13 @@ const LOOKS: Array[StringName] = [&"plasma_pistol", &"mug", &"canister", &"crate
 	&"toolbox", &"spare_helmet", &"power_cell", &"o2_tank", &"spanner", &"spare_module", &"medkit",
 	&"ration_tin", &"rock_sample", &"hand_lamp", &"flare", &"datapad",
 	&"rock_chunk", &"ice_chunk", &"scrap_plate", &"wire_coil", &"broken_module", &"quantum_shard",
-	&"repair_torch"]
+	&"repair_torch", &"package_hub", &"package_drill", &"package_store"]
 ## Salvage (quantum energy spec §10.5): the looks that glint outside.
 const GLINTS: Array[StringName] = [&"rock_chunk", &"ice_chunk", &"scrap_plate", &"wire_coil",
 	&"broken_module", &"quantum_shard"]
+
+## Head room a module package leaves above its case for the carrying handle.
+const PACKAGE_HANDLE_ROOM := 0.08
 
 ## The glint (spec §10.4): lit this long, every GLINT_EVERY seconds.
 const GLINT_FLASH := 0.15
@@ -99,6 +102,12 @@ static func build(kit: InteriorKit, look: StringName, size: Vector3, variety: fl
 			broken_module(kit, size)
 		&"quantum_shard":
 			quantum_shard(kit, size)
+		&"package_hub":
+			package(kit, size, InteriorPalette.MODULE_COLOURS[&"hub"])
+		&"package_drill":
+			package(kit, size, InteriorPalette.MODULE_COLOURS[&"drill"])
+		&"package_store":
+			package(kit, size, InteriorPalette.MODULE_COLOURS[&"store"])
 		_:
 			push_error("ItemLooks: no look called %s" % look)
 			kit.bevel_box(SOLID, Transform3D.IDENTITY, size, 0.01, _c(InteriorPalette.TRIM))
@@ -159,6 +168,28 @@ static func crate(kit: InteriorKit, size: Vector3, variety: float) -> void:
 	for z in [-1.0, 1.0]:
 		kit.bevel_box(SOLID, _at(Vector3(0, size.y * 0.17, z * (size.z * 0.5 - 0.004))),
 			Vector3(0.07, 0.04, 0.008), 0.003, _c(InteriorPalette.TRIM))
+
+## A module package (habitat modules spec §4.1): a bevelled trim case with two
+## terracotta straps, a carrying handle on top, a violet seam round its middle
+## and the module's colour in a band across the lid. Designed at 0.5 x 0.35 x 0.5;
+## the case is HANDLE_ROOM shorter than the box and sits low in it, so the
+## handle stays inside the item's box.
+static func package(kit: InteriorKit, size: Vector3, band: Color) -> void:
+	var case_size := Vector3(size.x, size.y - PACKAGE_HANDLE_ROOM, size.z)
+	var low := -PACKAGE_HANDLE_ROOM * 0.5
+	var lid := low + case_size.y * 0.5
+	kit.bevel_box(SOLID, _at(Vector3(0, low, 0)), case_size - Vector3.ONE * 0.012, 0.04, _c(InteriorPalette.TRIM))
+	for x in [-size.x * 0.28, size.x * 0.28]:
+		kit.box(SOLID, _at(Vector3(x, low, 0)), Vector3(0.05, case_size.y + 0.004, size.z + 0.004), _c(InteriorPalette.BELT))
+	kit.box(SOLID, _at(Vector3(0, lid + 0.002, 0)), Vector3(size.x * 0.3, 0.006, size.z * 0.98), _c(band))
+	kit.box(GLOW, _at(Vector3(0, low, 0)), Vector3(size.x + 0.006, 0.012, size.z + 0.006),
+		InteriorKit.lit(InteriorPalette.QUANTUM, 1.2))
+	kit.tube_between(SOLID, Vector3(-0.08, lid + 0.01, 0), Vector3(-0.08, lid + 0.06, 0),
+		0.012, _c(InteriorPalette.GUNMETAL))
+	kit.tube_between(SOLID, Vector3(0.08, lid + 0.01, 0), Vector3(0.08, lid + 0.06, 0),
+		0.012, _c(InteriorPalette.GUNMETAL))
+	kit.tube_between(SOLID, Vector3(-0.08, lid + 0.06, 0), Vector3(0.08, lid + 0.06, 0),
+		0.014, _c(InteriorPalette.GUNMETAL))
 
 ## A coral toolbox with a gunmetal lid seam, trim latches and a carry handle.
 ## Designed at 0.5 x 0.26 x 0.2.

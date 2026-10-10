@@ -14,8 +14,8 @@ lights. Building a ship means choosing
 blocks and orientations, then **proving** the generated result launches, flies, can be walked
 and looks right. Green tests prove structure, not looks or feel.
 
-The worked example is the starter shuttle: `_starter_grid()` in `who-knows/scenes/flight_test.gd`.
-Its comments explain every block that isn't obvious. Read it before you design.
+The worked example is the starter shuttle: `who-knows/data/ships/starter.json`, with
+`starter.md` beside it explaining every block that isn't obvious. Read both before you design.
 
 **Read first:** `CLAUDE.md` (the style guide is binding; the floating origin; no `#` comments in
 `.tscn`), `docs/design/visual-style.md` §3 and §6, and `reference.md` beside this file (blocks,
@@ -25,6 +25,12 @@ orientation codes, numbers, APIs).
 
 Do these in order. Each one names the check that proves it.
 
+0. **A ship is a file** (`docs/superpowers/specs/2026-10-02-ship-library-design.md`):
+   `who-knows/data/ships/<id>.json` plus `<id>.md` beside it, the id the file's name, one row
+   `[x, y, z, block, orientation]` per line (`ShipLibrary.write` writes the form). Run
+   `ship_check.gd` on it until it exits 0: it runs every rule (`ShipRules`) in seconds.
+   `test_ship_catalog.gd` then holds it to the rules and to being usable, with no test of its
+   own. F6 in the game spawns it.
 1. **Lay out the decks.** −Z is the bow, +X starboard, +Y up. The proven pattern is y=0 a
    walkable cabin and y=+1 a solid equipment deck (core, reactors, grav plating). **Shape the
    outside with fairings, outside the cabin row** (`fairing_*`, 0.3 t each: a spine above, a keel
@@ -115,11 +121,20 @@ Do these in order. Each one names the check that proves it.
      sources and its crew's ledger. `Ship` makes the `RcsShow` puffs, `ShipLights` and the
      bridge's lights panel itself;
    - **every ship is usable** (the owner's rule, 2026-10-02): you can board it (F8 to the nearest
-     other helm, or any ship's airlock from a spacewalk), fly it, and it saves. Only the ship you
-     are aboard (`aboard`) draws its hull on `OWN_HULL_LAYER` (`Ship.set_own`). The probe's
+     other helm, or any ship's airlock from a spacewalk), fly it, and it saves. Only where you are
+     (`home`: the ship you stand in, or a base you are in) draws its hull on `OWN_HULL_LAYER`
+     (`GridHome.set_own`). The probe's
      `fleet` line and `test/probes/fleet_play.gd` prove it;
    - the avatar's starting spot from `InteriorBuilder.floor_y(cell)` (the flight scene's
      `_deck_spot`);
+   - **a base is a grid too** (`docs/superpowers/specs/2026-09-26-habitat-modules-design.md`):
+     `Ship` and `Base` both extend `GridHome`, and a base's hub is built by the same
+     `ExteriorBuilder`, `InteriorBuilder` and airlock code from its `BaseSite`'s grid. Anything
+     that changes how a grid becomes an interior or an exterior, or how airlocks bind, must keep
+     `Base` working: run `test_base.gd`, `test_base_boarding.gd` and `test/probes/fleet_play.gd`
+     (and `test/probes/base_probe.gd` for anything a base shows);
+   - **interior slots come from `InteriorSlots`**, one pool shared by `Fleet` and `Bases`
+     (`fleet.slots`, `MAX` 16): never hand one out by hand, and give it back when a home is freed;
    - anything outside the hull goes in `Universe.EXTERIOR_SPACE` (CLAUDE.md);
    - **a ship's state round-trips through the save** (`docs/superpowers/specs/
      2026-09-26-saving-design.md`). A block with state of its own (a fixture, a store, a door that
@@ -154,6 +169,7 @@ Do these in order. Each one names the check that proves it.
    - the validator, the stats, the `balance` line (each axis's imbalance as a share of authority,
      flagged `OVER 5%`), and the feel numbers;
    - any `rcs` whose exhaust is `BLOCKED`;
+   - the `rules` line (`0 broken`, or each `<-- CODE`) and the notes;
    - rooms, pods and airlocks;
    - **the hull:** `skin` (plates, chamfers, corners, facets, nozzles), `windows N outside for N
      inside` (with `UNMATCHED` naming any inside window that has no place outside), and `lights  5
@@ -274,7 +290,7 @@ thrust.
 | A reach test with the eye where the brief said | The lights panel is on the shoulder's front wall, about 3.1 m from the cell behind, past the Interactor's 2.5 m; the test failed | Stand the test's eye in the shoulder's own cell (1.3 m from the panel) and remember the desk is 0.4 m deep |
 | Running a test or the probe from the main checkout | `run_tests.ps1` resolves from the current directory, so a shell that started in another tree ran that tree's code and reported a pass | Check the directory before every command when working in a worktree |
 | A new `class_name` without `--import` and its `.uid` | Tests fail to find the class, and the generated `.uid` is not committed | Run `--import`, then commit the `.uid` files (the repo tracks them) |
-| Every hull on `OWN_HULL_LAYER` | Found while designing many ships: the canopy and every window leave that layer out, so a second ship would have been invisible from your seat | `Ship.set_own`: only the ship you are aboard draws there; `board()` moves it and lets every other ship go |
+| Every hull on `OWN_HULL_LAYER` | Found while designing many ships: the canopy and every window leave that layer out, so a second ship would have been invisible from your seat | `GridHome.set_own`: only `home` draws there (the ship you stand in, or the base you are in); `board()` and `board_base()` move it and let every other ship and base go |
 | Each `PilotControls` listening to the one director | Sitting in any seat would have handed every ship the stick | `bind_director`; controls take the stick only when `director.seat_ship()` is their ship |
 | An airlock that let in only its own suit (`avatar.hull == hull`) | No way to board another ship from a spacewalk | Any suit; `Ship.airlock_crossed` boards that ship |
 | A canopy camera left where nobody looks through it | A second ship's canopy camera sat at the world's origin, then (first fix) at the hull's origin, where the velocity marker aims at rest: `unproject_position` hit depth 0 the frame you boarded | Unused, `CanopyPortal` rests the camera at the helm's eye on the hull |
@@ -291,6 +307,24 @@ thrust.
 | Timing the holo's `update()` with the computer still processing | The computer's own `_process` updates the holo too, untimed, and took the placings: the sweep read 1.7 ms worst when a placing at 4,000 km cost 10-12 ms (as first built) | `computer.set_process(false)` round a timed loop, as `computer_mode_render.gd` does |
 | Overlay text straight on the room | The computer mode's tabs and *ESC LEAVE* were cream on the bridge's cream ceiling: unreadable | Anything on screen outside a panel gets a `SCREEN_BACK` outline (`ComputerOverlay.OUTLINE`). Render it over the brightest wall it can sit on |
 | Working a tick out like a contact | Every one of the map's ~600 far ticks made a UniversePoint, worked the star's offset out again (three logs), undid the frame's basis and got a Dictionary back from `HoloVolume.place`: 12 ms a still SYSTEM placing, twice a second, a rhythmic stutter | Work out once a placing what every mark reads (`MapPage.Placing`); a ring's tick is its centre plus a unit circle times its radius, in the map's frame; test inside with `HoloVolume.inside` and hand ticks over with `add_ticks`. Guard a cost refactor with a recording of every mark (`test_map_page.gd`'s placing guard) before touching it |
+| A rule that failed the starter | `NO_STAND` as first written wanted the cell behind the helm free, but the starter's quantum core stands there; the seat stands you up beside it | Check a new rule on the starter first; `ShipRules.stand_cell` is where you stand up to |
+| Testing a rule with a broken copy that can't break it | Two solid cells behind a porthole remove the porthole rather than leave it unmatched | Check each broken copy breaks its rule on the real starter before writing the test |
+| `-gtest=` to run one test file | With this `.gutconfig.json` it ran the whole suite; and GUT exits 0 on a file that fails to parse | `-gselect=<file>.gd`, and read the summary: `Tests` must be above 0. After adding a `class_name`, run `godot --headless --import` first or nothing can see it |
+| A 2 × 2 hub (habitat modules) | `AirlockSite` wants exactly one horizontal face onto open space, and an airlock in the corner of a 2 × 2 has two: it would never cycle | The hub is 3 × 2 with the airlock mid-front (`ModuleCatalog`); any new module with an airlock puts it where only one face is open |
+| Modules planted face to face | Two grids that touch become one interior: rooms run together with no corridor or door between them | `Planting._crowds` and `BaseValidator`'s `APART` keep a cell between modules until corridors (Phase D) join them |
+| A shape query for "is this box in the rock" | The rock's `ConcavePolygonShape3D` is one-sided, so a box whose centre is under the surface overlaps nothing | `RockSurface._buried` casts rays in from outside to the box's centre and corners; never turn on backface collision for every rock to fix one query |
+| Freeing an item from inside its own `use()` | `Item.consume` inside `Item.use` hit "Attempted to free a locked object": the package lived on, orphaned, in your hand; and a freed object compares equal to `null`, so `item != null and not is_instance_valid(item)` never fired | Consume deferred (`Item.consume.call_deferred`); `Grasp` lets go on the item's `consumed` signal and guards on its mode, not on `item != null` |
+| `board()` returning early when `ship == aboard` | In a base your ship stays `aboard`, so walking back into it changed nothing: you stood in your ship with the base still `home` and your hull hidden | `board()` returns early only when the ship is both `aboard` and `home`; `board_base` is the one place a base becomes `home` |
+| Loading into a base with the focus on your ship | The rocks loaded round the ship, 25 km off, so the base woke with no ground in detail under it | `_restore_places` points the universe's focus at the woken base before the stream starts |
+| A `push_warning` in a check that runs every second | GUT counts it as an unexpected error, and a base waiting on a full slot pool would have logged one a second | Stay quiet and retry at the next check (`Bases._wake`) |
+| A ghost refreshed only when re-fitted | It stayed up after you aimed away, then flickered | `PackageUse` stamps the tick on every `aim_text` and hides the ghost `STALE_AFTER` 3 ticks later, or when the item leaves the hand |
+| The box skin on a base | The first hub rendered as a dark crate on spindly legs | A base hides `ExteriorBuilder.skin()` and wears `BaseExterior`'s drum shell over the same colliders; the shell leaves the hatch face open for the alcove |
+| A probe glide with the suit assist on | The assist brakes you to your home's velocity, so the suit stopped short of the hub's hatch | Turn `avatar.suit_assist` off for a scripted glide, as `fleet_play.gd` and `base_probe.gd` do |
+| An engine position kept across a 25 km jump | After `Universe.check()` the origin had moved, so "back where it was" in engine space was 25 km off | Keep places that cross a jump as `UniversePoint`s (`to_universe` before, `to_engine` after), and do what `hop()` does after one: `check()`, `place_all()`, `whereabouts.look()`, `stream.update(0, true)` |
+| The hub's link panel facing the front wall | It stood mid-cell with its back to the room, 0.6 m from the machine's face, and its offset did not turn with the hub; its tests pressed it in code and never looked | `LinkPanel.FROM_CENTRE` against the front wall, facing in, the offset turned with the hub (`test_the_panel_faces_into_the_hub_however_it_is_turned`); render a panel at eye height and press it through the Interactor |
+| A ship arriving straight at you | The first arrival flew in along its nose, toward the viewer: from the seat its wake hid behind it, and a 0.6 m wake was under a pixel from 400 m | A spawn comes in across your view (`SpawnSpot.arrival_line`, 60°) and turns to face you; judge effects outside at the distances they happen |
+| Measuring a hull by every mesh under it | The light beams are hidden meshes reaching 140 m ahead: the arrival's flash swallowed the view | Count only what shows (`WarpArrival.bounds_of`), or use `ExteriorBuilder.bounds()` where you have the ship |
+| A hull moved by something new, with its flight computer still steering | The arriving ship's RCS puffed all the way in, a dotted trail along its line | Anything that flies a hull for it rests the flight computer, as the warp and `WarpArrival` do (`FlightComputer._physics_process`) |
 
 ## Not built yet (plan for it; don't assume it works)
 
@@ -306,7 +340,14 @@ thrust.
   skids that assume a pull.
 
 - **Multi-storey interiors.** A `ladder` passes the validator, but every walkable cell still gets
-  a solid floor and ceiling, so you can't climb.
+  a solid floor and ceiling, so you can't climb. **Multi-level ships** can be written and checked
+  now and are usable once ladders climb: `CUT_OFF` names every storey the helm can't reach
+  ("ladders don't climb yet"). The climbing project gives `DeckPaths` its vertical links, and the
+  same rule then passes.
+- **Bases beyond Phase C** (habitat modules spec §19): no corridors between modules yet (Phase D,
+  waiting on the hose), so a drill or store beside the hub can't be walked into; the link moves
+  50 QE a press, with no hold; nothing makes a base visible from afar (no lights, beacon or sensor
+  contact: the owner's call); a hub's machine makes nothing (`can_make` false).
 - **The bubble canopy** pod variant.
 - **Light blocks** placed by hand. The generator places every light; a shipyard that wants its own
   comes with its own spec.

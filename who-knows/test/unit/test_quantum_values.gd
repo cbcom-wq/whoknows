@@ -17,7 +17,7 @@ func test_makeable_lists_every_item_in_the_catalogue_cheapest_first():
 	var list := QuantumValues.makeable(_cat)
 	assert_eq(list.size(), _cat.ids().size(), "every item has a value, salvage included")
 	assert_eq(list[0].id, &"mug", "the cheapest thing to make")
-	assert_eq(list[-1].id, &"quantum_shard", "the dearest thing to make, at 500 (spec §4.3)")
+	assert_eq(list[-1].id, &"hub_package", "the dearest thing to make, at 800 (habitat modules spec §4.1)")
 	for i in range(1, list.size()):
 		assert_true(
 			QuantumValues.make_cost(list[i - 1]) <= QuantumValues.make_cost(list[i]),

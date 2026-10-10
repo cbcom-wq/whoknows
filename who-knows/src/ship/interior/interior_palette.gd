@@ -95,3 +95,6 @@ const WELD := Color("fff0c8")
 const COPPER := Color("cc7a3c")
 ## Crates, on shelves and as items: one of these, chosen by variety.
 const CRATES: Array[Color] = [AMBER, SKY, CORAL, OLIVE, TRIM]
+## Each module's colour (habitat modules spec §4.1, §8.1): the band across its
+## package's lid and round its body.
+const MODULE_COLOURS := {&"hub": SKY, &"drill": COPPER, &"store": LAVENDER}

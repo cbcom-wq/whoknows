@@ -1,8 +1,8 @@
 extends SceneTree
 
 # Many ships, played through in real time (docs/superpowers/specs/
-# 2026-10-02-many-ships-design.md §4): a second starter parked stern to stern
-# with the first; F8 to its helm; up and out of its airlock in a full cycle;
+# 2026-10-02-many-ships-design.md §4): a second starter spawned through the F6
+# panel, arriving out of warp, then parked stern to stern with the first; F8 to its helm; up and out of its airlock in a full cycle;
 # across the gap, the suit switching ships on the way; in through the
 # starter's airlock in a full cycle; and back to the starter's helm to fly.
 # Every step prints what it found, and the key moments are rendered. Run it
@@ -57,6 +57,16 @@ func _check(ok: bool, what: String) -> void:
 	if not ok:
 		_fails += 1
 
+## A key as the player presses it: down and up, through the engine's input.
+func _press(code: Key) -> void:
+	for down in [true, false]:
+		var ev := InputEventKey.new()
+		ev.keycode = code
+		ev.physical_keycode = code
+		ev.pressed = down
+		Input.parse_input_event(ev)
+	await _frames(2)
+
 func _run(scene: Node) -> void:
 	await _frames(3)
 	var fleet: Fleet = scene.get("fleet")
@@ -66,7 +76,17 @@ func _run(scene: Node) -> void:
 	avatar.suit_cell.from_dict({"charge": 100.0})
 	var hull := starter.exterior.global_transform
 	var stern_to_stern := Transform3D(Basis(hull.basis.y, PI) * hull.basis, hull * Vector3(0, 0, 45))
-	var second := fleet.spawn(scene.call("_starter_grid"), stern_to_stern)
+	# Through the spawn panel (ship library spec §7.2): F6, 1, and it arrives out
+	# of warp ahead of the starter; then it is parked stern to stern for the trip.
+	await _press(KEY_F6)
+	await _press(KEY_1)
+	var second: Ship = fleet.ships()[fleet.ships().size() - 1]
+	_check(fleet.ships().size() == 2 and fleet.arriving(second), "F6, 1: %s arrives out of warp" % second.name)
+	_check(await _until(func() -> bool: return not fleet.arriving(second), 3.0), "%s has arrived" % second.name)
+	await _press(KEY_F6)
+	await _frames(30)
+	second.exterior.global_transform = stern_to_stern
+	second.exterior.linear_velocity = Vector3.ZERO
 	await _frames(5)
 	var lock_out: Airlock = second.airlocks.values()[0]
 	var lock_in: Airlock = starter.airlocks.values()[0]

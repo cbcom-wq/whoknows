@@ -15,27 +15,34 @@ const LABEL_SIZE := 12
 const BEHIND_ALPHA := 0.5
 
 var shown := false
+## True for the second marker (habitat modules spec §5.5): it points at the
+## other kind of home, labelled with what it is.
+var other := false
 var mode: int = VelocityMarker.Mode.HIDDEN
 var distance := 0.0
 
 var _position := Vector2.ZERO
+var _label := "AIRLOCK"
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 func render(telemetry: VehicleTelemetry) -> void:
 	var cam := get_viewport().get_camera_3d() if is_inside_tree() else null
-	shown = telemetry != null and telemetry.has_beacon and cam != null
+	var has := telemetry != null and (telemetry.has_other_beacon if other else telemetry.has_beacon)
+	shown = has and cam != null
 	if not shown:
 		mode = VelocityMarker.Mode.HIDDEN
 		queue_redraw()
 		return
+	var beacon := telemetry.other_beacon if other else telemetry.beacon
+	_label = telemetry.other_label if other else "AIRLOCK"
 	# A beacon always has a bearing, so the speed deadband never applies.
-	var state := VelocityMarker.resolve(INF, cam.is_position_behind(telemetry.beacon),
-		cam.unproject_position(telemetry.beacon), size)
+	var state := VelocityMarker.resolve(INF, cam.is_position_behind(beacon),
+		cam.unproject_position(beacon), size)
 	mode = state["mode"]
 	_position = state["position"]
-	distance = cam.global_position.distance_to(telemetry.beacon)
+	distance = cam.global_position.distance_to(beacon)
 	queue_redraw()
 
 func _draw() -> void:
@@ -53,7 +60,7 @@ func _draw() -> void:
 		var tip := _position + out * CHEVRON_SIZE * 0.5
 		var back := _position - out * CHEVRON_SIZE * 0.5
 		draw_polyline(PackedVector2Array([back + side, tip, back - side]), colour, LINE_WIDTH, true)
-	var text := "AIRLOCK %d M" % roundi(distance)
+	var text := "%s %d M" % [_label, roundi(distance)]
 	var at := _position + Vector2(RING_RADIUS + 6.0, 4.0)
 	if at.x > size.x - 110.0:
 		at.x = _position.x - RING_RADIUS - 100.0

@@ -1,5 +1,20 @@
 extends GutTest
 
+## Flat ground at height `y`, for planting a hub in the open.
+class Ground extends PlantSurface:
+	var y := 0.0
+	func _init(p_y: float) -> void:
+		y = p_y
+	func cast(from: Vector3, dir: Vector3, reach: float) -> Dictionary:
+		var to := from + dir * reach
+		if from.y >= y and to.y <= y:
+			return {"position": from.lerp(to, (from.y - y) / (from.y - to.y)), "normal": Vector3.UP}
+		return {}
+	func fixed() -> bool:
+		return true
+	func site_id() -> StringName:
+		return &"rock:origin"
+
 ## The floating origin in the real flight scene (docs/superpowers/specs/
 ## 2026-09-24-asteroids-design.md §4): who it follows, what it moves, and the
 ## rule that everything outside is covered.
@@ -45,10 +60,16 @@ func _uncovered() -> Array:
 			out.append(str(_root.get_path_to(n)))
 	return out
 
-## Inside any ship: interiors never move (many ships spec §5.1).
+## Inside any ship or base: interiors never move (many ships spec §5.1;
+## habitat modules spec §9.3).
 func _in_an_interior(n: Node) -> bool:
+	var homes: Array[GridHome] = []
 	for ship: Ship in _root.fleet.ships():
-		if ship.interior.is_ancestor_of(n):
+		homes.append(ship)
+	for base: Base in _root.bases.awake():
+		homes.append(base)
+	for home in homes:
+		if home.interior.is_ancestor_of(n):
 			return true
 	return false
 
@@ -215,3 +236,38 @@ func test_a_shot_on_a_spacewalk_is_covered():
 	assert_eq(shots.size(), 1)
 	assert_false(_in_an_interior(shots[0]), "the bolt is outside")
 	assert_eq(_uncovered(), [], "and covered")
+
+## Ship library spec §6.2: a ship arriving out of warp, its wake and its flash,
+## is covered.
+func test_a_ship_arriving_is_covered():
+	var place := Transform3D(Basis.IDENTITY, _ship.exterior.global_position + Vector3(300, 0, 0))
+	var ship: Ship = _root.fleet.spawn(_root._starter_grid(), place)
+	var a := WarpArrival.play(ship.exterior, place)
+	a.set_physics_process(false)
+	a._physics_process(0.3)
+	assert_eq(_uncovered(), [], "flying in, its wake behind it")
+	a._physics_process(WarpArrival.DURATION)
+	assert_eq(_uncovered(), [], "and its flash")
+
+## Habitat modules spec §9.3: a base outside, settled, with a hub package
+## adrift beside it as a stray, is covered; its interior never moves. Far
+## off, it sleeps, and a sleeping base has no nodes at all.
+func test_with_a_base_and_a_package_adrift_everything_outside_is_covered():
+	var at := _ship.exterior.global_position + Vector3(0, -40, 60)
+	var r := Planting.fit(Ground.new(at.y), ModuleCatalog.get_def(ModuleCatalog.HUB), at, Vector3.FORWARD, 0)
+	var base: Base = _root.bases.plant(ModuleCatalog.HUB, r, Ground.new(at.y))
+	assert_not_null(base)
+	if base == null:
+		return
+	base.tick_unfold(HabitatValues.UNFOLD + 0.1)
+	var item := Item.new()
+	item.setup(_ship.item_catalog.get_def(&"hub_package"), 0.5)
+	_outside.add_child(item, true)
+	item.global_position = at + Vector3(6, 4, 0)
+	item.set_space(true)
+	item.set_loose()
+	_root.strays.adopt(item)
+	assert_eq(_uncovered(), [], "the base, its legs and the package all shift")
+	_universe.origin = _universe.origin.plus(Vector3(25000, 0, 0))
+	_root.bases.check_sleep()
+	assert_null(_root.find_child("Base1", true, false), "asleep, no node of it is left")

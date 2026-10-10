@@ -1,9 +1,8 @@
 extends Node3D
 
-## Builds the starter shuttle -- the blueprint from
-## docs/superpowers/specs/2026-08-23-starter-shuttle-art-direction.md §3 --
-## so flight_test.tscn always has a ship. Once the shipyard exists
-## (Task 20) this loads a saved blueprint instead.
+## Builds the starter shuttle from the ship library (data/ships/starter.json;
+## docs/superpowers/specs/2026-10-02-ship-library-design.md §3), so
+## flight_test.tscn always has a ship.
 ##
 ## It also keeps the one saved game (docs/superpowers/specs/
 ## 2026-09-26-saving-design.md): a launch resumes it, and it saves itself in
@@ -12,6 +11,8 @@ extends Node3D
 
 ## The ship you are aboard changed (many ships spec §4.1).
 signal aboard_changed(ship: Ship)
+## Where you are changed (habitat modules spec §5.5): a ship or a base.
+signal home_changed(home: GridHome)
 
 @onready var _starter: Ship = $Ship
 @onready var _hud: HudRoot = $HudRoot
@@ -26,8 +27,20 @@ signal aboard_changed(ship: Ship)
 ## the one your suit belongs to on a spacewalk (§3.4).
 var fleet: Fleet
 var aboard: Ship
+## Where you are (habitat modules spec §5.5): the ship you are aboard or the
+## base you are in, or the one your suit belongs to on a spacewalk. A ship
+## here is always `aboard`.
+var home: GridHome
+## The base a loaded game had you in (habitat modules spec §11.2): woken in
+## _restore_places, boarded at the end of _ready; null aboard a ship.
+var _loaded_home: Base
 ## On a spacewalk, which ship your suit belongs to (§4.3).
 var suit_tie: SuitTie
+## Every base (habitat modules spec §9.1).
+var bases: Bases
+## Every ship the game can build, from data/ships (ship library spec §3.2):
+## loaded first in _ready, or by _starter_grid() on a bare instance.
+var library: ShipLibrary
 
 ## The star system the flight is in (the system skeleton spec §4), from the
 ## world seed, and the node that draws its star, planets and moons.
@@ -69,6 +82,8 @@ var course_chime: AudioStreamPlayer
 ## The warp on the HUD (the warp spec §7.3): its panel in the band, and a
 ## bracket per world, one per view.
 var warp_panel: WarpPanel
+## The spawn panel (ship library spec §5): F6.
+var spawn_panel: SpawnPanel
 var body_markers: Array[BodyMarker] = []
 ## Which body the debug hop last put you by (F7), in the system's order.
 var hop_index := -1
@@ -100,22 +115,8 @@ const OUTSIDE_GLOW_BLOOM := 0.05
 ## night draws no visible halo round a lens, however strong the light is.
 const OUTSIDE_GLOW_BLEND := Environment.GLOW_BLEND_MODE_SCREEN
 
-## BlockOrientation values used below. `_FORWARDS` order is
-## [FORWARD, BACK, LEFT, RIGHT, UP, DOWN]; o = (forward_index << 2) | roll.
-## Roll never matters here because every use is either the identity roll
-## (0) or a 90-degree roll whose only job is to swap which local axis the
-## wedge's chamfer leans toward -- see block_orientation.gd.
-const O_FORWARD := 0     ## bow-facing: chamfers/canopy glass slope up-forward; thrust along -Z
-const O_STARBOARD_FWD := 1   ## FORWARD, rolled 90 deg: hull_wedge chamfer faces +X,-Z
-const O_PORT_FWD := 3        ## FORWARD, rolled 270 deg: hull_wedge chamfer faces -X,-Z
-const O_STERN := 4       ## BACK: hull_wedge chamfer faces +Z,+Y, for the tail taper
-const O_RCS_PORT := 8        ## LEFT: thrust along -X
-const O_RCS_STARBOARD := 12  ## RIGHT: thrust along +X
-const O_RCS_UP := 16         ## UP: thrust along +Y
-const O_RCS_DOWN := 20       ## DOWN: thrust along -Y
-const O_KEEL := 2        ## FORWARD rolled 180 deg: a half block's upper half, hung under a cell
-
 func _ready() -> void:
+	_load_library()
 	var saved := _read_save()
 	var starter_part := _part_named(saved, Fleet.STARTER)
 	var layout := Ship.layout_of(starter_part) if resumed else null
@@ -131,11 +132,13 @@ func _ready() -> void:
 	if resumed:
 		_starter.restore_aboard(starter_part)
 	_make_fleet()
+	_make_bases()
 	_make_suit_tie()
 	_place_avatar_on_deck()
 	_set_interior_mood()
 	_set_outside_mood()
 	_wire_hud()
+	_wire_other_marker()
 	_wire_prompt()
 	_wire_computer_mode()
 	_wire_hands()
@@ -144,12 +147,22 @@ func _ready() -> void:
 	_wire_npcs()
 	_wire_sensors()
 	_wire_warp()
+	_wire_spawn()
 	_wire_saving()
 	for ship in fleet.ships():
 		_wire_ship(ship)
 	fleet.joined.connect(_wire_ship)
 	fleet.left.connect(_on_ship_left)
 	board(aboard, true)
+	if _loaded_home != null:
+		board_base(_loaded_home, true)
+
+## The ship library (ship library spec §3.2). A file that would not load is an
+## error in the output, and left out.
+func _load_library() -> void:
+	library = ShipLibrary.load_from_dir()
+	for e in library.errors:
+		push_error("ShipLibrary: " + e)
 
 ## Every ship in the world (many ships spec §5): the starter first, aboard.
 func _make_fleet() -> void:
@@ -158,10 +171,36 @@ func _make_fleet() -> void:
 	fleet.home = self
 	fleet.outside = $Outside
 	fleet.universe = _universe
-	fleet.aboard = func() -> Ship: return aboard
+	# In a base you are aboard no ship, so yours may sleep (habitat modules
+	# spec §9.3).
+	fleet.aboard = func() -> Ship: return aboard if home == aboard else null
 	add_child(fleet)
 	fleet.adopt(_starter)
 	aboard = _starter
+	home = _starter
+
+## Every base (habitat modules spec §9.3): sharing the fleet's interior slots,
+## and play time as the drills' clock. Its system is set in _wire_universe,
+## once the system exists.
+func _make_bases() -> void:
+	bases = Bases.new()
+	bases.name = "Bases"
+	bases.home = self
+	bases.outside = $Outside
+	bases.universe = _universe
+	bases.slots = fleet.slots
+	bases.clock = func() -> float: return play_time
+	bases.inside = func() -> Base: return home as Base
+	bases.ship_near = func(p: Vector3) -> Ship: return fleet.nearest(p)
+	bases.joined.connect(_wire_base)
+	add_child(bases)
+
+## In through a base's airlock, you are in it.
+func _wire_base(base: Base) -> void:
+	base.airlock_crossed.connect(func(_who: Avatar, outward: bool) -> void:
+		if not outward:
+			board_base(base))
+	base.set_own(base == home)
 
 ## Everything one ship needs from the game, once (many ships spec §5.2): every
 ## ship at the end of _ready, and each the fleet takes in after.
@@ -210,30 +249,35 @@ func _wire_ship(ship: Ship) -> void:
 func _on_ship_left(ship: Ship) -> void:
 	npc_debug.directors.erase(ship.npc_director)
 
-## On a spacewalk, your suit belongs to the nearest ship (many ships spec §4.3).
+## On a spacewalk, your suit belongs to the nearest ship or base (many ships
+## spec §4.3; habitat modules spec §5.5).
 func _make_suit_tie() -> void:
 	suit_tie = SuitTie.new()
 	suit_tie.name = "SuitTie"
 	suit_tie.fleet = fleet
+	suit_tie.bases = bases
 	suit_tie.avatar = _avatar
-	suit_tie.current = func() -> Ship: return aboard
+	suit_tie.current = func() -> GridHome: return home
 	suit_tie.tied.connect(_tie_suit)
 	add_child(suit_tie)
 
-## Your suit is `ship`'s now: speed relative to its hull, home its nearest
-## airlock, and aboard it.
-func _tie_suit(ship: Ship) -> void:
-	_avatar.hull = ship.exterior
-	var lock := _nearest_airlock(ship, _avatar.global_position)
+## Your suit is `to`'s now: speed relative to its hull, home its nearest
+## airlock, and you are its.
+func _tie_suit(to: GridHome) -> void:
+	_avatar.hull = to.exterior
+	var lock := _nearest_airlock(to, _avatar.global_position)
 	if lock != null:
 		_avatar.beacon_source = lock.beacon
 		_avatar.home_source = lock.home
-	board(ship)
+	if to is Ship:
+		board(to)
+	else:
+		board_base(to as Base)
 
-## `ship`'s airlock with a hatch on the hull nearest `p`, or null.
-static func _nearest_airlock(ship: Ship, p: Vector3) -> Airlock:
+## `to`'s airlock with a hatch on the hull nearest `p`, or null.
+static func _nearest_airlock(to: GridHome, p: Vector3) -> Airlock:
 	var best: Airlock = null
-	for lock: Airlock in ship.airlocks.values():
+	for lock: Airlock in to.airlocks.values():
 		if not is_instance_valid(lock.alcove):
 			continue
 		if best == null or lock.beacon().distance_to(p) < best.beacon().distance_to(p):
@@ -248,11 +292,14 @@ func _on_airlock_crossed(_who: Avatar, outward: bool, ship: Ship) -> void:
 ## Hands you to `ship` (many ships spec §4.1): its hull drawn as your own and
 ## its interior shown, the other's not; the views, the HUD's markers, the warp
 ## panel, your hands and the origin's focus all follow it, and only its
-## sensors scan. Boarding the ship you are aboard does nothing unless `force`.
+## sensors scan. Boarding the ship you are aboard does nothing unless `force`,
+## or unless you are in a base: your ship stays `aboard` there, and coming
+## back to it makes it `home` again (habitat modules spec §5.5).
 func board(ship: Ship, force := false) -> void:
-	if ship == null or (ship == aboard and not force):
+	if ship == null or (ship == aboard and ship == home and not force):
 		return
 	aboard = ship
+	home = ship
 	# Every other ship lets go, not only the last one aboard: a loaded game
 	# sets `aboard` before it first boards, and a ship starts as its own.
 	for other in fleet.ships():
@@ -260,6 +307,9 @@ func board(ship: Ship, force := false) -> void:
 			other.set_own(false)
 			for m in _cockpit_markers(other):
 				_hud.unregister_element(m)
+	if bases != null:
+		for b in bases.awake():
+			b.set_own(false)
 	ship.set_own(true)
 	for m in _cockpit_markers(ship):
 		_hud.register_element(m)
@@ -276,6 +326,25 @@ func board(ship: Ship, force := false) -> void:
 		s.sensors.process_mode = Node.PROCESS_MODE_INHERIT if s == ship else Node.PROCESS_MODE_DISABLED
 	_universe.set_focus(_avatar if _avatar.mode == Avatar.Mode.SUIT else ship.exterior)
 	aboard_changed.emit(ship)
+	home_changed.emit(ship)
+
+## Puts you in `base` (habitat modules spec §5.5): its interior shown and its
+## hull your own, no ship's; what you put down stays in it; the origin follows
+## it, or you on a spacewalk; and your ship may sleep. Your ship stays
+## `aboard`: its helm, warp and sensors are still the ones you use.
+func board_base(base: Base, force := false) -> void:
+	if base == null or (base == home and not force):
+		return
+	home = base
+	for s in fleet.ships():
+		if s.own:
+			s.set_own(false)
+	for b in bases.awake():
+		b.set_own(b == base)
+	_avatar.grasp.world_root = base.items
+	_avatar.external_accel = Vector3.ZERO
+	_universe.set_focus(_avatar if _avatar.mode == Avatar.Mode.SUIT else base.exterior)
+	home_changed.emit(base)
 
 ## The cockpit's own markers, in `ship`'s canopy view: the HUD feeds them while
 ## it is the ship you are aboard.
@@ -308,7 +377,8 @@ func _rebind_markers(ship: Ship) -> void:
 		(m as BodyMarker).sensors = ship.sensors
 
 ## F8, debug (many ships spec §4.3): seats you at the helm of the nearest other
-## awake ship. False, with a toast saying why, when it can't.
+## awake ship. False, with a toast saying why, when it can't. Measured from
+## the ship you are in: in a base yours may be asleep far off, so it refuses.
 func board_nearest() -> bool:
 	var why := _board_refusal()
 	var target: Ship = null
@@ -323,11 +393,13 @@ func board_nearest() -> bool:
 	board_at_helm(target)
 	return true
 
-## Why F8 must wait, or "": on a spacewalk, at a computer, mid-sit, during a
-## warp, or while an airlock of the ship you are aboard cycles.
+## Why F8 must wait, or "": on a spacewalk, in a base, at a computer, mid-sit,
+## during a warp, or while an airlock of the ship you are aboard cycles.
 func _board_refusal() -> String:
 	if _avatar.mode == Avatar.Mode.SUIT:
 		return "NOT ON A SPACEWALK"
+	if home != aboard:
+		return "IN A BASE"
 	if _director.is_at_station:
 		return "AT THE COMPUTER"
 	if _director.is_moving():
@@ -428,18 +500,19 @@ func _wire_hurt() -> void:
 	_avatar.seated_source = func() -> bool: return _director.is_seated
 	_avatar.rescue = _rescue
 	_avatar.rescue_cost = func(n: int) -> int:
-		return aboard.quantum.store.drain(n, &"rescue") if aboard.quantum.store != null else 0
+		return home.quantum.store.drain(n, &"rescue") if home.quantum.store != null else 0
 	_avatar.let_fall.connect(func(item: Item, outside: bool) -> void:
 		if outside and strays != null:
 			strays.adopt(item))
 
-## Puts a blacked-out `avatar` aboard where it fits first (§7.2).
+## Puts a blacked-out `avatar` in where it fits first (§7.2): the ship you are
+## aboard, or the base you are in (habitat modules spec §11.3).
 func _rescue(avatar: Avatar) -> void:
-	for pose in aboard.wake_spots():
+	for pose in home.wake_spots():
 		if not avatar.can_stand_at(pose) and avatar.mode == Avatar.Mode.PLATING:
 			continue
 		if avatar.mode == Avatar.Mode.SUIT:
-			avatar.enter_plating(aboard.interior, pose, 0.0, Vector3.ZERO, Quaternion.IDENTITY)
+			avatar.enter_plating(home.interior, pose, 0.0, Vector3.ZERO, Quaternion.IDENTITY)
 		else:
 			avatar.place(pose)
 		return
@@ -499,12 +572,19 @@ func _wire_universe(saved: Dictionary) -> void:
 	# first belt's first group: the universe's origin goes there, and the
 	# rocks around it load before the first frame.
 	system = SystemRecipe.from_seed(_stream.seed)
+	bases.system = system.seed
 	_stream.shapes = system.asteroid_shapes()
 	var start := system.entry()
 	var same_world := resumed and _same_generator(saved, "asteroids") and _same_generator(saved, "system")
 	if resumed and not same_world:
-		push_warning("FlightTest: the save's asteroids are another version; back to the start")
+		var lost: Array = saved.get("bases", {}).get("sites", [])
+		push_warning("FlightTest: the save's asteroids are another version; back to the start%s"
+			% ("; its bases are dropped" if not lost.is_empty() else ""))
 	if same_world:
+		# The bases first, before anything wakes; a world started over drops
+		# them, as it drops strays: their rocks are gone (habitat modules spec
+		# §11).
+		bases.from_dict(saved.get("bases", {}))
 		_restore_places(saved)
 	else:
 		_universe.origin = start
@@ -523,7 +603,7 @@ func _wire_universe(saved: Dictionary) -> void:
 	$DirectionalLight3D.directional_shadow_max_distance = AsteroidStream.SHADOW_REACH
 	_avatar.mode_changed.connect(
 		func(mode: Avatar.Mode) -> void:
-			_universe.set_focus(_avatar if mode == Avatar.Mode.SUIT else aboard.exterior)
+			_universe.set_focus(_avatar if mode == Avatar.Mode.SUIT else home.exterior)
 	)
 	_universe_readout = Label.new()
 	_universe_readout.name = "UniverseReadout"
@@ -598,7 +678,9 @@ func _wire_npcs() -> void:
 	exterior_npcs.catalog = _starter.npc_director.catalog
 	exterior_npcs.bus = npc_bus
 	exterior_npcs.cameras = [aboard.chase_camera, aboard.canopy_camera, _avatar.camera]
-	exterior_npcs.sources = [RockHerdSource.new(_stream)]
+	var herds := RockHerdSource.new(_stream)
+	herds.quiet = bases.quiet
+	exterior_npcs.sources = [herds]
 	exterior_npcs.ledger = npc_ledger
 	add_child(exterior_npcs)
 	npc_debug = NpcDebug.new()
@@ -701,9 +783,100 @@ func warp_busy_for(ship: Ship) -> StringName:
 			return &"airlock"
 	return &""
 
+## The spawn panel (ship library spec §5): F6 lists the library; a number
+## spawns that ship ahead of you, arriving out of warp; Delete removes the
+## nearest spawned one.
+func _wire_spawn() -> void:
+	spawn_panel = SpawnPanel.new()
+	spawn_panel.name = "SpawnPanel"
+	var lines: Array[String] = []
+	for id in library.ids():
+		lines.append("%s   %s" % [library.name_of(id), library.description_of(id)])
+	spawn_panel.entries = lines
+	spawn_panel.spawn_asked.connect(func(i: int) -> void:
+		spawn_panel.say(spawn_from_library(library.ids()[i])))
+	spawn_panel.remove_asked.connect(func() -> void: spawn_panel.say(remove_nearest_spawned()))
+	$Prompt.add_child(spawn_panel)
+
+## Spawns library ship `id` ahead of you, arriving out of warp (§5, §6), as the
+## panel's number keys do: ahead of where you will be when it lands, and clear
+## of the way you are going, so a spawn while cruising is not parked in your
+## path. Says what it did, or why not.
+func spawn_from_library(id: StringName) -> String:
+	if not library.has(id):
+		return "NO SHIP CALLED %s" % id
+	for ship in fleet.ships():
+		if ship.warp.is_spinning():
+			return "WARP ENGAGED"
+	if fleet.busy() != "":
+		return "A SHIP IS ARRIVING"
+	if fleet.ships().size() >= fleet.max_ships:
+		return "THE FLEET IS FULL"
+	# Bases hold interior slots too (habitat modules spec §9.3).
+	if fleet.slots.free_count() == 0:
+		return "NO BERTH FREE"
+	var view := _spawn_view()
+	var others: Array[Vector3] = []
+	for ship in fleet.awake():
+		others.append(ship.exterior.global_position)
+	var v := _spawn_velocity()
+	var spot: Variant = SpawnSpot.find(view.translated(v * WarpArrival.DURATION), others, _rock_near, v)
+	if spot == null:
+		return "NO CLEAR SPOT NEAR"
+	var place: Transform3D = spot
+	var grid := library.grid(id)
+	var ship := fleet.spawn(grid, place, true, "", ShipBlueprint.from_grid(grid, library.name_of(id)))
+	if ship == null:
+		return "NO BERTH FREE"
+	WarpArrival.play(ship.exterior, place, Vector3.ZERO, SpawnSpot.arrival_line(place))
+	return "SPAWNED %s · %s · %d m away" % [ship.name, library.name_of(id), roundi(view.origin.distance_to(place.origin))]
+
+## Removes the nearest spawned ship (any but the starter, awake and arrived)
+## other than the one you are aboard, as the panel's Delete does (§5). Says
+## what it did, or why not.
+func remove_nearest_spawned() -> String:
+	var here := _spawn_view().origin
+	var spawned := 0
+	var best: Ship = null
+	for ship in fleet.awake():
+		if ship.name == Fleet.STARTER or fleet.arriving(ship):
+			continue
+		spawned += 1
+		if ship == aboard:
+			continue
+		if best == null or here.distance_to(ship.exterior.global_position) < here.distance_to(best.exterior.global_position):
+			best = ship
+	if spawned == 0:
+		return "NO SPAWNED SHIP"
+	if best == null:
+		return "YOU ARE ABOARD IT"
+	var what := "%s · %s" % [best.name, best.launch_blueprint.ship_name]
+	fleet.remove(best)
+	return "REMOVED " + what
+
+## Where you look from: the hull you are in, a ship's or a base's, or your
+## view on a spacewalk. Never `aboard`'s in a base: your ship may be asleep
+## there, its engine place stale (habitat modules spec §9.3).
+func _spawn_view() -> Transform3D:
+	return _avatar.camera.global_transform if _avatar.mode == Avatar.Mode.SUIT else home.exterior.global_transform
+
+## How you move: a base stands still.
+func _spawn_velocity() -> Vector3:
+	if _avatar.mode == Avatar.Mode.SUIT:
+		return _avatar.velocity
+	return Vector3.ZERO if home is Base else home.exterior.linear_velocity
+
+## True when a rock is too near `p` for a ship to arrive there, as for a
+## warp's drop-out (§5).
+func _rock_near(p: Vector3) -> bool:
+	return WarpPlan.rock_near(_stream.recipe, _universe.to_universe(p))
+
 ## Why a save must wait on any ship (many ships spec §6.4), or "". Not a
 ## sleeping one: frozen mid-cycle, it would hold the save forever.
 func _fleet_busy() -> String:
+	var arriving := fleet.busy()
+	if arriving != "":
+		return arriving
 	for ship in fleet.awake():
 		var why := ship.busy()
 		if why != "":
@@ -765,9 +938,13 @@ static func hop_off(b: SystemBody) -> float:
 ## The debug hop (the system skeleton spec §10): puts the ship at rest HOP_OFF
 ## off the surface of the next body in the system's order (star, then each
 ## planet and its moons), or the previous for `step` -1, on its sunward side
-## and facing it. A system is 15,000 km across; this is the debug way round it. Refused on a spacewalk, while an airlock cycles, and while a
-## warp spools or travels. True if it hopped.
+## and facing it. A system is 15,000 km across; this is the debug way round
+## it. Refused on a spacewalk, in a base (it would move your parked ship and
+## strand you), while an airlock cycles, and while a warp spools or travels.
+## True if it hopped.
 func hop(step: int) -> bool:
+	if home != aboard:
+		return false
 	if aboard.warp.is_spinning():
 		return false
 	if _avatar.mode == Avatar.Mode.SUIT:
@@ -838,6 +1015,7 @@ func _wire_saving() -> void:
 	save_gate.add_source(func() -> String: return "sitting" if _director.is_moving() else "")
 	save_gate.add_source(_fleet_busy)
 	save_gate.add_source(_avatar.busy)
+	save_gate.add_source(func() -> String: return bases.busy())
 	save_gate.settle()
 	_saved_tag = SavedTag.new()
 	_saved_tag.name = "SavedTag"
@@ -887,6 +1065,8 @@ func capture() -> Dictionary:
 		"salvage": salvage.to_dict(),
 		"strays": strays.to_dict(),
 		"npcs": _capture_npcs(),
+		"bases": bases.to_dict(),
+		"home": {"base": String(home.name)} if home is Base else {},
 	}
 
 ## The dead, and the health of every NPC awake now and asleep (health and
@@ -921,7 +1101,7 @@ func _capture_you() -> Dictionary:
 			d["airlock"] = SaveCodec.cell_key(airlock.coord)
 	else:
 		d["mode"] = "seated" if _director.is_seated else "walking"
-		d["place"] = SaveCodec.transform(aboard.interior.global_transform.affine_inverse() * _avatar.global_transform)
+		d["place"] = SaveCodec.transform(home.interior.global_transform.affine_inverse() * _avatar.global_transform)
 	if _avatar.grasp.item != null:
 		d["held"] = _avatar.grasp.item.to_dict(Transform3D.IDENTITY)
 	return d
@@ -931,8 +1111,8 @@ static func _same_generator(saved: Dictionary, which: String) -> bool:
 	var theirs: Dictionary = saved.get("generators", {})
 	return int(theirs.get(which, -1)) == int(SaveGame.generators()[which])
 
-## The origin near where you were, then every ship and you (§6.1; many ships
-## spec §6.3).
+## The origin near where you were, then every ship, the base you were in, and
+## you (§6.1; many ships spec §6.3; habitat modules spec §11.2).
 func _restore_places(saved: Dictionary) -> void:
 	var you: Dictionary = saved.get("avatar", {})
 	var first := _part_named(saved, String(saved.get("aboard", Fleet.STARTER)))
@@ -941,11 +1121,22 @@ func _restore_places(saved: Dictionary) -> void:
 	var focus := SaveCodec.to_upoint(first.get("hull", {}).get("at"))
 	if String(you.get("mode", "")) == "suit":
 		focus = SaveCodec.to_upoint(you.get("at"))
+	# In a base, the origin goes to it: your ship may be far off, asleep.
+	var in_base := String(saved.get("home", {}).get("base", ""))
+	var site := bases.site_named(StringName(in_base)) if in_base != "" else null
+	if site != null and String(you.get("mode", "")) != "suit":
+		focus = site.at
 	_universe.origin = UniversePoint.at(
 		roundi(focus.x / Universe.STEP) * int(Universe.STEP),
 		roundi(focus.y / Universe.STEP) * int(Universe.STEP),
 		roundi(focus.z / Universe.STEP) * int(Universe.STEP))
 	_restore_fleet(saved, true)
+	if site != null:
+		_loaded_home = bases.wake(site.id)
+		# The rocks round the base, not round your far ship, load before the
+		# first frame (_stream.start); a spacewalk's focus is you, below.
+		if _loaded_home != null:
+			_universe.set_focus(_loaded_home.exterior)
 	_restore_you(you, true)
 
 ## Every saved ship but the starter, spawned under its own name, unstocked,
@@ -955,7 +1146,10 @@ func _restore_places(saved: Dictionary) -> void:
 func _restore_fleet(saved: Dictionary, in_place: bool) -> void:
 	fleet.from_dict(saved.get("fleet", {}))
 	if in_place:
-		_starter.restore_hull(_part_named(saved, Fleet.STARTER), _universe)
+		# Through the fleet, as every other ship: a starter left far off (you
+		# were in a base, or aboard another ship) is held asleep there, never
+		# put in engine space 25 km out for a second.
+		fleet.restore_hull(_starter, _part_named(saved, Fleet.STARTER))
 	var row := 0
 	for part in saved.get("ships", []):
 		if not (part is Dictionary) or String(part.get("name", "")) == Fleet.STARTER:
@@ -974,6 +1168,7 @@ func _restore_fleet(saved: Dictionary, in_place: bool) -> void:
 			fleet.restore_hull(ship, part)
 	var named := fleet.named(StringName(saved.get("aboard", Fleet.STARTER)))
 	aboard = named if named != null else _starter
+	home = aboard
 
 ## The saved ship called `ship_name`, or {}.
 static func _part_named(saved: Dictionary, ship_name: String) -> Dictionary:
@@ -985,26 +1180,28 @@ static func _part_named(saved: Dictionary, ship_name: String) -> Dictionary:
 ## You as the save had you (§6.3). With `outside_too` false -- the world
 ## started over -- a spacewalk comes back aboard, standing.
 func _restore_you(d: Dictionary, outside_too: bool) -> void:
+	var where: GridHome = _loaded_home if _loaded_home != null else aboard
 	_avatar.suit_cell.from_dict(d.get("suit", {}))
 	_avatar.suit_assist = bool(d.get("suit_assist", true))
 	_avatar.health.from_dict(d.get("health", {}))
 	var mode := String(d.get("mode", "walking"))
 	if mode != "suit":
-		# Into the ship you were aboard (many ships spec §6.3), where you
-		# stood, or on its deck if that is no place to stand any more.
-		var pose := aboard.interior.global_transform * SaveCodec.to_transform(d.get("place"))
-		if _can_stand(pose):
+		# Into the ship you were aboard or the base you were in (many ships
+		# spec §6.3; habitat modules spec §11.2), where you stood, or
+		# somewhere to stand in it if that is no place to stand any more.
+		var pose := where.interior.global_transform * SaveCodec.to_transform(d.get("place"))
+		if _can_stand(pose, where):
 			pose = Transform3D(Basis(Vector3.UP, pose.basis.get_euler().y), pose.origin)
 		else:
-			pose = aboard.interior.global_transform * _deck_spot(aboard)
-		_avatar.move_aboard(aboard.interior, pose)
+			pose = _stand_spot(where)
+		_avatar.move_aboard(where.interior, pose)
 		_avatar.set_head_pitch(float(d.get("pitch", 0.0)))
 	elif not outside_too:
-		_avatar.move_aboard(aboard.interior, aboard.interior.global_transform * _deck_spot(aboard))
+		_avatar.move_aboard(where.interior, _stand_spot(where))
 	# Hands work only aboard and standing, so the held item is taken first.
 	var held: Variant = d.get("held")
 	if held is Dictionary:
-		var item := aboard.restore_item(held)
+		var item := where.restore_item(held)
 		if item != null and not _avatar.grasp.take(item):
 			item.set_loose()
 	if mode == "seated":
@@ -1013,237 +1210,48 @@ func _restore_you(d: Dictionary, outside_too: bool) -> void:
 		_restore_spacewalk(d)
 
 func _restore_spacewalk(d: Dictionary) -> void:
-	var airlock: Airlock = aboard.airlocks.get(SaveCodec.to_cell(String(d.get("airlock", ""))))
+	var where: GridHome = _loaded_home if _loaded_home != null else aboard
+	var airlock: Airlock = where.airlocks.get(SaveCodec.to_cell(String(d.get("airlock", ""))))
 	if airlock == null or not is_instance_valid(airlock.alcove):
-		for a: Airlock in aboard.airlocks.values():
+		for a: Airlock in where.airlocks.values():
 			if is_instance_valid(a.alcove):
 				airlock = a
 				break
 	var pose := Transform3D(SaveCodec.to_basis(d.get("turn")), _universe.to_engine(SaveCodec.to_upoint(d.get("at"))))
-	_avatar.enter_suit(aboard.outside, pose, SaveCodec.to_vec3(d.get("v")), aboard.exterior)
+	_avatar.enter_suit(where.outside, pose, SaveCodec.to_vec3(d.get("v")), where.exterior)
 	_avatar.set_head_pitch(float(d.get("pitch", 0.0)))
 	if airlock != null:
 		_avatar.beacon_source = airlock.beacon
 		_avatar.home_source = airlock.home
 	_universe.set_focus(_avatar)
 
-## Whether a saved standing place is still somewhere to stand: a walkable
-## block under it, so a changed layout never leaves you in a wall (§6.3).
-func _can_stand(pose: Transform3D) -> bool:
-	var local := aboard.interior.global_transform.affine_inverse() * pose.origin
+## Whether a saved standing place in `where` is still somewhere to stand: a
+## walkable block under it, so a changed layout never leaves you in a wall
+## (§6.3).
+func _can_stand(pose: Transform3D, where: GridHome) -> bool:
+	var local := where.interior.global_transform.affine_inverse() * pose.origin
 	var cell := Vector3i(roundi(local.x / ShipGrid.CELL_SIZE),
 		roundi((local.y - InteriorBuilder.floor_y(Vector3i.ZERO)) / InteriorBuilder.STOREY_HEIGHT),
 		roundi(local.z / ShipGrid.CELL_SIZE))
-	if not aboard.grid.has_block(cell):
+	if not where.grid.has_block(cell):
 		return false
-	var def := aboard.catalog.get_def(aboard.grid.get_block(cell).block_id)
+	var def := where.catalog.get_def(where.grid.get_block(cell).block_id)
 	return def != null and def.is_walkable()
 
+## Somewhere to stand in `where`: a ship's deck by the helm, a base's first
+## wake spot.
+func _stand_spot(where: GridHome) -> Transform3D:
+	if where is Ship:
+		return where.interior.global_transform * _deck_spot(where as Ship)
+	return where.wake_spots()[0]
+
+## The starter shuttle, from data/ships/starter.json; why each block is where it
+## is: data/ships/starter.md. Most tests call this on a flight_test.gd that
+## never entered the tree, so it loads the library itself.
 func _starter_grid() -> ShipGrid:
-	var g := ShipGrid.new()
-
-	# --- y = 0, cabin (art direction §3.1): x -2..2, z -4..3 ---
-	for x in [-1, 0, 1]:
-		_put(g, Vector3i(x, 0, -4), &"canopy", O_FORWARD)
-	_put(g, Vector3i(-2, 0, -3), &"hull_wedge", O_PORT_FWD)
-	_put(g, Vector3i(2, 0, -3), &"hull_wedge", O_STARBOARD_FWD)
-	# The helm sits in the front row, facing the windshield: the cockpit pod
-	# juts out through the canopy face ahead of it (cockpit pod spec §7).
-	# The bridge computer's holo table in the port front corner, beside the
-	# helm, facing aft toward where you stand to use it: you look forward
-	# over it, out of the shoulder window (bridge computer spec §3.2, as
-	# amended 2026-09-27). The corner's console goes to the back corner
-	# (InteriorLayout._handed_consoles).
-	_put(g, Vector3i(-1, 0, -3), InteriorLayout.COMPUTER_ID, O_STERN)
-	_put(g, Vector3i(0, 0, -3), &"pilot_seat")
-	_put(g, Vector3i(1, 0, -3), &"deck")
-	for z in [-2, -1, 0, 1, 2]:
-		_put(g, Vector3i(-2, 0, z), &"hull")
-		_put(g, Vector3i(2, 0, z), &"hull")
-	# The quantum core stands at the bridge's centre, straight behind the
-	# helm, facing aft so its gauge faces the corridor (quantum energy spec
-	# §5.3); the quantum machine stands in the bridge's starboard back
-	# corner, facing forward with its back to the galley's wall.
-	_put(g, Vector3i(-1, 0, -2), &"deck")
-	_put(g, Vector3i(0, 0, -2), &"quantum_core", O_STERN)
-	_put(g, Vector3i(1, 0, -2), &"deck")
-	_put(g, Vector3i(-1, 0, -1), &"deck")
-	_put(g, Vector3i(0, 0, -1), &"deck")
-	_put(g, Vector3i(1, 0, -1), &"quantum_machine", O_FORWARD)
-	# Behind the bridge, a corridor down the centreline with rooms either side
-	# (interior redesign spec §7.5). Room blocks weigh and draw what deck
-	# does, so the flight balance measured below is unchanged.
-	for z in [0, 1, 2]:
-		_put(g, Vector3i(0, 0, z), &"deck")
-	_put(g, Vector3i(-1, 0, 0), &"bunk_room")
-	_put(g, Vector3i(-1, 0, 1), &"bunk_room")
-	_put(g, Vector3i(-1, 0, 2), &"bathroom")
-	_put(g, Vector3i(1, 0, 0), &"galley")
-	_put(g, Vector3i(1, 0, 1), &"weapon_room")
-	_put(g, Vector3i(1, 0, 2), &"closet")
-	_put(g, Vector3i(-2, 0, 3), &"hull")
-	_put(g, Vector3i(-1, 0, 3), &"bulkhead")
-	_put(g, Vector3i(0, 0, 3), &"airlock")
-	_put(g, Vector3i(1, 0, 3), &"bulkhead")
-	_put(g, Vector3i(2, 0, 3), &"hull")
-
-	# --- y = 0, engine pods (art direction §3.3): x = +-3 ---
-	for x in [-3, 3]:
-		_put(g, Vector3i(x, 0, 1), &"hull")
-		_put(g, Vector3i(x, 0, 2), &"hull")
-		_put(g, Vector3i(x, 0, 3), &"thruster", O_FORWARD)
-
-	# --- y = 1, equipment deck and roof (art direction §3.2) ---
-	_put(g, Vector3i(0, 1, -4), &"hull_wedge", O_FORWARD)
-	_put(g, Vector3i(-1, 1, -3), &"hull_wedge", O_FORWARD)
-	_put(g, Vector3i(1, 1, -3), &"hull_wedge", O_FORWARD)
-	_put(g, Vector3i(0, 1, -3), &"hull")
-	_put(g, Vector3i(-2, 1, -2), &"rcs", O_STERN)
-	_put(g, Vector3i(2, 1, -2), &"rcs", O_STERN)
-	for x in [-1, 0, 1]:
-		_put(g, Vector3i(x, 1, -2), &"hull")
-	for x in [-2, -1, 1, 2]:
-		_put(g, Vector3i(x, 1, -1), &"hull")
-	_put(g, Vector3i(0, 1, -1), &"core")
-	for x in [-2, 2]:
-		_put(g, Vector3i(x, 1, 0), &"hull")
-	# Quantum cell row: spec §3.2 places two (x=-1,+1). A third, centred at
-	# x=0, was added here -- see the block below on power and pitch
-	# balance for why. These three were reactors; the quantum core now
-	# generates the ship's power, and the cells keep their mass and hp,
-	# storing QE instead (quantum energy spec §5.1, §5.3).
-	_put(g, Vector3i(-1, 1, 0), &"quantum_cell")
-	_put(g, Vector3i(0, 1, 0), &"quantum_cell")
-	_put(g, Vector3i(1, 1, 0), &"quantum_cell")
-	for x in [-2, 2]:
-		_put(g, Vector3i(x, 1, 1), &"hull")
-	_put(g, Vector3i(0, 1, 1), &"hull")
-	_put(g, Vector3i(-1, 1, 1), &"grav_plating")
-	_put(g, Vector3i(1, 1, 1), &"grav_plating")
-	for x in [-2, -1, 0, 1, 2]:
-		_put(g, Vector3i(x, 1, 2), &"hull")
-	_put(g, Vector3i(-2, 1, 3), &"hull_wedge", O_STERN)
-	_put(g, Vector3i(2, 1, 3), &"hull_wedge", O_STERN)
-	# Stern roof (x=-1,0,1 at z=+3) is spec'd as plain hull. Converted to
-	# a second thruster bank instead -- see the note below.
-	for x in [-1, 0, 1]:
-		_put(g, Vector3i(x, 1, 3), &"thruster", O_FORWARD)
-
-	# --- Additions beyond art direction §3, all load-bearing on the
-	# blueprint's acceptance criteria (§3.4) rather than decorative:
-	#
-	# 1. RCS thrust authority. §3 places no RCS blocks anywhere, so as
-	#    literally specified the ship has thrust only along -Z (both main
-	#    pods fire straight aft) and ShipStats reads torque_budget from
-	#    the X/Y-thrusting blocks only. Zero RCS means zero rotational
-	#    authority: FlightComputer could not turn the ship at all,
-	#    mouse-steering included. Six RCS units sit in cells the nose
-	#    taper otherwise leaves empty, each face-adjacent to an
-	#    already-placed block so Rule 2 (ALL_CONNECTED) still holds.
-	#
-	#    They are laid out in opposed pairs, which ShipStats requires:
-	#    authority you only have one way is not authority, so each axis
-	#    counts the smaller of its two directions. Two lateral units at
-	#    the nose (one thrusting +X, one -X) give yaw both ways. Four
-	#    vertical units -- UP at z=-3, DOWN at z=-4, mirrored port and
-	#    starboard -- give pitch both ways, and, fired differentially
-	#    across the 8 m between them, roll both ways too. An earlier
-	#    layout had a single UP and a single DOWN unit on opposite sides:
-	#    both rolled the ship the *same* way, so roll authority was
-	#    effectively nil.
-	#
-	# 1b. Braking. Every main engine faces aft, so thrust_budget.reverse
-	#    was 0: S did nothing and, once burning, the ship could never be
-	#    slowed or stopped. Two RCS units at (+-2, 1, -2), thrusting +Z,
-	#    are the retro pair -- 500 kN, which stops the shuttle from its
-	#    2-second sprint speed of 32 m/s in about 6 s. They also give the
-	#    assist's drift correction something to spend along Z, which is
-	#    what cancels residual drift when the stick is centred.
-	#
-	# 2. Pitch balance. §3.4 flags the real risk directly: mounting both
-	#    main thrusters at y=0 while the equipment deck's mass sits at
-	#    y=+1 puts the centre of mass well above the thrust line, so full
-	#    forward burn induces a large pitch torque. Measured on this exact
-	#    grid at y=0-only thrust: torque_imbalance.x = 686,582 N*m against
-	#    a pitch authority (torque_budget.x) of only 160,000 N*m from the
-	#    two vertical RCS above -- nowhere near flyable. §3.4 explicitly
-	#    sanctions "moving equipment-deck mass or the pod row" to fix
-	#    this; the stern roof's three hull cells became a second thruster
-	#    bank instead (thrust higher, closer to the mass-weighted centre),
-	#    which alone brought it to -14,371 N*m. The nose RCS trim the
-	#    remainder: the grid then sat at +101,408 N*m, 3% of its own pitch
-	#    authority, so the assist held the nose through a full burn.
-	#
-	# 2b. The quantum core (quantum energy spec §5.1, §5.3, §5.4), added at
-	#    y=0 in the cabin itself rather than on the equipment deck, brings
-	#    the imbalance closer to zero rather than adding to it. Its 5 t sit
-	#    at cabin level, pulling the centre of mass down from 1.268 m to
-	#    1.206 m -- almost exactly the 1.2 m average height of the ship's
-	#    thrust (two nose pods at 0 m, three stern thrusters at 2 m). A full
-	#    burn now barely pitches the ship at all: torque_imbalance.x falls
-	#    from 101,408 to 9,278 N*m, well under 1% of pitch authority. The
-	#    quantum machine, standing starboard against the galley's wall,
-	#    introduces the only yaw imbalance the starter has: 3,093 N*m,
-	#    0.15% of yaw authority -- still negligible.
-	#
-	# 2c. The bridge computer (bridge computer spec §3.2), a 0.3 t holo table
-	#    in the port front corner, replaced a 0.4 t deck cell: the ship is
-	#    100 kg lighter, and the centre of mass edges 2 mm to starboard, so
-	#    the yaw imbalance doubles to 6,192 N*m -- 0.3% of yaw authority,
-	#    still negligible. Pitch moves to 11,146 N*m, 0.36% of authority.
-	#
-	# 3. Power margin. The extra stern thrusters draw 9.0 MW more than
-	#    §3.4's two-reactor estimate covers (that estimate assumed four
-	#    thrusters total, not five). Three reactors restored comfortable
-	#    margin; the quantum core now generates all 36 MW of it alone, and
-	#    the quantum machine's own draw (0.5 MW) is the only change to the
-	#    load side.
-	#
-	# Real numbers for this exact grid (via ShipStats/ShipValidator,
-	# res://data/blocks catalog), with the quantum core, the machine and the
-	# bridge computer aboard, the reactors replaced by quantum cells (quantum
-	# energy spec §5.4; bridge computer spec §3.2) and the 26 fairings of the
-	# shape below (ship exterior spec §8):
-	# 110 blocks, 104,700 kg, center_of_mass = (0.004, 1.301, 0.160),
-	# inertia = (2065526, 2865503, 1175422),
-	# torque_budget = (3080229, 2040115, 2174785),
-	# torque_imbalance = (151289, -5731, 0): pitch 4.9%, yaw 0.3%, roll 0%
-	# of authority,
-	# thrust_budget forward/reverse/lateral/vertical = 1500/500/500/1000 kN,
-	# power_gen = 36.0 MW (all from the quantum core), power_draw = 31.3 MW,
-	# quantum_capacity = 1200 QE, zero validation issues, can_launch = true.
-	# The fairings add 7.8 t and no power draw. Before them the ship was
-	# 96,900 kg with the centre of mass at y = 1.207 and pitch imbalance of
-	# 11,146 N*m (0.4%): 6.0 t of spine and fins sit above the cabin and only
-	# the 1.8 t keel below it, so the centre of mass rose 9 cm. Handling under
-	# assist is a little slower: torque_budget / inertia is pitch 1.49, yaw
-	# 0.71, roll 1.85 rad/s^2 (1.60 / 0.74 / 2.05 before), and forward,
-	# reverse and lateral thrust per tonne fall from 15.5 / 5.2 / 5.2 to
-	# 14.3 / 4.8 / 4.8 m/s^2. A full burn still holds the nose. See
-	# task-1-report.md and task-15-report.md for the earlier derivations.
-	_put(g, Vector3i(-1, 1, -4), &"rcs", O_RCS_STARBOARD)
-	_put(g, Vector3i(1, 1, -4), &"rcs", O_RCS_PORT)
-	_put(g, Vector3i(-2, 1, -3), &"rcs", O_RCS_UP)
-	_put(g, Vector3i(2, 1, -3), &"rcs", O_RCS_UP)
-	_put(g, Vector3i(-2, 1, -4), &"rcs", O_RCS_DOWN)
-	_put(g, Vector3i(2, 1, -4), &"rcs", O_RCS_DOWN)
-
-	# --- The shape (ship exterior spec §8): fairings, 0.3 t each, all outside
-	# the cabin row, so nothing inside moves. A dorsal spine a metre high,
-	# ramped up out of the roof toward the bow and down again over the stern
-	# bank; a fin rising aft on each engine pod; and a keel under the
-	# centreline for the floods to hang from.
-	for x in [-1, 0, 1]:
-		for z in [-1, 0, 1, 2]:
-			_put(g, Vector3i(x, 2, z), &"fairing_half")
-		_put(g, Vector3i(x, 2, -2), &"fairing_slope_long_low", O_FORWARD)
-		_put(g, Vector3i(x, 2, 3), &"fairing_slope_long_low", O_STERN)
-	for x in [-3, 3]:
-		_put(g, Vector3i(x, 1, 1), &"fairing_slope", O_FORWARD)
-	for z in [-3, -2, -1, 0, 1, 2]:
-		_put(g, Vector3i(0, -1, z), &"fairing_half", O_KEEL)
-
-	return g
+	if library == null:
+		library = ShipLibrary.load_from_dir()
+	return library.grid(ShipLibrary.STARTER)
 
 ## Stands you on the starter's deck to begin with (see _deck_spot). The
 ## avatar's scene position was authored for the hand-built room; deriving it
@@ -1296,6 +1304,23 @@ func _wire_hud() -> void:
 	# §8.3): speed relative to the ship, and the way home.
 	_avatar.mode_changed.connect(_on_avatar_mode_changed)
 
+## The second airlock marker on a spacewalk (habitat modules spec §5.5): your
+## ship's when your suit is a base's, the nearest base's when it is a ship's.
+func _wire_other_marker() -> void:
+	var marker := AirlockMarker.new()
+	marker.name = "OtherAirlockMarker"
+	marker.other = true
+	marker.set_anchors_preset(Control.PRESET_FULL_RECT)
+	$HudRoot/Screen.add_child(marker)
+	_avatar.other_beacon_source = func() -> Dictionary:
+		var to: GridHome = aboard if home is Base else bases.nearest(_avatar.global_position)
+		if to == null or (to is Ship and fleet.sleeping(to)):
+			return {}
+		var lock := _nearest_airlock(to, _avatar.global_position)
+		if lock == null:
+			return {}
+		return {"at": lock.beacon(), "label": "SHIP" if to is Ship else "BASE"}
+
 ## The pilot's controls of the ship whose seat you took report the flight
 ## computer's telemetry plus the stick and the pointer (flight controls spec
 ## §7).
@@ -1308,9 +1333,3 @@ func _on_avatar_mode_changed(mode: Avatar.Mode) -> void:
 		_hud.set_active_vehicle(_avatar)
 	elif not _director.is_seated:
 		_hud.set_active_vehicle(null)
-
-func _put(g: ShipGrid, coord: Vector3i, id: StringName, orientation: int = 0) -> void:
-	var i := BlockInstance.new()
-	i.block_id = id
-	i.orientation = orientation
-	g.set_block(coord, i)

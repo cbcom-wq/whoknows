@@ -22,6 +22,9 @@ signal prompt_changed(text: String)
 ## An item was taken, from `from` (its global transform before it went into
 ## the hands). Hands swipes it in from there.
 signal taken(item: Item, from: Transform3D)
+## EVA cargo let go on a spacewalk (habitat modules spec §4.1): already in the
+## space you are in. The holder makes it a stray.
+signal let_go(item: Item)
 
 enum Mode { EMPTY, CARRYING, WIELDING }
 
@@ -87,12 +90,15 @@ func busy() -> String:
 		return item.use_node.busy()
 	return ""
 
-## Whether the held item can be used now: wielded, in your own view, and
-## aboard, or out on a spacewalk if it works there (health and damage spec
-## §8.3).
+## Whether the held item can be used now: in your own view and wielded aboard,
+## or out on a spacewalk if it works there (health and damage spec §8.3); or
+## carried EVA cargo, anywhere (habitat modules spec §4.1).
 func can_use() -> bool:
-	return enabled and first_person and mode == Mode.WIELDING and item != null \
-		and (not suspended or item.definition.works_outside)
+	if not enabled or not first_person or item == null:
+		return false
+	if mode == Mode.CARRYING:
+		return item.definition.eva_cargo
+	return mode == Mode.WIELDING and (not suspended or item.definition.works_outside)
 
 func set_enabled(on: bool) -> void:
 	enabled = on
@@ -118,6 +124,21 @@ func let_fall(into: Node3D) -> Item:
 	changed.emit()
 	return it
 
+## Lets go of held EVA cargo on a spacewalk, into the space you are in, where
+## it floats (habitat modules spec §4.1). Null, holding on, for anything else.
+func let_go_outside() -> Item:
+	if not suspended or item == null or not item.definition.eva_cargo:
+		return null
+	var it := item
+	var was := world_root
+	world_root = use_world()
+	_release()
+	world_root = was
+	it.set_space(true)
+	changed.emit()
+	let_go.emit(it)
+	return it
+
 func _active() -> bool:
 	return enabled and not suspended
 
@@ -132,6 +153,7 @@ func take(candidate: Item) -> bool:
 		candidate.stow_point.release()
 	_end_grace(candidate)
 	item = candidate
+	candidate.consumed.connect(_on_held_consumed)
 	_ignore(candidate, true)
 	candidate.set_held()
 	if candidate.definition.grip == ItemDefinition.Grip.WIELD:
@@ -236,6 +258,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed(&"use"):
 		use()
 		return
+	if suspended and event.is_action_pressed(&"drop"):
+		let_go_outside()
+		return
 	if not _active():
 		return
 	if event.is_action_pressed(&"throw"):
@@ -249,10 +274,9 @@ func _physics_process(delta: float) -> void:
 	if _body == null:
 		return
 	_tick_grace(delta)
-	if item != null and not is_instance_valid(item):
-		item = null
-		mode = Mode.EMPTY
-		changed.emit()
+	# A freed item compares equal to null, so test the mode, not the item.
+	if mode != Mode.EMPTY and not is_instance_valid(item):
+		_forget_freed()
 	if charge >= 0.0:
 		charge = minf(charge + delta / CHARGE_TIME, 1.0)
 	holding = hold_now(delta, Input.is_action_pressed(&"use") and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED)
@@ -265,11 +289,25 @@ func hold_now(delta: float, pressed: bool) -> bool:
 		return false
 	return item.use_node.hold(item, aim(), use_world(), _body, delta)
 
+## The held item was freed under us: empty hands.
+func _forget_freed() -> void:
+	item = null
+	mode = Mode.EMPTY
+	charge = -1.0
+	changed.emit()
+
+## The held item is being used up (Item.consume, a planted package): the hands
+## let go of it now, before it is freed, so nothing reads a freed item.
+func _on_held_consumed() -> void:
+	item.consumed.disconnect(_on_held_consumed)
+	_forget_freed()
+
 ## Lets go: the item goes back into the world loose, at a point a ray from the
 ## eye proves is clear of walls, still ignoring its holder until the two no
 ## longer overlap.
 func _release() -> void:
 	var it := item
+	it.consumed.disconnect(_on_held_consumed)
 	item = null
 	mode = Mode.EMPTY
 	charge = -1.0

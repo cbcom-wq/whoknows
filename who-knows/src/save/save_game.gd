@@ -14,7 +14,7 @@ extends RefCounted
 
 ## The shape of the file. Bump it, and add a step to migrate(), whenever a
 ## part's dictionary changes shape.
-const FORMAT := 2
+const FORMAT := 3
 const DEFAULT_PATH := "user://save/game.json"
 
 ## Why the last read() came back empty: &"" (it loaded), &"missing",
@@ -111,6 +111,8 @@ static func migrate(data: Dictionary) -> Dictionary:
 	var out := data
 	if int(out.get("format", 1)) < 2:
 		out = _to_many_ships(out)
+	if int(out.get("format", 1)) < 3:
+		out = _to_bases(out)
 	return out
 
 ## Format 1 to 2 (docs/superpowers/specs/2026-10-02-many-ships-design.md
@@ -129,6 +131,15 @@ static func _to_many_ships(data: Dictionary) -> Dictionary:
 	out["aboard"] = String(Fleet.STARTER)
 	out["fleet"] = {"next": 2}
 	out["format"] = 2
+	return out
+
+## Format 2 to 3 (habitat modules spec §11.1): no bases yet, and you are not in
+## one.
+static func _to_bases(data: Dictionary) -> Dictionary:
+	var out := data.duplicate()
+	out["bases"] = {"next": 1, "sites": []}
+	out["home"] = {}
+	out["format"] = 3
 	return out
 
 static func _parse(file_path: String) -> Dictionary:

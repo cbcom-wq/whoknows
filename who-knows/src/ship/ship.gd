@@ -1,5 +1,5 @@
 class_name Ship
-extends Node3D
+extends GridHome
 
 ## Owns one ship's grid and both representations of it. The grid is the
 ## source of truth; everything else here reacts to `cell_changed`.
@@ -12,18 +12,9 @@ signal blocks_lost(coords: Array[Vector3i])
 ## §8.1): already outside, in space and in EXTERIOR_SPACE. The flight scene
 ## makes it a stray.
 signal plate_shed(item: Item)
-## Someone crossed one of its airlocks' outer hatches (airlock spec §7):
-## `outward` true out onto a spacewalk, false in, aboard (many ships spec §4.3).
-signal airlock_crossed(avatar: Avatar, outward: bool)
-
-const INTERIOR_WORLD_BASE := Vector3(0.0, -5000.0, 0.0)
 ## Every ship is in this group, for things that must find one without being
 ## given it (the repair torch aimed at a hole).
 const GROUP := &"ships"
-const SLOT_SPACING := 2000.0
-## How close a rebuilt stow point must be to where a stowed item's point was
-## for the item to stay stowed through the rebuild.
-const RESEAT_TOLERANCE := 0.05
 ## How long after a rock strikes the hull a save waits (saving spec §5).
 const STRUCK_CALM := 5.0
 ## How often, and how far past the hull, a hard burn is checked for blasting a
@@ -41,24 +32,7 @@ const CRASH_K := 5.5
 const SHED_ITEM := &"scrap_plate"
 const SHED_OUT := 1.4
 const SHED_SPEED := 1.0
-## Where you wake after blacking out, if the ship has one.
-const WAKE_ROOM := &"bunk_room"
 
-## The livery every builder paints the hull with: one shared instance. Each
-## ship swaps it for its own copy, `livery` (_apply_livery).
-const HULL_LIVERY_MATERIAL: ShaderMaterial = preload("res://data/materials/hull_livery.tres")
-## The window glass's shader; each ship makes its own material from it.
-const CANOPY_SHADER: Shader = preload("res://data/materials/interior/canopy_window.gdshader")
-## Marks a hull piece made for the own layer alone, so set_own can move it
-## back.
-const OWN_ONLY := &"own_only"
-
-@export var interior_slot: int = 0
-## Where a spacewalker goes (airlock spec §7.4): the scene's root for things in
-## the real world that are not the ship.
-@export var outside_path: NodePath
-
-var grid: ShipGrid
 ## The layout the ship launched with, nothing hurt (health and damage spec
 ## §8.2): what the repair torch puts back where a block was knocked off. Set
 ## by the first grid the ship is given, or by a save; a rebuild never
@@ -74,23 +48,10 @@ var inner_cells := {}
 var damage: ShipDamage
 ## The cabin's look the interior was last built at (ShipDamage.cabin_level).
 var _cabin_level := 0
-var outside: Node3D
 var stats: ShipStats
-var catalog: BlockCatalog
-var item_catalog: ItemCatalog
-## Every item aboard that is not in someone's hand (hands-and-items spec
-## §4.4). A sibling of the builders, so an interior rebuild never touches it.
-var items: Node3D
-## Every airlock that can cycle, by cell (airlock spec §4.5). Each outlives the
-## rebuilds that replace the room it drives.
-var airlocks: Dictionary = {}   # Vector3i -> Airlock
 ## The RCS thrusters you see and hear (flight controls spec §6). On the hull,
 ## so the floating origin carries it.
 var rcs_show: RcsShow
-## The quantum store and the core(s) it drives (quantum energy spec §3.2,
-## §8). At Ship/Quantum, alongside FlightComputer -- the two share the one
-## QuantumStore instance below.
-var quantum: QuantumPlant
 ## The work lights (ship exterior spec §6, §7). On the hull, so the floating
 ## origin carries them; kept across rebuilds, like Airlocks.
 var lights: ShipLights
@@ -98,14 +59,6 @@ var lights: ShipLights
 ## Ship/Warp. The flight scene binds it to the system; the ship only builds it
 ## and saves its chart.
 var warp: WarpDrive
-## True for the ship you are aboard (many ships spec §4.2): the hull's own
-## pieces are drawn on ExteriorBuilder.OWN_HULL_LAYER, which your canopy and
-## windows leave out, and the interior shows. Any other ship draws them on
-## layer 1, so you see it through your windows, and hides its interior, which
-## nobody can see from outside. A ship is your own until told otherwise.
-var own := true
-## This ship's own copy of the hull livery (_apply_livery).
-var livery: ShaderMaterial = HULL_LIVERY_MATERIAL.duplicate()
 
 ## Seconds since a rock last struck the hull.
 var since_struck := INF
@@ -115,8 +68,6 @@ var damage_log := DamageLog.new()
 var damage_show: DamageShow
 var _rebuild_queued := false
 
-var _stocked := false
-var _airlocks_root: Node
 ## Who lives aboard (NPC foundation spec §4.2, §14): the interior's director,
 ## the holder its NPCs stand under, and the place they live in.
 var npc_director: NpcDirector
@@ -136,10 +87,6 @@ var _thump: AudioStreamPlayer
 var _last_hull_velocity := Vector3.ZERO
 var _blast_in := 0.0
 
-@onready var exterior: RigidBody3D = $Exterior
-@onready var interior: Node3D = $Interior
-@onready var exterior_builder: ExteriorBuilder = $Exterior/ExteriorBuilder
-@onready var interior_builder: InteriorBuilder = $Interior/InteriorBuilder
 @onready var flight_computer: FlightComputer = $FlightComputer
 ## The parts of ship.tscn the flight scene hands you between (many ships spec
 ## §3.1).
@@ -151,7 +98,7 @@ var _blast_in := 0.0
 @onready var canopy_overlay: Control = $Canopy/CanopyOverlay
 
 func _ready() -> void:
-	_make_canopy_material()
+	_setup_home()
 	exterior.gravity_scale = 0.0
 	exterior.linear_damp = 0.0
 	exterior.angular_damp = 0.0
@@ -164,20 +111,6 @@ func _ready() -> void:
 	exterior.add_to_group(Universe.EXTERIOR_SPACE)
 	# It touches rocks (asteroids spec §7.1).
 	exterior.add_to_group(AsteroidStream.SPACE_ANCHOR)
-	interior.global_position = interior_slot_origin()
-	outside = get_node_or_null(outside_path) as Node3D if not outside_path.is_empty() else null
-	if outside == null:
-		outside = get_parent() as Node3D
-	if catalog == null:
-		catalog = BlockCatalog.load_from_dir("res://data/blocks")
-	if item_catalog == null:
-		item_catalog = ItemCatalog.load_from_dir("res://data/items")
-	items = Node3D.new()
-	items.name = "Items"
-	interior.add_child(items)
-	_airlocks_root = Node.new()
-	_airlocks_root.name = "Airlocks"
-	add_child(_airlocks_root)
 	_make_crew_quarters()
 	sensors = ShipSensors.new()
 	sensors.name = "Sensors"
@@ -234,41 +167,12 @@ func _ready() -> void:
 		return [hull_whole(), stats.crippled_reason if stats != null else "",
 			cockpit == BlockDamage.Stage.WRECKED, mini(int(cockpit), 2)]
 
-## Every window's glass shows this ship's own canopy view (cockpit pod spec
-## §3): one material per ship, fed by its own SubViewport, so each instance of
-## ship.tscn draws its own (many ships spec §3.1). Made here rather than in the
-## .tscn: a ViewportTexture's path inside an instanced scene is fragile.
-func _make_canopy_material() -> void:
-	var canopy := get_node_or_null("Canopy") as SubViewport
-	if canopy == null:
-		return
-	var mat := ShaderMaterial.new()
-	mat.shader = CANOPY_SHADER
-	mat.set_shader_parameter(&"canopy_view", canopy.get_texture())
-	interior_builder.canopy_material = mat
-
-func _process(_delta: float) -> void:
-	# hull_livery.gdshader paints its stripe from ship-local height, but the
-	# skin's merged plating meshes (HullDressing: the Hull and Windows kits'
-	# HULL batches, built in hull space) are drawn with a MODEL_MATRIX that is
-	# model-to-*world* -- it carries the hull RigidBody3D's own rotation.
-	# Pushing the hull's inverse transform every frame lets the shader cancel
-	# that rotation (`hull_inverse * MODEL_MATRIX`) before testing height, so
-	# the stripe stays fixed on the hull under roll and pitch instead of
-	# swimming across it. See hull_livery.gdshader's header comment for the
-	# full derivation. Each ship pushes its own hull's into its own copy: one
-	# shared material would hold only the last ship's (many ships, §12).
-	livery.set_shader_parameter(&"hull_inverse", exterior.global_transform.affine_inverse())
+func _process(delta: float) -> void:
+	# hull_livery.gdshader paints its stripe from ship-local height (GridHome
+	# pushes this hull's inverse transform every frame; see
+	# hull_livery.gdshader's header comment for why).
+	super(delta)
 	_update_hum()
-
-## Every hull piece painted with the shared livery gets this ship's own copy:
-## the stripe is measured through `hull_inverse`, which is this hull's alone.
-## After every rebuild, as the builders always paint with the shared one.
-func _apply_livery() -> void:
-	for node in exterior.find_children("*", "GeometryInstance3D", true, false):
-		var g := node as GeometryInstance3D
-		if g.material_override == HULL_LIVERY_MATERIAL:
-			g.material_override = livery
 
 ## The hum plays while the listener is aboard, and stops outside.
 func _update_hum() -> void:
@@ -515,35 +419,6 @@ func _shed_plate(removed: Array[Vector3i]) -> void:
 		plate_shed.emit(item)
 		return
 
-## Where you wake after blacking out (health and damage spec §7.2), best
-## first, in the world: the bunk room's cells, then the rest by how near they
-## are to it (or to the core, with no bunk room); never the airlock. The
-## caller takes the first you fit: a bunk room is mostly bunks, so that is
-## often the cell at its door.
-func wake_spots() -> Array[Transform3D]:
-	var layout := interior_builder.layout()
-	var core := Vector3.ZERO
-	for coord: Vector3i in grid.coords():
-		if grid.get_block(coord).block_id == BlockDamage.CORE:
-			core = Vector3(coord)
-	var bunks: Array[Vector3i] = []
-	var rest: Array[Vector3i] = []
-	for cell: Vector3i in interior_builder.walkable_coords():
-		var zone := layout.zone_at(cell) if layout != null else &""
-		if zone == InteriorLayout.AIRLOCK_ZONE:
-			continue
-		if zone == WAKE_ROOM:
-			bunks.append(cell)
-		else:
-			rest.append(cell)
-	var near := Vector3(bunks[0]) if not bunks.is_empty() else core
-	rest.sort_custom(func(a: Vector3i, b: Vector3i) -> bool:
-		return Vector3(a).distance_to(near) < Vector3(b).distance_to(near))
-	var out: Array[Transform3D] = []
-	for cell in bunks + rest:
-		out.append(interior.global_transform * Transform3D(Basis.IDENTITY, DeckPaths.floor_point(cell)))
-	return out
-
 ## A block crossed a stage (spec §4.3): what it can do changed, and nothing
 ## else did. The stats follow; no geometry is rebuilt.
 func _on_block_staged(coord: Vector3i, stage: int) -> void:
@@ -607,32 +482,14 @@ func hull_struck(knock: float) -> void:
 static func thump_db(knock: float) -> float:
 	return lerpf(-30.0, -2.0, clampf(knock / 8.0, 0.0, 1.0))
 
+## True while it is spooling or travelling at warp: no airlock works then.
+func is_warping() -> bool:
+	return warp != null and warp.is_spinning()
+
 ## True while the camera you see through is aboard.
 func _aboard() -> bool:
 	var cam := get_viewport().get_camera_3d()
 	return cam != null and interior.is_ancestor_of(cam)
-
-func interior_slot_origin() -> Vector3:
-	# Interior space sits well clear of the combat arena so the walkable
-	# interior can never intersect a flying hull. Collision layers enforce
-	# the same separation independently.
-	return INTERIOR_WORLD_BASE + Vector3(interior_slot * SLOT_SPACING, 0.0, 0.0)
-
-func set_own(on: bool) -> void:
-	own = on
-	_apply_own()
-
-## Every piece the builders made for the own layer alone goes on the layer
-## `own` says; pieces on both layers stay on both. After every rebuild too: the
-## builders always make the own layer.
-func _apply_own() -> void:
-	interior.visible = own
-	for node in exterior.find_children("*", "GeometryInstance3D", true, false):
-		var g := node as GeometryInstance3D
-		if g.layers == ExteriorBuilder.OWN_HULL_LAYER:
-			g.set_meta(OWN_ONLY, true)
-		if g.has_meta(OWN_ONLY):
-			g.layers = ExteriorBuilder.OWN_HULL_LAYER if own else 1
 
 func load_blueprint(bp: ShipBlueprint) -> void:
 	set_grid(bp.to_grid())
@@ -804,99 +661,17 @@ func _bind_crew() -> void:
 func records(_director: NpcDirector) -> Array:
 	return _crew
 
-## Hands each rebuilt airlock room to its Airlock, making one for a new
-## airlock and dropping those whose cell is gone. An Airlock keeps its cycle,
-## so a rebuild never resets a pressure or moves a hatch.
-func _bind_airlocks() -> void:
-	if _airlocks_root == null:
-		return
-	var seen := {}
-	for room in interior_builder.airlock_rooms():
-		seen[room.coord] = true
-		var airlock: Airlock = airlocks.get(room.coord)
-		if airlock == null:
-			airlock = Airlock.new()
-			airlock.setup(self, room.coord)
-			_airlocks_root.add_child(airlock)
-			airlock.crossed.connect(airlock_crossed.emit)
-			airlocks[room.coord] = airlock
-		airlock.bind(room, exterior_builder.alcoves().get(room.coord))
-	for at in airlocks.keys():
-		if not seen.has(at):
-			var gone: Airlock = airlocks[at]
-			airlocks.erase(at)
-			_airlocks_root.remove_child(gone)
-			gone.free()
-
-## Every stowed item and where its stow point was, before a rebuild frees the
-## points.
-func _stowed_items() -> Array:
-	var out := []
-	if items == null:
-		return out
-	for node in items.get_children():
-		var item := node as Item
-		if item != null and item.state == Item.State.STOWED and is_instance_valid(item.stow_point):
-			out.append([item, item.stow_point.global_position])
-	return out
-
-## Puts each stowed item back in the rebuilt point at the same place, or lets
-## it loose where it is if that point is gone.
-func _reseat(stowed: Array) -> void:
-	var points := interior_builder.stow_points()
-	for entry in stowed:
-		var item: Item = entry[0]
-		var was: Vector3 = entry[1]
-		var home: StowPoint = null
-		for point in points:
-			if point.fits(item) and point.global_position.distance_to(was) < RESEAT_TOLERANCE:
-				home = point
-				break
-		if home != null:
-			home.secure(item)
-		else:
-			item.set_loose()
-
-## Fills every stocked stow point, once, when the ship first loads
-## (hands-and-items spec §5.3).
-func _stock() -> void:
-	if items == null:
-		return
-	for point in interior_builder.stow_points():
-		if point.stock == &"" or not point.is_free():
-			continue
-		var def := item_catalog.get_def(point.stock)
-		if def == null:
-			push_warning("Ship: no item called %s to stock" % point.stock)
-			continue
-		var item := Item.new()
-		var at := point.global_position
-		item.setup(def, fposmod(at.x * 0.37 + at.z * 0.61, 1.0))
-		items.add_child(item, true)
-		point.secure(item)
-
 # --- saving (docs/superpowers/specs/2026-09-26-saving-design.md §3, §6) ------
 
-## Why a save must wait (§5), or "": a rock struck the hull lately, an
-## airlock is cycling, the quantum machine is busy, or a bolt is in flight.
+## Why a save must wait (§5), or "": a rock struck the hull lately, something
+## aboard was hurt lately, or anything GridHome waits on.
 func busy() -> String:
 	if since_struck < STRUCK_CALM:
 		return "hull struck"
 	var hurt := damage_log.busy()
 	if hurt != "":
 		return hurt
-	for airlock: Airlock in airlocks.values():
-		var why := airlock.busy()
-		if why != "":
-			return why
-	var why := quantum.busy() if quantum != null else ""
-	if why != "":
-		return why
-	if items != null:
-		for node in items.get_children():
-			if node is PlasmaBolt:
-				return "bolt in flight"
-	return ""
+	return home_busy()
 
 ## The ship's part of a save: its layout, where it is in `universe` and how
 ## it moves, its flight settings, its store, its warp chart, its lights, its
@@ -911,12 +686,7 @@ func to_dict(universe: Universe) -> Dictionary:
 	var saved_airlocks := {}
 	for at: Vector3i in airlocks:
 		saved_airlocks[SaveCodec.cell_key(at)] = airlocks[at].to_dict()
-	var saved_items := []
-	var frame := interior.global_transform
-	for node in items.get_children():
-		var item := node as Item
-		if item != null and item.state != Item.State.HELD and not item.is_queued_for_deletion():
-			saved_items.append(item.to_dict(frame))
+	var saved_items := items_to_dict()
 	return {
 		"layout": ShipBlueprint.from_grid(grid, String(name)).to_dict(),
 		"launch": launch_blueprint.to_dict() if launch_blueprint != null else {},
@@ -1040,29 +810,6 @@ func restore_aboard(d: Dictionary) -> void:
 	for entry in d.get("items", []):
 		if entry is Dictionary:
 			restore_item(entry)
-
-## One saved item back aboard: in the stow point it was in (the rebuild's
-## own RESEAT_TOLERANCE rule), or loose where it was -- on the floor under
-## its point if that point has gone (§6.4). Null if its kind has gone.
-func restore_item(d: Dictionary) -> Item:
-	var item := Item.from_dict(d, item_catalog)
-	if item == null:
-		return null
-	items.add_child(item, true)
-	var frame := interior.global_transform
-	var place := frame * SaveCodec.to_transform(d.get("place"))
-	if String(d.get("state", "")) == "stowed":
-		var was := frame * SaveCodec.to_vec3(d.get("point"), place.origin)
-		for point in interior_builder.stow_points():
-			if point.fits(item) and point.global_position.distance_to(was) < RESEAT_TOLERANCE:
-				point.secure(item)
-				return item
-		place = Transform3D(place.basis, Vector3(was.x, was.y + item.definition.size.y * 0.5, was.z))
-	item.set_loose()
-	item.global_transform = place
-	item.linear_velocity = frame.basis * SaveCodec.to_vec3(d.get("v"))
-	item.angular_velocity = frame.basis * SaveCodec.to_vec3(d.get("w"))
-	return item
 
 func _apply_stats() -> void:
 	exterior.mass = maxf(stats.total_mass_kg, 1.0)

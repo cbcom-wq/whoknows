@@ -5,16 +5,16 @@ var _cat: BlockCatalog
 func before_all():
 	_cat = BlockCatalog.load_from_dir("res://data/blocks")
 
-func test_all_twenty_nine_blocks_load():
-	assert_eq(_cat.ids().size(), 29,
-		"21 minus retired reactor and battery, plus the three quantum blocks, the bridge computer and the six fairings")
+func test_all_thirty_blocks_load():
+	assert_eq(_cat.ids().size(), 30,
+		"21 minus retired reactor and battery, plus the four quantum blocks, the bridge computer and the six fairings")
 
 func test_required_ids_exist():
 	for id in [&"hull", &"hull_wedge", &"armour", &"core",
 			&"thruster", &"rcs", &"grav_plating", &"deck",
 			&"bulkhead", &"door", &"pilot_seat", &"ladder", &"airlock", &"canopy",
 			&"bunk_room", &"galley", &"bathroom", &"closet", &"weapon_room",
-			&"quantum_core", &"quantum_machine", &"quantum_cell", &"computer",
+			&"quantum_core", &"quantum_machine", &"quantum_cell", &"quantum_tank", &"computer",
 			&"fairing_slope", &"fairing_slope_long_low", &"fairing_slope_long_high",
 			&"fairing_corner_out", &"fairing_corner_in", &"fairing_half"]:
 		assert_true(_cat.has(id), "missing block definition: %s" % id)
@@ -109,13 +109,22 @@ func test_quantum_cell_fields():
 	assert_almost_eq(def.power_draw, 0.0, 0.001)
 	assert_eq(def.quantum_capacity, 400)
 
-func test_only_the_quantum_cell_stores_qe():
+func test_only_the_quantum_cell_and_tank_store_qe():
+	var capacity := {&"quantum_cell": 400, &"quantum_tank": 1000}
 	for id in _cat.ids():
 		var def := _cat.get_def(id)
-		if id == &"quantum_cell":
-			assert_eq(def.quantum_capacity, 400)
-		else:
-			assert_eq(def.quantum_capacity, 0, "%s should not store QE" % id)
+		assert_eq(def.quantum_capacity, capacity.get(id, 0), "%s stores QE" % id)
+
+## The store's tank (habitat modules spec §6.3): the cell's fields, holding 1000.
+func test_quantum_tank_fields():
+	var def := _cat.get_def(&"quantum_tank")
+	assert_eq(def.category, BlockDefinition.Category.SYSTEMS)
+	assert_eq(def.occupancy, BlockDefinition.Occupancy.SOLID)
+	assert_almost_eq(def.mass_t, 5.0, 0.001)
+	assert_eq(def.hp, 250)
+	assert_almost_eq(def.power_gen, 0.0, 0.001)
+	assert_almost_eq(def.power_draw, 0.0, 0.001)
+	assert_eq(def.quantum_capacity, 1000)
 
 ## Rooms are walkable floor that says what the room is for. They weigh and
 ## draw exactly what deck does, so turning deck cells into rooms can never

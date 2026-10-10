@@ -25,21 +25,27 @@ const HOME_ACCEL := 1.0
 ## 0.9 m/s^2), so you settle on the point instead of overshooting it.
 const HOME_GAIN := 0.6
 
+## Thrust with cargo aboard the suit (habitat modules spec §4.1): the same
+## force on more mass.
+static func cargo_accel(suit_mass: float, cargo_kg: float) -> float:
+	return ACCEL * suit_mass / (suit_mass + maxf(cargo_kg, 0.0))
+
 ## The new velocity after `delta` seconds. `thrust_input` is in view axes (+x
 ## right, +y up, +z back, each -1..1); `view` is the camera's basis; `v_ref` is
-## your own ship's velocity where you are.
+## your own ship's velocity where you are. `accel` is the thrust (cargo_accel
+## with cargo aboard).
 static func step(v: Vector3, v_ref: Vector3, thrust_input: Vector3, view: Basis, assist: bool,
-		delta: float) -> Vector3:
+		delta: float, accel := ACCEL) -> Vector3:
 	var push := thrust_input
 	if push.length() > 1.0:
 		push = push.normalized()
-	v += view * push * ACCEL * delta
+	v += view * push * accel * delta
 	if not assist:
 		return v
 	var local := view.inverse() * (v - v_ref)
 	for axis in 3:
 		if is_zero_approx(thrust_input[axis]):
-			local[axis] = move_toward(local[axis], 0.0, ACCEL * delta)
+			local[axis] = move_toward(local[axis], 0.0, accel * delta)
 	return v_ref + view * local.limit_length(ASSIST_CAP)
 
 ## The new velocity after `delta` seconds on the emergency cell, homing on a

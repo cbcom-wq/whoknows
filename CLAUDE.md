@@ -33,6 +33,10 @@ thrusters):
 
 If a name in the skill no longer exists, fix the skill. The owner asked for this on 2026-09-25.
 
+**Every ship lives in `data/ships/`** (`<id>.json` plus `<id>.md`) and passes `ShipRules`:
+`test_ship_catalog.gd` checks every one, and `.claude/skills/building-a-ship/ship_check.gd` checks a
+draft in seconds (`docs/superpowers/specs/2026-10-02-ship-library-design.md`).
+
 ## NPCs: use and keep the `building-an-npc` skill current
 
 `.claude/skills/building-an-npc/` is how NPCs are built here: creatures, droids, crew, and new
@@ -62,7 +66,8 @@ the one exception: it leaves the group, is held as a `UniversePoint`, and is in 
 
 The owner's rule (2026-10-02): **any ship in the game can be boarded, flown and saved**, never a
 look-only prop. Ships come and go through `Fleet` (`src/ship/fleet.gd`): the starter is `/Ship`,
-an instance of `scenes/ship.tscn`; any other is `fleet.spawn(grid, place)`. The ship you are in
+an instance of `scenes/ship.tscn`; any other is `fleet.spawn(grid, place)`, from the library (F6 in
+the game) or a save. The ship you are in
 is the flight scene's `aboard`, and `board(ship)` is the one place it changes
 (`docs/superpowers/specs/2026-10-02-many-ships-design.md`). Never author a second `Ship` in a
 `.tscn` or instance `ship.tscn` any other way. `test/probes/fleet_play.gd` plays a trip between

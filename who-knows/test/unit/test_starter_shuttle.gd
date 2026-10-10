@@ -203,3 +203,10 @@ func test_the_reshape_keeps_the_open_rcs_open():
 		if not _grid.has_block(coord + Vector3i(out.round())):
 			open += 1
 	assert_eq(open, 2)
+
+## The starter is a file now (ship library spec §3.3), and this pins it:
+## changing the starter means changing these on purpose, with the reason in
+## data/ships/starter.md.
+func test_the_starter_file_is_pinned():
+	assert_eq(_grid.size(), 110)
+	assert_eq(ShipLibrary.rows_text(_grid).sha256_text(), "9305c583800ce1b438f5fffc6b1cb468fa3b18c360298cc15abd0f9f32dfe27f")

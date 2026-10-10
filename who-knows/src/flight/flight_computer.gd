@@ -208,9 +208,11 @@ func from_dict(d: Dictionary) -> void:
 	_boost = bool(d.get("boost", false))
 
 func _physics_process(delta: float) -> void:
-	if warp != null and warp.travelling():
+	if (warp != null and warp.travelling()) or WarpArrival.of(_hull) != null:
 		# Nothing fires: stale commands would keep the RCS puffing, and its
-		# particles holding back the origin's shift, the whole way.
+		# particles holding back the origin's shift, the whole way. Arriving
+		# out of warp too (ship library spec §6.3): its puffs left a dotted
+		# trail along its line.
 		boosting = false
 		boost_refused = false
 		commanded_force_local = Vector3.ZERO

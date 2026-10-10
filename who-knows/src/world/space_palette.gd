@@ -10,6 +10,11 @@ extends RefCounted
 ## so a ship's lights uncover it.
 const AMBIENT := Color("0b0d12")
 
+## A ship arriving out of warp (ship library spec §6.2): its wake and the flash
+## as it stops. A warm white near the hull's work lights, so bloom halos it
+## against the dark. Tuned at the renders.
+const WARP := Color("fff3e0")
+
 const ASH := Color(0.36, 0.34, 0.32)
 const UMBER := Color(0.33, 0.26, 0.21)
 const SLATE := Color(0.28, 0.28, 0.29)

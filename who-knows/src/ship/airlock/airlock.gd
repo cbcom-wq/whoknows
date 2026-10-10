@@ -45,7 +45,7 @@ var warning := {"level": 0, "text": ""}
 ## The room's steam, haze and light (§5), rebuilt with each room.
 var show: AirlockShow
 
-var _ship: Ship
+var _ship: GridHome
 ## While the viewer's camera is in the room it wears a copy of its own
 ## environment with the haze in it; the original is put back on leaving.
 var _hazed_camera: Camera3D
@@ -58,7 +58,7 @@ var _owns_air := false
 ## True while this airlock has the canopy view showing the own hull.
 var _owns_portal := false
 
-func setup(ship: Ship, at: Vector3i) -> void:
+func setup(ship: GridHome, at: Vector3i) -> void:
 	_ship = ship
 	coord = at
 	name = "Airlock_%d_%d_%d" % [at.x, at.y, at.z]
@@ -103,7 +103,7 @@ func must_charge() -> bool:
 ## nobody crosses the outer hatch, or they would be left behind, kilometres
 ## off.
 func warping() -> bool:
-	return _ship != null and _ship.warp != null and _ship.warp.is_spinning()
+	return _ship != null and _ship.is_warping()
 
 ## What a save keeps (saving spec §6.6): a save is only taken at rest, so the
 ## pressure and which hatch stands open are the whole of it.
