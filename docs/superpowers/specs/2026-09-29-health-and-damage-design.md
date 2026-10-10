@@ -317,6 +317,9 @@ The owner chose a handheld tool: you carry it to the damage and point it there.
   **25 hp/s**. A warm spark spray and a small practical light sit where the nozzle meets the
   surface. The light is a warm `OmniLight3D` (range 1.5 m); outside, its sparks join
   `Universe.HOLDS_SHIFT`.
+- **Amended 2026-10-03 (owner): the torch just repairs.** It has no hopper and uses nothing up;
+  plates are only salvage again, the prompt drops *SCRAP*, and nothing of the torch is saved. The
+  rest of this section is kept as history.
 - **It is fed scrap plates.** The torch has a hopper of **feed**, up to **300**, and one hp
   mended costs one feed. A hull block from wrecked to intact is 200 feed. With the hopper empty,
   the torch splutters and does nothing.
@@ -580,3 +583,9 @@ Built 2026-09-29 to 30: the suite went from 1,421 tests to 1,530, all green, hea
     is left standing: about 125 ms of a full rebuild's 210–230 ms on the dev Xeon (the generated
     skin from the ship exterior work made the full rebuild dearer).
 
+17. **The pistol works outside too** (2026-10-03: it wouldn't fire on a spacewalk). The plasma
+    pistol is `works_outside`. On a spacewalk `Grasp.use_world()` is the space you are in, not
+    the interior's `world_root`. The bolt and its flashes are then `outside`: drawn on
+    `Item.SPACE_LAYER`, lit for the world, members of `Universe.EXTERIOR_SPACE`, and cast
+    against `PlasmaBolt.SPACE_RAY_MASK` (hull, terrain, items, rocks, NPCs). A bolt into your
+    own hull damages it like any other hit.

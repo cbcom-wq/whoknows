@@ -116,7 +116,7 @@ changes shape: no interior block is ever removed.
 
 ## 6. Repair
 
-The torch (`RepairTorch`) keeps its hopper, plates, prompts and rates:
+The torch (`RepairTorch`) keeps its prompts and rates (amended 2026-10-03: the owner dropped the hopper; the torch uses nothing up, and the prompt no longer shows *SCRAP*):
 
 - **A hull section, from outside only.** Aim at any of its blocks or holes from a spacewalk and
   hold: it mends **4% of the section a second** for **1 scrap per 1%**, so a section from 0 to

@@ -493,7 +493,9 @@ Until you convert it, the item is simply stowed. Its own prompt (*Take Crate*) t
 ### 7.3 Charging the suit
 
 - F at the plate: *Charge suit (+86 QE)*.
-- The suit charges at 50 QE/s, up to 100, while you stay within 1.2 m of the plate.
+- The suit charges at 50 QE/s, up to 100, while you stay within 1.2 m of the plate. Each QE the store
+  pays buys 4 QE of suit (`SUIT_PER_STORE`, matching the 4x cheaper thrusters, §9), so the
+  25 QE pilot-light reserve fills a suit.
 - While charging: the plate glows, the machine's screen counts up (*SUIT 64%*) and a tone rises. A
   chime sounds when the suit is full.
 - Charging works in low power, and may take the store down to 0 (§3.2). The pilot light then
@@ -596,8 +598,9 @@ with an almost empty store, and you can take it without a fight by feeding its m
 ## 9. The suit cell
 
 - **`SuitCell`:** a charge from 0 to 100 QE. It starts **empty**.
-- **Cost:** 1 QE per m/s of Δv the thrusters deliver, suit assist included. That is 2.5 QE/s at full
-  thrust. Holding station beside a drifting ship costs almost nothing.
+- **Cost:** 0.25 QE per m/s of Δv the thrusters deliver, suit assist included. That is 0.625 QE/s at
+  full thrust, so a full cell gives 160 s of continuous thrust (raised 4x on 2026-10-03 for longer
+  spacewalks). Holding station beside a drifting ship costs almost nothing.
 - **Warnings** on the HUD and the suit's chime: amber at 25, coral at 10.
 - **Running dry:**
   - the thrusters stop, and the emergency cell takes over;
