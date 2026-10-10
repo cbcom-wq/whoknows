@@ -26,7 +26,7 @@ static func dock(layout: InteriorLayout, paths: DeckPaths) -> Vector3i:
 			return cell
 	var helm_side: Array[Vector3i] = []
 	for f in layout.fixtures():
-		if f["id"] == InteriorLayout.HELM_ID:
+		if InteriorLayout.HELM_IDS.has(f["id"]):
 			for n in _HORIZONTAL:
 				if paths.has(f["coord"] + n):
 					helm_side.append(f["coord"] + n)

@@ -338,10 +338,10 @@ func test_the_felt_gravity_starts_at_plating_gravity():
 ## colliders -- while the canopy faces beside it still stop the avatar.
 func test_a_pod_face_has_no_collider():
 	_cat.register(_def(&"canopy", BlockDefinition.Occupancy.SOLID))
-	_cat.register(_def(InteriorLayout.HELM_ID, BlockDefinition.Occupancy.MOUNT))
+	_cat.register(_def(InteriorLayout.POD_HELM, BlockDefinition.Occupancy.MOUNT))
 	for x in [0, 1]:
 		_put(Vector3i(x, 0, -1), &"canopy")
-	_put(Vector3i(0, 0, 0), InteriorLayout.HELM_ID)   # orientation 0 faces -z, into the glass
+	_put(Vector3i(0, 0, 0), InteriorLayout.POD_HELM)   # orientation 0 faces -z, into the glass
 	_put(Vector3i(1, 0, 0), &"deck")
 	_builder.rebuild()
 	var ahead := Vector3(0, 0, -ShipGrid.CELL_SIZE * 0.5)
@@ -353,11 +353,11 @@ func test_a_pod_face_has_no_collider():
 ## Cockpit pod spec §5: the helm is the dressing's captain's chair now; any
 ## other MOUNT block is still drawn from its own mesh.
 func test_the_helm_is_not_drawn_from_its_block_mesh():
-	var helm := _def(InteriorLayout.HELM_ID, BlockDefinition.Occupancy.MOUNT)
+	var helm := _def(InteriorLayout.POD_HELM, BlockDefinition.Occupancy.MOUNT)
 	helm.mesh = BoxMesh.new()
 	_cat.register(helm)
 	_cat.get_def(&"seat").mesh = BoxMesh.new()
-	_put(Vector3i(0, 0, 0), InteriorLayout.HELM_ID)
+	_put(Vector3i(0, 0, 0), InteriorLayout.POD_HELM)
 	_put(Vector3i(1, 0, 0), &"seat")
 	_builder.rebuild()
 	assert_eq(_builder.fixture_count(), 1, "only the other mount")

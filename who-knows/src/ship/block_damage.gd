@@ -18,7 +18,7 @@ const OUTPUT := {Stage.INTACT: 1.0, Stage.DAMAGED: 0.5, Stage.WRECKED: 0.0, Stag
 ## Wrecked but never removed (spec §4.5): without the core there is no ship,
 ## without the seat no flying, and without an airlock no way back aboard. The
 ## ship does not know which airlock you came in by, so every one is kept.
-const KEEP: Array[StringName] = [&"core", &"pilot_seat", &"airlock"]
+const KEEP: Array[StringName] = [&"core", &"pilot_seat", &"helm", &"airlock"]
 const CORE := &"core"
 
 static func stage_at(damage: float, hp: float) -> Stage:

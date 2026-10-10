@@ -12,7 +12,7 @@ func before_each():
 	for id in InteriorLayout.ROOM_IDS:
 		_cat.register(_def(id, BlockDefinition.Occupancy.DECK))
 	_cat.register(_def(&"seat", BlockDefinition.Occupancy.MOUNT))
-	_cat.register(_def(InteriorLayout.HELM_ID, BlockDefinition.Occupancy.MOUNT))
+	_cat.register(_def(InteriorLayout.POD_HELM, BlockDefinition.Occupancy.MOUNT))
 	_grid = ShipGrid.new()
 
 func _def(id: StringName, occ: BlockDefinition.Occupancy) -> BlockDefinition:
@@ -336,11 +336,11 @@ func test_partitions_are_never_portholes_or_hatches():
 ## Cockpit pod spec §5: every MOUNT fixture, with the way it faces.
 func test_fixtures_lists_mount_cells_with_their_orientation():
 	_put(Vector3i(0, 0, 0), &"deck")
-	_put(Vector3i(1, 0, 0), InteriorLayout.HELM_ID, O_RIGHT)
+	_put(Vector3i(1, 0, 0), InteriorLayout.POD_HELM, O_RIGHT)
 	var fixtures := _plan().fixtures()
 	assert_eq(fixtures.size(), 1, "the deck is not a fixture")
 	assert_eq(fixtures[0]["coord"], Vector3i(1, 0, 0))
-	assert_eq(fixtures[0]["id"], InteriorLayout.HELM_ID)
+	assert_eq(fixtures[0]["id"], InteriorLayout.POD_HELM)
 	assert_eq(fixtures[0]["orientation"], O_RIGHT)
 
 func test_facing_is_the_orientations_forward():
@@ -351,7 +351,7 @@ func _helm_behind_a_windshield() -> void:
 	for x in [-1, 0, 1]:
 		_put(Vector3i(x, 0, -1), &"canopy")
 	_put(Vector3i(-1, 0, 0), &"deck")
-	_put(Vector3i(0, 0, 0), InteriorLayout.HELM_ID, O_FORWARD)
+	_put(Vector3i(0, 0, 0), InteriorLayout.POD_HELM, O_FORWARD)
 	_put(Vector3i(1, 0, 0), &"deck")
 
 ## Cockpit pod spec §4: the pod juts out of the canopy face the helm looks
@@ -369,7 +369,7 @@ func test_the_canopy_face_ahead_of_the_helm_is_a_pod():
 
 func test_a_helm_facing_a_wall_has_no_pod():
 	_put(Vector3i(0, 0, -1), &"canopy")
-	_put(Vector3i(0, 0, 0), InteriorLayout.HELM_ID, O_RIGHT)   # looks at the hull, not the glass
+	_put(Vector3i(0, 0, 0), InteriorLayout.POD_HELM, O_RIGHT)   # looks at the hull, not the glass
 	_put(Vector3i(1, 0, 0), &"hull")
 	var layout := _plan()
 	assert_true(layout.pods().is_empty())

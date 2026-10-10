@@ -26,7 +26,7 @@ const COMPONENTS := {
 	&"engines": [&"thruster"],
 	&"quantum_core": [&"quantum_core"],
 	&"computer": [&"computer"],
-	&"cockpit": [&"pilot_seat", &"canopy"],
+	&"cockpit": [&"pilot_seat", &"helm", &"canopy"],
 }
 const COMPONENT_LABELS := {
 	&"engines": "ENGINES", &"quantum_core": "QUANTUM CORE", &"computer": "COMPUTER",

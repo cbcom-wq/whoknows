@@ -12,7 +12,9 @@ extends RefCounted
 enum Severity { ERROR, WARNING }
 
 const CORE_ID := &"core"
-const PILOT_SEAT_ID := &"pilot_seat"
+## The seats a ship is flown from: InteriorLayout.HELM_IDS, kept here too so
+## the validator stays free of the interior (a test pins the two equal).
+const HELM_IDS: Array[StringName] = [&"pilot_seat", &"helm"]
 const QUANTUM_CORE_ID := &"quantum_core"
 const QUANTUM_MACHINE_ID := &"quantum_machine"
 const QUANTUM_CELL_ID := &"quantum_cell"
@@ -33,7 +35,9 @@ class Issue extends RefCounted:
 static func validate(grid: ShipGrid, catalog: BlockCatalog) -> Array:
 	var issues: Array = []
 	var cores := _find_all(grid, CORE_ID)
-	var seats := _find_all(grid, PILOT_SEAT_ID)
+	var seats: Array = []
+	for id in HELM_IDS:
+		seats.append_array(_find_all(grid, id))
 
 	_check_single_core(cores, issues)
 	if cores.size() == 1:

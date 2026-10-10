@@ -101,7 +101,7 @@ static func _check_cabin(layout: InteriorLayout, paths: DeckPaths, rules: Array)
 	var helm: Variant = null
 	var start: Variant = null
 	for f in layout.fixtures():
-		if f["id"] == InteriorLayout.HELM_ID:
+		if InteriorLayout.HELM_IDS.has(f["id"]):
 			helm = f["coord"]
 			start = stand_cell(f["coord"], InteriorLayout.facing(f["orientation"]), paths)
 			break

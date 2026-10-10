@@ -190,11 +190,11 @@ func test_rooms_survive_churn():
 
 ## A helm at (0, 0, 0) facing -z, into a three-wide windshield.
 func _helm_behind_a_windshield() -> void:
-	_cat.register(_def(InteriorLayout.HELM_ID, BlockDefinition.Occupancy.MOUNT))
+	_cat.register(_def(InteriorLayout.POD_HELM, BlockDefinition.Occupancy.MOUNT))
 	for x in [-1, 0, 1]:
 		_put(Vector3i(x, 0, -1), &"canopy")
 	_put(Vector3i(-1, 0, 0), &"deck")
-	_put(Vector3i(0, 0, 0), InteriorLayout.HELM_ID)
+	_put(Vector3i(0, 0, 0), InteriorLayout.POD_HELM)
 	_put(Vector3i(1, 0, 0), &"deck")
 
 func _pods() -> Array:
@@ -240,8 +240,8 @@ func test_the_helm_sits_in_its_pod():
 	assert_almost_eq(f.basis * Vector3.FORWARD, Vector3(0, 0, -1), Vector3.ONE * 0.0001)
 
 func test_a_fixture_without_a_pod_sits_at_its_cell_floor_centre():
-	_cat.register(_def(InteriorLayout.HELM_ID, BlockDefinition.Occupancy.MOUNT))
-	_put(Vector3i(2, 0, 3), InteriorLayout.HELM_ID, 12)   # facing +x
+	_cat.register(_def(InteriorLayout.POD_HELM, BlockDefinition.Occupancy.MOUNT))
+	_put(Vector3i(2, 0, 3), InteriorLayout.POD_HELM, 12)   # facing +x
 	_builder.rebuild()
 	var f := InteriorDressing.fixture_frame(_builder.layout(), Vector3i(2, 0, 3))
 	assert_almost_eq(f.origin, Vector3(4, -0.95, 6), Vector3.ONE * 0.0001)
@@ -249,7 +249,7 @@ func test_a_fixture_without_a_pod_sits_at_its_cell_floor_centre():
 	assert_almost_eq(f.basis.y, Vector3.UP, Vector3.ONE * 0.0001)
 
 func test_the_dressing_draws_the_helm():
-	assert_true(InteriorDressing.draws_fixture(InteriorLayout.HELM_ID))
+	assert_true(InteriorDressing.draws_fixture(InteriorLayout.POD_HELM))
 	assert_false(InteriorDressing.draws_fixture(&"seat"))
 
 ## Quantum energy spec §6: the core and the machine on the starter's bridge.

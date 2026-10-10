@@ -47,8 +47,14 @@ const ZONE_COMMON := &"common"
 const AIRLOCK_ZONE := &"airlock"
 const CANOPY_ID := &"canopy"
 const AIRLOCK_ID := &"airlock"
-## The fixture the ship is flown from. A canopy face ahead of it becomes a pod.
-const HELM_ID := &"pilot_seat"
+## The two fixtures a ship is flown from (ship bridge spec §3.4): the pod
+## helm, whose canopy face ahead becomes a cockpit pod, and the bridge helm,
+## which never makes a pod and glazes the ship's canopies as bands.
+const POD_HELM := &"pilot_seat"
+const BRIDGE_HELM := &"helm"
+const HELM_IDS: Array[StringName] = [POD_HELM, BRIDGE_HELM]
+## The seats that do not fly (ship bridge spec §3.1).
+const SEAT_IDS: Array[StringName] = [&"captain_chair", &"crew_station"]
 ## The bridge computer's holo table (bridge computer spec §3.1): a fixture
 ## the dressing draws, and a quiet one, so it leaves the bridge as it is.
 const COMPUTER_ID := &"computer"
@@ -58,7 +64,10 @@ const COMPUTER_ID := &"computer"
 ## colour, and the starter's floors stay exactly as they were. Its own cell
 ## is still a MOUNT for its own WALLS only, which go plain (PANEL), or
 ## PORTHOLE on a skin flank -- nothing else stands where it does.
-const QUIET_FIXTURES: Array[StringName] = [&"quantum_core", &"quantum_machine", COMPUTER_ID]
+## The captain's chair and the crew stations are quiet too: the bridge keeps
+## its floors and walls as they are (ship bridge spec §5).
+const QUIET_FIXTURES: Array[StringName] = [&"quantum_core", &"quantum_machine", COMPUTER_ID,
+	&"captain_chair", &"crew_station"]
 const _HORIZONTAL: Array[Vector3i] = [
 	Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 0, 1), Vector3i(0, 0, -1),
 ]
@@ -282,7 +291,7 @@ static func _key(coord: Vector3i, normal: Vector3i) -> String:
 ## A helm looking straight at a canopy face makes that face a pod.
 func _mark_pods() -> void:
 	for fixture in _fixtures:
-		if fixture["id"] != HELM_ID:
+		if fixture["id"] != POD_HELM:
 			continue
 		var coord: Vector3i = fixture["coord"]
 		var normal := facing(fixture["orientation"])

@@ -986,10 +986,10 @@ func launch_block(cell: Vector3i) -> Array:
 	var i := launch_blueprint.coords.find(cell)
 	return [] if i < 0 else [launch_blueprint.block_ids[i], launch_blueprint.orientations[i]]
 
-## The helm's cell, or null with no pilot seat.
+## The helm's cell (a pilot seat or a helm), or null with neither.
 func helm_cell() -> Variant:
 	for coord: Vector3i in grid.coords():
-		if grid.get_block(coord).block_id == InteriorLayout.HELM_ID:
+		if InteriorLayout.HELM_IDS.has(grid.get_block(coord).block_id):
 			return coord
 	return null
 

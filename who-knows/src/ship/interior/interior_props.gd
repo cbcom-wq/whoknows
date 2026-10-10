@@ -127,6 +127,9 @@ const POD_ROOF := 2.2
 ## How far beyond the canopy plane the captain's chair stands in a pod: the
 ## seated eye is then 1.65 m behind the front glass, with glass on both flanks.
 const POD_SEAT_DEPTH := 0.7
+## How far forward of its cell's centre a bridge helm stands (ship bridge spec
+## §4.2): its eye 1.2 m behind the glass.
+const HELM_FORWARD := 0.25
 
 ## A pod shoulder's window, floor-relative, and its half width.
 const SHOULDER_WINDOW_LOW := 1.15
