@@ -35,6 +35,9 @@ func _def(size := Vector3(0.2, 0.2, 0.2), mass := 1.0, value := 3) -> ItemDefini
 
 func test_every_starter_item_fits_a_crate_and_a_toolbox_among_them():
 	for id in _cat.ids():
+		# spec §4.3: an EVA tool is never converted, so the bay never takes one.
+		if _cat.get_def(id).eva_tool:
+			continue
 		assert_true(QuantumBay.takes(_cat.get_def(id)), "%s fits the bay" % id)
 	var bay := _bay()
 	assert_true(bay.fits(_item(_cat.get_def(&"crate"))), "spec §7.1: a crate fits")
@@ -49,6 +52,16 @@ func test_it_refuses_an_eva_tool_whatever_its_value():
 	d.eva_tool = true
 	d.quantum_value = 50
 	assert_false(QuantumBay.takes(d), "spec §4.3: EVA tools are never converted")
+
+func test_the_bay_refuses_an_eva_tool():
+	var nozzle := _cat.get_def(&"hose_nozzle")
+	assert_not_null(nozzle, "the catalogue has the hose nozzle")
+	assert_true(nozzle.eva_tool, "it is an EVA tool")
+	# Priced, so that only the EVA rule can turn it away: the catalogue's
+	# nozzle has no value, which the bay refuses on its own.
+	var priced := nozzle.duplicate() as ItemDefinition
+	priced.quantum_value = 50
+	assert_false(QuantumBay.takes(priced), "spec §4.3: EVA tools are never converted, whatever their value")
 
 func test_it_refuses_anything_with_a_side_over_0_55_m():
 	assert_true(QuantumBay.takes(_def(Vector3(0.55, 0.2, 0.2))), "0.55 m exactly fits")
