@@ -171,6 +171,17 @@ z -1  H    Qk12 D    D    Qm   Qk8  H
   `SEAT_FACES_WALL`, `DAIS_BLOCKED`, `UNREACHABLE`.
 - The posts between panes sit at cell edges: the helm, centred on its cell, sees one 40° to each
   side. An odd-width bridge with the helm on the centre cell keeps the middle of its view clear.
+- **Re-check the rcs round the new glass** (the Warden's rebuild lost two rounds to it): a canopy
+  row over cells the bow's rcs fired into blocks them (`RCS_BLOCKED`); under a bridge only `R^`
+  (exhaust down) fits, and moving a vertical pair changes the weaker of pitch's two directions.
+- **Side glass three cells deep works** (the Warden's runs back past the captain, every window
+  matched, no frame cost); a retro in an empty bow corner, forward face open, gives the bow
+  section something to lose as a wedge does.
+- **The holo table** (`Cp`) fits beside the captain, turned inboard (`Cp12` to port), its
+  operator looking out through the side glass.
+- **Floor colour:** only cells beside a canopy or the helm are bridge (mauve); the stations and
+  the chair are quiet, so a bridge four deep or five wide shows slate common floor in its open
+  row. Expected for now, not a mistake in the plan.
 
 ## 5. Budgets
 
