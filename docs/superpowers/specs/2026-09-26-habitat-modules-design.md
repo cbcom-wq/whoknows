@@ -945,6 +945,9 @@ three modules in view, 3.6 ms (281 fps), worst 6.2. Above §12's 120 fps budget 
 
 ### 19.4 Gaps and open questions
 
+- **Phase D's prerequisite, the hose and its line, is built** (`HoseLine`, `HoseReel`; quantum
+  energy spec §11.5), so the header's and §14's "waits on the hose" no longer holds. Corridors may
+  reuse `HoseRope` and the shape of `HoseLine.setup(reel, nozzle)`.
 - **Hold-to-move:** the link is press-only, 50 QE a press: moving 1,000 QE takes 20 presses until
   the Interactor gets a held press (`LinkPanel.hold` and `LINK_RATE` are ready for it).
 - **Seeing a base from afar (§8.1, open, the owner's call):** a base can't be found from more

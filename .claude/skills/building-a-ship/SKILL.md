@@ -47,7 +47,8 @@ Do these in order. Each one names the check that proves it.
      deck: you stand up into it. A bridge adds `captain_chair`s (on a dais, ramp behind) and
      `crew_station`s, any number; they are sat in, never flown from.
    - an `airlock` with **exactly one** horizontal face onto an empty cell (its outer hatch), and
-     walkable deck straight through on the opposite side, not a room.
+     walkable deck straight through on the opposite side, not a room. Its hull alcove gets the
+     hose's reel and nozzle by itself (`AirlockAlcove.reel`): there is nothing to place.
    - room blocks (`bunk_room`, `galley`...) each touching walkable space for their doorway.
    - **the maintenance droid's needs** (NPC foundation spec §14), on any ship with 12 or more
      walkable cells: a `closet` for its dock (otherwise it docks in the walkable cell farthest
@@ -178,6 +179,9 @@ Do these in order. Each one names the check that proves it.
    - any `rcs` whose exhaust is `BLOCKED`;
    - the `rules` line (`0 broken`, or each `<-- CODE`) and the notes;
    - rooms, pods and airlocks;
+   - **the hose:** every airlock alcove has a `HoseReel` with a stocked nozzle. The `hose` line
+     prints, per airlock, whether `alcove.reel` and `reel.item` exist, and flags `NO REEL` or
+     `NO NOZZLE`;
    - **the hull:** `skin` (plates, chamfers, corners, facets, nozzles), `windows N outside for N
      inside` (with `UNMATCHED` naming any inside window that has no place outside), and `lights  5
      floods, 2 forward` on the starter (the four belly corners and one on the keel, and a forward
@@ -346,6 +350,8 @@ thrust.
 | A count-only window test | The band's window count matched a nose's on the bridge fixture (9 either way), so it passed before the band existed | Test where each window goes, one per face, and its size |
 | A band window outside run to the pane's top | Up the canopy's 45° slope to 2.3 m, the glass lay over the blocks above and the frames crossed at the corners | Stop it at the slope's top edge (`HullLayout.BAND_WINDOW_TOP`, as a shoulder's) and keep the frame in its cell (`BAND_WINDOW_WIDTH`) |
 | The probe's walk-away line on a crewed ship | The droid stood in the corridor behind the captain's chair: 0.63 m, flagged `STUCK` | The probe prints where you stood and the nearest npc, and says "(an npc was in the way)" |
+| Hanging a held thing off an airlock alcove | A block change rebuilds the hull and frees every alcove, so the reel and its nozzle go with it: a hand held a nozzle with no reel or line, and a rebuild that kept the hull stocked a second nozzle while the first was out | Anything you hang on an alcove is rebuilt with it, so anything a player holds from it must survive its freeing: the nozzle uses itself up (`HoseNozzle`), and a reel stocks once per instance (`HoseReel.stock_nozzle`). `test_hose_scene.gd` covers both rebuilds |
+| A windowed probe counting rendered frames as game time | `hose_render.gd` held the trigger for 120 frames to draw a chunk in: with vsync off the window renders about 280 fps against 60 physics ticks, so that was 0.4 s and the chunk never arrived (and a lambda's assignment to a captured local is lost, it captures by value) | Drive physics-time things from `physics_frame`, wait on a condition with a limit in seconds, and pass results out through a member |
 
 ## Not built yet (plan for it; don't assume it works)
 

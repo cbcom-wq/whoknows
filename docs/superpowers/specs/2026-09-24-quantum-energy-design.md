@@ -791,6 +791,44 @@ except the scrap plate (CARRY).
   particles are local to it. Any that are emitted in world space join `Universe.HOLDS_SHIFT`.
 - **Suction costs no QE,** and works in low power: gathering is how you climb back out.
 
+### 11.5 As built (2026-10-10)
+
+Built on branch `hose` from `docs/superpowers/plans/2026-10-10-hose.md`. Where the build is more
+exact than the text above, or differs from it:
+
+- **The nozzle draws in `ItemUse.hold`** (`HoseNozzle`), as any held tool does. It is an EVA tool by
+  two flags on its definition: `eva_tool` (Grasp takes it with the hands suspended, and any way of
+  letting go sends it home) and `works_outside` (`Grasp.can_use` lets its trigger work while they
+  are).
+- **The reel is on every alcove of every `GridHome`:** the starter, any ship from the fleet and a
+  base's hub, because `Airlock._bind_reel` is the one place a reel gets its sink, its room and its
+  nozzle. **The sink is the home's `QuantumPlant.credit_item`**, so each home's swallow credits its
+  own store.
+- **The line is `HoseRope` (pure maths) plus `HoseLine` (the drawn segments)**, under the home's
+  `Outside`. It sets no custom bounding box: the line lies wherever the hull is, up to a shift's
+  distance from its node, and a culled line is something a headless test cannot see. **The culling
+  fix is proven by the render, not the headless test:** `test/probes/hose_render.gd` moves the hull
+  300 m from the `Outside` origin first, and the line is drawn there.
+- **A save waits while the hose is out** (`HoseNozzle.busy()`, *hose out*): the nozzle and its line
+  are not saved. **A rebuild with the hose out** that frees the hull (a destroyed block) frees the
+  reel too: the nozzle in your hand uses itself up, your hands are empty, and the new reel is
+  stocked with a new nozzle. A rebuild that keeps the hull binds the same reel again, and **a reel
+  stocks its nozzle once per instance**, so a nozzle that is out gets no second one.
+- **Suction stops before an item flies in that the store has no room for** (`HoseReel.room`, set by
+  `Airlock._bind_reel`): nothing is drawn toward a mouth that cannot take it, and the prompt reads
+  *Store full*. The refusal at the mouth stays as defence in depth. An item freed by another system
+  mid-swallow is dropped from the shrink without error.
+- **The tether holds you in your ship's frame,** not the world's: a drifting ship is not braked
+  against space. With the suit's assist on at the end of the line, the assist cancels the tether's
+  pull as charged thruster work (1 m/s² at 0.25 QE per m/s, about 0.25 QE/s, §9). Only the tether's
+  own velocity change is free.
+- **The draw loop plays only while something is being pulled** (`Grasp.holding`), so the trigger
+  held in empty air is silent. If a listen finds the restarts clicky as items enter and leave the
+  cone, a 0.1–0.2 s hold-off in `SuitSounds` is the fix; it is not built.
+- **Not built:** the mouth's glow is always on, not only while drawing (§11.4): glowing only while
+  drawing needs a per-item emissive toggle the item kit does not have. The owner's call after the
+  renders.
+
 ---
 
 ## 12. HUD

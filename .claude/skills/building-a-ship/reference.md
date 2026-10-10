@@ -928,6 +928,28 @@ frozen kinematic with layer and mask 0; `QuantumPlant` runs the cores at `&"warp
 The hull is a space anchor (`AsteroidStream.SPACE_ANCHOR`), so a world's surface keeps ground
 solid under it with no wiring. A ghosted hull (mask 0, at warp) is never lifted.
 
+## The hose (`docs/superpowers/specs/2026-09-24-quantum-energy-design.md` §11, *As built* §11.5)
+
+Every airlock that can cycle gets a reel on its hull alcove, with a nozzle stocked on it, on any
+home (a ship from the fleet, a base's hub). A blueprint places nothing; the probe's `hose` line
+prints each airlock's reel and nozzle.
+
+| Name | What it is |
+|---|---|
+| `AirlockAlcove.reel` | The `HoseReel`, built by `_build_reel` on the jamb opposite the hull panel: a cream cradle, a 0.5 m `HullPalette.HOSE` drum, and the nozzle stood on it, mouth up. `Airlock.bind` → `_bind_reel` gives it `sink` (`QuantumPlant.credit_item`), `room` (the store's `room()`) and `line_parent` (the home's `Outside`), and stocks it |
+| `HoseReel` | A `StowPoint` (`STOW_CLASS` `&"hose"`). `item` is the nozzle while docked; `is_out()` while it is in a hand or winding home (`WIND_TIME` 1 s); `anchor()`; `stock_nozzle(def)` once per instance; `take_back(nozzle)`; `line` while out |
+| `HoseNozzle` | The `ItemUse` of `hose_nozzle` (WIELD, `eva_tool`, `works_outside`, 1.2 kg, 0.1 × 0.12 × 0.3 m, `use_point` 0.15 m in front of the centre). `hold` draws; `swallowed(label, value)`; `tether()`; `go_home(item)`; `busy()` is *hose out*; `tool_text()` is *HOSE 12 M*. A nozzle whose reel is freed uses itself up |
+| `HoseRope`, `HoseLine` | The line: `SEGMENTS` 40 over `LENGTH` 30 m, verlet, damped, no collision. `HoseLine` draws it (`GIRTH` 5 cm, every other segment 1.35×) under `Outside`, as a member of `EXTERIOR_SPACE`, with no custom bounding box |
+| `Tether.PULL` | 1 m/s². At 30 m, outward velocity is removed and you are drawn back, in your ship's frame |
+| `Suction` | `RANGE` 8 m, 15° half angle, `MAX_ACCEL` 6 m/s², `MAX_FORCE` 120 N, `MAX_SPEED` 5 m/s, `SWALLOW` 0.35 m, `SHRINK` 0.25 s, `BIGGEST` 0.6 m, `HEAVIEST` 40 kg |
+| `Interactor.SUIT_MASK` | `16 \| 32`: what the spacewalking ray finds (the hull's panels and loose items), so the nozzle can be taken off the reel |
+
+- **Proof:** `test_hose_scene.gd` (a reel on every airlock, drawing, the tether, every way of
+  letting go, both rebuilds, a second ship); `test/probes/hose_render.gd`, windowed, for the
+  looks, the toast and the frame time, with the hull 300 m from the `Outside` origin so a culled
+  line shows; and `test/probes/fleet_play.gd`, which CLAUDE.md asks for after any change to
+  boarding, airlocks or the suit.
+
 ## Commands
 
 - **Tests:** `who-knows/run_tests.ps1`, or `'-gselect=test_name.gd'` for one file (PowerShell;
