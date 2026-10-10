@@ -191,3 +191,29 @@ func test_a_rebuild_that_keeps_the_hull_does_not_stock_a_second_nozzle():
 	await wait_physics_frames(90)
 	assert_eq(_reel.item, nozzle)
 	assert_eq(_items_under(_reel), 1, "the one nozzle, home again")
+
+## A ship spawned from the library has its own reel, crediting its own store
+## (every ship is usable, CLAUDE.md).
+func test_a_spawned_ship_has_its_own_reel_and_credits_its_own_store():
+	var place := Transform3D(Basis.IDENTITY, _ship.exterior.global_position + Vector3(0, 0, -80))
+	var other: Ship = _root.fleet.spawn(_root._starter_grid(), place, true, "second")
+	await wait_physics_frames(3)
+	assert_not_null(other)
+	if other == null:
+		return
+	var airlock: Airlock = other.airlocks.values()[0]
+	var reel := airlock.alcove.reel
+	assert_not_null(reel)
+	assert_not_null(reel.item)
+	assert_ne(reel, _reel)
+	assert_eq(reel.item.definition.id, &"hose_nozzle")
+	assert_eq(reel.item.state, Item.State.STOWED)
+	assert_ne(reel.item, _reel.item, "its own nozzle")
+	assert_eq(reel.line_parent, other.outside)
+	var chunk := _loose(&"rock_chunk", Vector3(0, 0, -200))
+	var worth := chunk.definition.quantum_value
+	var mine := _ship.quantum.store.amount
+	var theirs := other.quantum.store.amount
+	assert_true(reel.sink.call(chunk))
+	assert_eq(_ship.quantum.store.amount, mine, "not the starter's store")
+	assert_eq(other.quantum.store.amount, theirs + worth, "its own")
