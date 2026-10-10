@@ -27,6 +27,11 @@ signal station_changed(station: ComputerStation)
 enum View { COCKPIT, CHASE, FOOT_FIRST, FOOT_THIRD, STATION }
 
 const SIT_DURATION := 0.75
+## At a seat that does not fly (ship bridge spec §3.2): how far you can turn
+## your head from the way it faces, and how fast the mouse turns it.
+const SEAT_LOOK_YAW := deg_to_rad(100.0)
+const SEAT_LOOK_PITCH := deg_to_rad(60.0)
+const SEAT_LOOK_SENSITIVITY := 0.003
 ## The group the game's one director is in: a computer station finds it here
 ## (computer mode spec §3.1), since tables are rebuilt and ships come and go.
 const GROUP := &"camera_director"
@@ -50,7 +55,9 @@ var is_at_station: bool = false
 ## the mouse swings the view, not the stick.
 var is_orbiting: bool = false
 
-var _seat: PilotSeat = null
+var _seat: Seat = null
+## Your head's turn at a seat that does not fly: yaw, pitch.
+var _look := Vector2.ZERO
 var _station: ComputerStation = null
 var _tween: Tween = null
 ## The orbit: where the chase camera rests, the view to go back to, and how
@@ -143,28 +150,35 @@ func _process(_delta: float) -> void:
 	if _tween == null:
 		_interior_cam.global_transform = _station.eye_transform()
 
-func sit(seat: PilotSeat) -> void:
+func sit(seat: Seat) -> void:
 	if is_seated or is_at_station or _tween != null or _avatar.mode == Avatar.Mode.SUIT:
 		return
 	_seat = seat
 	is_seated = true
+	_look = Vector2.ZERO
 	_avatar.set_control_enabled(false)
 	_move_camera_to(seat.eye.global_transform)
-	piloting_changed.emit(true)
+	# Only the seat that flies hands over the controls (ship bridge spec §3.2).
+	if seat.flies:
+		piloting_changed.emit(true)
+	seat.sat(_avatar)
 
 ## Seats you at once, with no camera move (saving spec §6.3): a loaded game
 ## that was saved at the helm.
-func sit_now(seat: PilotSeat) -> void:
+func sit_now(seat: Seat) -> void:
 	if is_seated or is_at_station or _tween != null or _avatar.mode == Avatar.Mode.SUIT:
 		return
 	_seat = seat
 	is_seated = true
+	_look = Vector2.ZERO
 	_avatar.set_control_enabled(false)
 	_interior_cam.reparent(seat.eye, false)
 	_interior_cam.transform = Transform3D.IDENTITY
 	view = View.COCKPIT
-	piloting_changed.emit(true)
+	if seat.flies:
+		piloting_changed.emit(true)
 	_apply_view()
+	seat.sat(_avatar)
 
 ## True while a sit or stand camera move is running: a save waits (saving
 ## spec §5).
@@ -202,8 +216,10 @@ func stand_now() -> void:
 		return
 	end_orbit()
 	is_seated = false
-	piloting_changed.emit(false)
-	_flight.clear_pilot_input()
+	if _seat.flies:
+		piloting_changed.emit(false)
+		_flight.clear_pilot_input()
+	_seat.stood(_avatar)
 	_avatar.place(_seat.stand_spot(_avatar))
 	_interior_cam.reparent(_avatar.head, false)
 	_interior_cam.transform = Transform3D.IDENTITY
@@ -216,8 +232,10 @@ func stand() -> void:
 		return
 	end_orbit()
 	is_seated = false
-	piloting_changed.emit(false)
-	_flight.clear_pilot_input()
+	if _seat.flies:
+		piloting_changed.emit(false)
+		_flight.clear_pilot_input()
+	_seat.stood(_avatar)
 	# Get up out of the chair to somewhere the avatar fits, then fly the camera
 	# back to its head.
 	_avatar.place(_seat.stand_spot(_avatar))
@@ -264,7 +282,7 @@ func _on_transition_finished() -> void:
 ## you see through the chase camera, starting from where it rests. Pressed
 ## again during the glide back, it carries on from where the glide got to.
 func begin_orbit() -> void:
-	if not is_seated or is_orbiting or _tween != null:
+	if not is_seated or not _seat.flies or is_orbiting or _tween != null:
 		return
 	if _orbit_tween != null:
 		_orbit_tween.kill()
@@ -330,6 +348,9 @@ func cycle_view() -> void:
 	if _tween != null or is_at_station or is_orbiting:
 		return
 	end_orbit()
+	# At a seat that does not fly there is no chase view to switch to.
+	if is_seated and not _seat.flies:
+		return
 	if is_seated:
 		view = View.CHASE if view == View.COCKPIT else View.COCKPIT
 	else:
@@ -362,7 +383,27 @@ func _unhandled_input(event: InputEvent) -> void:
 			leave_station()
 			get_viewport().set_input_as_handled()
 		return
+	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		look((event as InputEventMouseMotion).relative)
 	if event.is_action_pressed("cycle_camera"):
 		cycle_view()
 	elif event.is_action_pressed("interact") and is_seated:
 		stand()
+
+## The seat you sit in, or null.
+func seat() -> Seat:
+	return _seat if is_seated else null
+
+## True while you sit in the seat that flies.
+func piloting() -> bool:
+	return is_seated and _seat != null and _seat.flies
+
+## The mouse at a seat that does not fly (ship bridge spec §3.2): turns your
+## head within SEAT_LOOK_YAW and SEAT_LOOK_PITCH of the seat's eye. Nothing at
+## the helm, where the mouse is the stick.
+func look(relative: Vector2) -> void:
+	if not is_seated or _seat.flies or _tween != null:
+		return
+	_look.x = clampf(_look.x - relative.x * SEAT_LOOK_SENSITIVITY, -SEAT_LOOK_YAW, SEAT_LOOK_YAW)
+	_look.y = clampf(_look.y - relative.y * SEAT_LOOK_SENSITIVITY, -SEAT_LOOK_PITCH, SEAT_LOOK_PITCH)
+	_interior_cam.transform = Transform3D(Basis.from_euler(Vector3(_look.y, _look.x, 0.0)), Vector3.ZERO)

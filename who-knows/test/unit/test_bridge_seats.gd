@@ -45,3 +45,72 @@ func test_a_rebuild_keeps_one_seat_each():
 	await wait_process_frames(2)
 	assert_eq(_ship.seats().size(), 4)
 	assert_eq(_ship.interior.find_children("Seat_*", "", false, false).size(), 3, "the old seats are gone")
+
+func _sit(s: Seat) -> void:
+	_director.sit(s)
+	await wait_for_signal(_director.transition_finished, 3)
+
+func _stand() -> void:
+	_director.stand()
+	await wait_for_signal(_director.transition_finished, 3)
+
+func test_sitting_at_a_station_is_not_piloting():
+	watch_signals(_director)
+	await _sit(_ship.seat_at(Vector3i(-2, 0, -4)))
+	assert_true(_director.is_seated)
+	assert_false(_director.piloting())
+	assert_signal_not_emitted(_director, "piloting_changed")
+	assert_false(_ship.pilot.seated, "the controls stay with nobody")
+	assert_same(_director.seat(), _ship.seat_at(Vector3i(-2, 0, -4)))
+
+func test_the_helm_still_pilots():
+	watch_signals(_director)
+	await _sit(_ship.seat)
+	assert_true(_director.piloting())
+	assert_signal_emitted_with_parameters(_director, "piloting_changed", [true])
+	assert_true(_ship.pilot.seated)
+
+func test_a_seat_that_does_not_fly_moves_nothing():
+	await _sit(_ship.seat_at(Vector3i(0, 0, -2)))
+	var at := _ship.exterior.global_position
+	Input.action_press(&"move_forward")
+	await wait_physics_frames(60)
+	Input.action_release(&"move_forward")
+	assert_almost_eq(_ship.exterior.global_position, at, Vector3.ONE * 0.05)
+
+func test_you_look_round_within_limits():
+	await _sit(_ship.seat_at(Vector3i(0, 0, -2)))
+	var cam := _director.camera()
+	_director.look(Vector2(-100000, 0))
+	assert_almost_eq(cam.transform.basis.get_euler().y, CameraDirector.SEAT_LOOK_YAW, 0.01)
+	_director.look(Vector2(0, -100000))
+	assert_almost_eq(cam.transform.basis.get_euler().x, CameraDirector.SEAT_LOOK_PITCH, 0.01)
+
+func test_looking_does_nothing_at_the_helm():
+	await _sit(_ship.seat)
+	var before := _director.camera().transform
+	_director.look(Vector2(300, 200))
+	assert_eq(_director.camera().transform, before)
+
+func test_v_does_nothing_at_a_station():
+	await _sit(_ship.seat_at(Vector3i(2, 0, -4)))
+	_director.cycle_view()
+	assert_eq(_director.view, CameraDirector.View.COCKPIT)
+
+func test_you_stand_up_from_a_station():
+	var s := _ship.seat_at(Vector3i(2, 0, -4))
+	await _sit(s)
+	await _stand()
+	assert_false(_director.is_seated)
+	assert_null(_director.seat())
+	var local := s.global_transform.affine_inverse() * _avatar.global_position
+	assert_almost_eq(local, Seat.STAND_SPOTS[0], Vector3.ONE * 0.05)
+
+func test_f8_from_a_station_boards_the_other_helm():
+	await _sit(_ship.seat_at(Vector3i(-2, 0, -4)))
+	var other: Ship = _root.fleet.spawn(ShipLibrary.load_from_dir().grid(&"starter"),
+		Transform3D(_ship.exterior.global_basis, _ship.exterior.global_position + Vector3(300, 0, 0)))
+	await wait_physics_frames(2)
+	assert_true(_root.board_nearest())
+	assert_same(_director.seat(), other.seat)
+	assert_true(_director.piloting())
