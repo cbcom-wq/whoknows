@@ -487,6 +487,14 @@ var ship := _director.seat_ship()
 _hud.set_active_vehicle(ship.pilot if piloting and ship != null else null)
 ```
 
+Seated keys of note: X locks the speed (`speed_lock`); C held (`orbit_camera`) swings the
+ship's `chase_camera` round the hull's centre (`CameraDirector.begin_orbit()` / `orbit(relative)`
+/ `release_orbit()`, `ORBIT_SENSITIVITY` 0.005 rad/px, `ORBIT_PITCH_LIMIT` 80°) while the stick
+holds its offset. Letting go gives the mouse back to the stick at once and glides the camera back
+to rest the short way round (`ORBIT_RETURN_DURATION` 0.5 s, cubic in-out; `is_orbit_shown()` until
+it lands), then puts you back in the view you were in; C again mid-glide picks it up from there.
+`end_orbit()` cuts straight to rest (standing up, `bind`, V). So a ship's `ChaseCamera` must sit where an orbit about the hull origin frames it.
+
 ## Many ships (`docs/superpowers/specs/2026-10-02-many-ships-design.md`)
 
 | API | Does |
@@ -552,7 +560,7 @@ They are the truth; each block's `damage` in the grid is their view, written by
 | `ShipDamage.cabin_level(hull)` | 0 over 50% HULL, 1 to 20% (scorched, `DamageShow.CABIN_SPITS` 3), 2 under (charred, 8 spits, every ceiling light flickers) |
 | `to_dict()`, `from_dict(d)`, `infer(grid)` | saved as the ship's `"damage"`; `set_grid` infers it from the grid's block damage first (a save from before sections), then `restore_aboard` takes the saved one |
 | `Ship.take_damage(cell, hp)`, `take_damage_many(hits, sides)` | route through the model, then `_apply_view()`: stages via `block_staged`, pieces removed and put back in one `ShipGrid.replace_many` (one rebuild); returns what went |
-| `Ship.part_hit(collider, shape, at, normal)`, `repair_section`, `repair_component`, `part_label(part)`, `missing_cell_along` | the torch: a section only from outside, `RepairTorch.SECTION_RATE` 4% a second for `SECTION_SCRAP` 100 a whole section (25 s, one plate); from inside *HULL 45% · WELD FROM OUTSIDE*; a component where it is at 25 hp/s, one scrap an hp. A hole is a piece of its section |
+| `Ship.part_hit(collider, shape, at, normal)`, `repair_section`, `repair_component`, `part_label(part)`, `missing_cell_along` | the torch: a section only from outside, `RepairTorch.SECTION_RATE` 4% a second (25 s a whole section); from inside *HULL 45% · WELD FROM OUTSIDE*; a component where it is at 25 hp/s. It uses nothing up (no scrap, since 2026-10-03). A hole is a piece of its section |
 | `BlockDamage.stage_at`, `stage_of`, `output_of`, `cut_off`, `KEEP` | stages by a block's share of its hp (`INTACT` < 0.5, `DAMAGED` < 1.0, `WRECKED` < 1.5); `apply_many`/`repair`/`rebuild` remain for the pure tests but the ship no longer calls them |
 | `Ship.inner_cells`, `Ship.inner_of(layout, catalog)` | the cabin's shell: never a piece, so the cabin keeps its shape |
 | `Ship._cabin_level`, `InteriorBuilder.hull_wear`, `hull_flicker`, `wear_at`, `flicker_at` | the cabin by HULL %, set before each rebuild; a face onto a component's block (the core, the computer, the helm) shows that component's own stage. Crossing 50% or 20% queues one interior rebuild |
