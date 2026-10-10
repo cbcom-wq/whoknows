@@ -17,14 +17,17 @@ var _age := LIFE
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	set_anchors_preset(Control.PRESET_CENTER)
+	# Anchors *and* offsets: set_anchors_preset alone keeps the control's zero
+	# size and puts it in the corner (reticle.gd notes the same trap).
+	set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	_label = Label.new()
 	_label.add_theme_font_size_override("font_size", 26)
 	_label.add_theme_color_override("font_color", HudPalette.READOUT)
 	_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_label.position = Vector2(-160.0, DROP)
-	_label.size = Vector2(320.0, 40.0)
+	# Wide enough for the longest line, and centred on the toast.
+	_label.position = Vector2(-260.0, DROP)
+	_label.size = Vector2(520.0, 40.0)
 	add_child(_label)
 	visible = false
 

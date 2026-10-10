@@ -35,3 +35,14 @@ func test_a_new_toast_replaces_the_old():
 
 func test_it_never_eats_a_click():
 	assert_eq(_toast.mouse_filter, Control.MOUSE_FILTER_IGNORE)
+
+## The middle of the view, not its corner: a zero-size control moved by
+## set_anchors_preset alone sits at (0, 0) (reticle.gd's trap). The label's
+## centre lies on the middle's x, and its top DROP below the middle's y.
+func test_it_sits_under_the_middle_of_the_view():
+	_toast.say("+12 QE · ICE CHUNK")
+	var middle := get_viewport().get_visible_rect().size * 0.5
+	assert_lt(_toast.global_position.distance_to(middle), 2.0, "the toast is at the middle")
+	var label := _toast.get_child(0) as Label
+	assert_lt(absf(label.global_position.x + label.size.x * 0.5 - middle.x), 2.0, "the label is centred")
+	assert_lt(absf(label.global_position.y - (middle.y + QuantumToast.DROP)), 2.0, "and DROP under it")
