@@ -94,3 +94,27 @@ func test_woken_skitters_stand_on_the_rock():
 		if npc.active is SurfaceCrawler and (npc.active as SurfaceCrawler).gripping:
 			on_rock += 1
 	assert_eq(on_rock, _director.live.size(), "every one gripping the rock")
+
+func test_herds_that_a_drill_has_quietened_are_left_out_of_a_rock_that_loads():
+	var herd := _herd()
+	_hull_to(herd[0] + herd[1] * 60.0)
+	await wait_physics_frames(2)
+	var source := RockHerdSource.new(_stream)
+	var all := source.records(_director)
+	assert_gt(all.size(), 1, "the start rock has herds on offer")
+	var target: Vector3 = all[0][1].frame() * all[0][0].home
+	var target_id: StringName = all[0][0].id
+	# A site already built keeps its records when quiet turns true...
+	source.quiet = func(_site: StringName, _point: Vector3) -> bool: return true
+	assert_eq(source.records(_director).size(), all.size(), "skitters in view are not taken away")
+	# ...and a rebuilt one (the rock left detail and came back) drops them.
+	var again := RockHerdSource.new(_stream)
+	again.quiet = source.quiet
+	assert_eq(again.records(_director).size(), 0, "a quiet rock loads with no herds")
+	# Only the non-quiet ones, by point.
+	var near := RockHerdSource.new(_stream)
+	near.quiet = func(_site: StringName, point: Vector3) -> bool: return point.distance_to(target) < 0.01
+	var left := near.records(_director)
+	assert_eq(left.size(), all.size() - 1)
+	for pair in left:
+		assert_ne(pair[0].id, target_id)

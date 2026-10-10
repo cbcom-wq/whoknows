@@ -11,6 +11,8 @@ extends Node3D
 
 ## The ship you are aboard changed (many ships spec §4.1).
 signal aboard_changed(ship: Ship)
+## Where you are changed (habitat modules spec §5.5): a ship or a base.
+signal home_changed(home: GridHome)
 
 @onready var _starter: Ship = $Ship
 @onready var _hud: HudRoot = $HudRoot
@@ -25,8 +27,17 @@ signal aboard_changed(ship: Ship)
 ## the one your suit belongs to on a spacewalk (§3.4).
 var fleet: Fleet
 var aboard: Ship
+## Where you are (habitat modules spec §5.5): the ship you are aboard or the
+## base you are in, or the one your suit belongs to on a spacewalk. A ship
+## here is always `aboard`.
+var home: GridHome
+## The base a loaded game had you in (habitat modules spec §11.2): woken in
+## _restore_places, boarded at the end of _ready; null aboard a ship.
+var _loaded_home: Base
 ## On a spacewalk, which ship your suit belongs to (§4.3).
 var suit_tie: SuitTie
+## Every base (habitat modules spec §9.1).
+var bases: Bases
 ## Every ship the game can build, from data/ships (ship library spec §3.2):
 ## loaded first in _ready, or by _starter_grid() on a bare instance.
 var library: ShipLibrary
@@ -134,11 +145,13 @@ func _ready() -> void:
 	if resumed:
 		_starter.restore_aboard(starter_part)
 	_make_fleet()
+	_make_bases()
 	_make_suit_tie()
 	_place_avatar_on_deck()
 	_set_interior_mood()
 	_set_outside_mood()
 	_wire_hud()
+	_wire_other_marker()
 	_wire_prompt()
 	_wire_computer_mode()
 	_wire_hands()
@@ -154,6 +167,8 @@ func _ready() -> void:
 	fleet.joined.connect(_wire_ship)
 	fleet.left.connect(_on_ship_left)
 	board(aboard, true)
+	if _loaded_home != null:
+		board_base(_loaded_home, true)
 
 ## The ship library (ship library spec §3.2). A file that would not load is an
 ## error in the output, and left out.
@@ -169,10 +184,36 @@ func _make_fleet() -> void:
 	fleet.home = self
 	fleet.outside = $Outside
 	fleet.universe = _universe
-	fleet.aboard = func() -> Ship: return aboard
+	# In a base you are aboard no ship, so yours may sleep (habitat modules
+	# spec §9.3).
+	fleet.aboard = func() -> Ship: return aboard if home == aboard else null
 	add_child(fleet)
 	fleet.adopt(_starter)
 	aboard = _starter
+	home = _starter
+
+## Every base (habitat modules spec §9.3): sharing the fleet's interior slots,
+## and play time as the drills' clock. Its system is set in _wire_universe,
+## once the system exists.
+func _make_bases() -> void:
+	bases = Bases.new()
+	bases.name = "Bases"
+	bases.home = self
+	bases.outside = $Outside
+	bases.universe = _universe
+	bases.slots = fleet.slots
+	bases.clock = func() -> float: return play_time
+	bases.inside = func() -> Base: return home as Base
+	bases.ship_near = func(p: Vector3) -> Ship: return fleet.nearest(p)
+	bases.joined.connect(_wire_base)
+	add_child(bases)
+
+## In through a base's airlock, you are in it.
+func _wire_base(base: Base) -> void:
+	base.airlock_crossed.connect(func(_who: Avatar, outward: bool) -> void:
+		if not outward:
+			board_base(base))
+	base.set_own(base == home)
 
 ## Everything one ship needs from the game, once (many ships spec §5.2): every
 ## ship at the end of _ready, and each the fleet takes in after.
@@ -221,30 +262,35 @@ func _wire_ship(ship: Ship) -> void:
 func _on_ship_left(ship: Ship) -> void:
 	npc_debug.directors.erase(ship.npc_director)
 
-## On a spacewalk, your suit belongs to the nearest ship (many ships spec §4.3).
+## On a spacewalk, your suit belongs to the nearest ship or base (many ships
+## spec §4.3; habitat modules spec §5.5).
 func _make_suit_tie() -> void:
 	suit_tie = SuitTie.new()
 	suit_tie.name = "SuitTie"
 	suit_tie.fleet = fleet
+	suit_tie.bases = bases
 	suit_tie.avatar = _avatar
-	suit_tie.current = func() -> Ship: return aboard
+	suit_tie.current = func() -> GridHome: return home
 	suit_tie.tied.connect(_tie_suit)
 	add_child(suit_tie)
 
-## Your suit is `ship`'s now: speed relative to its hull, home its nearest
-## airlock, and aboard it.
-func _tie_suit(ship: Ship) -> void:
-	_avatar.hull = ship.exterior
-	var lock := _nearest_airlock(ship, _avatar.global_position)
+## Your suit is `to`'s now: speed relative to its hull, home its nearest
+## airlock, and you are its.
+func _tie_suit(to: GridHome) -> void:
+	_avatar.hull = to.exterior
+	var lock := _nearest_airlock(to, _avatar.global_position)
 	if lock != null:
 		_avatar.beacon_source = lock.beacon
 		_avatar.home_source = lock.home
-	board(ship)
+	if to is Ship:
+		board(to)
+	else:
+		board_base(to as Base)
 
-## `ship`'s airlock with a hatch on the hull nearest `p`, or null.
-static func _nearest_airlock(ship: Ship, p: Vector3) -> Airlock:
+## `to`'s airlock with a hatch on the hull nearest `p`, or null.
+static func _nearest_airlock(to: GridHome, p: Vector3) -> Airlock:
 	var best: Airlock = null
-	for lock: Airlock in ship.airlocks.values():
+	for lock: Airlock in to.airlocks.values():
 		if not is_instance_valid(lock.alcove):
 			continue
 		if best == null or lock.beacon().distance_to(p) < best.beacon().distance_to(p):
@@ -259,11 +305,14 @@ func _on_airlock_crossed(_who: Avatar, outward: bool, ship: Ship) -> void:
 ## Hands you to `ship` (many ships spec §4.1): its hull drawn as your own and
 ## its interior shown, the other's not; the views, the HUD's markers, the warp
 ## panel, your hands and the origin's focus all follow it, and only its
-## sensors scan. Boarding the ship you are aboard does nothing unless `force`.
+## sensors scan. Boarding the ship you are aboard does nothing unless `force`,
+## or unless you are in a base: your ship stays `aboard` there, and coming
+## back to it makes it `home` again (habitat modules spec §5.5).
 func board(ship: Ship, force := false) -> void:
-	if ship == null or (ship == aboard and not force):
+	if ship == null or (ship == aboard and ship == home and not force):
 		return
 	aboard = ship
+	home = ship
 	# Every other ship lets go, not only the last one aboard: a loaded game
 	# sets `aboard` before it first boards, and a ship starts as its own.
 	for other in fleet.ships():
@@ -271,6 +320,9 @@ func board(ship: Ship, force := false) -> void:
 			other.set_own(false)
 			for m in _cockpit_markers(other):
 				_hud.unregister_element(m)
+	if bases != null:
+		for b in bases.awake():
+			b.set_own(false)
 	ship.set_own(true)
 	for m in _cockpit_markers(ship):
 		_hud.register_element(m)
@@ -287,6 +339,25 @@ func board(ship: Ship, force := false) -> void:
 		s.sensors.process_mode = Node.PROCESS_MODE_INHERIT if s == ship else Node.PROCESS_MODE_DISABLED
 	_universe.set_focus(_avatar if _avatar.mode == Avatar.Mode.SUIT else ship.exterior)
 	aboard_changed.emit(ship)
+	home_changed.emit(ship)
+
+## Puts you in `base` (habitat modules spec §5.5): its interior shown and its
+## hull your own, no ship's; what you put down stays in it; the origin follows
+## it, or you on a spacewalk; and your ship may sleep. Your ship stays
+## `aboard`: its helm, warp and sensors are still the ones you use.
+func board_base(base: Base, force := false) -> void:
+	if base == null or (base == home and not force):
+		return
+	home = base
+	for s in fleet.ships():
+		if s.own:
+			s.set_own(false)
+	for b in bases.awake():
+		b.set_own(b == base)
+	_avatar.grasp.world_root = base.items
+	_avatar.external_accel = Vector3.ZERO
+	_universe.set_focus(_avatar if _avatar.mode == Avatar.Mode.SUIT else base.exterior)
+	home_changed.emit(base)
 
 ## The cockpit's own markers, in `ship`'s canopy view: the HUD feeds them while
 ## it is the ship you are aboard.
@@ -319,7 +390,8 @@ func _rebind_markers(ship: Ship) -> void:
 		(m as BodyMarker).sensors = ship.sensors
 
 ## F8, debug (many ships spec §4.3): seats you at the helm of the nearest other
-## awake ship. False, with a toast saying why, when it can't.
+## awake ship. False, with a toast saying why, when it can't. Measured from
+## the ship you are in: in a base yours may be asleep far off, so it refuses.
 func board_nearest() -> bool:
 	var why := _board_refusal()
 	var target: Ship = null
@@ -334,11 +406,13 @@ func board_nearest() -> bool:
 	board_at_helm(target)
 	return true
 
-## Why F8 must wait, or "": on a spacewalk, at a computer, mid-sit, during a
-## warp, or while an airlock of the ship you are aboard cycles.
+## Why F8 must wait, or "": on a spacewalk, in a base, at a computer, mid-sit,
+## during a warp, or while an airlock of the ship you are aboard cycles.
 func _board_refusal() -> String:
 	if _avatar.mode == Avatar.Mode.SUIT:
 		return "NOT ON A SPACEWALK"
+	if home != aboard:
+		return "IN A BASE"
 	if _director.is_at_station:
 		return "AT THE COMPUTER"
 	if _director.is_moving():
@@ -440,18 +514,19 @@ func _wire_hurt() -> void:
 	_avatar.seated_source = func() -> bool: return _director.is_seated
 	_avatar.rescue = _rescue
 	_avatar.rescue_cost = func(n: int) -> int:
-		return aboard.quantum.store.drain(n, &"rescue") if aboard.quantum.store != null else 0
+		return home.quantum.store.drain(n, &"rescue") if home.quantum.store != null else 0
 	_avatar.let_fall.connect(func(item: Item, outside: bool) -> void:
 		if outside and strays != null:
 			strays.adopt(item))
 
-## Puts a blacked-out `avatar` aboard where it fits first (§7.2).
+## Puts a blacked-out `avatar` in where it fits first (§7.2): the ship you are
+## aboard, or the base you are in (habitat modules spec §11.3).
 func _rescue(avatar: Avatar) -> void:
-	for pose in aboard.wake_spots():
+	for pose in home.wake_spots():
 		if not avatar.can_stand_at(pose) and avatar.mode == Avatar.Mode.PLATING:
 			continue
 		if avatar.mode == Avatar.Mode.SUIT:
-			avatar.enter_plating(aboard.interior, pose, 0.0, Vector3.ZERO, Quaternion.IDENTITY)
+			avatar.enter_plating(home.interior, pose, 0.0, Vector3.ZERO, Quaternion.IDENTITY)
 		else:
 			avatar.place(pose)
 		return
@@ -511,12 +586,19 @@ func _wire_universe(saved: Dictionary) -> void:
 	# first belt's first group: the universe's origin goes there, and the
 	# rocks around it load before the first frame.
 	system = SystemRecipe.from_seed(_stream.seed)
+	bases.system = system.seed
 	_stream.shapes = system.asteroid_shapes()
 	var start := system.entry()
 	var same_world := resumed and _same_generator(saved, "asteroids") and _same_generator(saved, "system")
 	if resumed and not same_world:
-		push_warning("FlightTest: the save's asteroids are another version; back to the start")
+		var lost: Array = saved.get("bases", {}).get("sites", [])
+		push_warning("FlightTest: the save's asteroids are another version; back to the start%s"
+			% ("; its bases are dropped" if not lost.is_empty() else ""))
 	if same_world:
+		# The bases first, before anything wakes; a world started over drops
+		# them, as it drops strays: their rocks are gone (habitat modules spec
+		# §11).
+		bases.from_dict(saved.get("bases", {}))
 		_restore_places(saved)
 	else:
 		_universe.origin = start
@@ -535,7 +617,7 @@ func _wire_universe(saved: Dictionary) -> void:
 	$DirectionalLight3D.directional_shadow_max_distance = AsteroidStream.SHADOW_REACH
 	_avatar.mode_changed.connect(
 		func(mode: Avatar.Mode) -> void:
-			_universe.set_focus(_avatar if mode == Avatar.Mode.SUIT else aboard.exterior)
+			_universe.set_focus(_avatar if mode == Avatar.Mode.SUIT else home.exterior)
 	)
 	_universe_readout = Label.new()
 	_universe_readout.name = "UniverseReadout"
@@ -610,7 +692,9 @@ func _wire_npcs() -> void:
 	exterior_npcs.catalog = _starter.npc_director.catalog
 	exterior_npcs.bus = npc_bus
 	exterior_npcs.cameras = [aboard.chase_camera, aboard.canopy_camera, _avatar.camera]
-	exterior_npcs.sources = [RockHerdSource.new(_stream)]
+	var herds := RockHerdSource.new(_stream)
+	herds.quiet = bases.quiet
+	exterior_npcs.sources = [herds]
 	exterior_npcs.ledger = npc_ledger
 	add_child(exterior_npcs)
 	npc_debug = NpcDebug.new()
@@ -742,6 +826,9 @@ func spawn_from_library(id: StringName) -> String:
 		return "A SHIP IS ARRIVING"
 	if fleet.ships().size() >= fleet.max_ships:
 		return "THE FLEET IS FULL"
+	# Bases hold interior slots too (habitat modules spec §9.3).
+	if fleet.slots.free_count() == 0:
+		return "NO BERTH FREE"
 	var view := _spawn_view()
 	var others: Array[Vector3] = []
 	for ship in fleet.awake():
@@ -753,6 +840,8 @@ func spawn_from_library(id: StringName) -> String:
 	var place: Transform3D = spot
 	var grid := library.grid(id)
 	var ship := fleet.spawn(grid, place, true, "", ShipBlueprint.from_grid(grid, library.name_of(id)))
+	if ship == null:
+		return "NO BERTH FREE"
 	WarpArrival.play(ship.exterior, place, Vector3.ZERO, SpawnSpot.arrival_line(place))
 	return "SPAWNED %s · %s · %d m away" % [ship.name, library.name_of(id), roundi(view.origin.distance_to(place.origin))]
 
@@ -779,12 +868,17 @@ func remove_nearest_spawned() -> String:
 	fleet.remove(best)
 	return "REMOVED " + what
 
-## Where you look from: the hull you are aboard, or your view on a spacewalk.
+## Where you look from: the hull you are in, a ship's or a base's, or your
+## view on a spacewalk. Never `aboard`'s in a base: your ship may be asleep
+## there, its engine place stale (habitat modules spec §9.3).
 func _spawn_view() -> Transform3D:
-	return _avatar.camera.global_transform if _avatar.mode == Avatar.Mode.SUIT else aboard.exterior.global_transform
+	return _avatar.camera.global_transform if _avatar.mode == Avatar.Mode.SUIT else home.exterior.global_transform
 
+## How you move: a base stands still.
 func _spawn_velocity() -> Vector3:
-	return _avatar.velocity if _avatar.mode == Avatar.Mode.SUIT else aboard.exterior.linear_velocity
+	if _avatar.mode == Avatar.Mode.SUIT:
+		return _avatar.velocity
+	return Vector3.ZERO if home is Base else home.exterior.linear_velocity
 
 ## True when a rock is too near `p` for a ship to arrive there, as for a
 ## warp's drop-out (§5).
@@ -858,9 +952,13 @@ static func hop_off(b: SystemBody) -> float:
 ## The debug hop (the system skeleton spec §10): puts the ship at rest HOP_OFF
 ## off the surface of the next body in the system's order (star, then each
 ## planet and its moons), or the previous for `step` -1, on its sunward side
-## and facing it. A system is 15,000 km across; this is the debug way round it. Refused on a spacewalk, while an airlock cycles, and while a
-## warp spools or travels. True if it hopped.
+## and facing it. A system is 15,000 km across; this is the debug way round
+## it. Refused on a spacewalk, in a base (it would move your parked ship and
+## strand you), while an airlock cycles, and while a warp spools or travels.
+## True if it hopped.
 func hop(step: int) -> bool:
+	if home != aboard:
+		return false
 	if aboard.warp.is_spinning():
 		return false
 	if _avatar.mode == Avatar.Mode.SUIT:
@@ -931,6 +1029,7 @@ func _wire_saving() -> void:
 	save_gate.add_source(func() -> String: return "sitting" if _director.is_moving() else "")
 	save_gate.add_source(_fleet_busy)
 	save_gate.add_source(_avatar.busy)
+	save_gate.add_source(func() -> String: return bases.busy())
 	save_gate.settle()
 	_saved_tag = SavedTag.new()
 	_saved_tag.name = "SavedTag"
@@ -980,6 +1079,8 @@ func capture() -> Dictionary:
 		"salvage": salvage.to_dict(),
 		"strays": strays.to_dict(),
 		"npcs": _capture_npcs(),
+		"bases": bases.to_dict(),
+		"home": {"base": String(home.name)} if home is Base else {},
 	}
 
 ## The dead, and the health of every NPC awake now and asleep (health and
@@ -1016,7 +1117,7 @@ func _capture_you() -> Dictionary:
 		d["mode"] = "seated" if _director.is_seated else "walking"
 		if _director.is_seated:
 			d["seat"] = SaveCodec.cell_key(_director.seat().cell)
-		d["place"] = SaveCodec.transform(aboard.interior.global_transform.affine_inverse() * _avatar.global_transform)
+		d["place"] = SaveCodec.transform(home.interior.global_transform.affine_inverse() * _avatar.global_transform)
 	if _avatar.grasp.item != null:
 		d["held"] = _avatar.grasp.item.to_dict(Transform3D.IDENTITY)
 	return d
@@ -1026,8 +1127,8 @@ static func _same_generator(saved: Dictionary, which: String) -> bool:
 	var theirs: Dictionary = saved.get("generators", {})
 	return int(theirs.get(which, -1)) == int(SaveGame.generators()[which])
 
-## The origin near where you were, then every ship and you (§6.1; many ships
-## spec §6.3).
+## The origin near where you were, then every ship, the base you were in, and
+## you (§6.1; many ships spec §6.3; habitat modules spec §11.2).
 func _restore_places(saved: Dictionary) -> void:
 	var you: Dictionary = saved.get("avatar", {})
 	var first := _part_named(saved, String(saved.get("aboard", Fleet.STARTER)))
@@ -1036,11 +1137,22 @@ func _restore_places(saved: Dictionary) -> void:
 	var focus := SaveCodec.to_upoint(first.get("hull", {}).get("at"))
 	if String(you.get("mode", "")) == "suit":
 		focus = SaveCodec.to_upoint(you.get("at"))
+	# In a base, the origin goes to it: your ship may be far off, asleep.
+	var in_base := String(saved.get("home", {}).get("base", ""))
+	var site := bases.site_named(StringName(in_base)) if in_base != "" else null
+	if site != null and String(you.get("mode", "")) != "suit":
+		focus = site.at
 	_universe.origin = UniversePoint.at(
 		roundi(focus.x / Universe.STEP) * int(Universe.STEP),
 		roundi(focus.y / Universe.STEP) * int(Universe.STEP),
 		roundi(focus.z / Universe.STEP) * int(Universe.STEP))
 	_restore_fleet(saved, true)
+	if site != null:
+		_loaded_home = bases.wake(site.id)
+		# The rocks round the base, not round your far ship, load before the
+		# first frame (_stream.start); a spacewalk's focus is you, below.
+		if _loaded_home != null:
+			_universe.set_focus(_loaded_home.exterior)
 	_restore_you(you, true)
 
 ## Every saved ship but the starter, spawned under its own name, unstocked,
@@ -1050,7 +1162,10 @@ func _restore_places(saved: Dictionary) -> void:
 func _restore_fleet(saved: Dictionary, in_place: bool) -> void:
 	fleet.from_dict(saved.get("fleet", {}))
 	if in_place:
-		_starter.restore_hull(_part_named(saved, Fleet.STARTER), _universe)
+		# Through the fleet, as every other ship: a starter left far off (you
+		# were in a base, or aboard another ship) is held asleep there, never
+		# put in engine space 25 km out for a second.
+		fleet.restore_hull(_starter, _part_named(saved, Fleet.STARTER))
 	var row := 0
 	for part in saved.get("ships", []):
 		if not (part is Dictionary) or String(part.get("name", "")) == Fleet.STARTER:
@@ -1069,6 +1184,7 @@ func _restore_fleet(saved: Dictionary, in_place: bool) -> void:
 			fleet.restore_hull(ship, part)
 	var named := fleet.named(StringName(saved.get("aboard", Fleet.STARTER)))
 	aboard = named if named != null else _starter
+	home = aboard
 
 ## The saved ship called `ship_name`, or {}.
 static func _part_named(saved: Dictionary, ship_name: String) -> Dictionary:
@@ -1080,26 +1196,28 @@ static func _part_named(saved: Dictionary, ship_name: String) -> Dictionary:
 ## You as the save had you (§6.3). With `outside_too` false -- the world
 ## started over -- a spacewalk comes back aboard, standing.
 func _restore_you(d: Dictionary, outside_too: bool) -> void:
+	var where: GridHome = _loaded_home if _loaded_home != null else aboard
 	_avatar.suit_cell.from_dict(d.get("suit", {}))
 	_avatar.suit_assist = bool(d.get("suit_assist", true))
 	_avatar.health.from_dict(d.get("health", {}))
 	var mode := String(d.get("mode", "walking"))
 	if mode != "suit":
-		# Into the ship you were aboard (many ships spec §6.3), where you
-		# stood, or on its deck if that is no place to stand any more.
-		var pose := aboard.interior.global_transform * SaveCodec.to_transform(d.get("place"))
-		if _can_stand(pose):
+		# Into the ship you were aboard or the base you were in (many ships
+		# spec §6.3; habitat modules spec §11.2), where you stood, or
+		# somewhere to stand in it if that is no place to stand any more.
+		var pose := where.interior.global_transform * SaveCodec.to_transform(d.get("place"))
+		if _can_stand(pose, where):
 			pose = Transform3D(Basis(Vector3.UP, pose.basis.get_euler().y), pose.origin)
 		else:
-			pose = aboard.interior.global_transform * _deck_spot(aboard)
-		_avatar.move_aboard(aboard.interior, pose)
+			pose = _stand_spot(where)
+		_avatar.move_aboard(where.interior, pose)
 		_avatar.set_head_pitch(float(d.get("pitch", 0.0)))
 	elif not outside_too:
-		_avatar.move_aboard(aboard.interior, aboard.interior.global_transform * _deck_spot(aboard))
+		_avatar.move_aboard(where.interior, _stand_spot(where))
 	# Hands work only aboard and standing, so the held item is taken first.
 	var held: Variant = d.get("held")
 	if held is Dictionary:
-		var item := aboard.restore_item(held)
+		var item := where.restore_item(held)
 		if item != null and not _avatar.grasp.take(item):
 			item.set_loose()
 	if mode == "seated":
@@ -1112,31 +1230,40 @@ func _restore_you(d: Dictionary, outside_too: bool) -> void:
 		_restore_spacewalk(d)
 
 func _restore_spacewalk(d: Dictionary) -> void:
-	var airlock: Airlock = aboard.airlocks.get(SaveCodec.to_cell(String(d.get("airlock", ""))))
+	var where: GridHome = _loaded_home if _loaded_home != null else aboard
+	var airlock: Airlock = where.airlocks.get(SaveCodec.to_cell(String(d.get("airlock", ""))))
 	if airlock == null or not is_instance_valid(airlock.alcove):
-		for a: Airlock in aboard.airlocks.values():
+		for a: Airlock in where.airlocks.values():
 			if is_instance_valid(a.alcove):
 				airlock = a
 				break
 	var pose := Transform3D(SaveCodec.to_basis(d.get("turn")), _universe.to_engine(SaveCodec.to_upoint(d.get("at"))))
-	_avatar.enter_suit(aboard.outside, pose, SaveCodec.to_vec3(d.get("v")), aboard.exterior)
+	_avatar.enter_suit(where.outside, pose, SaveCodec.to_vec3(d.get("v")), where.exterior)
 	_avatar.set_head_pitch(float(d.get("pitch", 0.0)))
 	if airlock != null:
 		_avatar.beacon_source = airlock.beacon
 		_avatar.home_source = airlock.home
 	_universe.set_focus(_avatar)
 
-## Whether a saved standing place is still somewhere to stand: a walkable
-## block under it, so a changed layout never leaves you in a wall (§6.3).
-func _can_stand(pose: Transform3D) -> bool:
-	var local := aboard.interior.global_transform.affine_inverse() * pose.origin
+## Whether a saved standing place in `where` is still somewhere to stand: a
+## walkable block under it, so a changed layout never leaves you in a wall
+## (§6.3).
+func _can_stand(pose: Transform3D, where: GridHome) -> bool:
+	var local := where.interior.global_transform.affine_inverse() * pose.origin
 	var cell := Vector3i(roundi(local.x / ShipGrid.CELL_SIZE),
 		roundi((local.y - InteriorBuilder.floor_y(Vector3i.ZERO)) / InteriorBuilder.STOREY_HEIGHT),
 		roundi(local.z / ShipGrid.CELL_SIZE))
-	if not aboard.grid.has_block(cell):
+	if not where.grid.has_block(cell):
 		return false
-	var def := aboard.catalog.get_def(aboard.grid.get_block(cell).block_id)
+	var def := where.catalog.get_def(where.grid.get_block(cell).block_id)
 	return def != null and def.is_walkable()
+
+## Somewhere to stand in `where`: a ship's deck by the helm, a base's first
+## wake spot.
+func _stand_spot(where: GridHome) -> Transform3D:
+	if where is Ship:
+		return where.interior.global_transform * _deck_spot(where as Ship)
+	return where.wake_spots()[0]
 
 ## The ship starter_ship names, {id, name, description, grid}; the starter's,
 ## with an error in the output, when it names none. The starter's file is
@@ -1205,6 +1332,23 @@ func _wire_hud() -> void:
 	# On a spacewalk the suit is the vehicle the HUD reports (airlock spec
 	# §8.3): speed relative to the ship, and the way home.
 	_avatar.mode_changed.connect(_on_avatar_mode_changed)
+
+## The second airlock marker on a spacewalk (habitat modules spec §5.5): your
+## ship's when your suit is a base's, the nearest base's when it is a ship's.
+func _wire_other_marker() -> void:
+	var marker := AirlockMarker.new()
+	marker.name = "OtherAirlockMarker"
+	marker.other = true
+	marker.set_anchors_preset(Control.PRESET_FULL_RECT)
+	$HudRoot/Screen.add_child(marker)
+	_avatar.other_beacon_source = func() -> Dictionary:
+		var to: GridHome = aboard if home is Base else bases.nearest(_avatar.global_position)
+		if to == null or (to is Ship and fleet.sleeping(to)):
+			return {}
+		var lock := _nearest_airlock(to, _avatar.global_position)
+		if lock == null:
+			return {}
+		return {"at": lock.beacon(), "label": "SHIP" if to is Ship else "BASE"}
 
 ## The pilot's controls of the ship whose seat you took report the flight
 ## computer's telemetry plus the stick and the pointer (flight controls spec

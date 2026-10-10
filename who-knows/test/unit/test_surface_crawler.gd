@@ -170,3 +170,29 @@ func test_footing_that_moves_too_fast_is_lost():
 	crate.linear_velocity = Vector3(4, 0, 0)
 	await wait_physics_frames(30)
 	assert_true(_npc.active is ZeroGDrift, "4 m/s: it lets go")
+
+## A rock that leaves detail all at once (a jump far away, the debug hop) is
+## freed before the director's next review demotes its skitters: in between,
+## they must not step on ground that is gone.
+class GoneSite extends NpcSite:
+	var ground: Node
+	func alive() -> bool:
+		return is_instance_valid(ground) and ground.is_inside_tree()
+
+func test_a_place_gone_stops_it_stepping_at_once():
+	var rock := _box(Vector3(10, 10, 10), Vector3.ZERO)
+	var site := GoneSite.new()
+	site.id = &"test"
+	site.ground = rock
+	_npc = Npc.new()
+	_root.add_child(_npc)
+	var pose := Transform3D(Basis.IDENTITY, Vector3(0, 5.05, 0))
+	_npc.setup(NpcRecord.make(&"crawler:0", &"crawler", &"test", pose.origin, 1), _species, site, false, pose)
+	await wait_physics_frames(5)
+	_npc.intent = Intent.go(Vector3(4.0, 5.0, 0.0), 1.0)
+	await wait_physics_frames(10)
+	rock.free()
+	var at := _npc.global_position
+	await wait_physics_frames(30)
+	assert_false(site.alive(), "the place is gone")
+	assert_eq(_npc.global_position, at, "and it has not moved since")

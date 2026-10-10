@@ -13,6 +13,7 @@ const SHADER_DIR := "res://data/materials/interior/"
 ## vertex colours rather than choosing colours.
 const PAINTING_FILES := [
 	"res://src/ui/computer_overlay.gd",
+	"res://src/habitat/link_panel.gd",
 	"res://src/ship/interior/interior_props.gd",
 	"res://src/ship/interior/interior_dressing.gd",
 	"res://src/ship/interior/interior_materials.gd",
@@ -40,6 +41,8 @@ const PAINTING_FILES := [
 	"res://src/ship/airlock/airlock_panel.gd",
 	"res://src/ship/airlock/airlock_room.gd",
 	"res://src/ship/airlock/airlock_show.gd",
+	"res://src/habitat/base_exterior.gd",
+	"res://src/habitat/package_ghost.gd",
 	"res://src/world/rock_mesh.gd",
 	"res://src/world/asteroid_recipe.gd",
 	"res://src/world/asteroid_stream.gd",

@@ -70,9 +70,13 @@ func test_names_never_repeat_and_slots_are_reused():
 func test_the_starter_and_the_ship_aboard_stay():
 	assert_false(_fleet.remove(_starter), "the starter stays")
 	var ship := _spawn()
+	# Aboard is `home` too: in a base the fleet holds no ship for you
+	# (habitat modules spec §9.3).
 	_root.aboard = ship
+	_root.home = ship
 	assert_false(_fleet.remove(ship), "the ship you are aboard stays")
 	_root.aboard = _starter
+	_root.home = _starter
 
 func test_no_more_than_the_cap():
 	_fleet.max_ships = 2
@@ -80,6 +84,15 @@ func test_no_more_than_the_cap():
 	assert_null(_spawn(Vector3(-300, 0, 0)), "past the cap, none")
 	assert_engine_error("the most there can be", "and it says why")
 	assert_eq(Fleet.MAX_SHIPS, 16)
+
+## Ships and bases share one slot pool (habitat modules spec §9.3): with every
+## slot held by bases, no ship, under the ship cap or not.
+func test_a_full_slot_pool_spawns_nothing():
+	while _fleet.slots.free_count() > 0:
+		_fleet.slots.claim()
+	assert_null(_spawn(), "no slot free: none")
+	assert_engine_error("no interior slot free", "and it says why")
+	assert_eq(_fleet.ships().size(), 1)
 
 func test_nearest():
 	var a := _spawn()

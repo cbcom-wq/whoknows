@@ -387,7 +387,7 @@ func test_you_wake_in_the_bunk_room_first():
 	assert_gt(spots.size(), 0)
 	var local := _ship.interior.to_local(spots[0].origin + Vector3.UP * 0.1)
 	var cell := ShipCells.interior_cell_at(local)
-	assert_eq(_ship.interior_builder.layout().zone_at(cell), Ship.WAKE_ROOM)
+	assert_eq(_ship.interior_builder.layout().zone_at(cell), GridHome.WAKE_ROOM)
 
 func test_a_blackout_aboard_wakes_you_in_the_bunk_room_and_costs_the_ship():
 	var avatar: Avatar = _ship.get_node("Interior/Avatar")
@@ -404,7 +404,7 @@ func test_a_blackout_aboard_wakes_you_in_the_bunk_room_and_costs_the_ship():
 	var layout := _ship.interior_builder.layout()
 	var nearest := INF
 	for c: Vector3i in _ship.interior_builder.walkable_coords():
-		if layout.zone_at(c) == Ship.WAKE_ROOM:
+		if layout.zone_at(c) == GridHome.WAKE_ROOM:
 			nearest = minf(nearest, Vector3(c).distance_to(Vector3(cell)))
 	assert_lt(nearest, 1.5, "woke at %s" % cell)
 

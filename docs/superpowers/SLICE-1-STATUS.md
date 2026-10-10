@@ -132,6 +132,26 @@ Spec `docs/superpowers/specs/2026-09-24-quantum-energy-design.md`, plan
 
 ---
 
+**Built on branch `habitat-modules`, Phases A–C: habitat modules** (spec 2026-09-26, revised and
+approved 2026-10-08; built 2026-10-08 to 2026-10-09). The quantum machine makes a hub package
+(800 QE); you carry it out on a spacewalk and aim it at a big rock, where a green or coral ghost
+says whether it fits and R turns it. Planted, it lands on four levelling legs and unfolds into a
+drum in 5.5 s, scattering the skitters near. You cycle in through its airlock and walk inside in
+gravity; the base is a grid like a ship's (`GridHome`), boarded as `home` while your ship stays
+`aboard`. A drill (600 QE) and a store (500 QE) plant beside the hub a cell apart: the drill
+earns QE into the base's store by play time, asleep or awake, and herds near a working drill move
+away; the store adds 1,000 QE. The hub's link panel moves 50 QE a press between your ship and the
+base within 1 km. Bases sleep past 20 km, share the 16 interior slots with the fleet, and save in
+format 3. `test/probes/base_probe.gd` plays it all in the real game: 39 checks, 0 fails; inside
+the hub 135 fps, outside with three modules 281 fps on the GTX 960. Not yet: corridors (so a drill
+or store can't be walked into), the fabricator, suit bay and ship builder (Phase D, waiting on
+quantum energy's hose, Task 9); holding the link's buttons; and any way to see a base from afar
+(the owner's call: lights, a beacon or a sensor contact). Spec
+`docs/superpowers/specs/2026-09-26-habitat-modules-design.md` §19 says what was built and why it
+differs.
+
+---
+
 ## Known open problems
 
 ### Unverified: the feel verdict

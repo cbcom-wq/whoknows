@@ -87,7 +87,7 @@ func test_a_newer_format_is_refused_and_never_written_over():
 func test_a_format_1_save_becomes_one_ship_named_ship_with_you_aboard():
 	var old := {"format": 1, "ship": {"layout": {"cells": []}, "hull": {}}, "avatar": {"mode": "walking"}}
 	var now := SaveGame.migrate(old)
-	assert_eq(int(now["format"]), 2)
+	assert_eq(int(now["format"]), SaveGame.FORMAT, "through every step")
 	assert_false(now.has("ship"))
 	assert_eq(now["ships"].size(), 1)
 	assert_eq(now["ships"][0]["name"], "Ship")
@@ -97,8 +97,20 @@ func test_a_format_1_save_becomes_one_ship_named_ship_with_you_aboard():
 	assert_eq(now["avatar"], old["avatar"], "the rest untouched")
 	assert_true(old.has("ship"), "the dictionary passed in is not changed")
 
-func test_a_format_2_save_is_left_as_it_is():
-	var d := {"format": 2, "ships": [], "aboard": "Ship", "fleet": {"next": 2}}
+## Habitat modules (docs/superpowers/specs/2026-09-26-habitat-modules-design.md
+## §11.1): format 2 had no bases, and you were in none.
+func test_format_2_migrates_to_3_with_no_bases():
+	var two := {"format": 2, "ships": [], "aboard": "Ship", "fleet": {"next": 2}}
+	var three := SaveGame.migrate(two)
+	assert_eq(int(three["format"]), 3)
+	assert_eq(three["bases"], {"next": 1, "sites": []})
+	assert_eq(three["home"], {})
+	assert_eq(three["fleet"], two["fleet"], "the rest untouched")
+	assert_false(two.has("bases"), "the dictionary passed in is not changed")
+
+func test_a_format_3_save_is_left_as_it_is():
+	var d := {"format": 3, "ships": [], "aboard": "Ship", "fleet": {"next": 2},
+		"bases": {"next": 1, "sites": []}, "home": {}}
 	assert_eq(SaveGame.migrate(d), d)
 
 func test_starting_over_sets_the_save_aside():
