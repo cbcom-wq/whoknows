@@ -53,9 +53,22 @@ func test_the_suit_cell_pays_nothing_for_the_tethers_pull():
 	_avatar.global_position = Vector3(0, 0, 35.0)
 	_avatar.velocity = Vector3(0, 0, 4.0)
 	var before := _avatar.suit_cell.charge
+	# The assist's own braking is the suit's thruster work and is charged (spec §9); switch it off to isolate the tether's pull, which is free.
+	_avatar.suit_assist = false
 	_avatar.suit_step(1.0 / 60.0, Vector3.ZERO)
 	assert_lte(_avatar.velocity.z, 0.0, "the outward speed is gone")
 	assert_eq(_avatar.suit_cell.charge, before, "and it cost the cell nothing")
+
+func test_the_suits_assist_braking_is_still_charged_at_the_end_of_the_line():
+	var item := _leash()
+	_avatar.grasp.take(item)
+	_avatar.global_position = Vector3(0, 0, 35.0)
+	_avatar.velocity = Vector3(0, 0, 4.0)
+	var before := _avatar.suit_cell.charge
+	assert_true(_avatar.suit_assist, "the assist is on by default")
+	_avatar.suit_step(1.0 / 60.0, Vector3.ZERO)
+	assert_lte(_avatar.velocity.z, 0.0, "the outward speed is still removed")
+	assert_lt(_avatar.suit_cell.charge, before, "but the assist's own braking cost the cell")
 
 func test_inside_the_length_the_line_changes_nothing():
 	_avatar.grasp.take(_leash())
