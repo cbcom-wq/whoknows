@@ -145,6 +145,8 @@ var _blast_in := 0.0
 ## §3.1).
 @onready var pilot: PilotControls = $PilotControls
 @onready var seat: PilotSeat = $Interior/PilotSeat
+## The seats that do not fly, rebuilt with the interior (ship bridge spec §3.2).
+var _crew_seats: Array[Seat] = []
 @onready var motion: MotionCoupling = $MotionCoupling
 @onready var chase_camera: Camera3D = $Exterior/ChaseCamera
 @onready var canopy_camera: Camera3D = $Canopy/CanopyCam
@@ -995,11 +997,47 @@ func helm_cell() -> Variant:
 
 ## The helm's seat where the dressing drew the chair (cockpit pod spec §7): its
 ## collider and eye from the same fixture frame, after every rebuild, so a
-## spawned ship's seat stands where the starter's does.
+## spawned ship's seat stands where the starter's does. Then one Seat for
+## every captain's chair and crew station (ship bridge spec §3.2).
 func _place_seat() -> void:
+	var layout := interior_builder.layout()
 	var helm: Variant = helm_cell()
 	if helm != null and seat != null:
-		seat.transform = InteriorDressing.fixture_frame(interior_builder.layout(), helm)
+		seat.transform = InteriorDressing.fixture_frame(layout, helm)
+		seat.cell = helm
+	for s in _crew_seats:
+		if is_instance_valid(s):
+			s.get_parent().remove_child(s)
+			s.queue_free()
+	_crew_seats.clear()
+	for f in layout.fixtures():
+		var script: GDScript = null
+		if f["id"] == &"captain_chair":
+			script = CaptainChair
+		elif f["id"] == &"crew_station":
+			script = CrewStation
+		if script == null:
+			continue
+		var s := Seat.build(script, InteriorDressing.fixture_frame(layout, f["coord"]), f["coord"])
+		interior.add_child(s)
+		_crew_seats.append(s)
+
+## Every seat aboard, the one that flies first.
+func seats() -> Array[Seat]:
+	var out: Array[Seat] = []
+	if seat != null:
+		out.append(seat)
+	for s in _crew_seats:
+		if is_instance_valid(s):
+			out.append(s)
+	return out
+
+## The seat at block `coord`, or null.
+func seat_at(coord: Vector3i) -> Seat:
+	for s in seats():
+		if s.cell == coord:
+			return s
+	return null
 
 ## The launch layout a save kept, or, from a save before there was one, its
 ## layout with nothing hurt.
