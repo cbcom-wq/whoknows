@@ -251,7 +251,18 @@ Warden's rebuild, after the review).
 - **Tuned at the renders:** one shared post between panes (whole posts at both edges made a double
   post in the pilot's view), and the sill's lit strip dimmed (a hard white bar).
 
-**Acceptance:** the Warden rebuilt with a bridge: not yet run (Task 14).
+**Changed at the final review** (a fresh reviewer, Opus): seats survive a rebuild (a block hit
+had freed the camera on a station's eye), a game loaded at a station hands over no controls, the
+prompt clears on any sit, and the band's windows outside stop at the canopy slope's top edge with
+their frames inside the cell (they had lain over the blocks above and crossed at the corners).
+
+**Acceptance** (Task 14, 2026-10-09): the `ship-designer` agent (sent by type) rebuilt the Warden
+with a command bridge on `ship-warden` (`2e12fa9`, rebased onto `bridge`): 311 blocks, 262.0 t;
+the helm forward at the glass, crew stations at both corners of the glass and one more to
+starboard, the captain's chair on its dais two rows back with the holo table to port; the band
+across the bow and three cells down each flank (20 windows outside for 20 inside); turns 1.13 /
+0.59 / 1.40, forward 21.8 (was 1.08 / 0.61 / 1.39, 21.9); no rule broken; worst view 123 fps.
+Its lessons are in the designing-a-ship skill's §4b. The owner's verdict: not yet given.
 
 ## 9. Not in this project
 
