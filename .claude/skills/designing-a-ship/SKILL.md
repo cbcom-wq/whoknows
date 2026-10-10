@@ -59,7 +59,8 @@ unless it is 0 (`W3`, `Fh2`, `Cp4`).
 | `Qm` | quantum_machine | `Qc` | quantum_cell | `G` | grav_plating |
 | `Ar` | armour | `L` | ladder | `Fs` | fairing_slope |
 | `Fh` | fairing_half | `Fi` | fairing_corner_in | `Fo` | fairing_corner_out |
-| `Fl` | fairing_slope_long_high | `Fk` | fairing_slope_long_low | | |
+| `Fl` | fairing_slope_long_high | `Fk` | fairing_slope_long_low | `Hm` | helm |
+| `Cc` | captain_chair | `Cs` | crew_station | | |
 
 The rcs pushes are arrows: `R<` to port (8), `R>` to starboard (12), `R^` up (16), `Rv` down (20),
 `Rb` aft, a retro (4). `T` pushes forward (a main engine at the stern). Orientation codes are in
@@ -89,11 +90,12 @@ turns slowly unless it has rcs at **both ends**.
 
 | Role | Shape | Leans on | Watch for |
 |---|---|---|---|
-| shuttle | the starter: one cabin storey, an equipment storey over it | — | — |
-| fighter | short, canopy forward, little inside | rcs, thrusters, a small cabin | too small for the airlock, the stand cell behind the helm and the droid's closet |
-| hauler | long, a hold of open deck or rooms | quantum cells, lateral rcs | mass above the thrust line (pitch under burn); power for every walkable cell |
-| explorer | bunks, galley, a computer, long reach | quantum cells, `Cp` facing a window | power |
-| yacht | rooms with windows, comfort over speed | rooms at the hull, `Ba`, `Gy` | the droid reaching every porthole |
+| shuttle | the starter: one cabin storey, an equipment storey over it; a pod | — | — |
+| fighter | short, canopy forward, little inside; a pod | rcs, thrusters, a small cabin | too small for the airlock, the stand cell behind the helm and the droid's closet |
+| frigate, warship | long, armoured; **a bridge** (§4b) | thrusters, armour, a weapon room, crew stations | power; the bridge's posts in the helm's view |
+| hauler | long, a hold of open deck or rooms; a bridge if over ~150 blocks | quantum cells, lateral rcs | mass above the thrust line (pitch under burn); power for every walkable cell |
+| explorer | bunks, galley, a computer, long reach; a bridge if over ~150 blocks | quantum cells, `Cp` facing a window | power |
+| yacht | rooms with windows, comfort over speed; a bridge | rooms at the hull, `Ba`, `Gy` | the droid reaching every porthole |
 
 ## 3. Be creative
 
@@ -137,6 +139,38 @@ ship file is still on disk, and a `ship_check` after it checks the stale ship an
 
 Windows: a walkable cell facing space gets a porthole, and so does a quiet fixture (core, machine,
 computer) on an outer side wall; a cell beside a canopy gets consoles, not glass.
+
+## 4b. Bridges
+
+A ship over about 150 blocks, a warship, or anything with a crew gets a **command bridge**, not
+the starter's pod (the owner, 2026-10-09: "These big ships would benefit from more of a bridge
+with a wide looping view": `docs/superpowers/specs/2026-10-09-ship-bridge-design.md`). The
+`helm` (`Hm`) flies it like a pilot seat but never makes a pod; every canopy of a helm ship is
+glazed as one band of tall glass. Draw it like this (the bridge fixture,
+`test/fixtures/bridge/bridge.plan`):
+
+```
+deck y=0    x: -3 .. 3
+z -5  W3   C    C    C    C    C    W1     # the glass across the bow
+z -4  C8   Cs   D    Hm   D    Cs   C12    # the front row; side glass C8 / C12
+z -3  C8   D    D    D    D    D    C12    # an open row to walk along
+z -2  H    D    D    Cc   D    D    H      # the captain's chair, ramp behind
+z -1  H    Qk12 D    D    Qm   Qk8  H
+```
+
+- **The glass:** a row of canopy across the bow, wrapping a cell or two down each side, `C8` to
+  port and `C12` to starboard (their slopes face out; `WINDOW_UNMATCHED` catches a wrong one). A
+  wedge at each empty bow corner gives the bow sections something to lose (`NO_PIECES`).
+- **The front row**, behind the glass: the `helm` at its centre, `crew_station`s (`Cs`) either
+  side, all facing forward.
+- **An open row** behind it: routes never cross a fixture.
+- **The `captain_chair`** (`Cc`) on the centreline behind that, facing forward, with open floor
+  behind its ramp (`DAIS_BLOCKED`) and round it.
+- At least 5 wide and 3 deep, on the one walkable storey.
+- Rules it must pass: `NO_HELM`, `TWO_HELMS` (one flying seat), `NO_STAND` (every seat),
+  `SEAT_FACES_WALL`, `DAIS_BLOCKED`, `UNREACHABLE`.
+- The posts between panes sit at cell edges: the helm, centred on its cell, sees one 40° to each
+  side. An odd-width bridge with the helm on the centre cell keeps the middle of its view clear.
 
 ## 5. Budgets
 

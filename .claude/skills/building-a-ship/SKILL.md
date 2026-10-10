@@ -40,8 +40,12 @@ Do these in order. Each one names the check that proves it.
    free. The cabin row keeps its full blocks, so nothing inside moves.
 2. **Place what the player needs:**
    - exactly one `core`, with every block face-connected to it;
-   - one `pilot_seat` looking straight at a `canopy` block, which makes a cockpit pod. Keep the
-     cell behind the seat walkable deck: you stand up into it.
+   - **one flying seat:** a `pilot_seat` looking straight at a `canopy` block, which makes a
+     cockpit pod (small ships), or a `helm` with a canopy face straight ahead, which glazes every
+     canopy as a band of tall glass (a bridge, big ships:
+     `docs/superpowers/specs/2026-10-09-ship-bridge-design.md`). Keep the cell behind it walkable
+     deck: you stand up into it. A bridge adds `captain_chair`s (on a dais, ramp behind) and
+     `crew_station`s, any number; they are sat in, never flown from.
    - an `airlock` with **exactly one** horizontal face onto an empty cell (its outer hatch), and
      walkable deck straight through on the opposite side, not a room.
    - room blocks (`bunk_room`, `galley`...) each touching walkable space for their doorway.

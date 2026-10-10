@@ -16,6 +16,9 @@ anything mid-run.
 - **Every ship is usable:** boarded, flown, walked and saved. A ship that breaks a rule is not
   finished.
 - **At most 400 blocks**, and no bigger than the brief needs: size costs frames.
+- **A ship over about 150 blocks, a warship, or anything with a crew gets a command bridge**
+  (the designing-a-ship skill's §4b), not the starter's cockpit pod: the owner's verdict on the
+  first big designed ships was that the copied pod was their weakest part.
 - **Your ship's branch only.** You write `data/ships/<id>.json` and `data/ships/<id>.md`, and
   nothing else in the repository. You commit on your worktree's branch, renamed `ship-<id>`; you
   never merge, push or touch `main`.

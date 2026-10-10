@@ -1,7 +1,7 @@
 # Ship bridge — a command bridge for big ships
 
 **Date:** 2026-10-09
-**Status:** Designed with the owner on 2026-10-09.
+**Status:** Designed with the owner on 2026-10-09; built on branch `bridge` the same day (§8).
 **Depends on:** branch `ship-designer` at `f702cb9` (the ship designer project; not yet on `main`)
 **Amends:** the cockpit pod spec (`2026-09-23-cockpit-pod-design.md`) §4–§5: a ship flown from the
 new `helm` builds no pod; the ship library spec's `NO_POD` rule (§4) becomes `NO_HELM`
@@ -208,7 +208,52 @@ file says a big ship gets a bridge.
 - **Renders for the owner,** eye height: the bridge from the helm, from each station, from the
   captain's chair, and from the bridge's back; outside, the band from the bow quarters.
 
-## 8. Not in this project
+## 8. What was built (2026-10-09)
+
+Built natively from `docs/superpowers/plans/2026-10-09-ship-bridge.md` (14 tasks; the 14th is the
+Warden's rebuild, after the review).
+
+- **The blocks:** `helm`, `captain_chair`, `crew_station` (MOUNT, 60 hp; tokens `Hm`, `Cc`, `Cs`).
+- **One list of helms**, `InteriorLayout.HELM_IDS`, everywhere the helm was named; the chairs and
+  stations are quiet fixtures.
+- **The band** inside (a pane per canopy face, half a post at each edge so neighbours share one)
+  and outside (a window per pane); a band ship's lights panel on the helm desk.
+- **The dais** (platform, 27° ramp, rails, colliders) and the captain's and crew station's props.
+- **`Seat`**, `PilotSeat`, `CaptainChair`, `CrewStation`, `SeatJob`; the ship builds a seat per
+  chair and station; the director sits you in any seat, handing over the controls only at the
+  helm; the mouse looks round elsewhere; the save remembers the seat.
+- **The rules** `NO_HELM`, `TWO_HELMS`, every seat's `NO_STAND`, `SEAT_FACES_WALL`,
+  `DAIS_BLOCKED`, seats `UNREACHABLE`.
+- **The bridge fixture** (`test/fixtures/bridge/`, 127 blocks, 117.5 t): no rule broken, usable,
+  every seat sat in and stood up from. **Probed:** 125 fps in the worst view (the starter 129), 124
+  with a second ship; 15 windows outside for 15 inside.
+
+**The HUD at a seat that does not fly** is the walking HUD (hull and QE): the plan's reading of
+§3.2's "readouts"; speed and heading at a station come with its job.
+
+**Rulings made in the build** (the ledger's):
+
+- The plan's `task-start`/`task-done` scripts cannot run under the worktree guard; each task's
+  final run was made by hand and ledgered.
+- Three tests named `InteriorLayout.HELM_ID` meaning the pod helm; renamed `POD_HELM`.
+- `InteriorDressing.build` puts its root under the body itself; the tests do not add it again.
+- The plan's hull-window test passed before the change (a nose's windows make the same count on
+  this ship); it was strengthened to one window per pane at the pane's width.
+- A built seat's shape is counted with `find_children(..., owned = false)`.
+- The test helper `_set` clashed with `Object._set`: renamed `_set_block`.
+- The starter's `NO_POD` test now expects `NO_HELM`.
+- The fixture broke `NO_PIECES` (its bow had nothing outside the shell to lose): wedges at the
+  empty bow corners, so 127 blocks, not 125.
+- **Standing from the captain's chair** put you at dais height on the ramp's edge, to drop 0.25 m:
+  `CaptainChair.DAIS_STAND_SPOTS` put you on the floor past the ramp (a test failed first).
+- The probe flagged the captain's chair `STUCK`: the droid stood in the corridor behind it; the
+  probe now prints where you stood and the nearest npc, and says so instead.
+- **Tuned at the renders:** one shared post between panes (whole posts at both edges made a double
+  post in the pilot's view), and the sill's lit strip dimmed (a hard white bar).
+
+**Acceptance:** the Warden rebuilt with a bridge: not yet run (Task 14).
+
+## 9. Not in this project
 
 - **Jobs for the seats** (weapons, damage control): the slot is built, nothing fills it.
 - **Crew NPCs** sitting at stations.

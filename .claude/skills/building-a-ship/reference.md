@@ -41,7 +41,10 @@ fix this file.
 | bunk_room, galley, bathroom, closet, weapon_room | deck | 0.4 | | 0.1 | | rooms (`InteriorLayout.ROOM_IDS`) |
 | airlock | deck | 1.2 | | 0.6 | | |
 | door | deck | 0.6 | | 0.3 | | |
-| pilot_seat | mount | 0.5 | | 0.5 | | the helm |
+| pilot_seat | mount | 0.5 | | 0.5 | | the helm of a pod ship |
+| helm | mount | 0.6 | | 0.5 | | the helm of a bridge: never a pod; its ship's canopies are bands; HELM_FORWARD 0.25 m toward the glass |
+| captain_chair | mount | 0.8 | | 0.2 | | on a 0.25 m dais, 0.5 m ramp behind; sat in, never flown; a quiet fixture |
+| crew_station | mount | 0.5 | | 0.3 | | a seat at a console, sat in, never flown; a job later (`SeatJob`); a quiet fixture |
 | computer | mount | 0.3 | | 0.3 | | the bridge computer's holo table; a quiet fixture, optional |
 | ladder | mount | 0.3 | | | | vertical link in `DeckGraph` only (see SKILL.md) |
 
@@ -564,8 +567,12 @@ itself on a bare `flight_test.gd`.
 | `NO_AUTHORITY` | no pitch, yaw or roll authority |
 | `UNBALANCED` | a full burn's imbalance ≥ 5% of an axis's authority |
 | `CRIPPLED` | crippled as built |
-| `NO_POD` | no helm looks straight at a canopy |
-| `NO_STAND` | none of the cells behind and beside the helm is open floor (`ShipRules.stand_cell`) |
+| `NO_HELM` | no `pilot_seat` looks straight at a canopy (a pod), and no `helm` has a canopy face straight ahead (a bridge) |
+| `TWO_HELMS` | more than one flying seat (`pilot_seat` or `helm`) |
+| `NO_STAND` | none of the cells behind and beside the helm, or a captain's chair or crew station, is open floor (`ShipRules.stand_cell`) |
+| `SEAT_FACES_WALL` | a captain's chair or crew station faces a solid block or wall, not open floor or glass |
+| `DAIS_BLOCKED` | a captain's chair has no open floor behind its ramp |
+| `UNREACHABLE` | a captain's chair or crew station cannot be walked to from an airlock |
 | `NO_AIRLOCK` | no airlock cycles with a way through its inner hatch |
 | `CUT_OFF` | a walkable cell (not a fixture or the airlock), or an airlock's inner cell, can't be reached on foot from where you stand up; another storey says "ladders don't climb yet" |
 | `WINDOW_UNMATCHED` | an inside window has no place outside (`HullLayout.unmatched`) |
@@ -622,6 +629,35 @@ with a second quantum core; `test_big_ship.gd`): rules 0.3 s, a spawn 1.2 s (acc
 a save 42 KB; probe fps 286 standing, 138 seated, 133 seated with both light groups, **121 seated
 by a rock with both** (the starter 130), 208 and 221 in the chase views, 122 with a second ship
 300 m off. At 600 blocks it was 116 and 109, which is why the limit is 400.
+
+## Seats and bridges (`docs/superpowers/specs/2026-10-09-ship-bridge-design.md`)
+
+- **Seats:** `Seat` (`src/avatar/seat.gd`) holds the eye, `STAND_SPOTS` and `stand_spots()`, the
+  prompt and `sat`/`stood`; `PilotSeat` (`flies = true`, `$Interior/PilotSeat` in `ship.tscn`),
+  `CaptainChair` (its own `DAIS_STAND_SPOTS`, down on the floor past the ramp) and `CrewStation`.
+  A seat that does not fly has an empty `job: SeatJob` for weapons or damage control later.
+- **The ship's seats:** `Ship.seats()` (the flying seat first) and `seat_at(cell)`; the chairs and
+  stations are built by `_place_seat()` with every rebuild (`Seat.build`), named `Seat_x_y_z`.
+- **Sitting:** `CameraDirector.sit(seat)` / `sit_now(seat)` take any seat; only one that flies
+  emits `piloting_changed` and gives `PilotControls` the stick. At the others the mouse looks round
+  (`look()`, ±100° yaw, ±60° pitch), V and C do nothing, F stands you up, and the HUD is the
+  walking HUD. `seat()` is the seat you sit in; `piloting()` true only at the helm.
+- **The save:** the avatar part's `seat` is the cell you sit in; a seat that is gone on loading
+  seats you at the helm. `flight_test.keep_saving` lets a test save aboard a `starter_ship`.
+- **The layout:** `InteriorLayout.HELM_IDS` (`POD_HELM` `pilot_seat`, `BRIDGE_HELM` `helm`),
+  `SEAT_IDS`; the chairs and stations are `QUIET_FIXTURES`. A ship with a `helm` has every
+  `canopy_groups()` record `band`: one pane per canopy face, `BAND_SILL` 0.85 to `BAND_TOP` 2.3 m,
+  `BAND_GLASS_WIDTH` across, half a post at each edge so neighbours share one; the hull matches
+  each with a window; the lights panel stands on the helm desk (`helm_panel_frame()`).
+- **The dais:** `DAIS_HEIGHT` 0.25, `DAIS_RAMP` 0.5 (27°: the avatar climbs 45° but no steps),
+  the chair `CAPTAIN_FORWARD` 0.25 forward on the flat; rails on the front and flanks, colliders
+  for platform, ramp and rails (`InteriorProps.captain_dais`).
+- **The bridge fixture:** `test/fixtures/bridge/bridge.json` (127 blocks): glass across the bow and
+  down both sides, the helm and two stations in the front row, an open row, the captain's chair,
+  the two quantum cores and the machine. Probed: 125 fps in the worst view (the starter 129).
+- **The probe** sits in every seat (`seats` line; a `seat` line each, with where you stood and the
+  nearest npc), renders `probe_seat_<cell>.png` (and `_left` at a seat that does not fly) and
+  `probe_bridge_from_dais.png`.
 
 ## Saving (`docs/superpowers/specs/2026-09-26-saving-design.md`)
 
