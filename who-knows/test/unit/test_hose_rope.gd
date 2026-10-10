@@ -34,14 +34,33 @@ func test_it_never_stretches_past_a_segment_once_settled():
 	for i in HoseRope.SEGMENTS:
 		assert_lte(rope.points[i].distance_to(rope.points[i + 1]), rest * 1.05, "segment %d" % i)
 
-func test_a_taut_line_is_straight():
+## Bounds measured from a Godot run (after 600 taut ticks: max |y| 0.367801 m,
+## max |z| 0, max link 1.000388 x rest), each set to about 2x the measured value.
+## |z| measured exactly 0, so 2x would be 0; the 0.001 m floor is the old test's.
+func test_a_bent_line_is_drawn_taut_when_the_ends_are_30_m_apart():
 	var rope := HoseRope.new()
-	rope.reset(Vector3.ZERO, Vector3(30, 0, 0))
-	for i in 60:
+	rope.reset(Vector3.ZERO, Vector3(10, 6, 0))
+	for i in 120:
+		rope.step(Vector3.ZERO, Vector3(10, 6, 0), DT)
+	for i in 600:
 		rope.step(Vector3.ZERO, Vector3(30, 0, 0), DT)
-	for p in rope.points:
-		assert_almost_eq(p.y, 0.0, 0.001)
-		assert_almost_eq(p.z, 0.0, 0.001)
+	for i in rope.points.size():
+		var p := rope.points[i]
+		assert_lte(absf(p.y), 0.75, "point %d is %.3f m off the axis" % [i, p.y])
+		assert_lte(absf(p.z), 0.001, "point %d is off the plane" % i)
+	for i in HoseRope.SEGMENTS:
+		assert_lte(rope.points[i].distance_to(rope.points[i + 1]), HoseRope.segment_length() * 2.0, "link %d" % i)
+	assert_eq(rope.points[0], Vector3.ZERO)
+	assert_eq(rope.points[40], Vector3(30, 0, 0))
+
+func test_a_line_at_rest_stays_put_when_stepped():
+	var rope := HoseRope.new()
+	rope.reset(Vector3.ZERO, Vector3(5, 0, 0))
+	# duplicate(): a plain assignment aliases the live array, so the check would compare it with itself.
+	var before := rope.points.duplicate()
+	rope.step(Vector3.ZERO, Vector3(5, 0, 0), DT)
+	for i in before.size():
+		assert_almost_eq(rope.points[i].distance_to(before[i]), 0.0, 0.000001, "point %d moved" % i)
 
 func test_there_is_no_gravity():
 	var rope := HoseRope.new()
