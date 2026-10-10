@@ -380,7 +380,7 @@ func test_an_item_freed_in_the_hand_is_let_go():
 	assert_null(_grasp.item)
 
 ## An EVA tool: allowed to be taken on a spacewalk, never dropped in space.
-func _tool(takes := true) -> Item:
+func _tool(takes := true, outside := true) -> Item:
 	var def := ItemDefinition.new()
 	def.id = &"test_tool"
 	def.look = &"spanner"
@@ -393,7 +393,7 @@ func _tool(takes := true) -> Item:
 	def.use = HomingUse
 	var item := Item.new()
 	item.setup(def)
-	item.set_space(true)
+	item.set_space(outside)
 	_world.add_child(item)
 	(item.use_node as HomingUse).takes = takes
 	return item
@@ -447,3 +447,19 @@ func test_a_tool_with_nowhere_to_go_drops_loose():
 	_grasp.let_go_outside()
 	assert_null(_grasp.item)
 	assert_eq(tool.state, Item.State.LOOSE)
+
+## Nowhere to go on a spacewalk: it floats where you are, as a stray, not in the
+## interior you left (world_root is the interior; use_world() is the space).
+func test_a_tool_with_nowhere_to_go_floats_where_you_are_and_becomes_a_stray():
+	_grasp.suspended = true
+	var aboard := Node3D.new()
+	add_child_autofree(aboard)
+	_grasp.world_root = aboard
+	var tool := _tool(false, false)
+	_grasp.take(tool)
+	watch_signals(_grasp)
+	assert_eq(_grasp.let_go_outside(), tool, "reported as a stray")
+	assert_eq(tool.get_parent(), _world, "the space you are in, not the interior")
+	assert_true(tool.in_space, "outside the hull")
+	assert_eq(tool.state, Item.State.LOOSE)
+	assert_signal_emitted_with_parameters(_grasp, "let_go", [tool])

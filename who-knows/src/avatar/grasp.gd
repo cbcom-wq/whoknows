@@ -125,22 +125,24 @@ func let_fall(into: Node3D) -> Item:
 	# An EVA tool went home to its reel: it is not something to land as a stray.
 	return it if it.state != Item.State.HELD else null
 
-## Lets go of held EVA cargo on a spacewalk, into the space you are in, where
-## it floats (habitat modules spec §4.1). Null, holding on, for anything else.
+## Lets go of held EVA cargo, or an EVA tool that has nowhere to go, on a
+## spacewalk, into the space you are in, where it floats (habitat modules spec
+## §4.1): either becomes a stray. An EVA tool that went home to its reel is no
+## stray: null. Null, holding on, for anything else.
 func let_go_outside() -> Item:
 	if not suspended or item == null:
 		return null
-	if item.definition.eva_tool:
-		_release()
-		changed.emit()
-		return null
-	if not item.definition.eva_cargo:
+	if not (item.definition.eva_cargo or item.definition.eva_tool):
 		return null
 	var it := item
 	var was := world_root
 	world_root = use_world()
 	_release()
 	world_root = was
+	if it.state == Item.State.HELD:
+		# An EVA tool went home to its reel: nothing to report, never a stray.
+		changed.emit()
+		return null
 	it.set_space(true)
 	changed.emit()
 	let_go.emit(it)
