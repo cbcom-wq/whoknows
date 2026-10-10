@@ -377,7 +377,8 @@ func _rebind_markers(ship: Ship) -> void:
 		(m as BodyMarker).sensors = ship.sensors
 
 ## F8, debug (many ships spec §4.3): seats you at the helm of the nearest other
-## awake ship. False, with a toast saying why, when it can't.
+## awake ship. False, with a toast saying why, when it can't. Measured from
+## the ship you are in: in a base yours may be asleep far off, so it refuses.
 func board_nearest() -> bool:
 	var why := _board_refusal()
 	var target: Ship = null
@@ -392,11 +393,13 @@ func board_nearest() -> bool:
 	board_at_helm(target)
 	return true
 
-## Why F8 must wait, or "": on a spacewalk, at a computer, mid-sit, during a
-## warp, or while an airlock of the ship you are aboard cycles.
+## Why F8 must wait, or "": on a spacewalk, in a base, at a computer, mid-sit,
+## during a warp, or while an airlock of the ship you are aboard cycles.
 func _board_refusal() -> String:
 	if _avatar.mode == Avatar.Mode.SUIT:
 		return "NOT ON A SPACEWALK"
+	if home != aboard:
+		return "IN A BASE"
 	if _director.is_at_station:
 		return "AT THE COMPUTER"
 	if _director.is_moving():
@@ -849,12 +852,17 @@ func remove_nearest_spawned() -> String:
 	fleet.remove(best)
 	return "REMOVED " + what
 
-## Where you look from: the hull you are aboard, or your view on a spacewalk.
+## Where you look from: the hull you are in, a ship's or a base's, or your
+## view on a spacewalk. Never `aboard`'s in a base: your ship may be asleep
+## there, its engine place stale (habitat modules spec §9.3).
 func _spawn_view() -> Transform3D:
-	return _avatar.camera.global_transform if _avatar.mode == Avatar.Mode.SUIT else aboard.exterior.global_transform
+	return _avatar.camera.global_transform if _avatar.mode == Avatar.Mode.SUIT else home.exterior.global_transform
 
+## How you move: a base stands still.
 func _spawn_velocity() -> Vector3:
-	return _avatar.velocity if _avatar.mode == Avatar.Mode.SUIT else aboard.exterior.linear_velocity
+	if _avatar.mode == Avatar.Mode.SUIT:
+		return _avatar.velocity
+	return Vector3.ZERO if home is Base else home.exterior.linear_velocity
 
 ## True when a rock is too near `p` for a ship to arrive there, as for a
 ## warp's drop-out (§5).
@@ -928,9 +936,13 @@ static func hop_off(b: SystemBody) -> float:
 ## The debug hop (the system skeleton spec §10): puts the ship at rest HOP_OFF
 ## off the surface of the next body in the system's order (star, then each
 ## planet and its moons), or the previous for `step` -1, on its sunward side
-## and facing it. A system is 15,000 km across; this is the debug way round it. Refused on a spacewalk, while an airlock cycles, and while a
-## warp spools or travels. True if it hopped.
+## and facing it. A system is 15,000 km across; this is the debug way round
+## it. Refused on a spacewalk, in a base (it would move your parked ship and
+## strand you), while an airlock cycles, and while a warp spools or travels.
+## True if it hopped.
 func hop(step: int) -> bool:
+	if home != aboard:
+		return false
 	if aboard.warp.is_spinning():
 		return false
 	if _avatar.mode == Avatar.Mode.SUIT:

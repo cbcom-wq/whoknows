@@ -88,6 +88,31 @@ func test_the_other_marker_points_at_the_other_kind_of_home():
 	assert_true(t.has_other_beacon)
 	assert_eq(t.other_label, "SHIP")
 
+## The debug keys reason from where you are (the final review): in a base,
+## with your ship asleep far off, F7 never moves it, F8 refuses, and F6
+## spawns ahead of the base, not of your ship's stale engine place.
+func test_in_a_base_with_your_ship_asleep_the_debug_keys_reason_from_the_base():
+	_step_in()
+	_ship.exterior.global_position += Vector3(25000, 0, 0)
+	_root.fleet.check_sleep()
+	assert_true(_root.fleet.sleeping(_ship), "your ship, 25 km off, asleep")
+	var held: UniversePoint = _root.fleet.place_of(_ship)
+	assert_false(_root.hop(1), "F7 refuses")
+	assert_eq(_root.hop_index, -1, "and hopped nowhere")
+	assert_lt(_root.fleet.place_of(_ship).minus(held).length(), 0.001, "your ship stays parked")
+	assert_false(_root.board_nearest(), "F8 refuses")
+	assert_eq(_root.warp_panel.toast_label.text, "IN A BASE")
+	var view := _base.exterior.global_transform
+	var expected: Variant = SpawnSpot.find(view, [] as Array[Vector3], Callable(_root, "_rock_near"))
+	assert_not_null(expected, "somewhere clear ahead of the base")
+	var said: String = _root.spawn_from_library(ShipLibrary.STARTER)
+	assert_string_starts_with(said, "SPAWNED")
+	var ships: Array[Ship] = _root.fleet.ships()
+	var spawned := ships[ships.size() - 1]
+	WarpArrival.of(spawned.exterior)._physics_process(WarpArrival.DURATION + 0.01)
+	assert_almost_eq(spawned.exterior.global_position, (expected as Transform3D).origin, Vector3.ONE * 0.01,
+		"ahead of the base")
+
 func test_blacking_out_in_a_base_wakes_you_there_at_the_base_s_cost():
 	_step_in()
 	_base.quantum.store.credit(120, &"test")
