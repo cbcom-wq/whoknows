@@ -47,13 +47,14 @@ func set_seated(on: bool) -> void:
 ## Listens to `d` for sitting and standing. Every ship's controls hear every
 ## sit, and take the stick only when the seat is their own ship's. Bound late,
 ## they catch up with a sit that has already happened (a game loaded at the
-## helm).
+## helm) -- only a sit at the seat that flies, never one at a station or the
+## captain's chair (ship bridge spec §3.2).
 func bind_director(d: CameraDirector) -> void:
 	if director != null and director.piloting_changed.is_connected(_on_piloting_changed):
 		director.piloting_changed.disconnect(_on_piloting_changed)
 	director = d
 	director.piloting_changed.connect(_on_piloting_changed)
-	_on_piloting_changed(director.is_seated)
+	_on_piloting_changed(director.piloting())
 
 func _on_piloting_changed(piloting: bool) -> void:
 	set_seated(piloting and director.seat_ship() == get_parent())

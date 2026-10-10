@@ -181,7 +181,10 @@ Do these in order. Each one names the check that proves it.
    - the droid's dock and its jobs, flagging any `UNREACHABLE`;
    - fps.
 
-   It also sits, stands and walks, and flags `STUCK`. Look for `SHADER ERROR` too: headless never
+   It also sits, stands and walks, and flags `STUCK`; on a bridge it sits in **every** seat (the
+   `seats` line and a `seat` line each: helm, stations, captain's chair) and renders each view and
+   the bridge from the dais. A bridge must break none of `NO_HELM`, `TWO_HELMS`, `NO_STAND`,
+   `SEAT_FACES_WALL`, `DAIS_BLOCKED`, `UNREACHABLE`. Look for `SHADER ERROR` too: headless never
    compiles shaders.
 10. **Render and show the owner:** eye-height (1.6 m) views of the bridge, the seated view, the
    corridor, each room and the exterior, plus an outside view with each RCS axis firing (every
@@ -315,6 +318,13 @@ thrust.
 | RCS only at the bow of a long ship | A 43-row stretched starter turned 0.06 / 0.03 / 0.42 rad/s²: inertia grows with length squared | Rcs pairs at both ends; the lever arm is free authority |
 | 600 blocks | Probed, the worst view fell to 116 fps (109 with a second ship), under the 120 floor | `ShipRules.MOST_BLOCKS` is 400, which holds 121; a big ship costs frames |
 | Quitting a probe with its scene made but not in the tree | `--ship nope` printed its error, then the engine crashed on the way out (exit -1073741819, not 1) | Check arguments before `instantiate()`, as `ship_probe.gd` does |
+| Stand spots in a raised seat's frame | Standing from the captain's chair put you at dais height on the ramp's edge, to drop 0.25 m to the floor | A raised seat has its own `stand_spots()` (`CaptainChair.DAIS_STAND_SPOTS`): on the floor, past the ramp by the avatar's radius |
+| Freeing a seat on every rebuild | A block hit rebuilds the interior; freeing the crew seats freed the camera on the seat's eye under you | `Ship._place_seat` keeps a seat by cell and moves it; a seat whose chair is gone stands you up first (`stand_now`) |
+| A late binder reading `is_seated` | `PilotControls.bind_director` caught up with `is_seated`, so a game loaded at a station handed you the stick | Ask `director.piloting()`: sitting is not flying |
+| Clearing the prompt only on `piloting_changed` | "[F] Sit at the station" stayed up the whole time you sat there | Clear it on any sit (`view_changed` while seated) |
+| A count-only window test | The band's window count matched a nose's on the bridge fixture (9 either way), so it passed before the band existed | Test where each window goes, one per face, and its size |
+| A band window outside run to the pane's top | Up the canopy's 45° slope to 2.3 m, the glass lay over the blocks above and the frames crossed at the corners | Stop it at the slope's top edge (`HullLayout.BAND_WINDOW_TOP`, as a shoulder's) and keep the frame in its cell (`BAND_WINDOW_WIDTH`) |
+| The probe's walk-away line on a crewed ship | The droid stood in the corridor behind the captain's chair: 0.63 m, flagged `STUCK` | The probe prints where you stood and the nearest npc, and says "(an npc was in the way)" |
 
 ## Not built yet (plan for it; don't assume it works)
 

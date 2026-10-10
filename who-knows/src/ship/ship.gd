@@ -1005,11 +1005,14 @@ func _place_seat() -> void:
 	if helm != null and seat != null:
 		seat.transform = InteriorDressing.fixture_frame(layout, helm)
 		seat.cell = helm
+	# A seat kept from the last build, by cell and kind, is moved, not rebuilt:
+	# a rebuild runs on every block hit, and the director's camera may be on the
+	# seat's eye (the final review's Critical 1).
+	var kept := {}   # Vector3i -> Seat
 	for s in _crew_seats:
 		if is_instance_valid(s):
-			s.get_parent().remove_child(s)
-			s.queue_free()
-	_crew_seats.clear()
+			kept[s.cell] = s
+	var placed: Array[Seat] = []
 	for f in layout.fixtures():
 		var script: GDScript = null
 		if f["id"] == &"captain_chair":
@@ -1018,9 +1021,26 @@ func _place_seat() -> void:
 			script = CrewStation
 		if script == null:
 			continue
-		var s := Seat.build(script, InteriorDressing.fixture_frame(layout, f["coord"]), f["coord"])
+		var frame := InteriorDressing.fixture_frame(layout, f["coord"])
+		var old: Seat = kept.get(f["coord"])
+		if old != null and old.get_script() == script:
+			old.transform = frame
+			kept.erase(f["coord"])
+			placed.append(old)
+			continue
+		var s := Seat.build(script, frame, f["coord"])
 		interior.add_child(s)
-		_crew_seats.append(s)
+		placed.append(s)
+	# Seats whose chair is gone: stand you up first if you sit in one.
+	for s: Seat in kept.values():
+		var d: CameraDirector = null
+		if is_inside_tree():
+			d = get_tree().get_first_node_in_group(CameraDirector.GROUP) as CameraDirector
+		if d != null and d.seat() == s:
+			d.stand_now()
+		s.get_parent().remove_child(s)
+		s.queue_free()
+	_crew_seats = placed
 
 ## Every seat aboard, the one that flies first.
 func seats() -> Array[Seat]:

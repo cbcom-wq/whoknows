@@ -394,10 +394,11 @@ func _wire_prompt() -> void:
 			_show_prompt()
 	)
 	# The prompt belongs to the avatar, not the pilot. Sitting down hands the
-	# view to the seat, so anything the raycast still reports is stale.
-	_director.piloting_changed.connect(
-		func(piloting: bool) -> void:
-			if piloting:
+	# view to the seat, so anything the raycast still reports is stale -- in any
+	# seat, not only the helm (ship bridge spec §3.2): every sit changes the view.
+	_director.view_changed.connect(
+		func(_view: CameraDirector.View, _moving: bool) -> void:
+			if _director.is_seated:
 				_interact_prompt = ""
 				_grasp_prompt = ""
 				_show_prompt()

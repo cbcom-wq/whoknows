@@ -125,3 +125,38 @@ func test_standing_from_the_captain_puts_you_on_the_floor_behind_the_ramp():
 	var local := floor_at.affine_inverse() * (_ship.interior.global_transform.affine_inverse() * _avatar.global_position)
 	assert_almost_eq(local.y, 0.0, 0.05, "on the floor, not at the dais's height")
 	assert_gt(local.z, InteriorProps.BAY * 0.5 + 0.3, "clear of the ramp's foot")
+## A rebuild (a block hit, a restyle) while you sit at a station keeps the
+## seat, and the camera on its eye, alive (the final review's Critical 1).
+func test_a_rebuild_while_seated_keeps_you_seated():
+	var s := _ship.seat_at(Vector3i(2, 0, -4))
+	await _sit(s)
+	_ship.set_grid(_ship.grid, false)
+	await wait_process_frames(3)
+	assert_true(is_instance_valid(_director.camera()), "the interior camera survives")
+	assert_true(_director.is_seated)
+	assert_true(is_instance_valid(_director.seat()), "the seat you sit in survives")
+	assert_same(_director.seat(), _ship.seat_at(Vector3i(2, 0, -4)))
+	await _stand()
+	assert_false(_director.is_seated)
+	assert_true(is_instance_valid(_director.camera()))
+## A rebuild that takes away the station you sit in stands you up first, the
+## camera back at your head.
+func test_a_rebuild_that_removes_your_seat_stands_you_up():
+	await _sit(_ship.seat_at(Vector3i(2, 0, -4)))
+	var grid: ShipGrid = ShipLibrary.read(BRIDGE)["grid"]
+	var deck := BlockInstance.new()
+	deck.block_id = &"deck"
+	grid.set_block(Vector3i(2, 0, -4), deck)
+	_ship.set_grid(grid, false)
+	await wait_process_frames(3)
+	assert_false(_director.is_seated)
+	assert_true(is_instance_valid(_director.camera()))
+	assert_null(_ship.seat_at(Vector3i(2, 0, -4)))
+## Sitting at a station clears the prompt that offered the seat, as sitting at
+## the helm does (the final review's Important 3).
+func test_sitting_at_a_station_clears_the_prompt():
+	_root._interact_prompt = "[F] Sit at the station"
+	_root._show_prompt()
+	await _sit(_ship.seat_at(Vector3i(-2, 0, -4)))
+	assert_eq(_root._interact_prompt, "")
+	assert_eq(_root._prompt.text, "")

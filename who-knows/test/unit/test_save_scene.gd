@@ -438,6 +438,7 @@ func test_seated_at_a_station_comes_back_at_the_station():
 	assert_true(director.is_seated)
 	assert_eq(director.seat().cell, Vector3i(2, 0, -4))
 	assert_false(director.piloting())
+	assert_false(b.aboard.pilot.seated, "the controls stay with nobody after a load at a station")
 	_drop(b)
 
 func test_a_seat_that_is_gone_seats_you_at_the_helm():

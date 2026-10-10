@@ -117,7 +117,7 @@ func test_every_pane_has_its_window_outside():
 		var c: Vector3i = w["coord"]
 		if _grid.has_block(c) and _grid.get_block(c).block_id == &"canopy":
 			got[c] = 1 + int(got.get(c, 0))
-			assert_almost_eq((w["size"] as Vector2).x, InteriorProps.BAND_GLASS_WIDTH, 0.001,
+			assert_almost_eq((w["size"] as Vector2).x, HullLayout.BAND_WINDOW_WIDTH, 0.001,
 				"a pane's width at %s" % c)
 	assert_eq(got, wanted)
 
@@ -138,3 +138,20 @@ func test_the_dais_and_its_ramp_are_solid_where_drawn():
 	var ramp := floor_at * Vector3(0, 0, 1.0 - InteriorProps.DAIS_RAMP * 0.5)
 	hit = space.intersect_ray(PhysicsRayQueryParameters3D.create(ramp + Vector3.UP, ramp + Vector3.DOWN))
 	assert_almost_eq(float(hit.get("position", Vector3.ZERO).y), floor_at.origin.y + InteriorProps.DAIS_HEIGHT * 0.5, 0.04)
+
+## Outside, each band window stays on its own canopy's face: its top within
+## the cell, its frame within the cell's width (the final review's Important
+## 4: run up the slope to 2.3 m, the glass lay over the blocks above and the
+## frames crossed at the corners).
+func test_each_band_window_stays_on_its_canopy():
+	var hull := HullLayout.plan(_grid, _cat, _layout)
+	for w in hull.windows:
+		var c: Vector3i = w["coord"]
+		if _grid.get_block(c).block_id != &"canopy":
+			continue
+		var f: Transform3D = w["frame"]
+		var size: Vector2 = w["size"]
+		var top := f.origin + f.basis.y * size.y * 0.5
+		var centre := ShipGrid.cell_center(c)
+		assert_lt(top.y, centre.y + ShipGrid.CELL_SIZE * 0.5 + 0.001, "the top of %s's window stays on its face" % c)
+		assert_lt(size.x + 2.0 * HullProps.FRAME, ShipGrid.CELL_SIZE + 0.001, "%s's frame fits its cell" % c)

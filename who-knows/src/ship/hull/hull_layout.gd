@@ -34,6 +34,13 @@ const FORWARD_BOW_BAND := 2.5
 const FORWARD_BELOW_WINDOW := 0.3
 const FORWARD_DROP_DEG := 5.0
 const FORWARD_TOE_DEG := 3.0
+## A bridge band's window outside (ship bridge spec §4.3): from the pane's sill
+## up to where a shoulder's stops, the canopy slope's top edge (tuned at the
+## final review: to the pane's own 2.3 m it lay over the blocks above), and
+## its frame within the cell, a gap between neighbours' frames (they crossed
+## at the corners).
+const BAND_WINDOW_TOP := InteriorProps.SHOULDER_WINDOW_HIGH
+const BAND_WINDOW_WIDTH := ShipGrid.CELL_SIZE - 2.0 * HullProps.FRAME - 0.06
 
 var plates: Array[Dictionary] = []
 var edges: Array[Dictionary] = []
@@ -106,12 +113,14 @@ func _plan_windows(interior: InteriorLayout) -> void:
 	for group in interior.canopy_groups():
 		var normal: Vector3i = group["normal"]
 		var group_pods: Array = group["pods"]
-		# A bridge's band (ship bridge spec §4.3): a window outside every pane.
+		# A bridge's band (ship bridge spec §4.3): a window outside every pane,
+		# on its canopy's own face: up to the slope's top edge, as a shoulder's,
+		# and narrow enough that its frame fits the cell.
 		if group.get("band", false):
 			for coord: Vector3i in group["coords"]:
 				wanted += 1
-				_window_on(coord + normal, coord, normal, InteriorProps.BAND_SILL, InteriorProps.BAND_TOP,
-					InteriorProps.BAND_GLASS_WIDTH, false, 0.0)
+				_window_on(coord + normal, coord, normal, InteriorProps.BAND_SILL, BAND_WINDOW_TOP,
+					BAND_WINDOW_WIDTH, false, 0.0)
 			continue
 		if group_pods.is_empty():
 			_nose_windows(group)
