@@ -49,6 +49,7 @@ static func check(grid: ShipGrid, catalog: BlockCatalog) -> Dictionary:
 	var layout := InteriorLayout.plan(grid, catalog, DeckGraph.build(grid, catalog).walkable_coords())
 	var paths := DeckPaths.build(layout)
 	_check_cabin(layout, paths, rules)
+	_check_seats(grid, layout, paths, rules)
 	_check_droid(layout, paths, rules)
 	for w in HullLayout.plan(grid, catalog, layout).unmatched:
 		rules.append(item(&"WINDOW_UNMATCHED", "the window in %s's wall toward %s has no place outside"
@@ -93,11 +94,61 @@ static func _check_flight(s: ShipStats, rules: Array) -> void:
 	if s.crippled:
 		rules.append(item(&"CRIPPLED", "crippled as built: %s" % s.crippled_reason))
 
-## The pod, standing up from the helm, an airlock that cycles, and every cell
+const _SIDES: Array[Vector3i] = [Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 0, 1), Vector3i(0, 0, -1)]
+
+## The seats that do not fly (ship bridge spec §6.1): somewhere to stand up
+## to, not facing a wall, a dais you can walk onto, and reachable on foot from
+## an airlock.
+static func _check_seats(grid: ShipGrid, layout: InteriorLayout, paths: DeckPaths, rules: Array) -> void:
+	var reach := {}
+	for lock in layout.airlocks():
+		for n in _SIDES:
+			var c: Vector3i = lock["coord"] + n
+			if paths.has(c):
+				reach = paths.distances(c)
+				break
+		if not reach.is_empty():
+			break
+	for f in layout.fixtures():
+		if not InteriorLayout.SEAT_IDS.has(f["id"]):
+			continue
+		var at: Vector3i = f["coord"]
+		var facing := InteriorLayout.facing(f["orientation"])
+		if stand_cell(at, facing, paths) == null:
+			rules.append(item(&"NO_STAND", "nowhere to stand up from the %s: behind it and beside it is no open floor" % f["id"], at))
+		var ahead := at + facing
+		var at_glass := grid.has_block(ahead) and grid.get_block(ahead).block_id == InteriorLayout.CANOPY_ID
+		if not at_glass and not paths.has(ahead):
+			rules.append(item(&"SEAT_FACES_WALL", "the %s looks straight into %s" % [f["id"], ahead], at))
+		if f["id"] == &"captain_chair" and not paths.has(at - facing):
+			rules.append(item(&"DAIS_BLOCKED", "the captain's dais has no open floor behind its ramp", at))
+		var beside := false
+		for n in _SIDES:
+			if reach.has(at + n):
+				beside = true
+		if not reach.is_empty() and not beside:
+			rules.append(item(&"UNREACHABLE", "the %s cannot be walked to from the airlock" % f["id"], at))
+
+## One helm that sees out (a pod, or a bridge helm at its glass: ship bridge
+## spec §6.1), standing up from it, an airlock that cycles, and every cell
 ## reachable on foot from the helm.
 static func _check_cabin(layout: InteriorLayout, paths: DeckPaths, rules: Array) -> void:
-	if layout.pods().is_empty():
-		rules.append(item(&"NO_POD", "no helm looks straight at a canopy, so there is no cockpit pod"))
+	var helms := []
+	for f in layout.fixtures():
+		if InteriorLayout.HELM_IDS.has(f["id"]):
+			helms.append(f)
+	if helms.size() > 1:
+		rules.append(item(&"TWO_HELMS", "%d seats fly this ship: a ship has one pilot seat or one helm" % helms.size(),
+			helms[1]["coord"]))
+	var sees := not layout.pods().is_empty()
+	for f in helms:
+		if f["id"] == InteriorLayout.BRIDGE_HELM:
+			var facing := InteriorLayout.facing(f["orientation"])
+			for face in layout.faces():
+				if face["kind"] == InteriorLayout.Kind.CANOPY and face["coord"] == f["coord"] and face["normal"] == facing:
+					sees = true
+	if not sees:
+		rules.append(item(&"NO_HELM", "no pilot seat looks straight at a canopy (a pod), and no helm has a canopy face straight ahead (a bridge)"))
 	var helm: Variant = null
 	var start: Variant = null
 	for f in layout.fixtures():

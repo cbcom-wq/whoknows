@@ -90,7 +90,7 @@ func test_every_thruster_wrecked_it_is_crippled():
 func test_with_the_canopy_row_made_hull_there_is_no_pod():
 	for x in [-1, 0, 1]:
 		_put(Vector3i(x, 0, -4), &"hull")
-	_breaks(&"NO_POD")
+	_breaks(&"NO_HELM")
 
 func test_boxed_in_you_cannot_stand_up_from_the_helm():
 	for c in [Vector3i(0, 0, -2), Vector3i(-1, 0, -3), Vector3i(1, 0, -3)]:
@@ -134,3 +134,52 @@ func test_a_bow_with_nothing_to_lose_never_shows_a_hole():
 				and ShipDamage.STRUCTURE.has(_g.get_block(c).block_id):
 			_put(c, &"grav_plating")
 	assert_string_contains(_breaks(&"NO_PIECES")["text"], "starboard bow")
+
+const BRIDGE := "res://test/fixtures/bridge/bridge.json"
+
+func _bridge() -> ShipGrid:
+	return ShipLibrary.read(BRIDGE)["grid"]
+
+func _codes_of(grid: ShipGrid) -> Array:
+	var out := []
+	for r in ShipRules.check(grid, BlockCatalog.load_from_dir("res://data/blocks"))["rules"]:
+		out.append(r["code"])
+	return out
+
+func _set_block(grid: ShipGrid, c: Vector3i, id: StringName, o := 0) -> void:
+	var inst := BlockInstance.new()
+	inst.block_id = id
+	inst.orientation = o
+	grid.set_block(c, inst)
+
+func test_the_bridge_fixture_breaks_no_rule():
+	assert_eq(_codes_of(_bridge()), [])
+
+func test_no_glass_ahead_of_the_helm_breaks_no_helm():
+	var g := _bridge()
+	_set_block(g, Vector3i(0, 0, -5), &"hull")
+	assert_has(_codes_of(g), &"NO_HELM")
+
+func test_two_helms_breaks_two_helms():
+	var g := _bridge()
+	_set_block(g, Vector3i(-1, 0, -4), &"pilot_seat")
+	assert_has(_codes_of(g), &"TWO_HELMS")
+
+func test_a_station_with_nowhere_to_stand_breaks_no_stand():
+	var g := _bridge()
+	for c in [Vector3i(-2, 0, -3), Vector3i(-1, 0, -4)]:
+		_set_block(g, c, &"hull")
+	assert_has(_codes_of(g), &"NO_STAND")
+
+func test_a_chair_facing_a_wall_breaks_seat_faces_wall():
+	var g := _bridge()
+	_set_block(g, Vector3i(0, 0, -3), &"hull")
+	assert_has(_codes_of(g), &"SEAT_FACES_WALL")
+
+func test_a_blocked_ramp_breaks_dais_blocked():
+	var g := _bridge()
+	_set_block(g, Vector3i(0, 0, -1), &"hull")
+	assert_has(_codes_of(g), &"DAIS_BLOCKED")
+
+func test_the_starter_still_breaks_none():
+	assert_eq(_codes_of(ShipLibrary.load_from_dir().grid(&"starter")), [])
