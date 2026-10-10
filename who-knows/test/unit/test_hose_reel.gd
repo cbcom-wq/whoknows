@@ -4,6 +4,7 @@ extends GutTest
 ## out when the nozzle is taken, winds it home in a second when it is let go,
 ## and keeps a stowed nozzle where it belongs as the hull moves.
 
+var _universe: Universe
 var _outside: Node3D
 var _hull: Node3D
 var _reel: HoseReel
@@ -20,6 +21,10 @@ func _def() -> ItemDefinition:
 	return d
 
 func before_each():
+	# A real Universe, never stepping by itself: a test calls shift() on it.
+	_universe = Universe.new()
+	add_child_autofree(_universe)
+	_universe.set_physics_process(false)
 	_outside = Node3D.new()
 	add_child_autofree(_outside)
 	_hull = Node3D.new()
@@ -81,6 +86,50 @@ func test_a_taken_back_nozzle_winds_home_in_a_second_then_secures_and_ends_the_l
 	await wait_physics_frames(2)
 	# finish() queue_frees the line: done means gone from the tree.
 	assert_null(_outside.get_node_or_null("HoseLine"), "the line is done")
+
+## Lets the nozzle go from 5 m off the reel and winds it home with the hull
+## drifting by `drift` (m/s, engine frame) the whole way and, from physics
+## frame `shift_at` of the wind (never if it is negative), a floating-origin
+## shift of 2 km along and 1 km across. Returns the worst distance, metres, that
+## the nozzle strayed -- seen in the REEL's own frame, which a drifting hull and
+## a shift both leave alone -- from the straight line from where it was let go
+## to where it is stowed. That is 0 on a still hull, whatever the wind's own
+## easing.
+func _worst_stray_on_the_wind_home(drift: Vector3, shift_at := -1) -> float:
+	var nozzle := _reel.item
+	_reel.release()
+	nozzle.global_position = _reel.to_global(Vector3(5, 1, 0))
+	assert_true(_reel.take_back(nozzle))
+	var from := _reel.to_local(nozzle.global_position)
+	var to := Vector3(0.0, nozzle.definition.size.y * 0.5, 0.0)
+	var worst := 0.0
+	var frame := 0
+	while _reel.is_out() and frame < 120:
+		await get_tree().physics_frame
+		var at := _reel.to_local(nozzle.global_position)
+		worst = maxf(worst, at.distance_to(Geometry3D.get_closest_point_to_segment(at, from, to)))
+		frame += 1
+		_hull.global_position += drift / 60.0
+		if frame == shift_at:
+			_universe.shift(Vector3(2000, 0, -1000))
+	assert_false(_reel.is_out(), "it got home")
+	assert_eq(_reel.item, nozzle)
+	return worst
+
+## The wind keeps its place in the reel's frame, not the engine's: a ship
+## coasting at 100 m/s shifts every ~20 s, so a few let-gos in a hundred land
+## in a shift (CLAUDE.md, the floating origin), and every ship drifts.
+func test_the_wind_home_keeps_the_reels_frame_on_a_drifting_hull_and_across_a_shift():
+	var worst: float = await _worst_stray_on_the_wind_home(Vector3(0, 0, 10), 30)
+	assert_lt(worst, 0.05, "the nozzle strayed %.2f m from its way home" % worst)
+
+func test_the_wind_home_keeps_the_reels_frame_on_a_drifting_hull():
+	var worst: float = await _worst_stray_on_the_wind_home(Vector3(0, 0, 10))
+	assert_lt(worst, 0.05, "the nozzle strayed %.2f m from its way home" % worst)
+
+func test_the_wind_home_keeps_the_reels_frame_across_a_shift():
+	var worst: float = await _worst_stray_on_the_wind_home(Vector3.ZERO, 30)
+	assert_lt(worst, 0.05, "the nozzle strayed %.2f m from its way home" % worst)
 
 func test_a_stowed_nozzle_follows_the_reel_as_the_hull_moves():
 	var nozzle := _reel.item

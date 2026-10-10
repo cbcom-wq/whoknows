@@ -57,7 +57,10 @@ var _sway := Vector2.ZERO
 var _last_look := Vector2.ZERO
 var _bob_phase := 0.0
 var _grab_item: Item = null
+## Where the grabbed item sat, relative to `_grab_anchor()`.
 var _grab_from := Transform3D.IDENTITY
+## Whether `_grab_from` is relative to the avatar. See `_grab_anchor`.
+var _grab_follows_avatar := false
 var _grab_rest := Transform3D.IDENTITY
 var _grab_reach := Vector3.ZERO
 var _grab_both := false
@@ -182,7 +185,13 @@ func _mount_motion(delta: float) -> Transform3D:
 ## Starts a grab swipe for what Grasp just took from `from`.
 func _on_taken(item: Item, from: Transform3D) -> void:
 	_grab_item = item
-	_grab_from = from
+	# On a spacewalk you are a member of the floating origin, which moves you in
+	# whole kilometres, and what you take sat on a hull that drifts with you.
+	# Either way an engine-frame `from` is wrong a few frames on, so keep it
+	# relative to you. Aboard the interior never moves: the world's frame is the
+	# item's own, and the swipe is exactly as it was.
+	_grab_follows_avatar = _avatar != null and _avatar.is_in_group(Universe.EXTERIOR_SPACE)
+	_grab_from = Transform3D(from.basis, from.origin - _grab_anchor())
 	_grab_rest = item.transform
 	_grab_t = 0.0
 	_grab_both = _grasp.mode == Grasp.Mode.CARRYING
@@ -211,7 +220,16 @@ func _draw_in() -> void:
 		_end_grab()
 		return
 	var home := (_grab_item.get_parent() as Node3D).global_transform * _grab_rest
-	_grab_item.global_transform = _grab_from.interpolate_with(home, smoothstep(0.0, 1.0, _grab_t))
+	var from := Transform3D(_grab_from.basis, _grab_from.origin + _grab_anchor())
+	_grab_item.global_transform = from.interpolate_with(home, smoothstep(0.0, 1.0, _grab_t))
+
+## What `_grab_from` is relative to: where you are, on a spacewalk (position
+## only: the reel it sat on does not turn with your view), and the world's
+## origin aboard, so a swipe there is exactly where the item sat.
+func _grab_anchor() -> Vector3:
+	if _grab_follows_avatar and is_instance_valid(_avatar):
+		return _avatar.global_position
+	return Vector3.ZERO
 
 func _end_grab() -> void:
 	_grab_item = null

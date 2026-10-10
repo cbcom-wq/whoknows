@@ -28,6 +28,10 @@ var line: HoseLine
 
 var _winding: Item = null
 var _wind_t := 0.0
+## Where the nozzle was let go, in this reel's own frame. The wind runs there
+## and never in the engine's: the hull drifts, and the floating origin shifts
+## it by whole kilometres (CLAUDE.md), and a remembered engine position would
+## stretch the line the nozzle follows.
 var _wind_from := Transform3D.IDENTITY
 ## True once this reel has been stocked: it is stocked once in its life.
 var _stocked := false
@@ -80,7 +84,8 @@ func _pay_out(nozzle: Item) -> void:
 	line.setup(self, nozzle)
 
 ## Winds a let-go nozzle home along the line over WIND_TIME, then secures it.
-## False if one is already winding.
+## It is a child of the reel from here, and is moved in the reel's frame, so it
+## rides the hull as it drifts. False if one is already winding.
 func take_back(nozzle: Item) -> bool:
 	if _winding != null or not is_inside_tree():
 		return false
@@ -88,7 +93,8 @@ func take_back(nozzle: Item) -> bool:
 	_wind_t = 0.0
 	nozzle.set_held()
 	nozzle.reparent(self, true)
-	_wind_from = nozzle.global_transform
+	# The nozzle is a child now: its transform is the reel-local one.
+	_wind_from = nozzle.transform
 	return true
 
 func _physics_process(delta: float) -> void:
@@ -97,7 +103,9 @@ func _physics_process(delta: float) -> void:
 			_winding = null
 			return
 		_wind_t = minf(_wind_t + delta / WIND_TIME, 1.0)
-		_winding.global_transform = _wind_from.interpolate_with(item_transform(_winding), _wind_t)
+		# Home is where item_transform() puts it, in the reel's own frame.
+		var stowed := Transform3D(Basis.IDENTITY, Vector3(0.0, _winding.definition.size.y * 0.5, 0.0))
+		_winding.transform = _wind_from.interpolate_with(stowed, _wind_t)
 		if _wind_t >= 1.0:
 			var home := _winding
 			_winding = null

@@ -137,3 +137,91 @@ func test_using_something_that_does_not_kick_leaves_the_hand_still():
 	await _after_the_swipe()
 	_avatar.grasp.used.emit(item)
 	assert_eq(_avatar.hands.recoil, 0.0)
+
+## --- the swipe's frame -------------------------------------------------------
+## What a swipe starts from is where the item sat. Outside, that is on a hull
+## that drifts and in a world that the floating origin shifts (CLAUDE.md), so
+## it is kept relative to you, who are moved by both; aboard, the interior never
+## moves and it is the world's own place.
+
+var _universe: Universe
+var _hull: Node3D
+
+func _nozzle_def() -> ItemDefinition:
+	var d := ItemDefinition.new()
+	d.id = &"test_nozzle"
+	d.display_name = "Nozzle"
+	d.mass_kg = 1.0
+	d.size = Vector3(0.1, 0.1, 0.3)
+	d.grip = ItemDefinition.Grip.WIELD
+	d.stow_class = &"hose"
+	d.look = &"spanner"
+	d.eva_tool = true
+	return d
+
+## Out on a spacewalk beside a reel on a hull (a floating-origin member), its
+## nozzle a metre or so ahead of the eye and below it: on a spacewalk an EVA
+## tool may be taken and nothing else.
+func _go_out_beside_a_reel() -> HoseReel:
+	_universe = Universe.new()
+	add_child_autofree(_universe)
+	_universe.set_physics_process(false)
+	_hull = Node3D.new()
+	_hull.add_to_group(Universe.EXTERIOR_SPACE)
+	_world.add_child(_hull)
+	_avatar.enter_suit(_world, Transform3D.IDENTITY, Vector3.ZERO, null)
+	var reel := HoseReel.new()
+	_hull.add_child(reel)
+	reel.global_position = _avatar.camera.global_position + Vector3(0.5, -0.65, -1.2)
+	reel.stock_nozzle(_nozzle_def())
+	return reel
+
+## Takes the nozzle off the reel and runs the grab swipe by hand, 60 steps a
+## second, you and the hull both drifting by `drift` (m/s, engine frame) and,
+## from step `shift_at` (never if negative), a floating-origin shift of 2 km.
+## Returns how much farther than where it began the nozzle ever was from where
+## it settles in the hand: a swipe only ever closes on the hand, so 0 or less.
+func _swipe_on_a_spacewalk(drift: Vector3, shift_at := -1) -> float:
+	var nozzle := _go_out_beside_a_reel().item
+	assert_true(_avatar.grasp.take(nozzle), "an EVA tool may be taken on a spacewalk")
+	var socket := _avatar.hands.wield_socket
+	var rest := -nozzle.definition.grip_point
+	var began := nozzle.global_position.distance_to(socket.global_transform * rest)
+	var worst := 0.0
+	var step := 0
+	while _avatar.hands.grabbing() and step < 40:
+		_hull.global_position += drift / 60.0
+		_avatar.global_position += drift / 60.0
+		if step == shift_at:
+			_universe.shift(Vector3(2000, 0, 0))
+		simulate(_avatar.hands, 1, 1.0 / 60.0)
+		worst = maxf(worst, nozzle.global_position.distance_to(socket.global_transform * rest))
+		step += 1
+	assert_false(_avatar.hands.grabbing(), "the swipe ended")
+	assert_eq(nozzle.get_parent(), socket)
+	assert_true(nozzle.transform.is_equal_approx(Transform3D(Basis.IDENTITY, rest)), "settled in the hand")
+	return worst - began
+
+func test_the_grab_swipe_keeps_its_frame_across_a_shift_and_a_drift():
+	var excess := _swipe_on_a_spacewalk(Vector3(0, 0, 10), 9)
+	assert_lt(excess, 0.05, "the nozzle strayed %.2f m past where it began" % excess)
+
+func test_the_grab_swipe_keeps_its_frame_on_a_drifting_hull():
+	var excess := _swipe_on_a_spacewalk(Vector3(0, 0, 10))
+	assert_lt(excess, 0.05, "the nozzle strayed %.2f m past where it began" % excess)
+
+func test_the_grab_swipe_keeps_its_frame_across_a_shift():
+	var excess := _swipe_on_a_spacewalk(Vector3.ZERO, 9)
+	assert_lt(excess, 0.05, "the nozzle strayed %.2f m past where it began" % excess)
+
+## Aboard, the swipe is as it always was: it starts where the item sat, and a
+## walk (3 m here) does not carry that spot with you.
+func test_aboard_the_swipe_still_starts_where_the_item_sat_even_if_you_walk():
+	var item := _item(ItemDefinition.Grip.WIELD)
+	item.global_position = _avatar.camera.global_position + Vector3(0.5, -0.6, -1.2)
+	var sat := item.global_position
+	_avatar.take_item(item)
+	_avatar.global_position += Vector3(0, 0, 3)
+	simulate(_avatar.hands, 1, 1.0 / 60.0)
+	assert_true(_avatar.hands.grabbing())
+	assert_lt(item.global_position.distance_to(sat), 0.2, "one step in, still about where it sat")
