@@ -73,7 +73,7 @@ func test_it_ends_when_the_nozzle_is_freed():
 	# finish() queue_frees the line: ended means gone from the tree.
 	assert_null(_outside.get_node_or_null("HoseLine"), "the line is gone from the tree")
 
-func test_it_is_not_culled_when_the_hull_is_far_from_the_origin():
+func test_it_has_no_custom_box_so_far_lines_are_bounded_by_their_instances():
 	_hull.global_position = Vector3(500, 0, 0)
 	var line := _out_with_a_line()
 	var shown := line.get_node("Segments") as MultiMeshInstance3D

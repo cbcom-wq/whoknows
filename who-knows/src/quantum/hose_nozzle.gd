@@ -118,10 +118,12 @@ func _tick_shrinking(delta: float, nozzle: Item) -> void:
 			_shrinking.remove_at(i)
 			Item.consume(thing)
 
-## Uses a nozzle up if it is still there when the deferred call runs.
-static func _use_up(item: Item) -> void:
+## Uses a nozzle up if it is still there when the deferred call runs. The
+## parameter is untyped on purpose: the engine refuses a freed object at a
+## typed boundary before the guard could see it.
+static func _use_up(item) -> void:
 	if is_instance_valid(item):
-		Item.consume(item)
+		Item.consume(item as Item)
 
 func _exit_tree() -> void:
 	for entry in _shrinking:
