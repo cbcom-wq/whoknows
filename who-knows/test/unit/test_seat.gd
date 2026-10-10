@@ -11,7 +11,9 @@ class RecordingJob extends SeatJob:
 		calls.append("stood")
 
 func test_only_the_pilot_seat_flies():
-	assert_true(PilotSeat.new().flies)
+	var pilot := PilotSeat.new()
+	assert_true(pilot.flies)
+	pilot.free()
 	var chair := CaptainChair.new()
 	var station := CrewStation.new()
 	assert_false(chair.flies)
