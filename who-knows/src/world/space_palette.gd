@@ -15,6 +15,10 @@ const AMBIENT := Color("0b0d12")
 ## against the dark. Tuned at the renders.
 const WARP := Color("fff3e0")
 
+## A turret's phaser bolt and its trail (ship weapons spec §6.2): a hot
+## amber-gold, warm like every light in the game, never the rejected blue.
+const PHASER := Color("ffbf4d")
+
 const ASH := Color(0.36, 0.34, 0.32)
 const UMBER := Color(0.33, 0.26, 0.21)
 const SLATE := Color(0.28, 0.28, 0.29)

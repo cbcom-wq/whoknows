@@ -32,6 +32,8 @@ const PAINTING_FILES := [
 	"res://src/avatar/hands.gd",
 	"res://src/items/impact_flash.gd",
 	"res://src/items/plasma_bolt.gd",
+	"res://src/combat/bolt.gd",
+	"res://src/combat/phaser_bolt.gd",
 	"res://src/items/hand_lamp.gd",
 	"res://src/items/flare.gd",
 	"res://src/items/datapad.gd",
