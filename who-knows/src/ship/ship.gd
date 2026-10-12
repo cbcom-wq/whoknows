@@ -612,7 +612,7 @@ func _place_turrets() -> void:
 			kept[t.coord] = t
 	var placed: Array[Turret] = []
 	var coords: Array = grid.coords()
-	coords.sort()
+	coords.sort_custom(ShipDamage.bow_first)
 	for coord: Vector3i in coords:
 		var inst := grid.get_block(coord)
 		if not WeaponValues.is_turret(inst.block_id):

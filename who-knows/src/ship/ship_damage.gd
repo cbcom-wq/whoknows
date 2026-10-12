@@ -139,18 +139,23 @@ static func turret_part(coord: Vector3i) -> StringName:
 static func is_turret_part(part: StringName) -> bool:
 	return String(part).begins_with("turret:")
 
+## The turrets' order, for sort_custom: bow to stern (-z first), then port to
+## starboard, then top down. TURRET n on the board and the weapons station's
+## turrets use this one comparator, so their numbers agree.
+static func bow_first(a: Vector3i, b: Vector3i) -> bool:
+	if a.z != b.z:
+		return a.z < b.z
+	if a.x != b.x:
+		return a.x < b.x
+	return a.y > b.y
+
 ## TURRET 1, 2 ... bow to stern, then port to starboard, then top down.
 func _number_turrets() -> void:
 	var cells: Array[Vector3i] = []
 	for coord: Vector3i in component_of:
 		if is_turret_part(component_of[coord]):
 			cells.append(coord)
-	cells.sort_custom(func(a: Vector3i, b: Vector3i) -> bool:
-		if a.z != b.z:
-			return a.z < b.z
-		if a.x != b.x:
-			return a.x < b.x
-		return a.y > b.y)
+	cells.sort_custom(bow_first)
 	for i in cells.size():
 		turret_labels[turret_part(cells[i])] = "TURRET %d" % (i + 1)
 

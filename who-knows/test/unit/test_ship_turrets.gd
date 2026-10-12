@@ -48,6 +48,25 @@ func test_hitting_it_hurts_the_turret():
 	_ship.take_damage(Vector3i(0, 2, 0), 150.0)
 	assert_eq(_ship.damage.component_stage(ShipDamage.turret_part(Vector3i(0, 2, 0))), BlockDamage.Stage.DAMAGED)
 
+func test_the_turrets_are_in_the_boards_order_bow_first():
+	var grid := _armed()
+	for at: Vector3i in [Vector3i(0, 2, -1), Vector3i(-1, 2, 0)]:
+		var more := BlockInstance.new()
+		more.block_id = WeaponValues.HEAVY if at.x == 0 else WeaponValues.LIGHT
+		grid.set_block(at, more)
+	_ship.launch_blueprint = null
+	_ship.set_grid(grid)
+	await wait_process_frames(2)
+	assert_eq(_ship.turrets.size(), 3)
+	var coords: Array[Vector3i] = []
+	for i in _ship.turrets.size():
+		var t: Turret = _ship.turrets[i]
+		coords.append(t.coord)
+		assert_eq(_ship.damage.turret_labels[ShipDamage.turret_part(t.coord)], "TURRET %d" % (i + 1),
+			"%s is TURRET %d on the board" % [t.coord, i + 1])
+	assert_eq(coords, [Vector3i(0, 2, -1), Vector3i(-1, 2, 0), Vector3i(0, 2, 0)] as Array[Vector3i])
+	assert_eq(_ship.heavy_turrets()[0].coord, Vector3i(0, 2, -1), "the bow's heavy first")
+
 func test_the_orders_are_saved():
 	_ship.fire_control.mark(&"ship:Ship2")
 	_ship.fire_control.set_orders(FireControl.Orders.ENGAGE)

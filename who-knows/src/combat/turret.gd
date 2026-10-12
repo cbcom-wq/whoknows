@@ -118,7 +118,7 @@ func can_engage(node: Node3D) -> bool:
 func pull_trigger() -> bool:
 	if not manual or _recharge > 0.0 or _burst_left > 0 or not _can_pay():
 		return false
-	if _stage() == BlockDamage.Stage.WRECKED:
+	if _stage() == BlockDamage.Stage.WRECKED or not _manual_clear():
 		return false
 	_burst_left = int(_spec["burst"])
 	_gap = 0.0
@@ -148,7 +148,7 @@ func step(delta: float) -> void:
 	if _burst_left > 0:
 		_gap -= delta
 		if _gap <= 0.0:
-			if _can_pay() and (manual or _ready_to_fire()):
+			if _can_pay() and (_manual_clear() if manual else _ready_to_fire()):
 				_fire_one()
 				_burst_left -= 1
 				_gap = _spec["gap"]
@@ -181,6 +181,11 @@ func _ready_to_fire() -> bool:
 	if barrel_dir().angle_to(_solution["dir"]) > WeaponValues.AIM_TOLERANCE:
 		return false
 	return _reaches(_solution) and _sky_clear(_solution["dir"]) and _clear_of_hull()
+
+## Where it points by hand is open sky and clear of its own hull: a gunner's
+## aim gets no leave to fire through the ship.
+func _manual_clear() -> bool:
+	return _sky_clear(barrel_dir()) and _clear_of_hull()
 
 func _solve(node: Node3D) -> Dictionary:
 	if node == null or hull == null or not Weapons.usable(node):
