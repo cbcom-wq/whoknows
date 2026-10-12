@@ -17,7 +17,8 @@ func test_required_ids_exist():
 			&"quantum_core", &"quantum_machine", &"quantum_cell", &"quantum_tank", &"computer",
 			&"fairing_slope", &"fairing_slope_long_low", &"fairing_slope_long_high",
 			&"fairing_corner_out", &"fairing_corner_in", &"fairing_half",
-			&"helm", &"captain_chair", &"crew_station"]:
+			&"helm", &"captain_chair", &"crew_station",
+			&"turret_light", &"turret_heavy"]:
 		assert_true(_cat.has(id), "missing block definition: %s" % id)
 
 func test_reactor_and_battery_are_retired():
