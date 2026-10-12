@@ -4728,7 +4728,43 @@ func _shot(shot_name: String) -> void:
 	print("render  %s" % file)
 ```
 
-Add to it, in the same style, the bridge view (seat the avatar at the Warden's helm with `CameraDirector.sit_now` and shoot `combat_bridge`), the gun camera (sit at the weapons station and shoot `combat_gun`), and the heavy by hand at 2 km: a still target 2,000 m ahead, the job's `heavy()` set `manual`, `manual_aim` from `WeaponAim.intercept`, five `pull_trigger()`s 3.1 s apart; print `heavy   5 bolts, n hit`.
+In `_fps_and_renders()`, before `scene.queue_free()`, the bridge view, the gun camera, and the heavy by hand at 2 km:
+
+```gdscript
+	var director: CameraDirector = scene.get_node("CameraDirector")
+	director.sit_now(warden.seat)
+	await _physics(30)
+	await _shot("combat_bridge")
+	director.stand_now()
+	var station: WeaponsStation = null
+	for s in warden.seats():
+		if s is WeaponsStation:
+			station = s
+	if station == null:
+		print("heavy   no weapons station")
+		return
+	director.sit_now(station)
+	await _physics(30)
+	await _shot("combat_gun")
+	var job := station.job as WeaponsJob
+	var heavy := job.heavy()
+	# The job aims from the reticle every frame; the probe aims instead.
+	job.active = false
+	warden.fire_control.set_orders(FireControl.Orders.HOLD)
+	var far := _target(scene, warden, 2000.0)
+	await _physics(5)
+	var t0 := _taken(far)
+	for i in 5:
+		var s := WeaponAim.intercept(heavy.muzzle(), warden.exterior.linear_velocity,
+			WeaponValues.spec(WeaponValues.HEAVY)["speed"], Weapons.point_of(far), Weapons.velocity_of(far))
+		if not s.is_empty():
+			heavy.manual_aim = s["dir"]
+		await _physics(int(3.2 * Engine.physics_ticks_per_second))
+		heavy.pull_trigger()
+	await _physics(int(5.0 * Engine.physics_ticks_per_second))
+	print("heavy   5 bolts at 2 km, %.0f hit" % ((_taken(far) - t0) / float(WeaponValues.spec(WeaponValues.HEAVY)["damage"])))
+	director.stand_now()
+```
 
 - [ ] **Step 2: Run it and tune**
 
