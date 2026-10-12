@@ -190,3 +190,24 @@ func test_each_npc_thinks_five_times_a_second():
 		_director.think_step()
 	for npc: CountingNpc in _director.live.values():
 		assert_eq(npc.thinks, 5, "%s thought %d times" % [npc.record.id, npc.thinks])
+
+## Ship weapons spec §4.1: outside, a live NPC is a target; inside, never.
+func test_outside_a_promoted_npc_joins_the_targets_and_demoting_leaves():
+	_director.rule = NpcDirector.Rule.BY_SITE
+	_director.targets = true
+	var rec := _record(1)
+	_source.entries = [[rec, _site]]
+	_director.review()
+	var npc: Npc = _director.live[rec.id]
+	assert_true(npc.is_in_group(Weapons.TARGETS))
+	assert_eq(Weapons.id_of(npc), Weapons.npc_id(rec.id))
+	_source.entries = []
+	_director.review()
+	assert_false(npc.is_in_group(Weapons.TARGETS), "back to a record, it is no target")
+
+func test_inside_a_promoted_npc_is_never_a_target():
+	_director.rule = NpcDirector.Rule.BY_SITE
+	var rec := _record(1)
+	_source.entries = [[rec, _site]]
+	_director.review()
+	assert_false(_director.live[rec.id].is_in_group(Weapons.TARGETS))

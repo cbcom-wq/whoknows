@@ -47,11 +47,14 @@ static func kind_of(id: StringName) -> StringName:
 	return StringName(s.substr(0, at)) if at > 0 else &""
 
 ## Whether `node` can be shot at now: alive, in the tree, a target, not dead,
-## not a ship asleep.
+## not a ship asleep, not an item that is held or stowed (a nozzle in its reel,
+## a tool in hand: only loose ones are targets).
 static func usable(node: Node) -> bool:
 	if node == null or not is_instance_valid(node) or not node.is_inside_tree() or not node.is_in_group(TARGETS):
 		return false
 	if node is Npc and (node as Npc).is_dead():
+		return false
+	if node is Item and (node as Item).state != Item.State.LOOSE:
 		return false
 	var ship := _ship_of(node)
 	if ship != null and ship.is_in_group(Fleet.ASLEEP):

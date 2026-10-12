@@ -76,7 +76,7 @@ func test_target_contacts_lists_other_ships_in_range():
 	var universe := Universe.new()
 	_world.add_child(universe)
 	var own := _body(&"ship:Own")
-	var near := _body(&"ship:Near", Vector3(0, 0, -800))
+	_body(&"ship:Near", Vector3(0, 0, -800))
 	_body(&"ship:Far", Vector3(0, 0, -9000))
 	_body(&"item:9", Vector3(0, 0, -50))
 	var source := TargetContacts.new(own, universe)
@@ -87,4 +87,70 @@ func test_target_contacts_lists_other_ships_in_range():
 		assert_eq(found[0].kind, &"ship")
 	assert_not_null(source.contact(&"ship:Near", universe.to_universe(Vector3.ZERO), 0.0))
 	assert_null(source.contact(&"ship:Own", universe.to_universe(Vector3.ZERO), 0.0))
-	near.free()
+
+func test_a_dead_npc_is_not_usable():
+	var npc := Npc.new()
+	npc.species = NpcSpecies.new()
+	npc.species.knocked_out_for = 0.0
+	_world.add_child(npc)
+	Weapons.join(npc, &"npc:thing:1")
+	assert_not_null(Weapons.find(get_tree(), &"npc:thing:1"), "alive, it is found")
+	npc.down = true
+	assert_null(Weapons.find(get_tree(), &"npc:thing:1"), "dead, it is not")
+
+func test_a_ship_asleep_is_not_usable():
+	var ship := Node.new()
+	add_child_autofree(ship)
+	var hull := _body(&"ship:Sleeper")
+	hull.set_meta(&"ship", ship)
+	assert_true(Weapons.usable(hull))
+	ship.add_to_group(Fleet.ASLEEP)
+	assert_false(Weapons.usable(hull))
+	assert_null(Weapons.find(get_tree(), &"ship:Sleeper"))
+
+func test_a_stowed_or_held_item_in_space_is_not_found():
+	var d := ItemDefinition.new()
+	d.id = &"crate"
+	d.display_name = "Crate"
+	d.size = Vector3(0.5, 0.5, 0.5)
+	d.look = &"crate"
+	var item := Item.new()
+	item.setup(d)
+	_world.add_child(item)
+	item.set_space(true)
+	var id := Weapons.id_of(item)
+	assert_same(Weapons.find(get_tree(), id), item, "loose, it is a target")
+	item.set_stowed(null)
+	assert_null(Weapons.find(get_tree(), id), "stowed on the hull, it is not")
+	item.set_loose()
+	assert_same(Weapons.find(get_tree(), id), item)
+	item.state = Item.State.HELD
+	assert_null(Weapons.find(get_tree(), id), "in a hand, it is not")
+
+func test_a_hull_is_aimed_at_by_its_centre_of_mass():
+	var b := _body(&"ship:Heavy", Vector3(10, 0, 0))
+	b.center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
+	b.center_of_mass = Vector3(0, 0, -2)
+	b.global_rotation = Vector3(0, PI / 2.0, 0)
+	assert_almost_eq(Weapons.point_of(b), b.global_transform * Vector3(0, 0, -2), Vector3.ONE * 0.001)
+	assert_almost_eq(Weapons.point_of(b), Vector3(8, 0, 0), Vector3.ONE * 0.001, "-z turned a quarter is -x")
+
+func test_labels_for_a_base_and_a_plain_body():
+	var base := _body(&"base:Base1")
+	base.set_meta(&"base", true)
+	assert_eq(Weapons.label_of(base), "BASE")
+	assert_eq(Weapons.label_of(_body(&"item:77")), "ITEM:77")
+
+func test_target_contacts_includes_a_base():
+	var universe := Universe.new()
+	_world.add_child(universe)
+	var own := _body(&"ship:Own")
+	var base := _body(&"base:Base1", Vector3(0, 0, -300))
+	base.set_meta(&"base", true)
+	var source := TargetContacts.new(own, universe)
+	var c := source.contact(&"base:Base1", universe.to_universe(Vector3.ZERO), 0.0)
+	assert_not_null(c)
+	if c != null:
+		assert_eq(c.kind, &"base")
+		assert_eq(c.label, "BASE")
+		assert_eq(c.precision, Contact.EXACT)

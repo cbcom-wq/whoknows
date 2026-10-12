@@ -287,3 +287,11 @@ func test_the_suit_is_not_tied_to_a_ship_still_arriving():
 	a._physics_process(0.2)
 	_root.suit_tie.check()
 	assert_same(_root.aboard, pair[0], "tied to it once it has arrived")
+
+## Ship weapons spec §4.1: each ship's hull is a target, found by its name.
+func test_each_ships_hull_is_a_weapon_target():
+	var found := Weapons.find(get_tree(), Weapons.ship_id(_starter))
+	assert_same(found, _starter.exterior)
+	assert_same(found.get_meta(&"ship"), _starter)
+	var second := _spawn()
+	assert_same(Weapons.find(get_tree(), &"ship:Ship2"), second.exterior)
