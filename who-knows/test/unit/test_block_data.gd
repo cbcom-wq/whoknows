@@ -5,9 +5,9 @@ var _cat: BlockCatalog
 func before_all():
 	_cat = BlockCatalog.load_from_dir("res://data/blocks")
 
-func test_all_thirty_three_blocks_load():
-	assert_eq(_cat.ids().size(), 33,
-		"21 minus retired reactor and battery, plus the four quantum blocks, the bridge computer, the six fairings and the three bridge seats")
+func test_all_thirty_five_blocks_load():
+	assert_eq(_cat.ids().size(), 35,
+		"21 minus retired reactor and battery, plus the four quantum blocks, the bridge computer, the six fairings and the three bridge seats and the two turrets")
 
 func test_required_ids_exist():
 	for id in [&"hull", &"hull_wedge", &"armour", &"core",
