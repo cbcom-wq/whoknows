@@ -5,7 +5,7 @@
 **Depends on:** `main` at `93543b3` (the bridge, the hose and habitat modules merged)
 **Amends:** the quantum energy spec (`2026-09-24-quantum-energy-design.md`) §8.4, *Turret weapons*,
 built here; the ship damage sections spec (`2026-10-03-ship-damage-sections-design.md`) §2.2, one
-component per turret, and the model moves from `Ship` to `GridHome` (§6.5); the bridge spec
+component per turret; the bridge spec
 (`2026-10-09-ship-bridge-design.md`) §3.3, the first `SeatJob`; the health and damage spec
 (`2026-09-29-health-and-damage-design.md`) §5.1, the pistol's bolt shares a base with the
 turrets'; the slice-1 spec's roadmap, Slice 2 *First Blood* split again (§2).
@@ -60,13 +60,14 @@ drill, wrecked, stops. The game holds 120 fps through all of it.
 
 ### 3.1 Two turrets
 
-Both are SYSTEMS blocks, one 2 m cell, `occupancy` SOLID, mounted on the outside of the hull.
+Both are SYSTEMS blocks, one 2 m cell, `occupancy` SOLID: a cell of the hull's surface (it takes the
+place of a plate or a fairing), with the turret standing on its open face.
 
 | | `turret_light` (*Light Turret*) | `turret_heavy` (*Heavy Turret*) |
 |---|---|---|
 | Look | a squat armoured dome, twin short barrels | a bigger dome, one long barrel overhanging its cell |
-| Mass, hp | 1.5 t, 200 | 4.0 t, 400 |
-| Power draw | 0.5 MW | 1.5 MW |
+| Mass, hp | 0.8 t, 200 | 2.0 t, 400 |
+| Power draw | 0.1 MW | 0.3 MW |
 | Slew | 90°/s | 30°/s |
 | Fire | bursts of 4 at 8 a second, then 1.5 s recharge | one bolt, then 3 s recharge |
 | Bolt speed | 600 m/s | 450 m/s |
@@ -79,7 +80,11 @@ Both are SYSTEMS blocks, one 2 m cell, `occupancy` SOLID, mounted on the outside
 The numbers are starting points; the combat probe (§10.2) tunes them and the as-built notes record
 what they became. They live in one place, `WeaponValues` (as `QuantumValues`, `HabitatValues`).
 
-Plan tokens: `Tl`, `Th`. Both drawn from `HullPalette` only.
+Plan tokens: `Tl`, `Th`. Both drawn from `HullPalette` only, by `TurretLook` from a kit and a frame
+(a reusable asset: it never sees the grid).
+
+The power draws are small on purpose (amended 2026-10-11, while planning): every shot is paid in QE,
+and at 0.5 MW a light turret the Warden (108 MW made, 97 drawn) would break `POWER_MARGIN`.
 
 ### 3.2 Mounting and the arc
 
@@ -89,11 +94,13 @@ or fore. The face must open onto an empty cell (`TURRET_BURIED`, §8). The turre
 
 ### 3.3 The sky map
 
-Built with the exterior, a turret casts rays against its own ship's exterior collider over a
-**32 × 16 grid** of the half-sky (yaw × elevation) from its muzzle height, and keeps one bit per
-direction: clear or blocked. It answers `can_bear(dir_local) -> bool` by lookup, and
-`coverage() -> float`, the clear fraction. It is rebuilt whenever the exterior is (pieces lost and
-mended change it). A turret on a pod or behind a fin sees less; `TURRET_BLIND` warns under 25%.
+`SkyMap` marches each direction of a **32 × 16 grid** of the half-sky (yaw × elevation) from the
+turret's muzzle through its ship's **launch layout**, every cell a cube, out to 40 m, and keeps one bit
+per direction: clear or blocked. Pure, so `ShipRules` uses it too. It answers
+`can_bear(dir_local) -> bool` by lookup, and `coverage() -> float`, the clear fraction. Made once per
+turret when the ship is given its grid: a piece lost only opens the sky, so the launch layout is the
+cautious answer, and the ray each shot casts (§5.3) catches the rest. A turret behind a fin sees
+less; `TURRET_BLIND` warns under 25%.
 
 ### 3.4 Each turret a component
 
@@ -124,9 +131,9 @@ Ships, bases, NPCs outside, and loose items in space join it. Your own avatar do
 
 ### 4.2 Contacts
 
-A new sensor source, `TargetContacts`, lists every target within **5 km** as an EXACT contact,
-kinds `&"ship"`, `&"base"`, `&"creature"`. Items are not listed (the map would drown in crates);
-they can still be marked directly (§6.1). Other ships become contacts on the HUD and the bridge
+A new sensor source, `TargetContacts`, lists every other ship and base within **5 km** as an EXACT
+contact, kinds `&"ship"` and `&"base"`. Creatures are already life signs (`LifeContacts`), and items
+are not listed (the map would drown in crates); both can still be marked by looking at them (§9.1). Other ships become contacts on the HUD and the bridge
 computer's map for the first time.
 
 ### 4.3 Hostile
@@ -136,8 +143,13 @@ project.** The enemy project fills it; tests set a stub.
 
 ### 4.4 Your own
 
-`Weapons.is_own(ship, target)`: the ship itself, and any ship in `Fleet` that is yours. Turrets
-never take one as a target, even when marked; marking one says *OWN SHIP* and does nothing.
+`Weapons.is_own(ship, target)`: the ship itself. Ships have no owner yet (every ship is yours to
+board, `CLAUDE.md`), so a turret may fire on any other ship you mark; factions come with the enemy
+project. Marking your own ship does nothing.
+
+Ships, bases and NPCs keep their ids across a save (`ship:<name>`, `base:<id>`, `npc:<record id>`);
+an item's is good for the session only (`item:<instance id>`), so a listed item is dropped on load
+(§5.1).
 
 ## 5. Fire control
 
@@ -162,7 +174,8 @@ parks facing along its mount's forward.
 In `HOLD`, no turret is given anything, and a manned heavy turret still fires (§7.2).
 
 An entry whose target is **gone** (an NPC dead, an item destroyed, a ship removed or gone to sleep
-past 20 km) leaves the list. A wrecked ship stays until you clear it.
+past 20 km) for **2 s** running leaves the list; the grace lets a loaded game's ships, bases and NPCs
+wake before their entries are judged. A wrecked ship stays until you clear it.
 
 ### 5.2 The aim solution
 
@@ -214,8 +227,10 @@ numbers, look and behaviour exactly. `PhaserBolt` extends it with the turrets' n
 - an elongated glowing capsule along its path: 2 m × 0.25 m (light), 4 m × 0.5 m (heavy);
 - colour **`SpacePalette.PHASER`**, a hot amber-gold, new; the owner sees it in the first renders
   before anything else builds on it. Not blue (the style guide §7);
-- a **light trail**: a ribbon through the bolt's last 0.4 s of positions, fading tail to head. It
-  outlives the bolt by 0.4 s;
+- a **light trail**: bolts fly straight, so the trail is one thin glowing streak from where the bolt
+  was 0.4 s ago (or its muzzle) to its head, tapering; when the bolt lands or fades the streak's
+  tail runs up to where it ended over 0.4 s. It fades by scale, never by touching the shared glow
+  material (as `ImpactFlash`);
 - only the **heavy** bolt carries an `OmniLight3D` (warm, range 30 m); light bolts glow only. A
   hundred and fifty lights in flight would break the frame budget;
 - at impact the existing `ImpactFlash`, scaled up for the heavy bolt.
@@ -240,20 +255,21 @@ hold **120 fps** on the dev machine with the Warden's guns all firing.
 
 ### 6.5 Bases
 
-`Base` and `Ship` are both `GridHome`s. The damage model moves down into `GridHome`: the
-`ShipDamage` model, `take_damage_many`, the hull and interior hit routing, the block-damage view
-and the torch's mending. `Ship` keeps what only a ship has (crash damage, the flight components).
+A base wears its own shell over its blocks (`BaseExterior`), and its modules are prefabs that never
+lose pieces, so it does not borrow the ship's sections (amended 2026-10-11, while planning: the
+spec first moved `ShipDamage` into `GridHome`). Instead **each module is a section** of its own,
+kept on `Base` by a small pure `ModuleDamage`: id `&"module:<index>"`, label the module's name
+(*DRILL 2*), hp the sum of its blocks'. A hit on the base's exterior finds its cell, then its module.
+Damage shows as a tint on that module's shell (`ExteriorBuilder.stage_colour`: scorched, then
+charred) and sparks from its damaged blocks (`DamageShow`); nothing breaks off. A **wrecked** module
+stops working until it is mended above wrecked:
 
-For a base, **each module is a section** (id `&"module:<index>"`, label the module's name and
-number), its hp the sum of its blocks'. Damage shows as a ship's does: tint, sparks, pieces of
-plating lost. A **wrecked** module stops working until it is mended above wrecked:
+- **hub:** its machine is unbound (dark, refuses) and its link panel reads *HUB WRECKED*;
+- **drill:** it stops drilling and humming;
+- **store:** its tanks drop out of the base's capacity; QE above what is left is lost.
 
-- **hub:** its machine is dark and refuses, its core gives no power, the base's lights go to
-  emergency;
-- **drill:** it stops drilling;
-- **store:** its tank's QE can neither be drawn nor credited (the base's capacity drops by it).
-
-Mended from outside with the torch, at a ship section's rate. Saved in the `BaseSite`.
+Mended from outside with the torch, at a ship section's rate (`RepairTorch` learns the base, as it
+knows a ship). Saved in the `BaseSite`, per module.
 
 ### 6.6 Items
 
@@ -268,9 +284,10 @@ takes three light bolts or four pistol bolts. At 0 the item bursts (a small spra
 ### 7.1 `WeaponsJob`
 
 The `SeatJob` of a `weapons_station`. `sat()` takes the screens and input; `stood()` hands them
-back. While someone sits, **the ship is held**: `FlightComputer` behaves as if the stick and the
-translation keys were centred, with the assist on (velocity held, spin damped), whatever the assist
-toggle says. The other turrets go on firing on their own.
+back. While someone sits, **the ship is held**: `FlightComputer.gunner_hold` centres the stick and
+the translation keys, and, with the assist on, locks the forward speed it has, so it keeps its course
+while drift and spin are damped. With the assist off it simply coasts. The other turrets go on firing
+on their own.
 
 ### 7.2 With a heavy turret
 
@@ -294,8 +311,9 @@ The station's screen shows the target board (§7.4); T, Tab and F work. No gun c
 
 On the station's screen and as a new **WEAPONS** page of the bridge computer: the orders, the list
 (each entry with its label, distance, and whether any turret can bear), and each turret's state:
-*TRACKING*, *FIRING*, *NO ARC*, *DAMAGED*, *WRECKED*, *LOW POWER*, *IDLE*. Entries can be marked,
-reordered and cleared from either, and the orders switched.
+*TRACKING*, *FIRING*, *NO ARC*, *DAMAGED*, *WRECKED*, *LOW POWER*, *IDLE*. The page's buttons: prev
+and next pick an entry, RANGE drops it, the big button switches the orders. Marking is done where you
+can see: at the helm and in the gun camera (T).
 
 ## 8. Rules
 
@@ -364,7 +382,9 @@ Synthesised with `Synth`, through the `SHIP` or `SUIT` bus as every ship sound i
   passes all three library ships with their weapons;
 - saving: orders and list round-trip; turret components; a base module's damage; an item's damage;
   a listed id that no longer exists is dropped on load;
-- the floating origin: `test_floating_origin_scene.gd` covers bolts, trails and pooled bolts.
+- the floating origin: `test_floating_origin_scene.gd` covers bolts, trails and pooled bolts;
+- the visual style: `TurretLook`, `PhaserBolt` and `Turret` are in `test_visual_style_rules.gd`'s
+  painting files, and `TurretLook` in its reusable ones.
 
 ### 10.2 In the real scene (mandatory, renders shown to the owner)
 
@@ -401,9 +421,10 @@ New:
 
 Changed:
 - `src/items/plasma_bolt.gd` (extends `Bolt`), `item.gd`, `item_definition.gd`
-- `src/ship/grid_home.gd` (the damage model, from `ship.gd`), `ship.gd`, `ship_damage.gd`
-  (turret components; module sections for a base), `ship_rules.gd`, `ship_plan.gd` (tokens)
-- `src/habitat/base.gd`, `base_site.gd`, the drill, store and hub's working parts
+- `ship.gd` (turrets, fire control, saving), `ship_damage.gd` (turret components), `ship_rules.gd`,
+  `ship_plan.gd` (tokens)
+- `src/habitat/base.gd`, `base_site.gd`, `base_exterior.gd`, `link_panel.gd`; `src/items/repair_torch.gd`
+- `src/npc/npc_director.gd` (exterior NPCs are targets)
 - `src/flight/flight_computer.gd` (held while a gunner sits), the flight HUD
 - `src/world/space_palette.gd` (`PHASER`)
 - `data/ships/starter.*`, `lamplighter.*`, `warden.*`
@@ -419,8 +440,8 @@ Each phase is playable at its end.
    trails, `Weapons`, `TargetContacts`, `FireControl`, `Turret`, the sky map, the turret component,
    the helm keys, the HUD brackets and strip, the sounds; the starter armed. You can mark an F6 ship
    and shoot it.
-2. **Items and bases.** Item hp; the damage model into `GridHome`; module sections; wrecked
-   modules stop.
+2. **Items and bases.** Item hp; `ModuleDamage` on bases; wrecked modules stop; the torch mends
+   them.
 3. **The heavy turret and the weapons station.** `WeaponsJob`, the gun camera, the held ship, the
    target board and the WEAPONS page; the Warden (six light, one heavy, the station) and the
    Lamplighter armed; the rules.
@@ -439,9 +460,9 @@ weapons station.
   measures it in phase 4 and the numbers in `WeaponValues` move until the owner's dance is there.
 - **Frame budget.** 150 rays a tick and 150 trails. Pooling, no lights on light bolts, and the
   probe's 120 fps floor; if it fails, trails become one `MultiMesh` first.
-- **Moving the damage model into `GridHome`.** It touches a built, tested path. Phase 2 moves it
-  without changing behaviour first (the existing damage tests pass unchanged), then adds module
-  sections.
+- **A turret replaces a plate.** Each loadout swaps a fairing or plate for a turret cell; the probe's
+  renders show whether the hull still reads right, and `ShipRules` (`NO_PIECES`, `UNBALANCED`) still
+  passes.
 - **The gun camera and render layers.** The camera sits outside a ship whose interior lives in a
   slot; it must see the world, the hull and bolts, not the interior. The bridge's seated cameras
   and the spacewalk's layers are the models.
