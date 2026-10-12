@@ -24,6 +24,7 @@ var pool: BoltPool
 var _head: MeshInstance3D
 var _trail: MeshInstance3D
 var _light: OmniLight3D
+var _crack: AudioStreamPlayer3D
 var _fading := 0.0
 var _trail_end := 0.0
 
@@ -46,6 +47,11 @@ func _ready() -> void:
 	_light.shadow_enabled = false
 	_light.visible = false
 	add_child(_light)
+	_crack = AudioStreamPlayer3D.new()
+	_crack.name = "Crack"
+	_crack.bus = AudioBuses.SUIT
+	_crack.max_distance = 200.0
+	add_child(_crack)
 	visible = false
 	set_physics_process(false)
 
@@ -96,6 +102,10 @@ func impact(result: Dictionary) -> void:
 	if _spent:
 		return
 	global_position = result["position"]
+	var crack := Synth.sound(&"phaser_crack")
+	if crack != null and _crack != null and _crack.is_inside_tree():
+		_crack.stream = crack
+		_crack.play()
 	super(result)
 
 func _draw_trail() -> void:

@@ -59,6 +59,12 @@ var lights: ShipLights
 ## Ship/Warp. The flight scene binds it to the system; the ship only builds it
 ## and saves its chart.
 var warp: WarpDrive
+## The ship's weapons (ship weapons spec §5): fire control, and a turret for
+## every turret block, on the hull, kept across rebuilds by cell.
+var fire_control: FireControl
+var turrets: Array[Turret] = []
+## Each turret's sky map, from the launch layout (spec §3.3): coord -> SkyMap.
+var _skies := {}
 
 ## Seconds since a rock last struck the hull.
 var since_struck := INF
@@ -145,6 +151,10 @@ func _ready() -> void:
 	add_child(warp)
 	flight_computer.warp = warp
 	quantum.warp = warp
+	fire_control = FireControl.new()
+	fire_control.name = "FireControl"
+	fire_control.ship = self
+	add_child(fire_control)
 	AudioBuses.ensure()
 	Synth.warm_up()
 	_hum = AudioStreamPlayer.new()
@@ -246,6 +256,8 @@ func _on_hull_hit(hit: Hit) -> void:
 	var cell := ShipCells.hull_cell(grid, exterior, hit.shape, at, exterior.global_basis.inverse() * hit.normal)
 	if cell != ShipCells.NONE:
 		take_damage_many({cell: hit.damage}, {cell: at.x - ShipGrid.cell_center(cell).x})
+	if hit.kind == &"phaser":
+		hull_struck(clampf(hit.damage / 4.0, 2.0, 8.0))
 
 ## A hit on an interior surface: the block behind it (spec §5.1), and a hull
 ## block's section on the side the shot landed (ship damage sections spec §3).
@@ -514,6 +526,11 @@ func set_grid(new_grid: ShipGrid, stock := true) -> void:
 	# which puts back any block the sections say is there.
 	damage = ShipDamage.build(layout, catalog, inner_cells)
 	damage.infer(grid)
+	_skies.clear()
+	for coord: Vector3i in layout.coords():
+		var inst := layout.get_block(coord)
+		if WeaponValues.is_turret(inst.block_id):
+			_skies[coord] = SkyMap.build(layout, coord, SkyMap.normal_of(inst.orientation))
 	_apply_view(true)
 	grid.cell_changed.connect(_on_cell_changed)
 	grid.block_staged.connect(_on_block_staged)
@@ -565,6 +582,7 @@ func _rebuild_everything(hull := true) -> void:
 	_apply_stats()
 	quantum.bind(interior_builder.quantum_cores(), interior_builder.quantum_machines(), stats)
 	flight_computer.quantum = quantum.store
+	_place_turrets()
 	for lid in interior_builder.toilet_lids():
 		lid.bind(quantum.store)
 	if lights != null:
@@ -584,6 +602,53 @@ func _rebuild_everything(hull := true) -> void:
 	_apply_own()
 	_apply_livery()
 	Weapons.join(exterior, Weapons.ship_id(self))
+
+## A Turret for each turret block (spec §3), on the hull: one kept from the
+## last build by cell and kind, so a rebuild on every hit never resets an aim.
+func _place_turrets() -> void:
+	var kept := {}
+	for t in turrets:
+		if is_instance_valid(t):
+			kept[t.coord] = t
+	var placed: Array[Turret] = []
+	var coords: Array = grid.coords()
+	coords.sort()
+	for coord: Vector3i in coords:
+		var inst := grid.get_block(coord)
+		if not WeaponValues.is_turret(inst.block_id):
+			continue
+		var n := SkyMap.normal_of(inst.orientation)
+		var t: Turret = kept.get(coord)
+		if t != null and t.kind == inst.block_id and t.normal == n:
+			kept.erase(coord)
+		else:
+			t = Turret.new()
+			t.setup(inst.block_id, coord, n, _skies.get(coord, SkyMap.build(grid, coord, n)))
+			t.hull = exterior
+			t.source = self
+			var part := ShipDamage.turret_part(coord)
+			t.stage_of = func() -> int:
+				return damage.component_stage(part) if damage != null else BlockDamage.Stage.INTACT
+			exterior.add_child(t)
+		t.store = quantum.store
+		placed.append(t)
+	for t: Turret in kept.values():
+		exterior.remove_child(t)
+		t.free()
+	turrets = placed
+	fire_control.turrets = turrets
+
+## The heavy turrets, bow first: the weapons station's guns (spec §7.2).
+func heavy_turrets() -> Array[Turret]:
+	var out: Array[Turret] = []
+	for t in turrets:
+		if t.kind == WeaponValues.HEAVY:
+			out.append(t)
+	return out
+
+## Whether whoever listens is aboard: a turret's shot is a thud through the hull.
+func listener_aboard() -> bool:
+	return _aboard()
 
 ## The cockpit's stage reaches the helm (ship damage sections spec §2.2):
 ## damaged, the assist chases at half strength; wrecked, it is off and refused.
@@ -700,6 +765,7 @@ func to_dict(universe: Universe) -> Dictionary:
 			"w": SaveCodec.vec3(Vector3.ZERO if not place.is_empty() else exterior.angular_velocity),
 		},
 		"warp": warp.to_dict() if warp != null else {},
+		"weapons": fire_control.to_dict(),
 		"flight": flight_computer.to_dict(),
 		"store": quantum.store.to_dict() if quantum.store != null else {},
 		"damage": damage.to_dict() if damage != null else {},
@@ -861,6 +927,7 @@ func restore_aboard(d: Dictionary) -> void:
 	if lights != null:
 		lights.from_dict(d.get("lights", {}))
 	warp.from_dict(d.get("warp", {}))
+	fire_control.from_dict(d.get("weapons", {}))
 	var saved_airlocks: Dictionary = d.get("airlocks", {})
 	for key: String in saved_airlocks:
 		var airlock: Airlock = airlocks.get(SaveCodec.to_cell(key))
