@@ -138,6 +138,12 @@ func shape() -> BoxShape3D:
 ## nozzle lives under a reel or a hand that are already shifted.
 func set_space(outside: bool) -> void:
 	in_space = outside
+	# Outside, a loose item is something a turret may break (ship weapons
+	# spec §4.1, §6.6); aboard it never is.
+	if outside:
+		Weapons.join(self, Weapons.item_id(self))
+	else:
+		Weapons.leave(self)
 	_build_look()
 	if state != State.HELD:
 		collision_mask = _mask()

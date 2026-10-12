@@ -89,6 +89,7 @@ func _ready() -> void:
 	exterior.add_to_group(Universe.EXTERIOR_SPACE)
 	exterior.add_to_group(AsteroidStream.SPACE_ANCHOR)
 	exterior.set_meta(&"base", self)
+	Weapons.join(exterior, Weapons.base_id(site.id))
 	quantum = QuantumPlant.new()
 	quantum.name = "Quantum"
 	quantum.items = items

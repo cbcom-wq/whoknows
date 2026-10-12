@@ -583,6 +583,7 @@ func _rebuild_everything(hull := true) -> void:
 	_bind_crew()
 	_apply_own()
 	_apply_livery()
+	Weapons.join(exterior, Weapons.ship_id(self))
 
 ## The cockpit's stage reaches the helm (ship damage sections spec §2.2):
 ## damaged, the assist chases at half strength; wrecked, it is off and refused.
