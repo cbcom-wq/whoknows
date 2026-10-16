@@ -155,6 +155,8 @@ func _ready() -> void:
 	fire_control.name = "FireControl"
 	fire_control.ship = self
 	add_child(fire_control)
+	flight_computer.fire_control = fire_control
+	pilot.fire_control = fire_control
 	AudioBuses.ensure()
 	Synth.warm_up()
 	_hum = AudioStreamPlayer.new()

@@ -38,6 +38,26 @@ const BLACKOUT := Color("050404")
 ## bridge's lights panel glows. The interior's SIGNAL_GO green.
 const GO := Color("8fd6a0")
 
+## A marked target's bracket (ship weapons spec §9.2): a warm orange of its
+## own, so it never reads as the course; and a hostile's, the hurt red.
+const TARGET := Color("ff9a5a")
+const HOSTILE := HURT
+
+## A turret's pip on the weapons strip.
+static func for_pip(state: StringName) -> Color:
+	match state:
+		&"firing":
+			return TARGET
+		&"tracking":
+			return READOUT
+		&"no_arc", &"idle":
+			return DIM
+		&"damaged", &"low_power":
+			return WARNING
+		&"wrecked":
+			return HURT
+	return DIM
+
 ## The colour for a sensor contact of `kind`; the readout's for any other.
 static func for_kind(kind: StringName) -> Color:
 	match kind:

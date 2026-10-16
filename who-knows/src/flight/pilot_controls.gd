@@ -26,6 +26,8 @@ var pointer := Vector2.ZERO
 ## The ship's work lights (ship exterior spec §7.2), set by the flight scene:
 ## L and K switch them while you sit.
 var lights: ShipLights
+## The ship's fire control, set by the ship: T, Shift+T and B work it.
+var fire_control: FireControl
 ## The game's one camera director (many ships spec §3.2). A ship's scene
 ## cannot reach it by path, so the flight scene hands it over.
 var director: CameraDirector
@@ -105,6 +107,17 @@ func handle(event: InputEvent) -> void:
 	elif event.is_action_pressed(&"lights_forward"):
 		if lights != null:
 			lights.toggle(ShipLights.FORWARD)
+	elif event.is_action_pressed(&"weapons_clear", false, true):
+		if fire_control != null:
+			fire_control.clear()
+	elif event.is_action_pressed(&"weapons_mark", false, true):
+		# Along the nose: the crosshair (ship weapons spec §9.1).
+		if fire_control != null:
+			fire_control.mark_nearest(_hull.global_position, -_hull.global_basis.z, WeaponValues.MARK_CONE,
+				WeaponValues.CONTACT_RANGE)
+	elif event.is_action_pressed(&"weapons_orders"):
+		if fire_control != null:
+			fire_control.toggle_orders()
 	elif event.is_action_pressed(&"warp"):
 		warp_pressed.emit()
 	elif event.is_action_pressed(&"toggle_assist"):

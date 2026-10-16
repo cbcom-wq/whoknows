@@ -14,6 +14,7 @@ const REQUIRED_ACTIONS := [
 	&"pitch_up", &"pitch_down", &"yaw_left", &"yaw_right",
 	&"point_mode", &"set_heading", &"speed_lock", &"orbit_camera", &"toggle_controls",
 	&"lights_flood", &"lights_forward",
+	&"weapons_mark", &"weapons_clear", &"weapons_orders",
 ]
 
 func test_every_gameplay_action_is_registered():

@@ -89,6 +89,8 @@ var hull_status: Callable
 ## The ship's warp drive, or null. While it travels it flies the hull, and
 ## this ignores the pilot (the warp spec §5.2).
 var warp: WarpDrive = null
+## The ship's fire control, or null: its weapons show in the telemetry.
+var fire_control: FireControl = null
 ## Where you are, for the limit; null means the cruise ceiling everywhere, as
 ## in every test that never sets it.
 var whereabouts: Whereabouts = null
@@ -416,4 +418,9 @@ func build_telemetry() -> VehicleTelemetry:
 		t.hud_flicker = status.size() > 2 and bool(status[2])
 		t.cockpit_cracks = int(status[3]) if status.size() > 3 else 0
 	t.tool_text = "BOOST −%d/S" % roundi(QuantumValues.BOOST_COST) if boosting else ""
+	if fire_control != null and not fire_control.turrets.is_empty():
+		t.has_weapons = true
+		t.weapons_engage = fire_control.orders == FireControl.Orders.ENGAGE
+		t.weapons_pips = fire_control.pips()
+		t.weapons_low_power = t.weapons_engage and quantum != null and quantum.is_low_power()
 	return t
