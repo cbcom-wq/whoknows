@@ -52,8 +52,10 @@ var _leg_count := 0
 ## Every module's shell and legs, from the site. `windows` are the hull
 ## layout's (HullLayout.windows, base frame), each given a porthole on the
 ## shell; `openings` are the airlocks' hatch faces, [cell, outward normal],
-## which the shell leaves bare.
-func build(site: BaseSite, windows: Array = [], openings: Array = []) -> void:
+## which the shell leaves bare. `tints` is each module's shell colour in
+## `site`'s order -- its damage (ship weapons spec §6.5), scorched then
+## charred; unhurt where short.
+func build(site: BaseSite, windows: Array = [], openings: Array = [], tints: Array = []) -> void:
 	for leg in _legs:
 		leg.queue_free()
 	_legs.clear()
@@ -85,7 +87,8 @@ func build(site: BaseSite, windows: Array = [], openings: Array = []) -> void:
 	for i in site.modules.size():
 		var box := _box(site, i)
 		var plan := _plan(box)
-		_draw_shell(shell, box, plan, _size(site, i), _band_colour(site, i), openings)
+		_draw_shell(shell, box, plan, _size(site, i), _band_colour(site, i), openings,
+			tints[i] if i < tints.size() else HullPalette.UNHURT)
 		for w: Dictionary in windows:
 			if w["round"] and _holds(box, w["frame"].origin - w["frame"].basis.z * 0.2):
 				_porthole(shell, plan, w)
@@ -128,7 +131,7 @@ func unfold(index: int, t: float, site: BaseSite, livery: Material = null) -> vo
 			InteriorKit.solid(HullPalette.TRIM))
 	else:
 		var box := AABB(mid - size * 0.5, size)
-		_draw_shell(kit, box, _plan(box), _size(site, index), _band_colour(site, index), [])
+		_draw_shell(kit, box, _plan(box), _size(site, index), _band_colour(site, index), [], HullPalette.UNHURT)
 	var legs := clampf((at - u.FLY - u.SETTLE) / u.LEGS, 0.0, 1.0)
 	if legs > 0.0:
 		_add_legs(kit, site, index, legs)
@@ -257,14 +260,15 @@ static func _at_opening(p: Vector3, n: Vector3, openings: Array) -> bool:
 	return false
 
 ## One module's shell round `box` (base frame), from its `plan`: `cells` says
-## where its storeys and cell boundaries fall.
+## where its storeys and cell boundaries fall. `tint` is the plate's colour:
+## the module's damage (ship weapons spec §6.5).
 static func _draw_shell(kit: InteriorKit, box: AABB, plan: Dictionary, cells: Vector3i, band: Color,
-		openings: Array) -> void:
+		openings: Array, tint: Color) -> void:
 	var pts: PackedVector2Array = plan["points"]
 	var normals: PackedVector2Array = plan["normals"]
 	var inset: PackedVector2Array = plan["inset"]
 	var n_pts := pts.size()
-	var plate := InteriorKit.solid(HullPalette.UNHURT)
+	var plate := InteriorKit.solid(tint)
 	var rib := InteriorKit.solid(HullPalette.PANEL_LINE)
 	var bevel := minf(SHELL_BEVEL, box.size.y * 0.15)
 	var y0 := box.position.y - SHELL_OUT

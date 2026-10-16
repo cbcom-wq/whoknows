@@ -20,6 +20,8 @@ var _screen: ReadoutPanel
 var _to_ship: ReadoutPanel
 var _to_base: ReadoutPanel
 var _held := 0.0
+## The hub is wrecked (ship weapons spec §6.5): the panel is dark and does nothing.
+var offline := false
 
 func setup(p_base: Base) -> void:
 	base = p_base
@@ -63,6 +65,8 @@ func _ship() -> Ship:
 	return ship
 
 func lines() -> PackedStringArray:
+	if offline:
+		return PackedStringArray(["HUB WRECKED", "MEND IT WITH THE TORCH"])
 	var ship := _ship()
 	var out := PackedStringArray()
 	out.append("NO LINK" if ship == null else "SHIP %d · BASE %d" % [ship.quantum.store.amount, base.quantum.store.amount])
@@ -81,10 +85,14 @@ func _prompt(role: StringName) -> String:
 		else "Move %d QE to the base" % HabitatValues.LINK_STEP
 
 func press(role: StringName) -> void:
+	if offline:
+		return
 	_move(role, HabitatValues.LINK_STEP)
 
 ## Held down: LINK_RATE a second, in whole QE.
 func hold(role: StringName, delta: float) -> void:
+	if offline:
+		return
 	_held += HabitatValues.LINK_RATE * delta
 	var whole := floori(_held)
 	_held -= whole
