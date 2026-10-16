@@ -70,8 +70,8 @@ The rcs pushes are arrows: `R<` to port (8), `R>` to starboard (12), `R^` up (16
 ## 1. The brief becomes numbers
 
 Write the targets down **before** drawing, as `ship_check`'s `FEEL` and `SIZE` notes print them.
-The starter is the yardstick: **110 blocks, 104.7 t; turns 1.49 / 0.71 / 1.85 rad/s² (pitch / yaw
-/ roll); side 4.8, vertical 9.6, brake 4.8, forward 14.3 m/s²; 36 MW made, 31.3 drawn; 14,500 km
+The starter is the yardstick: **110 blocks, 105.7 t; turns 1.48 / 0.71 / 1.84 rad/s² (pitch / yaw
+/ roll); side 4.7, vertical 9.5, brake 4.7, forward 14.2 m/s²; 36 MW made, 31.5 drawn; 14,500 km
 of warp.**
 
 | The brief says | Means | Moved by |

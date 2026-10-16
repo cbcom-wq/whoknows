@@ -110,7 +110,7 @@ Do these in order. Each one names the check that proves it.
    - `thrust_budget[&"reverse"] > 0`;
    - `torque_imbalance` within a few % of `torque_budget` on each axis. Fix it by moving mass or
      thrust, not by weakening the RCS. Fairings above the thrust line count: the reshaped
-     starter's spine and fins put pitch at **4.91% of the 5% limit**, so leave headroom;
+     starter's spine and fins put pitch at **4.77% of the 5% limit** (4.91% before its two turrets), so leave headroom;
    - the feel numbers (`torque_budget / inertia`, and each thrust budget divided by mass) are
      what you meant. The probe prints them.
 
@@ -233,8 +233,8 @@ is the blueprint's budgets, so the grid decides the feel:
 | Thrusters the player sees | each `rcs` block's exhaust face open and in view | 6 of 8 blocked (only the pitch-down pair shows); none in the pilot's view |
 | Warp reach on a full store | `(quantum_capacity − WarpPlan.WARP_BASE) × WarpPlan.WARP_M_PER_QE / 1000` km | 14,500 km on 1,200 QE (7,000 km on its starting 600) |
 
-The figures are the **reshaped starter's** (110 blocks, 104.7 t; the spine, fins and keel added
-7.8 t). Before the reshape it was 1.60 / 0.74 / 2.05 rad/s², 15.5 forward, 5.2 brake and side and
+The figures are the **reshaped starter's** (110 blocks, 105.7 t with its two light turrets; the spine, fins and keel added
+7.8 t, two of whose cells are now turrets). Before the reshape it was 1.60 / 0.74 / 2.05 rad/s², 15.5 forward, 5.2 brake and side and
 10.3 vertical; this table had said 1.74 / 0.79 / 2.05 and 5.4 since well before that, and was
 already stale. Weight added outside the thrust line slows every axis, so re-measure with the
 probe after any fairing.

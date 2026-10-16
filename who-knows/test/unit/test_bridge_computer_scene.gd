@@ -88,7 +88,7 @@ func test_the_status_page_reads_the_ship():
 	var lines := c.screen_text().split("\n")
 	assert_eq(lines[0], "STATUS")
 	assert_eq(lines[1], "QE 600 / 1200")
-	assert_eq(lines[2], "POWER 36.0 / 31.3 MW")
+	assert_eq(lines[2], "POWER 36.0 / 31.5 MW")  # 31.3 before the starter's turrets (ship weapons spec §13)
 	assert_eq(lines[3], "SUIT 0%", "the suit starts empty")
 
 func test_a_rebuild_makes_a_new_table_bound_again_with_its_state():

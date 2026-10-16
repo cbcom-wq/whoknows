@@ -462,7 +462,7 @@ func _run(scene: Node) -> void:
 		s.thrust_budget[&"reverse"] / 1000.0, s.thrust_budget[&"lateral"] / 1000.0,
 		s.thrust_budget[&"vertical"] / 1000.0])
 	print("torque  authority %s, imbalance under burn %s" % [s.torque_budget, s.torque_imbalance])
-	# The 5% rule (SKILL.md step 5): the reshaped starter's pitch sits at 4.91%,
+	# The 5% rule (SKILL.md step 5): the reshaped starter's pitch sits at 4.77%,
 	# so a little more mass above the thrust line breaks it.
 	var share := Vector3(absf(s.torque_imbalance.x) / maxf(s.torque_budget.x, 1.0),
 		absf(s.torque_imbalance.y) / maxf(s.torque_budget.y, 1.0),

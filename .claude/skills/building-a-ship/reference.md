@@ -105,12 +105,12 @@ issues.
   - a thrust line away from it (up/down or sideways) gives `torque_imbalance`;
   - a lone thruster in one direction gives zero authority on its axis.
 - **The starter shuttle** (reshaped by the ship exterior spec, 2026-09-29; Godot's figures):
-  - 110 blocks (84 and 26 fairings), 104,700 kg, centre of mass (0.004, 1.301, 0.160);
-  - inertia (2,065,526, 2,865,503, 1,175,422);
+  - 110 blocks (84, 24 fairings and 2 light turrets), 105,700 kg, centre of mass (0.004, 1.298, 0.159);
+  - inertia (2,075,310, 2,866,196, 1,185,178);
   - thrust 1500 forward, 500 reverse, 500 lateral and 1000 vertical kN;
-  - authority (3,080,229, 2,040,115, 2,174,785) N·m against an imbalance under burn of
-    (151,289, −5,731, 0): pitch **4.91%**, yaw 0.28%, roll 0% of authority (the rule is 5%);
-  - 36.0 MW made (all from the quantum core), 31.3 MW drawn, 1200 QE, zero validator issues.
+  - authority (3,079,470, 2,039,735, 2,175,497) N·m against an imbalance under burn of
+    (147,020, −5,676, 0): pitch **4.77%**, yaw 0.28%, roll 0% of authority (the rule is 5%);
+  - 36.0 MW made (all from the quantum core), 31.5 MW drawn, 1200 QE, zero validator issues.
 - **The starter's feel:**
   - turn acceleration 1.49 / 0.71 / 1.85 rad/s² (pitch, yaw, roll);
   - forward 14.3, brake 4.8, side 4.8 and vertical 9.6 m/s². 100 m/s sideways gone in 21 s;
@@ -426,7 +426,7 @@ pieces, all under `src/ship/` unless stated:
     three cells each; a `fairing_slope` fin on each engine pod at (±3, 1, 1); a keel of
     `fairing_half` `O_KEEL` at x = 0, y = −1, z −3..2 (6);
   - **totals:** 110 blocks, 104,700 kg, centre of mass (0.004, 1.301, 0.160), inertia
-    (2,065,526, 2,865,503, 1,175,422); budgets and imbalance under *Flight balance*, pitch at
+    (2,075,310, 2,866,196, 1,185,178); budgets and imbalance under *Flight balance*, pitch at
     4.91% of 5%; feel 1.49 / 0.71 / 1.85 rad/s², forward 14.3, brake and side 4.8, vertical 9.6 m/s²;
   - **the probe's lines:** `skin    110 plates, 78 chamfers, 18 corners, 140 facets, 9 nozzles`;
     `windows 8 outside for 8 inside` (6 portholes, 2 shoulder windows); `lights  5 floods, 2
