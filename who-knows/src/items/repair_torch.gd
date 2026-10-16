@@ -3,7 +3,8 @@ extends ItemUse
 
 ## The repair torch (docs/superpowers/specs/
 ## 2026-09-29-health-and-damage-design.md §8, and for ships
-## 2026-10-03-ship-damage-sections-design.md §6): hold `use` to weld what you
+## 2026-10-03-ship-damage-sections-design.md §6, and for a base's modules
+## 2026-10-11-ship-weapons-design.md §6.5): hold `use` to weld what you
 ## are aimed at within REACH. A hull section only from outside, SECTION_RATE of
 ## it a second, its pieces coming back as it rises; a component where it is,
 ## at RATE; and it brings a knocked-out droid round. It uses nothing up (owner,
@@ -11,7 +12,9 @@ extends ItemUse
 ## It works on a spacewalk (ItemDefinition.works_outside), where the hull is.
 ##
 ## It finds the ship from what it hits (meta &"ship" on the hull and the
-## interior) or, aimed through a hole, from Ship.GROUP.
+## interior) or, aimed through a hole, from Ship.GROUP. A base's module is
+## found the same way (meta &"base" on its exterior) and mended from outside,
+## at SECTION_RATE like a hull section.
 
 const REACH := 2.5
 const RATE := 25.0
@@ -90,6 +93,8 @@ func hold(item: Item, aim: Transform3D, _world: Node3D, holder: CollisionObject3
 
 ## Mends the section or component `t` is on: a section only from outside.
 func _mend_part(t: Dictionary, delta: float) -> bool:
+	if t.has("base"):
+		return (t["base"] as Base).repair_section(t["part"], SECTION_RATE * delta) > 0.0
 	var ship: Ship = t["ship"]
 	var part: StringName = t["part"]
 	if ship.damage.is_section(part):
@@ -109,8 +114,8 @@ func _mend_npc(npc: Npc, delta: float) -> bool:
 	npc.health.heal(hp)
 	return true
 
-## What the torch is aimed at: {kind, point, normal} and, by kind, for a `part`, the `ship`, the `part` (a section or a
-## component), its `cell` and whether it is `outside` (a hole is a piece of
+## What the torch is aimed at: {kind, point, normal} and, by kind, for a `part`, the `ship` (or the `base`), the `part` (a section or a
+## component, or a base's module), its `cell` and whether it is `outside` (a hole is a piece of
 ## its section, from outside); or the `npc`. Empty when it is aimed at nothing
 ## it can work on.
 func target(item: Item, aim: Transform3D, holder: CollisionObject3D) -> Dictionary:
@@ -139,6 +144,12 @@ func target(item: Item, aim: Transform3D, holder: CollisionObject3D) -> Dictiona
 				return {"kind": &"part", "ship": ship,
 					"part": on["part"], "cell": on["cell"], "outside": on["outside"],
 					"point": point, "normal": normal}
+		if collider != null and collider.has_meta(&"base"):
+			var base := collider.get_meta(&"base") as Base
+			var on := base.part_hit(collider, int(hit.get("shape", -1)), point, normal)
+			if not on.is_empty():
+				return {"kind": &"part", "base": base, "part": on["part"], "cell": on["cell"], "outside": true,
+					"point": point, "normal": normal}
 	# Nothing hit on the way, or not yet: a hole along the ray?
 	for node in item.get_tree().get_nodes_in_group(Ship.GROUP):
 		var ship := node as Ship
@@ -153,6 +164,8 @@ func aim_text(item: Item, aim: Transform3D, holder: CollisionObject3D) -> String
 	var t := target(item, aim, holder)
 	match t.get("kind", &""):
 		&"part":
+			if t.has("base"):
+				return (t["base"] as Base).part_label(t["part"])
 			var ship: Ship = t["ship"]
 			if ship.damage.is_section(t["part"]) and not t["outside"]:
 				return "HULL %d%% · WELD FROM OUTSIDE" % roundi(ship.hull_whole() * 100.0)
