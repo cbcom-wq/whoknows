@@ -124,7 +124,24 @@ var _boost: bool = false
 
 @onready var _hull: RigidBody3D = get_node(hull_path)
 
+## Someone at the weapons station (ship weapons spec §7.1): the stick and the
+## keys are centred and, with the assist on, the forward speed it had is
+## locked, so it keeps its course while drift and spin are damped. Off, the
+## helm flies it again.
+var gunner_hold := false:
+	set(on):
+		gunner_hold = on
+		if on:
+			_translate_input = Vector3.ZERO
+			_rotate_input = Vector3.ZERO
+			_boost = false
+			if assist_enabled and not speed_locked:
+				speed_locked = true
+				locked_speed = forward_speed() if _hull != null else 0.0
+
 func set_pilot_input(translate: Vector3, rotate: Vector3, boost: bool) -> void:
+	if gunner_hold:
+		return
 	_translate_input = translate
 	_rotate_input = rotate
 	_boost = boost

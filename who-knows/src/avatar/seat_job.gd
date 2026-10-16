@@ -10,3 +10,12 @@ func sat(_avatar: Avatar) -> void:
 
 func stood(_avatar: Avatar) -> void:
 	pass
+
+## The camera you see through while you sit here, or null for the seat's eye
+## (ship weapons spec §7.2: the heavy turret's gun camera).
+func view_camera() -> Camera3D:
+	return null
+
+## Whether the mouse is the job's while you sit here, not your head's.
+func takes_mouse() -> bool:
+	return false
