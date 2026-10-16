@@ -176,5 +176,5 @@ N·m against an imbalance under a full burn of (−138,352, −4,754, 0). Turnin
 rad/s² (pitch / yaw / roll); forward 11.9, brake and side 7.9, vertical 15.8 m/s². 72.0 MW made,
 40.5 drawn; 2,400 QE, 29,500 km of warp. Sections (hp / pieces): bow 930 / 2 and 1,030 / 2,
 midship 2,950 / 9 a side, stern 1,730 / 12 a side; the light turret 200; not crippled as built.
-Skin: 132 plates, 85 chamfers, 28 corners, 179 facets, 21 nozzles; 6 floods and 2 forward lights. No validator issue;
-no rule broken.
+Skin: 132 plates, 85 chamfers, 28 corners, 179 facets, 21 nozzles; 6 floods and 2 forward
+lights. No validator issue; no rule broken.

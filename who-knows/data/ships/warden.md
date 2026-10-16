@@ -130,8 +130,8 @@ command bridge in place of the pod, the silhouette, size and feel kept. The figu
 | Usable | helm with a view, airlock, walkable cabin, the droid's needs | one airlock, 51 walkable cells on one storey, closet dock, 31 jobs all reachable; 20 windows outside for 20 inside |
 | Frames | every probe `fps` ≥ 120 | worst **123** seated by a rock with both light groups (and with a second ship 300 m off) |
 
-**Turns.** Yaw is 0.02 under the first Warden's: the bridge row moved mass 2 m forward and yaw
-inertia grows with it. Pitch is 0.05 over: the bow's vertical rcs had to be rearranged (below), and
+**Turns.** Yaw is 0.04 under the first Warden's: the bridge row moved mass 2 m forward and yaw
+inertia grows with it. Pitch is 0.01 over: the bow's vertical rcs had to be rearranged (below), and
 the nearest arrangement with every exhaust open came out a little stronger, not weaker.
 
 ## Why the unusual blocks are where they are
@@ -232,9 +232,9 @@ turrets, none `TURRET_BLIND` and none `TURRET_BURIED`: no cell had to be moved.
   half, the two flank lights 0.2 t *under* the hull plates they replaced. 108.0 MW made and
   **97.9 MW drawn** (97.0 before: six lights at 0.1 and the heavy at 0.3; the station draws
   what the crew station did). That is **10.3% spare** (108.0 made against 97.9 drawn), about
-  0.3 MW above the 10% rule, so any further draw on the Warden trips `POWER_MARGIN`. Pitch
-  imbalance under burn went from 41,680 to 49,529 N·m of 22.7 MN·m of authority (0.22%); the
-  centre of mass moved 0.15 m forward.
+  0.3 MW above the 10% rule, so a further draw of more than about 0.3 MW trips
+  `POWER_MARGIN`. Pitch imbalance under burn went from 41,680 to 49,529 N·m of 22.7 MN·m of
+  authority (0.22%); the centre of mass moved 0.15 m forward.
 
 ## The numbers (`ShipStats`, the probe)
 
