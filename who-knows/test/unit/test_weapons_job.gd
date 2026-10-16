@@ -194,3 +194,10 @@ func test_taking_a_flipped_heavy_keeps_the_camera_upright():
 	assert_lt(cam_fwd.angle_to(t.barrel_dir()), deg_to_rad(1.0), "it looks where the barrels point")
 	var normal := t.global_basis * Vector3.UP
 	assert_gt(job.camera.global_basis.y.dot(normal), 0.0, "not rolled upside down")
+
+func test_the_sight_fills_the_screen_so_its_cross_is_at_the_middle():
+	await _sit()
+	var job := _station.job as WeaponsJob
+	await wait_process_frames(2)
+	assert_true(job.sight.visible)
+	assert_eq(job.sight.size, get_viewport().get_visible_rect().size, "a zero-size sight draws its cross in the corner")

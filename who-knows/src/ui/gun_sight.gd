@@ -15,7 +15,9 @@ var lead_point: Variant = null
 var status := ""
 
 func _ready() -> void:
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	# Anchors *and* offsets: set_anchors_preset alone keeps the control's zero
+	# size, and the cross -- drawn at the rect's centre -- lands in the corner.
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 func _process(_delta: float) -> void:
