@@ -225,11 +225,11 @@ is the blueprint's budgets, so the grid decides the feel:
 
 | Feel | Comes from | Starter shuttle |
 |---|---|---|
-| How fast a turn starts and stops | `torque_budget / inertia`, per axis | 1.49 / 0.71 / 1.85 rad/s² (pitch / yaw / roll) |
-| A clicked heading swinging on | the weaker of pitch and yaw above | 120° in 3.1 s on the flat starter; not re-measured on the reshaped one, a little slower |
-| Travel swinging onto the nose after a turn | `thrust_budget[&"lateral"]` (and `vertical`) / mass | side 4.8 m/s², vertical 9.6: 100 m/s sideways takes about 21 s |
-| Braking; a speed lock slowing down | `reverse` / mass | 4.8 m/s² |
-| Accelerating; a speed lock catching up | `forward` / mass | 14.3 m/s² |
+| How fast a turn starts and stops | `torque_budget / inertia`, per axis | 1.48 / 0.71 / 1.84 rad/s² (pitch / yaw / roll) |
+| A clicked heading swinging on | the weaker of pitch and yaw above | 120° in 3.1 s on the flat starter; not re-measured on the reshaped or armed one, a little slower; yaw, the weaker axis, is 0.71 either way |
+| Travel swinging onto the nose after a turn | `thrust_budget[&"lateral"]` (and `vertical`) / mass | side 4.7 m/s², vertical 9.5: 100 m/s sideways takes about 21 s |
+| Braking; a speed lock slowing down | `reverse` / mass | 4.7 m/s² |
+| Accelerating; a speed lock catching up | `forward` / mass | 14.2 m/s² |
 | Thrusters the player sees | each `rcs` block's exhaust face open and in view | 6 of 8 blocked (only the pitch-down pair shows); none in the pilot's view |
 | Warp reach on a full store | `(quantum_capacity − WarpPlan.WARP_BASE) × WarpPlan.WARP_M_PER_QE / 1000` km | 14,500 km on 1,200 QE (7,000 km on its starting 600) |
 

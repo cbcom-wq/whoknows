@@ -119,9 +119,9 @@ command bridge in place of the pod, the silhouette, size and feel kept. The figu
 | A command bridge | the helm forward at the glass, crew stations either side, the captain's chair on its dais behind, a band of glass across the bow and down the sides | helm at (0, 0, −5); stations at (±2, 0, −5) and (2, 0, −3); captain's chair at (0, 0, −3); 5 panes across the bow and 3 down each flank; every seat sat in and stood up from |
 | Keep the size | the first Warden's 296 blocks, 260.4 t, 36 × 18 × 10 m | 311 blocks, 262.0 t, 36 × 18 × 10 m (one row longer inside, no longer outside) |
 | Keep the feel | turns 1.08 / 0.61 / 1.39, forward 21.9 | turns **1.13 / 0.59 / 1.40** rad/s² (pitch / yaw / roll); forward **21.8** m/s² |
-| Pretty fast | forward well above the starter's 14.3: 18–22 m/s² | 21.8 m/s² (19 thrusters, 5,700 kN) |
-| Not as nimble as a fighter, never sluggish | every turn at or under the starter's 1.49 / 0.71 / 1.85, none under 0.5 | 1.13 / 0.59 / 1.40 |
-| Steady on a patrol line | side ≥ 5 m/s² (the starter's 4.8 slides) | side **7.6**, vertical 13.4; 100 m/s sideways gone in 13 s |
+| Pretty fast | forward well above the starter's 14.2: 18–22 m/s² | 21.8 m/s² (19 thrusters, 5,700 kN) |
+| Not as nimble as a fighter, never sluggish | every turn at or under the starter's 1.48 / 0.71 / 1.84, none under 0.5 | 1.13 / 0.59 / 1.40 |
+| Steady on a patrol line | side ≥ 5 m/s² (the starter's 4.7 slides) | side **7.6**, vertical 13.4; 100 m/s sideways gone in 13 s |
 | Stops like a warship | brake ≥ 5 | **5.7** m/s² (6 retros) |
 | Patrols the system | warp above the starter's 14,500 km | **19,500 km** on a full store (4 cells, 1,600 QE) |
 | Power with margin | made > drawn × 1.1 | 108.0 MW made, 97.0 drawn (11.3% spare) |

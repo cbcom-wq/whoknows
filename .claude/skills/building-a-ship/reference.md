@@ -112,13 +112,13 @@ issues.
     (147,020, −5,676, 0): pitch **4.77%**, yaw 0.28%, roll 0% of authority (the rule is 5%);
   - 36.0 MW made (all from the quantum core), 31.5 MW drawn, 1200 QE, zero validator issues.
 - **The starter's feel:**
-  - turn acceleration 1.49 / 0.71 / 1.85 rad/s² (pitch, yaw, roll);
-  - forward 14.3, brake 4.8, side 4.8 and vertical 9.6 m/s². 100 m/s sideways gone in 21 s;
+  - turn acceleration 1.48 / 0.71 / 1.84 rad/s² (pitch, yaw, roll);
+  - forward 14.2, brake 4.7, side 4.7 and vertical 9.5 m/s². 100 m/s sideways gone in 21 s;
   - `rcs` exhaust BLOCKED on 6 of 8, as it was before the reshape.
 - **Before the reshape** (84 blocks): 96,900 kg, centre of mass (0.004, 1.207, 0.124), pitch
   imbalance 0.36%, feel 1.60 / 0.74 / 2.05 rad/s², 15.5 / 5.2 / 5.2 / 10.3 m/s². This file and
   `SKILL.md` had carried older figures still (1.74 / 0.79, 5.4, 16.3); they were stale. The
-  reshape's 26 fairings add 7.8 t and no power. 6.0 t of it is above the cabin and 1.8 t below,
+  reshape's 26 fairings added 7.8 t and no power (two of them became turrets later: 24 fairings, 7.2 t). 6.0 t of it is above the cabin and 1.8 t below,
   which lifted the centre of mass 9 cm.
 - **Handling (flight controls, 2026-09-25):**
   - arrow keys give a steady 60°/s;
@@ -421,13 +421,14 @@ pieces, all under `src/ship/` unless stated:
   `OUTSIDE_GLOW_INTENSITY` 0.6, `OUTSIDE_GLOW_BLOOM` 0.05, blend `OUTSIDE_GLOW_BLEND` (Screen).
   The interior camera keeps `ship_interior.tres`.
 - **The starter's exterior** (Godot's figures, 2026-09-29):
-  - **blocks:** 84 and 26 fairings: a spine of `fairing_half` at y = 2, x −1..1, z −1..2 (12), a
+  - **blocks:** 84, and 26 fairings as first built (two of the `fairing_half` cells at (0, 2, 0) and
+    (0, −1, 0) are `turret_light` now, ship weapons spec §13): a spine of `fairing_half` at y = 2, x −1..1, z −1..2 (12), a
     `fairing_slope_long_low` ramp forward at z = −2 (`O_FORWARD`) and aft at z = 3 (`O_STERN`),
     three cells each; a `fairing_slope` fin on each engine pod at (±3, 1, 1); a keel of
     `fairing_half` `O_KEEL` at x = 0, y = −1, z −3..2 (6);
-  - **totals:** 110 blocks, 104,700 kg, centre of mass (0.004, 1.301, 0.160), inertia
+  - **totals:** 110 blocks, 105,700 kg, centre of mass (0.004, 1.298, 0.159), inertia
     (2,075,310, 2,866,196, 1,185,178); budgets and imbalance under *Flight balance*, pitch at
-    4.91% of 5%; feel 1.49 / 0.71 / 1.85 rad/s², forward 14.3, brake and side 4.8, vertical 9.6 m/s²;
+    4.77% of 5%; feel 1.48 / 0.71 / 1.84 rad/s², forward 14.2, brake and side 4.7, vertical 9.5 m/s²;
   - **the probe's lines:** `skin    110 plates, 78 chamfers, 18 corners, 140 facets, 9 nozzles`;
     `windows 8 outside for 8 inside` (6 portholes, 2 shoulder windows); `lights  5 floods, 2
     forward`; `tint    88 cells in 5 meshes` (the other 22 cells are all inside, or the alcove);
