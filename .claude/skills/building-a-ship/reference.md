@@ -815,7 +815,8 @@ by a rock with both** (the starter 130), 208 and 221 in the chase views, 122 wit
   nearest npc), renders `probe_seat_<cell>.png` (and `_left` at a seat that does not fly) and
   `probe_bridge_from_dais.png`. At a weapons station with a heavy turret the seat render is the gun
   camera, and `probe_seat_<cell>_board.png` is the board from the seat's eye (the job is
-  released and the eye looks down at the console).
+  released, its sight hidden, and the eye looks down at the console); at that station the
+  `_left` render is then the console seen from its side, not the gun camera.
 
 ## Saving (`docs/superpowers/specs/2026-09-26-saving-design.md`)
 

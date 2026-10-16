@@ -67,19 +67,19 @@ them.
 | Target | Wanted | Reached |
 |---|---|---|
 | Blocks | ≤ 160 | 131 |
-| Mass | 120–150 t | 125.7 t |
-| Power | made ≥ 1.25 × drawn | 72.0 MW made, 40.4 drawn (1.78 ×) |
+| Mass | 120–150 t | 126.2 t |
+| Power | made ≥ 1.25 × drawn | 72.0 MW made, 40.5 drawn (1.78 ×) |
 | Warp | ≥ 29,000 km | 29,500 km on 2,400 QE |
 | Pitch | ≥ 1.0 rad/s² | 1.94 |
 | Yaw | ≥ 0.5 rad/s² | 0.64 |
 | Roll | ≥ 2.0 rad/s² | 2.70 |
-| Side | ≥ 5 m/s² | 8.0 (100 m/s sideways gone in 13 s) |
-| Vertical | ≥ 8 m/s² | 15.9 |
-| Brake | ≥ 4 m/s² | 8.0 |
+| Side | ≥ 5 m/s² | 7.9 (100 m/s sideways gone in 13 s) |
+| Vertical | ≥ 8 m/s² | 15.8 |
+| Brake | ≥ 4 m/s² | 7.9 |
 | Forward | 9–12 m/s² | 11.9 |
 | Rooms | ≥ 6 | 6 (two bunk rooms, galley, bathroom, closet, weapon room) |
 | Windows | ≥ 8 portholes, all matched | 16 outside for 16 inside (10 portholes, 6 shoulder windows) |
-| Balance | < 5% each axis | pitch 2.59%, yaw 0.14%, roll 0% |
+| Balance | < 5% each axis | pitch 2.31%, yaw 0.14%, roll 0% |
 | Rules | 0 broken | 0 broken, no `RCS_BLOCKED` note (all 16 rcs puff in the open) |
 | Droid | every job | dock in the closet, 19 jobs, none unreachable |
 | fps | ≥ 120 | 127 seated by a rock with both light groups (126 with a second ship 300 m off) |
@@ -100,7 +100,7 @@ them.
 - **The starboard wingtip:** the quantum machine (`Qm8`, facing −x, toward the bridge) and the
   starboard quantum core (`Qk8`). Machine 0.5 t against the table's 0.3 t: the yaw imbalance is
   0.14% of authority.
-- **Two quantum cores.** One core's 36 MW would not cover the 40.4 MW this ship draws; they sit
+- **Two quantum cores.** One core's 36 MW would not cover the 40.5 MW this ship draws; they sit
   mirrored at the wingtips, 8 m out, so they cost no balance, and each has a porthole beside it.
 - **The airlock** is on the crossbar's trailing edge at (−3, 0, −2), not at the stern: hull on
   either side of it, its outer hatch faces aft onto space along the body, and its inner hatch
@@ -123,7 +123,7 @@ them.
   **grav plating** at (±1, 1, 1); hull fill.
 - **Three main engines** at (−1..1, 1, 3) over the two at y = 0: five in all, 1,500 kN. Three
   high and two low put the thrust line at 1.2 m against a centre of mass at 1.10 m: a full burn
-  pitches it with 155,600 N·m, 2.59% of its 6.0 MN·m authority.
+  pitches it with 138,352 N·m, 2.31% of its 6.0 MN·m authority.
 - **Sloped shoulders:** the outer columns x = ±2, z −2..2, are `fairing_slope` facing outward
   (`Fs8` to port, `Fs12` to starboard), low on the outside, so the body's top edges run as one
   chamfer instead of a box. Each is outside the cabin's shell, so they are the midship and stern
@@ -158,14 +158,15 @@ any side the bow reads as a flat hammer in front of a taller body.
 
 One `turret_light` on the spine at (0, 2, 0), dorsal (orientation 0), in the place of the spine's
 middle fairing half. The `TURRETS` note reads 1 turret, sky clear 100%; no `TURRET_BLIND`, no
-`TURRET_BURIED`, so it stayed where it was put. The ship has no weapons station and no heavy turret: the one light turret is the ship's whole
-armament, as the starter's two are, for a surveyor meant to look after itself, not to hunt. It
-stands on the spine, the ship's highest line, so the upper half-sky is clear of the hull; the
-check does not read the lower half, and nothing was mounted underneath.
+`TURRET_BURIED`, so it stayed where it was put. The ship has no weapons station and no heavy
+turret: the one light turret is the ship's whole armament, as the starter's two are, for a
+surveyor meant to look after itself, not to hunt. It stands on the spine, the ship's highest
+line, so the upper half-sky is clear of the hull; the check does not read the lower half, and
+nothing was mounted underneath.
 
 Mass **126.2 t** (125.7 before: a turret is 0.5 t over the fairing half it replaced) and **40.5 MW
 drawn** (40.4) of the 72.0 MW made. Pitch imbalance under burn *fell* from 155,609 to 138,352 N·m
-of 6.0 MN·m of authority (2.3%).
+of 6.0 MN·m of authority (2.31%).
 
 ## The numbers (`ShipStats`, the probe)
 
@@ -174,6 +175,6 @@ lateral / vertical 1500 / 1000 / 1000 / 2000 kN; authority (6,000,000, 3,500,000
 N·m against an imbalance under a full burn of (−138,352, −4,754, 0). Turning 1.94 / 0.64 / 2.70
 rad/s² (pitch / yaw / roll); forward 11.9, brake and side 7.9, vertical 15.8 m/s². 72.0 MW made,
 40.5 drawn; 2,400 QE, 29,500 km of warp. Sections (hp / pieces): bow 930 / 2 and 1,030 / 2,
-midship 2,970 / 10 a side, stern 1,730 / 12 a side; not crippled as built. Skin: 127 plates, 77
-chamfers, 24 corners, 188 facets, 21 nozzles; 6 floods and 2 forward lights. No validator issue;
+midship 2,950 / 9 a side, stern 1,730 / 12 a side; the light turret 200; not crippled as built.
+Skin: 132 plates, 85 chamfers, 28 corners, 179 facets, 21 nozzles; 6 floods and 2 forward lights. No validator issue;
 no rule broken.

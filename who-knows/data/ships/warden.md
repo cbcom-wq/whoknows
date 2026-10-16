@@ -1,6 +1,6 @@
 # Warden patrol frigate (`warden.json`)
 
-A military patrol ship for the system: 311 blocks, 262.0 t, 36 m from the sensor head to the
+A military patrol ship for the system: 311 blocks, 265.3 t, 36 m from the sensor head to the
 nozzles, 18 m across the engine block, 10 m from keel to superstructure. A long, flat bow runs out
 ahead of a command bridge and tapers to a sensor head; the cabin sits over the spine with a
 stepped superstructure rising toward the stern; the stern is one heavy block of nineteen engine
@@ -117,15 +117,15 @@ command bridge in place of the pod, the silhouette, size and feel kept. The figu
 | Target | Meant | Reached |
 |---|---|---|
 | A command bridge | the helm forward at the glass, crew stations either side, the captain's chair on its dais behind, a band of glass across the bow and down the sides | helm at (0, 0, −5); stations at (±2, 0, −5), the weapons station at (2, 0, −3); captain's chair at (0, 0, −3); 5 panes across the bow and 3 down each flank; every seat sat in and stood up from |
-| Keep the size | the first Warden's 296 blocks, 260.4 t, 36 × 18 × 10 m | 311 blocks, 262.0 t, 36 × 18 × 10 m (one row longer inside, no longer outside) |
-| Keep the feel | turns 1.08 / 0.61 / 1.39, forward 21.9 | turns **1.13 / 0.59 / 1.40** rad/s² (pitch / yaw / roll); forward **21.8** m/s² |
-| Pretty fast | forward well above the starter's 14.2: 18–22 m/s² | 21.8 m/s² (19 thrusters, 5,700 kN) |
-| Not as nimble as a fighter, never sluggish | every turn at or under the starter's 1.48 / 0.71 / 1.84, none under 0.5 | 1.13 / 0.59 / 1.40 |
-| Steady on a patrol line | side ≥ 5 m/s² (the starter's 4.7 slides) | side **7.6**, vertical 13.4; 100 m/s sideways gone in 13 s |
+| Keep the size | the first Warden's 296 blocks, 260.4 t, 36 × 18 × 10 m | 311 blocks, 265.3 t, 36 × 18 × 10 m (one row longer inside, no longer outside) |
+| Keep the feel | turns 1.08 / 0.61 / 1.39, forward 21.9 | turns **1.09 / 0.57 / 1.40** rad/s² (pitch / yaw / roll); forward **21.5** m/s² |
+| Pretty fast | forward well above the starter's 14.2: 18–22 m/s² | 21.5 m/s² (19 thrusters, 5,700 kN) |
+| Not as nimble as a fighter, never sluggish | every turn at or under the starter's 1.48 / 0.71 / 1.84, none under 0.5 | 1.09 / 0.57 / 1.40 |
+| Steady on a patrol line | side ≥ 5 m/s² (the starter's 4.7 slides) | side **7.5**, vertical 13.2; 100 m/s sideways gone in 13 s |
 | Stops like a warship | brake ≥ 5 | **5.7** m/s² (6 retros) |
 | Patrols the system | warp above the starter's 14,500 km | **19,500 km** on a full store (4 cells, 1,600 QE) |
-| Power with margin | made > drawn × 1.1 | 108.0 MW made, 97.0 drawn (11.3% spare) |
-| Balanced under burn | under 5% of authority | pitch 0.18%, yaw 0.03%, roll 0% |
+| Power with margin | made > drawn × 1.1 | 108.0 MW made, 97.9 drawn (10.3% spare) |
+| Balanced under burn | under 5% of authority | pitch 0.22%, yaw 0.03%, roll 0% |
 | Military | armour, an armoury, a crew berth | 6 armour blocks on the cabin's flanks, a four-cell weapon room, a four-cell bunk room |
 | Usable | helm with a view, airlock, walkable cabin, the droid's needs | one airlock, 51 walkable cells on one storey, closet dock, 31 jobs all reachable; 20 windows outside for 20 inside |
 | Frames | every probe `fps` ≥ 120 | worst **123** seated by a rock with both light groups (and with a second ship 300 m off) |
@@ -199,7 +199,7 @@ the nearest arrangement with every exhaust open came out a little stronger, not 
   posts, firing forward past the bridge's flanks; a pair below the side glass (y = −1, z = −4);
   and one at the front of each engine pod (z = 2). The old pair at y = 0, z = −4 is side glass now.
 - **The engine block.** 9 thrusters across y = 0, 7 across y = −1 (x −2..2 and the pods' ±4) and 3
-  on the tower's stern (y = 1): 19 bells. A full burn pitches the ship with 41,680 N·m, 0.18% of
+  on the tower's stern (y = 1): 19 bells. A full burn pitches the ship with 49,529 N·m, 0.22% of
   its authority.
 
 ## Weapons (ship weapons spec §13)
@@ -231,21 +231,23 @@ turrets, none `TURRET_BLIND` and none `TURRET_BURIED`: no cell had to be moved.
   ventral lights are 0.5 t over the fairing halves they replaced, the heavy one 1.7 t over its
   half, the two flank lights 0.2 t *under* the hull plates they replaced. 108.0 MW made and
   **97.9 MW drawn** (97.0 before: six lights at 0.1 and the heavy at 0.3; the station draws
-  what the crew station did), well inside the 10% margin. Pitch imbalance under burn went from
-  41,680 to 49,529 N·m of 22.7 MN·m of authority (0.22%); the centre of mass moved 0.15 m
-  forward.
+  what the crew station did). That is **10.3% spare** (108.0 made against 97.9 drawn), about
+  0.3 MW above the 10% rule, so any further draw on the Warden trips `POWER_MARGIN`. Pitch
+  imbalance under burn went from 41,680 to 49,529 N·m of 22.7 MN·m of authority (0.22%); the
+  centre of mass moved 0.15 m forward.
 
 ## The numbers (`ShipStats`, the probe)
 
 311 blocks (6 armour, 19 thrusters, 28 rcs, 3 quantum cores, 4 cells, 11 canopies, 122 fairings,
-6 light turrets and a heavy one; the helm, a captain's chair, 2 crew stations and a weapons station,
-the computer), 265,300 kg, centre of mass (−0.001, −0.412, 0.253). Thrust forward / reverse / lateral / vertical 5,700 / 1,500 / 2,000 /
-3,500 kN; authority (22,689,972, 14,000,000, 7,294,007) N·m against an imbalance under burn of
-(49,529, 4,295, 0). 108.0 MW made, 97.9 drawn; 1,600 QE. Sections (hp / pieces): bow 1,300 / 13 a
-side, midship 5,470–5,530 / 19, stern 8,060–8,100 / 24–26; engines 2,850, quantum cores 750,
-computer 300, cockpit (the helm and the 11 canopies) 720; not crippled. Skin 194 plates, 146
-chamfers, 56 corners, 559 facets, 47 nozzles; 20 windows outside for 20 inside; 7 floods and one
-forward light (on the sensor head). Seats: 5 (the helm, 2 crew stations, the weapons station, the captain's chair), each sat
-in and stood up from. Probe fps (GTX 960, 1280 × 720): 275 standing, 136 seated, 132 with both
-light groups, 122 by a rock, 203 and 223 in the chase views, 122 with a second ship 300 m off. No
-validator issues; no rule broken.
+6 light turrets and a heavy one; the helm, a captain's chair, 2 crew stations and a weapons
+station, the computer), 265,300 kg, centre of mass (−0.001, −0.412, 0.253). Thrust forward /
+reverse / lateral / vertical 5,700 / 1,500 / 2,000 / 3,500 kN; authority (22,689,972,
+14,000,000, 7,294,007) N·m against an imbalance under burn of (49,529, 4,295, 0). 108.0 MW made,
+97.9 drawn; 1,600 QE. Sections (hp / pieces): bow 1,280 / 11 a side, midship 5,430–5,490 / 18,
+stern 7,820–7,860 / 22–24; engines 2,850, quantum cores 750, computer 300, cockpit (the helm and
+the 11 canopies) 720, light turrets 200 each, the heavy one 400; not crippled. Skin 219 plates,
+186 chamfers, 76 corners, 521 facets, 47 nozzles; 20 windows outside for 20 inside; 7 floods and
+one forward light (on the sensor head). Seats: 5 (the helm, 2 crew stations, the weapons
+station, the captain's chair), each sat in and stood up from. Probe fps (GTX 960, 1280 × 720):
+275 standing, 136 seated, 132 with both light groups, 122 by a rock, 203 and 223 in the chase
+views, 122 with a second ship 300 m off. No validator issues; no rule broken.

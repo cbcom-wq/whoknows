@@ -299,6 +299,7 @@ func _seat_pass(scene: Node, ship: Ship, director: CameraDirector, avatar: Avata
 		# rendered too (with no heavy turret the view above is the board).
 		if s is WeaponsStation and (s.job as WeaponsJob).view_camera() != null:
 			(s.job as WeaponsJob).active = false
+			(s.job as WeaponsJob).sight.visible = false
 			director.refresh_view()
 			director.look(Vector2(0, 500))
 			await _process_frames(5)
