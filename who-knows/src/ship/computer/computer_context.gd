@@ -16,6 +16,9 @@ var warp: WarpDrive
 ## The ship's damage, for the status page and the table's own state (ship
 ## damage sections spec §7); null in tests.
 var damage: ShipDamage
+## The ship's fire control, for the WEAPONS page (ship weapons spec §7.4); null
+## in tests.
+var fire_control: FireControl
 ## Whoever last pressed one of the table's buttons.
 var operator: Node
 var time := 0.0

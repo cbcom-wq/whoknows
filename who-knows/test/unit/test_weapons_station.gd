@@ -46,3 +46,21 @@ func test_a_ship_builds_a_weapons_station_seat():
 	if stations.size() == 1:
 		assert_eq((stations[0] as WeaponsStation).prompt_text(), "Man the weapons")
 		assert_not_null((stations[0] as WeaponsStation).board)
+func test_the_board_reads_the_ships_fire_control():
+	var root: Node = load("res://scenes/flight_test.tscn").instantiate()
+	root.starter_ship = "res://test/fixtures/bridge/bridge.json"
+	add_child_autofree(root)
+	var ship: Ship = root.get_node("Ship")
+	ship.launch_blueprint = null
+	ship.set_grid(_bridge_grid())
+	var stations := ship.seats().filter(func(s: Seat) -> bool: return s is WeaponsStation)
+	assert_eq(stations.size(), 1)
+	if stations.size() != 1:
+		return
+	var station := stations[0] as WeaponsStation
+	assert_eq((station.job as WeaponsJob).fire_control, ship.fire_control)
+	station._process(0.016)
+	# The bridge fixture has no turrets, so the board says so; with the starter's
+	# turrets it would show the orders.
+	assert_eq(station.board.text, "NO WEAPONS")
+	assert_lte(station.board.width * station.board.pixel_size, WeaponsStation.SCREEN_SIZE.x)
