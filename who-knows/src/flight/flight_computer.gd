@@ -127,9 +127,12 @@ var _boost: bool = false
 ## Someone at the weapons station (ship weapons spec §7.1): the stick and the
 ## keys are centred and, with the assist on, the forward speed it had is
 ## locked, so it keeps its course while drift and spin are damped. Off, the
-## helm flies it again.
+## helm flies it again. Letting go unlocks the speed only if the hold locked it:
+## a lock the pilot had before is theirs.
 var gunner_hold := false:
 	set(on):
+		if on == gunner_hold:
+			return
 		gunner_hold = on
 		if on:
 			_translate_input = Vector3.ZERO
@@ -138,6 +141,13 @@ var gunner_hold := false:
 			if assist_enabled and not speed_locked:
 				speed_locked = true
 				locked_speed = forward_speed() if _hull != null else 0.0
+				_hold_locked = true
+		elif _hold_locked:
+			_hold_locked = false
+			speed_locked = false
+
+## The speed lock was set by the hold, so the hold clears it.
+var _hold_locked := false
 
 func set_pilot_input(translate: Vector3, rotate: Vector3, boost: bool) -> void:
 	if gunner_hold:
@@ -154,6 +164,7 @@ func clear_pilot_input() -> void:
 
 ## Locks the hull's forward speed as it is now, or unlocks. Needs assist.
 func toggle_speed_lock() -> void:
+	_hold_locked = false   # a lock chosen by hand is the pilot's
 	if speed_locked:
 		speed_locked = false
 	elif assist_enabled:

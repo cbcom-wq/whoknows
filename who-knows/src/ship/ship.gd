@@ -882,6 +882,14 @@ func _place_seat() -> void:
 		s.get_parent().remove_child(s)
 		s.queue_free()
 	_crew_seats = placed
+	for s in placed:
+		if s is WeaponsStation and s.job == null:
+			var job := WeaponsJob.new()
+			job.name = "WeaponsJob"
+			job.ship = self
+			job.fire_control = fire_control
+			s.job = job
+			s.add_child(job)
 
 ## Every seat aboard, the one that flies first.
 func seats() -> Array[Seat]:

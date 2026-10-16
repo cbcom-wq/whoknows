@@ -207,3 +207,10 @@ func test_by_hand_the_trigger_fires_where_it_points():
 	assert_eq(_store.amount, 1000 - 15)
 	assert_false(t.pull_trigger(), "recharging")
 	assert_gt(t.recharge_left(), 2.5)
+
+func test_by_hand_it_reaches_further():
+	var t := _turret(WeaponValues.HEAVY)
+	var s := {"time": 2000.0 / float(WeaponValues.spec(WeaponValues.HEAVY)["speed"])}
+	assert_false(t._reaches(s), "automatic, 2 km is past its 1.5 km")
+	t.manual = true
+	assert_true(t._reaches(s), "manned, it reaches 3 km")

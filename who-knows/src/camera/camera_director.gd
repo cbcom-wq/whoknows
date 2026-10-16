@@ -361,7 +361,11 @@ func cycle_view() -> void:
 func _job_camera() -> Camera3D:
 	if not is_seated or _seat == null or _seat.job == null or _tween != null:
 		return null
-	return _seat.job.view_camera()
+	var cam := _seat.job.view_camera()
+	# A freed or detached camera is no view: the seat's eye, never no camera.
+	if cam == null or not is_instance_valid(cam) or not cam.is_inside_tree():
+		return null
+	return cam
 
 ## A job changed its camera (another turret): see through the new one.
 func refresh_view() -> void:

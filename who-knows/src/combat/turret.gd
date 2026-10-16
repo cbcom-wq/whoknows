@@ -194,7 +194,7 @@ func _solve(node: Node3D) -> Dictionary:
 		Weapons.velocity_of(node))
 
 func _reaches(s: Dictionary) -> bool:
-	return float(s["time"]) * float(_spec["speed"]) <= float(_spec["range"])
+	return float(s["time"]) * float(_spec["speed"]) <= float(_spec["manned_range"] if manual else _spec["range"])
 
 func _sky_clear(dir: Vector3) -> bool:
 	return sky == null or hull == null or sky.can_bear(hull.global_basis.inverse() * dir)

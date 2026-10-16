@@ -38,3 +38,28 @@ func test_a_job_with_a_camera_is_seen_through():
 	_director.stand()
 	await wait_for_signal(_director.transition_finished, 3)
 	assert_true(_director.camera().current, "standing, your own eyes again")
+
+func test_a_detached_job_camera_falls_back_to_the_seats_eye():
+	var station := _ship.seat_at(Vector3i(2, 0, -4))
+	var job := CameraJob.new()
+	station.job = job
+	station.add_child(job)
+	_director.sit(station)
+	await wait_for_signal(_director.transition_finished, 3)
+	assert_null(_director._job_camera(), "the cam is in no tree: the seat's eye")
+	assert_true(_director.camera().current)
+	job.cam.free()
+
+func test_a_freed_job_camera_falls_back_to_the_seats_eye():
+	var station := _ship.seat_at(Vector3i(2, 0, -4))
+	var job := CameraJob.new()
+	station.job = job
+	station.add_child(job)
+	_ship.exterior.add_child(job.cam)
+	_director.sit(station)
+	await wait_for_signal(_director.transition_finished, 3)
+	assert_true(job.cam.current)
+	job.cam.free()
+	assert_null(_director._job_camera(), "a freed camera is no camera")
+	_director.refresh_view()
+	assert_true(_director.camera().current, "never no current camera")

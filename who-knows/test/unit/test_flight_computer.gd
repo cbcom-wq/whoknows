@@ -415,3 +415,22 @@ func test_a_gunner_holds_the_ship():
 	_fc.set_pilot_input(Vector3(1, 0, 0), Vector3.ZERO, false)
 	await wait_physics_frames(2)
 	assert_gt(_fc.commanded_force_local.x, 0.0, "let go, the helm flies it again")
+
+func test_a_hold_unlocks_only_the_lock_it_set():
+	_hull.gravity_scale = 0.0
+	_hull.linear_velocity = Vector3(0, 0, -30)
+	assert_false(_fc.speed_locked)
+	_fc.gunner_hold = true
+	assert_true(_fc.speed_locked, "the hold locked the speed")
+	_fc.gunner_hold = false
+	assert_false(_fc.speed_locked, "and lets it go with the hold")
+
+func test_a_hold_keeps_a_lock_the_pilot_had():
+	_hull.gravity_scale = 0.0
+	_hull.linear_velocity = Vector3(0, 0, -30)
+	_fc.toggle_speed_lock()
+	assert_true(_fc.speed_locked)
+	_fc.gunner_hold = true
+	_fc.gunner_hold = false
+	assert_true(_fc.speed_locked, "the pilot's own lock outlasts the hold")
+	assert_almost_eq(_fc.locked_speed, 30.0, 0.5)
