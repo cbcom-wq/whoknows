@@ -48,6 +48,40 @@ func test_t_marks_the_ship_ahead_and_b_engages():
 	_key(&"weapons_clear")
 	assert_eq(_ship.fire_control.list.size(), 0)
 
+func _key_event(code: Key, shift: bool) -> InputEventKey:
+	var e := InputEventKey.new()
+	e.physical_keycode = code
+	e.keycode = code
+	e.pressed = true
+	e.shift_pressed = shift
+	return e
+
+func test_the_real_t_key_marks_and_shift_t_clears():
+	var other := _arm_and_spawn()
+	await wait_physics_frames(3)
+	_ship.pilot.seated = true
+	_ship.pilot.handle(_key_event(KEY_T, false))
+	assert_eq(_ship.fire_control.list, [Weapons.ship_id(other)] as Array[StringName], "T marks and does not clear")
+	_ship.pilot.handle(_key_event(KEY_T, true))
+	assert_eq(_ship.fire_control.list.size(), 0, "Shift+T clears and does not mark")
+
+func test_boarding_another_ship_rebinds_the_brackets_and_the_strip_follows():
+	_arm_and_spawn()
+	var grid := ShipLibrary.read("res://data/ships/starter.json")["grid"] as ShipGrid
+	var top := BlockInstance.new()
+	top.block_id = WeaponValues.LIGHT
+	grid.set_block(Vector3i(0, 2, 0), top)
+	var place := Transform3D(_ship.exterior.global_basis, _ship.exterior.global_position + Vector3(300.0, 0.0, 0.0))
+	var armed: Ship = _root.fleet.spawn(grid, place)
+	await wait_physics_frames(3)
+	_root.board_at_helm(armed)
+	assert_eq(_root.target_brackets.size(), 3, "one per view")
+	for b: TargetBrackets in _root.target_brackets:
+		assert_same(b.fire_control, armed.fire_control)
+	await wait_process_frames(3)
+	assert_false(armed.fire_control.turrets.is_empty(), "the spawned ship is armed")
+	assert_true(_root.weapons_strip.visible, "the strip shows at an armed ship's helm")
+
 func test_the_turret_fires_on_a_marked_ship():
 	var other := _arm_and_spawn()
 	await wait_physics_frames(3)

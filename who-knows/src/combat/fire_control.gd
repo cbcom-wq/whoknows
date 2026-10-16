@@ -124,7 +124,8 @@ func assign(elapsed: float) -> void:
 		t.target = null if orders == Orders.HOLD else _pick(t, listed, tree)
 		t.no_arc = orders == Orders.ENGAGE and not listed.is_empty() and t.target == null
 	for e in entries:
-		e["bearing"] = e["node"] != null and _anyone_can(e["node"])
+		var raw = e["node"]
+		e["bearing"] = raw != null and is_instance_valid(raw) and _anyone_can(raw as Node3D)
 
 func bearing(id: StringName) -> bool:
 	for e in entries:

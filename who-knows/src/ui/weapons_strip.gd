@@ -12,6 +12,8 @@ var _label: Label
 var _pips: Array[Color] = []
 
 func _ready() -> void:
+	if _label != null:
+		return
 	custom_minimum_size = Vector2(150.0, 64.0)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_label = Label.new()
