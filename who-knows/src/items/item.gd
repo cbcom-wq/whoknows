@@ -53,6 +53,8 @@ var stow_point: StowPoint = null
 var use_node: ItemUse = null
 ## Out in the world rather than aboard (set_space).
 var in_space := false
+## What fire has done to it so far, hp (receive_hit).
+var damage_taken := 0.0
 
 var _shape: BoxShape3D
 var _variety := 0.0
@@ -108,6 +110,8 @@ func to_dict(frame: Transform3D) -> Dictionary:
 		var saved := use_node.save()
 		if not saved.is_empty():
 			d["use"] = saved
+	if damage_taken > 0.0:
+		d["hurt"] = damage_taken
 	return d
 
 ## A new item of the saved kind, set up but not yet placed, or null if the
@@ -119,6 +123,7 @@ static func from_dict(d: Dictionary, catalog: ItemCatalog) -> Item:
 		return null
 	var item := Item.new()
 	item.setup(def, float(d.get("variety", 0.0)))
+	item.damage_taken = float(d.get("hurt", 0.0))
 	if item.use_node != null and d.get("use") is Dictionary:
 		item.use_node.restore(d["use"])
 	return item
@@ -177,6 +182,25 @@ func set_held() -> void:
 	collision_layer = 0
 	collision_mask = 0
 
+## A bolt or a bite (ship weapons spec §6.6): a loose item takes it, and at its
+## hp it bursts and is gone through consume(), so the salvage ledger strikes it
+## off and the strays forget it. Stowed and held items, tools and packages
+## never break. It is freed at the end of the frame, not at once: an object
+## cannot free itself from inside its own method (the engine refuses a locked
+## object), so consume() takes it out of the tree and `consumed` fires now.
+func receive_hit(hit: Hit) -> void:
+	if hit == null or hit.damage <= 0.0 or not breaks() or state != State.LOOSE 			or is_queued_for_deletion():
+		return
+	damage_taken += hit.damage
+	if damage_taken >= definition.hp:
+		var parent := get_parent()
+		if parent != null:
+			ImpactFlash.spawn(parent, global_position, Vector3.UP, ImpactFlash.Kind.IMPACT, in_space, 2.5)
+		Item.consume(self, true)
+
+func breaks() -> bool:
+	return definition != null and not definition.unbreakable and not definition.eva_tool
+
 func prompt_text() -> String:
 	if definition.mass_kg > LIFT_LIMIT_KG:
 		return "Too heavy"
@@ -220,13 +244,19 @@ func use(aim: Transform3D, world: Node3D, holder: CollisionObject3D) -> bool:
 ## Uses `item` up: `consumed`, once, then out of the tree and freed at once --
 ## remove_child() then free(), never queue_free(), which would leave its
 ## collider registered until the engine flushes its queue (SLICE-1-STATUS).
-## Static, so nothing runs on an item after it is gone.
-static func consume(item: Item) -> void:
+## Static, so nothing runs on an item after it is gone. `later`, for an item
+## consuming itself from inside one of its own methods (receive_hit), where
+## free() is refused: it is out of the tree already, so its collider is gone
+## from the world, and queue_free() only releases the memory.
+static func consume(item: Item, later := false) -> void:
 	item.consumed.emit()
 	var parent := item.get_parent()
 	if parent != null:
 		parent.remove_child(item)
-	item.free()
+	if later:
+		item.queue_free()
+	else:
+		item.free()
 
 func _mask() -> int:
 	return SPACE_MASK if in_space else MASK

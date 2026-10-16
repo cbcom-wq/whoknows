@@ -54,5 +54,10 @@ enum Grip {
 ## out, used and let go outside, though hands are otherwise suspended there;
 ## made and converted like any other item.
 @export var eva_cargo: bool = false
+## How much it takes before it breaks, hp (ship weapons spec §6.6): three light
+## bolts or four pistol bolts for most things.
+@export var hp: float = 40.0
+## Never breaks: the tools and the module packages.
+@export var unbreakable: bool = false
 ## For a package: the module it unfolds into (ModuleCatalog).
 @export var module: StringName = &""

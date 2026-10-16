@@ -16,3 +16,4 @@ use = ExtResource("2_use")
 quantum_value = 250
 eva_cargo = true
 module = &"store"
+unbreakable = true
