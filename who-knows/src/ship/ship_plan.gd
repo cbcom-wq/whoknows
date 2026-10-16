@@ -22,7 +22,7 @@ const BASE := {
 	&"fairing_corner_in": "Fi", &"fairing_corner_out": "Fo",
 	&"fairing_slope_long_high": "Fl", &"fairing_slope_long_low": "Fk",
 	&"helm": "Hm", &"captain_chair": "Cc", &"crew_station": "Cs", &"quantum_tank": "Qt",
-	&"turret_light": "Tl", &"turret_heavy": "Th",
+	&"turret_light": "Tl", &"turret_heavy": "Th", &"weapons_station": "Ws",
 }
 ## The rcs pushes drawn as arrows, standing in for R4, R8, R12, R16 and R20:
 ## aft (a retro), to port, to starboard, up and down.

@@ -219,3 +219,11 @@ func test_a_hemmed_in_turret_is_noted_blind():
 					walls[Vector3i(dx, y, dz)] = &"hull"
 	var found := ShipRules.check(_starter_with(Vector3i(0, 2, 0), 0, walls), BlockCatalog.load_from_dir("res://data/blocks"))
 	assert_true(_found_codes(found["notes"]).has(&"TURRET_BLIND"))
+
+func test_two_weapons_stations_break_the_rule():
+	var grid := ShipLibrary.read("res://test/fixtures/bridge/bridge.json")["grid"] as ShipGrid
+	for c: Vector3i in grid.coords():
+		if grid.get_block(c).block_id == &"crew_station":
+			grid.get_block(c).block_id = WeaponValues.STATION
+	var found := ShipRules.check(grid, BlockCatalog.load_from_dir("res://data/blocks"))
+	assert_true(_found_codes(found["rules"]).has(&"TWO_WEAPONS_STATIONS"))

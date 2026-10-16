@@ -5,9 +5,9 @@ var _cat: BlockCatalog
 func before_all():
 	_cat = BlockCatalog.load_from_dir("res://data/blocks")
 
-func test_all_thirty_five_blocks_load():
-	assert_eq(_cat.ids().size(), 35,
-		"21 minus retired reactor and battery, plus the four quantum blocks, the bridge computer, the six fairings and the three bridge seats and the two turrets")
+func test_all_thirty_six_blocks_load():
+	assert_eq(_cat.ids().size(), 36,
+		"21 minus retired reactor and battery, plus the four quantum blocks, the bridge computer, the six fairings and the three bridge seats the two turrets and the weapons station")
 
 func test_required_ids_exist():
 	for id in [&"hull", &"hull_wedge", &"armour", &"core",
@@ -18,7 +18,7 @@ func test_required_ids_exist():
 			&"fairing_slope", &"fairing_slope_long_low", &"fairing_slope_long_high",
 			&"fairing_corner_out", &"fairing_corner_in", &"fairing_half",
 			&"helm", &"captain_chair", &"crew_station",
-			&"turret_light", &"turret_heavy"]:
+			&"turret_light", &"turret_heavy", &"weapons_station"]:
 		assert_true(_cat.has(id), "missing block definition: %s" % id)
 
 func test_reactor_and_battery_are_retired():
@@ -66,7 +66,7 @@ func test_walkable_blocks_are_exactly_the_interior_traversables():
 	walkable.sort()
 	var expected := [&"airlock", &"deck", &"door", &"ladder", &"pilot_seat",
 		&"bunk_room", &"galley", &"bathroom", &"closet", &"weapon_room",
-		&"quantum_core", &"quantum_machine", &"computer", &"helm", &"captain_chair", &"crew_station"]
+		&"quantum_core", &"quantum_machine", &"computer", &"helm", &"captain_chair", &"crew_station", &"weapons_station"]
 	expected.sort()
 	assert_eq(walkable, expected)
 

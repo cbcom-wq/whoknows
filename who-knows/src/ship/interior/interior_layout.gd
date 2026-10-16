@@ -54,7 +54,7 @@ const POD_HELM := &"pilot_seat"
 const BRIDGE_HELM := &"helm"
 const HELM_IDS: Array[StringName] = [POD_HELM, BRIDGE_HELM]
 ## The seats that do not fly (ship bridge spec §3.1).
-const SEAT_IDS: Array[StringName] = [&"captain_chair", &"crew_station"]
+const SEAT_IDS: Array[StringName] = [&"captain_chair", &"crew_station", WeaponValues.STATION]
 ## The bridge computer's holo table (bridge computer spec §3.1): a fixture
 ## the dressing draws, and a quiet one, so it leaves the bridge as it is.
 const COMPUTER_ID := &"computer"
@@ -67,7 +67,7 @@ const COMPUTER_ID := &"computer"
 ## The captain's chair and the crew stations are quiet too: the bridge keeps
 ## its floors and walls as they are (ship bridge spec §5).
 const QUIET_FIXTURES: Array[StringName] = [&"quantum_core", &"quantum_machine", COMPUTER_ID,
-	&"captain_chair", &"crew_station"]
+	&"captain_chair", &"crew_station", WeaponValues.STATION]
 const _HORIZONTAL: Array[Vector3i] = [
 	Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 0, 1), Vector3i(0, 0, -1),
 ]

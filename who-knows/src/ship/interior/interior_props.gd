@@ -838,6 +838,23 @@ static func captain_chair(kit: InteriorKit, f: Transform3D, variety: float) -> v
 ## or throttle, at a console ahead with two screens and lit buttons, all for
 ## show until a job takes them (ship bridge spec §3.3).
 static func crew_station(kit: InteriorKit, f: Transform3D, variety: float) -> void:
+	_station_seat(kit, f)
+	var face := f * Transform3D(Basis(Vector3.RIGHT, deg_to_rad(-55.0)), Vector3(0, 0.7, -0.64))
+	kit.bevel_box(SOLID, face * _at(Vector3(0, 0, 0.03)), Vector3(1.2, 0.24, 0.012), 0.005,
+		_c(InteriorPalette.SCREEN_BACK))
+	var first := int(variety * 3.0)
+	kit.screen(face * _at(Vector3(-0.3, 0, 0.038)), Vector2(0.52, 0.19), _mode(first), variety)
+	kit.screen(face * _at(Vector3(0.3, 0, 0.038)), Vector2(0.52, 0.19), _mode(first + 2),
+		fposmod(variety + 0.37, 1.0))
+	for i in 4:
+		kit.bevel_box(GLOW, f * _at(Vector3(-0.27 + i * 0.18, 0.5, -0.565)), Vector3(0.08, 0.05, 0.02), 0.008,
+			_lit([InteriorPalette.SKY, InteriorPalette.AMBER, InteriorPalette.LIGHT_WARM, InteriorPalette.CORAL][i], 1.6))
+	kit.collider(f * _at(Vector3(0, 0.4, -0.72)), Vector3(1.3, 0.8, 0.3))
+
+## The seat and console body a crew station and a weapons station share: the
+## pedestal, cushion and backrest, and the console with its sloped face. The
+## screens and buttons are each station's own.
+static func _station_seat(kit: InteriorKit, f: Transform3D) -> void:
 	var trim := _c(InteriorPalette.TRIM)
 	var low := _c(InteriorPalette.WALL_LOW)
 	var seat := _c(InteriorPalette.SEAT)
@@ -849,15 +866,18 @@ static func crew_station(kit: InteriorKit, f: Transform3D, variety: float) -> vo
 	kit.bevel_box(SOLID, f * _at(Vector3(0, 0.36, -0.72)), Vector3(1.3, 0.56, 0.3), 0.05, trim)
 	var face := f * Transform3D(Basis(Vector3.RIGHT, deg_to_rad(-55.0)), Vector3(0, 0.7, -0.64))
 	kit.bevel_box(SOLID, face, Vector3(1.3, 0.3, 0.05), 0.02, trim)
+
+## The weapons station (ship weapons spec §3.5): a crew station whose console
+## carries one wide dark screen -- the target board is drawn on it -- with a
+## row of amber and coral buttons under it.
+static func weapons_station(kit: InteriorKit, f: Transform3D, _variety: float) -> void:
+	_station_seat(kit, f)
+	var face := f * Transform3D(Basis(Vector3.RIGHT, deg_to_rad(-55.0)), Vector3(0, 0.7, -0.64))
 	kit.bevel_box(SOLID, face * _at(Vector3(0, 0, 0.03)), Vector3(1.2, 0.24, 0.012), 0.005,
 		_c(InteriorPalette.SCREEN_BACK))
-	var first := int(variety * 3.0)
-	kit.screen(face * _at(Vector3(-0.3, 0, 0.038)), Vector2(0.52, 0.19), _mode(first), variety)
-	kit.screen(face * _at(Vector3(0.3, 0, 0.038)), Vector2(0.52, 0.19), _mode(first + 2),
-		fposmod(variety + 0.37, 1.0))
 	for i in 4:
 		kit.bevel_box(GLOW, f * _at(Vector3(-0.27 + i * 0.18, 0.5, -0.565)), Vector3(0.08, 0.05, 0.02), 0.008,
-			_lit([InteriorPalette.SKY, InteriorPalette.AMBER, InteriorPalette.LIGHT_WARM, InteriorPalette.CORAL][i], 1.6))
+			_lit([InteriorPalette.AMBER, InteriorPalette.CORAL, InteriorPalette.AMBER, InteriorPalette.CORAL][i], 1.6))
 	kit.collider(f * _at(Vector3(0, 0.4, -0.72)), Vector3(1.3, 0.8, 0.3))
 
 ## The bridge computer's holo table (bridge computer spec §3.3).

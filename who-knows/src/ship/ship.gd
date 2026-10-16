@@ -858,6 +858,8 @@ func _place_seat() -> void:
 			script = CaptainChair
 		elif f["id"] == &"crew_station":
 			script = CrewStation
+		elif f["id"] == WeaponValues.STATION:
+			script = WeaponsStation
 		if script == null:
 			continue
 		var frame := InteriorDressing.fixture_frame(layout, f["coord"])

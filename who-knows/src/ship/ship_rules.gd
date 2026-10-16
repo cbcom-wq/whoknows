@@ -110,6 +110,10 @@ static func _check_seats(grid: ShipGrid, layout: InteriorLayout, paths: DeckPath
 				break
 		if not reach.is_empty():
 			break
+	var stations := layout.fixtures().filter(func(f: Dictionary) -> bool: return f["id"] == WeaponValues.STATION)
+	if stations.size() > 1:
+		rules.append(item(&"TWO_WEAPONS_STATIONS", "%d weapons stations: a ship has at most one (ship weapons spec §8)"
+			% stations.size(), stations[1]["coord"]))
 	for f in layout.fixtures():
 		if not InteriorLayout.SEAT_IDS.has(f["id"]):
 			continue
