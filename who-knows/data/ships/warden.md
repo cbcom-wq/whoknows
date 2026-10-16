@@ -6,7 +6,7 @@ ahead of a command bridge and tapers to a sensor head; the cabin sits over the s
 stepped superstructure rising toward the stern; the stern is one heavy block of nineteen engine
 bells. The bridge is the ship's face: a band of tall glass across the bow that turns both corners
 and runs three cells down each flank, the pilot forward at the glass with a crew station either
-side, the captain's chair raised on its dais behind them, and the holo table and a third station
+side, the captain's chair raised on its dais behind them, and the holo table and the weapons station
 beside the captain. It outruns the starter by half again while turning a little slower than it on
 every axis. −Z is the bow, +X starboard, +Y up.
 
@@ -116,7 +116,7 @@ command bridge in place of the pod, the silhouette, size and feel kept. The figu
 
 | Target | Meant | Reached |
 |---|---|---|
-| A command bridge | the helm forward at the glass, crew stations either side, the captain's chair on its dais behind, a band of glass across the bow and down the sides | helm at (0, 0, −5); stations at (±2, 0, −5) and (2, 0, −3); captain's chair at (0, 0, −3); 5 panes across the bow and 3 down each flank; every seat sat in and stood up from |
+| A command bridge | the helm forward at the glass, crew stations either side, the captain's chair on its dais behind, a band of glass across the bow and down the sides | helm at (0, 0, −5); stations at (±2, 0, −5), the weapons station at (2, 0, −3); captain's chair at (0, 0, −3); 5 panes across the bow and 3 down each flank; every seat sat in and stood up from |
 | Keep the size | the first Warden's 296 blocks, 260.4 t, 36 × 18 × 10 m | 311 blocks, 262.0 t, 36 × 18 × 10 m (one row longer inside, no longer outside) |
 | Keep the feel | turns 1.08 / 0.61 / 1.39, forward 21.9 | turns **1.13 / 0.59 / 1.40** rad/s² (pitch / yaw / roll); forward **21.8** m/s² |
 | Pretty fast | forward well above the starter's 14.2: 18–22 m/s² | 21.8 m/s² (19 thrusters, 5,700 kN) |
@@ -152,7 +152,7 @@ the nearest arrangement with every exhaust open came out a little stronger, not 
     either side of it, its ramp onto the corridor's head at (0, 0, −2). From the chair the captain
     looks over the pilot's head through the whole band. To port the bridge computer's holo table
     (`Cp12`) faces starboard, so its operator stands at (−1, 0, −3) beside the captain and looks
-    out of the port side glass across it. To starboard a third crew station faces forward; you
+    out of the port side glass across it. To starboard the `weapons_station` (the former third crew station) faces forward; you
     stand up from it to port, beside the chair.
   - **The two bridge quantum cores** stand in the bridge's back corners (z = −2), turned inboard
     (`Qk12`, `Qk8`) so their gauges face the deck, not the rooms behind them; each keeps a
@@ -202,17 +202,50 @@ the nearest arrangement with every exhaust open came out a little stronger, not 
   on the tower's stern (y = 1): 19 bells. A full burn pitches the ship with 41,680 N·m, 0.18% of
   its authority.
 
+## Weapons (ship weapons spec §13)
+
+Six `turret_light` and one `turret_heavy`, each in the place of a fairing half or a plate of
+hull, and the bridge's third station made the weapons station. The `TURRETS` note reads seven
+turrets, none `TURRET_BLIND` and none `TURRET_BURIED`: no cell had to be moved.
+
+| Turret | Cell | Face | Sky clear |
+|---|---|---|---|
+| light, dorsal | (0, 2, 2) | up (orientation 0), on the spine behind the ramp | 100% |
+| light, dorsal | (0, 1, −4) | up (0), on the bow ridge over the bridge | 98% |
+| light, ventral | (0, −2, −6) | down (2), under the sensor head | 100% |
+| light, ventral | (0, −2, 1) | down (2), on the keel | 100% |
+| light, starboard | (3, 0, 1) | out to +x (1), a plate of the flank | 92% |
+| light, port | (−3, 0, 1) | out to −x (3), a plate of the flank | 92% |
+| **heavy**, forward | (0, 0, −9) | up (0), on the tip of the sensor head | 96% |
+
+- **Why there:** a pair on top and a pair underneath, spread along the hull, so that between them
+  the whole sphere is covered from both ends of the ship; the flank pair at the midship fill in
+  the beams. Their 92% is the armour plate and the fairing slopes either side of each, standing
+  a little proud of the flank. The heavy turret is on the nose, where its field forward is
+  widest, the point of a frigate.
+- **The station** is the former third crew station at (2, 0, −3), in the captain's row beside the
+  chair: sitting there is the board, and, with a heavy turret aboard, the heavy turret's gun
+  camera. Still five seats; the probe sits in each and walks away from each. The
+  `TWO_WEAPONS_STATIONS` rule is quiet (one).
+- **Mass and power as the check printed them:** 265.3 t (262.0 before): the four dorsal and
+  ventral lights are 0.5 t over the fairing halves they replaced, the heavy one 1.7 t over its
+  half, the two flank lights 0.2 t *under* the hull plates they replaced. 108.0 MW made and
+  **97.9 MW drawn** (97.0 before: six lights at 0.1 and the heavy at 0.3; the station draws
+  what the crew station did), well inside the 10% margin. Pitch imbalance under burn went from
+  41,680 to 49,529 N·m of 22.7 MN·m of authority (0.22%); the centre of mass moved 0.15 m
+  forward.
+
 ## The numbers (`ShipStats`, the probe)
 
-311 blocks (6 armour, 19 thrusters, 28 rcs, 3 quantum cores, 4 cells, 11 canopies, 127 fairings;
-the helm, a captain's chair, 3 crew stations, the computer), 262,000 kg, centre of mass
-(−0.001, −0.414, 0.403). Thrust forward / reverse / lateral / vertical 5,700 / 1,500 / 2,000 /
-3,500 kN; authority (22,802,290, 14,000,000, 7,293,321) N·m against an imbalance under burn of
-(41,680, 4,351, 0). 108.0 MW made, 97.0 drawn; 1,600 QE. Sections (hp / pieces): bow 1,300 / 13 a
+311 blocks (6 armour, 19 thrusters, 28 rcs, 3 quantum cores, 4 cells, 11 canopies, 122 fairings,
+6 light turrets and a heavy one; the helm, a captain's chair, 2 crew stations and a weapons station,
+the computer), 265,300 kg, centre of mass (−0.001, −0.412, 0.253). Thrust forward / reverse / lateral / vertical 5,700 / 1,500 / 2,000 /
+3,500 kN; authority (22,689,972, 14,000,000, 7,294,007) N·m against an imbalance under burn of
+(49,529, 4,295, 0). 108.0 MW made, 97.9 drawn; 1,600 QE. Sections (hp / pieces): bow 1,300 / 13 a
 side, midship 5,470–5,530 / 19, stern 8,060–8,100 / 24–26; engines 2,850, quantum cores 750,
 computer 300, cockpit (the helm and the 11 canopies) 720; not crippled. Skin 194 plates, 146
 chamfers, 56 corners, 559 facets, 47 nozzles; 20 windows outside for 20 inside; 7 floods and one
-forward light (on the sensor head). Seats: 5 (the helm, 3 stations, the captain's chair), each sat
-in and stood up from. Probe fps (GTX 960, 1280 × 720): 282 standing, 137 seated, 134 with both
-light groups, 123 by a rock, 210 and 228 in the chase views, 123 with a second ship 300 m off. No
+forward light (on the sensor head). Seats: 5 (the helm, 2 crew stations, the weapons station, the captain's chair), each sat
+in and stood up from. Probe fps (GTX 960, 1280 × 720): 275 standing, 136 seated, 132 with both
+light groups, 122 by a rock, 203 and 223 in the chase views, 122 with a second ship 300 m off. No
 validator issues; no rule broken.

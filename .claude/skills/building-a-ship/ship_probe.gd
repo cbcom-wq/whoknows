@@ -278,7 +278,8 @@ func _toilet_shots(ship: Ship, avatar: Avatar) -> void:
 ## from the starter's seat, sunlit and then dark with its floods on; F8 to its
 ## helm and the starter from there; a 1.5 s burn, short of the starter; standing
 ## and walking; a spacewalk between the two. Prints the fleet line.
-## Every seat aboard (ship bridge spec §6.2): sat in, its view rendered, stood
+## Every seat aboard (ship bridge spec §6.2): sat in, its view rendered (a weapons
+## station's gun camera, then its board from the seat's eye, seat_<cell>_board), stood
 ## up from, and a step walked; and, on a ship with a captain's chair, the
 ## bridge from the dais at a standing eye. Prints a seats line.
 func _seat_pass(scene: Node, ship: Ship, director: CameraDirector, avatar: Avatar) -> void:
@@ -293,6 +294,15 @@ func _seat_pass(scene: Node, ship: Ship, director: CameraDirector, avatar: Avata
 		director.sit_now(s)
 		await _process_frames(5)
 		await _shot("seat_%s" % tag)
+		# A weapons station's view above is the gun camera: hand the camera back
+		# to the seat's eye and look down at the console, so its board is
+		# rendered too (with no heavy turret the view above is the board).
+		if s is WeaponsStation and (s.job as WeaponsJob).view_camera() != null:
+			(s.job as WeaponsJob).active = false
+			director.refresh_view()
+			director.look(Vector2(0, 500))
+			await _process_frames(5)
+			await _shot("seat_%s_board" % tag)
 		if not s.flies:
 			director.look(Vector2(-500, 0))
 			await _shot("seat_%s_left" % tag)

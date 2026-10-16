@@ -79,7 +79,7 @@
 		[0, 1, 3, "thruster", 0],
 		[0, 2, -2, "fairing_slope_long_low", 0],
 		[0, 2, -1, "fairing_half", 0],
-		[0, 2, 0, "fairing_half", 0],
+		[0, 2, 0, "turret_light", 0],
 		[0, 2, 1, "fairing_half", 0],
 		[0, 2, 2, "fairing_half", 0],
 		[0, 2, 3, "fairing_slope_long_low", 4],

@@ -813,7 +813,9 @@ by a rock with both** (the starter 130), 208 and 221 in the chase views, 122 wit
   the two quantum cores and the machine. Probed: 125 fps in the worst view (the starter 129).
 - **The probe** sits in every seat (`seats` line; a `seat` line each, with where you stood and the
   nearest npc), renders `probe_seat_<cell>.png` (and `_left` at a seat that does not fly) and
-  `probe_bridge_from_dais.png`.
+  `probe_bridge_from_dais.png`. At a weapons station with a heavy turret the seat render is the gun
+  camera, and `probe_seat_<cell>_board.png` is the board from the seat's eye (the job is
+  released and the eye looks down at the console).
 
 ## Saving (`docs/superpowers/specs/2026-09-26-saving-design.md`)
 
