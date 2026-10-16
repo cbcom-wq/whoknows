@@ -99,3 +99,84 @@ func test_a_loaded_game_seated_at_the_station_looks_down_the_gun():
 	var job := _station.job as WeaponsJob
 	assert_true(job.camera.current, "sat takes the gun camera even with no glide")
 	assert_false(_director.camera().current)
+
+## A second heavy turret on the roof level of the first.
+func _add_second_heavy() -> void:
+	var roof_y := -(1 << 20)
+	for c: Vector3i in _ship.grid.coords():
+		if _ship.grid.get_block(c).block_id != WeaponValues.HEAVY:
+			roof_y = maxi(roof_y, c.y)
+	var heavy := BlockInstance.new()
+	heavy.block_id = WeaponValues.HEAVY
+	for c: Vector3i in _ship.grid.coords():
+		if c.y == roof_y and not _ship.grid.has_block(c + Vector3i.UP):
+			_ship.grid.set_block(c + Vector3i.UP, heavy)
+			break
+	await wait_process_frames(2)
+
+func test_losing_the_only_heavy_while_manned_gives_the_seats_eye_back():
+	await _sit()
+	var job := _station.job as WeaponsJob
+	for t in _ship.heavy_turrets():
+		_ship.grid.clear_block(t.coord)
+	await wait_process_frames(3)
+	assert_null(job.heavy())
+	assert_null(job.view_camera())
+	assert_true(job.camera == null or is_instance_valid(job.camera), "no dangling camera")
+	assert_true(_director.camera().current, "the seat's eye again")
+	var move := InputEventMouseMotion.new()
+	move.relative = Vector2(10, 10)
+	assert_false(job.handle(move), "no gun, no aim")
+	assert_true(_ship.flight_computer.gunner_hold, "you still are not flying")
+
+func test_losing_the_manned_heavy_moves_the_job_to_the_other():
+	await _add_second_heavy()
+	assert_eq(_ship.heavy_turrets().size(), 2)
+	await _sit()
+	var job := _station.job as WeaponsJob
+	var gone := job.heavy().coord
+	_ship.grid.clear_block(gone)
+	await wait_process_frames(3)
+	var now := job.heavy()
+	assert_not_null(now)
+	assert_ne(now.coord, gone)
+	assert_true(is_instance_valid(job.camera))
+	assert_eq(job.camera.get_parent(), now, "the camera is on the gun that is left")
+	assert_true(job.camera.current)
+	assert_true(now.manual)
+	var wheel := InputEventMouseButton.new()
+	wheel.button_index = MOUSE_BUTTON_WHEEL_UP
+	wheel.pressed = true
+	assert_true(job.handle(wheel))
+
+func test_a_heavy_added_while_manned_with_none_gets_a_camera():
+	for t in _ship.heavy_turrets():
+		_ship.grid.clear_block(t.coord)
+	await wait_process_frames(2)
+	await _sit()
+	var job := _station.job as WeaponsJob
+	assert_null(job.view_camera())
+	await _add_second_heavy()
+	await wait_process_frames(2)
+	assert_not_null(job.view_camera())
+	assert_true(job.camera.current)
+
+func test_with_the_mouse_freed_the_gun_does_not_aim_or_fire():
+	await _sit()
+	var job := _station.job as WeaponsJob
+	var shots := []
+	job.heavy().fired.connect(func(_k: StringName) -> void: shots.append(1))
+	var before := job.aim
+	var mode := Input.mouse_mode
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	var move := InputEventMouseMotion.new()
+	move.relative = Vector2(100, -50)
+	job._unhandled_input(move)
+	var click := InputEventAction.new()
+	click.action = &"use"
+	click.pressed = true
+	job._unhandled_input(click)
+	await wait_physics_frames(2)
+	Input.mouse_mode = mode
+	assert_eq(job.aim, before, "Esc freed the mouse: it is not the gun's")
+	assert_eq(shots.size(), 0, "and the click that takes it back does not fire")

@@ -57,12 +57,18 @@ func stood(_avatar: Avatar) -> void:
 		ship.flight_computer.gunner_hold = false
 		for t in ship.heavy_turrets():
 			t.manual = false
-	if camera != null:
+	if is_instance_valid(camera):
 		camera.current = false
 	sight.visible = false
+	_whine.stop()
+
+func _exit_tree() -> void:
+	if is_instance_valid(camera):
+		camera.queue_free()
+	camera = null
 
 func view_camera() -> Camera3D:
-	return camera if active and heavy() != null else null
+	return camera if active and heavy() != null and is_instance_valid(camera) else null
 
 func takes_mouse() -> bool:
 	return active and heavy() != null
@@ -75,7 +81,7 @@ func _take() -> void:
 		other.manual = other == t
 	aim = Vector2(t.yaw, t.elevation)
 	t.manual_aim = t.barrel_dir()
-	if camera == null:
+	if not is_instance_valid(camera):
 		camera = Camera3D.new()
 		camera.name = "GunCamera"
 		camera.cull_mask = ship.chase_camera.cull_mask
@@ -88,18 +94,40 @@ func _take() -> void:
 	_pose_camera()
 	sight.visible = true
 	sight.camera = camera
+	_refresh_director()
+
+func _refresh_director() -> void:
 	var d := get_tree().get_first_node_in_group(CameraDirector.GROUP) as CameraDirector if is_inside_tree() else null
 	if d != null:
 		d.refresh_view()
+
+## Keeps the gun camera on the turret you man while the ship rebuilds its
+## turrets under you: one gone or replaced takes its camera with it. True when
+## there is a heavy turret with a camera on it; with none, the stale camera is
+## dropped and the seat's eye comes back.
+func _sync() -> bool:
+	var t := heavy()
+	if t == null:
+		if sight.visible:   # the gun view was up (a freed camera may compare equal to null)
+			if is_instance_valid(camera):
+				camera.queue_free()
+			camera = null
+			sight.camera = null
+			sight.visible = false
+			_refresh_director()
+		return false
+	if not is_instance_valid(camera) or camera.get_parent() != t:
+		_take()
+	return true
 
 func _pose_camera() -> void:
 	camera.transform = Transform3D(Basis.from_euler(Vector3(aim.y, -aim.x, 0.0)),
 		Vector3(0, WeaponValues.MUZZLE_UP + CAMERA_UP, 0))
 
 func _process(_delta: float) -> void:
-	var t := heavy()
-	if not active or t == null or camera == null:
+	if not active or not _sync():
 		return
+	var t := heavy()
 	_pose_camera()
 	t.manual_aim = -camera.global_basis.z
 	sight.barrel_point = t.muzzle() + t.barrel_dir() * 1000.0
@@ -125,15 +153,17 @@ func _lead(t: Turret) -> Variant:
 	return null if s.is_empty() else t.muzzle() + (s["dir"] as Vector3) * 1000.0
 
 func _unhandled_input(event: InputEvent) -> void:
-	if active and handle(event):
+	# Esc frees the mouse: then it is not the gun's, and the click that
+	# recaptures it is not a trigger pull.
+	if active and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and handle(event):
 		get_viewport().set_input_as_handled()
 
 ## One input event while sat here; true if it was the gun's. Split from
 ## _unhandled_input so tests can drive it.
 func handle(event: InputEvent) -> bool:
-	var t := heavy()
-	if not active or t == null:
+	if not active or not _sync():
 		return false
+	var t := heavy()
 	var motion := event as InputEventMouseMotion
 	if motion != null:
 		var scale := SENSITIVITY * camera.fov / ZOOMS[0]
