@@ -43,6 +43,12 @@ const FACE_OUT := 1.0
 const MUZZLE_UP := 0.6
 ## Where a turret with no target rests: ahead, a little raised.
 const PARK_ELEVATION := deg_to_rad(10.0)
+## The barrels pitch from the face's horizon over the top to the far one
+## (owner, 2026-10-16), so a turret reaches its half-sky upright or flipped
+## and takes the shorter way; it changes way only when the other is shorter
+## by this much, rad.
+const ELEVATION_MAX := PI
+const FLIP_MARGIN := deg_to_rad(10.0)
 ## How much of its path a bolt's trail shows, s, and how long it takes to run
 ## up to where the bolt ended (spec §6.2).
 const TRAIL_TIME := 0.4

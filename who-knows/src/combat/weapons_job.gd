@@ -19,7 +19,10 @@ var fire_control: FireControl
 var active := false
 var heavy_index := 0
 var zoom := 0
-## The reticle's mount-frame (yaw, elevation).
+## The reticle's mount-frame (yaw, elevation), always upright: elevation stays in
+## 0..PI/2 and the camera never rolls. Looking behind is a yaw drag; the barrels
+## choose their own way to follow (round, or over the top), and the sight's
+## barrel mark shows where they really point.
 var aim := Vector2(0.0, WeaponValues.PARK_ELEVATION)
 var camera: Camera3D
 var sight: GunSight
@@ -79,7 +82,7 @@ func _take() -> void:
 		return
 	for other in ship.heavy_turrets():
 		other.manual = other == t
-	aim = Vector2(t.yaw, t.elevation)
+	aim = t.barrel_angles()
 	t.manual_aim = t.barrel_dir()
 	if not is_instance_valid(camera):
 		camera = Camera3D.new()

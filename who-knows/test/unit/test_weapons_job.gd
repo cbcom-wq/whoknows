@@ -180,3 +180,17 @@ func test_with_the_mouse_freed_the_gun_does_not_aim_or_fire():
 	Input.mouse_mode = mode
 	assert_eq(job.aim, before, "Esc freed the mouse: it is not the gun's")
 	assert_eq(shots.size(), 0, "and the click that takes it back does not fire")
+
+func test_taking_a_flipped_heavy_keeps_the_camera_upright():
+	var t := _ship.heavy_turrets()[0] as Turret
+	t.yaw = 0.0
+	t.elevation = 3.0 * PI / 4.0
+	t._pose()
+	await _sit()
+	var job := _station.job as WeaponsJob
+	assert_gte(job.aim.y, 0.0)
+	assert_lte(job.aim.y, PI * 0.5 + 0.001, "the reticle is upright")
+	var cam_fwd := -job.camera.global_basis.z
+	assert_lt(cam_fwd.angle_to(t.barrel_dir()), deg_to_rad(1.0), "it looks where the barrels point")
+	var normal := t.global_basis * Vector3.UP
+	assert_gt(job.camera.global_basis.y.dot(normal), 0.0, "not rolled upside down")

@@ -28,7 +28,10 @@ var no_arc := false
 ## only on pull_trigger().
 var manual := false
 var manual_aim := Vector3.FORWARD
-## Mount-frame yaw (0 ahead, + to the right) and elevation, radians.
+## Mount-frame yaw (0 ahead, + to the right) and elevation, radians. Yaw turns
+## a full circle. Elevation runs 0..PI: level, up through PI/2, and past it the
+## barrels lean back over the top to the far horizon (the dome faces the other
+## way then). Every direction in the half-sky has two poses, upright and flipped.
 var yaw := 0.0
 var elevation := WeaponValues.PARK_ELEVATION
 ## &"idle", &"tracking", &"firing", &"no_arc", &"damaged", &"low_power",
@@ -134,12 +137,12 @@ func step(delta: float) -> void:
 	_solution = _solve(target) if target != null and not manual else {}
 	var goal := Vector2(0.0, WeaponValues.PARK_ELEVATION)
 	if manual:
-		goal = _angles(manual_aim)
+		goal = pose_toward(manual_aim)
 	elif not _solution.is_empty():
-		goal = _angles(_solution["dir"])
+		goal = pose_toward(_solution["dir"])
 	var rate := deg_to_rad(_spec["slew"]) * (WeaponValues.DAMAGED_SLEW if damaged else 1.0) * delta
 	yaw = _toward_angle(yaw, goal.x, rate)
-	elevation = move_toward(elevation, goal.y, rate)
+	elevation = clampf(move_toward(elevation, goal.y, rate), 0.0, WeaponValues.ELEVATION_MAX)
 	_pose()
 	_recharge = maxf(_recharge - delta / (WeaponValues.DAMAGED_RECHARGE if damaged else 1.0), 0.0)
 	if _burst_left == 0 and not manual and _recharge <= 0.0 and _ready_to_fire():
@@ -236,11 +239,35 @@ func _sound() -> void:
 	player.stream = s
 	player.play()
 
-## A world direction's mount-frame (yaw, elevation), elevation kept to the
-## half-sky.
-func _angles(dir_world: Vector3) -> Vector2:
+## A world direction's upright mount-frame (yaw, elevation): elevation kept to
+## 0..PI/2, the half-sky.
+func upright_angles(dir_world: Vector3) -> Vector2:
 	var a := SkyMap.angles(global_basis.inverse() * dir_world)
 	return Vector2(a.x, clampf(a.y, 0.0, PI * 0.5))
+
+## The pose that aims along `dir_world` soonest from where the barrels are:
+## upright or flipped over the top.
+func pose_toward(dir_world: Vector3) -> Vector2:
+	return choose_pose(Vector2(yaw, elevation), upright_angles(dir_world))
+
+## Of the two poses for one direction, upright `a` and flipped, the one
+## reached sooner from `now` (yaw and pitch slew together), keeping `now`'s
+## branch unless the other is shorter by FLIP_MARGIN. Pure.
+static func choose_pose(now: Vector2, a: Vector2) -> Vector2:
+	var flipped := Vector2(wrapf(a.x + PI, -PI, PI), PI - a.y)
+	var cost_a := _cost(now, a)
+	var cost_f := _cost(now, flipped)
+	if now.y > PI * 0.5:
+		return a if cost_a + WeaponValues.FLIP_MARGIN < cost_f else flipped
+	return flipped if cost_f + WeaponValues.FLIP_MARGIN < cost_a else a
+
+static func _cost(now: Vector2, to: Vector2) -> float:
+	return maxf(absf(wrapf(to.x - now.x, -PI, PI)), absf(to.y - now.y))
+
+## Where the barrels point, as the upright pose: what a gunner's reticle
+## starts from.
+func barrel_angles() -> Vector2:
+	return upright_angles(barrel_dir())
 
 static func _mount_dir(y: float, e: float) -> Vector3:
 	return Vector3(sin(y) * cos(e), sin(e), -cos(y) * cos(e))

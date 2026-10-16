@@ -214,3 +214,67 @@ func test_by_hand_it_reaches_further():
 	assert_false(t._reaches(s), "automatic, 2 km is past its 1.5 km")
 	t.manual = true
 	assert_true(t._reaches(s), "manned, it reaches 3 km")
+
+## The barrels pitch over the top (owner, 2026-10-16): elevation runs 0..PI and
+## each direction in the half-sky has an upright pose and a flipped one.
+
+func test_choose_pose_flips_for_behind_and_high():
+	var p := Turret.choose_pose(Vector2(0.0, deg_to_rad(10.0)), Vector2(PI, deg_to_rad(60.0)))
+	assert_almost_eq(p.x, 0.0, 0.001, "dome stays ahead")
+	assert_almost_eq(p.y, deg_to_rad(120.0), 0.001, "barrels lean back over the top")
+
+func test_choose_pose_turns_round_when_that_is_shorter():
+	var up := Vector2(deg_to_rad(40.0), deg_to_rad(20.0))
+	var p := Turret.choose_pose(Vector2(0.0, deg_to_rad(10.0)), up)
+	assert_almost_eq(p.x, up.x, 0.001)
+	assert_almost_eq(p.y, up.y, 0.001, "the upright pose itself")
+
+func test_choose_pose_keeps_its_branch_near_a_tie():
+	# The upright pose (90, 45) has the flipped twin (-90, 135).
+	var a := Vector2(deg_to_rad(90.0), deg_to_rad(45.0))
+	# Flipped at (4, 100): upright costs 86 deg, flipped 94. The upright way is
+	# shorter by 8 deg, under the 10 deg margin: it stays flipped.
+	var stays := Turret.choose_pose(Vector2(deg_to_rad(4.0), deg_to_rad(100.0)), a)
+	assert_gt(stays.y, PI * 0.5, "flipped holds near a tie")
+	assert_almost_eq(stays.x, deg_to_rad(-90.0), 0.001)
+	# Control: at (15, 100) the upright way is 30 deg shorter, so it changes.
+	var changes := Turret.choose_pose(Vector2(deg_to_rad(15.0), deg_to_rad(100.0)), a)
+	assert_almost_eq(changes.y, a.y, 0.001, "past the margin it goes upright")
+	# The mirror, from upright at (-4, 80): flipped costs 86, upright 94. Flipped
+	# is shorter by 8 deg: it stays upright.
+	var up_stays := Turret.choose_pose(Vector2(deg_to_rad(-4.0), deg_to_rad(80.0)), a)
+	assert_almost_eq(up_stays.y, a.y, 0.001, "upright holds near a tie")
+	# Control: at (-15, 80) flipped is 30 deg shorter, so it flips.
+	var flips := Turret.choose_pose(Vector2(deg_to_rad(-15.0), deg_to_rad(80.0)), a)
+	assert_gt(flips.y, PI * 0.5, "past the margin it flips")
+
+func test_it_reaches_a_target_behind_by_pitching_over_the_top():
+	var t := _turret()
+	t.yaw = 0.0
+	t.elevation = 0.0
+	t.target = _target(Vector3(0, 1.6 + 300.0 * sin(deg_to_rad(60.0)), 300.0 * cos(deg_to_rad(60.0))))
+	var shots := _count(t)
+	await wait_seconds(1.6)
+	assert_gt(t.elevation, PI * 0.5, "the barrels went over the top")
+	assert_lt(absf(t.yaw), 0.2, "the dome did not turn round")
+	assert_gt(shots.size(), 0, "turning round would have taken 2 s before the first")
+
+func test_flipped_barrels_point_where_the_pose_says():
+	var t := _turret()
+	t.yaw = 0.0
+	t.elevation = deg_to_rad(135.0)
+	t._pose()
+	var want := t.global_basis * Vector3(0.0, sin(deg_to_rad(135.0)), cos(deg_to_rad(45.0)))
+	assert_lt(t.barrel_dir().angle_to(want.normalized()), 0.001, "up and back")
+	assert_gt(t.barrel_dir().z, 0.5, "backward")
+	assert_gt(t.barrel_dir().y, 0.5, "and up")
+	var pitch := t.get_node("Yaw/Pitch") as Node3D
+	assert_lt((-pitch.global_basis.z).angle_to(t.barrel_dir()), 0.001, "the look turns the way the math says")
+
+func test_it_parks_upright():
+	var t := _turret()
+	t.elevation = deg_to_rad(150.0)
+	t.yaw = deg_to_rad(120.0)
+	await wait_seconds(2.0)
+	assert_almost_eq(t.elevation, WeaponValues.PARK_ELEVATION, 0.01)
+	assert_almost_eq(t.yaw, 0.0, 0.01)

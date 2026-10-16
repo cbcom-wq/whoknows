@@ -89,8 +89,11 @@ and at 0.5 MW a light turret the Warden (108 MW made, 97 drawn) would break `POW
 ### 3.2 Mounting and the arc
 
 A turret's orientation names its **mount face** (the block's up): dorsal, ventral, port, starboard,
-or fore. The face must open onto an empty cell (`TURRET_BURIED`, §8). The turret aims over the
-**half-sky** above that face: up to 90° from its normal.
+or fore. The face must open onto an empty cell (`TURRET_BURIED`, §8). The dome turns a full 360°,
+and the barrels pitch from the face's horizon over the top to the far horizon, 0–180° (owner,
+2026-10-16). It still reaches the **half-sky** above its face and nothing below it, but each direction
+has two poses, upright and flipped over the top. It takes whichever it reaches sooner, and holds its
+way unless the other is shorter by 10°.
 
 ### 3.3 The sky map
 
@@ -189,7 +192,7 @@ Changing velocity is how you dodge.
 Each physics tick, `Turret`:
 
 1. reads its target's position and velocity and solves (§5.2);
-2. slews its yaw and pitch toward the solution at its rate, clamped to the half-sky;
+2. slews its yaw and pitch toward the solution at its rate, the shorter way, upright or over the top (§3.2);
 3. fires when **all** hold: the barrel within 1° of the solution; the time to impact times the bolt
    speed is inside its engagement range; its recharge is done; the store is at or above the
    low-power line and can pay; a ray from the muzzle along the shot is clear of its own hull (the
@@ -293,8 +296,8 @@ on their own.
 
 - **The camera** moves to the heavy turret's gun camera: outside, beside the barrel, rendering the
   outside world (the layers a spacewalk sees).
-- **The mouse aims** a reticle within the turret's half-sky; the barrel follows at its own 30°/s,
-  and a second mark shows where it actually points.
+- **The mouse aims** a reticle within the turret's half-sky, always upright; the barrel follows at its
+  own 30°/s, the shorter way, over the top if need be, and a second mark shows where it actually points.
 - **Left mouse** fires when the turret has recharged and the store can pay, `HOLD` or not.
 - **The wheel** zooms 1×, 2×, 4×.
 - **Range:** you may fire at anything out to 3 km.
