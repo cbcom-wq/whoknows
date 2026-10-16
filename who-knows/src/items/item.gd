@@ -189,7 +189,9 @@ func set_held() -> void:
 ## cannot free itself from inside its own method (the engine refuses a locked
 ## object), so consume() takes it out of the tree and `consumed` fires now.
 func receive_hit(hit: Hit) -> void:
-	if hit == null or hit.damage <= 0.0 or not breaks() or state != State.LOOSE 			or is_queued_for_deletion():
+	if hit == null or hit.damage <= 0.0 or is_queued_for_deletion():
+		return
+	if not breaks() or state != State.LOOSE:
 		return
 	damage_taken += hit.damage
 	if damage_taken >= definition.hp:
