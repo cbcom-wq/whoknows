@@ -762,7 +762,7 @@ static func pilot_station(kit: InteriorKit, f: Transform3D, variety: float) -> v
 	# The helm console, low and ahead.
 	kit.box(GLOW, f * _at(Vector3(0, 0.04, -0.72)), Vector3(0.9, 0.08, 0.22), _lit(InteriorPalette.LIGHT_WARM, 2.5))
 	kit.bevel_box(SOLID, f * _at(Vector3(0, 0.36, -0.72)), Vector3(1.1, 0.56, 0.3), 0.05, trim)
-	var face := f * Transform3D(Basis(Vector3.RIGHT, deg_to_rad(-55.0)), Vector3(0, 0.7, -0.64))
+	var face := f * STATION_FACE
 	kit.bevel_box(SOLID, face, Vector3(1.1, 0.3, 0.05), 0.02, trim)
 	kit.bevel_box(SOLID, face * _at(Vector3(0, 0, 0.03)), Vector3(1.0, 0.24, 0.012), 0.005,
 		_c(InteriorPalette.SCREEN_BACK))
@@ -834,12 +834,20 @@ static func captain_chair(kit: InteriorKit, f: Transform3D, variety: float) -> v
 		kit.screen(pad * Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), Vector3(0, 0.016, 0.02)),
 			Vector2(0.12, 0.09), InteriorKit.Screen.DOTS, fposmod(variety + side * 0.3, 1.0))
 
+## A station console's sloped face, in the seat's frame: the dark panel and the
+## screens sit on it, along its +z (out of the screen). WeaponsStation hangs
+## its board off the same frame, so the two stay in step.
+const STATION_FACE := Transform3D(Basis(Vector3.RIGHT, deg_to_rad(-55.0)), Vector3(0, 0.7, -0.64))
+## The dark panel's front, along the face's +z: its centre 0.03 out, half its
+## 0.012 depth more.
+const STATION_PANEL_FRONT := 0.036
+
 ## A crew station in its fixture frame: a seat like the pilot's without stick
 ## or throttle, at a console ahead with two screens and lit buttons, all for
 ## show until a job takes them (ship bridge spec §3.3).
 static func crew_station(kit: InteriorKit, f: Transform3D, variety: float) -> void:
 	_station_seat(kit, f)
-	var face := f * Transform3D(Basis(Vector3.RIGHT, deg_to_rad(-55.0)), Vector3(0, 0.7, -0.64))
+	var face := f * STATION_FACE
 	kit.bevel_box(SOLID, face * _at(Vector3(0, 0, 0.03)), Vector3(1.2, 0.24, 0.012), 0.005,
 		_c(InteriorPalette.SCREEN_BACK))
 	var first := int(variety * 3.0)
@@ -864,7 +872,7 @@ static func _station_seat(kit: InteriorKit, f: Transform3D) -> void:
 	var back := f * Transform3D(Basis(Vector3.RIGHT, deg_to_rad(12.0)), Vector3(0, 0.9, 0.62))
 	kit.bevel_box(SOLID, back, Vector3(0.56, 0.72, 0.12), 0.06, seat)
 	kit.bevel_box(SOLID, f * _at(Vector3(0, 0.36, -0.72)), Vector3(1.3, 0.56, 0.3), 0.05, trim)
-	var face := f * Transform3D(Basis(Vector3.RIGHT, deg_to_rad(-55.0)), Vector3(0, 0.7, -0.64))
+	var face := f * STATION_FACE
 	kit.bevel_box(SOLID, face, Vector3(1.3, 0.3, 0.05), 0.02, trim)
 
 ## The weapons station (ship weapons spec §3.5): a crew station whose console
@@ -872,7 +880,7 @@ static func _station_seat(kit: InteriorKit, f: Transform3D) -> void:
 ## row of amber and coral buttons under it.
 static func weapons_station(kit: InteriorKit, f: Transform3D, _variety: float) -> void:
 	_station_seat(kit, f)
-	var face := f * Transform3D(Basis(Vector3.RIGHT, deg_to_rad(-55.0)), Vector3(0, 0.7, -0.64))
+	var face := f * STATION_FACE
 	kit.bevel_box(SOLID, face * _at(Vector3(0, 0, 0.03)), Vector3(1.2, 0.24, 0.012), 0.005,
 		_c(InteriorPalette.SCREEN_BACK))
 	for i in 4:

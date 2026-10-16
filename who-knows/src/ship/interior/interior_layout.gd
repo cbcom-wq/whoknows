@@ -64,8 +64,8 @@ const COMPUTER_ID := &"computer"
 ## colour, and the starter's floors stay exactly as they were. Its own cell
 ## is still a MOUNT for its own WALLS only, which go plain (PANEL), or
 ## PORTHOLE on a skin flank -- nothing else stands where it does.
-## The captain's chair and the crew stations are quiet too: the bridge keeps
-## its floors and walls as they are (ship bridge spec §5).
+## The captain's chair, the crew stations and the weapons station are quiet
+## too: the bridge keeps its floors and walls as they are (ship bridge spec §5).
 const QUIET_FIXTURES: Array[StringName] = [&"quantum_core", &"quantum_machine", COMPUTER_ID,
 	&"captain_chair", &"crew_station", WeaponValues.STATION]
 const _HORIZONTAL: Array[Vector3i] = [

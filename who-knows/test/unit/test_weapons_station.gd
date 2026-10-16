@@ -24,6 +24,16 @@ func test_it_is_a_seat_the_rules_check():
 	var found := ShipRules.check(_bridge_grid(), BlockCatalog.load_from_dir("res://data/blocks"))
 	assert_eq(found["rules"], [], "the bridge fixture with a weapons station breaks nothing")
 
+func test_the_board_stands_proud_of_the_screen_panel():
+	# Along the face's normal (+z in the face frame) the board must lie clear
+	# in front of the dark panel's front plane, or the text is hidden in it.
+	var in_face := InteriorProps.STATION_FACE.affine_inverse() * WeaponsStation.board_frame()
+	assert_almost_eq(in_face.origin.x, 0.0, 0.0001)
+	assert_almost_eq(in_face.origin.y, 0.0, 0.0001)
+	assert_gt(in_face.origin.z, InteriorProps.STATION_PANEL_FRONT + 0.005,
+		"the board is %.4f m out of the face; the panel's front is %.4f" % [in_face.origin.z, InteriorProps.STATION_PANEL_FRONT])
+	assert_true(in_face.basis.is_equal_approx(Basis.IDENTITY), "the board faces out of the screen")
+
 func test_a_ship_builds_a_weapons_station_seat():
 	var root: Node = load("res://scenes/flight_test.tscn").instantiate()
 	root.starter_ship = "res://test/fixtures/bridge/bridge.json"
