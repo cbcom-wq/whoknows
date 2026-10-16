@@ -55,6 +55,7 @@ static func check(grid: ShipGrid, catalog: BlockCatalog) -> Dictionary:
 		rules.append(item(&"WINDOW_UNMATCHED", "the window in %s's wall toward %s has no place outside"
 			% [w["coord"], w["normal"]], w["coord"]))
 	_check_pieces(grid, catalog, rules)
+	_check_turrets(grid, rules, notes)
 	_note(grid, catalog, stats, notes)
 	return {"rules": rules, "notes": notes}
 
@@ -214,6 +215,29 @@ static func _check_pieces(grid: ShipGrid, catalog: BlockCatalog, rules: Array) -
 		if (damage.pieces[id] as Array).is_empty():
 			rules.append(item(&"NO_PIECES", "the %s has no plating or fairing outside the cabin to lose: it never shows a hole"
 				% String(ShipDamage.SECTION_LABELS[id]).to_lower()))
+
+## Turrets (ship weapons spec §8): each must stand on an open face, and one
+## that sees under BLIND_BELOW of its half-sky is worth knowing.
+static func _check_turrets(grid: ShipGrid, rules: Array, notes: Array) -> void:
+	var seen: Array[String] = []
+	var coords: Array = grid.coords()
+	coords.sort()
+	for coord: Vector3i in coords:
+		var inst := grid.get_block(coord)
+		if not WeaponValues.is_turret(inst.block_id):
+			continue
+		var n := SkyMap.normal_of(inst.orientation)
+		if grid.has_block(coord + n):
+			rules.append(item(&"TURRET_BURIED", "the %s at %s stands under %s: its mount face must open onto space"
+				% [inst.block_id, coord, coord + n], coord))
+			continue
+		var cover := SkyMap.build(grid, coord, n).coverage()
+		seen.append("%s %d%%" % [coord, roundi(cover * 100.0)])
+		if cover < WeaponValues.BLIND_BELOW:
+			notes.append(item(&"TURRET_BLIND", "the %s at %s sees %d%% of its half-sky: mount it where it can see"
+				% [inst.block_id, coord, roundi(cover * 100.0)], coord))
+	if not seen.is_empty():
+		notes.append(item(&"TURRETS", "%d turrets, sky clear: %s" % [seen.size(), ", ".join(seen)]))
 
 ## Worth knowing, never failing: rcs whose puffs are hidden, how it flies, and
 ## its size.
