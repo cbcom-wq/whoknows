@@ -104,3 +104,54 @@ func test_a_hurt_module_sparks_and_a_whole_one_does_not():
 func test_a_wrecked_hub_darkens_the_panel_s_lines():
 	_wreck(0)
 	assert_eq(_base.link.lines()[0], "HUB WRECKED")
+
+func test_the_wrecked_time_is_not_paid_back_on_a_mend():
+	var rate := DrillYield.rate(_base.site.modules[_drill]["drill"])
+	_wreck(_drill)
+	_clock += 600.0
+	_base.credit_drills()
+	_base.repair_section(ModuleDamage.part(_drill), 1.0)
+	_clock += 1.0
+	var ran_before := float(_base.site.modules[_drill]["drill"]["ran"])
+	_base.credit_drills()
+	var drill: Dictionary = _base.site.modules[_drill]["drill"]
+	assert_almost_eq(float(drill["ran"]) - ran_before, 1.0, 0.001, "one second ran, not 601")
+	assert_lt(float(drill["owed"]) + _base.quantum.store.amount, rate * 5.0 + 1.0)
+
+func test_a_stage_crossing_hit_pays_the_seconds_before_it_and_then_stops_the_drill():
+	_clock += 600.0
+	var cell: Vector3i = _base.site.cells_of(_drill)[0]
+	var hit := Hit.make(_base.exterior.to_global(ShipGrid.cell_center(cell)), Vector3.UP, Vector3.DOWN, Vector3.ZERO, null)
+	hit.damage = ModuleDamage.hp(_base.site, _drill, _base.catalog)
+	var before := _base.quantum.store.amount
+	_base._on_hull_hit(hit)
+	assert_eq(_base.module_stage(_drill), BlockDamage.Stage.WRECKED)
+	assert_gt(_base.quantum.store.amount, before, "the 600 s before the wreck were paid")
+	var after := _base.quantum.store.amount
+	_clock += 600.0
+	assert_eq(_base.credit_drills(), 0, "wrecked by the hit: nothing more")
+	assert_eq(_base.quantum.store.amount, after)
+
+func test_a_damaged_module_is_tinted_in_the_shown_sites_order_while_another_unfolds():
+	_base.begin_unfold(_drill)
+	_base.site.modules[_store]["damage"] = ModuleDamage.hp(_base.site, _store, _base.catalog) * 0.7
+	_base.rebuild()
+	var tints: Array = _base.exterior_look.last_tints
+	assert_eq(tints.size(), _base.site.modules.size() - 1)
+	assert_eq(tints[0], HullPalette.UNHURT, "the hub")
+	assert_ne(tints[1], HullPalette.UNHURT, "the store, now second in the shown site")
+
+func test_a_wrecked_store_s_clamp_survives_sleep_and_a_mend():
+	var whole := _base.quantum.store.capacity
+	_base.quantum.store.credit(whole - _base.quantum.store.amount, &"test")
+	_wreck(_store)
+	var held := _base.quantum.store.amount
+	assert_eq(held, whole - HabitatValues.STORE_ADDS, "clamped to the reduced capacity")
+	var id := _base.site.id
+	_root.bases.sleep(id)
+	var woke: Base = _root.bases.wake(id)
+	assert_not_null(woke)
+	assert_eq(woke.quantum.store.amount, held)
+	woke.repair_section(ModuleDamage.part(_store), 1.0)
+	assert_eq(woke.quantum.store.capacity, whole)
+	assert_eq(woke.quantum.store.amount, held, "the lost QE does not come back")

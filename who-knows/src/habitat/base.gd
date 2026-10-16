@@ -270,7 +270,12 @@ func credit_drills() -> int:
 	var now: float = clock.call()
 	var paid := 0
 	for i in site.drills():
-		if i != unfolding and ModuleDamage.stage(site, i, catalog) != BlockDamage.Stage.WRECKED:
+		if i == unfolding:
+			continue
+		if ModuleDamage.stage(site, i, catalog) == BlockDamage.Stage.WRECKED:
+			# Stopped: the time it stood wrecked is neither paid nor run, now or after a mend.
+			site.modules[i]["drill"]["credited_at"] = now
+		else:
 			paid += DrillYield.credit(site.modules[i]["drill"], now, quantum.store)
 	return paid
 
@@ -300,6 +305,9 @@ func _on_hull_hit(hit: Hit) -> void:
 	var index: int = site.occupied().get(cell, -1)
 	if index < 0 or index == unfolding:
 		return
+	# A drill about to be wrecked is paid up to now first: the seconds before it stopped are its own.
+	if site.modules[index]["kind"] == ModuleCatalog.DRILL:
+		credit_drills()
 	if ModuleDamage.hit(site, index, hit.damage, catalog):
 		rebuild()
 

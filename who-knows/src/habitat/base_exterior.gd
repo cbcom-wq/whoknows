@@ -48,6 +48,8 @@ var _legs: Array[MeshInstance3D] = []
 var _shell: Node3D
 var _show: Node3D
 var _leg_count := 0
+## The tints the last build() was given, for tests.
+var last_tints: Array = []
 
 ## Every module's shell and legs, from the site. `windows` are the hull
 ## layout's (HullLayout.windows, base frame), each given a porthole on the
@@ -56,6 +58,7 @@ var _leg_count := 0
 ## `site`'s order -- its damage (ship weapons spec §6.5), scorched then
 ## charred; unhurt where short.
 func build(site: BaseSite, windows: Array = [], openings: Array = [], tints: Array = []) -> void:
+	last_tints = tints
 	for leg in _legs:
 		leg.queue_free()
 	_legs.clear()
