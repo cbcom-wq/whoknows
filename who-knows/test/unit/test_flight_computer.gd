@@ -398,3 +398,39 @@ func test_boost_telemetry_shows_the_running_cost():
 	var t := _fc.build_telemetry()
 	assert_eq(t.tool_text, "BOOST −5/S")
 	assert_false(t.boost_refused)
+
+func test_a_gunner_holds_the_ship():
+	_hull.gravity_scale = 0.0
+	_hull.linear_velocity = Vector3(0, 0, -30)
+	_fc.thrust_budget = {&"forward": 1_000_000.0, &"reverse": 400_000.0, &"lateral": 400_000.0, &"vertical": 400_000.0}
+	_fc.set_pilot_input(Vector3(1, 0, -1), Vector3(0.5, 0, 0), false)
+	_fc.gunner_hold = true
+	assert_true(_fc.speed_locked, "the speed it had is held")
+	assert_almost_eq(_fc.locked_speed, 30.0, 0.5)
+	_fc.set_pilot_input(Vector3(1, 0, -1), Vector3(0.5, 0, 0), true)
+	await wait_physics_frames(3)
+	assert_almost_eq(_fc.commanded_force_local.x, 0.0, 1.0, "no one strafes it")
+	assert_almost_eq(_fc.commanded_torque_local.x, 0.0, 1.0, "no one turns it")
+	_fc.gunner_hold = false
+	_fc.set_pilot_input(Vector3(1, 0, 0), Vector3.ZERO, false)
+	await wait_physics_frames(2)
+	assert_gt(_fc.commanded_force_local.x, 0.0, "let go, the helm flies it again")
+
+func test_a_hold_unlocks_only_the_lock_it_set():
+	_hull.gravity_scale = 0.0
+	_hull.linear_velocity = Vector3(0, 0, -30)
+	assert_false(_fc.speed_locked)
+	_fc.gunner_hold = true
+	assert_true(_fc.speed_locked, "the hold locked the speed")
+	_fc.gunner_hold = false
+	assert_false(_fc.speed_locked, "and lets it go with the hold")
+
+func test_a_hold_keeps_a_lock_the_pilot_had():
+	_hull.gravity_scale = 0.0
+	_hull.linear_velocity = Vector3(0, 0, -30)
+	_fc.toggle_speed_lock()
+	assert_true(_fc.speed_locked)
+	_fc.gunner_hold = true
+	_fc.gunner_hold = false
+	assert_true(_fc.speed_locked, "the pilot's own lock outlasts the hold")
+	assert_almost_eq(_fc.locked_speed, 30.0, 0.5)

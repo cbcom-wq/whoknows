@@ -183,3 +183,47 @@ func test_a_blocked_ramp_breaks_dais_blocked():
 
 func test_the_starter_still_breaks_none():
 	assert_eq(_codes_of(ShipLibrary.load_from_dir().grid(&"starter")), [])
+
+func _starter_with(at: Vector3i, orientation: int, extra := {}) -> ShipGrid:
+	var grid := ShipLibrary.read("res://data/ships/starter.json")["grid"] as ShipGrid
+	var t := BlockInstance.new()
+	t.block_id = WeaponValues.LIGHT
+	t.orientation = orientation
+	grid.set_block(at, t)
+	for c: Vector3i in extra:
+		var inst := BlockInstance.new()
+		inst.block_id = extra[c]
+		grid.set_block(c, inst)
+	return grid
+
+func _found_codes(found: Array) -> Array:
+	return found.map(func(r: Dictionary) -> StringName: return r["code"])
+
+func test_a_buried_turret_breaks_turret_buried():
+	var found := ShipRules.check(_starter_with(Vector3i(0, 1, -3), 0, {Vector3i(0, 2, -3): &"hull"}),
+		BlockCatalog.load_from_dir("res://data/blocks"))
+	assert_true(_found_codes(found["rules"]).has(&"TURRET_BURIED"))
+
+func test_an_open_turret_breaks_nothing_and_notes_its_sky():
+	var found := ShipRules.check(_starter_with(Vector3i(0, 2, 0), 0), BlockCatalog.load_from_dir("res://data/blocks"))
+	assert_false(_found_codes(found["rules"]).has(&"TURRET_BURIED"))
+	assert_true(_found_codes(found["notes"]).has(&"TURRETS"))
+
+func test_a_hemmed_in_turret_is_noted_blind():
+	# A ring of hull two cells high round it: it sees only a disc of sky overhead.
+	var walls := {}
+	for y in [3, 4]:
+		for dx in [-1, 0, 1]:
+			for dz in [-1, 0, 1]:
+				if dx != 0 or dz != 0:
+					walls[Vector3i(dx, y, dz)] = &"hull"
+	var found := ShipRules.check(_starter_with(Vector3i(0, 2, 0), 0, walls), BlockCatalog.load_from_dir("res://data/blocks"))
+	assert_true(_found_codes(found["notes"]).has(&"TURRET_BLIND"))
+
+func test_two_weapons_stations_break_the_rule():
+	var grid := ShipLibrary.read("res://test/fixtures/bridge/bridge.json")["grid"] as ShipGrid
+	for c: Vector3i in grid.coords():
+		if grid.get_block(c).block_id == &"crew_station":
+			grid.get_block(c).block_id = WeaponValues.STATION
+	var found := ShipRules.check(grid, BlockCatalog.load_from_dir("res://data/blocks"))
+	assert_true(_found_codes(found["rules"]).has(&"TWO_WEAPONS_STATIONS"))

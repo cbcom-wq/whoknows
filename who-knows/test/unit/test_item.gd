@@ -174,7 +174,10 @@ func test_set_space_puts_it_in_the_world_and_back_aboard():
 	for g in _looks(item):
 		assert_eq(g.layers, 1, "%s on the exterior layer" % g.name)
 	assert_eq(item.get_node("Look").get_child_count(), _looks(item).size(), "one look, not two")
-	assert_eq(item.get_groups(), groups, "no floating-origin group joined")
+	var outside_groups := item.get_groups()
+	outside_groups.erase(Weapons.TARGETS)
+	assert_eq(outside_groups, groups, "no floating-origin group joined")
+	assert_true(item.is_in_group(Weapons.TARGETS), "outside, a turret may shoot it")
 	item.set_space(false)
 	assert_false(item.in_space)
 	assert_eq(item.collision_mask, 2 | 4 | 32 | Npc.LAYER)

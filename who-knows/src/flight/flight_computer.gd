@@ -89,6 +89,8 @@ var hull_status: Callable
 ## The ship's warp drive, or null. While it travels it flies the hull, and
 ## this ignores the pilot (the warp spec §5.2).
 var warp: WarpDrive = null
+## The ship's fire control, or null: its weapons show in the telemetry.
+var fire_control: FireControl = null
 ## Where you are, for the limit; null means the cruise ceiling everywhere, as
 ## in every test that never sets it.
 var whereabouts: Whereabouts = null
@@ -122,7 +124,34 @@ var _boost: bool = false
 
 @onready var _hull: RigidBody3D = get_node(hull_path)
 
+## Someone at the weapons station (ship weapons spec §7.1): the stick and the
+## keys are centred and, with the assist on, the forward speed it had is
+## locked, so it keeps its course while drift and spin are damped. Off, the
+## helm flies it again. Letting go unlocks the speed only if the hold locked it:
+## a lock the pilot had before is theirs.
+var gunner_hold := false:
+	set(on):
+		if on == gunner_hold:
+			return
+		gunner_hold = on
+		if on:
+			_translate_input = Vector3.ZERO
+			_rotate_input = Vector3.ZERO
+			_boost = false
+			if assist_enabled and not speed_locked:
+				speed_locked = true
+				locked_speed = forward_speed() if _hull != null else 0.0
+				_hold_locked = true
+		elif _hold_locked:
+			_hold_locked = false
+			speed_locked = false
+
+## The speed lock was set by the hold, so the hold clears it.
+var _hold_locked := false
+
 func set_pilot_input(translate: Vector3, rotate: Vector3, boost: bool) -> void:
+	if gunner_hold:
+		return
 	_translate_input = translate
 	_rotate_input = rotate
 	_boost = boost
@@ -135,6 +164,7 @@ func clear_pilot_input() -> void:
 
 ## Locks the hull's forward speed as it is now, or unlocks. Needs assist.
 func toggle_speed_lock() -> void:
+	_hold_locked = false   # a lock chosen by hand is the pilot's
 	if speed_locked:
 		speed_locked = false
 	elif assist_enabled:
@@ -416,4 +446,9 @@ func build_telemetry() -> VehicleTelemetry:
 		t.hud_flicker = status.size() > 2 and bool(status[2])
 		t.cockpit_cracks = int(status[3]) if status.size() > 3 else 0
 	t.tool_text = "BOOST −%d/S" % roundi(QuantumValues.BOOST_COST) if boosting else ""
+	if fire_control != null and not fire_control.turrets.is_empty():
+		t.has_weapons = true
+		t.weapons_engage = fire_control.orders == FireControl.Orders.ENGAGE
+		t.weapons_pips = fire_control.pips()
+		t.weapons_low_power = t.weapons_engage and quantum != null and quantum.is_low_power()
 	return t

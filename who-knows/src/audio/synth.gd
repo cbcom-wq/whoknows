@@ -24,6 +24,7 @@ const NAMES: Array[StringName] = [
 	&"light_switch",
 	&"unfold", &"leg_stamp", &"drill_hum",
 	&"hose_draw", &"hose_gulp",
+	&"phaser_thrum", &"phaser_heavy", &"phaser_whine", &"phaser_crack",
 ]
 ## Sounds that play as seamless loops.
 const LOOPED: Array[StringName] = [&"ship_hum", &"breath", &"thruster_puff", &"core_hum", &"charge", &"droid_whir",
@@ -132,6 +133,14 @@ static func build(sound_name: StringName) -> AudioStreamWAV:
 			x = _hose_draw()
 		&"hose_gulp":
 			x = _hose_gulp()
+		&"phaser_thrum":
+			x = _phaser_thrum()
+		&"phaser_heavy":
+			x = _phaser_heavy()
+		&"phaser_whine":
+			x = _phaser_whine()
+		&"phaser_crack":
+			x = _phaser_crack()
 		_:
 			push_error("Synth: no sound called %s" % sound_name)
 			return null
@@ -456,6 +465,57 @@ static func _hose_gulp() -> PackedFloat32Array:
 		phase += TAU * lerpf(420.0, 150.0, minf(t / 0.2, 1.0)) / MIX_RATE
 		x[i] = sin(phase) * _ramp(t, 0.01, 0.25, 0.08)
 	return _gain(x, 0.35)
+
+## A light turret's bolt (ship weapons spec §9.3): a punchy falling thrum with a
+## bright crack on its front.
+static func _phaser_thrum() -> PackedFloat32Array:
+	var n := _len(0.2)
+	var crack := _highpass(_noise(n, 71), 1500.0)
+	var x := PackedFloat32Array()
+	x.resize(n)
+	var phase := 0.0
+	for i in n:
+		var t := float(i) / MIX_RATE
+		phase += TAU * lerpf(170.0, 70.0, minf(t / 0.12, 1.0)) / MIX_RATE
+		x[i] = sin(phase) * exp(-t / 0.06) + crack[i] * exp(-t / 0.02) * 0.6
+	return _gain(x, 0.7)
+
+## The heavy turret's bolt: a deep whump.
+static func _phaser_heavy() -> PackedFloat32Array:
+	var n := _len(0.7)
+	var rumble := _lowpass(_noise(n, 73), 300.0)
+	var x := PackedFloat32Array()
+	x.resize(n)
+	var phase := 0.0
+	for i in n:
+		var t := float(i) / MIX_RATE
+		phase += TAU * lerpf(95.0, 35.0, minf(t / 0.4, 1.0)) / MIX_RATE
+		x[i] = sin(phase) * exp(-t / 0.22) + rumble[i] * exp(-t / 0.08) * 1.8
+	return _gain(x, 0.9)
+
+## The heavy turret recharging, at the weapons station: a soft rising whine.
+static func _phaser_whine() -> PackedFloat32Array:
+	var n := _len(3.0)
+	var x := PackedFloat32Array()
+	x.resize(n)
+	var phase := 0.0
+	for i in n:
+		var t := float(i) / MIX_RATE
+		phase += TAU * lerpf(300.0, 900.0, t / 3.0) / MIX_RATE
+		x[i] = sin(phase) * _ramp(t, 0.1, 3.0, 0.3) * (0.8 + 0.2 * sin(TAU * 7.0 * t))
+	return _gain(x, 0.25)
+
+## A bolt landing, heard outside close by: a short sharp crack.
+static func _phaser_crack() -> PackedFloat32Array:
+	var n := _len(0.25)
+	var crack := _highpass(_noise(n, 79), 900.0)
+	var body := _lowpass(_noise(n, 83), 400.0)
+	var x := PackedFloat32Array()
+	x.resize(n)
+	for i in n:
+		var t := float(i) / MIX_RATE
+		x[i] = crack[i] * exp(-t / 0.015) + body[i] * exp(-t / 0.07) * 1.5
+	return _gain(x, 0.6)
 
 ## Converting (spec §13): a rising shimmer -- filtered noise swept up and a
 ## sine gliding up an octave and more over the convert's 1.2 s -- ending in a

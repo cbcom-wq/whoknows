@@ -37,6 +37,8 @@ var ledger: NpcLedger
 var anchor_group: StringName = AsteroidStream.SPACE_ANCHOR
 ## The cameras that could see an NPC being demoted (outside).
 var cameras: Array[Camera3D] = []
+## Outside, its NPCs are targets (ship weapons spec §4.1); inside they never are.
+var targets := false
 ## Its own clock, seconds: rounds and memories read this.
 var time := 0.0
 ## id -> Npc
@@ -217,6 +219,8 @@ func promote(record: NpcRecord, site: NpcSite) -> Npc:
 	npc.director = self
 	npc.bus = bus
 	holder.add_child(npc)
+	if targets:
+		Weapons.join(npc, Weapons.npc_id(record.id))
 	npc.setup(record, species, site, rule == Rule.BY_SITE, site.start_pose(record, time))
 	if ledger != null:
 		npc.health.current = ledger.health_of(record.id, species.max_health)
@@ -245,6 +249,7 @@ func demote(npc: Npc) -> void:
 		herd.erase(npc)
 		if herd.is_empty():
 			_herds.erase(_herd_key(npc))
+	Weapons.leave(npc)
 	if npc.get_parent() != null:
 		npc.get_parent().remove_child(npc)
 	_pool.get_or_add(npc.species.id, []).append(npc)

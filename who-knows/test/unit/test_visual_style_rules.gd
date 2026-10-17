@@ -32,6 +32,10 @@ const PAINTING_FILES := [
 	"res://src/avatar/hands.gd",
 	"res://src/items/impact_flash.gd",
 	"res://src/items/plasma_bolt.gd",
+	"res://src/combat/bolt.gd",
+	"res://src/combat/phaser_bolt.gd",
+	"res://src/combat/turret.gd",
+	"res://src/combat/turret_look.gd",
 	"res://src/items/hand_lamp.gd",
 	"res://src/items/flare.gd",
 	"res://src/items/datapad.gd",
@@ -89,6 +93,7 @@ const PAINTING_FILES := [
 const REUSABLE_FILES := [
 	"res://src/ship/interior/interior_props.gd",
 	"res://src/ship/hull/hull_props.gd",
+	"res://src/combat/turret_look.gd",
 	"res://src/ship/hull/hull_materials.gd",
 	"res://src/ship/interior/interior_kit.gd",
 	"res://src/ship/interior/sliding_door.gd",

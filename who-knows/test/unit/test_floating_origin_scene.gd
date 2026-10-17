@@ -109,6 +109,13 @@ func test_a_spacewalk_across_a_shift_keeps_you_beside_your_ship():
 func test_everything_outside_is_covered():
 	assert_eq(_uncovered(), [], "every body and mesh outside the interior shifts")
 
+func test_bolts_in_flight_are_covered():
+	var pool: BoltPool = _root.bolt_pool
+	var ex: Array[RID] = []
+	pool.fire(WeaponValues.HEAVY, _ship.exterior.global_position + Vector3(0, 30, 0), Vector3.UP, Vector3.ZERO, null, ex)
+	await wait_physics_frames(2)
+	assert_eq(_uncovered(), [], "every bolt, its streak and its light move with the origin")
+
 func test_with_a_second_ship_everything_outside_is_covered():
 	var place := Transform3D(Basis.IDENTITY, _ship.exterior.global_position + Vector3(300, 0, 0))
 	_root.fleet.spawn(_root._starter_grid(), place)

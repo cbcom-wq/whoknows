@@ -227,6 +227,45 @@ func test_it_brings_the_droid_round():
 	_hold(aim, 0.1)
 	assert_false(droid.down)
 
+## A flat plane for a base to stand on, as test_base_drill.gd's.
+class BaseGround extends PlantSurface:
+	var y := 0.0
+	func _init(p_y: float) -> void:
+		y = p_y
+	func cast(from: Vector3, dir: Vector3, reach: float) -> Dictionary:
+		var to := from + dir * reach
+		if from.y >= y and to.y <= y:
+			return {"position": from.lerp(to, (from.y - y) / (from.y - to.y)), "normal": Vector3.UP}
+		return {}
+	func fixed() -> bool:
+		return true
+	func site_id() -> StringName:
+		return &"rock:torch"
+
+## A base's module is mended from outside, like a hull section (ship weapons
+## spec §6.5).
+func test_the_torch_mends_a_base_module_from_outside():
+	_root.bases.clock = func() -> float: return 0.0
+	var at: Vector3 = _ship.exterior.global_position + Vector3(0, -40, 60)
+	var ground := BaseGround.new(at.y)
+	var r := Planting.fit(ground, ModuleCatalog.get_def(ModuleCatalog.HUB), at, Vector3.FORWARD, 0)
+	var base: Base = _root.bases.plant(ModuleCatalog.HUB, r, ground)
+	base.tick_unfold(HabitatValues.UNFOLD + 0.1)
+	await wait_physics_frames(2)
+	base.site.modules[0]["damage"] = 100.0
+	var top := Vector3i(0, -(1 << 20), 0)
+	for c in base.site.cells_of(0):
+		if c.y > top.y and not base.grid.has_block(c + Vector3i.UP):
+			top = c
+	var face := base.exterior.to_global(ShipGrid.cell_center(top) + Vector3.UP * 1.0)
+	var aim := Transform3D(Basis.looking_at(-base.exterior.global_basis.y, base.exterior.global_basis.z),
+		face + base.exterior.global_basis.y * 1.5)
+	var t := _torch.target(_item, aim, null)
+	assert_eq(t.get("part"), ModuleDamage.part(0))
+	_torch.hold(_item, aim, null, null, 1.0)
+	assert_lt(float(base.site.modules[0]["damage"]), 100.0)
+	assert_string_starts_with(_torch.aim_text(_item, aim, null), "HUB 1")
+
 ## Nothing to save; an old save's feed is ignored.
 func test_it_saves_nothing():
 	assert_eq(_torch.save(), {})

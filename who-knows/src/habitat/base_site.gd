@@ -20,7 +20,7 @@ var rock := Vector4i.ZERO
 var site_id: StringName
 ## {kind, cell, turns, legs, drill}: the module's kind, its origin cell in the
 ## base's grid, its quarter turns, its four leg lengths, and its drill's state
-## ({} unless it is a drill).
+## ({} unless it is a drill), and the damage it has taken (ModuleDamage).
 var modules: Array = []
 var store := 0
 ## While asleep or saved: each airlock's to_dict(), by cell key, and the items
@@ -30,7 +30,7 @@ var items: Array = []
 
 ## Adds a module; returns its index.
 func add(kind: StringName, cell: Vector3i, turns: int, legs: PackedFloat32Array) -> int:
-	modules.append({"kind": kind, "cell": cell, "turns": posmod(turns, 4), "legs": legs, "drill": {}})
+	modules.append({"kind": kind, "cell": cell, "turns": posmod(turns, 4), "legs": legs, "drill": {}, "damage": 0.0})
 	return modules.size() - 1
 
 func remove(index: int) -> void:
@@ -86,7 +86,7 @@ func to_dict() -> Dictionary:
 	var saved := []
 	for m: Dictionary in modules:
 		saved.append({"kind": String(m["kind"]), "cell": SaveCodec.vec3i(m["cell"]), "turns": m["turns"],
-			"legs": Array(m["legs"]), "drill": m["drill"]})
+			"legs": Array(m["legs"]), "drill": m["drill"], "damage": float(m.get("damage", 0.0))})
 	return {"id": String(id), "system": system, "at": SaveCodec.upoint(at), "turn": SaveCodec.basis(turn),
 		"rock": [rock.x, rock.y, rock.z, rock.w], "site": String(site_id), "modules": saved,
 		"store": store, "airlocks": airlocks, "items": items}
@@ -105,7 +105,7 @@ static func from_dict(d: Dictionary) -> BaseSite:
 			continue
 		s.modules.append({"kind": StringName(m["kind"]), "cell": SaveCodec.to_vec3i(m.get("cell")),
 			"turns": int(m.get("turns", 0)), "legs": PackedFloat32Array(m.get("legs", [])),
-			"drill": m.get("drill", {})})
+			"drill": m.get("drill", {}), "damage": float(m.get("damage", 0.0))})
 	s.store = int(d.get("store", 0))
 	s.airlocks = d.get("airlocks", {})
 	s.items = d.get("items", [])

@@ -357,12 +357,33 @@ func cycle_view() -> void:
 		view = View.FOOT_THIRD if view == View.FOOT_FIRST else View.FOOT_FIRST
 	_apply_view()
 
+## A seated job's own camera (ship weapons spec §7.2), or null.
+func _job_camera() -> Camera3D:
+	if not is_seated or _seat == null or _seat.job == null or _tween != null:
+		return null
+	var cam := _seat.job.view_camera()
+	# A freed or detached camera is no view: the seat's eye, never no camera.
+	if cam == null or not is_instance_valid(cam) or not cam.is_inside_tree():
+		return null
+	return cam
+
+## A job changed its camera (another turret): see through the new one.
+func refresh_view() -> void:
+	if is_seated and _tween == null:
+		_apply_view()
+
 func _apply_view() -> void:
 	match view:
 		View.COCKPIT, View.FOOT_FIRST:
-			_interior_cam.current = true
-			_chase_cam.current = false
-			_interior_cam.position = Vector3.ZERO
+			var job_cam := _job_camera()
+			if job_cam != null:
+				job_cam.current = true
+				_interior_cam.current = false
+				_chase_cam.current = false
+			else:
+				_interior_cam.current = true
+				_chase_cam.current = false
+				_interior_cam.position = Vector3.ZERO
 		View.FOOT_THIRD:
 			_interior_cam.current = true
 			_chase_cam.current = false
@@ -403,6 +424,8 @@ func piloting() -> bool:
 ## the helm, where the mouse is the stick.
 func look(relative: Vector2) -> void:
 	if not is_seated or _seat.flies or _tween != null:
+		return
+	if _seat.job != null and _seat.job.takes_mouse():
 		return
 	_look.x = clampf(_look.x - relative.x * SEAT_LOOK_SENSITIVITY, -SEAT_LOOK_YAW, SEAT_LOOK_YAW)
 	_look.y = clampf(_look.y - relative.y * SEAT_LOOK_SENSITIVITY, -SEAT_LOOK_PITCH, SEAT_LOOK_PITCH)

@@ -17,3 +17,4 @@ grip_point = Vector3(0, -0.02, 0.085)
 use_point = Vector3(0, 0.012, -0.14)
 quantum_value = 60
 works_outside = true
+unbreakable = true

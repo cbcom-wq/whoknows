@@ -54,6 +54,7 @@ local z otherwise. Origin at the feet; up is local +y; forward is −z.
 | `Npc.bite()`, `BITE_DAMAGE` 15, `BITE_PUSH` 40 N·s, `BITE_REACH` 1.6 m | the body's bite, asked for by an intent with action `&"bite"` |
 | `NpcLedger` (`mark_dead`, `is_dead`, `set_health`, `health_of`, `to_dict`) | one per game (`flight_test.npc_ledger`), given to every director; `NpcDirector.amend` returns null for the dead; `demote` writes wounds; `promote` reads them. Saved as `"npcs"` |
 | `ctx.extra[&"hurt_ago"]` | seconds since it was last hurt, for a behaviour to read |
+| `NpcDirector.targets`, `Weapons.TARGETS`, `Weapons.npc_id(record.id)` | the exterior director joins each promoted NPC to the weapons group as `npc:<record id>` and takes it out on `demote` (ship weapons spec §4.1); the interior director's `targets` is false. A turret's phaser bolt arrives at `receive_hit` like any other hit: **15 hp a light bolt, 120 a heavy** (`WeaponValues` damage). `Weapons.usable` is false for a dead NPC (`is_dead()`), so it leaves every turret's choice and, 2 s on, the fire-control list; a knocked-out one is still a target. Test: `test_npc_director.gd` (`targets`) |
 | `behaviours/defend.gd` | the template for an NPC that fights back: a reflex scored from `hurt_ago`, fear and the player's distance, `Intent.go(player, 1.0, &"lunge"/&"bite")`, given up past 6 m or when calm; weight it over `scatter` |
 
 NPCs heal `HEAL_RATE` 0.1 hp/s after `HEAL_AFTER` 10 s, only while live.

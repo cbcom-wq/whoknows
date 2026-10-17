@@ -95,15 +95,17 @@ func test_the_starter_shuttle_still_launches():
 ## spec §8) then added 7.8 t of unpowered mass above and below the cabin: the
 ## centre of mass rose 9 cm, and pitch imbalance went from 0.4% to 4.9% of
 ## authority, inside the 5% rule.
+## Ship weapons spec §13: the two fairing halves at (0, 2, 0) and (0, -1, 0)
+## became light turrets, +1.0 t and +0.2 MW drawn; pitch imbalance fell to 4.8%.
 func test_the_starter_shuttle_is_pinned_with_the_quantum_core_machine_and_computer():
 	assert_eq(_grid.coords().size(), 110, "110 blocks")
 	var s := ShipStats.compute(_grid, _cat)
-	assert_almost_eq(s.total_mass_kg, 104_700.0, 1.0)
-	assert_almost_eq(s.center_of_mass, Vector3(0.004, 1.301, 0.160), Vector3.ONE * 0.001)
-	assert_almost_eq(s.torque_imbalance, Vector3(151289, -5731, 0), Vector3.ONE * 1.0)
-	assert_almost_eq(s.torque_budget, Vector3(3_080_229, 2_040_115, 2_174_785), Vector3.ONE * 1.0)
+	assert_almost_eq(s.total_mass_kg, 105_700.0, 1.0)
+	assert_almost_eq(s.center_of_mass, Vector3(0.004, 1.298, 0.159), Vector3.ONE * 0.001)
+	assert_almost_eq(s.torque_imbalance, Vector3(147_020, -5676, 0), Vector3.ONE * 1.0)
+	assert_almost_eq(s.torque_budget, Vector3(3_079_470, 2_039_735, 2_175_497), Vector3.ONE * 1.0)
 	assert_almost_eq(s.power_gen, 36.0, 0.05)
-	assert_almost_eq(s.power_draw, 31.3, 0.05)
+	assert_almost_eq(s.power_draw, 31.5, 0.05)
 	assert_eq(s.quantum_capacity, 1200)
 	var issues := ShipValidator.validate(_grid, _cat)
 	assert_eq(issues.size(), 0, "zero issues")
@@ -169,6 +171,7 @@ const FAIRINGS := [&"fairing_slope", &"fairing_slope_long_low", &"fairing_slope_
 	&"fairing_corner_out", &"fairing_corner_in", &"fairing_half"]
 
 ## Ship exterior spec §8: the shape is fairings, all outside the cabin row.
+## Ship weapons spec §13: two of the 26 became turrets, so 24 fairings, 7.2 t.
 func test_the_shape_is_fairings_outside_the_cabin():
 	var n := 0
 	var mass := 0.0
@@ -178,8 +181,8 @@ func test_the_shape_is_fairings_outside_the_cabin():
 			n += 1
 			mass += _cat.get_def(id).mass_t
 			assert_ne(coord.y, 0, "no fairing in the cabin row: %s" % coord)
-	assert_eq(n, 26)
-	assert_almost_eq(mass, 7.8, 0.0001)
+	assert_eq(n, 24)
+	assert_almost_eq(mass, 7.2, 0.0001)
 
 ## The building-a-ship reference's test for a new ship (reference.md).
 func test_the_reshaped_starter_flies():
@@ -209,4 +212,4 @@ func test_the_reshape_keeps_the_open_rcs_open():
 ## data/ships/starter.md.
 func test_the_starter_file_is_pinned():
 	assert_eq(_grid.size(), 110)
-	assert_eq(ShipLibrary.rows_text(_grid).sha256_text(), "9305c583800ce1b438f5fffc6b1cb468fa3b18c360298cc15abd0f9f32dfe27f")
+	assert_eq(ShipLibrary.rows_text(_grid).sha256_text(), "ea002a045222dabd82577279aac911900b6e7ab6160bb01b1725924ec544e64a")

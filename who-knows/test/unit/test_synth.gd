@@ -13,6 +13,7 @@ const LENGTHS := {
 	&"light_switch": 0.12,
 	&"unfold": 2.0, &"leg_stamp": 0.4, &"drill_hum": 3.0,
 	&"hose_draw": 1.0, &"hose_gulp": 0.25,
+	&"phaser_thrum": 0.2, &"phaser_heavy": 0.7, &"phaser_whine": 3.0, &"phaser_crack": 0.25,
 }
 
 func test_every_sound_builds_at_its_length():

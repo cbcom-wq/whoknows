@@ -95,6 +95,14 @@ Do these in order. Each names the check that proves it.
    whether it dies (`knocked_out_for` 0) or is knocked out and gets up. A creature that fights
    back lists a reflex like `defend` and asks the body for the bite with an intent action; the
    mind never delivers a hit itself. Proof: `test_npc_death.gd`-style tests with a fake source.
+   **Ship weapons reach it:** NPCs outside are targets (`Weapons.TARGETS`; the exterior director
+   has `NpcDirector.targets = true`, set in `flight_test._wire_weapons`, and joins each NPC as
+   `npc:<record id>` on `promote`, leaving on `demote`), so a turret can be sent after one. A
+   phaser bolt reaches it through `receive_hit` like the pistol's: 15 hp from a light bolt, 120 from
+   a heavy, so a species with `max_health` under 120 dies to one heavy bolt. A dead NPC is no
+   longer `Weapons.usable`: turrets drop it at once and its list entry leaves after
+   `WeaponValues.MISSING_GRACE` 2 s. A new population needs nothing for this beyond going through
+   that director; the interior director leaves `targets` false, so crew are never shot at.
 9. **Sound** (inside only): new `Synth` builders, `species.move_sound` for a loop, behaviours set
    `ctx.voice`. Proof: `test_synth.gd` lengths.
 10. **Run the whole suite.** Masks and the floating-origin coverage test catch a lot.

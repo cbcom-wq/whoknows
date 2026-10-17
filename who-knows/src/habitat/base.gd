@@ -20,6 +20,8 @@ var unfold_left := 0.0
 var exterior_look: BaseExterior
 ## The hub's link panel (§6.1), rebuilt with the interior; null with no hub.
 var link: LinkPanel
+## Sparks on a damaged module's shell (ship weapons spec §6.5).
+var damage_show: DamageShow
 
 var _stamped := false
 ## Through the suit (outside is vacuum): the legs' stamp, and the walls folding
@@ -89,6 +91,8 @@ func _ready() -> void:
 	exterior.add_to_group(Universe.EXTERIOR_SPACE)
 	exterior.add_to_group(AsteroidStream.SPACE_ANCHOR)
 	exterior.set_meta(&"base", self)
+	exterior.set_meta(&"receive_hit", _on_hull_hit)
+	Weapons.join(exterior, Weapons.base_id(site.id))
 	quantum = QuantumPlant.new()
 	quantum.name = "Quantum"
 	quantum.items = items
@@ -99,6 +103,10 @@ func _ready() -> void:
 	exterior_look = BaseExterior.new()
 	exterior_look.name = "BaseExterior"
 	exterior.add_child(exterior_look)
+	damage_show = DamageShow.new()
+	damage_show.name = "DamageShow"
+	exterior.add_child(damage_show)
+	damage_show.setup(exterior, outside)
 	_thud = _player("Thud")
 	_fold = _player("Fold")
 	_grind = AudioStreamPlayer.new()
@@ -141,7 +149,20 @@ func rebuild() -> void:
 	_bind_airlocks()
 	_reseat(stowed)
 	var stats := ShipStats.compute(grid, catalog)
-	quantum.bind(interior_builder.quantum_cores(), interior_builder.quantum_machines(), stats)
+	# Wrecked modules stop (ship weapons spec §6.5): a store's tanks leave the
+	# capacity, a hub's machine is unbound, a drill stops (credit_drills).
+	var lost := 0
+	for i in ModuleDamage.wrecked(site, ModuleCatalog.STORE, catalog):
+		for b: Array in ModuleCatalog.get_def(ModuleCatalog.STORE).turned(site.modules[i]["turns"]):
+			var def := catalog.get_def(b[1])
+			lost += def.quantum_capacity if def != null else 0
+	stats.quantum_capacity = maxi(stats.quantum_capacity - lost, 0)
+	stats.intact_quantum_capacity = maxi(stats.intact_quantum_capacity - lost, 0)
+	var hub_down := not ModuleDamage.wrecked(site, ModuleCatalog.HUB, catalog).is_empty()
+	var machines: Array[QuantumMachine] = []
+	if not hub_down:
+		machines = interior_builder.quantum_machines()
+	quantum.bind(interior_builder.quantum_cores(), machines, stats)
 	# The box skin is the ship's look; a base wears its shell (§8.1) instead,
 	# over the same colliders.
 	if exterior_builder.skin() != null:
@@ -151,7 +172,11 @@ func rebuild() -> void:
 	for at: Vector3i in alcoves:
 		openings.append([at, (alcoves[at] as AirlockAlcove).hatch_normal])
 	var layout := exterior_builder.layout()
-	exterior_look.build(shown, layout.windows if layout != null else [], openings)
+	var tints := []
+	for i in site.modules.size():
+		if i != unfolding:
+			tints.append(ExteriorBuilder.stage_colour(ModuleDamage.stage(site, i, catalog)))
+	exterior_look.build(shown, layout.windows if layout != null else [], openings, tints)
 	var reach := 0.0
 	for c: Vector3i in grid.coords():
 		reach = maxf(reach, ShipGrid.cell_center(c).length())
@@ -159,6 +184,26 @@ func rebuild() -> void:
 	_apply_own()
 	_apply_livery()
 	_place_link(shown)
+	if link != null:
+		link.offline = hub_down
+	_show_damage()
+
+## A damaged module's blocks carry its damage (the shown grid is rebuilt each
+## time), so DamageShow spits sparks from its shell as it does from a ship's.
+func _show_damage() -> void:
+	if damage_show == null:
+		return
+	for i in site.modules.size():
+		if i == unfolding or ModuleDamage.taken(site, i) <= 0.0:
+			continue
+		var share := minf(ModuleDamage.taken(site, i) / ModuleDamage.hp(site, i, catalog),
+			ShipDamage.SHOWN_MOST / BlockDamage.GONE_AT)
+		for cell in site.cells_of(i):
+			var inst := grid.get_block(cell)
+			var def := catalog.get_def(inst.block_id) if inst != null else null
+			if def != null:
+				inst.damage = def.hp * share
+	damage_show.sync(grid, catalog)
 
 ## The link panel on the first hub's deck beside its airlock (§6.1).
 func _place_link(shown: BaseSite) -> void:
@@ -225,19 +270,25 @@ func credit_drills() -> int:
 	var now: float = clock.call()
 	var paid := 0
 	for i in site.drills():
-		if i != unfolding:
+		if i == unfolding:
+			continue
+		if ModuleDamage.stage(site, i, catalog) == BlockDamage.Stage.WRECKED:
+			# Stopped: the time it stood wrecked is neither paid nor run, now or after a mend.
+			site.modules[i]["drill"]["credited_at"] = now
+		else:
 			paid += DrillYield.credit(site.modules[i]["drill"], now, quantum.store)
 	return paid
 
 ## Each working drill's hum through the rock (§8.4): too faint to startle.
 func hum() -> void:
 	for i in site.drills():
-		if i == unfolding:
+		if i == unfolding or ModuleDamage.stage(site, i, catalog) == BlockDamage.Stage.WRECKED:
 			continue
 		var at := exterior.global_transform * site.centre_of(i)
 		StimulusBus.send(exterior, Stimulus.make(Stimulus.VIBRATION, at, HabitatValues.HUM_STRENGTH,
 			HabitatValues.HUM_RADIUS, exterior, site.site_id), HabitatValues.HUM_EVERY)
-	var working := site.drills().any(func(i: int) -> bool: return i != unfolding)
+	var working := site.drills().any(func(i: int) -> bool:
+		return i != unfolding and ModuleDamage.stage(site, i, catalog) != BlockDamage.Stage.WRECKED)
 	if own and working and not _grind.playing:
 		var s := Synth.sound(&"drill_hum")
 		if s != null:
@@ -245,6 +296,54 @@ func hum() -> void:
 			_grind.play()
 	elif (not own or not working) and _grind.playing:
 		_grind.stop()
+
+## A hit on the base's shell (ship weapons spec §6.5): its cell, then its
+## module. A stage crossed rebuilds it, which is what stops or restarts it.
+func _on_hull_hit(hit: Hit) -> void:
+	var at := exterior.to_local(hit.position)
+	var cell := ShipCells.hull_cell(grid, exterior, hit.shape, at, exterior.global_basis.inverse() * hit.normal)
+	var index: int = site.occupied().get(cell, -1)
+	if index < 0 or index == unfolding:
+		return
+	# A drill about to be wrecked is paid up to now first: the seconds before it stopped are its own.
+	if site.modules[index]["kind"] == ModuleCatalog.DRILL:
+		credit_drills()
+	if ModuleDamage.hit(site, index, hit.damage, catalog):
+		rebuild()
+
+func module_stage(index: int) -> int:
+	return ModuleDamage.stage(site, index, catalog)
+
+## What the torch is aimed at (RepairTorch): {part, cell, outside}, or {}.
+func part_hit(collider: Object, shape: int, at: Vector3, normal: Vector3) -> Dictionary:
+	if collider != exterior:
+		return {}
+	var cell := ShipCells.hull_cell(grid, exterior, shape, exterior.to_local(at), exterior.global_basis.inverse() * normal)
+	var index: int = site.occupied().get(cell, -1)
+	if index < 0 or index == unfolding:
+		return {}
+	return {"part": ModuleDamage.part(index), "cell": cell, "outside": true}
+
+func is_section(p: StringName) -> bool:
+	return ModuleDamage.index_of(p) >= 0
+
+func repair_section(p: StringName, share: float) -> float:
+	var index := ModuleDamage.index_of(p)
+	if index < 0 or index >= site.modules.size():
+		return 0.0
+	var before := module_stage(index)
+	var used := ModuleDamage.repair(site, index, share, catalog)
+	if used > 0.0 and module_stage(index) != before:
+		rebuild()
+	return used
+
+## "DRILL 1 · 45% H"
+func part_label(p: StringName) -> String:
+	var index := ModuleDamage.index_of(p)
+	if index < 0:
+		return ""
+	var left := 1.0 - ModuleDamage.taken(site, index) / maxf(ModuleDamage.hp(site, index, catalog), 1.0)
+	return "%s · %d%% H" % [ModuleDamage.label(site, index), roundi(left * 100.0)]
 
 func _player(player_name: String) -> AudioStreamPlayer3D:
 	var p := AudioStreamPlayer3D.new()

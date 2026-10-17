@@ -89,6 +89,12 @@ var crippled_reason: String = ""
 var hud_flicker := false
 ## Cracks over the pilot's view: 0 none, 1 a damaged cockpit, 2 a wrecked one.
 var cockpit_cracks := 0
+## The ship's weapons (ship weapons spec §9.2): whether it has any, its
+## orders, each turret's state, and whether low power holds them.
+var has_weapons := false
+var weapons_engage := false
+var weapons_pips: Array[StringName] = []
+var weapons_low_power := false
 
 ## Takes plain values rather than a body on purpose: it is the seam that lets
 ## every derivation here be tested headless, with no nodes and no physics

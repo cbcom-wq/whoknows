@@ -88,7 +88,7 @@ func test_the_status_page_reads_the_ship():
 	var lines := c.screen_text().split("\n")
 	assert_eq(lines[0], "STATUS")
 	assert_eq(lines[1], "QE 600 / 1200")
-	assert_eq(lines[2], "POWER 36.0 / 31.3 MW")
+	assert_eq(lines[2], "POWER 36.0 / 31.5 MW")  # 31.3 before the starter's turrets (ship weapons spec §13)
 	assert_eq(lines[3], "SUIT 0%", "the suit starts empty")
 
 func test_a_rebuild_makes_a_new_table_bound_again_with_its_state():
@@ -111,8 +111,24 @@ func test_the_table_opens_on_the_map_and_page_reaches_the_status():
 	assert_true(c.screen_text().begins_with("MAP · 10 KM"))
 	c.press(&"page")
 	assert_true(c.page() is StatusPage)
+	# The starter is armed (ship weapons spec §13), so it has a third page, WEAPONS.
+	assert_eq(c.pages.size(), 3, "the armed starter's table has MAP, STATUS and WEAPONS")
+	c.press(&"page")
+	assert_true(c.page() is WeaponsPage)
+	assert_eq(c.ctx.fire_control, _ship.fire_control)
 	c.press(&"page")
 	assert_true(c.page() is MapPage, "and round again")
+
+func test_the_weapons_page_survives_a_rebuild_once():
+	var c := _computer()
+	c.page_index = 2
+	(c.pages[2] as WeaponsPage).selected = 1
+	_ship._rebuild_everything()
+	var after := _computer()
+	assert_eq(after.pages.size(), 3, "bound again, the page is not added twice")
+	assert_eq(after.page_index, 2)
+	assert_eq((after.pages[2] as WeaponsPage).selected, 1)
+	assert_true(after.screen_text().begins_with("WEAPONS"))
 
 func test_the_map_s_range_survives_a_rebuild():
 	var c := _computer()

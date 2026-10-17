@@ -23,6 +23,7 @@ extends SceneTree
 # night side, probe_seated_rock_{dark,lit} and probe_rock_*. Every ship gets
 # probe_hull_* (the skin, fill-lit) and prints skin, windows, lights and tint lines.
 # It prints the rules line (ShipRules: every rule broken, or 0) and the notes,
+# a turret line per turret (name, kind, cell, sky coverage; or "turret  none"),
 # and a hose line per airlock (its alcove's reel, and the nozzle stocked on it).
 # Then a two-ship pass (docs/superpowers/specs/2026-10-02-many-ships-design.md
 # §8.2): fps in the worst view with a second ship 300 m off,
@@ -278,7 +279,8 @@ func _toilet_shots(ship: Ship, avatar: Avatar) -> void:
 ## from the starter's seat, sunlit and then dark with its floods on; F8 to its
 ## helm and the starter from there; a 1.5 s burn, short of the starter; standing
 ## and walking; a spacewalk between the two. Prints the fleet line.
-## Every seat aboard (ship bridge spec §6.2): sat in, its view rendered, stood
+## Every seat aboard (ship bridge spec §6.2): sat in, its view rendered (a weapons
+## station's gun camera, then its board from the seat's eye, seat_<cell>_board), stood
 ## up from, and a step walked; and, on a ship with a captain's chair, the
 ## bridge from the dais at a standing eye. Prints a seats line.
 func _seat_pass(scene: Node, ship: Ship, director: CameraDirector, avatar: Avatar) -> void:
@@ -293,6 +295,16 @@ func _seat_pass(scene: Node, ship: Ship, director: CameraDirector, avatar: Avata
 		director.sit_now(s)
 		await _process_frames(5)
 		await _shot("seat_%s" % tag)
+		# A weapons station's view above is the gun camera: hand the camera back
+		# to the seat's eye and look down at the console, so its board is
+		# rendered too (with no heavy turret the view above is the board).
+		if s is WeaponsStation and (s.job as WeaponsJob).view_camera() != null:
+			(s.job as WeaponsJob).active = false
+			(s.job as WeaponsJob).sight.visible = false
+			director.refresh_view()
+			director.look(Vector2(0, 500))
+			await _process_frames(5)
+			await _shot("seat_%s_board" % tag)
 		if not s.flies:
 			director.look(Vector2(-500, 0))
 			await _shot("seat_%s_left" % tag)
@@ -462,7 +474,7 @@ func _run(scene: Node) -> void:
 		s.thrust_budget[&"reverse"] / 1000.0, s.thrust_budget[&"lateral"] / 1000.0,
 		s.thrust_budget[&"vertical"] / 1000.0])
 	print("torque  authority %s, imbalance under burn %s" % [s.torque_budget, s.torque_imbalance])
-	# The 5% rule (SKILL.md step 5): the reshaped starter's pitch sits at 4.91%,
+	# The 5% rule (SKILL.md step 5): the reshaped starter's pitch sits at 4.77%,
 	# so a little more mass above the thrust line breaks it.
 	var share := Vector3(absf(s.torque_imbalance.x) / maxf(s.torque_budget.x, 1.0),
 		absf(s.torque_imbalance.y) / maxf(s.torque_budget.y, 1.0),
@@ -495,6 +507,12 @@ func _run(scene: Node) -> void:
 		print("        <-- %s %s" % [r["code"], r["text"]])
 	for n in found["notes"]:
 		print("note    %s %s" % [n["code"], n["text"]])
+	# Each turret (ship weapons spec §10.2): its kind, cell and the share of its
+	# half-sky that is clear.
+	for t in ship.turrets:
+		print("turret  %s %s at %s, sky %d%%" % [t.name, t.kind, t.coord, roundi(t.sky.coverage() * 100.0)])
+	if ship.turrets.is_empty():
+		print("turret  none")
 
 	# The ship's part of a save must bring back the same grid and store.
 	var universe: Universe = scene.get_node_or_null("Universe")

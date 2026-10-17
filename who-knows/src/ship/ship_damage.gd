@@ -12,7 +12,9 @@ extends RefCounted
 ## starboard about the layout's centre line. A block on the centre line is in
 ## both sections of its third. Components: the engines (every main thruster,
 ## as one), the quantum core, the bridge computer and the cockpit (the helm and
-## the canopy glass). Everything else is a hull block.
+## the canopy glass). Everything else is a hull block. Every turret is a
+## component of its own (ship weapons spec §3.4), numbered bow to stern, port to
+## starboard.
 
 const SECTIONS: Array[StringName] = [&"port_bow", &"starboard_bow", &"port_mid", &"starboard_mid",
 	&"port_stern", &"starboard_stern"]
@@ -68,6 +70,8 @@ var exposure := {}
 var pieces := {}
 ## coord -> [block id, orientation, hp], the launch layout.
 var launch := {}
+## Each turret's label, by its part: "TURRET 1" bow first.
+var turret_labels := {}
 var _layout: ShipGrid
 
 ## The model for a ship that launched as `layout`. `held` (coord -> true) is
@@ -93,6 +97,11 @@ static func build(layout: ShipGrid, catalog: BlockCatalog, held: Dictionary = {}
 		var def := catalog.get_def(inst.block_id)
 		var hp := float(def.hp) if def != null else 0.0
 		d.launch[coord] = [inst.block_id, inst.orientation, hp]
+		if WeaponValues.is_turret(inst.block_id):
+			var part := turret_part(coord)
+			d.component_of[coord] = part
+			d.component_hp[part] = hp
+			continue
 		if by_block.has(inst.block_id):
 			var comp: StringName = by_block[inst.block_id]
 			d.component_of[coord] = comp
@@ -118,9 +127,37 @@ static func build(layout: ShipGrid, catalog: BlockCatalog, held: Dictionary = {}
 	for comp: StringName in d.component_hp:
 		d.component_hp[comp] = maxf(d.component_hp[comp], COMPONENT_HP_MIN.get(comp, 0.0))
 		d.component_damage[comp] = 0.0
+	d._number_turrets()
 	d._layout = layout
 	d._find_pieces(layout, held)
 	return d
+
+## A turret's part id (ship weapons spec §3.4).
+static func turret_part(coord: Vector3i) -> StringName:
+	return StringName("turret:%d,%d,%d" % [coord.x, coord.y, coord.z])
+
+static func is_turret_part(part: StringName) -> bool:
+	return String(part).begins_with("turret:")
+
+## The turrets' order, for sort_custom: bow to stern (-z first), then port to
+## starboard, then top down. TURRET n on the board and the weapons station's
+## turrets use this one comparator, so their numbers agree.
+static func bow_first(a: Vector3i, b: Vector3i) -> bool:
+	if a.z != b.z:
+		return a.z < b.z
+	if a.x != b.x:
+		return a.x < b.x
+	return a.y > b.y
+
+## TURRET 1, 2 ... bow to stern, then port to starboard, then top down.
+func _number_turrets() -> void:
+	var cells: Array[Vector3i] = []
+	for coord: Vector3i in component_of:
+		if is_turret_part(component_of[coord]):
+			cells.append(coord)
+	cells.sort_custom(bow_first)
+	for i in cells.size():
+		turret_labels[turret_part(cells[i])] = "TURRET %d" % (i + 1)
 
 ## z -> "bow", "mid" or "stern" for the span lo..hi (−z is the bow).
 static func _thirds(lo: int, hi: int) -> Dictionary:
@@ -169,6 +206,8 @@ static func _key(c: Vector3i) -> int:
 ## Whether a block of `block_id` loses function when damaged: only a
 ## component's blocks do (spec §2.3).
 static func degrades(block_id: StringName) -> bool:
+	if WeaponValues.is_turret(block_id):
+		return true
 	for comp: StringName in COMPONENTS:
 		if COMPONENTS[comp].has(block_id):
 			return true
@@ -282,7 +321,7 @@ func is_section(part: StringName) -> bool:
 	return section_hp.has(part)
 
 func label(part: StringName) -> String:
-	return SECTION_LABELS.get(part, COMPONENT_LABELS.get(part, ""))
+	return SECTION_LABELS.get(part, COMPONENT_LABELS.get(part, turret_labels.get(part, "")))
 
 ## The share of a part lost, 0..1: what its health lacks.
 func part_health(part: StringName) -> float:

@@ -167,6 +167,7 @@ func test_the_file_names_itself_in_errors():
 const OUT_DIR := "user://test_ship_plan"
 
 ## The starter as to_text prints it: the design skill's worked example.
+## Ship weapons spec §13: Tl and Tl2 are the two light turrets that replaced fairing halves.
 const STARTER_PLAN := """ship   starter
 name   Starter shuttle
 desc   Two decks: a bridge with a cockpit pod, five rooms, an airlock aft.
@@ -174,7 +175,7 @@ desc   Two decks: a bridge with a cockpit pod, five rooms, an airlock aft.
 deck y=2    x: -1 .. 1
 z -2  Fk  Fk  Fk
 z -1  Fh  Fh  Fh
-z 0   Fh  Fh  Fh
+z 0   Fh  Tl  Fh
 z 1   Fh  Fh  Fh
 z 2   Fh  Fh  Fh
 z 3   Fk4 Fk4 Fk4
@@ -203,7 +204,7 @@ deck y=-1    x: 0 .. 0
 z -3  Fh2
 z -2  Fh2
 z -1  Fh2
-z 0   Fh2
+z 0   Tl2
 z 1   Fh2
 z 2   Fh2
 """

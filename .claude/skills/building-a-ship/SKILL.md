@@ -67,14 +67,26 @@ Do these in order. Each one names the check that proves it.
      behind the holo's centre, up to 2.34 m while orbiting) must be clear of the ceiling and
      walls; the probe prints it (`eye ... m up, orbiting to ... m`, flagged
      `EYE IN THE CEILING`).
+   - **weapons** (optional; `docs/superpowers/specs/2026-10-11-ship-weapons-design.md`, `reference.md`
+     *Weapons*): `turret_light` (0.8 t), `turret_heavy` (2.0 t) and `weapons_station` (a seat).
+     **Every turret stands on an open face and its `TURRETS` note shows its sky; under 25%
+     (`TURRET_BLIND`) move it.** The block's orientation names the face it stands on (the table in
+     `reference.md`; `SkyMap.normal_of(o)` answers any orientation), and a face onto another block
+     is `TURRET_BURIED`. A turret takes the place of a fairing half or a hull plate, never an extra
+     cell, so read the new mass, power and balance from the check (see *Mistakes*). **At most one `weapons_station`
+     (`TWO_WEAPONS_STATIONS`); a heavy turret without one fires on its own.** A station takes the
+     place of a `crew_station` and passes the same seat rules.
 3. **Damage** (`docs/superpowers/specs/2026-10-03-ship-damage-sections-design.md`): a ship
-   takes damage as **six hull sections and four components**, not block by block (`ShipDamage`):
+   takes damage as **six hull sections and its components**, not block by block (`ShipDamage`):
    - **the sections** are the launch layout's thirds (bow, midship, stern) split port and
      starboard; the centre line is in both. Every block that is not a component is in one: its
      `hp` (in its `.tres`) adds to its section's. Hull damage changes only looks and pieces,
      never what the ship can do;
    - **the components** are the `thruster`s (as one, the engines), the `quantum_core`, the
-     `computer` and the cockpit (`pilot_seat` and every `canopy`). Damaged under half: half
+     `computer`, the cockpit (`pilot_seat` and every `canopy`) and **each turret on its own**
+     (`turret:<x>,<y>,<z>`, labelled TURRET 1... bow first; slews at half rate and recharges
+     twice as long below half, silent and parked wrecked, mended from outside and never knocked
+     off). Damaged under half: half
      thrust, half power, a glitching table and a 20 s warp spool, a cracked canopy and a sluggish
      assist; wrecked: none, crippled, dark and no warp, assist off (a centred stick still damps a spin; mending it turns the assist back on). They are mended where they
      sit, so put the core and the table where the torch reaches them from walkable deck;
@@ -110,7 +122,7 @@ Do these in order. Each one names the check that proves it.
    - `thrust_budget[&"reverse"] > 0`;
    - `torque_imbalance` within a few % of `torque_budget` on each axis. Fix it by moving mass or
      thrust, not by weakening the RCS. Fairings above the thrust line count: the reshaped
-     starter's spine and fins put pitch at **4.91% of the 5% limit**, so leave headroom;
+     starter's spine and fins put pitch at **4.77% of the 5% limit** (4.91% before its two turrets), so leave headroom;
    - the feel numbers (`torque_budget / inertia`, and each thrust budget divided by mass) are
      what you meant. The probe prints them.
 
@@ -192,6 +204,9 @@ Do these in order. Each one names the check that proves it.
      store (`NOT FOUND`, `NOT FULL`). It writes `probe_toilet_shut.png` and
      `probe_toilet_open.png`;
    - the droid's dock and its jobs, flagging any `UNREACHABLE`;
+   - **the turrets:** a `turret` line each (`turret  Turret_0_2_0 turret_light at (0, 2, 0), sky
+     100%`), or `turret  none`. Read the sky: under 25% is `TURRET_BLIND`, and the Warden's
+     flank pair at 92% is the lowest on a library ship;
    - fps.
 
    It also sits, stands and walks, and flags `STUCK`; on a bridge it sits in **every** seat (the
@@ -215,6 +230,10 @@ Do these in order. Each one names the check that proves it.
    The cabin must keep its shape: same rooms, pod, helm and doors.
 11. **Fly it:** a steady turn on the arrow keys, a clicked heading 120° away, and a speed-locked
     turn at cruise. Compare them with the feel numbers you meant.
+12. **Armed ships:** anything that changes a turret, the sky map, the fire control or the station
+    reruns `test/probes/combat_probe.gd` (`reference.md` *Weapons*) and its renders, and
+    `test/probes/fleet_play.gd` (seats and ships change). Aim it at targets above and below as
+    well as ahead, or the dorsal and ventral turrets read `NO ARC` and fire nothing.
 
 ## What the blueprint decides about flying
 
@@ -225,16 +244,16 @@ is the blueprint's budgets, so the grid decides the feel:
 
 | Feel | Comes from | Starter shuttle |
 |---|---|---|
-| How fast a turn starts and stops | `torque_budget / inertia`, per axis | 1.49 / 0.71 / 1.85 rad/s² (pitch / yaw / roll) |
-| A clicked heading swinging on | the weaker of pitch and yaw above | 120° in 3.1 s on the flat starter; not re-measured on the reshaped one, a little slower |
-| Travel swinging onto the nose after a turn | `thrust_budget[&"lateral"]` (and `vertical`) / mass | side 4.8 m/s², vertical 9.6: 100 m/s sideways takes about 21 s |
-| Braking; a speed lock slowing down | `reverse` / mass | 4.8 m/s² |
-| Accelerating; a speed lock catching up | `forward` / mass | 14.3 m/s² |
+| How fast a turn starts and stops | `torque_budget / inertia`, per axis | 1.48 / 0.71 / 1.84 rad/s² (pitch / yaw / roll) |
+| A clicked heading swinging on | the weaker of pitch and yaw above | 120° in 3.1 s on the flat starter; not re-measured on the reshaped or armed one, a little slower; yaw, the weaker axis, is 0.71 either way |
+| Travel swinging onto the nose after a turn | `thrust_budget[&"lateral"]` (and `vertical`) / mass | side 4.7 m/s², vertical 9.5: 100 m/s sideways takes about 21 s |
+| Braking; a speed lock slowing down | `reverse` / mass | 4.7 m/s² |
+| Accelerating; a speed lock catching up | `forward` / mass | 14.2 m/s² |
 | Thrusters the player sees | each `rcs` block's exhaust face open and in view | 6 of 8 blocked (only the pitch-down pair shows); none in the pilot's view |
 | Warp reach on a full store | `(quantum_capacity − WarpPlan.WARP_BASE) × WarpPlan.WARP_M_PER_QE / 1000` km | 14,500 km on 1,200 QE (7,000 km on its starting 600) |
 
-The figures are the **reshaped starter's** (110 blocks, 104.7 t; the spine, fins and keel added
-7.8 t). Before the reshape it was 1.60 / 0.74 / 2.05 rad/s², 15.5 forward, 5.2 brake and side and
+The figures are the **reshaped starter's** (110 blocks, 105.7 t with its two light turrets; the spine, fins and keel are 24 fairings, 7.2 t; the
+reshape's 26 added 7.8 t before two cells became turrets). Before the reshape it was 1.60 / 0.74 / 2.05 rad/s², 15.5 forward, 5.2 brake and side and
 10.3 vertical; this table had said 1.74 / 0.79 / 2.05 and 5.4 since well before that, and was
 already stale. Weight added outside the thrust line slows every axis, so re-measure with the
 probe after any fairing.
@@ -352,6 +371,18 @@ thrust.
 | The probe's walk-away line on a crewed ship | The droid stood in the corridor behind the captain's chair: 0.63 m, flagged `STUCK` | The probe prints where you stood and the nearest npc, and says "(an npc was in the way)" |
 | Hanging a held thing off an airlock alcove | A block change rebuilds the hull and frees every alcove, so the reel and its nozzle go with it: a hand held a nozzle with no reel or line, and a rebuild that kept the hull stocked a second nozzle while the first was out | Anything you hang on an alcove is rebuilt with it, so anything a player holds from it must survive its freeing: the nozzle uses itself up (`HoseNozzle`), and a reel stocks once per instance (`HoseReel.stock_nozzle`). `test_hose_scene.gd` covers both rebuilds |
 | A windowed probe counting rendered frames as game time | `hose_render.gd` held the trigger for 120 frames to draw a chunk in: with vsync off the window renders about 280 fps against 60 physics ticks, so that was 0.4 s and the chunk never arrived (and a lambda's assignment to a captured local is lost, it captures by value) | Drive physics-time things from `physics_frame`, wait on a condition with a limit in seconds, and pass results out through a member |
+| Adding a turret's own mass to the old total | A turret replaces a cell, so the Warden's four dorsal and ventral lights came out 0.5 t over their fairing halves, its heavy 1.7 t over its half, and its two flank lights 0.2 t *under* the hull plates they replaced. The starter's pitch imbalance *fell* from 4.91% to 4.77%, because the ventral turret's mass sits below the thrust line and more than answers the dorsal one's above it | Read the figures from `ship_check` after the swap. Put a turret on the side the balance needs |
+| Arming a ship that has no power to spare | The Warden is at 97.9 of 108.0 MW (10.3% spare, about 0.3 MW above the `POWER_MARGIN` rule): the six lights draw 0.1 MW each, the heavy 0.3, and the station what the crew station did | A turret's draw is small on purpose (every shot is paid in QE, 1 a light bolt, 15 a heavy). Count it before you add one; a second `quantum_core` if the margin goes |
+| Guessing a turret's orientation | Each face is reached by four orientations, and the rolls of one face are not the next face's: a guess puts a turret on the wrong side, or buries it | Call `SkyMap.normal_of(o)` and read the `TURRETS` note; `reference.md` has the table the ships use. The Warden's flank pair sees 92%: the armour plate and slopes either side stand proud of it |
+| `set_anchors_preset(PRESET_FULL_RECT)` for a full-screen `Control` | It sets the anchors only and leaves a zero-size control. `GunSight` drew its cross and status line at the screen's corner; its barrel and lead marks were right, because they come from `unproject_position` in screen pixels | `set_anchors_and_offsets_preset`, and a test that the control's size equals the viewport's (`test_weapons_job.gd`). Render the sight; its test passed with the cross in the corner |
+| Measuring bolts with a rock dead ahead | The world's rocks are fixed and one in the line takes every bolt: the first combat runs read 0% from 1000 m out, and the heavy missed all five at 2 km | `combat_probe.gd` turns the Warden to the first heading with no rock within 3.5 km (five rays each, 12 headings; it picks 30°) before it counts |
+| One target dead ahead in a combat run | The dorsal and ventral turrets have nothing in their half-sky and read `NO ARC`: 0 shots, so the fps of "every gun firing" was a baseline | The probe lists two starters, one up and starboard and one down and port, so every turret has one. `NO ARC` means the turret engages nothing; a turret on a hostile is `FIRING` or `TRACKING` |
+| Reading the hit rate at the range cut-off | A turret fires only when the lead solution's flight distance is inside its range (1.2 km), and the flight distance to a jinking target 1.2 km off is always a little over. No bolt is fired at 1.2 km, so "at most 30% at 1.2 km" is met by the cut-off, not by the dodge | The probe adds a 1150 m row for the guns at the very edge (14%). Judge the dodge window from 400 to 1150 m |
+| Judging the frame rate of a fire fight by its guns | Firing cost 3-8 fps (0.3-0.5 ms) on the GTX 960; the Warden alone, no weapon firing, reads 114-127. The renderer says 5.2 ms of GPU in a 9 ms frame, so it is not the bolts (two instances of one shared mesh and material each, no light on a light bolt) | Print a baseline and a guns-idle line beside the firing line (the probe does). A `MultiMesh` for the trails would not move the number, so it was not built |
+| `get_meta(key, null)` for a meta that may be missing | In Godot 4.5.1 a missing key with a `null` default raises an error rather than returning null | `has_meta` first, or `Weapons._ship_of` for a target's ship |
+| `camera != null` on a gun camera that may be freed | A freed Object compares equal to `null` here, so `camera != null` skipped the gunner's cleanup and a freed gun camera would have blacked the screen | `WeaponsJob._job_camera()` is null unless the camera is valid and in the tree; key a branch off a flag (`sight.visible`), not `!= null`, as the *Freeing an item from inside its own `use()`* row says |
+| A gunner hold that unlocks the speed on standing | The gunner hold locks the ship's forward speed so it keeps its course. A hold that unlocked on standing would take away a lock the pilot had set | `FlightComputer._hold_locked`: standing clears the lock only if the hold set it, and toggling the lock by hand clears the flag. A save made during the hold has a known edge (`reference.md` *Weapons*) |
+| The barrels pitching only 0 to 90° | The first design had to yaw right round to reach anything behind its face; the owner asked for barrels that pitch over the top (2026-10-16) | Elevation is 0..PI (`WeaponValues.ELEVATION_MAX`). `Turret.choose_pose` takes the upright or the flipped pose, whichever is sooner, and holds its branch within `FLIP_MARGIN` 10°. The gunner's reticle stays upright, 0..90°, and the SkyMap is unchanged: both poses cover the same half-sky |
 
 ## Not built yet (plan for it; don't assume it works)
 
@@ -359,7 +390,7 @@ thrust.
   dev Xeon for the starter since the generated skin), and a stage seen from inside rebuilds the
   interior (~125 ms; the hull recolours in place). Fine for now; a hitch in a big fight.
 - **Debris and breaches.** A piece cut off vanishes in a burst; a hole has no air to lose.
-- **Damage beyond the four components.** RCS, cells, rooms and the airlock never break; a
+- **Damage beyond the components** (the engines, core, computer, cockpit and each turret). RCS, cells, rooms and the airlock never break; a
   section's health changes only looks and pieces. No per-section effect on flight, no repairing
   a section from inside, no droid repairing the ship.
 - **Gravity and landing on a world.** Worlds are solid and you can skim and bump off them, but
@@ -385,6 +416,9 @@ thrust.
   turned so it widens away from the lamp), the cones go, fog goes on in `_set_outside_mood` with
   a 150 m length. See the ship exterior spec §6.4 and the Task 13 report.
 - **Asteroid tunnels.** None exist; the forward lights (220 m, shadowed) are sized for them.
+- **Weapons beyond the turrets** (ship weapons spec §14): no shields, no hostile ship or AI
+  that sets targets (`Weapons.is_hostile` is false for everything; tests set a stub), no fixed
+  guns for a fighter, no missiles, no NPC gunner. Its known edges, and the 120 fps floor, are in `reference.md` *Weapons*.
 - **Migrating a saved starter.** A resumed game keeps its saved layout, the flat starter; only a
   new game gets the reshaped one.
 - **Dust kicked up by the floods** near a surface, and a rendered low-power frame of the beams

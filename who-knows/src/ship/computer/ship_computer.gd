@@ -102,12 +102,17 @@ func page() -> ComputerPage:
 	return pages[page_index]
 
 ## Binds the table to its ship's context: after every rebuild, and whoever
-## was operating it stays the operator.
+## was operating it stays the operator. A ship with turrets gives the table its
+## WEAPONS page, once (ship weapons spec §7.4); the pages come before the
+## ship's state is restored, so a saved page index still means the same page.
 func bind(context: ComputerContext) -> void:
 	var operator := ctx.operator
 	ctx = context
 	if ctx.operator == null:
 		ctx.operator = operator
+	if ctx.fire_control != null and not ctx.fire_control.turrets.is_empty() \
+			and not pages.any(func(p: ComputerPage) -> bool: return p is WeaponsPage):
+		pages.append(WeaponsPage.new())
 	holo.clear_miniature()
 	_refresh()
 

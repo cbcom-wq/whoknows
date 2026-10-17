@@ -283,6 +283,8 @@ static func _fixture(kit: InteriorKit, layout: InteriorLayout, fixture: Dictiona
 		InteriorProps.captain_chair(kit, fixture_frame(layout, coord), variety)
 	elif fixture["id"] == &"crew_station":
 		InteriorProps.crew_station(kit, fixture_frame(layout, coord), variety)
+	elif fixture["id"] == &"weapons_station":
+		InteriorProps.weapons_station(kit, fixture_frame(layout, coord), variety)
 	elif fixture["id"] == QUANTUM_CORE_ID:
 		var f := fixture_frame(layout, coord)
 		InteriorProps.quantum_core(kit, f, variety)

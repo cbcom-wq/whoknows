@@ -93,6 +93,11 @@ var warp_panel: WarpPanel
 ## The spawn panel (ship library spec §5): F6.
 var spawn_panel: SpawnPanel
 var body_markers: Array[BodyMarker] = []
+## Every turret bolt (ship weapons spec §6.3), under Outside.
+var bolt_pool: BoltPool
+## The marked targets on the HUD, one per view (spec §9.2), and the weapons on the band.
+var target_brackets: Array[TargetBrackets] = []
+var weapons_strip: WeaponsStrip
 ## Which body the debug hop last put you by (F7), in the system's order.
 var hop_index := -1
 ## The debug hop leaves you this far off a body's surface, or nearer a small
@@ -160,6 +165,7 @@ func _ready() -> void:
 	_wire_npcs()
 	_wire_sensors()
 	_wire_warp()
+	_wire_weapons()
 	_wire_spawn()
 	_wire_saving()
 	for ship in fleet.ships():
@@ -242,6 +248,7 @@ func _wire_ship(ship: Ship) -> void:
 	ship.sensors.add_source(LifeContacts.new(_stream, exterior_npcs, _universe))
 	ship.sensors.add_source(RockContacts.new(_stream.seed, _stream.recipe.start, _stream.shapes))
 	ship.sensors.add_source(BodyContacts.new(system))
+	ship.sensors.add_source(TargetContacts.new(ship.exterior, _universe))
 	ship.sensors.system = system
 	ship.sensors.whereabouts = star_system.whereabouts
 	ship.sensors.course_arrived.connect(_on_course_arrived.bind(ship))
@@ -373,7 +380,7 @@ static func _cockpit_markers(ship: Ship) -> Array[HudElement]:
 ## the cockpit's into its canopy view, the chase view's through its chase
 ## camera, all reading its sensors.
 func _rebind_markers(ship: Ship) -> void:
-	for group: Array in [contact_markers, course_markers, body_markers]:
+	for group: Array in [contact_markers, course_markers, body_markers, target_brackets]:
 		for m: WorldMarker in group:
 			if String(m.name).ends_with("Cockpit"):
 				if m.get_parent() != ship.canopy_overlay:
@@ -388,6 +395,8 @@ func _rebind_markers(ship: Ship) -> void:
 		(m as CourseMarker).warp = ship.warp
 	for m in body_markers:
 		(m as BodyMarker).sensors = ship.sensors
+	for m in target_brackets:
+		m.fire_control = ship.fire_control
 
 ## F8, debug (many ships spec §4.3): seats you at the helm of the nearest other
 ## awake ship. False, with a toast saying why, when it can't. Measured from
@@ -777,6 +786,22 @@ func _wire_warp() -> void:
 		body_markers.append(m)
 	for m in course_markers:
 		m.warp = aboard.warp
+
+## The weapons (ship weapons spec §5, §9): the bolt pool outside, the strip on
+## the band, a bracket per view on the ship you are aboard; exterior NPCs are
+## targets.
+func _wire_weapons() -> void:
+	bolt_pool = BoltPool.new()
+	bolt_pool.name = "BoltPool"
+	$Outside.add_child(bolt_pool)
+	weapons_strip = WeaponsStrip.new()
+	weapons_strip.name = "WeaponsStrip"
+	$HudRoot/Screen/Band/Row.add_child(weapons_strip)
+	target_brackets.clear()
+	for m in _mount_per_view(func() -> WorldMarker: return TargetBrackets.new(), "Targets"):
+		(m as TargetBrackets).fire_control = aboard.fire_control
+		target_brackets.append(m)
+	exterior_npcs.targets = true
 
 ## A toast as you cross a warp limit (the warp spec §7.3).
 func _on_limit_entered(place: Whereabouts.Place) -> void:

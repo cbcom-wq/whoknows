@@ -41,14 +41,17 @@ var players: Array[AudioStreamPlayer3D] = []
 
 var _flight: FlightComputer
 var _interior: Node3D
+var _ship: Node
 var _armed := PackedByteArray()
 var _last_puff := PackedFloat32Array()
 
 ## `flight` is read each physics tick; the puff sounds go under `interior`,
-## where each block sits aboard.
-func setup(flight: FlightComputer, interior: Node3D) -> void:
+## where each block sits aboard. `ship`, when given, says who is aboard (it
+## counts manning a gun as aboard); without it, aboard means under `interior`.
+func setup(flight: FlightComputer, interior: Node3D, ship: Node = null) -> void:
 	_flight = flight
 	_interior = interior
+	_ship = ship
 
 ## One emitter and one sound per `rcs` block of `grid`, replacing the last set.
 func rebuild(grid: ShipGrid, catalog: BlockCatalog, center_of_mass: Vector3) -> void:
@@ -163,6 +166,8 @@ func _sound(amounts: PackedFloat32Array) -> void:
 ## True while the camera you see through is aboard. Space is silent: the chase
 ## view hears nothing, like the ship's hum (spec §6.3).
 func _aboard() -> bool:
+	if is_instance_valid(_ship) and _ship.has_method(&"listener_aboard"):
+		return _ship.listener_aboard()
 	var cam := get_viewport().get_camera_3d()
 	return cam != null and _interior != null and _interior.is_ancestor_of(cam)
 

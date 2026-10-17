@@ -1,6 +1,6 @@
 # Starter shuttle (`starter.json`)
 
-The ship every new game starts in: 110 blocks, 104.7 t. Two decks, the cabin at y = 0 and a solid
+The ship every new game starts in: 110 blocks, 105.7 t. Two decks, the cabin at y = 0 and a solid
 equipment deck at y = +1, with fairings outside both. −Z is the bow, +X starboard, +Y up.
 `test_starter_shuttle.gd` pins the file and its figures: changing a block means changing that pin
 on purpose, with the reason here.
@@ -65,7 +65,7 @@ the thrust line: with thrust at y = 0 only, a full burn pitched the ship with 68
 brought it to −14,371 N·m, and the nose RCS trimmed the rest. The quantum core's 5 t at cabin level
 then pulled the centre of mass down to about the thrust's 1.2 m average height; the fairings' 6.0 t
 above the cabin (and 1.8 t of keel below) raised it 9 cm again. **A full burn now pitches it with
-151,289 N·m, 4.91% of its authority, against the 5% limit (`UNBALANCED`).** Leave headroom: a little
+147,020 N·m, 4.77% of its authority, against the 5% limit (`UNBALANCED`).** Leave headroom: a little
 more mass above the thrust line breaks it. Yaw is 0.3% (the machine and the table stand off the
 centreline); roll 0.
 
@@ -73,22 +73,34 @@ centreline); roll 0.
 
 The five main thrusters drew 9 MW more than the art direction's two-reactor estimate, which
 assumed four; three reactors restored the margin. The quantum core now makes all 36.0 MW alone,
-and the machine adds 0.5 MW of draw: **36.0 MW made, 31.3 MW drawn**, past the 34.4 MW that
+and the machine adds 0.5 MW of draw: **36.0 MW made, 31.5 MW drawn**, past the 34.4 MW that
 `POWER_MARGIN`'s 10% asks for.
 
 ## The shape (ship exterior spec §8)
 
-26 fairings, 0.3 t each, all outside the cabin row so nothing inside moves: a dorsal spine a metre
+24 fairings (26 before the turrets took two places, below), 0.3 t each, all outside the cabin
+row so nothing inside moves: a dorsal spine a metre
 high (half blocks at y = 2 over z −1..2, ramped by long low slopes at z = −2 and z = 3); a fin
 rising aft on each engine pod (slopes at (±3, 1, 1)); and a keel of half blocks under the
-centreline (y = −1, z −3..2) for the floods to hang from. They added 7.8 t and no power draw. Every
+centreline (y = −1, z −3..2) for the floods to hang from. They add 7.2 t and no power draw. Every
 hull section has plating or fairings outside the cabin to lose (`NO_PIECES`): 3 a side at the bow,
 6 midships and 12 at the stern.
 
 ## The numbers (`ShipStats`, `data/blocks`)
 
-110 blocks, 104,700 kg, centre of mass (0.004, 1.301, 0.160); inertia (2065526, 2865503, 1175422);
-torque authority (3080229, 2040115, 2174785), imbalance under a full burn (151289, −5731, 0).
-Thrust forward / reverse / lateral / vertical 1500 / 500 / 500 / 1000 kN. Turning 1.49 / 0.71 /
-1.85 rad/s² (pitch / yaw / roll); forward 14.3, brake and side 4.8, vertical 9.6 m/s². 1,200 QE:
+110 blocks, 105,700 kg, centre of mass (0.004, 1.298, 0.159); inertia (2075310, 2866196, 1185178);
+torque authority (3079470, 2039735, 2175497), imbalance under a full burn (147020, −5676, 0).
+Thrust forward / reverse / lateral / vertical 1500 / 500 / 500 / 1000 kN. Turning 1.48 / 0.71 /
+1.84 rad/s² (pitch / yaw / roll); forward 14.2, brake and side 4.7, vertical 9.5 m/s². 1,200 QE:
 14,500 km of warp on a full store. No validator issues; no rule broken.
+
+## Weapons (ship weapons spec §13)
+
+Two `turret_light` on the centre line, **dorsal** at (0, 2, 0) on the spine and **ventral** at
+(0, -1, 0) on the keel, each in the place of a fairing half (orientation 0 and 2). The `TURRETS`
+note reads sky clear 100% for both, no `TURRET_BLIND`, and `TURRET_BURIED` stays quiet. Together
+they added 1.0 t (a turret is 0.8 t against the half's 0.3 t) and 0.2 MW of draw, so the ship is
+now 105.7 t and **36.0 MW made, 31.5 MW drawn**, still past the 10% margin. Pitch imbalance
+*fell* from 4.91% to **4.77%** of authority, the ventral turret's extra mass below the thrust line
+more than answering the dorsal one's above it. No rule moved, so neither turret was shifted along z. `test_starter_shuttle.gd`,
+`test_ship_plan.gd` and `test_bridge_computer_scene.gd` carry the new figures.

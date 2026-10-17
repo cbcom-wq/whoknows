@@ -113,3 +113,10 @@ func test_it_wears_a_shell_not_the_box_skin():
 		assert_null(glass)
 	else:
 		assert_not_null(glass, "a porthole on the shell")
+
+func test_a_base_is_a_weapon_target_by_its_site():
+	var base := _base()
+	var found := Weapons.find(get_tree(), Weapons.base_id(base.site.id))
+	assert_same(found, base.exterior)
+	assert_eq(Weapons.label_of(found), "BASE")
+	assert_eq(Weapons.velocity_of(found), Vector3.ZERO)
