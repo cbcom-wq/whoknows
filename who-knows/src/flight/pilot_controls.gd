@@ -115,7 +115,7 @@ func handle(event: InputEvent) -> void:
 		if fire_control != null:
 			fire_control.mark_nearest(_hull.global_position, -_hull.global_basis.z, WeaponValues.MARK_CONE,
 				WeaponValues.CONTACT_RANGE)
-	elif event.is_action_pressed(&"weapons_orders"):
+	elif event.is_action_pressed(&"weapons_orders", false, true):
 		if fire_control != null:
 			fire_control.toggle_orders()
 	elif event.is_action_pressed(&"warp"):

@@ -65,6 +65,15 @@ func test_the_real_t_key_marks_and_shift_t_clears():
 	_ship.pilot.handle(_key_event(KEY_T, true))
 	assert_eq(_ship.fire_control.list.size(), 0, "Shift+T clears and does not mark")
 
+func test_the_real_b_key_toggles_orders_and_shift_b_does_not():
+	_arm_and_spawn()
+	await wait_physics_frames(3)
+	_ship.pilot.seated = true
+	_ship.pilot.handle(_key_event(KEY_B, true))
+	assert_eq(_ship.fire_control.orders, FireControl.Orders.HOLD, "Shift+B is not B")
+	_ship.pilot.handle(_key_event(KEY_B, false))
+	assert_eq(_ship.fire_control.orders, FireControl.Orders.ENGAGE, "B engages")
+
 func test_boarding_another_ship_rebinds_the_brackets_and_the_strip_follows():
 	_arm_and_spawn()
 	var grid := ShipLibrary.read("res://data/ships/starter.json")["grid"] as ShipGrid
