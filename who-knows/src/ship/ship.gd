@@ -634,7 +634,12 @@ func _place_turrets() -> void:
 			kept.erase(coord)
 		else:
 			t = Turret.new()
-			t.setup(inst.block_id, coord, n, _skies.get(coord, SkyMap.build(grid, coord, n)))
+			# Not get(coord, build(...)): the default is built whether or not
+			# it is wanted (18 ms a turret).
+			var sky: SkyMap = _skies.get(coord)
+			if sky == null:
+				sky = SkyMap.build(grid, coord, n)
+			t.setup(inst.block_id, coord, n, sky)
 			t.hull = exterior
 			t.source = self
 			var part := ShipDamage.turret_part(coord)

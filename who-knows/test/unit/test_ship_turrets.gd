@@ -75,3 +75,16 @@ func test_the_orders_are_saved():
 	_ship.fire_control.clear()
 	_ship.restore_aboard(d)
 	assert_eq(_ship.fire_control.list, [&"ship:Ship2"] as Array[StringName])
+
+func test_a_turret_takes_the_sky_the_ship_built_for_it_and_builds_none_of_its_own():
+	var bare := _armed()
+	bare.clear_block(Vector3i(0, 2, 0))
+	_ship.launch_blueprint = null
+	_ship.set_grid(bare)
+	await wait_process_frames(2)
+	assert_eq(_ship.turrets.size(), 0, "none kept over from the starter")
+	_ship.launch_blueprint = null
+	_ship.set_grid(_armed())
+	await wait_process_frames(2)
+	var t: Turret = _ship.turrets[0]
+	assert_same(t.sky, _ship._skies[Vector3i(0, 2, 0)], "the cached map, not a second build")
