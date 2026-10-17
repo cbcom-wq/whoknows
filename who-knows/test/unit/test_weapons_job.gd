@@ -201,3 +201,32 @@ func test_the_sight_fills_the_screen_so_its_cross_is_at_the_middle():
 	await wait_process_frames(2)
 	assert_true(job.sight.visible)
 	assert_eq(job.sight.size, get_viewport().get_visible_rect().size, "a zero-size sight draws its cross in the corner")
+
+func _list_one(node: Node3D) -> void:
+	var fc := (_station.job as WeaponsJob).fire_control
+	fc.entries.clear()
+	fc.entries.append({"id": &"ship:Lead", "node": node, "label": "LEAD", "distance": 100.0, "bearing": false})
+
+func test_a_listed_target_freed_since_the_last_assign_leaves_no_lead_and_raises_nothing():
+	await _sit()
+	var job := _station.job as WeaponsJob
+	var target := Node3D.new()
+	_root.add_child(target)
+	_list_one(target)
+	target.free()
+	assert_null(job._lead(job.heavy()), "a freed target has no lead")
+	job._process(0.016)
+	assert_null(job.sight.lead_point)
+	assert_true(job.active, "and the frame went on to the end")
+
+func test_a_listed_target_out_of_the_tree_leaves_no_lead():
+	await _sit()
+	var job := _station.job as WeaponsJob
+	var target := Node3D.new()
+	_root.add_child(target)
+	_list_one(target)
+	_root.remove_child(target)
+	assert_null(job._lead(job.heavy()), "a demoted target has no position to lead")
+	job._process(0.016)
+	assert_null(job.sight.lead_point)
+	target.free()

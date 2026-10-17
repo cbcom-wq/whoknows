@@ -27,7 +27,7 @@ func render(telemetry: VehicleTelemetry) -> void:
 		if raw == null or not is_instance_valid(raw):
 			continue
 		var node := raw as Node3D
-		if node == null:
+		if node == null or not node.is_inside_tree():
 			continue
 		var at := Weapons.point_of(node)
 		if cam.is_position_behind(at):

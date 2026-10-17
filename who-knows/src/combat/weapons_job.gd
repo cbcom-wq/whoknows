@@ -148,8 +148,14 @@ func _process(_delta: float) -> void:
 func _lead(t: Turret) -> Variant:
 	if fire_control == null or fire_control.entries.is_empty():
 		return null
-	var node := fire_control.entries[0]["node"] as Node3D
-	if node == null or not is_instance_valid(node):
+	# Read it untyped: the node may have been freed since assign, and casting
+	# a freed object aborts. One out of the tree (a demoted NPC) has no
+	# position to read either.
+	var raw = fire_control.entries[0]["node"]
+	if raw == null or not is_instance_valid(raw):
+		return null
+	var node := raw as Node3D
+	if node == null or not node.is_inside_tree():
 		return null
 	var s := WeaponAim.intercept(t.muzzle(), ship.exterior.linear_velocity, WeaponValues.spec(t.kind)["speed"],
 		Weapons.point_of(node), Weapons.velocity_of(node))

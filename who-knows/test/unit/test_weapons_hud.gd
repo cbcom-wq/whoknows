@@ -84,3 +84,12 @@ func test_a_target_freed_since_the_last_assign_draws_nothing_and_raises_nothing(
 	(rig["fc"] as FireControl).assign(0.2)
 	brackets.render(_telemetry(false, [] as Array[StringName]))
 	assert_eq(brackets.marks.size(), 0)
+
+func test_a_demoted_target_out_of_the_tree_draws_nothing_and_raises_nothing():
+	var rig := _brackets_rig()
+	var brackets: TargetBrackets = rig["brackets"]
+	var target := rig["target"] as Node3D
+	target.get_parent().remove_child(target)
+	brackets.render(_telemetry(false, [] as Array[StringName]))
+	assert_eq(brackets.marks.size(), 0)
+	target.free()
