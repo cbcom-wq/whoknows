@@ -91,3 +91,16 @@ func test_a_heavy_bolt_carries_a_light():
 	assert_eq(light.light_color, SpacePalette.PHASER)
 	var small := _fire()
 	assert_false((small.get_node("Light") as OmniLight3D).visible, "light bolts only glow")
+
+func test_a_bolt_whose_ship_was_removed_in_flight_still_lands_its_damage():
+	var target := _slab(-60.0, Target.new()) as Target
+	await wait_physics_frames(2)
+	var ship := Node3D.new()
+	_world.add_child(ship)
+	var bolt := _pool.fire(WeaponValues.LIGHT, Vector3.ZERO, Vector3.FORWARD, Vector3.ZERO, ship, [] as Array[RID])
+	ship.free()
+	await wait_physics_frames(20)
+	assert_true(bolt.is_spent())
+	assert_eq(target.hits.size(), 1, "the hit still arrives")
+	assert_null((target.hits[0] as Hit).source, "from nobody")
+	assert_eq((target.hits[0] as Hit).damage, WeaponValues.spec(WeaponValues.LIGHT)["damage"])

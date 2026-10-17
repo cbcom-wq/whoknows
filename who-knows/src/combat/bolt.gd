@@ -70,6 +70,10 @@ func impact(result: Dictionary) -> void:
 	if _spent:
 		return
 	_spent = true
+	# The firing ship may have been removed while this flew; a freed object
+	# passed to a typed parameter aborts the impact.
+	if not is_instance_valid(source):
+		source = null
 	var point: Vector3 = result["position"]
 	var normal: Vector3 = result["normal"]
 	var collider: Object = result.get("collider")
