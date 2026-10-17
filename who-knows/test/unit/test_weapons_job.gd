@@ -230,3 +230,18 @@ func test_a_listed_target_out_of_the_tree_leaves_no_lead():
 	job._process(0.016)
 	assert_null(job.sight.lead_point)
 	target.free()
+
+func test_manning_the_gun_is_still_aboard_for_the_hum_the_hull_and_the_guns():
+	await _sit()
+	var job := _station.job as WeaponsJob
+	assert_true(job.camera.current)
+	assert_true(_ship._aboard(), "the gun's camera is on the hull but you are in the ship")
+	assert_true(_ship.listener_aboard(), "so the guns thud through the hull")
+	assert_true(_ship.rcs_show._aboard(), "and the thrusters puff")
+	await wait_process_frames(2)
+	assert_true(_ship._hum.playing, "and the hum goes on")
+	var outside := Camera3D.new()
+	_root.add_child(outside)
+	outside.make_current()
+	assert_false(_ship.listener_aboard(), "a camera elsewhere is outside")
+	assert_false(_ship.rcs_show._aboard())

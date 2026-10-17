@@ -130,7 +130,7 @@ func _ready() -> void:
 	rcs_show = RcsShow.new()
 	rcs_show.name = "RcsShow"
 	exterior.add_child(rcs_show)
-	rcs_show.setup(flight_computer, interior)
+	rcs_show.setup(flight_computer, interior, self)
 	quantum = QuantumPlant.new()
 	quantum.name = "Quantum"
 	quantum.flight_computer = flight_computer
@@ -502,10 +502,19 @@ static func thump_db(knock: float) -> float:
 func is_warping() -> bool:
 	return warp != null and warp.is_spinning()
 
-## True while the camera you see through is aboard.
+## True while the camera you see through is aboard: one under the interior, or
+## the gun camera of a turret on this hull (manning the gun is still being
+## aboard: the hum plays, the hull is heard, the guns thud).
 func _aboard() -> bool:
 	var cam := get_viewport().get_camera_3d()
-	return cam != null and interior.is_ancestor_of(cam)
+	if cam == null:
+		return false
+	if interior.is_ancestor_of(cam):
+		return true
+	for t in turrets:
+		if is_instance_valid(t) and t.is_ancestor_of(cam):
+			return true
+	return false
 
 func load_blueprint(bp: ShipBlueprint) -> void:
 	set_grid(bp.to_grid())
