@@ -491,7 +491,7 @@ the probe tuned nothing. Alongside them as built: a heavy bolt's lamp reaches 30
 | `turret_heavy` | 2.0 t | 400 | 0.3 MW | `Th` |
 | `weapons_station` | 0.5 t | 60 | 0.3 MW | `Ws` |
 
-Orientations: 0 dorsal, 2 ventral, 1 starboard (+x), 3 port (−x), fore 18 or 22, aft 16 or 20.
+Orientations: 0 dorsal, 2 ventral, 1 starboard (+x), 3 port (−x), for example fore 18, aft 16 (four orientations reach each face; `SkyMap.normal_of` answers any).
 
 ### 16.2 The probe (`test/probes/combat_probe.gd`, 2026-10-16, GTX 960, 1280 × 720)
 
@@ -520,9 +520,9 @@ the last run (run 11; runs 5 to 11, all on a clear heading, agree):
   firing) 114-127; guns idle 115-120; **every gun firing 109-117** (86 and 96 in two noisy runs).
   The renderer reports 5.2 ms of GPU in a 9 ms frame, so it is not bound by the bolts (two
   instances of one shared mesh and material each, no light on a light bolt); firing costs 3-8 fps
-  (0.3-0.5 ms). The Warden's own scene is at or under 120 on this card, so the floor is a property
-  of the scene on a GTX 960 rather than of the weapons. The probe's recommendation was to accept it
-  and make the Warden's scene cost a separate task. §15's fallback, the trails as one `MultiMesh`,
+  (0.3-0.5 ms). The Warden alone is around 120 (114-127) on this card, so the floor is a property
+  of the scene on a GTX 960 rather than of the weapons. The options put to the owner are (a)
+  accept it, (b) a separate task on the Warden's frame cost, (c) hold the branch. §15's fallback, the trails as one `MultiMesh`,
   was not built: it would not move the number.
 - **Sky coverage: every turret 92 to 100%** on all three ships, so no `TURRET_BLIND` and no
   `TURRET_BURIED` anywhere, and no cell had to be moved (§16.3).

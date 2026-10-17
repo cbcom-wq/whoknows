@@ -88,11 +88,14 @@ A turret's orientation is the face it stands on (`SkyMap.normal_of(o)`, the bloc
 | 0 | dorsal, +Y | the starter's spine, the Lamplighter's, the Warden's two dorsal lights and its heavy |
 | 2 | ventral, −Y | the starter's keel, the Warden's two ventral lights |
 | 1 / 3 | starboard +X / port −X | the Warden's flank pair |
-| 18 or 22 | fore, −Z | no ship yet |
-| 16 or 20 | aft, +Z | no ship yet |
+| 18 | fore, −Z | no ship yet |
+| 16 | aft, +Z | no ship yet |
 
-Any of the four rolls of a face gives the same normal. Fore and aft are `SkyMap.mount_basis`'s
-special case: its forward is the hull's up there.
+Each face is reached by four orientations: dorsal 0, 4, 8, 12; ventral 2, 6, 10, 14; starboard 1,
+7, 17, 23; port 3, 5, 19, 21; fore 9, 15, 18, 22; aft 11, 13, 16, 20. The table gives the ones the
+ships use, and `SkyMap.normal_of(o)` answers any other. The mount frame depends only on the face
+(`SkyMap.mount_basis`; on fore and aft its forward is the hull's up), so which of the four you pick
+does not change how the turret aims.
 
 ## Validator (`ShipValidator.validate`)
 
@@ -1041,8 +1044,6 @@ read **92 to 100%**:
 | warden | (0, 0, −9) **heavy** 96%; (0, −2, −6) light 100%; (0, 1, −4) light 98%; (−3, 0, 1) light 92%; (0, −2, 1) light 100%; (3, 0, 1) light 92%; (0, 2, 2) light 100% |
 | lamplighter | (0, 2, 0) light 100% |
 
-At a weapons station with a heavy turret the seat render is the gun camera (*Seats and bridges*).
-
 **`test/probes/combat_probe.gd`** (windowed; see *Commands*) is the proof for anything that changes
 a turret, the sky map, fire control or the station. It puts the Warden in `ENGAGE`, lists two
 starters (one up and starboard, one down and port, so every turret has a target in its half-sky),
@@ -1064,14 +1065,18 @@ three `fps` lines (baseline, guns idle, firing) with the renderer's own gpu and 
 | 1,200 m and 1,400 m | no bolt fired: the lead distance is over the 1.2 km range |
 
 The heavy hit 5 of 5 by hand at 2 km. The fps, on the GTX 960 at 1280 × 720: baseline 114-127, guns
-idle 115-120, **firing 109-117** (86 and 96 in two noisy runs). The Warden alone is at or under 120,
-so the floor is a property of the scene on this card; the bolts cost 0.3-0.5 ms.
+idle 115-120, **firing 109-117** (86 and 96 in two noisy runs). The Warden alone is around 120 (114-127),
+so the floor is a property of the scene on this card; the bolts cost 0.3-0.5 ms. **The 120 fps
+floor under full fire: owner's decision pending.**
 
 **Known edges.** A save made during the gunner hold reloads with the speed lock on and no memory
 that the hold set it, so standing up leaves the lock on (the live case is handled:
 `FlightComputer._hold_locked`). A flipped turret's barrels lie back through the dome's rear trim
 strip (`turret_look.gd`); the render reads as a gun leaning over its shoulder with a small pale
-wedge beside the breech, no clip. A wrecked turret does not appear on the STATUS page. The gun
+wedge beside the breech, no clip. A wrecked turret does not appear on the STATUS page (`StatusPage.damage_line` walks
+`ShipDamage.COMPONENTS` only). The weapons strip's pips draw past 150 px beyond about 12 turrets, and
+the `TURRETS` note reads "sky clear" even for a blind turret (the `TURRET_BLIND` rule says it). The
+trails are not a `MultiMesh` (spec §15): the probe showed it would not move the frame rate. The gun
 camera sits outside the hull and takes the chase camera's cull mask, so it sees the world, the hull
 and the bolts and not the interior.
 

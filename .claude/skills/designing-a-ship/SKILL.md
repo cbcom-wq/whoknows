@@ -64,7 +64,7 @@ unless it is 0 (`W3`, `Fh2`, `Cp4`).
 | `Tl` | turret_light | `Th` | turret_heavy | | |
 
 The rcs pushes are arrows: `R<` to port (8), `R>` to starboard (12), `R^` up (16), `Rv` down (20),
-`Rb` aft, a retro (4). `T` pushes forward (a main engine at the stern). A turret's orientation is the face it stands on: `Tl` dorsal, `Tl2` ventral, `Tl1` starboard, `Tl3` port (fore and aft are 18 and 16). Orientation codes are in
+`Rb` aft, a retro (4). `T` pushes forward (a main engine at the stern). A turret's orientation is the face it stands on: `Tl` dorsal, `Tl2` ventral, `Tl1` starboard, `Tl3` port (for example 18 fore, 16 aft). Orientation codes are in
 `building-a-ship/reference.md`. A `legend` section before the first deck can name its own tokens
 (`X  fairing_half 2`).
 
@@ -293,6 +293,6 @@ z 2   Fh2
 | `Fs1` / `Fs3` for a flank chamfer | A sawtooth: every block still rose aft | `Fs8` / `Fs12` on a roof edge, `Fs10` / `Fs14` on a belly edge |
 | Rcs as pods on the hull | The Warden's first draft read as clutter at the bow | Rcs as outer hull cells, exhaust face open |
 | A quantum core off the centreline | 3% yaw imbalance on a 260 t ship | Centre it, or mirror two |
-| Putting the guns on last | A turret takes a cell of the skin, so a late one moves the mass, the power margin and the pitch balance together; the Warden's margin is now 0.3 MW over the rule | Place the turrets in the shape pass (§4 step 5), then re-read power and balance |
+| Putting the guns on last | A turret takes a cell of the skin, so a late one moves the mass, the power margin and the pitch balance together; see *Budgets* for how thin the Warden's margin is | Place the turrets in the shape pass (§4 step 5), then re-read power and balance |
 | Judging shape from `ship_check` alone | A first draft broke no rule and looked like a shuttle on a pole | Probe inside the design loop; the `.md` last |
 | The arrival render to judge looks | At 200–400 m the new ship is a few pixels | It proves the arrival; judge the ship from the probe's hull views |
