@@ -23,6 +23,7 @@ extends SceneTree
 # night side, probe_seated_rock_{dark,lit} and probe_rock_*. Every ship gets
 # probe_hull_* (the skin, fill-lit) and prints skin, windows, lights and tint lines.
 # It prints the rules line (ShipRules: every rule broken, or 0) and the notes,
+# a turret line per turret (name, kind, cell, sky coverage; or "turret  none"),
 # and a hose line per airlock (its alcove's reel, and the nozzle stocked on it).
 # Then a two-ship pass (docs/superpowers/specs/2026-10-02-many-ships-design.md
 # §8.2): fps in the worst view with a second ship 300 m off,
@@ -506,6 +507,12 @@ func _run(scene: Node) -> void:
 		print("        <-- %s %s" % [r["code"], r["text"]])
 	for n in found["notes"]:
 		print("note    %s %s" % [n["code"], n["text"]])
+	# Each turret (ship weapons spec §10.2): its kind, cell and the share of its
+	# half-sky that is clear.
+	for t in ship.turrets:
+		print("turret  %s %s at %s, sky %d%%" % [t.name, t.kind, t.coord, roundi(t.sky.coverage() * 100.0)])
+	if ship.turrets.is_empty():
+		print("turret  none")
 
 	# The ship's part of a save must bring back the same grid and store.
 	var universe: Universe = scene.get_node_or_null("Universe")
