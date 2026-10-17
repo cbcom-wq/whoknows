@@ -60,10 +60,11 @@ unless it is 0 (`W3`, `Fh2`, `Cp4`).
 | `Ar` | armour | `L` | ladder | `Fs` | fairing_slope |
 | `Fh` | fairing_half | `Fi` | fairing_corner_in | `Fo` | fairing_corner_out |
 | `Fl` | fairing_slope_long_high | `Fk` | fairing_slope_long_low | `Hm` | helm |
-| `Cc` | captain_chair | `Cs` | crew_station | | |
+| `Cc` | captain_chair | `Cs` | crew_station | `Ws` | weapons_station |
+| `Tl` | turret_light | `Th` | turret_heavy | | |
 
 The rcs pushes are arrows: `R<` to port (8), `R>` to starboard (12), `R^` up (16), `Rv` down (20),
-`Rb` aft, a retro (4). `T` pushes forward (a main engine at the stern). Orientation codes are in
+`Rb` aft, a retro (4). `T` pushes forward (a main engine at the stern). A turret's orientation is the face it stands on: `Tl` dorsal, `Tl2` ventral, `Tl1` starboard, `Tl3` port (fore and aft are 18 and 16). Orientation codes are in
 `building-a-ship/reference.md`. A `legend` section before the first deck can name its own tokens
 (`X  fairing_half 2`).
 
@@ -88,14 +89,28 @@ turns slowly unless it has rcs at **both ends**.
 
 ## 2. Roles
 
-| Role | Shape | Leans on | Watch for |
-|---|---|---|---|
-| shuttle | the starter: one cabin storey, an equipment storey over it; a pod | — | — |
-| fighter | short, canopy forward, little inside; a pod | rcs, thrusters, a small cabin | too small for the airlock, the stand cell behind the helm and the droid's closet |
-| frigate, warship | long, armoured; **a bridge** (§4b) | thrusters, armour, a weapon room, crew stations | power; the bridge's posts in the helm's view |
-| hauler | long, a hold of open deck or rooms; a bridge if over ~150 blocks | quantum cells, lateral rcs | mass above the thrust line (pitch under burn); power for every walkable cell |
-| explorer | bunks, galley, a computer, long reach; a bridge if over ~150 blocks | quantum cells, `Cp` facing a window | power |
-| yacht | rooms with windows, comfort over speed; a bridge | rooms at the hull, `Ba`, `Gy` | the droid reaching every porthole |
+| Role | Shape | Leans on | Watch for | Weapons |
+|---|---|---|---|---|
+| shuttle | the starter: one cabin storey, an equipment storey over it; a pod | — | — | two light turrets, dorsal and ventral (the starter's) |
+| fighter | short, canopy forward, little inside; a pod | rcs, thrusters, a small cabin | too small for the airlock, the stand cell behind the helm and the droid's closet | none yet: its fixed guns are not built (spec §11) |
+| frigate, warship, patrol ship | long, armoured; **a bridge** (§4b) | thrusters, armour, a weapon room, crew stations | power; the bridge's posts in the helm's view | light turrets on every face it shows an enemy (dorsal, ventral and the flanks), one heavy forward on the bow, and a `weapons_station` on the bridge in a crew station's place |
+| hauler, freighter | long, a hold of open deck or rooms; a bridge if over ~150 blocks | quantum cells, lateral rcs | mass above the thrust line (pitch under burn); power for every walkable cell | none, or one light turret |
+| explorer | bunks, galley, a computer, long reach; a bridge if over ~150 blocks | quantum cells, `Cp` facing a window | power | one light turret, dorsal (the Lamplighter's) |
+| yacht | rooms with windows, comfort over speed; a bridge | rooms at the hull, `Ba`, `Gy` | the droid reaching every porthole | none |
+
+**Placing the guns** (`building-a-ship`'s checklist and `reference.md` *Weapons* hold the checks):
+
+- A turret takes the place of a fairing half or a hull plate on the outer skin, on a face that
+  opens onto space, never an extra cell. Its token carries the face.
+- It must see its sky: the centre line of the spine or the keel reads 100%, a flank plate between
+  slopes about 92%, and under 25% is `TURRET_BLIND`. The check's `TURRETS` note prints each.
+- A warship's pair on top and a pair underneath, spread along the hull, cover the whole sphere from
+  both ends; a flank pair at the midship fills in the beams. The Warden's six lights and one heavy
+  are the example (`data/ships/warden.md`, *Weapons*).
+- One heavy at most per gun you want a gunner to aim: it fires on its own as well. One
+  `weapons_station`, and it must pass the seat rules (`NO_STAND`, `SEAT_FACES_WALL`, reachable).
+- A turret's mass moves the balance: a ventral one lowers the centre of mass, a dorsal one lifts it.
+  Read the pitch imbalance after each swap.
 
 ## 3. Be creative
 
@@ -131,6 +146,7 @@ ship file is still on disk, and a `ship_check` after it checks the stale ship an
 5. **The outside:** wedges and fairings outside the cabin row; the skin chamfers for free. A
    chamfer along a flank faces the slope outward: `Fs8` / `Fs12` on a roof edge to port /
    starboard, `Fs10` / `Fs14` on a belly edge. `Fs1` / `Fs3` make a sawtooth.
+   Mount the turrets here, in place of a fairing half or a hull plate (*Placing the guns*, §2).
 6. **Mirror port and starboard** unless the twist says otherwise, and keep heavy blocks (quantum
    cores and cells, 5 t) on the centreline or in mirrored pairs: one core 4 m off-centre put a
    260 t ship's yaw imbalance at 3%.
@@ -187,16 +203,23 @@ z -1  H    Qk12 D    D    Qm   Qk8  H
 
 - **Power:** only `quantum_core` makes power, **36 MW** each, with 10% to spare (`POWER_MARGIN`).
   Draws: thruster 3, core 2, grav plating 1.5, rcs 1, airlock 0.6, pilot seat 0.5, quantum machine
-  0.5, door 0.3, computer 0.3, **every walkable or room cell 0.1**. Hull, fairings, cells and
-  armour draw nothing. **The starter already draws 31.3 of its core's 36 MW** (its five thrusters,
+  0.5, door 0.3, computer 0.3, weapons station 0.3, heavy turret 0.3, light turret 0.1, **every
+  walkable or room cell 0.1**. Hull, fairings, cells and
+  armour draw nothing. **The starter already draws 31.5 of its core's 36 MW** (its five thrusters,
   eight rcs and two grav plates are most of it), so one core leaves room for about a dozen more
   cabin cells and nothing else: **most new ships need a second quantum core.** Put it on the
   walkable storey beside the corridor, never in it (a quiet fixture). Face its gauge into the room:
   `Qk4` (aft) behind a helm as on the starter, but in a corner beside a room turn it inboard
   (`Qk12` on the port side, `Qk8` on starboard). The quantum plant runs any number.
-- **Mass** (t): quantum core and cell 5, core 4, armour 3, thruster 2.5, grav plating 1.5, airlock
-  1.2, hull and rcs 1, bulkhead 0.8, door and wedge 0.6, canopy and seat 0.5, deck and rooms 0.4,
-  fairings 0.3.
+  **Guns are cheap to run and dear to forget:** a light turret draws 0.1 MW and a heavy 0.3 (each
+  shot is paid in QE, 1 a light bolt and 15 a heavy, not in power). The armed Warden has 108.0 MW
+  made against 97.9 drawn, 10.3% spare, about 0.3 MW above the rule: count the guns while you draw,
+  and add a core if the margin goes.
+- **Mass** (t): quantum core and cell 5, core 4, armour 3, thruster 2.5, heavy turret 2, grav
+  plating 1.5, airlock 1.2, hull and rcs 1, light turret and bulkhead 0.8, door and wedge 0.6,
+  canopy, seat and weapons station 0.5, deck and rooms 0.4, fairings 0.3. **A turret replaces a
+  cell**, so the net is its mass less the cell's: a light is +0.5 t over a fairing half and 0.2 t
+  under a hull plate, a heavy +1.7 t over a half.
 - **Size:** 400 blocks at most. A 400-block ship builds in about 1.2 s when it spawns, a freeze the
   owner accepted for now; its rules take 0.3 s; it holds 121 fps in the worst view, just over the
   120 floor, so **a big ship costs frames**: keep it no bigger than the brief needs.
@@ -270,5 +293,6 @@ z 2   Fh2
 | `Fs1` / `Fs3` for a flank chamfer | A sawtooth: every block still rose aft | `Fs8` / `Fs12` on a roof edge, `Fs10` / `Fs14` on a belly edge |
 | Rcs as pods on the hull | The Warden's first draft read as clutter at the bow | Rcs as outer hull cells, exhaust face open |
 | A quantum core off the centreline | 3% yaw imbalance on a 260 t ship | Centre it, or mirror two |
+| Putting the guns on last | A turret takes a cell of the skin, so a late one moves the mass, the power margin and the pitch balance together; the Warden's margin is now 0.3 MW over the rule | Place the turrets in the shape pass (§4 step 5), then re-read power and balance |
 | Judging shape from `ship_check` alone | A first draft broke no rule and looked like a shuttle on a pole | Probe inside the design loop; the `.md` last |
 | The arrival render to judge looks | At 200–400 m the new ship is a few pixels | It proves the arrival; judge the ship from the probe's hull views |

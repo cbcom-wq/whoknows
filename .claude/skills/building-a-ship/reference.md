@@ -47,6 +47,9 @@ fix this file.
 | captain_chair | mount | 0.8 | | 0.2 | | on a 0.25 m dais, 0.5 m ramp behind; sat in, never flown; a quiet fixture |
 | crew_station | mount | 0.5 | | 0.3 | | a seat at a console, sat in, never flown; a job later (`SeatJob`); a quiet fixture |
 | computer | mount | 0.3 | | 0.3 | | the bridge computer's holo table; a quiet fixture, optional |
+| turret_light | solid | 0.8 | | 0.1 | | 200 hp; a cell of the hull's surface with a turret on its open face (category SYSTEMS); plan token `Tl` |
+| turret_heavy | solid | 2.0 | | 0.3 | | 400 hp; the same, a bigger dome and one long barrel; `Th` |
+| weapons_station | mount | 0.5 | | 0.3 | | 60 hp; a seat at a console like `crew_station`, a gun-camera screen and a target board; a quiet fixture; at most one a ship; `Ws` |
 | ladder | mount | 0.3 | | | | vertical link in `DeckGraph` only (see SKILL.md) |
 | quantum_cell | solid | 5.0 | | | | 400 QE of store (`quantum_capacity`); the hub's store |
 | quantum_tank | solid | 5.0 | | | | 1,000 QE; the store module's (habitat modules). A copy of `quantum_cell.tres`; its mesh sub-resource is still named `BoxMesh_quantum_cell` |
@@ -77,6 +80,19 @@ UP(+Y), DOWN(-Y)]` (`BlockOrientation`). A thruster's force on the ship acts alo
 | 4 | `O_STERN` | pushes aft: a **retro** RCS; `hull_wedge` tail taper |
 | 8 / 12 | `O_RCS_PORT` / `O_RCS_STARBOARD` | lateral −X / +X |
 | 16 / 20 | `O_RCS_UP` / `O_RCS_DOWN` | vertical +Y / −Y |
+
+A turret's orientation is the face it stands on (`SkyMap.normal_of(o)`, the block's up):
+
+| o | Mount face | Used by |
+|---|---|---|
+| 0 | dorsal, +Y | the starter's spine, the Lamplighter's, the Warden's two dorsal lights and its heavy |
+| 2 | ventral, −Y | the starter's keel, the Warden's two ventral lights |
+| 1 / 3 | starboard +X / port −X | the Warden's flank pair |
+| 18 or 22 | fore, −Z | no ship yet |
+| 16 or 20 | aft, +Z | no ship yet |
+
+Any of the four rolls of a face gives the same normal. Fore and aft are `SkyMap.mount_basis`'s
+special case: its forward is the hull's up there.
 
 ## Validator (`ShipValidator.validate`)
 
@@ -734,8 +750,10 @@ itself on a bare `flight_test.gd`.
 | `WINDOW_UNMATCHED` | an inside window has no place outside (`HullLayout.unmatched`) |
 | `DROID` | 12+ walkable cells and no dock, or a job the droid can't reach from it |
 | `NO_PIECES` | a hull section has no plating or fairing outside the shell to lose |
+| `TURRET_BURIED` | a turret's mount face does not open onto an empty cell |
+| `TWO_WEAPONS_STATIONS` | more than one `weapons_station` |
 
-Notes, never failing: `RCS_BLOCKED` (per block; the starter has 6), `FEEL`, `SIZE`.
+Notes, never failing: `RCS_BLOCKED` (per block; the starter has 6), `FEEL`, `SIZE`, `TURRETS` (the count and each turret's sky clear, `3 turrets, sky clear: (0, 2, 0) 100%, ...`) and `TURRET_BLIND` (a turret whose `SkyMap` is under `WeaponValues.BLIND_BELOW` 25% clear: mount it where it can see; it warns, it never fails).
 
 **`ship_check.gd`** (beside the probe): `<godot> --headless --path who-knows --script
 <abs>/ship_check.gd -- <abs or res:// path>.json`. Prints `rules   N broken`, each `<--   CODE text
@@ -791,7 +809,7 @@ by a rock with both** (the starter 130), 208 and 221 in the chase views, 122 wit
 - **Seats:** `Seat` (`src/avatar/seat.gd`) holds the eye, `STAND_SPOTS` and `stand_spots()`, the
   prompt and `sat`/`stood`; `PilotSeat` (`flies = true`, `$Interior/PilotSeat` in `ship.tscn`),
   `CaptainChair` (its own `DAIS_STAND_SPOTS`, down on the floor past the ramp) and `CrewStation`.
-  A seat that does not fly has an empty `job: SeatJob` for weapons or damage control later.
+  A seat that does not fly has a `job: SeatJob`: empty on a `crew_station`, a `WeaponsJob` on a `WeaponsStation` (below); damage control is later.
 - **The ship's seats:** `Ship.seats()` (the flying seat first) and `seat_at(cell)`; the chairs and
   stations are built by `_place_seat()` with every rebuild (`Seat.build`), named `Seat_x_y_z`.
 - **Sitting:** `CameraDirector.sit(seat)` / `sit_now(seat)` take any seat; only one that flies
@@ -825,7 +843,7 @@ What a ship contributes:
 
 | API | Does |
 |---|---|
-| `Ship.to_dict(universe)` | layout (`ShipBlueprint.to_dict`), hull place and motion (during a warp, the drop-out point, moving in), `FlightComputer.to_dict`, `QuantumStore.to_dict`, `WarpDrive.to_dict` (the chart), each `Airlock.to_dict`, `ShipLights.to_dict` (`lights`), every item aboard (`Item.to_dict`) |
+| `Ship.to_dict(universe)` | layout (`ShipBlueprint.to_dict`), hull place and motion (during a warp, the drop-out point, moving in), `FlightComputer.to_dict`, `QuantumStore.to_dict`, `WarpDrive.to_dict` (the chart), each `Airlock.to_dict`, `ShipLights.to_dict` (`lights`), `FireControl.to_dict` (`weapons`: orders and the list; ids that no longer exist are dropped on load), every item aboard (`Item.to_dict`) |
 | `Ship.layout_of(d)` → `ShipGrid` | the grid a save was built from |
 | `Ship.set_grid(grid, false)` | builds without stocking the shelves: a loaded game brings its own items |
 | `Ship.restore_hull(d, universe)` / `restore_aboard(d)` / `restore_item(d)` | puts it all back; an item whose stow point is gone comes loose |
@@ -871,6 +889,7 @@ They are the truth; each block's `damage` in the grid is their view, written by
 | `StatusPage.damage_line(ctx)` | *HULL 64% · ENGINES DAMAGED* (a wreck before a damaged one), or *ALL SYSTEMS OK* |
 | `ShipStats.intact_forward`, `intact_torque`, `crippled`, `crippled_reason` | crippled below 25% of intact forward thrust or any turning axis, or with no working `quantum_core`: wrecked engines or core |
 | `ShipCells.hull_cell`, `interior_cell`, `interior_cell_at` | which block a hit lands on |
+| `ShipDamage.turret_part(coord)`, `is_turret_part`, `turret_labels` | each turret is its own component, id `&"turret:<x>,<y>,<z>"`, label *TURRET <n>* numbered bow first then port to starboard (one comparator, shared with the turrets' own order), hp its block's (200 light, 400 heavy). Damaged under half: slews at `DAMAGED_SLEW` 0.5, recharges `DAMAGED_RECHARGE` 2 times longer; wrecked: silent, parked; mended from outside with the torch, never knocked off |
 | `Ship.crash_damage(knock)` | nothing below `CRASH_FROM` 2 m/s, then `CRASH_K` 5.5 × (knock − 2)² on the struck cell and half on each neighbour, dealt after the physics step |
 | `Ship.blocks_lost(coords)`, `plate_shed(item)`, `wake_spots()`, `launch_blueprint` | as before: chunks and a plate from a lost piece; where you wake; the launch layout |
 
@@ -954,6 +973,108 @@ prints each airlock's reel and nozzle.
   line shows; and `test/probes/fleet_play.gd`, which CLAUDE.md asks for after any change to
   boarding, airlocks or the suit.
 
+## Weapons (`docs/superpowers/specs/2026-10-11-ship-weapons-design.md`, §16 *As built*)
+
+A ship has one `FireControl`; its turrets are blocks that aim and fire on their own, at the targets
+you marked. Nothing here is hand-placed: a `Turret` node is made for each turret block, on the hull,
+and kept across rebuilds by cell. Paths are under `src/combat/` unless they say otherwise.
+
+**`WeaponValues` as tuned** (the combat probe moved nothing: the starting values already met its
+marks). Every number the weapons use is in this one file:
+
+| | `turret_light` | `turret_heavy` |
+|---|---|---|
+| Slew | 90°/s | 30°/s |
+| Fire | bursts of 4, 0.125 s apart, 1.5 s recharge | one bolt, 3 s recharge |
+| Bolt speed, damage, life, push | 600 m/s, 15 hp, 3 s, 20 N·s | 450 m/s, 120 hp, 7 s, 400 N·s |
+| Engagement range | 1,200 m | 1,500 m alone; 3,000 m by hand |
+| Spread, QE a bolt | 0.4°, 1 | 0, 15 |
+| Bolt look (length × thickness), impact flash, barrel from pivot | 2.0 × 0.25 m, ×1.5, 1.0 m | 4.0 × 0.5 m, ×3.0, 2.4 m |
+| Block | 0.8 t, 200 hp, 0.1 MW | 2.0 t, 400 hp, 0.3 MW |
+
+Shared: `AIM_TOLERANCE` 1° (a turret fires only this close to its solution), `ASSIGN_EVERY` 0.2 s,
+`LIST_MOST` 3, `MISSING_GRACE` 2 s, `CONTACT_RANGE` 5,000 m, `MARK_CONE` 10°, `FACE_OUT` 1.0 m and
+`MUZZLE_UP` 0.6 m (cell centre to mount face, face to the barrels' pivot), `PARK_ELEVATION` 10°,
+`ELEVATION_MAX` π, `FLIP_MARGIN` 10°, `TRAIL_TIME` 0.4 s, `SKY_YAW` 32 × `SKY_PITCH` 16 bins marched
+`SKY_REACH` 40 m in `SKY_STEP` 0.5 m, `BLIND_BELOW` 0.25, `DAMAGED_SLEW` 0.5, `DAMAGED_RECHARGE` 2,
+`HULL_CHECK` 40 m, `HEAVY_LIGHT_RANGE` 30 m (the heavy bolt's lamp; light bolts have none). The
+bolts' colour is `SpacePalette.PHASER` (`ffbf4d`).
+
+| Name | What it is |
+|---|---|
+| `Ship.turrets`, `Ship.heavy_turrets()` | the `Turret`s, one per turret block, numbered and ordered bow first, then port to starboard (`ShipDamage`'s own comparator); the heavy ones alone, in the same order, for the station's Q and E |
+| `Ship.fire_control` | the `FireControl` node, a sibling of `FlightComputer` (which and the pilot hold a reference); saved as `"weapons"` |
+| `FireControl` | `orders` (`Orders.HOLD` / `ENGAGE`; a new ship starts in `HOLD`), `list` (up to 3 ids, priority order), `entries` (`{id, node, label, distance, bearing}`, for the HUD and the board). `mark(id)` (a new one last, a full list's last place, one already listed to the top; it refuses its own hull), `mark_nearest(from, dir, cone, reach)`, `unmark`, `clear`, `set_orders(o)`, `toggle_orders`, `rotate_list`, `bearing(id)`, `pips()`. Every `ASSIGN_EVERY` it gives each turret the first listed target it can engage, else the nearest hostile, else none; a listed target gone for 2 s leaves the list |
+| `Weapons` (`weapons.gd`) | `TARGETS` (group `weapon_targets`), `join(node, id)` / `leave(node)`, `id_of`, `ship_id(ship)` = `ship:<name>`, `base_id`, `npc_id`, `item_id` (good for the session only: a listed item is dropped on load), `kind_of`, `usable(node)` (alive, in the tree, not a ship asleep, not an item held or stowed), `find(tree, id)`, `point_of` and `velocity_of` (take the exterior body), `label_of`, `is_hostile` (false for everything; `hostile_rule` is the enemy project's hook), `is_own` |
+| `Turret` (`turret.gd`) | `kind`, `coord`, `normal`, `sky`, `target`, `no_arc`, `state` (`tracking`, `firing`, `idle`, `damaged`, `low_power`, `no_arc`), `manual` and `manual_aim` for the gunner; `can_engage(node)`, `muzzle()`, `barrel_dir()`, `pull_trigger()`, `recharge_left()`. It fires when the barrel is inside 1° of the solution, the flight distance is inside its range, the recharge is done, the store is above the low-power line and can pay, the sky map allows it, and a ray from the muzzle is clear of its own hull |
+| `Turret.choose_pose(now, a)`, `pose_toward(dir)`, `upright_angles(dir)`, `barrel_angles()` | **the barrels pitch 0..180° over the top** (owner, 2026-10-16: `ELEVATION_MAX` π). A direction has an upright pose and a flipped one (`yaw + π`, `π − elevation`); the turret takes whichever it reaches sooner and keeps its branch unless the other is shorter by `FLIP_MARGIN`. The park goal stays upright. `upright_angles` keeps elevation in 0..π/2, the half-sky |
+| `SkyMap.build(layout, coord, normal)` | `normal_of(o)`, `mount_basis(n)`, `muzzle(coord, n)`, `can_bear(dir_local)`, `coverage()`; 32 × 16 bits over the half-sky above the face, marched through the **launch layout** with every cell a cube. Yaw 0 ahead and positive to the right, elevation 0 along the face. The upright and the flipped pose cover the same half-sky, so the flip leaves the map unchanged |
+| `WeaponAim.intercept(shooter, shooter_v, speed, target, target_v)` | the direction to fire, or null when the bolt can never catch it; in the shooter's frame, the target holding its velocity |
+| `Bolt`, `PhaserBolt`, `BoltPool` (`flight_test.bolt_pool`) | a pooled bolt (the trail is part of `PhaserBolt`) is a ray a tick, in `EXTERIOR_SPACE` while live, carrying its shooter's velocity; `fire(kind, from, dir, carrier, source, exclude)`; `live` is the count in the air. `PlasmaBolt` is the pistol's, unchanged |
+| `WeaponsStation` (`src/avatar/weapons_station_seat.gd`), `WeaponsJob` | the seat of a `weapons_station`. Its job holds the ship (`FlightComputer.gunner_hold`: stick centred, forward speed locked if the assist is on and no lock was set) and, with a heavy turret aboard, moves the camera to the gun camera: the mouse aims an upright reticle (`aim`, elevation 0..π/2) that the barrel follows its own way, left mouse fires, the wheel zooms 1×/2×/4×, T marks, Tab cycles, Q/E switch heavies, F stands you up. Without a heavy turret it is the target board |
+| `TargetContacts` (`src/sensors/`), `WeaponsPage` (`src/ship/computer/`), `WeaponsStrip`, `TargetBrackets`, `GunSight` (`src/ui/`) | other ships and bases within 5 km as exact contacts; the WEAPONS page and the station's board; the flight HUD's strip and numbered brackets; the gun camera's cross (the reticle), ring (where the barrels point) and lead diamond |
+| `NpcDirector.targets`, `ModuleDamage`, `Item.hp` | NPCs outside are targets; each module of a base is a damage section; an item takes damage and breaks (spec §6) |
+| Input | `weapons_mark` T (nearest the crosshair within `MARK_CONE` and 5 km; items too), `weapons_clear` Shift+T, `weapons_orders` B (`HOLD` ⇄ `ENGAGE`), in `project.godot` |
+
+**What a bolt does:** a ship's section or a turret component (with a small push), an NPC's
+`receive_hit`, a spacewalker (15 hp a light bolt, 120 a heavy: a heavy bolt downs you), a loose
+item, a base's module, and on an asteroid a flash and nothing else. A held or stowed item is not a
+target. A ship's bolts exclude its own colliders.
+
+**Tests worth copying:** `test_sky_map.gd`, `test_turret.gd` (the flip and its near ties),
+`test_fire_control.gd`, `test_turret_damage.gd`, `test_ship_turrets.gd`, `test_weapons_job.gd` (the
+sight's size equal to the viewport's), `test_weapons_scene.gd`, `test_weapons_station.gd` and
+`test_weapons_page.gd`.
+
+### The probe lines
+
+`ship_probe.gd` prints a `turret` line for each turret, and `turret  none` for an unarmed ship:
+
+    turret  Turret_0_2_0 turret_light at (0, 2, 0), sky 100%
+
+The coverage is `turret.sky.coverage()`. On 2026-10-16 every turret on the three library ships
+read **92 to 100%**:
+
+| Ship | Turrets (cell, kind, sky) |
+|---|---|
+| starter | (0, 2, 0) light 100%; (0, −1, 0) light 100% |
+| warden | (0, 0, −9) **heavy** 96%; (0, −2, −6) light 100%; (0, 1, −4) light 98%; (−3, 0, 1) light 92%; (0, −2, 1) light 100%; (3, 0, 1) light 92%; (0, 2, 2) light 100% |
+| lamplighter | (0, 2, 0) light 100% |
+
+At a weapons station with a heavy turret the seat render is the gun camera (*Seats and bridges*).
+
+**`test/probes/combat_probe.gd`** (windowed; see *Commands*) is the proof for anything that changes
+a turret, the sky map, fire control or the station. It puts the Warden in `ENGAGE`, lists two
+starters (one up and starboard, one down and port, so every turret has a target in its half-sky),
+turns the Warden to a heading with no rock within 3.5 km, and jinks the target sideways at 5 m/s².
+Its pass marks are at least 80% at 400 m, at most 30% at 1.2 km and at least 120 fps with every gun
+firing; then the heavy by hand at 2 km on a target holding still. It prints a `hit` line per range,
+three `fps` lines (baseline, guns idle, firing) with the renderer's own gpu and cpu milliseconds, a
+`sight` line and a `heavy` line, and writes `combat_chase`, `combat_bridge`, `combat_gun`,
+`combat_gun_fire`, `combat_turret_upright` and `combat_turret_flipped`.
+
+| Range | Light bolts that hit |
+|---|---|
+| 200 m | 95% (38 of 40) |
+| 400 m | 85% (34 of 40) |
+| 600 m | 63% (27 of 43) |
+| 800 m | 36% (10 of 28) |
+| 1,000 m | 29% (7 of 24) |
+| 1,150 m | 14% (6 of 44) |
+| 1,200 m and 1,400 m | no bolt fired: the lead distance is over the 1.2 km range |
+
+The heavy hit 5 of 5 by hand at 2 km. The fps, on the GTX 960 at 1280 × 720: baseline 114-127, guns
+idle 115-120, **firing 109-117** (86 and 96 in two noisy runs). The Warden alone is at or under 120,
+so the floor is a property of the scene on this card; the bolts cost 0.3-0.5 ms.
+
+**Known edges.** A save made during the gunner hold reloads with the speed lock on and no memory
+that the hold set it, so standing up leaves the lock on (the live case is handled:
+`FlightComputer._hold_locked`). A flipped turret's barrels lie back through the dome's rear trim
+strip (`turret_look.gd`); the render reads as a gun leaning over its shoulder with a small pale
+wedge beside the breech, no clip. A wrecked turret does not appear on the STATUS page. The gun
+camera sits outside the hull and takes the chase camera's cull mask, so it sees the world, the hull
+and the bolts and not the interior.
+
 ## Commands
 
 - **Tests:** `who-knows/run_tests.ps1`, or `'-gselect=test_name.gd'` for one file (PowerShell;
@@ -970,6 +1091,9 @@ prints each airlock's reel and nozzle.
   <id or ship .json> <abs out.plan>`, and `-- to-json <abs plan> <abs out\<id>.json>`.
 - **The full suite** takes about 17 minutes (2,033 tests on 2026-10-08): run it in the background,
   logged to a file.
+- **Combat probe:** `<godot> --path who-knows --resolution 1280x720 --script res://test/probes/combat_probe.gd -- <abs out dir>`
+  (windowed). The Warden in `ENGAGE` on a jinking starter: `hit` lines by range, three `fps`
+  lines, `heavy`, and the `combat_*.png` renders (*Weapons* below).
 - **Damage probes** (`who-knows/test/probes/`, run like the ship probe):
   - `damage_review.gd`: the renders to show the owner for any damage work (step 10): the port
     sections at 70%, 35% and 0% from outside, the cabin at 60%, 35% and 15% HULL;
@@ -1004,3 +1128,4 @@ prints each airlock's reel and nozzle.
 - `docs/superpowers/specs/2026-09-25-flight-controls-design.md`: how the flight computer spends
   the budgets, the RCS show, and (§9.4) what the starter's layout does to the feel.
 - `docs/superpowers/specs/2026-09-26-saving-design.md`: what a ship saves, and when.
+- `docs/superpowers/specs/2026-10-11-ship-weapons-design.md`: the turrets, fire control, the weapons station, and (§16) what the build did differently.

@@ -1,7 +1,7 @@
 # Ship weapons — QE-powered phaser turrets
 
 **Date:** 2026-10-11
-**Status:** Designed with the owner on 2026-10-10 to 11; not yet built.
+**Status:** approved and built, 2026-10-16 (§16 *As built*). The 120 fps floor under full fire: owner's decision pending.
 **Depends on:** `main` at `93543b3` (the bridge, the hose and habitat modules merged)
 **Amends:** the quantum energy spec (`2026-09-24-quantum-energy-design.md`) §8.4, *Turret weapons*,
 built here; the ship damage sections spec (`2026-10-03-ship-damage-sections-design.md`) §2.2, one
@@ -469,3 +469,162 @@ weapons station.
 - **The gun camera and render layers.** The camera sits outside a ship whose interior lives in a
   slot; it must see the world, the hull and bolts, not the interior. The bridge's seated cameras
   and the spacewalk's layers are the models.
+
+## 16. As built
+
+Built on branch `weapons` in the plan's twenty tasks (`docs/superpowers/plans/2026-10-11-ship-weapons.md`),
+each reviewed, with one owner change made mid-plan (§16.5). The four phases are as §13 laid them
+out: bolts, targets, fire control and the light turret; items and bases; the heavy turret and the
+weapons station; the proof and the skills.
+
+### 16.1 The numbers
+
+`WeaponValues` is **unchanged from §3.1**: the starting values already met the hit-rate marks, so
+the probe tuned nothing. Alongside them as built: a heavy bolt's lamp reaches 30 m
+(`HEAVY_LIGHT_RANGE`), a trail shows `TRAIL_TIME` 0.4 s, `AIM_TOLERANCE` is 1°, the sky map is
+32 × 16 marched 40 m in 0.5 m steps, `FLIP_MARGIN` is 10°. The bolts are `SpacePalette.PHASER`
+(`ffbf4d`, a hot amber-gold).
+
+| Block | Mass | hp | Draw | Plan token |
+|---|---|---|---|---|
+| `turret_light` | 0.8 t | 200 | 0.1 MW | `Tl` |
+| `turret_heavy` | 2.0 t | 400 | 0.3 MW | `Th` |
+| `weapons_station` | 0.5 t | 60 | 0.3 MW | `Ws` |
+
+Orientations: 0 dorsal, 2 ventral, 1 starboard (+x), 3 port (−x), fore 18 or 22, aft 16 or 20.
+
+### 16.2 The probe (`test/probes/combat_probe.gd`, 2026-10-16, GTX 960, 1280 × 720)
+
+The Warden in `ENGAGE` on a starter jinking sideways at 5 m/s². Light-bolt hit rate by range, from
+the last run (run 11; runs 5 to 11, all on a clear heading, agree):
+
+| Range | Hit |
+|---|---|
+| 200 m | 95% (38 of 40) |
+| 400 m | 85% (34 of 40) |
+| 600 m | 63% (27 of 43) |
+| 800 m | 36% (10 of 28) |
+| 1,000 m | 29% (7 of 24) |
+| 1,150 m | 14% (6 of 44) |
+| 1,200 m, 1,400 m | no bolt fired |
+
+- **At least 80% at 400 m: met** (85%).
+- **At most 30% at 1.2 km: met, by the cut-off.** A turret fires only when the lead solution's
+  flight distance (`time × speed`) is inside its 1.2 km range, and the flight distance to a jinking
+  target 1.2 km off is always a little over. No light bolt fires at 1.2 km. The 1,150 m row shows
+  the guns at the very edge of their range. The curve is a clean hit at 400 m and a dodge window
+  opening from about 600 m: the owner's "a bit of a dance".
+- **The heavy by hand at 2 km: 5 of 5 hit**, against a target holding still, as §10.2 asked. One
+  bolt did 120 hp to the target's engines and the barrel settled 0.009° off the solution.
+- **Frame rate: the 120 fps floor: owner's decision pending.** Baseline (the Warden alone, no gun
+  firing) 114-127; guns idle 115-120; **every gun firing 109-117** (86 and 96 in two noisy runs).
+  The renderer reports 5.2 ms of GPU in a 9 ms frame, so it is not bound by the bolts (two
+  instances of one shared mesh and material each, no light on a light bolt); firing costs 3-8 fps
+  (0.3-0.5 ms). The Warden's own scene is at or under 120 on this card, so the floor is a property
+  of the scene on a GTX 960 rather than of the weapons. The probe's recommendation was to accept it
+  and make the Warden's scene cost a separate task. §15's fallback, the trails as one `MultiMesh`,
+  was not built: it would not move the number.
+- **Sky coverage: every turret 92 to 100%** on all three ships, so no `TURRET_BLIND` and no
+  `TURRET_BURIED` anywhere, and no cell had to be moved (§16.3).
+- `WeaponValues` was left unchanged.
+
+### 16.3 The loadouts
+
+| Ship | Turrets (cell, face, sky clear) | Mass and power |
+|---|---|---|
+| Starter | light dorsal (0, 2, 0) 100%; light ventral (0, −1, 0) 100%; each in a fairing half's place | 105.7 t (+1.0); 36.0 MW made, 31.5 drawn; pitch imbalance *fell* from 4.91% to 4.77% |
+| Lamplighter | light dorsal (0, 2, 0) 100%, in the place of the spine's middle fairing half | 126.2 t (+0.5); 40.5 MW drawn of 72.0; pitch imbalance fell to 2.31% |
+| Warden | light dorsal (0, 2, 2) 100% and (0, 1, −4) 98%; light ventral (0, −2, −6) 100% and (0, −2, 1) 100%; light starboard (3, 0, 1) 92% and port (−3, 0, 1) 92%, in hull plates' places; **heavy** (0, 0, −9) 96%, dorsal on the bow tip; the weapons station at (2, 0, −3), the third crew station's cell | 265.3 t (+3.3); 108.0 MW made, **97.9 drawn, 10.3% spare** (about 0.3 MW above the rule); pitch imbalance 0.22% |
+
+The Warden's flank pair is the lowest at 92%: the armour plate and the fairing slopes either side
+stand a little proud of the flank. Those two lights are 0.2 t *under* the plates they replaced.
+
+### 16.4 What moved from the plan, and why
+
+- **The power draws and the bases** were amended while planning (§3.1, §6.5), as marked there.
+- **Held and stowed items are not targets** (`Weapons.usable` checks `Item.State.LOOSE`): the spec
+  says loose items in space, and otherwise a turret would pick the hose nozzle on its reel or a
+  tool in hand.
+- **`NO ARC` means the turret engages nothing.** A turret that has a hostile is `FIRING` or
+  `TRACKING`; `no_arc` is set only when something is listed and the turret can engage none of it.
+- **Turrets are numbered and ordered bow first, then port to starboard**, by `ShipDamage`'s own
+  comparator, shared with the station's Q and E: the plan's `coords.sort()` contradicted its own
+  "bow first".
+- **The weapons station replaced the Warden's third crew station** rather than adding a seat: still
+  five seats, the same stand rules, `TWO_WEAPONS_STATIONS` quiet.
+- **The board stands 0.045 m proud of the console**, its position derived from the console's face
+  frame (the plan's constant sat 2.4 mm behind the panel).
+- **The gunner hold undoes only the speed lock it set** (`FlightComputer._hold_locked`), so the
+  pilot does not find a lock they never chose; and `WeaponsJob._job_camera()` is null unless the
+  camera is valid and in the tree, since a freed gun camera would black the screen.
+- **Files differ from §12.** There is no `gun_camera.gd` (the job makes the gun camera) and no
+  `bolt_trail.gd` (the trail is part of `PhaserBolt`). Added: `src/combat/turret_look.gd`,
+  `src/ui/gun_sight.gd`, `src/avatar/weapons_station_seat.gd`, `src/habitat/module_damage.gd`.
+- **Render steps did not wait for the owner.** The renders go under `.superpowers/renders/<task>/`
+  (git-ignored) and are sent on; the plan carried on. Task 10's playable screenshot step became the
+  ship probe's renders, and bolts in flight come from the combat probe.
+- **The probe steers clear of rocks.** The world's rocks are fixed and a rock dead ahead eats every
+  bolt (the first runs read 0% from 1,000 m out); the plan's probe had no such step. It turns the
+  Warden to the first heading with no rock within 3.5 km (30°) and lists two starters, one up and
+  starboard and one down and port: with a single target dead ahead the dorsal and ventral turrets
+  read `NO ARC` and fire nothing. The range table adds a 1,150 m row, and the heavy turret is idled
+  in it so its 120 hp bolts do not swamp the count of 15 hp ones.
+- **A gun-sight bug found by the render.** `GunSight._ready()` called `set_anchors_preset`, which
+  leaves a Control at zero size, so the cross and the status line drew at the screen's corner.
+  `set_anchors_and_offsets_preset` fixed it (`49dfc86`), with a test that the sight's size equals
+  the viewport's.
+
+### 16.5 Owner changes during the build
+
+- **2026-10-11, planning:** turret power draws cut to 0.1 and 0.3 MW so the Warden keeps its margin
+  (§3.1); each base module a damage section of its own (§6.5).
+- **2026-10-16, barrels pitch over the top.** Elevation is 0..180° (`ELEVATION_MAX` π) with the
+  360° yaw: horizon to horizon. A direction has two poses, upright and flipped (`yaw + π`,
+  `π − elevation`); `Turret.choose_pose` takes whichever is sooner and holds its branch unless the
+  other is shorter by `WeaponValues.FLIP_MARGIN` (10°). **The gunner's reticle stays upright,
+  0..90°**, and looking behind is a yaw drag; the barrels choose their own way and a second mark
+  shows where they point. **The SkyMap is unchanged**, because both poses cover the same half-sky.
+  Edited into §3.2, §5.3 and §7.2. In the render the flipped barrels lean back and up from the
+  dome's rear top edge at about 45° and read as a gun over its shoulder; the pale rear trim strip
+  shows as a small wedge beside the breech and nothing clips. Lowering the strip would tidy it, and
+  is the owner's call.
+
+### 16.6 Known edges
+
+- **A save made during the gunner hold** reloads with the speed lock on and no memory that the hold
+  set it, so standing up leaves the lock on. (The in-session case is handled.)
+- A wrecked turret never shows on the STATUS page (`StatusPage.damage_line` walks
+  `ShipDamage.COMPONENTS` only), though the weapons board and pips show it.
+- The weapons strip's pips draw past 150 px beyond about 12 turrets, and the board groups turret
+  states past about 3. The `TURRETS` note says "sky clear" even for a blind turret (the
+  `TURRET_BLIND` rule says it).
+- The gun is live during the sit glide; the station swallows Q and E with one heavy; its status
+  reads READY while the turret is wrecked or in low power.
+- A phaser bolt's hit impulse uses its direction, not the carrier's velocity added.
+- On bases: a wrecked module's blocks show as DAMAGED, so it keeps sparking; the link panel still
+  offers moves while offline; a drill mended within 5 s of its wreck is paid the seconds since.
+- Not built (§11, §14): fixed guns for a fighter, shields, any hostile AI (`Weapons.is_hostile` is
+  false for everything), missiles, NPC crew at the station.
+
+### 16.7 The renders
+
+Sent to the owner 2026-10-16, **verdict pending** (the colour first, §10.2). The combat probe's, in
+`.superpowers/renders/task-19/` (git-ignored): `combat_chase.png` (outside the hull, bolts and
+trails in flight, two listed starters in the distance), `combat_bridge.png` (seated at the helm),
+`combat_gun.png` (the gun camera with the job active: cross, barrel ring, lead diamond, status
+line), `combat_gun_fire.png` (a heavy bolt leaving the barrel), `combat_turret_upright.png` and
+`combat_turret_flipped.png` (a Warden dorsal light turret at 20° and 135° elevation), the zoom
+crops `crop_upright.png` and `crop_flipped.png`, the logs `run1.log` to `run11.log`, and `ship/<id>/`
+PNGs for the starter, the Warden and the Lamplighter. Earlier ones: `task-10/` (the armed starter's
+hull and seats), `task-12/` (the wrecked base drill, ~30 m exterior stills, not eye height) and
+`task-18/` (the Warden's station, board, gun camera and hull views).
+
+### 16.8 Tests
+
+New: `test_sky_map`, `test_weapon_aim`, `test_phaser_bolt`, `test_weapons`, `test_fire_control`,
+`test_turret`, `test_turret_damage`, `test_ship_turrets`, `test_weapons_hud`, `test_weapons_station`,
+`test_weapons_job`, `test_job_camera`, `test_weapons_page`, `test_weapons_scene`, `test_item_break`,
+`test_module_damage` and `test_base_damage`. `test_starter_shuttle`, `test_ship_plan` and
+`test_bridge_computer_scene` carry the armed starter's figures. The builders ran the files that
+covered each change, one at a time; the full suite (about 17 minutes) is the owner's call before the
+branch is finished.
