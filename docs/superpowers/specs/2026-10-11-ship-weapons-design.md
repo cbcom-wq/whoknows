@@ -1,7 +1,7 @@
 # Ship weapons — QE-powered phaser turrets
 
 **Date:** 2026-10-11
-**Status:** approved and built, 2026-10-16 (§16 *As built*). The 120 fps floor under full fire: owner's decision pending.
+**Status:** approved and built, 2026-10-16 (§16 *As built*). The owner accepted the frame rate under full fire and approved the look, 2026-10-16.
 **Depends on:** `main` at `93543b3` (the bridge, the hose and habitat modules merged)
 **Amends:** the quantum energy spec (`2026-09-24-quantum-energy-design.md`) §8.4, *Turret weapons*,
 built here; the ship damage sections spec (`2026-10-03-ship-damage-sections-design.md`) §2.2, one
@@ -516,7 +516,8 @@ the last run (run 11; runs 5 to 11, all on a clear heading, agree):
   opening from about 600 m: the owner's "a bit of a dance".
 - **The heavy by hand at 2 km: 5 of 5 hit**, against a target holding still, as §10.2 asked. One
   bolt did 120 hp to the target's engines and the barrel settled 0.009° off the solution.
-- **Frame rate: the 120 fps floor: owner's decision pending.** Baseline (the Warden alone, no gun
+- **Frame rate: accepted by the owner, 2026-10-16**, with the Warden's frame cost a separate task
+  to follow. Baseline (the Warden alone, no gun
   firing) 114-127; guns idle 115-120; **every gun firing 109-117** (86 and 96 in two noisy runs).
   The renderer reports 5.2 ms of GPU in a 9 ms frame, so it is not bound by the bolts (two
   instances of one shared mesh and material each, no light on a light bolt); firing costs 3-8 fps
@@ -608,7 +609,8 @@ stand a little proud of the flank. Those two lights are 0.2 t *under* the plates
 
 ### 16.7 The renders
 
-Sent to the owner 2026-10-16, **verdict pending** (the colour first, §10.2). The combat probe's, in
+Sent to the owner 2026-10-16: **approved** ("looks good": the amber bolts and trails, the turret
+upright and flipped, the gun camera). The combat probe's, in
 `.superpowers/renders/task-19/` (git-ignored): `combat_chase.png` (outside the hull, bolts and
 trails in flight, two listed starters in the distance), `combat_bridge.png` (seated at the helm),
 `combat_gun.png` (the gun camera with the job active: cross, barrel ring, lead diamond, status

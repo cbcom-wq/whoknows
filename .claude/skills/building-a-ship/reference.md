@@ -1066,8 +1066,8 @@ three `fps` lines (baseline, guns idle, firing) with the renderer's own gpu and 
 
 The heavy hit 5 of 5 by hand at 2 km. The fps, on the GTX 960 at 1280 × 720: baseline 114-127, guns
 idle 115-120, **firing 109-117** (86 and 96 in two noisy runs). The Warden alone is around 120 (114-127),
-so the floor is a property of the scene on this card; the bolts cost 0.3-0.5 ms. **The 120 fps
-floor under full fire: owner's decision pending.**
+so the floor is a property of the scene on this card; the bolts cost 0.3-0.5 ms. The owner accepted
+this on 2026-10-16; the Warden's frame cost is a separate task.
 
 **Known edges.** A save made during the gunner hold reloads with the speed lock on and no memory
 that the hold set it, so standing up leaves the lock on (the live case is handled:
