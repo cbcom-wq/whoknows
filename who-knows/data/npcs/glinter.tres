@@ -29,7 +29,7 @@ needs = {
 need_start = {
 &"fear": Vector2(0, 0)
 }
-behaviours = Array[StringName]([&"lure", &"hide"])
+behaviours = Array[StringName]([&"lure", &"ambush", &"hide"])
 bite_damage = 8.0
 bite_push = 25.0
 bite_reach = 0.8

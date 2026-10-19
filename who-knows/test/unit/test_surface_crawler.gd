@@ -245,3 +245,35 @@ func test_a_species_that_does_not_grip_bases_does_not_see_a_base_wall_as_ground(
 	_spawn(Transform3D(Basis.IDENTITY, Vector3(0, 5.05, 0)))
 	await wait_physics_frames(int(SurfaceCrawler.LOST_AFTER * 60.0) + 10)
 	assert_true(_npc.active is ZeroGDrift, "a skitter's rays see only rock")
+
+## A suit: what the avatar is to a ray, a capsule on layer 4 standing 0.9 m
+## above its origin, which is at its feet, as the avatar's is.
+func _suit(at: Vector3) -> StaticBody3D:
+	var b := StaticBody3D.new()
+	b.collision_layer = SurfaceCrawler.AVATAR_LAYER
+	b.collision_mask = 0
+	var cs := CollisionShape3D.new()
+	var capsule := CapsuleShape3D.new()
+	capsule.radius = 0.35
+	capsule.height = 1.8
+	cs.shape = capsule
+	cs.position = Vector3(0, 0.9, 0)
+	b.add_child(cs)
+	_root.add_child(b)
+	b.global_position = at
+	return b
+
+func test_a_leap_aims_at_a_spacewalker_over_open_space():
+	_box(Vector3(10, 10, 10), Vector3.ZERO)
+	_spawn(Transform3D(Basis.IDENTITY, Vector3(0, 5.05, 0)))
+	var suit_at := Vector3(0.3, 9.0, 0.1)
+	await wait_physics_frames(5)
+	var crawler := _npc.active as SurfaceCrawler
+	assert_null(crawler.aim_leap(_npc, suit_at), "with nothing there, and nothing beyond, it does not jump")
+	var suit := _suit(suit_at)
+	await wait_physics_frames(2)
+	var landing: Variant = crawler.aim_leap(_npc, suit_at)
+	assert_not_null(landing, "the suit is something to land on")
+	if landing != null:
+		assert_lt((landing as Vector3).distance_to(suit_at), 0.6, "on the suit, at %s" % landing)
+	suit.free()

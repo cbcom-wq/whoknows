@@ -45,6 +45,9 @@ const ARRIVED := 0.15
 ## The layer a base's body and every ship's hull are on: a species that grips
 ## bases looks for it too (rock creatures spec §6.1).
 const BASE_LAYER := 1
+## The layer the avatar is on: a leap can be aimed at a spacewalker (a Glinter's
+## ambush, rock creatures spec §4.3), not only at rock.
+const AVATAR_LAYER := 4
 
 var gripping := true
 ## Herd mates' positions (site-local), from the last think.
@@ -221,11 +224,19 @@ func _crowded(npc: Npc) -> bool:
 	return false
 
 ## Where a leap toward `toward` (engine space) would land, or null: nothing to
-## land on within reach, and it does not jump.
+## land on within reach, and it does not jump. Rock counts, and so does the
+## avatar's suit.
 func aim_leap(npc: Npc, toward: Vector3) -> Variant:
 	var o := npc.global_position + npc.global_basis.y * npc.species.height * 0.5
 	var dir := (toward - o).normalized()
-	var hit := _ray(npc.get_world_3d().direct_space_state, o + dir * 0.6, o + dir * LEAP_REACH, [npc.get_rid()])
+	var query := PhysicsRayQueryParameters3D.create(o + dir * 0.6, o + dir * LEAP_REACH, _mask | AVATAR_LAYER,
+		[npc.get_rid()])
+	var hit := npc.get_world_3d().direct_space_state.intersect_ray(query)
+	if not hit.is_empty() and _mask != AsteroidBody.LAYER:
+		# As _ray: a hull on the base-and-hull layer is no place to land.
+		var body := hit["collider"] as CollisionObject3D
+		if body != null and body.collision_layer & BASE_LAYER != 0 and not body.has_meta(&"base"):
+			return null
 	return hit["position"] if not hit.is_empty() else null
 
 func handover(npc: Npc) -> StringName:

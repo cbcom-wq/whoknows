@@ -150,7 +150,7 @@ func test_the_glinter_reads_back_as_authored():
 	assert_almost_eq(g.feels_vibration, 1.0, 0.0001)
 	assert_almost_eq(float(g.needs[&"fear"]), 0.0, 0.0001)
 	assert_true(g.need_start.has(&"fear"))
-	assert_eq(g.behaviours, [&"lure", &"hide"] as Array[StringName])
+	assert_eq(g.behaviours, [&"lure", &"ambush", &"hide"] as Array[StringName])
 	assert_almost_eq(g.fear_of_player, 0.3, 0.0001)
 	assert_almost_eq(g.bite_damage, 8.0, 0.0001)
 	assert_almost_eq(g.bite_push, 25.0, 0.0001)

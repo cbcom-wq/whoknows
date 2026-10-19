@@ -55,6 +55,7 @@ local z otherwise. Origin at the feet; up is local +y; forward is −z.
 | `NpcLedger` (`mark_dead`, `is_dead`, `set_health`, `health_of`, `to_dict`) | one per game (`flight_test.npc_ledger`), given to every director; `NpcDirector.amend` returns null for the dead; `demote` writes wounds; `promote` reads them. Saved as `"npcs"` |
 | `ctx.extra[&"hurt_ago"]` | seconds since it was last hurt, for a behaviour to read |
 | `NpcDirector.targets`, `Weapons.TARGETS`, `Weapons.npc_id(record.id)` | the exterior director joins each promoted NPC to the weapons group as `npc:<record id>` and takes it out on `demote` (ship weapons spec §4.1); the interior director's `targets` is false. A turret's phaser bolt arrives at `receive_hit` like any other hit: **15 hp a light bolt, 120 a heavy** (`WeaponValues` damage). `Weapons.usable` is false for a dead NPC (`is_dead()`), so it leaves every turret's choice and, 2 s on, the fire-control list; a knocked-out one is still a target. Test: `test_npc_director.gd` (`targets`) |
+| `behaviours/ambush.gd` | a reflex that springs: you within `AMBUSH` 5 m (`ctx.position` to `ctx.player`) and fear under `CALM` 0.4 -> first think `Intent.idle(&"leap")` with `leap_to` = you; then within `bite_reach + 0.3` one `&"bite"` and `raise(&"fear", AFTER_FEAR 0.8)`, else `&"lunge"`; done after the bite or `GIVE_UP` 4 s. `test/probes/glinter_leap.gd` is the leap check (20 tries, reach and bite), `glinter_render.gd` the renders |
 | `behaviours/defend.gd` | the template for an NPC that fights back: a reflex scored from `hurt_ago`, fear and the player's distance, `Intent.go(player, 1.0, &"lunge"/&"bite")`, given up past 6 m or when calm; weight it over `scatter` |
 
 NPCs heal `HEAL_RATE` 0.1 hp/s after `HEAL_AFTER` 10 s, only while live.
@@ -199,7 +200,8 @@ herd is gone the next time the rock comes into detail. No behaviour changes.
   `PERSONAL` 1.2 m, `LOST_AFTER` 0.2 s, `KNOCKED_OFF` 1.5 m/s, `SLIPPERY` 3 m/s, `LEAP_REACH`
   30 m, `STILL` 0.25 m/s, `RECHECK` 30 ticks, `WALL_GAP` 0.45 m. Rays on layer 64 only.
   `mates` (site-local) is set on it for separation. A leap: intent action `&"leap"` with
-  `leap_to`; refused if the ray finds nothing within reach.
+  `leap_to`; refused if the ray finds nothing within reach. The leap's ray hits rock and the
+  avatar (`AVATAR_LAYER` 4: a Glinter's ambush), so a leap can be aimed at a spacewalker.
 - **`ZeroGDrift`:** `LEAP_SPEED` 6, `TUMBLE` 0.6 s, `PUFF` 0.8 m/s at most once a second,
   `PUFFS` 6, `LOOK` 60 m, `LANDED` 0.6 m.
 - **Bumps:** `Avatar.bump` shares momentum with an `Npc` by the rocks' rule
