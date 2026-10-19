@@ -17,6 +17,12 @@ extends Node3D
 ## under the field, and leaves the group before it is freed -- a member must
 ## never sit under another member, which would shift it twice.
 ##
+## A cloud can also be placed (add_placed_cloud): its items' poses chosen by the
+## caller, a nest's real salvage on a crater floor, rather than seeded in a
+## ball. A placed cloud loads, frees, shifts and is taken from like any other,
+## its items at rest. Its caller registers it again whenever its rock comes
+## into detail, so it is not saved; what was taken from it is.
+##
 ## What is taken -- an item that says it was consumed, swallowed by the hose
 ## -- goes in the ledger, and a cloud that loads again leaves it out.
 
@@ -56,6 +62,7 @@ var ledger := SalvageLedger.new()
 
 var _centres := {}   # StringName cloud id -> UniversePoint
 var _loaded := {}    # StringName cloud id -> {int index: Item}, in index order
+var _placed := {}    # StringName cloud id -> Array[Dictionary] of entries, for placed clouds
 
 func setup(p_universe: Universe, p_catalog: ItemCatalog, p_world_seed: int) -> void:
 	universe = p_universe
@@ -70,14 +77,38 @@ func add_near_cloud(stern: Transform3D) -> void:
 	_centres[NEAR] = universe.to_universe(stern * Vector3(0, 0, NEAR_AFT))
 	update()
 
+## Registers a cloud whose items are already posed. `centre` is in engine
+## space and is kept as a universe point; each entry is {index: int, kind:
+## StringName, variety: float, pose: Transform3D} with `pose` relative to
+## `centre`. Registering an id that is loaded keeps its live items and replaces
+## only the stored centre and entries (they apply the next time it loads); one
+## that is not loaded is just stored. Loads at once if the focus is near.
+func add_placed_cloud(cloud_id: StringName, centre: Vector3, entries: Array[Dictionary]) -> void:
+	var own: Array[Dictionary] = []
+	for e in entries:
+		own.append(e.duplicate())
+	_placed[cloud_id] = own
+	_centres[cloud_id] = universe.to_universe(centre)
+	update()
+
+func is_placed(cloud_id: StringName) -> bool:
+	return _placed.has(cloud_id)
+
 func centre(cloud_id: StringName) -> UniversePoint:
 	return _centres.get(cloud_id)
 
 ## A cloud's items, from the seed and its id alone: {index, kind, pose (from
 ## the centre), tumble (an angular velocity), variety (0..1, for the look and
-## its glint)}, in index order.
+## its glint)}, in index order. A placed cloud's entries are as it was given
+## them, each at rest: a tumble of zero.
 func cloud_items(cloud_id: StringName) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
+	if _placed.has(cloud_id):
+		for e: Dictionary in _placed[cloud_id]:
+			var entry := e.duplicate()
+			entry["tumble"] = Vector3.ZERO
+			out.append(entry)
+		return out
 	if cloud_id != NEAR:
 		push_error("SalvageField: no cloud called %s" % cloud_id)
 		return out
@@ -120,10 +151,14 @@ static func cloud_seed(p_world_seed: int, cloud_id: StringName) -> int:
 
 ## What a save keeps (saving spec §3): where each cloud is, and the ledger.
 ## Where loaded items drift to is not kept: pushed salvage goes back to its
-## seeded place (spec §10.3).
+## seeded place (spec §10.3). Placed clouds are left out -- they are registered
+## again when their rock comes into detail -- but the ledger keeps what was
+## taken from them.
 func to_dict() -> Dictionary:
 	var centres := {}
 	for id: StringName in _centres:
+		if _placed.has(id):
+			continue
 		centres[String(id)] = SaveCodec.upoint(_centres[id])
 	return {"centres": centres, "taken": ledger.to_dict()}
 
