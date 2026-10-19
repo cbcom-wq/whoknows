@@ -21,6 +21,11 @@ extends SceneTree
 #                                           on its own
 #   glinter_spring_pov_<k>.png               through the suit's eye as a Glinter springs and bites
 #   glinter_spring_side_<k>.png              the same spring seen from beside its path
+#   glinter_lit_*.png                         a dev nest of four Glinters and three real pieces of
+#                                           salvage on the rock's sunlit side, in daylight, no lamp: _close (3 m),
+#                                           _one (1 m, shut), _40m (from 40 m), _sprung_1..4 (a
+#                                           spacewalker drifting over it, from 6 m to the side: spring,
+#                                           bite, rebound, the start of its puff home)
 # and prints, for the nest, how its Glinters and salvage lie on the ground.
 
 const DISTANCES: Array[float] = [40.0, 100.0]
@@ -174,6 +179,10 @@ func _run() -> void:
 	_lamp.spot_angle = 35.0
 	_lamp.visible = false
 	_cam.add_child(_lamp)
+	if OS.get_cmdline_user_args().has("--lit-only"):
+		await _lit_set(ship, sun)
+		quit()
+		return
 	# Far shots, as the rock is (its night side), then with the sun brought round
 	# to the nest, which is where a day-side nest would be.
 	await _far_shots("", to_sun)
@@ -220,6 +229,7 @@ func _run() -> void:
 	_save("one_shut")
 	_cam.fov = 70.0
 	await _spring(ship, side, to_sun)
+	await _lit_set(ship, sun)
 	quit()
 
 ## The far shots, 40 m and 100 m, standing and floating, as the sun is.
@@ -460,3 +470,220 @@ func _spring(ship: Ship, side: Vector3, to_sun: Vector3) -> void:
 				print("spring %s %d: Glinter %.2f m from the suit, action %s, eyes shown: %s" % [mode, saved, d, looking.action,
 					looking.eyes.visible])
 		print("spring %s: %d frames kept; suit health %.0f of %.0f" % [mode, saved, avatar.health.current, avatar.health.max])
+
+# --- in daylight ------------------------------------------------------------------------
+
+## A nest of the dev spawner's four Glinters and three real pieces of salvage on
+## the sunlit side of the rock, shot with no lamp.
+func _lit_set(ship: Ship, sun: DirectionalLight3D) -> void:
+	_lamp.visible = false
+	_cam.fov = 70.0
+	var to_sun := sun.global_basis.z.normalized()
+	# The ground that takes the sun at about 40 degrees up: lit, and shaped by it.
+	var best := _home
+	var best_score := -INF
+	var count := 600
+	for k in count:
+		var y := 1.0 - 2.0 * (float(k) + 0.5) / float(count)
+		var r := sqrt(1.0 - y * y)
+		var dir := Vector3(cos(float(k) * 2.399963) * r, y, sin(float(k) * 2.399963) * r)
+		var up := (_site.frame().basis * RockHerds.surface_normal(_site.data, dir)).normalized()
+		var score := -absf(up.dot(to_sun) - 0.75)
+		if score > best_score:
+			best_score = score
+			best = dir
+	var spot := _site.frame() * _site.data.surface_point(best)
+	var n := (_site.frame().basis * RockHerds.surface_normal(_site.data, best)).normalized()
+	var side := n.cross(Vector3.UP if absf(n.y) < 0.9 else Vector3.RIGHT).normalized()
+	print("lit nest: ground facing the sun %.2f (1 straight at it)" % n.dot(to_sun))
+	ship.exterior.global_position = spot + n * 60.0 + side * 40.0
+	await _physics(180)
+	var before := {}
+	for npc in _all_glinters():
+		before[npc] = true
+	_cam.global_position = spot + n * 8.0 + side * 1.0
+	_cam.look_at(spot, side)
+	await _physics(3)
+	print("spawn: %s" % _scene.spawn_creature(&"glinter"))
+	await _physics(180)
+	var fresh: Array[Npc] = []
+	for npc in _all_glinters():
+		if not before.has(npc):
+			fresh.append(npc)
+	if fresh.is_empty():
+		print("lit nest: no Glinters came live")
+		return
+	_group = fresh[0].record.herd
+	var centre := Vector3.ZERO
+	for npc in fresh:
+		centre += npc.global_position
+	centre /= fresh.size()
+	_home = _site.data.dir_of(_site.frame().affine_inverse() * centre)
+	_bed = _site.frame() * _site.data.surface_point(_home)
+	_n = (_site.frame().basis * RockHerds.surface_normal(_site.data, _home)).normalized()
+	print("lit nest: %d Glinters live" % fresh.size())
+	_place_salvage(fresh)
+	await _physics(120)
+	print("lit nest: %d salvage glints near" % _salvage_glints().size())
+	_ground_report()
+	# Close, about 3 m, with the sun behind the camera.
+	_cam.fov = 55.0
+	_place(2.8, EYE, -1.0, to_sun)
+	await _physics(2)
+	await _wait_beat(true)
+	_save("lit_close")
+	# One Glinter, shut, about 1 m, on the sun's side of it.
+	var one := fresh[0]
+	var one_up := one.global_basis.y.normalized()
+	var toward := to_sun - one_up * to_sun.dot(one_up)
+	toward = toward.normalized() if toward.length() > 0.2 else one_up.cross(Vector3.RIGHT).normalized()
+	_cam.fov = 45.0
+	_cam.global_position = one.global_position + toward * 1.0 + one_up * 0.45
+	_cam.look_at(one.global_position + one_up * 0.12, one_up)
+	await _physics(2)
+	await _wait_beat(true)
+	_save("lit_one")
+	# From 40 m, as from a spacewalk: standing height (1.6 m) puts the nest past the
+	# rock's horizon (about 30 m on a 284 m rock), so also from 6 m up.
+	_cam.fov = 70.0
+	_place(40.0, EYE, -1.0, to_sun)
+	await _physics(2)
+	await _wait_beat()
+	_save("lit_40m_eye")
+	_place(40.0, 6.0, -1.0, to_sun)
+	await _physics(2)
+	await _wait_beat()
+	_save("lit_40m")
+	_save_zoom("lit_40m_zoom", _cam.unproject_position(_bed))
+	await _lit_sprung(fresh, to_sun)
+
+## The picture round `centre` (pixels) blown up four times: what a small thing far off is.
+func _save_zoom(name: String, centre: Vector2) -> void:
+	var image := root.get_viewport().get_texture().get_image()
+	var w := 240
+	var h := 135
+	var x := clampi(int(centre.x) - w / 2, 0, image.get_width() - w)
+	var y := clampi(int(centre.y) - h / 2, 0, image.get_height() - h)
+	var crop := image.get_region(Rect2i(x, y, w, h))
+	crop.resize(w * 4, h * 4, Image.INTERPOLATE_NEAREST)
+	crop.save_png("%s/glinter_%s.png" % [_out, name])
+	print("render  %s/glinter_%s.png (nest at pixel %s)" % [_out, name, centre])
+
+## Three real pieces of salvage on the nest's ground, as RockSite.place_nests
+## builds entries: a ray down finds the rock, the piece lies at rest, its up the rock's.
+func _place_salvage(glinters: Array[Npc]) -> void:
+	var space := root.get_world_3d().direct_space_state
+	var side := _n.cross(Vector3.UP if absf(_n.y) < 0.9 else Vector3.RIGHT).normalized()
+	var other := _n.cross(side).normalized()
+	var taken: Array[Vector3] = []
+	for npc in glinters:
+		taken.append(npc.global_position)
+	var entries: Array[Dictionary] = []
+	for i in 3:
+		var kind: StringName = SalvageField.MIX[i][0]
+		var spot := _bed
+		var spot_clear := -1.0
+		for k in 24:
+			var angle := TAU * float(k) / 24.0 + float(i) * 2.1
+			var p := _bed + (side * cos(angle) + other * sin(angle)) * (1.5 + 0.25 * float(i))
+			var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(p + _n * 3.0, p - _n * 3.0, AsteroidBody.LAYER))
+			if hit.is_empty():
+				continue
+			var at: Vector3 = hit["position"]
+			var clear := INF
+			for q in taken:
+				clear = minf(clear, at.distance_to(q))
+			if clear > spot_clear:
+				spot_clear = clear
+				spot = at
+		taken.append(spot)
+		var basis := Basis(Quaternion(Vector3.UP, _n)) * Basis(Vector3.UP, float(i) * 1.9)
+		entries.append({"index": i, "kind": kind, "variety": 0.2 + 0.3 * float(i),
+			"pose": Transform3D(basis, spot + _n * RockSite.LIFT - _bed)})
+		print("salvage %d (%s) %.1f m from the nearest Glinter or piece" % [i, kind, spot_clear])
+	_scene.salvage.add_placed_cloud(&"nest:dev:lit", _bed, entries)
+
+func _all_glinters() -> Array[Npc]:
+	var out: Array[Npc] = []
+	for npc: Npc in _director.live.values():
+		if npc.species.id == &"glinter":
+			out.append(npc)
+	return out
+
+## A spacewalker drifts across the nest 4 m up, seen from the side about 6 m
+## off, with the sun behind the camera: the spring, the bite, the rebound and the
+## start of the puff home (rock creatures spec §4.3).
+func _lit_sprung(glinters: Array[Npc], to_sun: Vector3) -> void:
+	# (The earlier spring left the avatar on the outside: find it by its group.)
+	var avatar := get_first_node_in_group(Avatar.GROUP) as Avatar
+	if avatar.mode != Avatar.Mode.SUIT:
+		avatar.enter_suit(_scene.get_node("Outside"), Transform3D(Basis.IDENTITY, _bed + _n * 40.0), Vector3.ZERO,
+			(_scene.get_node("Ship") as Ship).exterior)
+	_cam.make_current()
+	avatar.suit_assist = false
+	avatar.suit_cell.charge = 100.0
+	var home: Array[Transform3D] = []
+	for npc in glinters:
+		home.append(npc.global_transform)
+	avatar.global_position = _bed + _n * 40.0
+	avatar.velocity = Vector3.ZERO
+	for k in glinters.size():
+		var npc := glinters[k]
+		npc.switch_to(&"surface_crawler")
+		npc.global_transform = home[k]
+		npc.velocity = Vector3.ZERO
+		npc.brain.needs[&"fear"] = 0.0
+		npc.brain.current = null
+		npc.intent = Intent.idle()
+		npc.look.call(&"act", &"shut")
+	await _physics(150)
+	# The Glinter that will spring is the one nearest the nest's middle.
+	var star := glinters[0]
+	for npc in glinters:
+		if npc.global_position.distance_to(_bed) < star.global_position.distance_to(_bed):
+			star = npc
+	var up := star.global_basis.y.normalized()
+	var toward := to_sun - up * to_sun.dot(up)
+	toward = toward.normalized() if toward.length() > 0.2 else up.cross(Vector3.RIGHT).normalized()
+	var across := up.cross(toward).normalized()
+	var ground := star.global_position
+	_cam.fov = 38.0
+	_cam.global_position = ground + up * 4.5 + toward * 4.0
+	_cam.look_at(ground + up * 2.0, up)
+	avatar.health.current = avatar.health.max
+	avatar.global_transform = Transform3D(Basis.looking_at(-up, across), ground + up * 4.0 - across * 0.6)
+	avatar.velocity = across * 0.5
+	var looking := star.look as GlinterLook
+	var kept := 0
+	var t_bite := -1.0
+	var t_puff := -1.0
+	var t0 := Time.get_ticks_msec()
+	var got := [false, false, false, false]
+	while float(Time.get_ticks_msec() - t0) / 1000.0 < 8.0 and kept < 4:
+		await process_frame
+		var d := star.global_position.distance_to(avatar.global_position)
+		var now := float(Time.get_ticks_msec() - t0) / 1000.0
+		# The camera stays where it is and turns to keep the Glinter and the suit in view.
+		_cam.look_at((star.global_position + avatar.global_position) * 0.5, up)
+		var drift := star.active as ZeroGDrift
+		if t_bite < 0.0 and avatar.health.current < avatar.health.max:
+			t_bite = now
+		if t_puff < 0.0 and t_bite >= 0.0 and looking.action == &"puff":
+			t_puff = now
+		var shoot := -1
+		if not got[0] and (looking.action == &"leap" or looking.action == &"lunge") and d <= 3.0:
+			shoot = 0
+		elif not got[1] and t_bite >= 0.0 and now >= t_bite:
+			shoot = 1
+		elif not got[2] and t_bite >= 0.0 and now >= t_bite + 0.4:
+			shoot = 2
+		elif not got[3] and t_bite >= 0.0 and now >= t_bite + 1.6:
+			shoot = 3
+		if shoot >= 0:
+			await RenderingServer.frame_post_draw
+			got[shoot] = true
+			kept += 1
+			_save("lit_sprung_%d" % (shoot + 1))
+			print("lit sprung %d at %.2f s: Glinter %.2f m from the suit, %s, action %s, %.1f m/s, still leaping %s" % [shoot + 1, now, d,
+				star.active.id, looking.action, star.velocity.length(), "yes" if drift != null and drift.leaping() else "no"])
+	print("lit sprung: %d of 4 frames kept; bite at %.2f s, first puff at %.2f s" % [kept, t_bite, t_puff])
