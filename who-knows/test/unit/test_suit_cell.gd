@@ -13,6 +13,17 @@ func test_it_starts_empty_and_dry():
 	assert_eq(SuitCell.CAPACITY, 100.0)
 	assert_eq(SuitCell.GO_OUT_MIN, 10.0)
 
+## A Limpet's sip (rock creatures spec §6.1): it takes what it can and says how much.
+func test_drain_takes_what_it_can_and_says_how_much():
+	var c := SuitCell.new()
+	c.charge = 1.0
+	assert_eq(c.drain(0.4), 0.4)
+	assert_eq(c.drain(5.0), 0.6)
+	assert_true(c.is_dry())
+	assert_eq(c.drain(1.0), 0.0, "nothing from a dry cell")
+	assert_eq(c.drain(-1.0), 0.0, "and it never gives back")
+	assert_eq(c.charge, 0.0)
+
 func test_delta_v_costs_a_quarter_qe_per_metre_a_second():
 	var cell := SuitCell.new()
 	cell.charge = 50.0

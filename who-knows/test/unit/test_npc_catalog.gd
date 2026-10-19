@@ -118,7 +118,7 @@ func test_the_limpet_reads_back_as_authored():
 	assert_almost_eq(float(l.needs[&"appetite"]), 0.01, 0.0001)
 	assert_almost_eq(float(l.needs[&"fear"]), 0.0, 0.0001)
 	assert_true(l.need_start.has(&"appetite") and l.need_start.has(&"fear"))
-	assert_eq(l.behaviours, [&"cling"] as Array[StringName])
+	assert_eq(l.behaviours, [&"cling", &"creep", &"sip"] as Array[StringName])
 	assert_almost_eq(l.fear_of_player, 0.0, 0.0001)
 	assert_almost_eq(l.bite_damage, 0.0, 0.0001)
 	assert_almost_eq(l.drain_rate, 0.4, 0.0001)

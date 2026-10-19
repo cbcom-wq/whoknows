@@ -40,6 +40,14 @@ func add(n: float) -> float:
 	charge = minf(charge + maxf(n, 0.0), CAPACITY)
 	return charge - before
 
+## Takes up to `qe` QE out of it, down to 0, and returns how much it took (a
+## Limpet's sip, rock creatures spec §6.1). Dry is dry: the emergency cell
+## then brings you home (Suit.home_step), as for any dry suit.
+func drain(qe: float) -> float:
+	var took := minf(maxf(qe, 0.0), charge)
+	charge -= took
+	return took
+
 ## How much more it can take.
 func room() -> float:
 	return CAPACITY - charge

@@ -15,6 +15,11 @@ func test_make_still_takes_five_arguments_and_does_no_damage():
 	assert_eq(hit.kind, &"")
 	assert_eq(hit.shape, -1)
 
+func test_a_hit_drains_nothing_unless_told_to():
+	var hit := Hit.make(Vector3.ONE, Vector3.UP, Vector3.FORWARD, Vector3.BACK, null)
+	assert_eq(hit.drain, 0.0)
+	assert_eq(hit.drained, 0.0)
+
 func test_deliver_calls_receive_hit():
 	var node: Receiver = autofree(Receiver.new())
 	var hit := Hit.make(Vector3.ZERO, Vector3.UP, Vector3.FORWARD, Vector3.ZERO, null)

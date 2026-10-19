@@ -196,3 +196,52 @@ func test_a_place_gone_stops_it_stepping_at_once():
 	await wait_physics_frames(30)
 	assert_false(site.alive(), "the place is gone")
 	assert_eq(_npc.global_position, at, "and it has not moved since")
+
+# --- bases and hulls (rock creatures spec §6.1) --------------------------------
+
+## A body on the layer bases and ship hulls share; with `base` it carries the
+## meta a base's exterior does.
+func _hull_layer_box(size: Vector3, at: Vector3, base: bool) -> StaticBody3D:
+	var b := StaticBody3D.new()
+	b.collision_layer = 1
+	b.collision_mask = 0
+	var cs := CollisionShape3D.new()
+	var s := BoxShape3D.new()
+	s.size = size
+	cs.shape = s
+	b.add_child(cs)
+	if base:
+		b.set_meta(&"base", b)
+	_root.add_child(b)
+	b.global_position = at
+	return b
+
+func test_a_limpet_grips_a_base_wall():
+	_species.grips_bases = true
+	_hull_layer_box(Vector3(10, 10, 10), Vector3.ZERO, true)
+	_spawn(Transform3D(Basis.IDENTITY, Vector3(0, 5.05, 0)))
+	await wait_physics_frames(5)
+	var goal := Vector3(2.0, 5.0, 0.0)
+	_npc.intent = Intent.go(goal, 1.0)
+	for i in 60 * 3:
+		await wait_physics_frames(1)
+		if _npc.global_position.distance_to(goal) < 0.4:
+			break
+	assert_lt(_npc.global_position.distance_to(goal), 0.4, "walked across the base's roof to %s" % _npc.global_position)
+	assert_true(_npc.active is SurfaceCrawler and (_npc.active as SurfaceCrawler).gripping, "gripping a base wall")
+
+func test_a_ship_hull_is_not_ground_for_a_limpet():
+	_species.grips_bases = true
+	_hull_layer_box(Vector3(10, 10, 10), Vector3.ZERO, false)
+	_spawn(Transform3D(Basis.IDENTITY, Vector3(0, 5.05, 0)))
+	await wait_physics_frames(int(SurfaceCrawler.LOST_AFTER * 60.0) + 10)
+	assert_true(_npc.active is ZeroGDrift, "it hands over to zero_g_drift within LOST_AFTER, having found no ground")
+	await wait_physics_frames(60)
+	assert_false(_npc.active is SurfaceCrawler, "and never grips the hull")
+
+func test_a_species_that_does_not_grip_bases_does_not_see_a_base_wall_as_ground():
+	_species.grips_bases = false
+	_hull_layer_box(Vector3(10, 10, 10), Vector3.ZERO, true)
+	_spawn(Transform3D(Basis.IDENTITY, Vector3(0, 5.05, 0)))
+	await wait_physics_frames(int(SurfaceCrawler.LOST_AFTER * 60.0) + 10)
+	assert_true(_npc.active is ZeroGDrift, "a skitter's rays see only rock")

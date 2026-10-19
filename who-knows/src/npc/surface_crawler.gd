@@ -42,6 +42,9 @@ const RECHECK := 30
 ## A leap reaches at most this far, metres.
 const LEAP_REACH := 30.0
 const ARRIVED := 0.15
+## The layer a base's body and every ship's hull are on: a species that grips
+## bases looks for it too (rock creatures spec §6.1).
+const BASE_LAYER := 1
 
 var gripping := true
 ## Herd mates' positions (site-local), from the last think.
@@ -50,6 +53,9 @@ var _lost_for := 0.0
 var _let_go := false
 var _leap_to: Variant = null
 var _leapt: Intent = null
+## What its rays can hit: rock, and for a species that grips bases, the layer
+## bases and hulls share, of which only a base's body counts (_ray).
+var _mask := AsteroidBody.LAYER
 var _rest_ticks := 0
 ## The ground under it when it last settled, and where it was then.
 var _settled := {}
@@ -59,6 +65,7 @@ var _on_rock := false
 
 func enter(npc: Npc) -> void:
 	npc.motion_mode = CharacterBody3D.MOTION_MODE_FLOATING
+	_mask = AsteroidBody.LAYER | (BASE_LAYER if npc.species.grips_bases else 0)
 	gripping = true
 	_lost_for = 0.0
 	_let_go = false
@@ -111,8 +118,10 @@ func step(npc: Npc, intent: Intent, delta: float) -> void:
 		up = new_up
 	# Its feet on moving footing (a shoved piece of rubble) move with it.
 	var footing := Vector3.ZERO
-	_on_rock = not centre.is_empty() and not (centre["collider"] is RigidBody3D)
-	if not centre.is_empty() and centre["collider"] is RigidBody3D:
+	# A base is a frozen body: as still as the rock.
+	var loose := not centre.is_empty() and centre["collider"] is RigidBody3D and not (centre["collider"] as Node).has_meta(&"base")
+	_on_rock = not centre.is_empty() and not loose
+	if loose:
 		var body := centre["collider"] as RigidBody3D
 		footing = body.linear_velocity + body.angular_velocity.cross(o - body.global_position)
 		if footing.length() > SLIPPERY:
@@ -239,6 +248,13 @@ func shoved(npc: Npc, dv: Vector3) -> void:
 	if dv.dot(npc.global_basis.y) > KNOCKED_OFF:
 		_let_go = true
 
-static func _ray(space: PhysicsDirectSpaceState3D, from: Vector3, to: Vector3, exclude: Array[RID]) -> Dictionary:
-	var q := PhysicsRayQueryParameters3D.create(from, to, AsteroidBody.LAYER, exclude)
-	return space.intersect_ray(q)
+## The ground along a ray, or {}. A hit on the base-and-hull layer that is not
+## a base (a ship's hull) is no ground: a Limpet never touches a ship.
+func _ray(space: PhysicsDirectSpaceState3D, from: Vector3, to: Vector3, exclude: Array[RID]) -> Dictionary:
+	var q := PhysicsRayQueryParameters3D.create(from, to, _mask, exclude)
+	var hit := space.intersect_ray(q)
+	if not hit.is_empty() and _mask != AsteroidBody.LAYER:
+		var body := hit["collider"] as CollisionObject3D
+		if body != null and body.collision_layer & BASE_LAYER != 0 and not body.has_meta(&"base"):
+			return {}
+	return hit

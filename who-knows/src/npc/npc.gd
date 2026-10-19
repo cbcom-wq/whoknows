@@ -82,6 +82,8 @@ var health: Health
 var down := false
 var down_left := 0.0
 var _flinch_left := 0.0
+## QE it has drained since it woke (a Limpet's sips, rock creatures spec §6.4).
+var sipped := 0.0
 ## The look's scale as built, which its pose keeps.
 var _look_scale := 1.0
 
@@ -145,6 +147,7 @@ func setup(p_record: NpcRecord, p_species: NpcSpecies, p_site: NpcSite, p_inside
 	down = false
 	down_left = 0.0
 	_flinch_left = 0.0
+	sipped = 0.0
 	_pose_look()
 	if active != null:
 		active.enter(self)
@@ -279,6 +282,8 @@ func think(time: float, dt: float) -> void:
 	intent = brain.think(ctx)
 	if intent.action == &"bite":
 		bite()
+	elif intent.action == &"sip":
+		sip(dt)
 	last_context = ctx
 	if look != null and look.has_method(&"act"):
 		look.call(&"act", intent.action)
@@ -326,6 +331,29 @@ func bite() -> bool:
 	if look != null and look.has_method(&"act"):
 		look.call(&"act", &"bite")
 	return true
+
+## Sips for `dt` seconds (rock creatures spec §6.1; the sip behaviour asks for
+## it): from the avatar's suit if it is within the species' drain_reach of its
+## middle, else from its place's own store (a base's, through the site). Adds
+## what it got to `sipped` and returns that running total.
+func sip(dt: float) -> float:
+	if not is_inside_tree():
+		return sipped
+	var got := 0.0
+	var avatar := get_tree().get_first_node_in_group(Avatar.GROUP) as Node3D
+	var middle := global_position + global_basis.y * species.height * 0.5
+	if avatar != null and avatar.global_position.distance_to(middle) <= species.drain_reach:
+		var to := avatar.global_position - middle
+		var dir := to.normalized() if to.length() > 0.01 else -global_basis.z
+		var hit := Hit.make(avatar.global_position, -dir, dir, Vector3.ZERO, self)
+		hit.drain = species.drain_rate * dt
+		hit.kind = &"sip"
+		Hit.deliver(avatar, hit)
+		got = hit.drained
+	elif site != null:
+		got = site.sip_source(self, dt)
+	sipped += got
+	return sipped
 
 func is_dead() -> bool:
 	return down and species != null and species.knocked_out_for <= 0.0

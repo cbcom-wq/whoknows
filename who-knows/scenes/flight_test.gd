@@ -718,6 +718,8 @@ func _wire_npcs() -> void:
 	exterior_npcs.cameras = [aboard.chase_camera, aboard.canopy_camera, _avatar.camera]
 	var life := RockLifeSource.new(_stream, exterior_npcs.catalog)
 	life.quiet = bases.quiet
+	life.base_place = bases.place_of
+	life.base_sip = bases.sip
 	rock_life = life
 	DevCreatures.restart()
 	var dev := DevCreatures.new()

@@ -31,7 +31,7 @@ need_start = {
 &"appetite": Vector2(0, 0.4),
 &"fear": Vector2(0, 0)
 }
-behaviours = Array[StringName]([&"cling"])
+behaviours = Array[StringName]([&"cling", &"creep", &"sip"])
 bite_damage = 0.0
 drain_rate = 0.4
 drain_reach = 5.0

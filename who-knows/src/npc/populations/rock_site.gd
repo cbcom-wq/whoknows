@@ -17,6 +17,19 @@ const FIND_GROUND := 3.0
 const DEV_FIRST := 1000
 ## A dev group's members stand within this of its centre, metres.
 const DEV_HUDDLE := 4.0
+## A Limpet is drawn to your suit within this of it, metres (rock creatures
+## spec §6.2).
+const SUIT_DRAW := 20.0
+## A bed raids a base whose nearest module is within RAID of its home, while
+## something that is not a base (you, your ship) is within RAID_NEAR of the
+## bed (§6.3).
+const RAID := 100.0
+const RAID_NEAR := 300.0
+## What a Limpet takes from a base's store, QE a second (§6.1).
+const BASE_RATE := 0.05
+## A Limpet creeping to a base stops once within the reach Bases.sip allows of
+## a module's cell centre, which is less than it can sip a suit from.
+const BASE_REACH := Bases.SIP_REACH
 
 var detail: AsteroidDetail
 var rock: AsteroidRock
@@ -180,6 +193,8 @@ func fill(ctx: NpcContext, npc: Npc) -> void:
 	match npc.species.id:
 		&"skitter":
 			_fill_skitter(ctx, npc)
+		&"limpet":
+			_fill_limpet(ctx, npc)
 
 ## A skitter: where its herd's round has got to (where it grazes), company from
 ## its huddle, and fear easing while nothing has shaken the rock.
@@ -196,6 +211,38 @@ func _fill_skitter(ctx: NpcContext, npc: Npc) -> void:
 		or ctx.lit
 	if not frightened:
 		ctx.ease(&"fear", 0.1)
+
+## A Limpet: the quantum energy it is drawn to (rock creatures spec §6.2). Your
+## suit if you are within SUIT_DRAW of it; else a base's module cell, if a base
+## is within RAID of its bed and you or your ship are near the bed (§6.3). Both
+## site-local. A base is sipped only within BASE_REACH of the module.
+func _fill_limpet(ctx: NpcContext, npc: Npc) -> void:
+	if ctx.player != null and (ctx.player as Vector3).distance_to(ctx.position) <= SUIT_DRAW:
+		ctx.places[&"quantum"] = ctx.player
+		return
+	if not base_place.is_valid() or director == null:
+		return
+	var f := frame()
+	var home := npc.record.home
+	var place: Variant = base_place.call(id, npc.global_position)
+	if place == null:
+		return
+	var local: Vector3 = f.affine_inverse() * (place as Vector3)
+	if local.distance_to(home) > RAID:
+		return
+	var bed := f * home
+	for a: Node3D in director.anchors():
+		if not a.has_meta(&"base") and a.global_position.distance_to(bed) <= RAID_NEAR:
+			ctx.places[&"quantum"] = local
+			ctx.extra[&"quantum_reach"] = BASE_REACH
+			return
+
+## A Limpet's sip from a base: BASE_RATE QE a second, if a base's store is
+## within the base's reach of it (Bases.sip), else nothing.
+func sip_source(npc: Npc, dt: float) -> float:
+	if not base_sip.is_valid():
+		return 0.0
+	return float(base_sip.call(id, npc.global_position, BASE_RATE * dt))
 
 ## Where group `h`'s round has got to at `time`, on the surface.
 func round_point(h: Dictionary, time: float) -> Vector3:
