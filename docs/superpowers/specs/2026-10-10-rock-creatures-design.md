@@ -350,7 +350,7 @@ Three new `.tres` in `data/npcs/`, populations `glinter_nests`, `delver_burrows`
 | `src/npc/npc_looks.gd` | looks `glinter`, `delver`, `limpet` | §9 |
 | `src/items/item_looks.gd`, `data/items/` | `crystal_grit`, `limpet_husk` | §5.4, §6.4 |
 | `scenes/flight_test.gd` | wires `RockLifeSource` (with `quiet`), the drop Callables, the dev panel | one place |
-| `src/npc/locomotors/burrower.gd` (new) | leaves the fire-control targets while under (`Weapons.leave`), joins again on emerging | §8.1 |
+| `src/npc/burrower.gd` (new) | leaves the fire-control targets while under (`Weapons.leave`), joins again on emerging | §8.1 |
 
 ### 8.1 Ship weapons and the creatures
 
