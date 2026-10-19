@@ -54,6 +54,19 @@ extends Resource
 @export var behaviours: Array[StringName] = []
 ## Behaviour -> weight; missing means 1.
 @export var behaviour_weights: Dictionary = {}
+@export_group("Bite and drain")
+## A bite (health and damage spec §5.4): its hp, its shove, N·s, and how far
+## from the middle of it you can be and still be bitten, m.
+@export var bite_damage := 15.0
+@export var bite_push := 40.0
+@export var bite_reach := 1.6
+## QE/s it drains from whatever it sips at, within drain_reach metres; 0 drains nothing.
+@export var drain_rate := 0.0
+@export var drain_reach := 0.0
+## Whether a running drill scares it off.
+@export var shy_of_drills := true
+## Whether it can grip a base.
+@export var grips_bases := false
 @export_group("Disposition")
 @export var fear_of_player := 0.0
 @export var curiosity_about_player := 0.0

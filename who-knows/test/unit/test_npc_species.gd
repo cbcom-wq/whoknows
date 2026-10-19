@@ -101,3 +101,16 @@ func test_records_and_stimuli_are_plain_data():
 	assert_eq(i.move_to, Vector3(1, 0, 0))
 	assert_eq(i.face, Vector3(2, 0, 0))
 	assert_eq(i.action, &"graze")
+
+func test_the_skitter_keeps_its_bite_as_data():
+	var s := NpcCatalog.load_from_dir("res://data/npcs").get_def(&"skitter")
+	assert_eq(s.bite_damage, 15.0)
+	assert_eq(s.bite_push, 40.0)
+	assert_eq(s.bite_reach, 1.6)
+	assert_eq(s.drain_rate, 0.0)
+	assert_true(s.shy_of_drills)
+	assert_false(s.grips_bases)
+
+func test_a_new_species_defaults_to_the_skitters_bite():
+	var s := NpcSpecies.new()
+	assert_eq([s.bite_damage, s.bite_push, s.bite_reach], [15.0, 40.0, 1.6])

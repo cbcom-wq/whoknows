@@ -74,11 +74,6 @@ const CORPSE_SHRINK := 1.0
 const SLUMP := deg_to_rad(70.0)
 const FLINCH := 0.8
 const FLINCH_FOR := 0.15
-## A bite (health and damage spec §5.4): its hp, its shove, N·s, and how far
-## from the middle of it you can be and still be bitten, m.
-const BITE_DAMAGE := 15.0
-const BITE_PUSH := 40.0
-const BITE_REACH := 1.6
 
 ## How hurt it is. Made from its species on setup; its director gives it the
 ## ledger's value for its record.
@@ -311,7 +306,7 @@ func take_damage(amount: float) -> float:
 		_pose_look()
 	return taken
 
-## Bites whoever is within BITE_REACH (the defend behaviour asks for it):
+## Bites whoever is within the species' bite_reach (the defend behaviour asks for it):
 ## a hit that hurts and shoves them away. Returns whether it landed.
 func bite() -> bool:
 	if not is_inside_tree():
@@ -321,11 +316,11 @@ func bite() -> bool:
 		return false
 	var middle := global_position + global_basis.y * species.height * 0.5
 	var to := avatar.global_position - middle
-	if to.length() > BITE_REACH:
+	if to.length() > species.bite_reach:
 		return false
 	var dir := to.normalized() if to.length() > 0.01 else -global_basis.z
-	var hit := Hit.make(avatar.global_position, -dir, dir, dir * BITE_PUSH, self)
-	hit.damage = BITE_DAMAGE
+	var hit := Hit.make(avatar.global_position, -dir, dir, dir * species.bite_push, self)
+	hit.damage = species.bite_damage
 	hit.kind = &"bite"
 	Hit.deliver(avatar, hit)
 	if look != null and look.has_method(&"act"):
