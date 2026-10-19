@@ -2,14 +2,12 @@
 
 **Date:** 2026-10-10 (brainstormed with the owner, 2026-10-02 to 2026-10-10)
 **Status:** Design, awaiting the owner's review of this written spec. Nothing is built. Every row
-of §2 was decided by the owner in the brainstorm. The **hose** is a prerequisite and is built first,
-as its own piece (§13).
-**Depends on:** `main` at `d6ae3b5`: the NPC foundation (skitters, the droid, `NpcDirector`,
+of §2 was decided by the owner in the brainstorm. Refreshed 2026-10-18 against `main` at `85aa4d4`:
+the hose, its prerequisite, has merged (§13), and ship weapons now target creatures (§8.1).
+**Depends on:** `main` at `85aa4d4`: the NPC foundation (skitters, the droid, `NpcDirector`,
 `StimulusBus`), health and damage (bites, `NpcLedger`), habitat modules Phases A–C (bases, drills and
 `Bases.quiet`), quantum energy's Tasks 1–8 (the store, the machine, the suit cell, the near cloud),
-the floating origin, and big rocks in detail.
-**Needs first:** quantum energy's hose and its line (quantum energy spec §11, plan Task 9), which is
-not built on `main` (the `quantum-energy` branch has none either).
+the hose (`93543b3`), ship weapons (`85aa4d4`), the floating origin, and big rocks in detail.
 **Governed by:** `docs/design/visual-style.md` (§3.6 NPCs), CLAUDE.md's floating-origin rule, and
 the `building-an-npc` skill.
 **Builds on:**
@@ -17,7 +15,10 @@ the `building-an-npc` skill.
   §4 populations, §13 the skitter, §22 the life sensor;
 - health and damage §5.4 (the skitter's `defend`) and §6 (`NpcLedger`);
 - habitat modules §8.4 (skitters and drills), §6.2 (the drill's richness);
-- quantum energy §2 row 8 (the hose reaches 8 m), §9 (the suit cell), §10 (salvage and its glint).
+- quantum energy §2 row 8 (the hose reaches 8 m), §9 (the suit cell), §10 (salvage and its glint),
+  §11 and its *As built* (the hose);
+- ship weapons (`docs/superpowers/specs/2026-10-11-ship-weapons-design.md`): exterior NPCs are
+  fire-control targets.
 
 **Amends, once approved:** the NPC foundation (a rock's site holds every species on it, §3); habitat
 modules §8.4 (Limpets raid a base; Delvers keep away from a drill); the visual style guide §3.6 (a
@@ -36,7 +37,7 @@ What exists today:
   (inside). The foundation was built so that "a new species swaps a layer": locomotors, behaviours,
   senses and looks are reusable parts.
 - **Nothing to find, fear or earn from out there.** Skitters scatter and, since health and damage,
-  bite back. Salvage is a cloud behind the stern, found with the hose (not built). A drill earns QE
+  bite back. Salvage is a cloud behind the stern, gathered with the hose. A drill earns QE
   on the clock. Nothing on a rock is worth going to look at for its own sake.
 - **No way to call a creature up.** A species appears only where its seeded population puts it.
 
@@ -83,7 +84,7 @@ All taken by the owner in the brainstorm.
 | 7 | Bases | **Limpets raid; the rest keep away** | the drill already scares skitters; Limpets are drawn to quantum energy |
 | 8 | Delver's pay | **Grit, sometimes a shard** | a steady trickle and a gamble |
 | 9 | Spawning | **A dev panel** (F10), not saved | testing and showing creatures off; no save format change |
-| 10 | Gathering | **The hose is built first** | its own piece, already designed; habitat Phase D waits on it too |
+| 10 | Gathering | **The hose is built first** | its own piece, already designed; habitat Phase D waits on it too. Done: merged at `93543b3` (§13) |
 
 ---
 
@@ -302,6 +303,8 @@ bed is a one-time bounty.
 - **Wrong place:** it says why on the last line ("needs a big rock in view").
 - **Not saved.** Dev records are held by a **`DevCreatures`** source on the exterior and interior
   directors, live for the session, and forgotten once demoted. The dead still go in the ledger.
+- **Record ids** are `"dev:<species>:<n>"`, `n` counting up for the session, so they never collide
+  with a rock's records and their fire-control ids (`npc:<record id>`, §8.1) stay unique.
 - **Use:** renders and probes make a creature on demand, and a Limpet bed dropped beside a base
   tests a raid.
 
@@ -347,6 +350,23 @@ Three new `.tres` in `data/npcs/`, populations `glinter_nests`, `delver_burrows`
 | `src/npc/npc_looks.gd` | looks `glinter`, `delver`, `limpet` | §9 |
 | `src/items/item_looks.gd`, `data/items/` | `crystal_grit`, `limpet_husk` | §5.4, §6.4 |
 | `scenes/flight_test.gd` | wires `RockLifeSource` (with `quiet`), the drop Callables, the dev panel | one place |
+| `src/npc/locomotors/burrower.gd` (new) | leaves the fire-control targets while under (`Weapons.leave`), joins again on emerging | §8.1 |
+
+### 8.1 Ship weapons and the creatures
+
+Since ship weapons merged, every live exterior NPC joins the fire-control targets as it is promoted
+(`NpcDirector.targets`, `Weapons.join(npc, Weapons.npc_id(record.id))`). So all three species can be
+marked and shot from the ship with **no change to weapons**. What that means here:
+
+- **The pay is the same** whoever kills it: drops come from the body's death report (§8, `npc.gd`),
+  not from the weapon. A light turret bolt is 15 hp and a heavy one 120 hp, so a heavy bolt kills a
+  Delver outright and ends its income, as the pistol's six would.
+- **A buried Delver is not a target** (Claude's call in the 2026-10-18 refresh): while `burrower` has it under, hidden and without a
+  collider, it leaves the targets and the marked list drops it after the usual 2 s grace; it joins
+  again when it emerges. A bolt can never reach it under rock, and a bracket on bare rock would lie.
+- **Asteroids take no damage** (weapons §2 row 8), so missing a creature never harms its rock.
+- **Bites and sips on a seated player:** creatures never reach you in the turret seat (you are
+  aboard); nothing to do.
 
 ---
 
@@ -408,7 +428,7 @@ a Limpet sipping; a bed on a base's wall. With `scene.save_enabled = false` in a
 
 ## 12. Build order
 
-After the hose merges, each step ending with the tests for it:
+The hose has merged, so the plan starts here. Each step ends with the tests for it:
 
 1. **`RockLife` and the single site,** with the skitters pinned identical, and `quiet` kept.
 2. **The species fields** and `shy_of_drills`.
@@ -424,12 +444,18 @@ Each creature ends with a render shown to the owner before the next begins.
 
 ## 13. The hose
 
-Quantum energy §11 and its plan's Task 9 design the hose: a nozzle on a 30 m line from a reel
-beside the outer hatch, pulling loose things within 8 m into the ship's store. It is **not built**,
-and habitat modules' Phase D (corridors, the fabricator, the suit bay) waits on it too. It is
-built first, as its own piece with its own plan, and this batch's plan starts after it merges. The
-Glinter's 5 m ambush and 8 m gather range (§4.3) depend on the hose's reach: if that changes, the
-Glinter's numbers move with it.
+**Built and merged** (`93543b3`, plan `docs/superpowers/plans/2026-10-10-hose.md`, quantum energy
+§11 *As built*): a nozzle on a 30 m line from a reel beside every airlock's outer hatch, pulling
+loose things into its own home's store. Its cone is **8 m** long (`Suction.RANGE`), as this design
+assumed, so the Glinter's 5 m ambush against an 8 m gather (§4.3) stands. Two as-built facts touch
+this batch:
+
+- **Over 0.6 m or 40 kg is not pulled** (`Suction.BIGGEST`, `HEAVIEST`). Grit, shards, husks and a
+  nest's salvage are all well under; a Glinter is an NPC, not an item, and is never pulled.
+- **Suction stops before an item flies in that the store has no room for** (`HoseReel.room`). A
+  Delver's heap beside a full store waits; the grit cap (§5.4) keeps it from piling up meanwhile.
+
+If the hose's reach ever changes, the Glinter's numbers move with it.
 
 ---
 
