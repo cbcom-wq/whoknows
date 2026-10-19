@@ -33,6 +33,10 @@ static func build(look: StringName, variety: float, inside: bool, tint := SpaceP
 			var skitter := SkitterLook.new()
 			skitter.build(variety, tint, fade)
 			return skitter
+		&"limpet":
+			var limpet := LimpetLook.new()
+			limpet.build(variety, tint, fade)
+			return limpet
 		_:
 			return placeholder(inside)
 
@@ -42,6 +46,8 @@ static func built_size(look: StringName) -> float:
 	match look:
 		&"skitter":
 			return 0.85
+		&"limpet":
+			return 1.0
 	return 0.0
 
 ## A box: an NPC with no look yet.

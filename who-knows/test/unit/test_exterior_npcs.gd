@@ -112,7 +112,8 @@ func test_herds_that_a_drill_has_quietened_are_left_out_of_a_rock_that_loads():
 	# ...and a rebuilt one (the rock left detail and came back) drops them.
 	var again := RockLifeSource.new(_stream, _catalog)
 	again.quiet = source.quiet
-	assert_eq(again.records(_director).size(), 0, "a quiet rock loads with no herds")
+	for pair in again.records(_director):
+		assert_eq(pair[0].species, &"limpet", "a quiet rock loads with no skitters, only what a drill does not scare")
 	# Only the non-quiet ones, by point.
 	var near := RockLifeSource.new(_stream, _catalog)
 	near.quiet = func(_site: StringName, point: Vector3) -> bool: return point.distance_to(target) < 0.01
@@ -123,4 +124,4 @@ func test_herds_that_a_drill_has_quietened_are_left_out_of_a_rock_that_loads():
 
 func test_the_source_reaches_as_far_as_the_widest_rock_species():
 	var src := RockLifeSource.new(_stream, _catalog)
-	assert_eq(src.reach, 350.0 + NpcDirector.DEMOTE_MARGIN)   # the skitter's, until Task 5
+	assert_eq(src.reach, 350.0 + NpcDirector.DEMOTE_MARGIN)   # the skitter's; the limpet's 100 m is less
