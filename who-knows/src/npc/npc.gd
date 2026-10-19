@@ -478,6 +478,10 @@ func _build_look() -> void:
 		look = null
 	look = NpcLooks.build(species.look, float(record.seed & 0xFFFF) / 65535.0, inside, site.tint(), species.fade)
 	look.name = "Look"
+	# A group's creatures share one thing about how they look (a nest's glint
+	# flashes on one beat): only a look that has such a thing is told.
+	if look.has_method(&"set_group_seed"):
+		look.call(&"set_group_seed", site.group_seed(record))
 	var built := NpcLooks.built_size(species.look)
 	_look_scale = species.size / built if built > 0.0 else 1.0
 	look.scale = Vector3.ONE * _look_scale

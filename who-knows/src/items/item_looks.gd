@@ -584,17 +584,32 @@ static func glint(parent: Node3D, variety: float) -> Glint:
 	parent.add_child(g)
 	return g
 
-## Lit for GLINT_FLASH at the start of every `period` seconds.
+## Lit for GLINT_FLASH at the start of every `period` seconds. Salvage counts
+## its own time. A Glinter's glint (rock creatures spec §4.2) is read off the
+## clock instead, through `clock_phase`, so a nest's Glinters flash together
+## whenever each was built.
 class Glint extends MeshInstance3D:
 	var period := 3.0
+	## null: this glint counts its own time (salvage). A float: it is lit while
+	## the engine's clock, seconds, plus this falls in the first GLINT_FLASH of
+	## a period.
+	var clock_phase: Variant = null
 	var _t := 0.0
 
 	func _process(delta: float) -> void:
+		if clock_phase is float:
+			visible = lit_at(Time.get_ticks_msec() / 1000.0)
+			return
 		advance(delta)
 
 	func advance(delta: float) -> void:
 		_t = fposmod(_t + delta, period)
 		visible = _t < GLINT_FLASH
+
+	## Whether a clocked glint is lit at clock time `seconds`.
+	func lit_at(seconds: float) -> bool:
+		var phase: float = clock_phase if clock_phase is float else 0.0
+		return fposmod(seconds + phase, period) < GLINT_FLASH
 
 ## One diamond, GLINT_LIFT toward the viewer, shared by every glint.
 static func _glint_quad() -> ArrayMesh:

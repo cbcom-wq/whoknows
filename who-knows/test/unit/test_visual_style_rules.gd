@@ -79,6 +79,7 @@ const PAINTING_FILES := [
 	"res://src/npc/droid_look.gd",
 	"res://src/npc/skitter_look.gd",
 	"res://src/npc/limpet_look.gd",
+	"res://src/npc/glinter_look.gd",
 	"res://src/ship/computer/holo_volume.gd",
 	"res://src/ship/computer/ship_computer.gd",
 	"res://src/ship/computer/map_page.gd",

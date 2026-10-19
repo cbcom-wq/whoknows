@@ -180,3 +180,74 @@ func test_a_placed_cloud_keeps_its_place_through_a_shift():
 	assert_almost_eq(shifted_centre, centre - Vector3(0, 0, 2000), Vector3.ONE * 0.01)
 	assert_almost_eq(back[0].global_position, shifted_centre + (_entries()[0]["pose"] as Transform3D).origin,
 		Vector3.ONE * 0.001, "and reloads at the same place in the world")
+
+## A rock with a Glinter nest, in detail and offered through RockLifeSource
+## (rock creatures spec §4.1): the nest's real salvage is registered when the
+## site is built, every item within half a metre of the rock's solid surface.
+func test_a_nests_salvage_lies_on_the_crater_floor():
+	RockMesh.warm()
+	var recipe := AsteroidRecipe.new(SEED)
+	var rock: AsteroidRock = null
+	var data: RockDetail = null
+	var x := 0
+	while rock == null and x < 5000:
+		for r in recipe.cell_rocks(AsteroidRecipe.Tier.GIANT, Vector3i(x, 3, -2)):
+			var d := RockDetail.build(r, SEED)
+			if rock == null and RockLife.groups(r, d, SEED).any(func(g: Dictionary) -> bool: return g["species"] == &"glinter"):
+				rock = r
+				data = d
+		x += 1
+	assert_not_null(rock, "a rock with a nest")
+	var holder := Node3D.new()
+	add_child_autofree(holder)
+	var detail := AsteroidDetail.new()
+	detail.setup(rock, data, StandardMaterial3D.new(), StandardMaterial3D.new())
+	detail.transform = Transform3D(Basis(Vector3.UP, 0.7), Vector3(5000, 0, 0))
+	holder.add_child(detail)
+	var stream := AsteroidStream.new()
+	autofree(stream)
+	stream.details = AsteroidDetails.new(stream, holder)
+	stream.details.live[rock.id()] = detail
+	var anchor := Node3D.new()
+	anchor.add_to_group(AsteroidStream.SPACE_ANCHOR)
+	add_child_autofree(anchor)
+	anchor.global_position = detail.global_position + Vector3(0, 0, rock.radius + 50.0)
+	var director := NpcDirector.new()
+	add_child_autofree(director)
+	var source := RockLifeSource.new(stream, NpcCatalog.load_from_dir("res://data/npcs"))
+	source.world_seed = SEED
+	var seen := {}
+	source.place_salvage = func(id: StringName, centre: Vector3, entries: Array[Dictionary]) -> void:
+		seen[id] = [centre, entries]
+	await wait_physics_frames(2)
+	source.records(director)
+	var site := source.site_for(rock)
+	assert_not_null(site, "the rock's creatures are on offer")
+	var nests: Array[Dictionary] = []
+	for g in site.groups:
+		if g["species"] == &"glinter":
+			nests.append(g)
+	assert_eq(nests.size(), 1)
+	assert_eq(seen.size(), 1, "one cloud, the nest's")
+	var g := nests[0]
+	var cloud := StringName("nest:%s:%d" % [site.id, g["index"]])
+	assert_true(seen.has(cloud), "called %s, not %s" % [cloud, seen.keys()])
+	var centre: Vector3 = seen[cloud][0]
+	var entries: Array[Dictionary] = []
+	entries.assign(seen[cloud][1])
+	assert_eq(entries.size(), (g["salvage"] as Array).size())
+	var space := detail.get_world_3d().direct_space_state
+	for i in entries.size():
+		var e := entries[i]
+		assert_eq(int(e["index"]), i)
+		assert_eq(e["kind"], g["salvage"][i]["kind"])
+		var at: Vector3 = centre + (e["pose"] as Transform3D).origin
+		var up: Vector3 = (e["pose"] as Transform3D).basis.y
+		var q := PhysicsRayQueryParameters3D.create(at + up * 2.0, at - up * 2.0, AsteroidBody.LAYER)
+		var hit := space.intersect_ray(q)
+		assert_false(hit.is_empty(), "item %d is over the rock" % i)
+		if not hit.is_empty():
+			assert_lt(at.distance_to(hit["position"]), 0.5, "item %d lies on the floor" % i)
+		assert_true((e["pose"] as Transform3D).basis.is_equal_approx((e["pose"] as Transform3D).basis.orthonormalized()))
+	assert_almost_eq(centre.distance_to(detail.global_position), data.surface_point(g["home_dir"]).length(), 3.0,
+		"the centre is the nest's own place on the rock")

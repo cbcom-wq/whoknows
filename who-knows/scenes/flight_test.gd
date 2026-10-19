@@ -721,6 +721,11 @@ func _wire_npcs() -> void:
 	life.base_place = bases.place_of
 	life.base_sip = bases.sip
 	life.drop = _drop
+	# The salvage field is made after the NPCs (_wire_salvage), and again when a
+	# save is loaded: asked at the time, it is looked up then.
+	life.place_salvage = func(cloud_id: StringName, centre: Vector3, entries: Array[Dictionary]) -> void:
+		if salvage != null:
+			salvage.add_placed_cloud(cloud_id, centre, entries)
 	life.count_near = func(kind: StringName, at: Vector3, radius: float) -> int:
 		return strays.count_of(kind, at, radius) if strays != null else 0
 	rock_life = life

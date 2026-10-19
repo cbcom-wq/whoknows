@@ -63,6 +63,7 @@ func records(director: NpcDirector) -> Array:
 				site.base_sip = base_sip
 				site.drop = drop
 				site.count_near = count_near
+				site.place_nests()
 				_sites[id] = site
 				var kept: Array = []
 				for r in site.records:

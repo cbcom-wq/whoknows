@@ -217,8 +217,10 @@ func test_a_drill_does_not_clear_limpets():
 	var offered := _species_offered(drilled.records(director))
 	assert_true(offered.has(&"limpet"), "a drill does not clear the limpets")
 	assert_false(offered.has(&"skitter"), "it clears the skitters")
+	assert_false(offered.has(&"glinter"), "and the glinters, who shy from drills as they do")
 	assert_eq(asked[0], RockLife.records(detail.rock, detail.data, SEED).filter(
-		func(r: NpcRecord) -> bool: return r.species == &"skitter").size(), "and is asked only about them")
+		func(r: NpcRecord) -> bool: return r.species == &"skitter" or r.species == &"glinter").size(),
+		"and is asked only about them")
 
 func _species_offered(pairs: Array) -> Dictionary:
 	var out := {}

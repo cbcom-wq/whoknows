@@ -129,6 +129,27 @@ func pose_at(dir: Vector3) -> Transform3D:
 	var basis := Basis(n.cross(forward), n, forward).orthonormalized()
 	return Transform3D(basis, at + n * LIFT)
 
+## Registers the real salvage of the rock's nest, if it has one and the flight
+## scene gave a `place_salvage` (rock creatures spec §4.1). The cloud is called
+## "nest:<site>:<group>", its centre the nest's own spot on the rock, and each
+## item lies where a ray down onto the solid rock finds the ground, at rest and
+## the way up the rock's own: the rock never turns, so its poses stay as they
+## are. Asked again whenever the rock comes into detail, as it is built again.
+func place_nests() -> void:
+	if not place_salvage.is_valid() or not alive():
+		return
+	var f := frame()
+	for g in groups:
+		if g["species"] != GlinterNests.SPECIES or not g.has("salvage"):
+			continue
+		var centre := f * pose_at(g["home_dir"]).origin
+		var entries: Array[Dictionary] = []
+		for e: Dictionary in g["salvage"]:
+			var pose := f * pose_at(e["dir"])
+			entries.append({"index": e["index"], "kind": e["kind"], "variety": e["variety"],
+				"pose": Transform3D(pose.basis, pose.origin - centre)})
+		place_salvage.call(StringName("nest:%s:%d" % [id, g["index"]]), centre, entries)
+
 ## A group made on the spot by the dev spawner (rock creatures spec §7.2):
 ## `count` members of `species`, one per id, in a huddle round `dir`, with the
 ## index DEV_FIRST + k for this site's k-th. The group joins `groups`, so the
