@@ -9,6 +9,7 @@ var _root: Node
 var _ship: Ship
 var _stream: AsteroidStream
 var _director: NpcDirector
+var _catalog: NpcCatalog
 var _chase: Camera3D
 
 func before_each():
@@ -19,6 +20,7 @@ func before_each():
 	_chase = _root.get_node("Ship/Exterior/ChaseCamera")
 	await wait_physics_frames(5)
 	_director = _root.exterior_npcs
+	_catalog = _director.catalog
 
 ## The start's big rock: in a belt, others can be in detail too.
 func _detail() -> AsteroidDetail:
@@ -99,7 +101,7 @@ func test_herds_that_a_drill_has_quietened_are_left_out_of_a_rock_that_loads():
 	var herd := _herd()
 	_hull_to(herd[0] + herd[1] * 60.0)
 	await wait_physics_frames(2)
-	var source := RockHerdSource.new(_stream)
+	var source := RockLifeSource.new(_stream, _catalog)
 	var all := source.records(_director)
 	assert_gt(all.size(), 1, "the start rock has herds on offer")
 	var target: Vector3 = all[0][1].frame() * all[0][0].home
@@ -108,13 +110,18 @@ func test_herds_that_a_drill_has_quietened_are_left_out_of_a_rock_that_loads():
 	source.quiet = func(_site: StringName, _point: Vector3) -> bool: return true
 	assert_eq(source.records(_director).size(), all.size(), "skitters in view are not taken away")
 	# ...and a rebuilt one (the rock left detail and came back) drops them.
-	var again := RockHerdSource.new(_stream)
+	var again := RockLifeSource.new(_stream, _catalog)
 	again.quiet = source.quiet
-	assert_eq(again.records(_director).size(), 0, "a quiet rock loads with no herds")
+	for pair in again.records(_director):
+		assert_eq(pair[0].species, &"limpet", "a quiet rock loads with no skitters, only what a drill does not scare")
 	# Only the non-quiet ones, by point.
-	var near := RockHerdSource.new(_stream)
+	var near := RockLifeSource.new(_stream, _catalog)
 	near.quiet = func(_site: StringName, point: Vector3) -> bool: return point.distance_to(target) < 0.01
 	var left := near.records(_director)
 	assert_eq(left.size(), all.size() - 1)
 	for pair in left:
 		assert_ne(pair[0].id, target_id)
+
+func test_the_source_reaches_as_far_as_the_widest_rock_species():
+	var src := RockLifeSource.new(_stream, _catalog)
+	assert_eq(src.reach, 350.0 + NpcDirector.DEMOTE_MARGIN)   # the skitter's; the limpet's 100 m is less

@@ -81,6 +81,11 @@ var _saved_tag: SavedTag
 var npc_debug: NpcDebug
 var npc_bus: StimulusBus
 var exterior_npcs: NpcDirector
+## The exterior director's source of rock creatures, kept for the dev spawner.
+var rock_life: RockLifeSource
+## What F10 made, one per director (rock creatures spec §7.2): the exterior's
+## and each ship's.
+var dev_creatures := {}
 ## The dead and the wounded, for every director (health and damage spec §6).
 var npc_ledger := NpcLedger.new()
 var contact_markers: Array[ContactMarker] = []
@@ -92,6 +97,8 @@ var course_chime: AudioStreamPlayer
 var warp_panel: WarpPanel
 ## The spawn panel (ship library spec §5): F6.
 var spawn_panel: SpawnPanel
+## The creature panel (rock creatures spec §7.2): F10.
+var creature_panel: CreaturePanel
 var body_markers: Array[BodyMarker] = []
 ## Every turret bolt (ship weapons spec §6.3), under Outside.
 var bolt_pool: BoltPool
@@ -239,6 +246,9 @@ func _wire_ship(ship: Ship) -> void:
 	# Its crew answers to the game's ledger, and shows on F4. The crew woke
 	# with the ship, before it had the ledger.
 	ship.npc_director.ledger = npc_ledger
+	var dev := DevCreatures.new()
+	dev_creatures[ship.npc_director] = dev
+	ship.npc_director.sources.append(dev)
 	for npc: Npc in ship.npc_director.live_npcs():
 		npc.health.current = npc_ledger.health_of(npc.record.id, npc.health.max)
 	npc_debug.directors.append(ship.npc_director)
@@ -267,6 +277,7 @@ func _wire_ship(ship: Ship) -> void:
 	ship.airlock_crossed.connect(_on_airlock_crossed.bind(ship))
 
 func _on_ship_left(ship: Ship) -> void:
+	dev_creatures.erase(ship.npc_director)
 	npc_debug.directors.erase(ship.npc_director)
 
 ## On a spacewalk, your suit belongs to the nearest ship or base (many ships
@@ -705,15 +716,47 @@ func _wire_npcs() -> void:
 	exterior_npcs.catalog = _starter.npc_director.catalog
 	exterior_npcs.bus = npc_bus
 	exterior_npcs.cameras = [aboard.chase_camera, aboard.canopy_camera, _avatar.camera]
-	var herds := RockHerdSource.new(_stream)
-	herds.quiet = bases.quiet
-	exterior_npcs.sources = [herds]
+	var life := RockLifeSource.new(_stream, exterior_npcs.catalog)
+	life.quiet = bases.quiet
+	life.base_place = bases.place_of
+	life.base_sip = bases.sip
+	life.drop = _drop
+	# The salvage field is made after the NPCs (_wire_salvage), and again when a
+	# save is loaded: asked at the time, it is looked up then.
+	life.place_salvage = func(cloud_id: StringName, centre: Vector3, entries: Array[Dictionary]) -> void:
+		if salvage != null:
+			salvage.add_placed_cloud(cloud_id, centre, entries)
+	life.count_near = func(kind: StringName, at: Vector3, radius: float) -> int:
+		return strays.count_of(kind, at, radius) if strays != null else 0
+	rock_life = life
+	DevCreatures.restart()
+	var dev := DevCreatures.new()
+	dev_creatures[exterior_npcs] = dev
+	exterior_npcs.sources = [life, dev]
 	exterior_npcs.ledger = npc_ledger
 	add_child(exterior_npcs)
 	npc_debug = NpcDebug.new()
 	npc_debug.name = "NpcDebug"
 	add_child(npc_debug)
 	npc_debug.directors.append(exterior_npcs)
+
+## Drops `count` of the item `kind` as strays round `at`, which is on a surface
+## with the normal `up`: each 0.15 m up it, 0.3 m apart on a ring about `at`, at
+## rest (rock creatures spec §6.4). A kind the catalogue lacks drops nothing.
+func _drop(kind: StringName, at: Vector3, up: Vector3, count: int) -> void:
+	if strays == null or _starter.item_catalog.get_def(kind) == null:
+		return
+	var side := up.cross(Vector3.RIGHT if absf(up.x) < 0.9 else Vector3.BACK).normalized()
+	# On a ring whose neighbours are 0.3 m apart; a lone item is at the centre.
+	var ring := 0.3 / (2.0 * sin(PI / count)) if count > 1 else 0.0
+	for i in count:
+		var item := Item.new()
+		item.setup(_starter.item_catalog.get_def(kind), fmod(i * 0.37, 1.0))
+		item.set_space(true)
+		strays.add_child(item)
+		item.global_position = at + up * 0.15 + side.rotated(up, TAU * i / maxf(count, 1)) * ring
+		item.linear_velocity = Vector3.ZERO
+		strays.adopt(item)
 
 ## The sensors' contacts, and the course the bridge computer sets (NPC
 ## foundation spec §22), show on the HUD three ways, like the velocity marker:
@@ -840,6 +883,95 @@ func _wire_spawn() -> void:
 		spawn_panel.say(spawn_from_library(library.ids()[i])))
 	spawn_panel.remove_asked.connect(func() -> void: spawn_panel.say(remove_nearest_spawned()))
 	$Prompt.add_child(spawn_panel)
+	_wire_creatures()
+
+## The creature panel (rock creatures spec §7.2): F10 lists the species the
+## catalog has, in CreaturePanel.ORDER; a number makes one at the crosshair.
+func _wire_creatures() -> void:
+	creature_panel = CreaturePanel.new()
+	creature_panel.name = "CreaturePanel"
+	var species: Array[StringName] = []
+	var lines: Array[String] = []
+	for id in CreaturePanel.ORDER:
+		var def := exterior_npcs.catalog.get_def(id)
+		if def != null:
+			species.append(id)
+			lines.append(def.display_name)
+	creature_panel.entries = lines
+	creature_panel.creature_asked.connect(func(i: int) -> void:
+		creature_panel.say(spawn_creature(species[i])))
+	$Prompt.add_child(creature_panel)
+
+## How many of a species F10 makes at once; any other is one.
+const DEV_COUNTS := {&"skitter": 3, &"glinter": 4, &"limpet": 6}
+## F10's ray reaches this far, metres.
+const DEV_REACH := 60.0
+
+## Makes `species` where you look, for this session only (rock creatures spec
+## §7.2), as the panel's number keys do: a group on the rock at the crosshair,
+## or the droid on the deck of the ship you are aboard. Says what it did, or
+## why not.
+func spawn_creature(species: StringName) -> String:
+	var def := exterior_npcs.catalog.get_def(species)
+	if def == null:
+		return "no creature called %s" % species
+	var count: int = int(DEV_COUNTS.get(species, 1))
+	if species == ShipCrew.SPECIES:
+		return _spawn_droid(def)
+	var cam := _view_camera()
+	if cam == null:
+		return "needs a big rock in view"
+	var from := cam.global_position
+	var q := PhysicsRayQueryParameters3D.create(from, from - cam.global_basis.z * DEV_REACH, AsteroidBody.LAYER)
+	var hit := cam.get_world_3d().direct_space_state.intersect_ray(q)
+	var detail: AsteroidDetail = hit.get("collider") as AsteroidDetail if not hit.is_empty() else null
+	var site: RockSite = rock_life.site_for(detail.rock) if detail != null else null
+	if site == null:
+		return "needs a big rock in view"
+	var dir := site.data.dir_of(site.frame().affine_inverse() * (hit["position"] as Vector3))
+	var dev: DevCreatures = dev_creatures[exterior_npcs]
+	var ids: Array[StringName] = []
+	for n in count:
+		ids.append(_new_dev_id(dev, species))
+	for record in site.add_group(species, dir, count, ids):
+		dev.add(record, site)
+	return "%s x%d on the rock" % [def.display_name, count]
+
+## The droid, on the deck cell you look at, aboard the ship you are in.
+func _spawn_droid(def: NpcSpecies) -> String:
+	var ship := aboard
+	if _avatar.mode != Avatar.Mode.PLATING or home != ship or ship == null or ship.crew_site == null or ship.crew_site.paths == null:
+		return "needs to be aboard"
+	var site := ship.crew_site
+	var cam := _view_camera()
+	if cam == null:
+		return "needs the deck in view"
+	var from := cam.global_position
+	var q := PhysicsRayQueryParameters3D.create(from, from - cam.global_basis.z * DEV_REACH, 2)
+	var hit := cam.get_world_3d().direct_space_state.intersect_ray(q)
+	if hit.is_empty():
+		return "needs the deck in view"
+	var local := site.frame().affine_inverse() * ((hit["position"] as Vector3) + (hit["normal"] as Vector3) * 0.1)
+	var cell := DeckPaths.cell_at(local)
+	if not site.paths.has(cell):
+		return "needs the deck in view"
+	var dev: DevCreatures = dev_creatures[ship.npc_director]
+	var record := NpcRecord.make(_new_dev_id(dev, def.id), def.id, site.id, DeckPaths.floor_point(cell), randi())
+	dev.add(record, site)
+	return "%s x1 aboard" % def.display_name
+
+## The next dev id of `species` that the ledger knows nothing of, dead or
+## hurt: the ledger is saved, a session's counter is not.
+func _new_dev_id(dev: DevCreatures, species: StringName) -> StringName:
+	var id := dev.next_id(species)
+	while npc_ledger.is_dead(id) or npc_ledger.health_of(id, -1.0) != -1.0:
+		id = dev.next_id(species)
+	return id
+
+## The camera you are looking through.
+func _view_camera() -> Camera3D:
+	var cam := get_viewport().get_camera_3d()
+	return cam if cam != null else _avatar.camera
 
 ## Spawns library ship `id` ahead of you, arriving out of warp (§5, §6), as the
 ## panel's number keys do: ahead of where you will be when it lands, and clear

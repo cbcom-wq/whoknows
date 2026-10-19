@@ -1,0 +1,45 @@
+[gd_resource type="Resource" script_class="NpcSpecies" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/npc/npc_species.gd" id="1_species"]
+
+[resource]
+script = ExtResource("1_species")
+id = &"limpet"
+display_name = "Limpet"
+size = 0.3
+height = 0.15
+width = 0.3
+mass = 8.0
+top_speed = 0.25
+max_health = 15.0
+knocked_out_for = 0.0
+locomotors = Array[StringName]([&"surface_crawler", &"zero_g_drift"])
+look = &"limpet"
+sight_range = 20.0
+sight_cone_deg = 360.0
+dark_sight = 1.0
+near_sense = 0.0
+feels_vibration = 0.0
+hears = 0.0
+feels_shake = 0.0
+light_response = 0.0
+needs = {
+&"appetite": 0.01,
+&"fear": 0.0
+}
+need_start = {
+&"appetite": Vector2(0, 0.4),
+&"fear": Vector2(0, 0)
+}
+behaviours = Array[StringName]([&"cling", &"creep", &"sip"])
+bite_damage = 0.0
+drain_rate = 0.4
+drain_reach = 5.0
+shy_of_drills = false
+grips_bases = true
+fear_of_player = 0.0
+curiosity_about_player = 0.0
+population = &"limpet_beds"
+live_radius = 100.0
+fade = Vector2(70, 95)
+interactions = Array[StringName]([])

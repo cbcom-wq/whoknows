@@ -129,7 +129,7 @@ func test_a_bite_hurts_and_shoves_you_when_you_are_close():
 	add_child_autofree(avatar)
 	avatar.global_position = npc.global_position + Vector3(0.8, 0, 0)
 	assert_true(npc.bite())
-	assert_eq(avatar.health.current, Avatar.MAX_HEALTH - Npc.BITE_DAMAGE)
+	assert_eq(avatar.health.current, Avatar.MAX_HEALTH - npc.species.bite_damage)
 	assert_gt(avatar.velocity.x, 0.0, "shoved away")
 	avatar.global_position = npc.global_position + Vector3(5, 0, 0)
 	assert_false(npc.bite(), "out of reach")

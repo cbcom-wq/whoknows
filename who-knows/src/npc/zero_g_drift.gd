@@ -20,6 +20,10 @@ const LOOK := 60.0
 ## Within this of a surface under its feet, it has landed.
 const LANDED := 0.6
 const TURN := 6.0
+## A leap that meets the avatar's suit, or has gone past the point it was aimed
+## at, ends: it drifts on at this speed, m/s, away from the suit, and puffs its
+## way home like a crawler knocked off (rock creatures spec §4.3).
+const REBOUND := 0.5
 
 ## Set by the crawler before a leap: where to land, engine space.
 var leap_to: Variant = null
@@ -28,15 +32,23 @@ var _since := 0.0
 var _last_puff := -INF
 var _spin := Vector3.ZERO
 var _leaping := false
+## Where the leap was aimed, and the way it set off (engine space).
+var _aim := Vector3.ZERO
+var _aim_dir := Vector3.ZERO
 
 func enter(npc: Npc) -> void:
 	npc.motion_mode = CharacterBody3D.MOTION_MODE_FLOATING
 	_since = 0.0
 	_last_puff = -INF
+	# Each trip off the rock has its own few puffs: a Glinter that springs again
+	# and again must still be able to come home.
+	puffs_left = PUFFS
 	_leaping = leap_to != null
 	if _leaping:
 		var from := npc.global_position + npc.global_basis.y * npc.species.height * 0.5
-		npc.velocity = ((leap_to as Vector3) - from).normalized() * LEAP_SPEED
+		_aim = leap_to as Vector3
+		_aim_dir = (_aim - from).normalized()
+		npc.velocity = _aim_dir * LEAP_SPEED
 		_spin = Vector3.ZERO
 	else:
 		_spin = npc.velocity.cross(npc.global_basis.y).limit_length(3.0)
@@ -58,6 +70,29 @@ func step(npc: Npc, _intent: Intent, delta: float) -> void:
 			basis = Basis(_spin.normalized(), _spin.length() * delta) * basis
 	npc.global_basis = basis.orthonormalized()
 	npc.move_and_slide()
+	if _leaping:
+		_end_leap_at_suit(npc)
+
+## A leap in flight ends on touching the avatar (a slide collision with a body on
+## its layer) or passing the point it was aimed at: only rock stops a leap
+## otherwise, and a Glinter that had bitten would fly on for good. It drops to
+## a REBOUND away from the suit, steadied, so it puffs back to the rock.
+func _end_leap_at_suit(npc: Npc) -> void:
+	var away := Vector3.ZERO
+	for i in npc.get_slide_collision_count():
+		var hit := npc.get_slide_collision(i)
+		var body := hit.get_collider() as CollisionObject3D
+		if body != null and body.collision_layer & SurfaceCrawler.AVATAR_LAYER != 0:
+			away = hit.get_normal()
+			break
+	if away == Vector3.ZERO:
+		if (npc.global_position - _aim).dot(_aim_dir) <= 0.0:
+			return
+		away = _aim_dir
+	_leaping = false
+	_since = TUMBLE
+	_spin = Vector3.ZERO
+	npc.velocity = away.normalized() * REBOUND
 
 ## Steadied, it puffs toward the nearest surface it can see.
 func _puff_home(npc: Npc) -> void:
@@ -113,6 +148,10 @@ func handover(npc: Npc) -> StringName:
 func _land() -> StringName:
 	_leaping = false
 	return &"surface_crawler"
+
+## Whether it is still flying a leap (not yet landed, or ended at a suit).
+func leaping() -> bool:
+	return _leaping
 
 func grounded() -> bool:
 	return false

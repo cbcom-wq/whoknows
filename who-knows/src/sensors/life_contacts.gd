@@ -2,10 +2,11 @@ class_name LifeContacts
 extends RefCounted
 
 ## Signs of life, for the ship's sensors (NPC foundation spec §22.1): one
-## contact per herd on every big rock held in detail within reach, read by
-## SenseProfile.life() -- a vague ping far off, a region 30 m across close by.
-## A herd asleep is where its round has got to; awake, where its members
-## actually are, so a region follows a herd that bolts or hides.
+## contact per group of any species on every big rock held in detail within
+## reach, read by SenseProfile.life() -- a vague ping far off, a region 30 m
+## across close by. A group asleep is where its round has got to (one with no
+## round, at its home); awake, where its members actually are, so a region
+## follows a group that bolts or hides.
 
 var stream: AsteroidStream
 ## The exterior's director: its clock drives the herds' rounds, and it knows
@@ -55,7 +56,8 @@ func herd_point(detail: AsteroidDetail, h: Dictionary, site: StringName) -> Vect
 		if n > 0:
 			return sum / n
 	var time := director.time if director != null else 0.0
-	return detail.global_transform * detail.data.surface_point(RockHerds.round_dir(h, time))
+	var dir: Vector3 = RockHerds.round_dir(h, time) if h.has("round_dirs") else h["home_dir"]
+	return detail.global_transform * detail.data.surface_point(dir)
 
 ## Every big rock in detail, with its herds, worked out once per rock.
 func _entries() -> Array:
@@ -70,7 +72,7 @@ func _entries() -> Array:
 		seen[id] = true
 		var entry: Array = _herds.get(id, [])
 		if entry.is_empty() or entry[0] != detail:
-			entry = [detail, RockHerds.herds(detail.rock, detail.data, stream.seed), RockHerds.site_of(detail.rock)]
+			entry = [detail, RockLife.groups(detail.rock, detail.data, stream.seed), RockHerds.site_of(detail.rock)]
 			_herds[id] = entry
 		out.append(entry)
 	for id in _herds.keys():

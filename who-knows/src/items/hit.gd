@@ -15,8 +15,13 @@ var impulse: Vector3
 var source: Node
 ## hp. 0 for a hit that only pushes.
 var damage := 0.0
-## &"plasma", &"crash", &"bite"; &"" when it does not matter.
+## &"plasma", &"crash", &"bite", &"sip"; &"" when it does not matter.
 var kind: StringName = &""
+## QE asked of the receiver (a Limpet's sip, rock creatures spec §6.1), and
+## the QE the receiver gave: it writes `drained` in receive_hit, 0 if it has
+## none to give. A hit with no drain changes nothing.
+var drain := 0.0
+var drained := 0.0
 ## The collider's shape index the hit landed on, or -1: which cell of a hull.
 var shape := -1
 

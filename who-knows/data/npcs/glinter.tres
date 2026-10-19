@@ -1,0 +1,45 @@
+[gd_resource type="Resource" script_class="NpcSpecies" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/npc/npc_species.gd" id="1_species"]
+
+[resource]
+script = ExtResource("1_species")
+id = &"glinter"
+display_name = "Glinter"
+size = 0.25
+height = 0.18
+width = 0.2
+mass = 6.0
+top_speed = 3.0
+max_health = 20.0
+knocked_out_for = 0.0
+locomotors = Array[StringName]([&"surface_crawler", &"zero_g_drift"])
+look = &"glinter"
+sight_range = 6.0
+sight_cone_deg = 360.0
+dark_sight = 0.85
+near_sense = 1.5
+feels_vibration = 1.0
+hears = 0.0
+feels_shake = 0.0
+light_response = 0.0
+needs = {
+&"fear": 0.0
+}
+need_start = {
+&"fear": Vector2(0, 0)
+}
+behaviours = Array[StringName]([&"lure", &"ambush", &"hide"])
+bite_damage = 8.0
+bite_push = 25.0
+bite_reach = 0.8
+drain_rate = 0.0
+drain_reach = 0.0
+shy_of_drills = true
+grips_bases = false
+fear_of_player = 0.3
+curiosity_about_player = 0.0
+population = &"glinter_nests"
+live_radius = 150.0
+fade = Vector2(110, 140)
+interactions = Array[StringName]([])

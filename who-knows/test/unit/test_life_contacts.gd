@@ -28,7 +28,9 @@ func _start_rock() -> AsteroidDetail:
 
 func test_the_start_rocks_herds_are_sensed():
 	var detail := _start_rock()
-	var herds := RockHerds.herds(detail.rock, detail.data, _stream.seed)
+	# A group of any species is a sign of life: the herds, and a Glinter nest or
+	# Limpet bed where the rock has one.
+	var herds := RockLife.groups(detail.rock, detail.data, _stream.seed)
 	var site := "life:" + String(RockHerds.site_of(detail.rock))
 	var mine := _life().filter(func(c: Contact) -> bool: return String(c.id).begins_with(site))
 	assert_gt(herds.size(), 0, "the start rock has herds")

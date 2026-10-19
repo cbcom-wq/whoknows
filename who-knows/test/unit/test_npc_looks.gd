@@ -101,3 +101,198 @@ func test_the_skitters_legs_never_stretch():
 		var length := (mi as MeshInstance3D).transform.basis.z.length()
 		assert_lt(length, SkitterLook.SHIN + 0.01, "%s is %.2f m long" % [mi.name, length])
 	remove_child(look)
+
+func test_the_limpet_is_built_low_and_cheap():
+	var look := autofree(NpcLooks.build(&"limpet", 0.4, false, SpacePalette.UMBER, Vector2(70, 95))) as LimpetLook
+	assert_not_null(look)
+	assert_null(look.get_node_or_null("Placeholder"), "not a placeholder")
+	assert_lte(_triangles(look), 80, "at most 80 triangles")
+	assert_almost_eq(NpcLooks.built_size(&"limpet"), 1.0, 0.0001)
+	var low := INF
+	var high := -INF
+	var wide := 0.0
+	for mi: MeshInstance3D in look.find_children("*", "MeshInstance3D", true, false):
+		assert_eq(mi.layers, 1, "%s outside" % mi.name)
+		var m := mi.material_override as StandardMaterial3D
+		assert_eq(m.distance_fade_mode, BaseMaterial3D.DISTANCE_FADE_PIXEL_DITHER, "%s fades" % mi.name)
+		assert_almost_eq(m.distance_fade_min_distance, 95.0, 0.001)
+		assert_almost_eq(m.distance_fade_max_distance, 70.0, 0.001)
+		for v in (mi.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]:
+			low = minf(low, v.y)
+			high = maxf(high, v.y)
+			wide = maxf(wide, Vector2(v.x, v.z).length() * 2.0)
+	assert_gt(high - low, 0.0)
+	assert_lt(high - low, wide * 0.6, "a low, flat cone")
+	assert_almost_eq(wide, NpcLooks.built_size(&"limpet"), 0.01, "as wide as it says")
+
+func test_the_limpets_shell_takes_its_rocks_shades_and_its_ribs_the_crystal():
+	var look := autofree(NpcLooks.build(&"limpet", 0.4, false, SpacePalette.UMBER, Vector2(70, 95))) as LimpetLook
+	var shell := _colours(look.get_node("Shell") as MeshInstance3D)
+	var ribs := _colours(look.get_node("Ribs") as MeshInstance3D)
+	assert_true(_has(shell, SpacePalette.shade(SpacePalette.UMBER, 1)), "its shell in its rock's shades")
+	assert_false(_has(shell, SpacePalette.CRYSTAL), "no crystal in the shell between the ribs")
+	assert_eq(ribs.size(), 1, "the ribs are one colour")
+	assert_true(_has(ribs, SpacePalette.shade(SpacePalette.CRYSTAL, 0)), "lavender, its darkest step at rest")
+	var veined := autofree(NpcLooks.build(&"limpet", 0.4, false, SpacePalette.UNTINTED, Vector2(70, 95))) as LimpetLook
+	assert_true(_has(_colours(veined.get_node("Shell") as MeshInstance3D), SpacePalette.shade(SpacePalette.ASH, 1)),
+		"on a veined rock, in the ash it is made of")
+
+## Not a stone: a raised nub at the middle, and a rim that scallops (tips on
+## the ground, drawn out, between valleys lifted and drawn in).
+func test_the_limpet_has_an_apex_nub_and_a_scalloped_rim():
+	var look := autofree(NpcLooks.build(&"limpet", 0.4, false, SpacePalette.UMBER, Vector2(70, 95))) as LimpetLook
+	var tips := {}
+	var valleys := {}
+	var apex := Vector3.ZERO
+	for v in (look.get_node("Shell") as MeshInstance3D).mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]:
+		var vec := v as Vector3
+		if vec.y > apex.y:
+			apex = vec
+		if vec.y < 0.01:
+			tips[snappedf(atan2(vec.x, vec.z), 0.01)] = Vector2(vec.x, vec.z).length()
+		elif vec.y < 0.2:
+			valleys[snappedf(atan2(vec.x, vec.z), 0.01)] = Vector2(vec.x, vec.z).length()
+	assert_almost_eq(Vector2(apex.x, apex.z).length(), 0.0, 0.001, "the nub is at the middle")
+	assert_gt(apex.y, 0.5, "and stands up")
+	assert_eq(tips.size(), LimpetLook.RIBS, "a tip to each rib")
+	assert_eq(valleys.size(), LimpetLook.RIBS, "a valley between each")
+	for r: float in tips.values():
+		assert_almost_eq(r, LimpetLook.TIP_RADIUS, 0.001)
+	for r: float in valleys.values():
+		assert_almost_eq(r, LimpetLook.VALLEY_RADIUS, 0.001)
+
+func test_a_limpet_sipping_brightens_its_ribs_and_stops():
+	var look := autofree(NpcLooks.build(&"limpet", 0.4, false, SpacePalette.UMBER, Vector2(70, 95))) as LimpetLook
+	var under := look.get_node("Ribs") as MeshInstance3D
+	var rest := SpacePalette.shade(SpacePalette.CRYSTAL, 0)
+	var brightest := SpacePalette.shade(SpacePalette.CRYSTAL, SpacePalette.SHADES.size() - 1)
+	assert_gt(brightest.v, rest.v * 1.2, "a step you can see from above")
+	assert_true(_has(_colours(under), rest))
+	look.act(&"sip")
+	assert_true(_has(_colours(under), brightest), "sipping: the brightest step of the crystal")
+	assert_false(_has(_colours(under), rest))
+	look.act(&"cling")
+	assert_true(_has(_colours(under), rest), "any other action swaps back")
+	assert_false(_has(_colours(under), brightest))
+	look.act(&"sip")
+	look.act(&"bite")
+	assert_true(_has(_colours(under), rest))
+
+static func _colours(mi: MeshInstance3D) -> Dictionary:
+	var out := {}
+	for c in (mi.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_COLOR]:
+		out[c] = true
+	return out
+
+# --- The Glinter (rock creatures spec §4.2, §9) -------------------------------
+
+func _glinter(seed: float, group := -1) -> GlinterLook:
+	var look := autofree(NpcLooks.build(&"glinter", seed, false, SpacePalette.UMBER, Vector2(110, 140))) as GlinterLook
+	if group >= 0:
+		look.set_group_seed(group)
+	return look
+
+## Which of `times` (seconds) a glint is lit at.
+static func _lit(glint: ItemLooks.Glint, times: Array[float]) -> Array[bool]:
+	var out: Array[bool] = []
+	for t in times:
+		out.append(glint.lit_at(t))
+	return out
+
+func _frames(seconds: float) -> Array[float]:
+	var out: Array[float] = []
+	for i in int(seconds * 60.0):
+		out.append(1000.0 + i / 60.0)
+	return out
+
+func test_the_glinter_is_built_and_cheap():
+	var look := _glinter(0.4)
+	assert_not_null(look)
+	assert_null(look.get_node_or_null("Placeholder"), "not a placeholder")
+	assert_lte(_triangles(look), 120, "at most 120 triangles")
+	assert_gt(_triangles(look), 40, "a body, a head and legs, not a lump of one facet")
+	assert_gt(NpcLooks.built_size(&"glinter"), 0.0)
+	assert_not_null(look.get_node_or_null("Legs"), "it has legs")
+	assert_not_null(look.get_node_or_null("Head"), "and a head")
+	for mi: MeshInstance3D in look.find_children("*", "MeshInstance3D", true, false):
+		if mi == look.glint:
+			continue
+		assert_eq(mi.layers, 1, "%s outside" % mi.name)
+		var m := mi.material_override as StandardMaterial3D
+		assert_eq(m.distance_fade_mode, BaseMaterial3D.DISTANCE_FADE_PIXEL_DITHER, "%s fades" % mi.name)
+		assert_almost_eq(m.distance_fade_min_distance, 140.0, 0.001)
+		assert_almost_eq(m.distance_fade_max_distance, 110.0, 0.001)
+
+func test_the_glinter_is_scrap_coloured_from_the_palette_and_not_a_stone():
+	var look := _glinter(0.4)
+	var colours := {}
+	for mi: MeshInstance3D in look.find_children("*", "MeshInstance3D", true, false):
+		if mi == look.glint or mi == look.eyes:
+			continue
+		for c in (mi.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_COLOR]:
+			colours[c] = true
+	var in_palette := 0
+	for k in SpacePalette.SHADES.size():
+		if _has(colours, SpacePalette.shade(SpacePalette.SLATE, k)) or _has(colours, SpacePalette.shade(SpacePalette.RUST, k)):
+			in_palette += 1
+	assert_gt(in_palette, 1, "its shell in the palette's slate and rust shades")
+	assert_false(_has(colours, SpacePalette.SKITTER_EYE), "and no eyes while shut")
+	assert_true(look.glint is ItemLooks.Glint, "it wears the salvage glint")
+
+func test_the_glinters_eyes_show_when_it_leaps_or_bites_and_go_when_it_shuts():
+	var look := _glinter(0.4)
+	assert_false(look.eyes.visible, "shut at first")
+	var shown := _colours(look.eyes)
+	assert_true(_has(shown, SpacePalette.SKITTER_EYE), "two pale facets")
+	assert_eq((look.eyes.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX].size() / 3, 4, "two quads")
+	look.act(&"leap")
+	assert_true(look.eyes.visible)
+	look.act(&"shut")
+	assert_false(look.eyes.visible)
+	look.act(&"bite")
+	assert_true(look.eyes.visible)
+	look.act(&"lunge")
+	assert_true(look.eyes.visible, "open while it flies at you")
+	look.act(&"freeze")
+	assert_false(look.eyes.visible, "anything but a spring shuts them")
+
+func test_a_nests_glinters_flash_on_one_beat_outside_the_salvage_band():
+	var seed_a := 12345
+	var one := _glinter(0.1, seed_a)
+	var two := _glinter(0.9, seed_a)
+	assert_almost_eq(GlinterLook.BEAT, 1.6, 0.0001)
+	assert_almost_eq(one.glint.period, GlinterLook.BEAT, 0.0001)
+	assert_lt(one.glint.period, ItemLooks.GLINT_EVERY.x, "quicker than any salvage")
+	var times := _frames(4.0)
+	var lit_one := _lit(one.glint, times)
+	assert_eq(lit_one, _lit(two.glint, times), "visible on the same frames, whatever the glinter")
+	assert_true(lit_one.has(true) and lit_one.has(false), "and it does flash")
+	var other := _glinter(0.1, 54321)
+	assert_ne(_lit(other.glint, times), lit_one, "another nest flashes apart")
+
+func test_a_glinters_glint_follows_the_clock_not_its_own_count():
+	var look := _glinter(0.1, 777)
+	add_child(look)
+	var glint: ItemLooks.Glint = look.glint
+	assert_typeof(glint.clock_phase, TYPE_FLOAT)
+	assert_between(float(glint.clock_phase), 0.0, GlinterLook.BEAT)
+	var before := Time.get_ticks_msec() / 1000.0
+	glint._process(0.016)
+	var after := Time.get_ticks_msec() / 1000.0
+	if glint.lit_at(before) == glint.lit_at(after):
+		assert_eq(glint.visible, glint.lit_at(before))
+	remove_child(look)
+
+func test_salvage_glints_behave_as_before():
+	var parent := autofree(Node3D.new()) as Node3D
+	var g := ItemLooks.glint(parent, 0.3)
+	assert_null(g.clock_phase, "no clock: it counts its own time")
+	assert_between(g.period, ItemLooks.GLINT_EVERY.x, ItemLooks.GLINT_EVERY.y)
+	var t0 := g.visible
+	var lit := 0
+	for i in 600:
+		g.advance(0.01)
+		if g.visible:
+			lit += 1
+	assert_gt(lit, 0)
+	assert_lt(lit, 600)

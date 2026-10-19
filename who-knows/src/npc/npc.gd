@@ -74,11 +74,6 @@ const CORPSE_SHRINK := 1.0
 const SLUMP := deg_to_rad(70.0)
 const FLINCH := 0.8
 const FLINCH_FOR := 0.15
-## A bite (health and damage spec §5.4): its hp, its shove, N·s, and how far
-## from the middle of it you can be and still be bitten, m.
-const BITE_DAMAGE := 15.0
-const BITE_PUSH := 40.0
-const BITE_REACH := 1.6
 
 ## How hurt it is. Made from its species on setup; its director gives it the
 ## ledger's value for its record.
@@ -87,6 +82,8 @@ var health: Health
 var down := false
 var down_left := 0.0
 var _flinch_left := 0.0
+## QE it has drained since it woke (a Limpet's sips, rock creatures spec §6.4).
+var sipped := 0.0
 ## The look's scale as built, which its pose keeps.
 var _look_scale := 1.0
 
@@ -150,6 +147,7 @@ func setup(p_record: NpcRecord, p_species: NpcSpecies, p_site: NpcSite, p_inside
 	down = false
 	down_left = 0.0
 	_flinch_left = 0.0
+	sipped = 0.0
 	_pose_look()
 	if active != null:
 		active.enter(self)
@@ -284,6 +282,8 @@ func think(time: float, dt: float) -> void:
 	intent = brain.think(ctx)
 	if intent.action == &"bite":
 		bite()
+	elif intent.action == &"sip":
+		sip(dt)
 	last_context = ctx
 	if look != null and look.has_method(&"act"):
 		look.call(&"act", intent.action)
@@ -311,7 +311,7 @@ func take_damage(amount: float) -> float:
 		_pose_look()
 	return taken
 
-## Bites whoever is within BITE_REACH (the defend behaviour asks for it):
+## Bites whoever is within the species' bite_reach (the defend behaviour asks for it):
 ## a hit that hurts and shoves them away. Returns whether it landed.
 func bite() -> bool:
 	if not is_inside_tree():
@@ -321,16 +321,39 @@ func bite() -> bool:
 		return false
 	var middle := global_position + global_basis.y * species.height * 0.5
 	var to := avatar.global_position - middle
-	if to.length() > BITE_REACH:
+	if to.length() > species.bite_reach:
 		return false
 	var dir := to.normalized() if to.length() > 0.01 else -global_basis.z
-	var hit := Hit.make(avatar.global_position, -dir, dir, dir * BITE_PUSH, self)
-	hit.damage = BITE_DAMAGE
+	var hit := Hit.make(avatar.global_position, -dir, dir, dir * species.bite_push, self)
+	hit.damage = species.bite_damage
 	hit.kind = &"bite"
 	Hit.deliver(avatar, hit)
 	if look != null and look.has_method(&"act"):
 		look.call(&"act", &"bite")
 	return true
+
+## Sips for `dt` seconds (rock creatures spec §6.1; the sip behaviour asks for
+## it): from the avatar's suit if it is within the species' drain_reach of its
+## middle, else from its place's own store (a base's, through the site). Adds
+## what it got to `sipped` and returns that running total.
+func sip(dt: float) -> float:
+	if not is_inside_tree():
+		return sipped
+	var got := 0.0
+	var avatar := get_tree().get_first_node_in_group(Avatar.GROUP) as Node3D
+	var middle := global_position + global_basis.y * species.height * 0.5
+	if avatar != null and avatar.global_position.distance_to(middle) <= species.drain_reach:
+		var to := avatar.global_position - middle
+		var dir := to.normalized() if to.length() > 0.01 else -global_basis.z
+		var hit := Hit.make(avatar.global_position, -dir, dir, Vector3.ZERO, self)
+		hit.drain = species.drain_rate * dt
+		hit.kind = &"sip"
+		Hit.deliver(avatar, hit)
+		got = hit.drained
+	elif site != null:
+		got = site.sip_source(self, dt)
+	sipped += got
+	return sipped
 
 func is_dead() -> bool:
 	return down and species != null and species.knocked_out_for <= 0.0
@@ -359,6 +382,8 @@ func _go_down() -> void:
 		down_left = CORPSE_FOR
 		if director != null and director.get(&"ledger") != null:
 			director.ledger.mark_dead(record.id)
+		if site != null:
+			site.died(self)
 		if look != null and look.has_method(&"act"):
 			look.call(&"act", &"dead")
 	_pose_look()
@@ -453,6 +478,10 @@ func _build_look() -> void:
 		look = null
 	look = NpcLooks.build(species.look, float(record.seed & 0xFFFF) / 65535.0, inside, site.tint(), species.fade)
 	look.name = "Look"
+	# A group's creatures share one thing about how they look (a nest's glint
+	# flashes on one beat): only a look that has such a thing is told.
+	if look.has_method(&"set_group_seed"):
+		look.call(&"set_group_seed", site.group_seed(record))
 	var built := NpcLooks.built_size(species.look)
 	_look_scale = species.size / built if built > 0.0 else 1.0
 	look.scale = Vector3.ONE * _look_scale

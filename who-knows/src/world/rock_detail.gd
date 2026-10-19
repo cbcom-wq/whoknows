@@ -133,6 +133,13 @@ func shade_of(face: int) -> int:
 func surface_point(d: Vector3) -> Vector3:
 	return d * radius_at(d) * 0.5 * RockMesh.stretch_of(_shape) * _size
 
+## The direction whose surface point lies along `p` (rock frame): the exact
+## inverse of surface_point. A big rock is stretched, so `p.normalized()` is
+## wrong by tens of metres; use this to turn a point on the rock back into a
+## direction.
+func dir_of(p: Vector3) -> Vector3:
+	return (p / (0.5 * RockMesh.stretch_of(_shape) * _size)).normalized()
+
 func _make(rock: AsteroidRock, world_seed: int) -> void:
 	_shape = rock.shape
 	_size = rock.size

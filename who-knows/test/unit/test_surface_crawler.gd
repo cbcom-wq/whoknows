@@ -196,3 +196,121 @@ func test_a_place_gone_stops_it_stepping_at_once():
 	await wait_physics_frames(30)
 	assert_false(site.alive(), "the place is gone")
 	assert_eq(_npc.global_position, at, "and it has not moved since")
+
+# --- bases and hulls (rock creatures spec §6.1) --------------------------------
+
+## A body on the layer bases and ship hulls share; with `base` it carries the
+## meta a base's exterior does.
+func _hull_layer_box(size: Vector3, at: Vector3, base: bool) -> StaticBody3D:
+	var b := StaticBody3D.new()
+	b.collision_layer = 1
+	b.collision_mask = 0
+	var cs := CollisionShape3D.new()
+	var s := BoxShape3D.new()
+	s.size = size
+	cs.shape = s
+	b.add_child(cs)
+	if base:
+		b.set_meta(&"base", b)
+	_root.add_child(b)
+	b.global_position = at
+	return b
+
+func test_a_limpet_grips_a_base_wall():
+	_species.grips_bases = true
+	_hull_layer_box(Vector3(10, 10, 10), Vector3.ZERO, true)
+	_spawn(Transform3D(Basis.IDENTITY, Vector3(0, 5.05, 0)))
+	await wait_physics_frames(5)
+	var goal := Vector3(2.0, 5.0, 0.0)
+	_npc.intent = Intent.go(goal, 1.0)
+	for i in 60 * 3:
+		await wait_physics_frames(1)
+		if _npc.global_position.distance_to(goal) < 0.4:
+			break
+	assert_lt(_npc.global_position.distance_to(goal), 0.4, "walked across the base's roof to %s" % _npc.global_position)
+	assert_true(_npc.active is SurfaceCrawler and (_npc.active as SurfaceCrawler).gripping, "gripping a base wall")
+
+func test_a_ship_hull_is_not_ground_for_a_limpet():
+	_species.grips_bases = true
+	_hull_layer_box(Vector3(10, 10, 10), Vector3.ZERO, false)
+	_spawn(Transform3D(Basis.IDENTITY, Vector3(0, 5.05, 0)))
+	await wait_physics_frames(int(SurfaceCrawler.LOST_AFTER * 60.0) + 10)
+	assert_true(_npc.active is ZeroGDrift, "it hands over to zero_g_drift within LOST_AFTER, having found no ground")
+	await wait_physics_frames(60)
+	assert_false(_npc.active is SurfaceCrawler, "and never grips the hull")
+
+func test_a_species_that_does_not_grip_bases_does_not_see_a_base_wall_as_ground():
+	_species.grips_bases = false
+	_hull_layer_box(Vector3(10, 10, 10), Vector3.ZERO, true)
+	_spawn(Transform3D(Basis.IDENTITY, Vector3(0, 5.05, 0)))
+	await wait_physics_frames(int(SurfaceCrawler.LOST_AFTER * 60.0) + 10)
+	assert_true(_npc.active is ZeroGDrift, "a skitter's rays see only rock")
+
+## A suit: what the avatar is to a ray and to a body, a character body with a
+## capsule on layer 4 standing 0.9 m above its origin, which is at its feet.
+func _suit(at: Vector3) -> CharacterBody3D:
+	var b := CharacterBody3D.new()
+	b.collision_layer = SurfaceCrawler.AVATAR_LAYER
+	b.collision_mask = 0
+	var cs := CollisionShape3D.new()
+	var capsule := CapsuleShape3D.new()
+	capsule.radius = 0.35
+	capsule.height = 1.8
+	cs.shape = capsule
+	cs.position = Vector3(0, 0.9, 0)
+	b.add_child(cs)
+	_root.add_child(b)
+	b.global_position = at
+	return b
+
+func test_a_leap_aims_at_a_spacewalker_over_open_space():
+	_box(Vector3(10, 10, 10), Vector3.ZERO)
+	_spawn(Transform3D(Basis.IDENTITY, Vector3(0, 5.05, 0)))
+	var suit_at := Vector3(0.3, 9.0, 0.1)
+	await wait_physics_frames(5)
+	var crawler := _npc.active as SurfaceCrawler
+	assert_null(crawler.aim_leap(_npc, suit_at), "with nothing there, and nothing beyond, it does not jump")
+	var suit := _suit(suit_at)
+	await wait_physics_frames(2)
+	var landing: Variant = crawler.aim_leap(_npc, suit_at)
+	assert_not_null(landing, "the suit is something to land on")
+	if landing != null:
+		assert_lt((landing as Vector3).distance_to(suit_at), 0.6, "on the suit, at %s" % landing)
+	suit.free()
+
+## A leap that meets the suit ends there: the body rebounds, steadies and puffs
+## its way back to the rock instead of flying on for good.
+func test_a_leap_that_meets_a_suit_ends_and_it_comes_home_to_the_rock():
+	# A Glinter's size: a taller body's landing ray still reaches the ground it has just left.
+	_species.size = 0.25
+	_species.height = 0.18
+	_species.width = 0.2
+	_species.top_speed = 3.0
+	_box(Vector3(10, 10, 10), Vector3.ZERO)
+	_spawn(Transform3D(Basis.IDENTITY, Vector3(0, 5.05, 0)))
+	var suit_at := Vector3(0.3, 9.0, 0.1)
+	var suit := _suit(suit_at)
+	await wait_physics_frames(5)
+	var intent := Intent.idle(&"leap")
+	intent.leap_to = suit_at
+	_npc.intent = intent
+	var left := false
+	var met := false
+	var back_at := -1.0
+	for i in 60 * 15:
+		await wait_physics_frames(1)
+		if _npc.active is ZeroGDrift:
+			left = true
+			if not (_npc.active as ZeroGDrift).leaping():
+				met = true
+		if left and met and _npc.active is SurfaceCrawler:
+			back_at = float(i) / 60.0
+			break
+	assert_true(left, "it sprang")
+	assert_true(met, "the leap ended in the air")
+	assert_gt(back_at, 0.0, "and it was back on the rock within 15 s")
+	assert_lt(_npc.global_position.distance_to(suit_at), 20.0, "not gone off into space")
+	_npc.intent = Intent.idle()
+	_npc.switch_to(&"zero_g_drift")
+	assert_eq((_npc.locomotors[&"zero_g_drift"] as ZeroGDrift).puffs_left, ZeroGDrift.PUFFS, "a new trip off the rock has all its puffs")
+	suit.free()

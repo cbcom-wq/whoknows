@@ -14,6 +14,9 @@ signal left(base: Base)
 
 const GROUP := &"bases"
 const CHECK_EVERY := 1.0
+## A Limpet this close to a module's cell centre, metres, can sip the base's
+## store (rock creatures spec §6.1).
+const SIP_REACH := 4.0
 
 ## Where base nodes go (the flight scene), and their outside.
 var home: Node
@@ -120,6 +123,46 @@ func plant(kind: StringName, r: Planting.Result, surface: PlantSurface) -> Base:
 func _on_planted(site: BaseSite, index: int, surface: PlantSurface) -> void:
 	if site.modules[index]["kind"] == ModuleCatalog.DRILL:
 		site.modules[index]["drill"] = DrillYield.fresh(surface.ore(), clock.call() if clock.is_valid() else 0.0)
+
+## Every module cell centre of `site`, engine space: the base's cells are
+## turned into its local frame as BaseSite.centre_of does, then into the world.
+func _cell_centres(site: BaseSite) -> Array[Vector3]:
+	var frame := frame_of(site)
+	var out: Array[Vector3] = []
+	for i in site.modules.size():
+		for c in site.cells_of(i):
+			out.append(frame * ShipGrid.cell_center(c))
+	return out
+
+## The nearest module cell centre to `from` of the awake base on `site_id`,
+## engine space, or null when that base is asleep or there is none (rock
+## creatures spec §6.1, §6.3).
+func place_of(site_id: StringName, from: Vector3) -> Variant:
+	var site := on(site_id)
+	if site == null or not _awake.has(site.id):
+		return null
+	var best: Variant = null
+	var best_d := INF
+	for p in _cell_centres(site):
+		var d := p.distance_to(from)
+		if d < best_d:
+			best = p
+			best_d = d
+	return best
+
+## Takes `qe` QE from the store of the awake base on `site_id` for a Limpet at
+## `point` (engine space), and returns what it took: `qe`, or 0.0 if the base
+## is asleep, `point` is more than SIP_REACH from every module cell centre, or
+## the store refuses. A sleeping base is never drained (§6.3).
+func sip(site_id: StringName, point: Vector3, qe: float) -> float:
+	var site := on(site_id)
+	var base: Base = named(site.id) if site != null else null
+	if base == null or base.quantum == null or base.quantum.store == null:
+		return 0.0
+	var near: Variant = place_of(site_id, point)
+	if near == null or (near as Vector3).distance_to(point) > SIP_REACH:
+		return 0.0
+	return qe if base.quantum.store.spend_continuous(qe, &"limpet") else 0.0
 
 ## True if a drill on `site_id`'s base has run QUIET_AFTER and stands within
 ## QUIET_RADIUS of `point` (engine space): its herds have moved away (§8.4).

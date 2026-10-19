@@ -62,6 +62,9 @@ const EVA_HURT_K := 10.0
 ## Waking after blacking out, and what the ship pays for it.
 const WAKE_HEALTH := 50.0
 const RESCUE_COST := 50
+## The most QE a spacewalk's Limpets take from your suit in all, per second
+## (rock creatures spec §6.1): a budget that refills at this rate, up to this.
+const SIP_CAP := 1.2
 ## Close enough to home, on a spacewalk, to wake.
 const HOME_REACHED := 3.0
 ## How far the head rolls when you are hit, radians, easing back over
@@ -119,6 +122,9 @@ var at_station := false
 
 ## Seconds since you last bumped a rock on a spacewalk.
 var since_bumped := INF
+
+## QE the Limpets may still take from the suit just now (SIP_CAP).
+var _sip_budget := SIP_CAP
 
 ## How hurt you are (health and damage spec §7.1).
 var health := Health.make(MAX_HEALTH, HEAL_AFTER, HEAL_RATE)
@@ -285,6 +291,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			rotation.y = _yaw
 
 func _physics_process(delta: float) -> void:
+	refill_sip(delta)
 	if downed != null:
 		_downed_physics(delta)
 		return
@@ -329,6 +336,11 @@ func _process(delta: float) -> void:
 
 # --- being hurt (health and damage spec §5.3, §7) ------------------------------
 
+## Gives the Limpets' sip budget back `delta` seconds of SIP_CAP. Called every
+## physics tick; tests call it directly.
+func refill_sip(delta: float) -> void:
+	_sip_budget = minf(_sip_budget + SIP_CAP * delta, SIP_CAP)
+
 ## A hit on you: a bolt, a bite. Seated, the ship takes it; blacked out,
 ## nothing more happens to you.
 func receive_hit(hit: Hit) -> void:
@@ -336,6 +348,10 @@ func receive_hit(hit: Hit) -> void:
 		return
 	velocity += hit.impulse / SUIT_MASS
 	take_damage(hit.damage, hit.direction)
+	if hit.drain > 0.0 and mode == Mode.SUIT:
+		# A Limpet's sip: the suit's cell, within the budget all of them share.
+		hit.drained = suit_cell.drain(minf(hit.drain, _sip_budget))
+		_sip_budget -= hit.drained
 
 ## Takes `amount` hp, from the way `from` points (world, or zero).
 func take_damage(amount: float, from := Vector3.ZERO) -> float:
