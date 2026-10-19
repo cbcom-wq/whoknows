@@ -12,6 +12,11 @@ extends NpcSite
 const LIFT := 0.05
 ## How far either side of the exact surface to look for the solid one.
 const FIND_GROUND := 3.0
+## The first index of a group the dev spawner makes (rock creatures spec §7.2),
+## clear of every group a recipe makes.
+const DEV_FIRST := 1000
+## A dev group's members stand within this of its centre, metres.
+const DEV_HUDDLE := 4.0
 
 var detail: AsteroidDetail
 var rock: AsteroidRock
@@ -21,6 +26,8 @@ var groups: Array[Dictionary] = []
 var records: Array[NpcRecord] = []
 ## record id -> the direction its home was made from.
 var dirs := {}
+## How many groups F10 has made here: their indices run on from DEV_FIRST.
+var _dev_groups := 0
 ## Every crater's floor, worked out once: the exact surface is costly to ask.
 var _floors: Array[Vector3] = []
 ## group index -> [second, point]: where its round has got to, redone once a
@@ -104,6 +111,47 @@ func pose_at(dir: Vector3) -> Transform3D:
 	var forward := n.cross(Vector3.RIGHT if absf(n.x) < 0.9 else Vector3.FORWARD).normalized()
 	var basis := Basis(n.cross(forward), n, forward).orthonormalized()
 	return Transform3D(basis, at + n * LIFT)
+
+## A group made on the spot by the dev spawner (rock creatures spec §7.2):
+## `count` members of `species`, one per id, in a huddle round `dir`, with the
+## index DEV_FIRST + k for this site's k-th. The group joins `groups`, so the
+## site fills in for its members as for any others; its records are returned,
+## not added to `records`, which are the recipes' own. Species that need more
+## of their group (a Delver's burrows) add their keys to the returned
+## group, which is `groups.back()`.
+func add_group(species: StringName, dir: Vector3, count: int, ids: Array[StringName]) -> Array[NpcRecord]:
+	var g := {"index": DEV_FIRST + _dev_groups, "species": species, "home_dir": dir, "count": count,
+		"seed": hash(String(ids[0])) if not ids.is_empty() else DEV_FIRST + _dev_groups}
+	_dev_groups += 1
+	if species == RockLife.SKITTER:
+		# The skitter's fill reads its herd's round: this one stays where it is.
+		g["round_dirs"] = [dir]
+		g["period"] = RockHerds.ROUND_MAX
+	groups.append(g)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(g["seed"]) ^ 0x5A5A
+	var out: Array[NpcRecord] = []
+	var members := dev_member_dirs(g, data)
+	for m in mini(members.size(), ids.size()):
+		var record := NpcRecord.make(ids[m], species, id, data.surface_point(members[m]), rng.randi(), int(g["index"]))
+		dirs[record.id] = members[m]
+		out.append(record)
+	return out
+
+## Where each member of a dev group lives: a huddle round its `home_dir`, the
+## first on it, as RockHerds.member_dirs does for a herd.
+static func dev_member_dirs(g: Dictionary, data: RockDetail) -> Array[Vector3]:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = g["seed"]
+	var home: Vector3 = g["home_dir"]
+	var metres := data.surface_point(home).length()
+	var out: Array[Vector3] = []
+	for m in int(g["count"]):
+		if m == 0:
+			out.append(home)
+		else:
+			out.append(RockHerds.tilted(home, rng.randf() * DEV_HUDDLE / maxf(metres, 1.0), rng.randf() * TAU))
+	return out
 
 func tint() -> Color:
 	return rock.colour

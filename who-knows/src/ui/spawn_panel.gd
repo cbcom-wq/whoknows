@@ -4,7 +4,8 @@ extends Label
 ## The spawn panel (docs/superpowers/specs/2026-10-02-ship-library-design.md
 ## §5), a debug tool in the plain style of the F3 readout: F6 opens and shuts
 ## it; while it is open 1-9 ask for that ship and Delete asks to remove the
-## nearest spawned one. Shut, those keys do nothing, and a held key's repeats
+## nearest spawned one. Opening it shuts the creature panel (F10), and the
+## other way round. Shut, those keys do nothing, and a held key's repeats
 ## never do. It only asks: the flight scene does the work and says how it went
 ## on the last line, so src/ui never learns about Fleet or Ship.
 
@@ -25,6 +26,7 @@ var entries: Array[String] = []:
 var _said := ""
 
 func _ready() -> void:
+	add_to_group(CreaturePanel.GROUP)
 	position = AT
 	visible = false
 	_redraw()
@@ -40,6 +42,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		return
 	if key.keycode == KEY:
 		visible = not visible
+		if visible:
+			CreaturePanel.shut_others(self)
 	elif not visible:
 		return
 	elif key.keycode >= KEY_1 and key.keycode <= KEY_9:
