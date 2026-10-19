@@ -125,32 +125,58 @@ func test_the_limpet_is_built_low_and_cheap():
 	assert_lt(high - low, wide * 0.6, "a low, flat cone")
 	assert_almost_eq(wide, NpcLooks.built_size(&"limpet"), 0.01, "as wide as it says")
 
-func test_the_limpets_shell_takes_its_rocks_shades_and_its_underside_the_crystal():
+func test_the_limpets_shell_takes_its_rocks_shades_and_its_ribs_the_crystal():
 	var look := autofree(NpcLooks.build(&"limpet", 0.4, false, SpacePalette.UMBER, Vector2(70, 95))) as LimpetLook
 	var shell := _colours(look.get_node("Shell") as MeshInstance3D)
-	var under := _colours(look.get_node("Underside") as MeshInstance3D)
+	var ribs := _colours(look.get_node("Ribs") as MeshInstance3D)
 	assert_true(_has(shell, SpacePalette.shade(SpacePalette.UMBER, 1)), "its shell in its rock's shades")
-	assert_false(_has(shell, SpacePalette.CRYSTAL), "no crystal on top")
-	assert_eq(under.size(), 1, "the underside is one colour")
-	assert_true(_has(under, SpacePalette.CRYSTAL), "lavender")
+	assert_false(_has(shell, SpacePalette.CRYSTAL), "no crystal in the shell between the ribs")
+	assert_eq(ribs.size(), 1, "the ribs are one colour")
+	assert_true(_has(ribs, SpacePalette.shade(SpacePalette.CRYSTAL, 0)), "lavender, its darkest step at rest")
 	var veined := autofree(NpcLooks.build(&"limpet", 0.4, false, SpacePalette.UNTINTED, Vector2(70, 95))) as LimpetLook
 	assert_true(_has(_colours(veined.get_node("Shell") as MeshInstance3D), SpacePalette.shade(SpacePalette.ASH, 1)),
 		"on a veined rock, in the ash it is made of")
 
-func test_a_limpet_sipping_brightens_its_crystal_and_stops():
+## Not a stone: a raised nub at the middle, and a rim that scallops (tips on
+## the ground, drawn out, between valleys lifted and drawn in).
+func test_the_limpet_has_an_apex_nub_and_a_scalloped_rim():
 	var look := autofree(NpcLooks.build(&"limpet", 0.4, false, SpacePalette.UMBER, Vector2(70, 95))) as LimpetLook
-	var under := look.get_node("Underside") as MeshInstance3D
+	var tips := {}
+	var valleys := {}
+	var apex := Vector3.ZERO
+	for v in (look.get_node("Shell") as MeshInstance3D).mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]:
+		var vec := v as Vector3
+		if vec.y > apex.y:
+			apex = vec
+		if vec.y < 0.01:
+			tips[snappedf(atan2(vec.x, vec.z), 0.01)] = Vector2(vec.x, vec.z).length()
+		elif vec.y < 0.2:
+			valleys[snappedf(atan2(vec.x, vec.z), 0.01)] = Vector2(vec.x, vec.z).length()
+	assert_almost_eq(Vector2(apex.x, apex.z).length(), 0.0, 0.001, "the nub is at the middle")
+	assert_gt(apex.y, 0.5, "and stands up")
+	assert_eq(tips.size(), LimpetLook.RIBS, "a tip to each rib")
+	assert_eq(valleys.size(), LimpetLook.RIBS, "a valley between each")
+	for r: float in tips.values():
+		assert_almost_eq(r, LimpetLook.TIP_RADIUS, 0.001)
+	for r: float in valleys.values():
+		assert_almost_eq(r, LimpetLook.VALLEY_RADIUS, 0.001)
+
+func test_a_limpet_sipping_brightens_its_ribs_and_stops():
+	var look := autofree(NpcLooks.build(&"limpet", 0.4, false, SpacePalette.UMBER, Vector2(70, 95))) as LimpetLook
+	var under := look.get_node("Ribs") as MeshInstance3D
+	var rest := SpacePalette.shade(SpacePalette.CRYSTAL, 0)
 	var brightest := SpacePalette.shade(SpacePalette.CRYSTAL, SpacePalette.SHADES.size() - 1)
-	assert_true(_has(_colours(under), SpacePalette.CRYSTAL))
+	assert_gt(brightest.v, rest.v * 1.2, "a step you can see from above")
+	assert_true(_has(_colours(under), rest))
 	look.act(&"sip")
 	assert_true(_has(_colours(under), brightest), "sipping: the brightest step of the crystal")
-	assert_false(_has(_colours(under), SpacePalette.CRYSTAL))
+	assert_false(_has(_colours(under), rest))
 	look.act(&"cling")
-	assert_true(_has(_colours(under), SpacePalette.CRYSTAL), "any other action swaps back")
+	assert_true(_has(_colours(under), rest), "any other action swaps back")
 	assert_false(_has(_colours(under), brightest))
 	look.act(&"sip")
 	look.act(&"bite")
-	assert_true(_has(_colours(under), SpacePalette.CRYSTAL))
+	assert_true(_has(_colours(under), rest))
 
 static func _colours(mi: MeshInstance3D) -> Dictionary:
 	var out := {}
