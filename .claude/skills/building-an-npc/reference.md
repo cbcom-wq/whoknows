@@ -1,7 +1,7 @@
 # NPC building reference
 
 The facts behind `SKILL.md`, checked against the code on 2026-09-26 (bases' vibrations and
-`RockHerdSource.quiet` added 2026-10-09). Paths are relative to
+`RockLifeSource.quiet` added 2026-10-09; the Limpet, the Glinter and `RockLife` 2026-10-19). Paths are relative to
 `who-knows/` unless they start with `docs/` or `.claude/`. If a name here no longer exists,
 trust the code and fix this file.
 
@@ -20,11 +20,12 @@ trust the code and fix this file.
 | `src/npc/brain.gd`, `behaviour.gd`, `npc_behaviours.gd`, `curves.gd` | the mind |
 | `src/npc/perception.gd`, `npc_memory.gd`, `stimulus.gd`, `stimulus_bus.gd` | the senses |
 | `src/npc/locomotor.gd`, `deck_walker.gd`, `deck_paths.gd`, `surface_crawler.gd`, `zero_g_drift.gd` | movement |
-| `src/npc/npc_looks.gd`, `droid_look.gd`, `skitter_look.gd`, `legged_gait.gd` | looks |
+| `src/npc/npc_looks.gd`, `droid_look.gd`, `skitter_look.gd`, `legged_gait.gd`, `limpet_look.gd`, `glinter_look.gd` | looks |
 | `src/npc/npc_debug.gd` | the F4 overlay |
-| `src/npc/populations/` | `ShipCrew` + `ShipSite`; `RockHerds` + `RockSite` + `RockHerdSource` |
+| `src/npc/populations/` | `ShipCrew` + `ShipSite`; `RockLife` (every species on a rock) + `RockHerds`, `GlinterNests`, `LimpetBeds` (recipes) + `RockSite` + `RockLifeSource`; `DevCreatures` (F10) |
+| `src/ui/creature_panel.gd` | `CreaturePanel`, the F10 dev panel |
 | `data/npcs/*.tres` | species |
-| `test/probes/` | `npc_probe.gd` (frame time), `droid_render.gd`, `skitter_render.gd` (not run by GUT) |
+| `test/probes/` | `npc_probe.gd` (frame time), `droid_render.gd`, `skitter_render.gd`, `limpet_render.gd`, `glinter_render.gd`, `glinter_leap.gd` (not run by GUT) |
 
 ## Species fields (`NpcSpecies`)
 
@@ -45,17 +46,37 @@ trust the code and fix this file.
 The body's collider is a capsule sized from these: upright if `size ≤ height × 1.3`, lying along
 local z otherwise. Origin at the feet; up is local +y; forward is −z.
 
+**Fields added for the rock creatures** (`NpcSpecies`, group *Bite and drain*), and the two species that set them:
+
+| Field | Default | Skitter, droid | Limpet | Glinter |
+|---|---|---|---|---|
+| `bite_damage` (hp), `bite_push` (N·s), `bite_reach` (m, from its middle) | 15, 40, 1.6 | default | 0, 40, 1.6 | 8, 25, 0.8 |
+| `drain_rate` (QE/s), `drain_reach` (m) | 0, 0 (drains nothing) | default | 0.4, 5 | default |
+| `shy_of_drills` | true | default | false | true |
+| `grips_bases` | false | default | true | false |
+
+| | Limpet | Glinter |
+|---|---|---|
+| `size`, `height`, `width` (m); `mass`; `top_speed` | 0.3, 0.15, 0.3; 8; 0.25 | 0.25, 0.18, 0.2; 6; 3.0 |
+| `max_health`, `knocked_out_for` | 15, 0 | 20, 0 |
+| `sight_range`, cone, `dark_sight`, `near_sense` | 20, 360, 1.0, 0 | 6, 360, **0.85**, 1.5 |
+| `feels_vibration`; `needs` | 0; appetite .01, fear | 1; fear |
+| `behaviours` | `cling`, `creep`, `sip` | `lure`, `ambush`, `hide` |
+| `population`, `live_radius`, `fade` | `limpet_beds`, 100, (70, 95) | `glinter_nests`, 150, (110, 140) |
+
 ## Health and death (`docs/superpowers/specs/2026-09-29-health-and-damage-design.md` §6)
 
 | API | Does |
 |---|---|
 | `Npc.health` (`Health`), `take_damage(hp)`, `receive_hit(hit)` | a hit touches, shoves, takes `hit.damage`, raises fear by the share lost, squashes the look for `FLINCH_FOR` 0.15 s |
 | `Npc.down`, `is_dead()`, `revive(fraction)` | at 0 hp: dead (on its back, `CORPSE_FOR` 20 s, shrinks over the last 1 s, demoted) or knocked out (slumped `SLUMP` 70°, up after `knocked_out_for` at `wake_health`, or at once by `revive`) |
-| `Npc.bite()`, `BITE_DAMAGE` 15, `BITE_PUSH` 40 N·s, `BITE_REACH` 1.6 m | the body's bite, asked for by an intent with action `&"bite"` |
+| `Npc.bite()` (species `bite_damage`, `bite_push`, `bite_reach`) | the body's bite, asked for by an intent with action `&"bite"`; the hit is kind `&"bite"` |
+| `Npc.sip(dt)`, `Npc.sipped` | the body's sip, asked for by an intent with action `&"sip"`: a hit of kind `&"sip"` with `drain` = `drain_rate × dt` to the avatar if it is within `drain_reach` of the creature's middle, else `site.sip_source(npc, dt)` (a base's store). `sipped` is the running total since it woke, for the husks |
+| the `&"sip"` hit | `Hit.drain` (QE asked) and `Hit.drained` (QE given, written by the receiver); `Avatar.receive_hit` drains `suit_cell.drain(...)` on a spacewalk within `Avatar.SIP_CAP` 1.2 QE/s for all Limpets together (a budget, `refill_sip`); `SuitCell.drain(qe)` takes up to `charge` and returns it. A dry suit goes home by `Suit.home_step`. A Limpet never drains the ship's store |
 | `NpcLedger` (`mark_dead`, `is_dead`, `set_health`, `health_of`, `to_dict`) | one per game (`flight_test.npc_ledger`), given to every director; `NpcDirector.amend` returns null for the dead; `demote` writes wounds; `promote` reads them. Saved as `"npcs"` |
 | `ctx.extra[&"hurt_ago"]` | seconds since it was last hurt, for a behaviour to read |
 | `NpcDirector.targets`, `Weapons.TARGETS`, `Weapons.npc_id(record.id)` | the exterior director joins each promoted NPC to the weapons group as `npc:<record id>` and takes it out on `demote` (ship weapons spec §4.1); the interior director's `targets` is false. A turret's phaser bolt arrives at `receive_hit` like any other hit: **15 hp a light bolt, 120 a heavy** (`WeaponValues` damage). `Weapons.usable` is false for a dead NPC (`is_dead()`), so it leaves every turret's choice and, 2 s on, the fire-control list; a knocked-out one is still a target. Test: `test_npc_director.gd` (`targets`) |
-| `behaviours/ambush.gd` | a reflex that springs: you within `AMBUSH` 5 m (`ctx.position` to `ctx.player`) and fear under `CALM` 0.4 -> first think `Intent.idle(&"leap")` with `leap_to` = you; then within `bite_reach + 0.3` one `&"bite"` and `raise(&"fear", AFTER_FEAR 0.8)`, else `&"lunge"`; done after the bite or `GIVE_UP` 4 s. `test/probes/glinter_leap.gd` is the leap check (20 tries, reach and bite), `glinter_render.gd` the renders |
+| `behaviours/ambush.gd` | a reflex that springs: you within `AMBUSH` 5 m (`ctx.position` to `ctx.player`) and fear under `CALM` 0.4 -> first think `Intent.idle(&"leap")` with `leap_to` = you; then within `bite_reach + 0.3` one `&"bite"`, else `&"lunge"`; done after the bite or `GIVE_UP` 4 s. The bite sets its fear to at least `AFTER_FEAR` 0.8 (so `hide` follows and the nest re-arms as it fades), and a give-up raises it by `GAVE_UP_FEAR` 0.3 so a miss does not spring again every 4 s. `GlinterLook` shows its eyes for `leap`, `lunge` and `bite`. `test/probes/glinter_leap.gd` is the leap check (20 tries, reach and bite), `glinter_render.gd` the renders |
 | `behaviours/defend.gd` | the template for an NPC that fights back: a reflex scored from `hurt_ago`, fear and the player's distance, `Intent.go(player, 1.0, &"lunge"/&"bite")`, given up past 6 m or when calm; weight it over `scatter` |
 
 NPCs heal `HEAL_RATE` 0.1 hp/s after `HEAL_AFTER` 10 s, only while live.
@@ -69,7 +90,11 @@ NPCs heal `HEAL_RATE` 0.1 hp/s after `HEAL_AFTER` 10 s, only while live.
 origin moves); `gravity(local) -> Vector3`; `alive() -> bool`; `start_pose(record, time) ->
 Transform3D` (site-local, feet on the ground; while `alive()` is false the `Npc` steps nothing
 until the director's next review demotes it); `tint() -> Color` (the look's colour; default
-`SpacePalette.UNTINTED`); `fill(ctx, npc)`.
+`SpacePalette.UNTINTED`); `fill(ctx, npc)`. Hooks the body calls, each a no-op by default:
+`died(npc)` (it died for good, after the ledger is marked; `RockSite` drops a Limpet's husks), `surfaced(npc)`
+(it came up out of the ground; nothing calls it until the Delver), `sip_source(npc, dt) -> float` (QE the
+place's own store gives it over `dt`; `RockSite` asks a base) and `group_seed(record) -> int` (the seed of
+its group, given to a look that has `set_group_seed`: a nest's glints flash together).
 
 **`Locomotor`:** `id`; `enter(npc)`; `step(npc, intent, delta)`; `exit(npc)`; `handover(npc) ->
 StringName` (`&""` to stay); `grounded() -> bool`; `shoved(npc, dv)`.
@@ -106,7 +131,7 @@ percepts), then the site's `fill`:
 | Site | Fills |
 |---|---|
 | `ShipSite` | `places.dock`; `spots` (the reachable ones, each + `at`, `since`); `extra.rooms` (`[point, zone]`), `extra.nearby` (step-aside points), `extra.tended` (Callable), `extra.player_zone`, `extra.zone`; fear fades 0.1/s with no touch or sound in 2 s |
-| `RockSite` | `mates` (live herd mates); `places.round` and `extra.graze` (the herd's round, cached per second); `places.shelter` (nearest crater floor, cached); company eases near mates; fear fades 0.1/s unless jolted, touched or lit |
+| `RockSite` | `mates` (live group mates); `places.shelter` (nearest crater floor, cached) for every species; then by species. Skitter: `places.round` and `extra.graze` (the herd's round, cached per second); company eases near mates; fear fades 0.1/s unless jolted, touched or lit. Limpet: `places.quantum` (your suit within `SUIT_DRAW` 20 m, else the nearest module cell of an awake base within `RAID` 100 m of its bed while a non-base anchor is within `RAID_NEAR` 300 m) and, for a base, `extra.quantum_reach` `BASE_REACH` 4 m |
 
 `ctx.need(n)`, `ctx.ease(n, rate)` (per second over `dt`), `ctx.raise(n, amount)`,
 `ctx.recent(kind, seconds) -> Percept`, `ctx.voice`.
@@ -142,14 +167,69 @@ Bases give off `VIBRATION` on the rock they stand on (habitat modules spec §8.4
 stamp and each drill's hum, both sent from the base's exterior with the base's `site.site_id`
 (its rock's `RockHerds.site_of`), so only that rock's skitters feel them.
 
-**Herds keep away from a drill** (`RockHerdSource.quiet`, a Callable `(site id, engine point) ->
-bool`, wired by the flight scene to `Bases.quiet`): true when a drill on that rock's base has run
+**Species that are `shy_of_drills` keep away from a drill** (`RockLifeSource.quiet`, a Callable `(site id, engine point) ->
+bool`, wired by the flight scene to `Bases.quiet`; a species that is not shy, the Limpet, is never asked): true when a drill on that rock's base has run
 `HabitatValues.QUIET_AFTER` (600 s) and stands within `QUIET_RADIUS` (80 m) of the point. It is
 asked **once per record when the rock's `RockSite` is (re)built** (`_offered`, keyed by rock id,
 cleared when the rock leaves), never on every review: live skitters never vanish in view, and the
 herd is gone the next time the rock comes into detail. No behaviour changes.
 
 `RockHerds.site_of(rock)` names a rock as a site (`&"rock:x_y_z_w"`); vibrations carry it.
+
+## Rock creatures (`docs/superpowers/specs/2026-10-10-rock-creatures-design.md`)
+
+**`RockLife`** (`src/npc/populations/rock_life.gd`) lists every group of every species on a rock.
+`ORDER` is `[skitter, glinter, delver, limpet]` and only grows at its end; `RECIPES` maps a species to its
+class (`GlinterNests`, `DelverBurrows`, `LimpetBeds`); `SPACING` 30 m; a species whose class is not in the
+project yet is skipped. `groups(rock, data, seed)`, `records(rock, data, seed, groups)`, `member_dirs(g, data)`,
+`clear_of(data, dir, taken, metres)`. Record ids are `"<species>:<site>:<group>:<n>"` (the skitters' are as
+`RockHerds` makes them, pinned by `test/unit/golden/rock_life_skitters.json`); `herd` is the group index.
+
+**A recipe** is a class with `static groups(rock, data, world_seed, taken: Array[Vector3], first_index) ->
+Array[Dictionary]` (each `{index, species, home_dir, count, seed}` and its own keys, `crater`, `salvage`) and
+`static member_dirs(g, data) -> Array[Vector3]`. Directions are unit vectors in the rock's frame as
+`RockDetail` makes them. Its salt differs from every `AsteroidRecipe.cell_seed` salt in use: tiers 0-2, rock
+detail 7, herds 11, **Glinter 13**, Delver 17, **Limpet 19**.
+
+**`RockLifeSource`** replaces `RockHerdSource`: one `RockSite` per rock in detail near an anchor, built with
+the Callables it holds (`quiet`, `place_salvage`, `base_place`, `base_sip`, `drop`, `count_near`), and
+`site_for(rock)`. `POPULATIONS` lists the population ids it offers.
+
+**`RockSite`** (one site for every species on the rock): `groups`, `records`, `dirs` (record id -> the
+direction its home was made from), `group_of(record)`, `pose_at(dir)`, `place_nests()`, `add_group(...)`.
+Its Callables, all optional (check `is_valid()`), engine-space points, set by the source and wired in
+`flight_test._wire_npcs`:
+
+| Callable | Is | Wired to |
+|---|---|---|
+| `place_salvage(cloud_id, centre, entries)` | registers a nest's real salvage | `SalvageField.add_placed_cloud` |
+| `base_place(site_id, from)` | the nearest module cell of an awake base, or null | `Bases.place_of` |
+| `base_sip(site_id, point, qe)` | the QE the base gave | `Bases.sip` |
+| `drop(kind, at, up, count)` | drops stray items | the flight scene's `_drop` |
+| `count_near(kind, at, radius)` | how many of `kind` lie within `radius` | `StrayField.count_of` |
+
+Its hooks (overrides of `NpcSite`): `died(npc)` drops husks (1, and one more per `HUSK_PER_QE` 40 QE sipped, to
+`HUSKS_MAX` 4), `sip_source(npc, dt)` (`BASE_RATE` 0.05 QE/s from a base), `group_seed(record)`, and `surfaced`
+(unused until the Delver). `RockDetail.dir_of(p)` turns a rock-frame point into the direction whose surface
+point lies along it; use it, never `normalized()`.
+
+**Bases and the world:** `Bases.sip(site_id, point, qe)` (0 if the base is asleep, has no store, or `point` is
+over `Bases.SIP_REACH` 4 m from every module cell centre; else spends from the store, purpose `&"limpet"`),
+`Bases.place_of(site_id, from)`. `SalvageField.add_placed_cloud(id, centre, entries)` takes `{index, kind,
+variety, pose}` entries (pose relative to `centre`), loads at once if the focus is near, is not saved (the
+ledger of what was taken is), and `is_placed(id)`. `StrayField.count_of(kind, at, radius)` counts the ledger's
+strays, loaded or not. `ItemLooks.Glint.clock_phase` (a float: lit while `Time.get_ticks_msec()/1000 + phase`
+falls in the first `GLINT_FLASH` of a period; null: counts its own time) with `lit_at(seconds)`. The Limpet's
+drop is the item `limpet_husk` (a glinting look).
+
+**F10, `CreaturePanel`** (`src/ui/creature_panel.gd`; same place as F6's panel, each shuts the other, group
+`CreaturePanel.GROUP`): `1`-`9` ask for the species in `CreaturePanel.ORDER` that the catalogue has;
+`creature_asked(index)`; `say(text)` for the last line. The flight scene's `spawn_creature(species)` makes a
+group at the crosshair's rock (skitters 3, glinters 4, limpets 6, anything else one; the droid on the deck you
+look at, aboard) through `RockSite.add_group`, into `DevCreatures` (a source on each director; not saved;
+forgotten once its creature has been live and is not, or its site goes). **Dev ids** are
+`"dev:<species>:<n>"`, `n` counting on for the session across every `DevCreatures` and skipping any id the
+ledger knows (dead or hurt), so no id is ever reused. Dev groups are indexed from `RockSite.DEV_FIRST` 1000.
 
 ## Sensors (NPC foundation spec §22)
 
@@ -158,7 +238,7 @@ herd is gone the next time the rock comes into detail. No behaviour changes.
   `contact(id)`, `focus_point()`.
 - **A source:** `contacts(focus: UniversePoint, range_m, time) -> Array[Contact]`,
   `contact(id, focus, time) -> Contact`. `LifeContacts(stream, exterior director, universe)`:
-  one per herd in detail, id `&"life:<site>:<herd>"`, at its awake members' middle or its round.
+  one per group of any species in detail, id `&"life:<site>:<group>"`, at its awake members' middle, or its round (a group with none: its home).
 - **`Sense.read(profile, focus, target, id, time) -> Contact`**, pure. `SenseProfile.life()`:
   reach 4000, region within 1000, radius 15, offset 7, ping ±10° every 4 s.
   `SenseProfile.salvage()`: 10000, 2000, 75, 50.
@@ -199,11 +279,11 @@ herd is gone the next time the rock comes into detail. No behaviour changes.
 - **`SurfaceCrawler`:** `STICK` 0.6 m/s, `SETTLE` 0.05 s, `LEAD` 6, `ACCEL` 10, `TURN_RATE` 5,
   `PERSONAL` 1.2 m, `LOST_AFTER` 0.2 s, `KNOCKED_OFF` 1.5 m/s, `SLIPPERY` 3 m/s, `LEAP_REACH`
   30 m, `STILL` 0.25 m/s, `RECHECK` 30 ticks, `WALL_GAP` 0.45 m. Rays on layer 64 only.
-  `mates` (site-local) is set on it for separation. A leap: intent action `&"leap"` with
+  `mates` (site-local) is set on it for separation. `BASE_LAYER` 1: a species with `grips_bases` also rays layer 1 (a base's body, never a ship's hull: `_ray` drops a hit there without meta `base`). A leap: intent action `&"leap"` with
   `leap_to`; refused if the ray finds nothing within reach. The leap's ray hits rock and the
   avatar (`AVATAR_LAYER` 4: a Glinter's ambush), so a leap can be aimed at a spacewalker.
 - **`ZeroGDrift`:** `LEAP_SPEED` 6, `REBOUND` 0.5 m/s (a leap meeting the suit or passing its aim ends, `leaping()`), `TUMBLE` 0.6 s, `PUFF` 0.8 m/s at most once a second,
-  `PUFFS` 6, `LOOK` 60 m, `LANDED` 0.6 m.
+  `PUFFS` 6 (refilled on every `enter`: per trip off the rock), `LOOK` 60 m, `LANDED` 0.6 m.
 - **Bumps:** `Avatar.bump` shares momentum with an `Npc` by the rocks' rule
   (`SUIT_MASS × m / (SUIT_MASS + m)`, bounce 0.2) through `npc.shove`.
 
@@ -228,6 +308,14 @@ herd is gone the next time the rock comes into detail. No behaviour changes.
   clamped to reach; `LeggedGait` tripods (legs 0, 3, 4 then 1, 2, 5), rays only within 60 m of
   the camera, legs posed every 6th frame beyond 100 m and not past the fade; actions `freeze`,
   `graze`, `rest`, `puff`; under 300 triangles.
+- `LimpetLook`: built 1 m across, 0.58 m high; a shell of eight scalloped facets in the rock's shades
+  (`SpacePalette.shade`, ash on a veined rock) with a raised apex nub, and eight lavender crystal ribs
+  (`SpacePalette.CRYSTAL`) on a second mesh that swaps to the brightest `SHADES` step on `sip`; no glow;
+  80 triangles at most.
+- `GlinterLook`: built 1 m long, 0.72 m high; a six-sided domed shell of big flat facets in `SLATE` shades
+  with two opposite `RUST` patches, a blunt rust head, six short two-jointed legs; `eyes` (two `SKITTER_EYE`
+  quads) shown on `leap`, `lunge` and `bite`; wears `ItemLooks.glint` on `BEAT` 1.6 s, set by `set_group_seed`
+  through `Glint.clock_phase` so a nest flashes together; at most 120 triangles.
 
 ## Testing patterns
 

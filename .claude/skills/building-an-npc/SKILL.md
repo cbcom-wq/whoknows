@@ -22,13 +22,19 @@ locomotor moves), **the mind never reads the world** (only its memory, needs and
 `NpcSite` puts in the `NpcContext`), and **only the site knows the place** (frame, gravity,
 where a record wakes, mates, shelter, jobs).
 
-Two worked examples, one per space. Read the one nearest to what you are making:
+Worked examples, inside and outside. Read the one nearest to what you are making:
 - **The maintenance droid** (inside): `data/npcs/maintenance_droid.tres`, `ShipCrew` +
   `ShipSite`, `DeckWalker` over `DeckPaths`, `behaviours/{tend,roam,recharge,give_way,notice,
   startle,brace,keep_away}.gd`, `DroidLook`.
-- **The skitter** (outside, 1.3 m, found with the ship's life sensor): `data/npcs/skitter.tres`, `RockHerds` + `RockSite` +
-  `RockHerdSource`, `SurfaceCrawler` + `ZeroGDrift`, `behaviours/{graze,wander,stay_with_herd,
+- **The skitter** (outside, 1.3 m, found with the ship's life sensor): `data/npcs/skitter.tres`, `RockHerds` (through `RockLife`) +
+  `RockSite` + `RockLifeSource`, `SurfaceCrawler` + `ZeroGDrift`, `behaviours/{graze,wander,stay_with_herd,
   freeze,scatter,hide,investigate,rest,drawn_to_flare}.gd`, `SkitterLook` + `LeggedGait`.
+- **The Limpet** (outside, 0.3 m, sips quantum energy from your suit or a base): `data/npcs/limpet.tres`,
+  `LimpetBeds` (a `RockLife` recipe), `behaviours/{cling,creep,sip}.gd`, `LimpetLook`. The body
+  delivers the sip (`Npc.sip`) and its husks (`RockSite.died`).
+- **The Glinter** (outside, 0.25 m, lures with a glint and springs at a spacewalker): `data/npcs/glinter.tres`,
+  `GlinterNests` (a recipe with real salvage), `behaviours/{lure,ambush,hide}.gd`, `GlinterLook`;
+  the leap is `SurfaceCrawler.aim_leap` + `ZeroGDrift`, the bite `Npc.bite`.
 
 **Read first:** `CLAUDE.md` (style guide binding; floating origin; no `#` in `.tscn`/`.tres`),
 `docs/superpowers/specs/2026-09-26-npc-foundation-design.md` (§2 the layers, §21 *As built*: why
@@ -43,7 +49,7 @@ Answer these, in the spec or the task, before writing code. Each answer picks ex
    (that ship's director, `BY_SITE`, never shifts)? A new kind of place (a wreck, a world) means a
    new site and maybe a new director.
 2. **Which place does it belong to, and how many?** That is its population recipe and site: an
-   existing one (`RockHerds`/`RockSite`, `ShipCrew`/`ShipSite`) or a new pair.
+   existing one (a `RockLife` recipe on `RockSite`, or `ShipCrew`/`ShipSite`) or a new pair.
 3. **How does it move?** `DeckWalker` (floors under gravity), `SurfaceCrawler` + `ZeroGDrift`
    (any surface in zero g, leaping and puffing), or a new locomotor (§ *Recipes*).
 4. **What does it sense?** Sight (range, cone, `dark_sight`, `near_sense`), light response,
@@ -62,12 +68,22 @@ Do these in order. Each names the check that proves it.
 
 1. **Species `.tres`** from `templates/species.tres` in `data/npcs/`. Every field set, **no `#`
    comments**. Proof: a read-back test of every property (as `test_npc_species.gd`), and the
-   catalogue test `test_npc_catalog.gd` (every behaviour, locomotor and look id exists).
+   catalogue test `test_npc_catalog.gd` (every behaviour, locomotor and look id exists). Decide
+   two flags: `shy_of_drills` (default true: a working drill clears the species from a rock
+   when it loads; the Limpet is false, as it is drawn to a drill) and `grips_bases` (default
+   false: true lets the crawler walk on a base, never on a ship's hull).
 2. **Population and site.** Records are pure: same place, same records, stable unique ids
    (`"<species>:<site>:<group>:<n>"`), homes in the **site's frame**, never engine positions.
    If the place is stretched or curved, keep each record's generating direction (the skitter
    lesson). Proof: determinism, uniqueness and on-the-surface tests (as `test_rock_herds.gd`,
    `test_ship_crew.gd`).
+   **A rock holds many species, from `RockLife`.** A species is a recipe class (`LimpetBeds`,
+   `GlinterNests`) listed in `RockLife.RECIPES` and in `RockLife.ORDER`, with its own salt, its homes
+   `RockLife.SPACING` 30 m clear of those taken. **`ORDER` only grows at its end:** group numbers
+   carry on across species, so a species put earlier renumbers every group after it and revives the
+   ledger's dead records. Turn a site-local point into a direction with `RockDetail.dir_of`, never
+   `normalized()` (the rock is stretched). Proof: `test_rock_life.gd` (and its golden file for the
+   skitters), a recipe test as `test_limpet_beds.gd`.
 3. **Wire a source into the right director** (`sources`), or make a director for a new space
    (holder that never moves, `catalog`, `bus`, `rule`, `max_live`, `cameras` outside). Proof: a
    director test with a fake source and site (as `test_npc_director.gd`), then the real scene.
@@ -94,7 +110,12 @@ Do these in order. Each names the check that proves it.
 8. **Health:** `max_health` in the species (the catalogue test checks it is above 0), and
    whether it dies (`knocked_out_for` 0) or is knocked out and gets up. A creature that fights
    back lists a reflex like `defend` and asks the body for the bite with an intent action; the
-   mind never delivers a hit itself. Proof: `test_npc_death.gd`-style tests with a fake source.
+   mind never delivers a hit itself. The bite is data: `bite_damage`, `bite_push`, `bite_reach`.
+   A creature that drains (`drain_rate`, `drain_reach`) asks with `&"sip"`. **The body delivers every
+   drain and every drop** (`Npc.sip`, `Npc.bite`, `RockSite.died`), and reaches the rest of the game
+   only through its site's Callables (`place_salvage`, `base_place`, `base_sip`, `drop`, `count_near`),
+   which the flight scene sets: never a behaviour, never `src/npc` reaching for the bases or the
+   strays directly. Proof: `test_npc_death.gd`-style tests with a fake source; `test_limpet_sip.gd`.
    **Ship weapons reach it:** NPCs outside are targets (`Weapons.TARGETS`; the exterior director
    has `NpcDirector.targets = true`, set in `flight_test._wire_weapons`, and joins each NPC as
    `npc:<record id>` on `promote`, leaving on `demote`), so a turret can be sent after one. A
@@ -138,7 +159,7 @@ Do these in order. Each names the check that proves it.
   company fade there).
 - **A population and site:** copy `templates/site.gd`. A pure static recipe makes records; the
   site answers `frame`, `gravity`, `alive`, `start_pose`, `tint`, `fill`. Outside, a source class
-  (like `RockHerdSource`) offers records only for places near an anchor and caches one site per
+  (like `RockLifeSource`) offers records only for places near an anchor and caches one site per
   place.
 - **A locomotor:** extend `Locomotor` (`enter`, `step`, `exit`, `handover`, `grounded`,
   `shoved`), add its id to `Npc.make_locomotor`. Hand over by returning the other id; pass data
@@ -191,7 +212,7 @@ Do these in order. Each names the check that proves it.
 | Health on the record | Recipes make records afresh on every review, so a wound set on an `NpcRecord` was gone next review | Keep what must stick in `NpcLedger`, read in `amend` and `promote` |
 | Reposing the look without its scale | The look is scaled to the species' size when built; setting its transform dropped that | `Npc._look_scale`, kept by every pose; lift a body on its back by its height |
 | A Variant-typed `:=` | GDScript treats the warning as an error; the whole script fails to load | Type it: `var x: Variant = ...` |
-| Filtering a population every review | `RockHerdSource.quiet` (herds keep away from a working drill, habitat modules spec §8.4) first dropped records on every `records()` call, so skitters already out vanished in view the moment a drill passed 10 minutes | Ask a "has this place changed" question once, when the site is (re)built (`RockHerdSource._offered`): live NPCs stay, and the herd is gone the next time the rock loads |
+| Filtering a population every review | `RockLifeSource.quiet` (herds keep away from a working drill, habitat modules spec §8.4) first dropped records on every `records()` call, so skitters already out vanished in view the moment a drill passed 10 minutes | Ask a "has this place changed" question once, when the site is (re)built (`RockLifeSource._offered`): live NPCs stay, and the herd is gone the next time the rock loads |
 | Trusting the director to demote before a place goes | A rock leaving detail all at once (a 25 km jump, the F7 hop) is freed before the next review (0.25 s); every skitter on it stepped on freed ground and `SurfaceCrawler` raised script errors each tick (found by the base probe, 2026-10-09) | `Npc._physics_process` steps nothing while `site.alive()` is false, as `DeckWalker` already checked; `test_a_place_gone_stops_it_stepping_at_once` |
 | A leap at a spacewalker | `ZeroGDrift` landed only on rock: a Glinter that reached the suit bit (the body does that, from its middle to the avatar's *origin, at its feet*) and then flew on at `LEAP_SPEED` for good, never to hide; and a 6 m/s body striking the suit hurt it again through `Avatar`'s creature-strike rule (`EVA_HURT_FROM` 4 m/s: 0.1 and 15.7 hp seen) (found at the ambush probe, 2026-10-19) | A leap now ends on touching layer 4 or passing its aimed point (`ZeroGDrift._end_leap_at_suit`, `REBOUND` 0.5 m/s) and puffs home; prove it with `test/probes/glinter_leap.gd` (reach, bite, back on the rock 15 s later, strikes counted apart from bites) |
 | A landing ray that finds the ground it just left | A leap's `_since >= 0.1` landing ray (`LANDED`) reaches 0.5 x height + 0.6 m along the body's down: a 0.4 m skitter leaving a flat rock "landed" at once, and a test of a leap went wrong | Test leaps with the real species' size (a Glinter's 0.18 m) |
@@ -199,6 +220,11 @@ Do these in order. Each names the check that proves it.
 | A spawn check on a suit that will not drift | The suit brakes to rest (`suit_assist`) and a dry cell homes the suit to the hull: a probe's "drifting at 0.5 m/s" stopped in half a second | `avatar.suit_assist = false` and `avatar.suit_cell.charge = 100.0` before a drift |
 | A salvage glint seen from 100 m | `ItemLooks.GLINT_FADE` fades every glint out at 50-60 m: a nest (Glinters wear the same glint) is invisible beyond it | Say so when judging a lure from afar; a nest in a crater is also hidden by the rim from the ground |
 | A look at the rock's night side | The nest in the start rock's crater lay in the dark: bodies black, only glints seen | Light the shot with a lamp on the camera, and show the real lighting beside it |
+| A crawler that sees only rock | `SurfaceCrawler`'s rays hit layer 64, so a Limpet reaching a base's wall found no ground and let go; widening to layer 1 would have let it walk a ship's hull too | `grips_bases` adds the base-and-hull layer, and `_ray` drops a hit on it that is not a base (`has_meta(&"base")`): a Limpet never touches a ship |
+| An awake base as "someone is near" | The raid asked whether any director anchor was near the bed, and an awake base is itself an anchor (`AsteroidStream.SPACE_ANCHOR`): every bed within 100 m raided with nobody about | An anchor that is not a base, within `RockSite.RAID_NEAR` 300 m of the bed, as well as a base within `RAID` 100 m; `test_limpet_sip.gd` |
+| `puffs_left` set once | A skitter knocked off twice, or a Glinter that sprang and bit again, had no puffs left and drifted away for good | `ZeroGDrift.enter` refills `PUFFS`: the six are per trip off the rock, not per life |
+| "Would I notice it?" answered from the numbers | The first Limpet (a flat cone in its rock's colour) read as a pebble: specks at 40 m, gone at 100 m. The owner: "too much like just rocks" | Render it from a spacewalk at 40-100 m before showing it; give it a shape no stone has (a fluted shell, eight crystal ribs from a raised apex) and a state that shows (the ribs go to the brightest `SHADES` step while sipping); `limpet_render.gd` |
+| `normalized()` for a point's direction on a stretched rock | A dev spawn and a test aimed at `home.normalized()` landed up to 43 m from the surface point the home was made from | `RockDetail.dir_of(p)`, the exact inverse of `surface_point`; and a record's `RockSite.dirs` entry when it has one |
 | Taking `stream.details.live.values()[0]` as the start rock | Once rocks moved into belts (system skeleton spec §6), a neighbour was in detail too and had no herds | `stream.details.nearest(ship.exterior.global_position)`; and count only its own site's contacts |
 
 ## Not built yet (plan for it; don't assume it works)

@@ -4,6 +4,8 @@
 **Status:** Design, awaiting the owner's review of this written spec. Nothing is built. Every row
 of §2 was decided by the owner in the brainstorm. Refreshed 2026-10-18 against `main` at `85aa4d4`:
 the hose, its prerequisite, has merged (§13), and ship weapons now target creatures (§8.1).
+**Built so far (2026-10-19):** the shared rock-life code, F10, the Limpet and the Glinter, as §19 records.
+The owner approved both looks on 2026-10-19. The Delver is not built yet.
 **Depends on:** `main` at `85aa4d4`: the NPC foundation (skitters, the droid, `NpcDirector`,
 `StimulusBus`), health and damage (bites, `NpcLedger`), habitat modules Phases A–C (bases, drills and
 `Bases.quiet`), quantum energy's Tasks 1–8 (the store, the machine, the suit cell, the near cloud),
@@ -320,7 +322,7 @@ Three new `.tres` in `data/npcs/`, populations `glinter_nests`, `delver_burrows`
 | `max_health`, `knocked_out_for` | 20, 0 | 60, 0 | 15, 0 |
 | `locomotors` | `surface_crawler`, `zero_g_drift` | `surface_crawler`, `burrower`, `zero_g_drift` | `surface_crawler`, `zero_g_drift` |
 | `sight_range`, cone | 6, 360° | 10, 220° | 20, 360° |
-| `dark_sight`, `near_sense` | 0.5, 1.5 | 0.33, 2.0 | 1.0, 0 |
+| `dark_sight`, `near_sense` | 0.85, 1.5 | 0.33, 2.0 | 1.0, 0 |
 | `feels_vibration` | 1.0 | 1.0 | 0 |
 | `needs` | fear | hunger, fear | appetite (0.01/s), fear |
 | `behaviours` | `lure`, `ambush`, `hide` | `feed`, `delve`, `dive` | `cling`, `creep`, `sip` |
@@ -515,3 +517,47 @@ The glint beat (1.6 s), the ambush range (5 m) and bite (8 hp), the Delver's cyc
 shard odds (1 in 12), the grit's value (15 QE) and the husk's (20 QE), the Limpet's drain rates
 (0.4 and 0.05 QE/s) and creep speed (0.2 m/s), each species' wake radius and fade, and the group
 sizes. None of them blocks the design.
+
+---
+
+## 19. As built (Limpet and Glinter, 2026-10-19)
+
+**Built:** `RockLife` and `RockLifeSource` (which replaces `RockHerdSource`), one `RockSite` for every
+species on a rock, the species fields (the bite and drain are data, so `Npc.BITE_*` are gone), F10
+(`CreaturePanel`, `DevCreatures`), the Limpet and the Glinter, with their renders. The owner approved both
+looks on 2026-10-19. **Not built:** the Delver (§5: `DelverBurrows`, the `burrower` locomotor, the grit and
+the shards), so `RockLife.ORDER` names it and the `surfaced` hook has no caller yet. Where the build
+differs from the text above:
+
+- **`grips_bases`** is a species field beside `shy_of_drills` (default false; the Limpet's is true). The
+  crawler rays layer 1 as well as the rock for a species that has it, and drops a hit there that is not a
+  base (`has_meta(&"base")`), so a Limpet walks on a base and never on a ship's hull (§6.1).
+- **A raid needs a non-base anchor within 300 m** of the bed (`RockSite.RAID_NEAR`), as well as a base
+  within 100 m (`RAID`). An awake base is itself an anchor, so "while you are near" could not be read from
+  the anchors alone (§6.3).
+- **The base reach is 4 m** (`Bases.SIP_REACH`, from a module's cell centre). A Limpet creeps to within 4 m
+  (`ctx.extra[&"quantum_reach"]`); its suit reach stays `drain_reach`, 5 m. Stopping at 5 m would never have
+  drained a base (§6.1).
+- **`RockDetail.dir_of(p)`** is the exact inverse of `surface_point`. The rock is stretched, so
+  `normalized()` lands up to 43 m off; the dev spawner and the tests use `dir_of`.
+- **Dev ids** (`"dev:<species>:<n>"`) count on for the session across every `DevCreatures`, and skip any id
+  the ledger knows, dead or hurt, so a reused id never wakes a hurt one. With no deck in view the droid says
+  "needs the deck in view" instead of using the cell under you (§7.2).
+- **The Glinter's `dark_sight` is 0.85**, not 0.5: it sees an unlit suit at 5.1 m, so the 5 m ambush holds
+  without a lamp (§4.3).
+- **A leap ends at the suit.** `ZeroGDrift` landed only on rock, the risk §16 names: a Glinter that reached
+  you flew on for good. A leap now ends on touching the avatar's layer or passing its aimed point, drifts off
+  at `REBOUND` 0.5 m/s and puffs home. The ambush sets fear to at least 0.8 after a bite, and a spring that
+  found nobody raises it by 0.3 so it does not spring again every 4 s. Its eyes show for `leap`, `lunge` and
+  `bite`.
+- **Puffs are per trip.** `ZeroGDrift` refills `puffs_left` on every `enter`, so a Glinter that bites again
+  and again can always come home. The foundation spec's "runs out, drifts away" holds per trip only.
+- **The Limpet's look has ribs.** The first look read as a pebble; the owner asked for distinguishing
+  features. It is now a fluted, scalloped shell with eight lavender crystal ribs from a raised apex, built
+  0.58 m high, the ribs brightening while it sips (§9).
+- **Ids shift** on a rock that has a nest: group numbers carry on in `ORDER`, so the Limpet beds of such a
+  rock are numbered after the nest. The skitters' are pinned by the golden file. `ORDER` must only ever grow
+  at its end, or a new species would renumber the groups after it and bring dead records back.
+- **For the owner:** the sip budget is a bucket (`Avatar.SIP_CAP` 1.2 QE/s, refilled at the same rate), so a
+  suit that has idled can lose about 2.4 QE in a second; and a `limpet_husk` can be made at the quantum
+  machine (cost 40) and wielded like any valued item, which pays 20.

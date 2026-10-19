@@ -474,6 +474,8 @@ A base is part of the rock to the herds (§2, row 17). No new behaviour, need or
 - **A working drill hums:** a `VIBRATION` of strength 0.2, radius 80 m, renewed every few seconds
   while it runs and the base is awake. It is below the startle threshold, so herds don't bolt, but
   their rounds drift away from it over time. A rock with a busy base slowly empties of skitters.
+- **Limpets raid a base** (rock creatures spec §6.3, built 2026-10-19): a bed within 100 m creeps over while you are near and sips the base's store,
+  0.05 QE/s each, within 4 m of a module while the base is awake; a drill does not clear them. Delvers (not built yet) will keep away from a drill, as skitters do.
 - **The `building-an-npc` skill** gains *bases give off vibration* in its reference and checklist,
   in the same branch (CLAUDE.md).
 

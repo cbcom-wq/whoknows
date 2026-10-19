@@ -355,6 +355,18 @@ until then these are the rules they were built to:
   creature once you are looking; two lavender patches (`SpacePalette.CRYSTAL`); pale eyes that catch a lamp (`SpacePalette.SKITTER_EYE`); six short,
   stubby legs -- long legs read as a spider. Under 300 triangles. It fades in with distance by
   the built-in dither, as the rocks do. Silent, as everything outside is (§2.9).
+- **The Limpet is a fluted shell with crystal ribs** (`LimpetLook`, approved by the owner 2026-10-19), 0.3 m
+  across: a low shell of eight scalloped facets in its rock's colour (ash on a veined rock), a raised apex
+  nub, and eight ribs of lavender `SpacePalette.CRYSTAL` running down from the nub to the rim, standing clear
+  of the shell. The first Limpet, a flat cone in its rock's colour, read as a pebble ("too much like just
+  rocks", the owner, 2026-10-19). While it sips the ribs go to the brightest `SHADES` step, with no glow, so
+  the sip shows from above. At most 80 triangles; it fades in by the dither; silent.
+- **The Glinter is a scrap-coloured hoarder** (`GlinterLook`, approved by the owner 2026-10-19), 0.25 m long:
+  a domed shell of big flat facets in three slate shades with two opposite patches of rust, a blunt dark-rust
+  head and six short two-jointed legs, in scrap colours whatever its rock. Shut, it has no eyes; sprung (leap,
+  lunge, bite), two pale `SpacePalette.SKITTER_EYE` facets show on its face. It wears the salvage glint as its
+  lure; its tell is the rhythm, one beat of 1.6 s for a whole nest where real salvage flashes at its own 2-4 s.
+  At most 120 triangles; it fades in by the dither; silent.
 - **Sensor contacts on the HUD are coloured by kind** (`HudPalette.for_kind`): signs of life a
   soft green, salvage the quantum violet, anything else the readout blue.
 - **Legs never stretch.** A foot left behind by a bolting body is drawn at the end of its reach.
