@@ -719,6 +719,7 @@ func _wire_npcs() -> void:
 	var life := RockLifeSource.new(_stream, exterior_npcs.catalog)
 	life.quiet = bases.quiet
 	rock_life = life
+	DevCreatures.restart()
 	var dev := DevCreatures.new()
 	dev_creatures[exterior_npcs] = dev
 	exterior_npcs.sources = [life, dev]
@@ -908,37 +909,34 @@ func spawn_creature(species: StringName) -> String:
 		dev.add(record, site)
 	return "%s x%d on the rock" % [def.display_name, count]
 
-## The droid, on the floor cell you look at (or, failing that, the one you
-## stand on) aboard the ship you are in.
+## The droid, on the deck cell you look at, aboard the ship you are in.
 func _spawn_droid(def: NpcSpecies) -> String:
 	var ship := aboard
 	if _avatar.mode != Avatar.Mode.PLATING or home != ship or ship == null or ship.crew_site == null or ship.crew_site.paths == null:
 		return "needs to be aboard"
 	var site := ship.crew_site
-	var to_local := site.frame().affine_inverse()
-	var cells: Array[Vector3i] = []
 	var cam := _view_camera()
-	if cam != null:
-		var from := cam.global_position
-		var q := PhysicsRayQueryParameters3D.create(from, from - cam.global_basis.z * DEV_REACH, 2)
-		var hit := cam.get_world_3d().direct_space_state.intersect_ray(q)
-		if not hit.is_empty():
-			cells.append(DeckPaths.cell_at(to_local * ((hit["position"] as Vector3) + (hit["normal"] as Vector3) * 0.1)))
-	cells.append(DeckPaths.cell_at(to_local * _avatar.global_position))
-	for cell in cells:
-		if site.paths.has(cell):
-			var dev: DevCreatures = dev_creatures[ship.npc_director]
-			var record := NpcRecord.make(_new_dev_id(dev, def.id), def.id, site.id, DeckPaths.floor_point(cell),
-				randi())
-			dev.add(record, site)
-			return "%s x1 aboard" % def.display_name
-	return "needs to be aboard"
+	if cam == null:
+		return "needs the deck in view"
+	var from := cam.global_position
+	var q := PhysicsRayQueryParameters3D.create(from, from - cam.global_basis.z * DEV_REACH, 2)
+	var hit := cam.get_world_3d().direct_space_state.intersect_ray(q)
+	if hit.is_empty():
+		return "needs the deck in view"
+	var local := site.frame().affine_inverse() * ((hit["position"] as Vector3) + (hit["normal"] as Vector3) * 0.1)
+	var cell := DeckPaths.cell_at(local)
+	if not site.paths.has(cell):
+		return "needs the deck in view"
+	var dev: DevCreatures = dev_creatures[ship.npc_director]
+	var record := NpcRecord.make(_new_dev_id(dev, def.id), def.id, site.id, DeckPaths.floor_point(cell), randi())
+	dev.add(record, site)
+	return "%s x1 aboard" % def.display_name
 
-## The next dev id of `species` that the ledger has not buried: the ledger is
-## saved, a session's counter is not.
+## The next dev id of `species` that the ledger knows nothing of, dead or
+## hurt: the ledger is saved, a session's counter is not.
 func _new_dev_id(dev: DevCreatures, species: StringName) -> StringName:
 	var id := dev.next_id(species)
-	while npc_ledger.is_dead(id):
+	while npc_ledger.is_dead(id) or npc_ledger.health_of(id, -1.0) != -1.0:
 		id = dev.next_id(species)
 	return id
 

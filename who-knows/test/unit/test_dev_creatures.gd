@@ -13,6 +13,7 @@ var _director: NpcDirector
 var _site: UpSite
 
 func before_each():
+	DevCreatures.restart()
 	_dev = DevCreatures.new()
 	_director = NpcDirector.new()
 	autofree(_director)
@@ -43,6 +44,18 @@ func test_ids_count_up_and_never_look_like_a_rocks():
 	assert_eq(_dev.next_id(&"limpet"), &"dev:limpet:1")
 	assert_eq(_dev.next_id(&"limpet"), &"dev:limpet:2")
 	assert_eq(_dev.next_id(&"skitter"), &"dev:skitter:1", "each species counts for itself")
+
+## One ledger holds every director's creatures by id, so two ships' droids
+## must not share one.
+func test_two_sources_never_hand_out_the_same_id():
+	var other := DevCreatures.new()
+	var seen := {}
+	for i in 3:
+		for dev in [_dev, other]:
+			var id: StringName = dev.next_id(&"maintenance_droid")
+			assert_false(seen.has(id), "%s was given twice" % id)
+			seen[id] = true
+	assert_eq(seen.size(), 6)
 
 # --- in the real flight scene -------------------------------------------------
 
@@ -129,11 +142,25 @@ func test_the_droid_needs_a_deck_under_you():
 	await _walk_to_the_rock(30.0)
 	assert_eq(_root.spawn_creature(&"maintenance_droid"), "needs to be aboard")
 
+## Looks straight down from where the eye is: at the deck.
+func _look_at_the_deck() -> void:
+	var cam := _avatar.camera
+	cam.global_transform = Transform3D(Basis.looking_at(Vector3.DOWN, Vector3.FORWARD), cam.global_position)
+
+func _droid_ids(ship: Ship) -> Array[StringName]:
+	var out: Array[StringName] = []
+	for npc: Npc in ship.npc_director.live_npcs():
+		if String(npc.record.id).begins_with("dev:"):
+			out.append(npc.record.id)
+	out.sort()
+	return out
+
 func test_the_droid_is_made_aboard():
 	await _scene()
 	await wait_physics_frames(2)
 	var ship: Ship = _root.aboard
 	var before: int = ship.npc_director.live_npcs().size()
+	_look_at_the_deck()
 	assert_eq(_root.spawn_creature(&"maintenance_droid"), "Maintenance droid x1 aboard")
 	await wait_physics_frames(40)
 	assert_eq(ship.npc_director.live_npcs().size(), before + 1)
@@ -143,6 +170,34 @@ func test_the_droid_is_made_aboard():
 			found = true
 			assert_same(npc.site, ship.crew_site)
 	assert_true(found)
+
+func test_the_droid_needs_the_deck_in_view():
+	await _scene()
+	await wait_physics_frames(2)
+	var ship: Ship = _root.aboard
+	var cam := _avatar.camera
+	cam.global_transform = Transform3D(Basis.IDENTITY, cam.global_position + Vector3(0, 5000, 0))
+	assert_eq(_root.spawn_creature(&"maintenance_droid"), "needs the deck in view")
+	await wait_physics_frames(40)
+	assert_eq(_droid_ids(ship).size(), 0, "nothing was made")
+
+func test_an_id_the_ledger_remembers_is_never_reused():
+	await _scene()
+	await wait_physics_frames(2)
+	var ship: Ship = _root.aboard
+	_root.npc_ledger.mark_dead(&"dev:maintenance_droid:1")
+	_root.npc_ledger.set_health(&"dev:maintenance_droid:2", 5.0, 20.0)
+	_look_at_the_deck()
+	assert_eq(_root.spawn_creature(&"maintenance_droid"), "Maintenance droid x1 aboard")
+	await wait_physics_frames(40)
+	assert_eq(_droid_ids(ship), [&"dev:maintenance_droid:3"] as Array[StringName])
+
+func test_two_ships_never_share_a_dev_id():
+	await _scene()
+	var a: Ship = _root.aboard
+	var dev_a: DevCreatures = _root.dev_creatures[a.npc_director]
+	var dev_ex: DevCreatures = _root.dev_creatures[_root.exterior_npcs]
+	assert_ne(dev_a.next_id(&"maintenance_droid"), dev_ex.next_id(&"maintenance_droid"))
 
 func test_a_skitter_asked_for_aboard_is_not_made():
 	await _scene()

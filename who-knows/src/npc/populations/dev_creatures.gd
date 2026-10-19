@@ -9,8 +9,13 @@ extends RefCounted
 
 ## [record, site, seen_live] per spawn.
 var _entries: Array[Array] = []
-## species -> how many ids it has been given.
-var _counts := {}
+## species -> how many ids it has been given, across every DevCreatures: a
+## ledger holds all directors' creatures by id, so no two may share one.
+static var _counts := {}
+
+## A new session: the ids start again from 1.
+static func restart() -> void:
+	_counts.clear()
 
 ## The `[record, site]` entries still on offer to `director`.
 func records(director: NpcDirector) -> Array:
@@ -33,7 +38,8 @@ func records(director: NpcDirector) -> Array:
 func add(record: NpcRecord, site: NpcSite) -> void:
 	_entries.append([record, site, false])
 
-## The next id of `species`: "dev:<species>:<n>", n from 1 for the session.
+## The next id of `species`: "dev:<species>:<n>", n from 1 for the session
+## and never given twice, whichever DevCreatures asks.
 ## Never the shape of a rock's ("<species>:<site>:<group>:<n>").
 func next_id(species: StringName) -> StringName:
 	var n: int = int(_counts.get(species, 0)) + 1
