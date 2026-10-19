@@ -85,13 +85,13 @@ func _material() -> StandardMaterial3D:
 		m.distance_fade_max_distance = fade.x
 	return m
 
-## What it is doing: springing or biting shows its eyes; anything else (shut,
-## hiding, still) closes them.
+## What it is doing: springing, lunging in flight or biting shows its eyes;
+## anything else (shut, hiding, still) closes them.
 func act(p_action: StringName) -> void:
 	if p_action == action:
 		return
 	action = p_action
-	eyes.visible = p_action == &"leap" or p_action == &"bite"
+	eyes.visible = p_action == &"leap" or p_action == &"lunge" or p_action == &"bite"
 
 ## Puts its glint on its nest's beat (rock creatures spec §4.2). The glint
 ## reads the engine's clock, so every Glinter of one `seed` flashes together

@@ -251,6 +251,8 @@ func test_the_glinters_eyes_show_when_it_leaps_or_bites_and_go_when_it_shuts():
 	assert_false(look.eyes.visible)
 	look.act(&"bite")
 	assert_true(look.eyes.visible)
+	look.act(&"lunge")
+	assert_true(look.eyes.visible, "open while it flies at you")
 	look.act(&"freeze")
 	assert_false(look.eyes.visible, "anything but a spring shuts them")
 
