@@ -720,6 +720,9 @@ func _wire_npcs() -> void:
 	life.quiet = bases.quiet
 	life.base_place = bases.place_of
 	life.base_sip = bases.sip
+	life.drop = _drop
+	life.count_near = func(kind: StringName, at: Vector3, radius: float) -> int:
+		return strays.count_of(kind, at, radius) if strays != null else 0
 	rock_life = life
 	DevCreatures.restart()
 	var dev := DevCreatures.new()
@@ -731,6 +734,24 @@ func _wire_npcs() -> void:
 	npc_debug.name = "NpcDebug"
 	add_child(npc_debug)
 	npc_debug.directors.append(exterior_npcs)
+
+## Drops `count` of the item `kind` as strays round `at`, which is on a surface
+## with the normal `up`: each 0.15 m up it, 0.3 m apart on a ring about `at`, at
+## rest (rock creatures spec §6.4). A kind the catalogue lacks drops nothing.
+func _drop(kind: StringName, at: Vector3, up: Vector3, count: int) -> void:
+	if strays == null or _starter.item_catalog.get_def(kind) == null:
+		return
+	var side := up.cross(Vector3.RIGHT if absf(up.x) < 0.9 else Vector3.BACK).normalized()
+	# On a ring whose neighbours are 0.3 m apart; a lone item is at the centre.
+	var ring := 0.3 / (2.0 * sin(PI / count)) if count > 1 else 0.0
+	for i in count:
+		var item := Item.new()
+		item.setup(_starter.item_catalog.get_def(kind), fmod(i * 0.37, 1.0))
+		item.set_space(true)
+		strays.add_child(item)
+		item.global_position = at + up * 0.15 + side.rotated(up, TAU * i / maxf(count, 1)) * ring
+		item.linear_velocity = Vector3.ZERO
+		strays.adopt(item)
 
 ## The sensors' contacts, and the course the bridge computer sets (NPC
 ## foundation spec §22), show on the HUD three ways, like the velocity marker:

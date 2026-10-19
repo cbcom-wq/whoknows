@@ -60,6 +60,20 @@ func live(id: int) -> Item:
 func count() -> int:
 	return ledger.entries.size()
 
+## How many strays of `kind` lie within `radius` of the engine point `at`,
+## those unloaded as well as those live: the ledger knows where each is, once
+## the live ones have copied in where they have got to. A creature that caps
+## what it hoards asks this (rock creatures spec §5.4, §6.4).
+func count_of(kind: StringName, at: Vector3, radius: float) -> int:
+	sync()
+	var here := universe.to_universe(at)
+	var n := 0
+	for id: int in ledger.entries:
+		var e: Dictionary = ledger.entries[id]
+		if e["kind"] == kind and (e["at"] as UniversePoint).minus(here).length() <= radius:
+			n += 1
+	return n
+
 func _physics_process(delta: float) -> void:
 	tick(delta)
 

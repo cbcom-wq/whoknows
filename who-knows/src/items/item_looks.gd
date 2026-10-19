@@ -18,10 +18,11 @@ const LOOKS: Array[StringName] = [&"plasma_pistol", &"mug", &"canister", &"crate
 	&"toolbox", &"spare_helmet", &"power_cell", &"o2_tank", &"spanner", &"spare_module", &"medkit",
 	&"ration_tin", &"rock_sample", &"hand_lamp", &"flare", &"datapad",
 	&"rock_chunk", &"ice_chunk", &"scrap_plate", &"wire_coil", &"broken_module", &"quantum_shard",
-	&"repair_torch", &"package_hub", &"package_drill", &"package_store", &"hose_nozzle"]
+	&"limpet_husk", &"repair_torch", &"package_hub", &"package_drill", &"package_store", &"hose_nozzle"]
 ## Salvage (quantum energy spec §10.5): the looks that glint outside.
+## The Limpet's husk glints too (rock creatures spec §6.4): it is salvage.
 const GLINTS: Array[StringName] = [&"rock_chunk", &"ice_chunk", &"scrap_plate", &"wire_coil",
-	&"broken_module", &"quantum_shard"]
+	&"broken_module", &"quantum_shard", &"limpet_husk"]
 
 ## Head room a module package leaves above its case for the carrying handle.
 const PACKAGE_HANDLE_ROOM := 0.08
@@ -104,6 +105,8 @@ static func build(kit: InteriorKit, look: StringName, size: Vector3, variety: fl
 			broken_module(kit, size)
 		&"quantum_shard":
 			quantum_shard(kit, size)
+		&"limpet_husk":
+			limpet_husk(kit, size)
 		&"package_hub":
 			package(kit, size, InteriorPalette.MODULE_COLOURS[&"hub"])
 		&"package_drill":
@@ -495,9 +498,38 @@ static func quantum_shard(kit: InteriorKit, size: Vector3) -> void:
 		_facet(kit, k, [high[i], high[j], top], end)
 		_facet(kit, k, [low[j], low[i], bottom], end)
 
-## One flat, glowing facet of a solid round the origin, a triangle or a quad,
-## facing away from it.
-static func _facet(kit: InteriorKit, k: Transform3D, points: Array, colour: Color) -> void:
+## A Limpet's husk (rock creatures spec §6.4): the shell half it leaves, a
+## low faceted dome of eight sides in lavender, shaded by turns, its pale rim
+## round a dim hollow. Solid, not lit. Designed at 0.14 x 0.08 x 0.14.
+static func limpet_husk(kit: InteriorKit, size: Vector3) -> void:
+	var k := _scale(size, Vector3(0.14, 0.08, 0.14))
+	var sides := 8
+	var light := _c(InteriorPalette.LAVENDER)
+	var shade := _c(InteriorPalette.HOLO_DIM)
+	# Rim, shoulder, crown: radius and height of each ring of the dome.
+	var rings := [[0.068, -0.035], [0.058, -0.004], [0.036, 0.024], [0.016, 0.04]]
+	var at: Array = []
+	for r in rings:
+		var ring: Array[Vector3] = []
+		for i in sides:
+			var a := TAU * (i + 0.5) / sides
+			ring.append(Vector3(cos(a) * r[0], r[1], sin(a) * r[0]))
+		at.append(ring)
+	for j in 3:
+		for i in sides:
+			var n := (i + 1) % sides
+			_facet(kit, k, [at[j][i], at[j][n], at[j + 1][n], at[j + 1][i]], light, SOLID)
+	for i in sides:
+		var n := (i + 1) % sides
+		_facet(kit, k, [at[3][i], at[3][n], Vector3(0, 0.04, 0)], light, SOLID)
+	# The open side: a pale rim, and the dim hollow set a little in.
+	kit.annulus(SOLID, k * Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0, -0.035, 0)), 0.056, 0.068,
+		_c(InteriorPalette.TRIM))
+	kit.disc(SOLID, k * Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0, -0.03, 0)), 0.056, shade)
+
+## One flat facet of a solid round the origin, a triangle or a quad, facing
+## away from it: glowing, unless `batch` says otherwise.
+static func _facet(kit: InteriorKit, k: Transform3D, points: Array, colour: Color, batch := GLOW) -> void:
 	var p: Array[Vector3] = []
 	for q: Vector3 in points:
 		p.append(k * q)
@@ -505,9 +537,9 @@ static func _facet(kit: InteriorKit, k: Transform3D, points: Array, colour: Colo
 	if n.dot(p[0] - k.origin) < 0.0:
 		n = -n
 	if p.size() == 4:
-		kit.quad(GLOW, p[0], p[1], p[2], p[3], n, colour)
+		kit.quad(batch, p[0], p[1], p[2], p[3], n, colour)
 	else:
-		kit.tri(GLOW, p[0], p[1], p[2], n, colour)
+		kit.tri(batch, p[0], p[1], p[2], n, colour)
 
 ## A faceted torus lying flat in `k`'s xz plane: `ring` from the centre to the
 ## middle of the tube, `tube` the tube's radius, in `sides` straight pieces of

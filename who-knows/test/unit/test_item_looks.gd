@@ -70,7 +70,9 @@ func test_the_six_salvage_looks_build_in_bare_boxes():
 
 func test_only_salvage_glints():
 	for look in ItemLooks.LOOKS:
-		assert_eq(ItemLooks.has_glint(look), SALVAGE.has(look), "%s" % look)
+		# The Limpet's husk glints too: it is salvage in all but name (rock
+		# creatures spec §6.4).
+		assert_eq(ItemLooks.has_glint(look), SALVAGE.has(look) or look == &"limpet_husk", "%s" % look)
 
 func test_the_shard_is_all_glow():
 	assert_eq(_batches(&"quantum_shard"), ["DressingGlow"], "a crystal on the glow batch, nothing else")
@@ -133,3 +135,17 @@ func test_the_glint_is_seeded():
 	var c := _flashes(ItemLooks.glint(_root, 0.6), 12.0)
 	assert_eq(a, b, "the same seed flashes the same")
 	assert_ne(a, c, "neighbours flash apart")
+
+## Rock creatures spec §6.4: the Limpet's husk is a shell half in lavender that
+## glints outside, like salvage, and is solid, not lit.
+func test_the_limpet_husk_builds_glints_and_stays_in_its_box():
+	var size := Vector3(0.14, 0.08, 0.14)
+	assert_true(ItemLooks.has_look(&"limpet_husk"))
+	assert_true(ItemLooks.has_glint(&"limpet_husk"), "a husk catches the sun")
+	ItemLooks.build(_kit, &"limpet_husk", size, 0.4)
+	var meshes := _kit.commit()
+	assert_eq(meshes.map(func(mi): return String(mi.name)), ["DressingSolid"], "a shell, nothing lit")
+	var box := _bounds(meshes)
+	var half := size * 0.5 + Vector3.ONE * 0.005
+	assert_true(box.position.x >= -half.x and box.position.y >= -half.y and box.position.z >= -half.z
+		and box.end.x <= half.x and box.end.y <= half.y and box.end.z <= half.z, "inside its box (drew %s)" % box)

@@ -280,3 +280,70 @@ func test_a_base_out_of_reach_is_not_sipped():
 	assert_eq(bases.sip(_site.id, near + _out * (Bases.SIP_REACH + 20.0), 1.0), 0.0, "past SIP_REACH of every module")
 	assert_eq(bases.sip(&"rock:elsewhere", near, 1.0), 0.0, "another rock's base is no concern")
 	assert_eq(base.quantum.store.amount, 150)
+
+# --- the pay (rock creatures spec §6.4) --------------------------------------------
+
+## Every husk the stray field holds, near or far.
+func _husks() -> int:
+	return _root.strays.count_of(&"limpet_husk", _at, 100000.0)
+
+## Kills `npc` having sipped `qe`, and returns how many husks lie within a metre
+## of where it died, counting only the new ones.
+func _kill_after_sipping(npc: Npc, qe: float) -> int:
+	npc.sipped = qe
+	var before: int = _root.strays.count_of(&"limpet_husk", npc.global_position, 1.0)
+	npc.take_damage(100.0)
+	assert_true(npc.down, "it is dead")
+	return _root.strays.count_of(&"limpet_husk", npc.global_position, 1.0) - before
+
+func test_a_lean_limpet_leaves_one_husk_and_a_fat_one_up_to_four():
+	await _bed(3, 50.0)
+	var bed := _limpets()
+	# Limpets in a bed lie more than a metre from each other by the time they
+	# have settled; kill them one at a time, far from the others' husks.
+	var all_before := _husks()
+	assert_eq(_kill_after_sipping(bed[0], 0.0), 1, "sipped nothing: one husk")
+	assert_eq(_kill_after_sipping(bed[1], 95.0), 3, "95 QE: 1 + floor(95 / 40) = 3")
+	assert_eq(_kill_after_sipping(bed[2], 400.0), 4, "400 QE: capped at four")
+	assert_eq(_husks() - all_before, 8)
+
+func test_the_husks_are_at_rest_and_worth_20_qe():
+	await _bed(1, 50.0)
+	var npc := _limpets()[0]
+	npc.take_damage(100.0)
+	var found := 0
+	for item: Item in get_tree().get_nodes_in_group(Item.GROUP):
+		if item.definition.id != &"limpet_husk":
+			continue
+		found += 1
+		assert_true(item.in_space, "outside")
+		assert_eq(item.linear_velocity, Vector3.ZERO)
+		assert_eq(item.definition.quantum_value, 20)
+		assert_lt(item.global_position.distance_to(npc.global_position), 1.0, "where it died")
+	assert_eq(found, 1)
+
+func test_a_dead_limpet_stays_dead():
+	await _bed(1, 50.0)
+	var npc := _limpets()[0]
+	var record := npc.record
+	npc.take_damage(100.0)
+	assert_true(_root.npc_ledger.is_dead(record.id), "the ledger has it")
+	assert_null(_root.exterior_npcs.amend(record), "and a review will not offer it again")
+	_root.exterior_npcs.review()
+	await wait_physics_frames(5)
+	for other: Npc in _limpets():
+		assert_ne(other.record.id, record.id, "it is not woken")
+
+## StrayField.count_of counts by kind and distance, an unloaded stray as well
+## as a live one (the Delver's grit cap reads it, spec §5.4).
+func test_count_of_counts_by_kind_and_distance_loaded_or_not():
+	await _scene()
+	var strays: StrayField = _root.strays
+	var here: Vector3 = _ship.exterior.global_position + Vector3(0, 50, 0)
+	_root._drop(&"limpet_husk", here, Vector3.UP, 3)
+	_root._drop(&"limpet_husk", here + Vector3(0, 0, 5000), Vector3.UP, 2)
+	await wait_physics_frames(2)
+	assert_eq(strays.count_of(&"limpet_husk", here, 1.0), 3, "the three at hand, to the metre")
+	assert_eq(strays.count_of(&"limpet_husk", here, 10000.0), 5, "and the two 5 km off, unloaded or not")
+	assert_eq(strays.count_of(&"mug", here, 10000.0), 0, "only of its kind")
+	assert_eq(_root.rock_life.count_near.call(&"limpet_husk", here, 1.0), 3, "and the flight scene hands it on")

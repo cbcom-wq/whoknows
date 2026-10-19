@@ -30,6 +30,10 @@ const BASE_RATE := 0.05
 ## A Limpet creeping to a base stops once within the reach Bases.sip allows of
 ## a module's cell centre, which is less than it can sip a suit from.
 const BASE_REACH := Bases.SIP_REACH
+## A dead Limpet leaves a husk, and another for each this many QE it had
+## sipped, to HUSKS_MAX in all (§6.4).
+const HUSK_PER_QE := 40.0
+const HUSKS_MAX := 4
 
 var detail: AsteroidDetail
 var rock: AsteroidRock
@@ -243,6 +247,14 @@ func sip_source(npc: Npc, dt: float) -> float:
 	if not base_sip.is_valid():
 		return 0.0
 	return float(base_sip.call(id, npc.global_position, BASE_RATE * dt))
+
+## What a death on the rock leaves (rock creatures spec §6.4). A Limpet drops
+## husks: one, and one more for every HUSK_PER_QE it had sipped, up to HUSKS_MAX
+## in all, so killing a fat one gives your QE back.
+func died(npc: Npc) -> void:
+	if npc.species.id == &"limpet" and drop.is_valid():
+		var count := 1 + mini(floori(npc.sipped / HUSK_PER_QE), HUSKS_MAX - 1)
+		drop.call(&"limpet_husk", npc.global_position, npc.global_basis.y, count)
 
 ## Where group `h`'s round has got to at `time`, on the surface.
 func round_point(h: Dictionary, time: float) -> Vector3:

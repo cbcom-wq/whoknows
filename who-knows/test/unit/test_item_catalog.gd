@@ -172,8 +172,8 @@ func test_the_salvage_set_stows_and_sits_in_the_hand_as_authored():
 ## The sixteen aboard, the six salvage kinds, the repair torch (health and
 ## damage spec §8.1), the three module packages (habitat modules spec §4.1)
 ## and the hose's nozzle (quantum energy spec §11.1).
-func test_the_catalogue_has_27_kinds():
-	assert_eq(_cat.ids().size(), 27)
+func test_the_catalogue_has_28_kinds():
+	assert_eq(_cat.ids().size(), 28)
 
 func test_the_hose_nozzle():
 	var n := _cat.get_def(&"hose_nozzle")
@@ -208,3 +208,19 @@ func test_the_hose_nozzle_is_the_only_eva_tool():
 	for id in _cat.ids():
 		assert_eq(_cat.get_def(id).eva_tool, id == &"hose_nozzle",
 			"%s: only the hose nozzle is an EVA tool" % id)
+
+## Rock creatures spec §6.4, read back from its .tres: a shell half a Limpet
+## leaves, worth 20 QE.
+func test_the_limpet_husk():
+	var h := _cat.get_def(&"limpet_husk")
+	assert_not_null(h, "data/items has limpet_husk")
+	if h == null:
+		return
+	assert_eq(h.display_name, "Limpet husk")
+	assert_eq(h.look, &"limpet_husk")
+	assert_eq(h.quantum_value, 20)
+	assert_eq(h.stow_class, &"small")
+	assert_eq(h.grip, ItemDefinition.Grip.WIELD)
+	assert_false(h.eva_tool)
+	assert_null(h.use, "a husk does nothing when used")
+	assert_almost_eq(h.size, Vector3(0.14, 0.08, 0.14), Vector3.ONE * 0.0001)
