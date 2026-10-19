@@ -1,11 +1,12 @@
 class_name RockSite
 extends NpcSite
 
-## A big rock as a place skitters live (docs/superpowers/specs/
-## 2026-09-26-npc-foundation-design.md §4.2, §4.4, §13): its frame is the rock
-## in detail, which is fixed where it is and moved only by the floating origin,
-## so a skitter's rock-local positions never change. There is no gravity: a
-## skitter grips.
+## A big rock as a place its creatures live (docs/superpowers/specs/
+## 2026-09-26-npc-foundation-design.md §4.2, §4.4, §13; rock creatures spec
+## §3.1): its frame is the rock in detail, which is fixed where it is and moved
+## only by the floating origin, so a creature's rock-local positions never
+## change. There is no gravity: a creature grips. One site holds every species
+## on the rock; `fill` does what all share, then hands each species its extras.
 
 ## Starting this far off the surface, metres, it settles onto it.
 const LIFT := 0.05
@@ -15,29 +16,51 @@ const FIND_GROUND := 3.0
 var detail: AsteroidDetail
 var rock: AsteroidRock
 var data: RockDetail
-var herds: Array[Dictionary] = []
+## Every group of every species (RockLife), in index order.
+var groups: Array[Dictionary] = []
 var records: Array[NpcRecord] = []
 ## record id -> the direction its home was made from.
 var dirs := {}
 ## Every crater's floor, worked out once: the exact surface is costly to ask.
 var _floors: Array[Vector3] = []
-## herd index -> [second, point]: where its round has got to, redone once a
+## group index -> [second, point]: where its round has got to, redone once a
 ## second.
 var _rounds := {}
-## The director that keeps its skitters, for their herd mates.
+## record id -> the pose it first woke in: asked every review, and pose_at
+## casts a ray.
+var _poses := {}
+## The director that keeps its creatures, for their group mates.
 var director: NpcDirector
+
+## What the body's reports reach the flight scene through, set by the source
+## that builds this site. All optional: check is_valid(). Points are engine
+## space.
+## (cloud_id, centre, entries): where salvage is placed.
+var place_salvage: Callable
+## (site_id, from) -> a base's place near `from`, or null.
+var base_place: Callable
+## (site_id, point, qe) -> the QE a base gave up.
+var base_sip: Callable
+## (kind, at, up, count): drops a stray item.
+var drop: Callable
+## (kind, at, radius) -> how many of `kind` lie within radius.
+var count_near: Callable
 
 func _init(p_detail: AsteroidDetail, world_seed: int) -> void:
 	detail = p_detail
 	rock = p_detail.rock
 	data = p_detail.data
 	id = RockHerds.site_of(rock)
-	herds = RockHerds.herds(rock, data, world_seed)
-	records = RockHerds.records(rock, data, world_seed, herds)
-	for h in herds:
-		var made := RockHerds.member_dirs(h, data)
-		for m in made.size():
-			dirs[StringName("skitter:%s:%d:%d" % [id, h["index"], m])] = made[m]
+	groups = RockLife.groups(rock, data, world_seed)
+	records = RockLife.records(rock, data, world_seed, groups)
+	# RockLife.records lists each group's members in group order, as
+	# member_dirs does (the skitters come first in both), so walking the groups
+	# pairs every record with its direction.
+	var at := 0
+	for g in groups:
+		for d in RockLife.member_dirs(g, data):
+			dirs[records[at].id] = d
+			at += 1
 	for c in data.craters:
 		_floors.append(data.surface_point(c[0]))
 
@@ -47,16 +70,20 @@ func frame() -> Transform3D:
 func alive() -> bool:
 	return is_instance_valid(detail) and detail.is_inside_tree()
 
-## Where a skitter wakes: its herd's place on its round now, and its own
-## place in the huddle, standing on the surface.
+## Where a creature wakes. A group on a round (a skitter herd) wakes where its
+## round has got to now, in its own place in the huddle; any other wakes at its
+## own spot on the surface, worked out once.
 func start_pose(record: NpcRecord, time: float) -> Transform3D:
-	var h := herd_of(record)
-	var dir: Vector3 = dirs.get(record.id, record.home.normalized())
-	if not h.is_empty():
-		var home: Vector3 = h["home_dir"]
-		var now := RockHerds.round_dir(h, time)
+	var g := group_of(record)
+	var dir: Vector3 = dirs.get(record.id, data.dir_of(record.home))
+	if g.has("round_dirs"):
+		var home: Vector3 = g["home_dir"]
+		var now := RockHerds.round_dir(g, time)
 		dir = (Quaternion(home, now) * dir).normalized() if not home.is_equal_approx(now) else dir
-	return pose_at(dir)
+		return pose_at(dir)
+	if not _poses.has(record.id):
+		_poses[record.id] = pose_at(dir)
+	return _poses[record.id]
 
 ## Standing on the surface along direction `dir`, up its normal. The solid
 ## rock is a mesh of the exact surface, a little inside it on the bulges and
@@ -81,14 +108,19 @@ func pose_at(dir: Vector3) -> Transform3D:
 func tint() -> Color:
 	return rock.colour
 
-func herd_of(record: NpcRecord) -> Dictionary:
-	for h in herds:
-		if int(h["index"]) == record.herd:
-			return h
+## The group `record` belongs to, or {} if it has none.
+func group_of(record: NpcRecord) -> Dictionary:
+	for g in groups:
+		if int(g["index"]) == record.herd:
+			return g
 	return {}
 
-## What skitter behaviours may ask of the rock: where its herd mates are, where
-## its herd's round has got to (where it grazes), and the nearest shelter.
+func group_seed(record: NpcRecord) -> int:
+	var g := group_of(record)
+	return int(g["seed"]) if not g.is_empty() else record.seed
+
+## What behaviours may ask of the rock: where the group's mates are and the
+## nearest shelter (every species), then each species' own extras.
 func fill(ctx: NpcContext, npc: Npc) -> void:
 	var to_local := frame().affine_inverse()
 	if director != null:
@@ -96,11 +128,18 @@ func fill(ctx: NpcContext, npc: Npc) -> void:
 			var mate := other as Npc
 			if mate != null and mate != npc and mate.site == self:
 				ctx.mates.append(to_local * mate.global_position)
-	var h := herd_of(npc.record)
+	ctx.places[&"shelter"] = shelter(ctx.position)
+	match npc.species.id:
+		&"skitter":
+			_fill_skitter(ctx, npc)
+
+## A skitter: where its herd's round has got to (where it grazes), company from
+## its huddle, and fear easing while nothing has shaken the rock.
+func _fill_skitter(ctx: NpcContext, npc: Npc) -> void:
+	var h := group_of(npc.record)
 	if not h.is_empty():
 		ctx.places[&"round"] = round_point(h, ctx.time)
 		ctx.extra[&"graze"] = ctx.places[&"round"]
-	ctx.places[&"shelter"] = shelter(ctx.position)
 	for m in ctx.mates:
 		if m.distance_to(ctx.position) < 3.0:
 			ctx.ease(&"company", 0.2)
@@ -110,7 +149,7 @@ func fill(ctx: NpcContext, npc: Npc) -> void:
 	if not frightened:
 		ctx.ease(&"fear", 0.1)
 
-## Where herd `h`'s round has got to at `time`, on the surface.
+## Where group `h`'s round has got to at `time`, on the surface.
 func round_point(h: Dictionary, time: float) -> Vector3:
 	var second := int(time)
 	var cached: Array = _rounds.get(h["index"], [])

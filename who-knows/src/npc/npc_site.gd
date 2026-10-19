@@ -33,3 +33,23 @@ func tint() -> Color:
 ## Fills in what behaviours may ask of this place: mates, shelter, spots...
 func fill(_ctx: NpcContext, _npc: Npc) -> void:
 	pass
+
+## Called by the body when `npc` dies for good (not when it is only knocked
+## out), after the ledger is marked. A site with something to do on a death
+## (a drop, a count) overrides it.
+func died(_npc: Npc) -> void:
+	pass
+
+## Called by the body when `npc` comes up out of the ground.
+func surfaced(_npc: Npc) -> void:
+	pass
+
+## QE/s the body may drain from this site's own store for `npc`, over `dt`
+## seconds; 0 when the place has none.
+func sip_source(_npc: Npc, _dt: float) -> float:
+	return 0.0
+
+## The seed of the group `record` belongs to; a site with no groups gives the
+## record's own.
+func group_seed(record: NpcRecord) -> int:
+	return record.seed

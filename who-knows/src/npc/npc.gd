@@ -354,6 +354,8 @@ func _go_down() -> void:
 		down_left = CORPSE_FOR
 		if director != null and director.get(&"ledger") != null:
 			director.ledger.mark_dead(record.id)
+		if site != null:
+			site.died(self)
 		if look != null and look.has_method(&"act"):
 			look.call(&"act", &"dead")
 	_pose_look()

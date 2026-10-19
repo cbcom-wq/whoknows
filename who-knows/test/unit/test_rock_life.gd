@@ -92,3 +92,31 @@ func test_clear_of_measures_surface_metres():
 	var far := d.surface_point(here).distance_to(d.surface_point(-here))
 	assert_true(RockLife.clear_of(d, here, [-here] as Array[Vector3], far - 1.0))
 	assert_false(RockLife.clear_of(d, here, [-here] as Array[Vector3], far + 1.0))
+
+func test_a_site_keeps_every_group_and_each_records_direction():
+	for i in _rocks.size():
+		var site := RockSite.new(_details_as_detail(i), 1337)
+		var all := RockLife.groups(_rocks[i], _details[i], 1337)
+		assert_eq(site.groups.size(), all.size())
+		for j in all.size():
+			assert_eq(int(site.groups[j]["index"]), int(all[j]["index"]))
+			assert_eq(site.groups[j]["species"], all[j]["species"])
+		for r in site.records:
+			assert_true(site.dirs.has(r.id), "%s has a direction" % r.id)
+			assert_true(site.data.surface_point(site.dirs[r.id]).is_equal_approx(r.home), "%s's direction gives its home" % r.id)
+
+## RockDetail.dir_of undoes surface_point: the rock is stretched, so
+## `p.normalized()` would be wrong by tens of metres.
+func test_dir_of_is_the_inverse_of_surface_point():
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5
+	for data in _details:
+		for k in 60:
+			var d := Vector3(rng.randf_range(-1, 1), rng.randf_range(-1, 1), rng.randf_range(-1, 1)).normalized()
+			assert_lt(data.dir_of(data.surface_point(d)).distance_to(d), 1e-4)
+
+func _details_as_detail(i: int) -> AsteroidDetail:
+	var detail: AsteroidDetail = autofree(AsteroidDetail.new())
+	detail.rock = _rocks[i]
+	detail.data = _details[i]
+	return detail
