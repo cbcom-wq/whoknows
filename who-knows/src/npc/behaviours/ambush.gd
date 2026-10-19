@@ -7,14 +7,17 @@ extends Behaviour
 ## (`&"bite"`: the body does it, Npc.bite), then raises its own fear to
 ## AFTER_FEAR, which sends it to ground (`hide`) until the fear fades and the
 ## nest re-arms. A reflex: it pre-empts the quiet `lure`. If the leap misses it
-## chases along the surface, and gives up after GIVE_UP.
+## chases along the surface, and gives up after GIVE_UP (a little afraid, so a
+## Glinter that missed does not spring again every few seconds).
 
 ## You are this near, metres, and it springs.
 const AMBUSH := 5.0
 ## Afraid at or over this, it does not spring.
 const CALM := 0.4
-## Its fear once it has bitten.
+## Its fear, at least, once it has bitten; and what a spring that found nobody to
+## bite adds to it.
 const AFTER_FEAR := 0.8
+const GAVE_UP_FEAR := 0.3
 ## Seconds before it gives up a spring that has not landed a bite.
 const GIVE_UP := 4.0
 ## Added to the species' bite reach when deciding to bite: the body's own
@@ -23,6 +26,7 @@ const SLACK := 0.3
 
 var _sprung := false
 var _bitten := false
+var _gave_up := false
 
 func _init() -> void:
 	reflex = true
@@ -40,6 +44,7 @@ func start(ctx: NpcContext) -> void:
 	super(ctx)
 	_sprung = false
 	_bitten = false
+	_gave_up = false
 
 func think(ctx: NpcContext) -> Intent:
 	var at: Variant = player_at(ctx)
@@ -53,9 +58,17 @@ func think(ctx: NpcContext) -> Intent:
 		return i
 	if ctx.position.distance_to(you) <= ctx.species.bite_reach + SLACK:
 		_bitten = true
-		ctx.raise(&"fear", AFTER_FEAR)
+		if ctx.needs.has(&"fear"):
+			ctx.needs[&"fear"] = maxf(ctx.need(&"fear"), AFTER_FEAR)
 		return Intent.go(you, 1.0, &"bite")
 	return Intent.go(you, 1.0, &"lunge")
 
 func done(ctx: NpcContext) -> bool:
-	return _bitten or running(ctx) >= GIVE_UP
+	if _bitten:
+		return true
+	if running(ctx) < GIVE_UP:
+		return false
+	if not _gave_up:
+		_gave_up = true
+		ctx.raise(&"fear", GAVE_UP_FEAR)
+	return true

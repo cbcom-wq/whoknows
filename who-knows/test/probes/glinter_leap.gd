@@ -28,6 +28,9 @@ const DRIFT := 0.5
 const HEIGHT := 4.0
 ## A try's length once the suit is placed, seconds, and the calm between tries.
 const TRY_FOR := 3.0
+## Part A also waits this long after each bite and counts the Glinters back on the rock.
+const RETURN_AFTER := 15.0
+const RETURN_NEEDED := 15
 const SETTLE := 2.0
 
 class Lamp extends SpotLight3D:
@@ -48,7 +51,10 @@ var _site: RockSite
 var _lamp: Lamp
 var _rng := RandomNumberGenerator.new()
 var _bites := 0
+var _bumps := 0
 var _trace := false
+var _trace_hurt := false
+var _try_start := 0
 
 func _initialize() -> void:
 	_scene = load("res://scenes/flight_test.tscn").instantiate()
@@ -57,6 +63,22 @@ func _initialize() -> void:
 	root.add_child(_scene)
 	_run.call_deferred()
 
+## Every hurt. A Glinter's bite is 8 hp while one of them is asking for a bite;
+## anything else is the suit striking a creature (Avatar.EVA_HURT_FROM) and is
+## counted apart.
+func _on_hurt(amount: float, from: Vector3) -> void:
+	var bite := (_director.catalog.get_def(&"glinter") as NpcSpecies).bite_damage
+	var asked := false
+	for npc: Npc in _director.live.values():
+		if npc.species.id == &"glinter" and npc.intent.action == &"bite":
+			asked = true
+	if asked and is_equal_approx(amount, bite):
+		_bites += 1
+	else:
+		_bumps += 1
+	if _trace_hurt:
+		print("  hurt %.1f at f%d (%s)" % [amount, Engine.get_physics_frames() - _try_start, "a bite" if asked and is_equal_approx(amount, bite) else "a bump"])
+
 func _physics(n: int) -> void:
 	for i in n:
 		await physics_frame
@@ -64,6 +86,7 @@ func _physics(n: int) -> void:
 func _run() -> void:
 	_rng.seed = 20261019
 	_trace = OS.get_cmdline_user_args().has("--trace")
+	_trace_hurt = OS.get_cmdline_user_args().has("--trace-hurt")
 	await _physics(5)
 	var ship: Ship = _scene.get_node("Ship")
 	var stream: AsteroidStream = _scene.get_node("AsteroidStream")
@@ -83,7 +106,7 @@ func _run() -> void:
 	# The hull waits well off, out of the way but near enough for the Glinters to wake.
 	ship.exterior.global_position = spot + n * 60.0 + side * 40.0
 	_avatar.enter_suit(_scene.get_node("Outside"), Transform3D(Basis.IDENTITY, spot + n * 30.0), Vector3.ZERO, ship.exterior)
-	_avatar.hurt.connect(func(_amount: float, _from: Vector3) -> void: _bites += 1)
+	_avatar.hurt.connect(_on_hurt)
 	_lamp = Lamp.new()
 	_lamp.light_color = InteriorPalette.LIGHT_WARM
 	_lamp.spot_range = 10.0
@@ -93,27 +116,34 @@ func _run() -> void:
 	_lamp.add_to_group(StimulusBus.LIGHTS)
 	print("rock radius %.0f m; glinter bite reach %.2f m" % [detail.rock.radius, _director.catalog.get_def(&"glinter").bite_reach])
 
-	var a := await _part("A single Glinter, drifting suit looking down", _apart(home, 0), 1, TRIES, false, true)
-	if OS.get_cmdline_user_args().has("--only-a"):
-		print("A: %d of %d tries sprang, %d ended within reach, %d bit" % [a[0], TRIES, a[1], a[2]])
+	if OS.get_cmdline_user_args().has("--only-b"):
+		var only: Array = await _part("B single Glinter, drifting suit at a random attitude", _apart(home, 1), 1, TRIES, true, true, false)
+		print("B: %d of %d tries sprang, %d ended within reach, %d bit" % [only[0], TRIES, only[1], only[2]])
 		quit()
 		return
-	var b := await _part("B single Glinter, drifting suit at a random attitude", _apart(home, 1), 1, TRIES, true, true)
-	var c := await _part("C group of four, drifting suit looking down", _apart(home, 2), 4, GROUP_TRIES, false, true)
-	var h := await _part("H single Glinter, suit holding station (assist on) looking down", _apart(home, 3), 1, TRIES, false, false)
+	var a := await _part("A single Glinter, drifting suit looking down", _apart(home, 0), 1, TRIES, false, true, true)
+	if OS.get_cmdline_user_args().has("--only-a"):
+		print("A: %d of %d tries sprang, %d ended within reach, %d bit, %d bumps, %d back on the rock" % [a[0], TRIES, a[1], a[2], a[4], a[3]])
+		quit()
+		return
+	var b := await _part("B single Glinter, drifting suit at a random attitude", _apart(home, 1), 1, TRIES, true, true, false)
+	var c := await _part("C group of four, drifting suit looking down", _apart(home, 2), 4, GROUP_TRIES, false, true, false)
+	var h := await _part("H single Glinter, suit holding station (assist on) looking down", _apart(home, 3), 1, TRIES, false, false, false)
 	await _unlit(_apart(home, 4))
 	print("")
-	print("A: %d of %d tries sprang, %d ended within reach, %d bit" % [a[0], TRIES, a[1], a[2]])
-	print("B: %d of %d tries sprang, %d ended within reach, %d bit" % [b[0], TRIES, b[1], b[2]])
-	print("C: %d leaps in %d tries, %d ended within reach, %d bit" % [c[0], GROUP_TRIES, c[1], c[2]])
-	print("H: %d of %d tries sprang, %d ended within reach, %d bit" % [h[0], TRIES, h[1], h[2]])
+	print("A: %d of %d tries sprang, %d ended within reach, %d bit (ambush bites only), %d bumps, %d back on the rock" % [a[0], TRIES, a[1], a[2], a[4], a[3]])
+	print("B: %d of %d tries sprang, %d ended within reach, %d bit, %d bumps" % [b[0], TRIES, b[1], b[2], b[4]])
+	print("C: %d leaps in %d tries, %d ended within reach, %d bit, %d bumps" % [c[0], GROUP_TRIES, c[1], c[2], c[4]])
+	print("H: %d of %d tries sprang, %d ended within reach, %d bit, %d bumps" % [h[0], TRIES, h[1], h[2], h[4]])
 	var verdict := "PASS" if a[2] >= PASS else "FAIL (fall back: lunge along the surface, ambush 3 m)"
 	print("VERDICT (part A, at least %d of %d leap and bite): %s" % [PASS, TRIES, verdict])
+	print("VERDICT (part A, at least %d of %d back on the rock %d s after the bite): %s, %d" % [RETURN_NEEDED, TRIES, int(RETURN_AFTER),
+		"PASS" if a[3] >= RETURN_NEEDED else "FAIL", a[3]])
 	quit()
 
 ## Spawns `count` Glinters where the hull was, and runs `tries` tries with them.
 ## Returns [leaps, within reach, bites].
-func _part(label: String, dir: Vector3, count: int, tries: int, tumble: bool, drift: bool) -> Array:
+func _part(label: String, dir: Vector3, count: int, tries: int, tumble: bool, drift: bool, watch: bool) -> Array:
 	print("")
 	print("--- %s ---" % label)
 	var dev: DevCreatures = _scene.dev_creatures[_director]
@@ -128,30 +158,35 @@ func _part(label: String, dir: Vector3, count: int, tries: int, tumble: bool, dr
 		var npc: Npc = _director.live.get(id)
 		if npc == null:
 			print("a Glinter is not live: %s" % id)
-			return [0, 0, 0]
+			return [0, 0, 0, 0, 0]
 		homes[id] = npc.global_transform
 	var leaps := 0
 	var reached := 0
 	var bit := 0
+	var home_again := 0
+	var bumps := 0
 	for t in tries:
-		var r := await _try(ids, homes, tumble, drift, t)
+		var r := await _try(ids, homes, tumble, drift, watch, t)
 		leaps += r[0]
 		reached += r[1]
 		bit += r[2]
+		home_again += r[3]
+		bumps += r[4]
 	# Out of the way: they are gone from the live set when the part ends.
 	for id in ids:
 		var npc: Npc = _director.live.get(id)
 		if npc != null:
 			npc.take_damage(1000.0)
 	await _physics(30)
-	return [leaps, reached, bit]
+	return [leaps, reached, bit, home_again, bumps]
 
 ## Part `k`'s ground: 12 m round the rock from the last, so none lies near another.
 func _apart(home: Vector3, k: int) -> Vector3:
 	return RockHerds.tilted(home, 12.0 * float(k) / maxf(_site.data.surface_point(home).length(), 1.0), 0.7)
 
-## One try. Returns [leaps, leaps ending within bite reach, bites landed].
-func _try(ids: Array[StringName], homes: Dictionary, tumble: bool, drift: bool, t: int) -> Array:
+## One try. Returns [leaps, leaps ending within bite reach, bites landed, Glinters back on the rock
+## RETURN_AFTER s after their bite (when `watch`), suit strikes by a creature].
+func _try(ids: Array[StringName], homes: Dictionary, tumble: bool, drift: bool, watch: bool, t: int) -> Array:
 	# Calm and home, the suit far off.
 	_avatar.global_position = (homes[ids[0]] as Transform3D).origin + (homes[ids[0]] as Transform3D).basis.y * 40.0
 	_avatar.velocity = Vector3.ZERO
@@ -188,9 +223,13 @@ func _try(ids: Array[StringName], homes: Dictionary, tumble: bool, drift: bool, 
 	_avatar.suit_assist = not drift
 	_avatar.suit_cell.charge = 100.0
 	_bites = 0
+	_bumps = 0
+	_try_start = Engine.get_physics_frames()
 	var sprang := {}
 	var nearest := {}
-	for f in int(TRY_FOR * 60.0):
+	var bit_at := {}
+	var home_again := 0
+	for f in int((RETURN_AFTER + 2.0 if watch else TRY_FOR) * 60.0):
 		await physics_frame
 		if _trace and t == 0 and f % 6 == 0 and f < 120:
 			var g: Npc = _director.live.get(ids[0])
@@ -205,6 +244,10 @@ func _try(ids: Array[StringName], homes: Dictionary, tumble: bool, drift: bool, 
 			var looking := npc.look as GlinterLook
 			if looking != null and (looking.action == &"leap" or looking.action == &"bite") and not sprang.has(id):
 				sprang[id] = f
+			if npc.intent.action == &"bite" and not bit_at.has(id):
+				bit_at[id] = f
+			if watch and bit_at.has(id) and f == int(bit_at[id]) + int(RETURN_AFTER * 60.0) and npc.active is SurfaceCrawler:
+				home_again += 1
 			if sprang.has(id):
 				var middle := npc.global_position + npc.global_basis.y * npc.species.height * 0.5
 				nearest[id] = minf(float(nearest.get(id, INF)), middle.distance_to(_avatar.global_position))
@@ -215,9 +258,12 @@ func _try(ids: Array[StringName], homes: Dictionary, tumble: bool, drift: bool, 
 	var line := "try %2d: %d sprang" % [t + 1, sprang.size()]
 	for id in sprang:
 		line += ", glinter %s at %.2f s came within %.2f m" % [String(id).get_slice(":", 2), float(sprang[id]) / 60.0, float(nearest[id])]
-	line += "; bites landed %d; suit drifted %.2f m/s" % [_bites, _avatar.velocity.length()]
+	line += "; bites landed %d, suit struck by a creature %d" % [_bites, _bumps]
+	if watch:
+		line += "; back on the rock %.0f s after its bite: %s" % [RETURN_AFTER, "yes" if home_again > 0 else "NO"]
+	line += "; suit drifting %.2f m/s" % _avatar.velocity.length()
 	print(line)
-	return [sprang.size(), reached, _bites]
+	return [sprang.size(), reached, _bites, home_again, _bumps]
 
 ## An unlit suit, upright, drifting toward a Glinter at 0.5 m/s from 8 m along
 ## the ground, its feet UNLIT_UP m up: how near when it springs (it sees the

@@ -229,14 +229,8 @@ func _crowded(npc: Npc) -> bool:
 func aim_leap(npc: Npc, toward: Vector3) -> Variant:
 	var o := npc.global_position + npc.global_basis.y * npc.species.height * 0.5
 	var dir := (toward - o).normalized()
-	var query := PhysicsRayQueryParameters3D.create(o + dir * 0.6, o + dir * LEAP_REACH, _mask | AVATAR_LAYER,
-		[npc.get_rid()])
-	var hit := npc.get_world_3d().direct_space_state.intersect_ray(query)
-	if not hit.is_empty() and _mask != AsteroidBody.LAYER:
-		# As _ray: a hull on the base-and-hull layer is no place to land.
-		var body := hit["collider"] as CollisionObject3D
-		if body != null and body.collision_layer & BASE_LAYER != 0 and not body.has_meta(&"base"):
-			return null
+	var hit := _ray(npc.get_world_3d().direct_space_state, o + dir * 0.6, o + dir * LEAP_REACH, [npc.get_rid()],
+		_mask | AVATAR_LAYER)
 	return hit["position"] if not hit.is_empty() else null
 
 func handover(npc: Npc) -> StringName:
@@ -261,10 +255,12 @@ func shoved(npc: Npc, dv: Vector3) -> void:
 
 ## The ground along a ray, or {}. A hit on the base-and-hull layer that is not
 ## a base (a ship's hull) is no ground: a Limpet never touches a ship.
-func _ray(space: PhysicsDirectSpaceState3D, from: Vector3, to: Vector3, exclude: Array[RID]) -> Dictionary:
-	var q := PhysicsRayQueryParameters3D.create(from, to, _mask, exclude)
+## `mask` is what it can hit: its own unless a leap aims at more.
+func _ray(space: PhysicsDirectSpaceState3D, from: Vector3, to: Vector3, exclude: Array[RID], mask := -1) -> Dictionary:
+	var hits := _mask if mask < 0 else mask
+	var q := PhysicsRayQueryParameters3D.create(from, to, hits, exclude)
 	var hit := space.intersect_ray(q)
-	if not hit.is_empty() and _mask != AsteroidBody.LAYER:
+	if not hit.is_empty() and hits & BASE_LAYER != 0:
 		var body := hit["collider"] as CollisionObject3D
 		if body != null and body.collision_layer & BASE_LAYER != 0 and not body.has_meta(&"base"):
 			return {}

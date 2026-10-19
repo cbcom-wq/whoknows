@@ -202,7 +202,7 @@ herd is gone the next time the rock comes into detail. No behaviour changes.
   `mates` (site-local) is set on it for separation. A leap: intent action `&"leap"` with
   `leap_to`; refused if the ray finds nothing within reach. The leap's ray hits rock and the
   avatar (`AVATAR_LAYER` 4: a Glinter's ambush), so a leap can be aimed at a spacewalker.
-- **`ZeroGDrift`:** `LEAP_SPEED` 6, `TUMBLE` 0.6 s, `PUFF` 0.8 m/s at most once a second,
+- **`ZeroGDrift`:** `LEAP_SPEED` 6, `REBOUND` 0.5 m/s (a leap meeting the suit or passing its aim ends, `leaping()`), `TUMBLE` 0.6 s, `PUFF` 0.8 m/s at most once a second,
   `PUFFS` 6, `LOOK` 60 m, `LANDED` 0.6 m.
 - **Bumps:** `Avatar.bump` shares momentum with an `Npc` by the rocks' rule
   (`SUIT_MASS × m / (SUIT_MASS + m)`, bounce 0.2) through `npc.shove`.

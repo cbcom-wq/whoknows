@@ -132,3 +132,54 @@ func test_ambush_outranks_lure_and_hide_takes_over_after():
 	c.needs[&"fear"] = 0.9
 	assert_eq(amb.score(c), 0.0)
 	assert_gt(hide.score(c), lure.score(c), "afraid after the bite: it goes to the crater floor")
+
+func test_a_bite_makes_it_exactly_as_afraid_as_the_spec_says():
+	var b := NpcBehaviours.make(&"ambush")
+	var c := _ctx()
+	c.needs[&"fear"] = 0.1
+	c.player = Vector3(4.0, 0, 0)
+	b.start(c)
+	b.think(c)
+	c.player = Vector3(0.5, 0, 0)
+	b.think(c)
+	assert_almost_eq(float(c.needs[&"fear"]), 0.8, 0.0001, "0.1 is lifted to 0.8, not to 0.9")
+	b = NpcBehaviours.make(&"ambush")
+	c = _ctx()
+	c.needs[&"fear"] = 0.35
+	c.player = Vector3(4.0, 0, 0)
+	b.start(c)
+	b.think(c)
+	c.player = Vector3(0.5, 0, 0)
+	b.think(c)
+	assert_almost_eq(float(c.needs[&"fear"]), 0.8, 0.0001, "and 0.35 likewise")
+	b = NpcBehaviours.make(&"ambush")
+	c = _ctx()
+	c.needs[&"fear"] = 0.95
+	b.start(c)
+	c.player = Vector3(0.5, 0, 0)
+	b.think(c)
+	b.think(c)
+	assert_almost_eq(float(c.needs[&"fear"]), 0.95, 0.0001, "never lowered")
+
+func test_giving_up_without_a_bite_leaves_it_a_little_afraid_once():
+	var b := NpcBehaviours.make(&"ambush")
+	var c := _ctx()
+	c.player = Vector3(3, 0, 0)
+	b.start(c)
+	b.think(c)
+	assert_false(b.done(c))
+	assert_eq(float(c.needs[&"fear"]), 0.0, "nothing yet")
+	c.time += 4.1
+	assert_true(b.done(c))
+	assert_almost_eq(float(c.needs[&"fear"]), 0.3, 0.0001, "0.3 for a spring that found nobody")
+	assert_true(b.done(c))
+	assert_true(b.done(c))
+	assert_almost_eq(float(c.needs[&"fear"]), 0.3, 0.0001, "asked again and again, it counts once")
+	c.needs[&"fear"] = 0.3
+	assert_gte(b.score(c), b.threshold, "0.3 is still calm: it springs once more")
+	b.start(c)
+	b.think(c)
+	c.time += 4.1
+	b.done(c)
+	assert_almost_eq(float(c.needs[&"fear"]), 0.6, 0.0001, "the second miss gives 0.6")
+	assert_eq(b.score(c), 0.0, "and then it keeps still instead of springing every 4 s")

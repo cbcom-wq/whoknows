@@ -173,3 +173,22 @@ func test_memory_halves_and_forgets():
 	assert_eq(m.percepts[0].where, Vector3.ONE)
 	m.forget_faded(20.0)
 	assert_eq(m.percepts.size(), 0)
+
+func test_a_glinter_sees_an_unlit_suit_at_4_9_m_and_springs():
+	_make(false)
+	var glinter := NpcCatalog.load_from_dir("res://data/npcs").get_def(&"glinter")
+	_species.sight_range = glinter.sight_range
+	_species.dark_sight = glinter.dark_sight
+	_species.near_sense = glinter.near_sense
+	_species.sight_cone_deg = glinter.sight_cone_deg
+	_player.global_position = Vector3(0, 0, -4.9)
+	await wait_physics_frames(2)
+	var ctx := _sense()
+	assert_not_null(ctx.player, "no lamp, 4.9 m: seen (5.1 m in the dark)")
+	_player.global_position = Vector3(0, 0, -5.3)
+	assert_null(_sense(1.2).player, "5.3 m is not")
+	var ambush := NpcBehaviours.make(&"ambush")
+	ctx.species = glinter
+	ctx.needs = {&"fear": 0.0}
+	ctx.position = Vector3.ZERO
+	assert_gte(ambush.score(ctx), ambush.threshold, "and it springs on what it saw")

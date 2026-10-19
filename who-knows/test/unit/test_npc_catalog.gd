@@ -145,7 +145,7 @@ func test_the_glinter_reads_back_as_authored():
 	assert_eq(g.look, &"glinter")
 	assert_almost_eq(g.sight_range, 6.0, 0.0001)
 	assert_almost_eq(g.sight_cone_deg, 360.0, 0.0001)
-	assert_almost_eq(g.dark_sight, 0.5, 0.0001)
+	assert_almost_eq(g.dark_sight, 0.85, 0.0001)
 	assert_almost_eq(g.near_sense, 1.5, 0.0001)
 	assert_almost_eq(g.feels_vibration, 1.0, 0.0001)
 	assert_almost_eq(float(g.needs[&"fear"]), 0.0, 0.0001)

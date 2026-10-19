@@ -246,10 +246,10 @@ func test_a_species_that_does_not_grip_bases_does_not_see_a_base_wall_as_ground(
 	await wait_physics_frames(int(SurfaceCrawler.LOST_AFTER * 60.0) + 10)
 	assert_true(_npc.active is ZeroGDrift, "a skitter's rays see only rock")
 
-## A suit: what the avatar is to a ray, a capsule on layer 4 standing 0.9 m
-## above its origin, which is at its feet, as the avatar's is.
-func _suit(at: Vector3) -> StaticBody3D:
-	var b := StaticBody3D.new()
+## A suit: what the avatar is to a ray and to a body, a character body with a
+## capsule on layer 4 standing 0.9 m above its origin, which is at its feet.
+func _suit(at: Vector3) -> CharacterBody3D:
+	var b := CharacterBody3D.new()
 	b.collision_layer = SurfaceCrawler.AVATAR_LAYER
 	b.collision_mask = 0
 	var cs := CollisionShape3D.new()
@@ -276,4 +276,41 @@ func test_a_leap_aims_at_a_spacewalker_over_open_space():
 	assert_not_null(landing, "the suit is something to land on")
 	if landing != null:
 		assert_lt((landing as Vector3).distance_to(suit_at), 0.6, "on the suit, at %s" % landing)
+	suit.free()
+
+## A leap that meets the suit ends there: the body rebounds, steadies and puffs
+## its way back to the rock instead of flying on for good.
+func test_a_leap_that_meets_a_suit_ends_and_it_comes_home_to_the_rock():
+	# A Glinter's size: a taller body's landing ray still reaches the ground it has just left.
+	_species.size = 0.25
+	_species.height = 0.18
+	_species.width = 0.2
+	_species.top_speed = 3.0
+	_box(Vector3(10, 10, 10), Vector3.ZERO)
+	_spawn(Transform3D(Basis.IDENTITY, Vector3(0, 5.05, 0)))
+	var suit_at := Vector3(0.3, 9.0, 0.1)
+	var suit := _suit(suit_at)
+	await wait_physics_frames(5)
+	var intent := Intent.idle(&"leap")
+	intent.leap_to = suit_at
+	_npc.intent = intent
+	var left := false
+	var met := false
+	var back_at := -1.0
+	for i in 60 * 15:
+		await wait_physics_frames(1)
+		if _npc.active is ZeroGDrift:
+			left = true
+			if not (_npc.active as ZeroGDrift).leaping():
+				met = true
+		if left and met and _npc.active is SurfaceCrawler:
+			back_at = float(i) / 60.0
+			break
+	assert_true(left, "it sprang")
+	assert_true(met, "the leap ended in the air")
+	assert_gt(back_at, 0.0, "and it was back on the rock within 15 s")
+	assert_lt(_npc.global_position.distance_to(suit_at), 20.0, "not gone off into space")
+	_npc.intent = Intent.idle()
+	_npc.switch_to(&"zero_g_drift")
+	assert_eq((_npc.locomotors[&"zero_g_drift"] as ZeroGDrift).puffs_left, ZeroGDrift.PUFFS, "a new trip off the rock has all its puffs")
 	suit.free()
