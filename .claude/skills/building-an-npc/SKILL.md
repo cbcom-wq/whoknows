@@ -226,6 +226,7 @@ Do these in order. Each names the check that proves it.
 | "Would I notice it?" answered from the numbers | The first Limpet (a flat cone in its rock's colour) read as a pebble: specks at 40 m, gone at 100 m. The owner: "too much like just rocks" | Render it from a spacewalk at 40-100 m before showing it; give it a shape no stone has (a fluted shell, eight crystal ribs from a raised apex) and a state that shows (the ribs go to the brightest `SHADES` step while sipping); `limpet_render.gd` |
 | `normalized()` for a point's direction on a stretched rock | A dev spawn and a test aimed at `home.normalized()` landed up to 43 m from the surface point the home was made from | `RockDetail.dir_of(p)`, the exact inverse of `surface_point`; and a record's `RockSite.dirs` entry when it has one |
 | Taking `stream.details.live.values()[0]` as the start rock | Once rocks moved into belts (system skeleton spec §6), a neighbour was in detail too and had no herds | `stream.details.nearest(ship.exterior.global_position)`; and count only its own site's contacts |
+| A hand-over that reads the intent that caused it | A burrow ask is still the intent after the burrower hands back (the mind thinks 5 times a second): the crawler sent it straight down again; and off a rock crawler and burrower would swap every tick | The burrower clears a spent `&"burrow"` intent as it hands back; `SurfaceCrawler.burrow_asked` needs a `RockSite`, the locomotor and a `move_to`; `test_burrower.gd` |
 
 ## Not built yet (plan for it; don't assume it works)
 

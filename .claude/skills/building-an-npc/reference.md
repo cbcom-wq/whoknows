@@ -92,7 +92,7 @@ Transform3D` (site-local, feet on the ground; while `alive()` is false the `Npc`
 until the director's next review demotes it); `tint() -> Color` (the look's colour; default
 `SpacePalette.UNTINTED`); `fill(ctx, npc)`. Hooks the body calls, each a no-op by default:
 `died(npc)` (it died for good, after the ledger is marked; `RockSite` drops a Limpet's husks), `surfaced(npc)`
-(it came up out of the ground; nothing calls it until the Delver), `sip_source(npc, dt) -> float` (QE the
+(it came up out of the ground: `Npc.surfaced()` calls it; `RockSite` has no species branch yet), `sip_source(npc, dt) -> float` (QE the
 place's own store gives it over `dt`; `RockSite` asks a base) and `group_seed(record) -> int` (the seed of
 its group, given to a look that has `set_group_seed`: a nest's glints flash together).
 
@@ -284,6 +284,13 @@ ledger knows (dead or hurt), so no id is ever reused. Dev groups are indexed fro
   avatar (`AVATAR_LAYER` 4: a Glinter's ambush), so a leap can be aimed at a spacewalker.
 - **`ZeroGDrift`:** `LEAP_SPEED` 6, `REBOUND` 0.5 m/s (a leap meeting the suit or passing its aim ends, `leaping()`), `TUMBLE` 0.6 s, `PUFF` 0.8 m/s at most once a second,
   `PUFFS` 6 (refilled on every `enter`: per trip off the rock), `LOOK` 60 m, `LANDED` 0.6 m.
+- **`Burrower`** (`burrower`; only on a `RockSite`): the mind asks `Intent.go(point, speed, &"burrow")` and `SurfaceCrawler.handover` 
+  sends it (`SurfaceCrawler.burrow_asked`: on a rock, the species has the locomotor, `move_to` set). `SINK` 1.5 s (the look drops by
+  `species.height`, `Npc.sink_look`), then `Npc.set_solid(false)`, look hidden, `Weapons.leave`; `UNDER_SPEED` 2 m/s along `RockDetail.dir_of`
+  directions with no ray; at the target `site.pose_at(data.dir_of(target))` once, `Weapons.join` if the director has `targets`, `RISE` 1.5 s,
+  `set_solid(true)`, `Npc.surfaced()` (`surfaced_at`, `site.surfaced`, `look.act(&"emerge")`), and it clears the spent burrow intent and
+  hands back to the crawler. `ctx.extra[&"surfaced_ago"]` is the seconds since `surfaced_at` (set at `setup` too). `Npc.setup` makes a
+  pooled node solid and drawn again. `test_burrower.gd`.
 - **Bumps:** `Avatar.bump` shares momentum with an `Npc` by the rocks' rule
   (`SUIT_MASS × m / (SUIT_MASS + m)`, bounce 0.2) through `npc.shove`.
 

@@ -160,3 +160,6 @@ func test_the_glinter_reads_back_as_authored():
 	assert_eq(g.population, &"glinter_nests")
 	assert_almost_eq(g.live_radius, 150.0, 0.0001)
 	assert_eq(g.fade, Vector2(110, 140))
+
+func test_the_burrower_locomotor_exists():
+	assert_not_null(Npc.make_locomotor(&"burrower"), "add burrower to Npc.make_locomotor")
