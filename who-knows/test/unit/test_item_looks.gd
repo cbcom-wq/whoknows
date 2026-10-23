@@ -72,7 +72,9 @@ func test_only_salvage_glints():
 	for look in ItemLooks.LOOKS:
 		# The Limpet's husk glints too: it is salvage in all but name (rock
 		# creatures spec §6.4).
-		assert_eq(ItemLooks.has_glint(look), SALVAGE.has(look) or look == &"limpet_husk", "%s" % look)
+		# So does the Delver's grit (§5.4).
+		assert_eq(ItemLooks.has_glint(look), SALVAGE.has(look) or look == &"limpet_husk" or look == &"crystal_grit",
+			"%s" % look)
 
 func test_the_shard_is_all_glow():
 	assert_eq(_batches(&"quantum_shard"), ["DressingGlow"], "a crystal on the glow batch, nothing else")
@@ -149,3 +151,18 @@ func test_the_limpet_husk_builds_glints_and_stays_in_its_box():
 	var half := size * 0.5 + Vector3.ONE * 0.005
 	assert_true(box.position.x >= -half.x and box.position.y >= -half.y and box.position.z >= -half.z
 		and box.end.x <= half.x and box.end.y <= half.y and box.end.z <= half.z, "inside its box (drew %s)" % box)
+
+## Rock creatures spec §5.4: a Delver's grit is a crumb of lavender crystal that
+## glints outside, like salvage, and is solid, not lit.
+func test_the_crystal_grit_builds_glints_and_stays_in_its_box():
+	var size := ItemCatalog.load_from_dir().get_def(&"crystal_grit").size
+	assert_true(ItemLooks.has_look(&"crystal_grit"))
+	assert_true(ItemLooks.has_glint(&"crystal_grit"), "grit catches the sun")
+	ItemLooks.build(_kit, &"crystal_grit", size, 0.4)
+	var meshes := _kit.commit()
+	assert_eq(meshes.map(func(mi): return String(mi.name)), ["DressingSolid"], "crystal, nothing lit")
+	var box := _bounds(meshes)
+	var half := size * 0.5 + Vector3.ONE * 0.005
+	assert_true(box.position.x >= -half.x and box.position.y >= -half.y and box.position.z >= -half.z
+		and box.end.x <= half.x and box.end.y <= half.y and box.end.z <= half.z, "inside its box (drew %s)" % box)
+	assert_gt(box.size.x, size.x * 0.5, "and fills most of it")

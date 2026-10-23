@@ -34,6 +34,21 @@ const BASE_REACH := Bases.SIP_REACH
 ## sipped, to HUSKS_MAX in all (§6.4).
 const HUSK_PER_QE := 40.0
 const HUSKS_MAX := 4
+## A Delver leaves this many crystal grit, least and most, where it surfaces,
+## and about one time in SHARD_ODDS a quantum shard as well (rock creatures
+## spec §5.4).
+const GRIT := Vector2i(2, 4)
+const SHARD_ODDS := 12
+## At most GRIT_CAP untaken grit lie about a rock (within its radius and
+## CAP_MARGIN, metres, of its centre: cap_radius()), and one shard at a time.
+const GRIT_CAP := 8
+const CAP_MARGIN := 50.0
+## A dead Delver leaves a shard and this much grit.
+const DELVER_GRIT := 6
+## What a Delver leaves lies this far behind its tail, metres: its 3 m body
+## would push the pieces about if they lay under it, and the heap is meant to be
+## found where it came up.
+const TAIL_CLEAR := 0.5
 
 var detail: AsteroidDetail
 var rock: AsteroidRock
@@ -53,6 +68,12 @@ var _rounds := {}
 ## record id -> the pose it first woke in: asked every review, and pose_at
 ## casts a ray.
 var _poses := {}
+## group index -> a Delver's burrow points, site-local, worked out once: the
+## exact surface is costly to ask.
+var _burrows := {}
+## record id -> how many times that Delver has surfaced, and its cycle.
+var _surfacings := {}
+var _cycles := {}
 ## The director that keeps its creatures, for their group mates.
 var director: NpcDirector
 
@@ -165,6 +186,12 @@ func add_group(species: StringName, dir: Vector3, count: int, ids: Array[StringN
 		# The skitter's fill reads its herd's round: this one stays where it is.
 		g["round_dirs"] = [dir]
 		g["period"] = RockHerds.ROUND_MAX
+	if species == DelverBurrows.SPECIES:
+		# A Delver put down anywhere has a round to go by (the recipe's own are
+		# on the vein of a veined rock only).
+		var round_rng := RandomNumberGenerator.new()
+		round_rng.seed = int(g["seed"])
+		g["burrows"] = DelverBurrows.round_near(data, dir, round_rng)
 	groups.append(g)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = int(g["seed"]) ^ 0x5A5A
@@ -220,6 +247,8 @@ func fill(ctx: NpcContext, npc: Npc) -> void:
 			_fill_skitter(ctx, npc)
 		&"limpet":
 			_fill_limpet(ctx, npc)
+		&"delver":
+			_fill_delver(ctx, npc.record)
 
 ## A skitter: where its herd's round has got to (where it grazes), company from
 ## its huddle, and fear easing while nothing has shaken the rock.
@@ -262,6 +291,50 @@ func _fill_limpet(ctx: NpcContext, npc: Npc) -> void:
 			ctx.extra[&"quantum_reach"] = BASE_REACH
 			return
 
+## A Delver: its round (rock creatures spec §5.3). `extra[&"burrows"]` lists its
+## burrow points, site-local; `places[&"crystal"]` is the one it is nearest, where
+## it feeds; `places[&"burrow"]` the next one round, where it digs to;
+## `extra[&"cycle"]` how long it stays up between burrowings, its own in
+## DelverBurrows.CYCLE. A Delver with no round (a group the site does not know)
+## is offered none of them, and its behaviours score nothing.
+func _fill_delver(ctx: NpcContext, record: NpcRecord) -> void:
+	var round := burrow_points(group_of(record))
+	if round.is_empty():
+		return
+	var nearest := 0
+	var best := INF
+	for i in round.size():
+		var d := round[i].distance_to(ctx.position)
+		if d < best:
+			best = d
+			nearest = i
+	ctx.extra[&"burrows"] = round
+	ctx.places[&"crystal"] = round[nearest]
+	ctx.places[&"burrow"] = round[(nearest + 1) % round.size()]
+	ctx.extra[&"cycle"] = cycle_of(record)
+
+## The burrow points of Delver group `g`, site-local on the surface: its round's
+## directions, worked out once. Empty for a group with none.
+func burrow_points(g: Dictionary) -> Array[Vector3]:
+	if g.is_empty() or not g.has("burrows"):
+		return [] as Array[Vector3]
+	var index: int = g["index"]
+	if not _burrows.has(index):
+		var points: Array[Vector3] = []
+		for d: Vector3 in g["burrows"]:
+			points.append(data.surface_point(d))
+		_burrows[index] = points
+	return _burrows[index]
+
+## How long `record`'s Delver stays up between burrowings, seconds: a point in
+## DelverBurrows.CYCLE its seed picks.
+func cycle_of(record: NpcRecord) -> float:
+	if not _cycles.has(record.id):
+		var rng := RandomNumberGenerator.new()
+		rng.seed = record.seed
+		_cycles[record.id] = lerpf(DelverBurrows.CYCLE.x, DelverBurrows.CYCLE.y, rng.randf())
+	return _cycles[record.id]
+
 ## A Limpet's sip from a base: BASE_RATE QE a second, if a base's store is
 ## within the base's reach of it (Bases.sip), else nothing.
 func sip_source(npc: Npc, dt: float) -> float:
@@ -273,9 +346,54 @@ func sip_source(npc: Npc, dt: float) -> float:
 ## husks: one, and one more for every HUSK_PER_QE it had sipped, up to HUSKS_MAX
 ## in all, so killing a fat one gives your QE back.
 func died(npc: Npc) -> void:
-	if npc.species.id == &"limpet" and drop.is_valid():
-		var count := 1 + mini(floori(npc.sipped / HUSK_PER_QE), HUSKS_MAX - 1)
-		drop.call(&"limpet_husk", npc.global_position, npc.global_basis.y, count)
+	if not drop.is_valid():
+		return
+	match npc.species.id:
+		&"limpet":
+			var count := 1 + mini(floori(npc.sipped / HUSK_PER_QE), HUSKS_MAX - 1)
+			drop.call(&"limpet_husk", npc.global_position, npc.global_basis.y, count)
+		&"delver":
+			# Following it beats shooting it: all it would have paid, at once, and
+			# nothing after (§5.4). The caps do not apply to a windfall.
+			drop.call(&"quantum_shard", behind(npc), npc.global_basis.y, 1)
+			drop.call(&"crystal_grit", behind(npc), npc.global_basis.y, DELVER_GRIT)
+
+## A Delver has come up out of the ground (rock creatures spec §5.4): it leaves
+## 2-4 crystal grit where it surfaces, and one time in SHARD_ODDS a quantum
+## shard. Not while GRIT_CAP grit already lie untaken about the rock, nor a
+## shard while one does (the caps are counted by the flight scene's
+## `count_near`, from the rock's centre to cap_radius()). The dice are the
+## Delver's own: its record's seed and how often it has surfaced, so the same
+## Delver pays the same luck however the game is played.
+func surfaced(npc: Npc) -> void:
+	if npc.species.id != DelverBurrows.SPECIES or not drop.is_valid():
+		return
+	var n: int = _surfacings.get(npc.record.id, 0)
+	_surfacings[npc.record.id] = n + 1
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([npc.record.seed, n])
+	var grit := rng.randi_range(GRIT.x, GRIT.y)
+	var shard := rng.randi_range(0, SHARD_ODDS - 1) == 0
+	if count_near.is_valid():
+		var centre := frame().origin
+		if int(count_near.call(&"crystal_grit", centre, cap_radius())) >= GRIT_CAP:
+			grit = 0
+		if shard and int(count_near.call(&"quantum_shard", centre, cap_radius())) >= 1:
+			shard = false
+	var up := npc.global_basis.y
+	if grit > 0:
+		drop.call(&"crystal_grit", behind(npc), up, grit)
+	if shard:
+		drop.call(&"quantum_shard", behind(npc), up, 1)
+
+## Just behind `npc`'s tail (a body lies along its z, head to -z).
+func behind(npc: Npc) -> Vector3:
+	return npc.global_position + npc.global_basis.z * (npc.species.size * 0.5 + TAIL_CLEAR)
+
+## The cap on what a Delver leaves is counted within this of the rock's centre:
+## its radius and CAP_MARGIN, metres.
+func cap_radius() -> float:
+	return rock.radius + CAP_MARGIN
 
 ## Where group `h`'s round has got to at `time`, on the surface.
 func round_point(h: Dictionary, time: float) -> Vector3:

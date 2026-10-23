@@ -20,12 +20,12 @@ trust the code and fix this file.
 | `src/npc/brain.gd`, `behaviour.gd`, `npc_behaviours.gd`, `curves.gd` | the mind |
 | `src/npc/perception.gd`, `npc_memory.gd`, `stimulus.gd`, `stimulus_bus.gd` | the senses |
 | `src/npc/locomotor.gd`, `deck_walker.gd`, `deck_paths.gd`, `surface_crawler.gd`, `zero_g_drift.gd` | movement |
-| `src/npc/npc_looks.gd`, `droid_look.gd`, `skitter_look.gd`, `legged_gait.gd`, `limpet_look.gd`, `glinter_look.gd` | looks |
+| `src/npc/npc_looks.gd`, `droid_look.gd`, `skitter_look.gd`, `legged_gait.gd`, `limpet_look.gd`, `glinter_look.gd`, `delver_look.gd` | looks |
 | `src/npc/npc_debug.gd` | the F4 overlay |
-| `src/npc/populations/` | `ShipCrew` + `ShipSite`; `RockLife` (every species on a rock) + `RockHerds`, `GlinterNests`, `LimpetBeds` (recipes) + `RockSite` + `RockLifeSource`; `DevCreatures` (F10) |
+| `src/npc/populations/` | `ShipCrew` + `ShipSite`; `RockLife` (every species on a rock) + `RockHerds`, `GlinterNests`, `DelverBurrows`, `LimpetBeds` (recipes) + `RockSite` + `RockLifeSource`; `DevCreatures` (F10) |
 | `src/ui/creature_panel.gd` | `CreaturePanel`, the F10 dev panel |
 | `data/npcs/*.tres` | species |
-| `test/probes/` | `npc_probe.gd` (frame time), `droid_render.gd`, `skitter_render.gd`, `limpet_render.gd`, `glinter_render.gd`, `glinter_leap.gd` (not run by GUT) |
+| `test/probes/` | `npc_probe.gd` (frame time), `droid_render.gd`, `skitter_render.gd`, `limpet_render.gd`, `glinter_render.gd`, `glinter_leap.gd`, `delver_render.gd` (not run by GUT) |
 
 ## Species fields (`NpcSpecies`)
 
@@ -55,14 +55,16 @@ local z otherwise. Origin at the feet; up is local +y; forward is −z.
 | `shy_of_drills` | true | default | false | true |
 | `grips_bases` | false | default | true | false |
 
-| | Limpet | Glinter |
-|---|---|---|
-| `size`, `height`, `width` (m); `mass`; `top_speed` | 0.3, 0.15, 0.3; 8; 0.25 | 0.25, 0.18, 0.2; 6; 3.0 |
-| `max_health`, `knocked_out_for` | 15, 0 | 20, 0 |
-| `sight_range`, cone, `dark_sight`, `near_sense` | 20, 360, 1.0, 0 | 6, 360, **0.85**, 1.5 |
-| `feels_vibration`; `needs` | 0; appetite .01, fear | 1; fear |
-| `behaviours` | `cling`, `creep`, `sip` | `lure`, `ambush`, `hide` |
-| `population`, `live_radius`, `fade` | `limpet_beds`, 100, (70, 95) | `glinter_nests`, 150, (110, 140) |
+| | Limpet | Glinter | Delver |
+|---|---|---|---|
+| `size`, `height`, `width` (m); `mass`; `top_speed` | 0.3, 0.15, 0.3; 8; 0.25 | 0.25, 0.18, 0.2; 6; 3.0 | 3.0, 0.4, 0.5; 120; 1.2 |
+| `max_health`, `knocked_out_for` | 15, 0 | 20, 0 | 60, 0 |
+| `locomotors` | `surface_crawler`, `zero_g_drift` | same | `surface_crawler`, `burrower`, `zero_g_drift` |
+| `sight_range`, cone, `dark_sight`, `near_sense` | 20, 360, 1.0, 0 | 6, 360, **0.85**, 1.5 | 10, 220, 0.33, 2 |
+| `feels_vibration`; `needs` | 0; appetite .01, fear | 1; fear | 1; hunger .004 (starts 0-0.25), fear |
+| `behaviours` | `cling`, `creep`, `sip` | `lure`, `ambush`, `hide` | `feed`, `delve`, `dive` |
+| `fear_of_player`; `shy_of_drills` | 0; false | 0.3; true | 0.2; true |
+| `population`, `live_radius`, `fade` | `limpet_beds`, 100, (70, 95) | `glinter_nests`, 150, (110, 140) | `delver_burrows`, 250, (180, 230) |
 
 ## Health and death (`docs/superpowers/specs/2026-09-29-health-and-damage-design.md` §6)
 
@@ -91,8 +93,8 @@ origin moves); `gravity(local) -> Vector3`; `alive() -> bool`; `start_pose(recor
 Transform3D` (site-local, feet on the ground; while `alive()` is false the `Npc` steps nothing
 until the director's next review demotes it); `tint() -> Color` (the look's colour; default
 `SpacePalette.UNTINTED`); `fill(ctx, npc)`. Hooks the body calls, each a no-op by default:
-`died(npc)` (it died for good, after the ledger is marked; `RockSite` drops a Limpet's husks), `surfaced(npc)`
-(it came up out of the ground: `Npc.surfaced()` calls it; `RockSite` has no species branch yet), `sip_source(npc, dt) -> float` (QE the
+`died(npc)` (it died for good, after the ledger is marked; `RockSite` drops a Limpet's husks, and a Delver's shard and grit), `surfaced(npc)`
+(it came up out of the ground: `Npc.surfaced()` calls it; `RockSite` pays a Delver's grit and shard), `sip_source(npc, dt) -> float` (QE the
 place's own store gives it over `dt`; `RockSite` asks a base) and `group_seed(record) -> int` (the seed of
 its group, given to a look that has `set_group_seed`: a nest's glints flash together).
 
@@ -131,7 +133,7 @@ percepts), then the site's `fill`:
 | Site | Fills |
 |---|---|
 | `ShipSite` | `places.dock`; `spots` (the reachable ones, each + `at`, `since`); `extra.rooms` (`[point, zone]`), `extra.nearby` (step-aside points), `extra.tended` (Callable), `extra.player_zone`, `extra.zone`; fear fades 0.1/s with no touch or sound in 2 s |
-| `RockSite` | `mates` (live group mates); `places.shelter` (nearest crater floor, cached) for every species; then by species. Skitter: `places.round` and `extra.graze` (the herd's round, cached per second); company eases near mates; fear fades 0.1/s unless jolted, touched or lit. Limpet: `places.quantum` (your suit within `SUIT_DRAW` 20 m, else the nearest module cell of an awake base within `RAID` 100 m of its bed while a non-base anchor is within `RAID_NEAR` 300 m) and, for a base, `extra.quantum_reach` `BASE_REACH` 4 m |
+| `RockSite` | `mates` (live group mates); `places.shelter` (nearest crater floor, cached) for every species; then by species. Delver: `extra.burrows` (its round, site-local), `places.crystal` (the point it is nearest), `places.burrow` (the next one round), `extra.cycle` (its own 180-360 s from its seed), none of them for a group with no round. Skitter: `places.round` and `extra.graze` (the herd's round, cached per second); company eases near mates; fear fades 0.1/s unless jolted, touched or lit. Limpet: `places.quantum` (your suit within `SUIT_DRAW` 20 m, else the nearest module cell of an awake base within `RAID` 100 m of its bed while a non-base anchor is within `RAID_NEAR` 300 m) and, for a base, `extra.quantum_reach` `BASE_REACH` 4 m |
 
 `ctx.need(n)`, `ctx.ease(n, rate)` (per second over `dt`), `ctx.raise(n, amount)`,
 `ctx.recent(kind, seconds) -> Percept`, `ctx.voice`.
@@ -210,7 +212,7 @@ Its Callables, all optional (check `is_valid()`), engine-space points, set by th
 
 Its hooks (overrides of `NpcSite`): `died(npc)` drops husks (1, and one more per `HUSK_PER_QE` 40 QE sipped, to
 `HUSKS_MAX` 4), `sip_source(npc, dt)` (`BASE_RATE` 0.05 QE/s from a base), `group_seed(record)`, and `surfaced`
-(unused until the Delver). `RockDetail.dir_of(p)` turns a rock-frame point into the direction whose surface
+(a Delver's pay: see *The Delver*, below). `died` for a Delver drops one `quantum_shard` and `DELVER_GRIT` 6 `crystal_grit`, behind its tail, with no cap (a windfall). `RockDetail.dir_of(p)` turns a rock-frame point into the direction whose surface
 point lies along it; use it, never `normalized()`.
 
 **Bases and the world:** `Bases.sip(site_id, point, qe)` (0 if the base is asleep, has no store, or `point` is
@@ -230,6 +232,40 @@ look at, aboard) through `RockSite.add_group`, into `DevCreatures` (a source on 
 forgotten once its creature has been live and is not, or its site goes). **Dev ids** are
 `"dev:<species>:<n>"`, `n` counting on for the session across every `DevCreatures` and skipping any id the
 ledger knows (dead or hurt), so no id is ever reused. Dev groups are indexed from `RockSite.DEV_FIRST` 1000.
+
+## The Delver (rock creatures spec §5; `test_delver_burrows.gd`, `test_delver_behaviours.gd`, `test_delver_pay.gd`)
+
+**`DelverBurrows`** (`src/npc/populations/delver_burrows.gd`, salt `SALT` 17): `groups(rock, data, seed, taken, first_index)` makes one
+group on a `RockMesh.Shape.VEINED` rock only, `{index, species, home_dir, count 1, seed, burrows}`: its home is a vein direction
+(`RockMesh.in_vein`) clear of `taken` by `RockLife.SPACING`, its `burrows` (`POINTS` 6-10 directions) are the home first, then vein
+directions within `REACH` 0.5 rad of it, `GAP` 15 m apart (surface point to surface point; the reach widens a quarter after `TRIES` 40
+failures in a row until `POINTS.x` fit). `member_dirs(g, data)` is `[home_dir]`. `round_near(data, dir, rng)` is the same round about any
+direction, vein or not: `RockSite.add_group` gives a dev Delver one, so F10 puts a working Delver on any rock. `CYCLE` is
+`Vector2(180, 360)` s.
+
+**`RockSite`:** `burrow_points(g)` (the round as site-local surface points, cached per group), `cycle_of(record)` (`lerpf(CYCLE.x, CYCLE.y,
+randf)` from `record.seed`, cached), `_fill_delver(ctx, record)`. Pay: `surfaced(npc)` rolls from `hash([record.seed, n])`, `n` the Delver's
+count of surfacings (so the same Delver pays the same luck): `GRIT` (2, 4) grit always rolled, and a shard when `randi_range(0,
+SHARD_ODDS - 1) == 0` (`SHARD_ODDS` 12); the grit is dropped unless `count_near(&"crystal_grit", the rock's centre, cap_radius())` is
+`GRIT_CAP` 8 or more, the shard unless one `quantum_shard` already lies within `cap_radius()` (`rock.radius + CAP_MARGIN` 50 m). With no
+`count_near` wired there is no cap. Both go to `behind(npc)`: `TAIL_CLEAR` 0.5 m past the tail, up the Delver's up. **Both items are strays**
+(the flight scene's `_drop` adopts them into `StrayField`), so they save and unload as any stray; `crystal_grit` is `data/items/crystal_grit.tres`
+(15 QE, `0.09 x 0.07 x 0.09`, `stow_class` small, `ItemLooks.crystal_grit`: three lavender splinters in `InteriorPalette.LAVENDER` and `HOLO_DIM`,
+solid, and in `ItemLooks.GLINTS`).
+
+**Behaviours:** `feed` (score `Curves.ramp(hunger, 0.3, 0.8)`; to `places.crystal` at speed 0.5 until within `THERE` 1 m, then `Intent.idle(&"eat")`
+and hunger eases `EATING` 0.05/s; done below `FULL` 0.1; `min_time` 3), `delve` (score 0.7 when hunger is under 0.3 and `extra.surfaced_ago >=
+extra.cycle`; `Intent.go(places.burrow, 1.0, &"burrow")`; done once `surfaced_ago < running(ctx)`, i.e. it came up since it began), `dive` (a reflex,
+threshold 0.5, score 1.0 on a `VIBRATION` or `TOUCH` percept within `FRESH` 1 s and at least `FELT` 0.25 sure -- the hum of a drill, 0.2, is not
+a reason to run -- while `ctx.grounded`; `Intent.go(Behaviour.farthest_from(extra.burrows, position, position), 1.0, &"burrow")`; done as
+`delve`). All three score 0 without the site's round. In the brain they cycle: it eats when hungry, digests, goes under once each cycle and
+never while hungry (`test_the_mind_cycles_feed_digest_burrow`).
+
+**Probe:** `test/probes/delver_render.gd` (windowed; `--no-snag`, `--far-only`) shoots `delver_close`, `_closer`, `_sink_1..3`, `_rise_1..3`, `_heap`,
+`_heap_close`, `_40m`, `_40m_low`, `_100m`, `_100m_low` and zooms, and sends the Delver over five legs of 30-67 m (into and out of a crater, open
+ground) printing whether the 3 m body snags (spec §16). On the start rock (a SHARD, radius 284 m, 6 craters) 2026-10-22: no leg snagged; the
+Delver kept 1.1-1.2 m/s on every leg, arrived on all five and never stalled for half a second, so the 1.2 m head collider was not needed
+(the crawler reads the ground by rays, not by sliding its collider on the mesh).
 
 ## Sensors (NPC foundation spec §22)
 
@@ -319,6 +355,13 @@ ledger knows (dead or hurt), so no id is ever reused. Dev groups are indexed fro
   (`SpacePalette.shade`, ash on a veined rock) with a raised apex nub, and eight lavender crystal ribs
   (`SpacePalette.CRYSTAL`) on a second mesh that swaps to the brightest `SHADES` step on `sip`; no glow;
   80 triangles at most.
+- `DelverLook`: built at its own size, 3 m long (`LENGTH`; `NpcLooks.built_size` 3.0, so the `Npc` scales it by 1), head at -z, 0.4 m high
+  and 0.5 wide bar a crystal's point; six bevelled hexagonal plates (`PLATES`; each a tube whose top slopes up to its rear, so the
+  silhouette is a sawtooth) in `scree(UMBER)` and `scree(RUST)` alternately, a `RUST` head with two `SKITTER_EYE` facets, a snout of three
+  `CRYSTAL` crystals (two darkest steps at rest, the brightest on `eat`), a lavender crystal on each plate (`Crest`, swept toward the tail),
+  no legs; about 230 triangles, at most 300; `act(&"emerge")` makes `PUFFS` 10 `Puffs.mesh` spheres as children of the look in a ring
+  `RING` (0.7 x 1.9 m) that drift out and fade over `PUFF_TIME` 1.4 s (no world-space particles, so the floating origin never strands
+  them); meshes `Plates`, `Crest`, `Head`, `Snout`.
 - `GlinterLook`: built 1 m long, 0.72 m high; a six-sided domed shell of big flat facets in `SLATE` shades
   with two opposite `RUST` patches, a blunt rust head, six short two-jointed legs; `eyes` (two `SKITTER_EYE`
   quads) shown on `leap`, `lunge` and `bite`; wears `ItemLooks.glint` on `BEAT` 1.6 s, set by `set_group_seed`
