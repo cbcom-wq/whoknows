@@ -71,9 +71,14 @@ var _poses := {}
 ## group index -> a Delver's burrow points, site-local, worked out once: the
 ## exact surface is costly to ask.
 var _burrows := {}
-## record id -> how many times that Delver has surfaced, and its cycle.
-var _surfacings := {}
+## record id -> its Delver's cycle.
 var _cycles := {}
+## The dice for what a Delver pays, freshly seeded (randomize) when the site is
+## built. A site is rebuilt whenever its rock leaves and re-enters detail, so
+## seeding them from the record would roll the same first dice after every
+## return, and a Delver whose first roll is a shard would farm one. A test that
+## needs reproducible rolls sets `rolls.seed`.
+var rolls := RandomNumberGenerator.new()
 ## The director that keeps its creatures, for their group mates.
 var director: NpcDirector
 
@@ -96,6 +101,7 @@ func _init(p_detail: AsteroidDetail, world_seed: int) -> void:
 	rock = p_detail.rock
 	data = p_detail.data
 	id = RockHerds.site_of(rock)
+	rolls.randomize()
 	groups = RockLife.groups(rock, data, world_seed)
 	records = RockLife.records(rock, data, world_seed, groups)
 	# RockLife.records lists each group's members in group order, as
@@ -363,17 +369,13 @@ func died(npc: Npc) -> void:
 ## shard. Not while GRIT_CAP grit already lie untaken about the rock, nor a
 ## shard while one does (the caps are counted by the flight scene's
 ## `count_near`, from the rock's centre to cap_radius()). The dice are the
-## Delver's own: its record's seed and how often it has surfaced, so the same
-## Delver pays the same luck however the game is played.
+## site's `rolls`, fresh every time the site is built, so the rate holds across
+## returns to the rock.
 func surfaced(npc: Npc) -> void:
 	if npc.species.id != DelverBurrows.SPECIES or not drop.is_valid():
 		return
-	var n: int = _surfacings.get(npc.record.id, 0)
-	_surfacings[npc.record.id] = n + 1
-	var rng := RandomNumberGenerator.new()
-	rng.seed = hash([npc.record.seed, n])
-	var grit := rng.randi_range(GRIT.x, GRIT.y)
-	var shard := rng.randi_range(0, SHARD_ODDS - 1) == 0
+	var grit := rolls.randi_range(GRIT.x, GRIT.y)
+	var shard := rolls.randi_range(0, SHARD_ODDS - 1) == 0
 	if count_near.is_valid():
 		var centre := frame().origin
 		if int(count_near.call(&"crystal_grit", centre, cap_radius())) >= GRIT_CAP:

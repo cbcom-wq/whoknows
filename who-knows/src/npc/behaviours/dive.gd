@@ -12,6 +12,7 @@ const SPEED := 1.0
 ## this sure: the far hum of a drill (0.2) is felt and ignored, a bump or a
 ## thruster burn (0.6) is not.
 const FRESH := 1.0
+## (FELT sits above the hum's strength, HabitatValues.HUM_STRENGTH 0.2.)
 const FELT := 0.25
 
 func _init() -> void:

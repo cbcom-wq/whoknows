@@ -40,6 +40,7 @@ func before_each():
 	detail.data = _data
 	add_child_autofree(detail)
 	_site = RockSite.new(detail, SEED)
+	_site.rolls.seed = 4242
 	_site.drop = func(kind: StringName, at: Vector3, up: Vector3, count: int) -> void:
 		_drops.append([kind, at, up, count])
 	_site.count_near = func(kind: StringName, at: Vector3, radius: float) -> int:
@@ -88,20 +89,38 @@ func test_it_leaves_its_pay_just_behind_its_tail_up_its_up():
 	assert_gt(((d[1] as Vector3) - _npc.global_position).dot(_npc.global_basis.z), 1.5, "behind it, not beside it")
 	assert_almost_eq((d[2] as Vector3).distance_to(_npc.global_basis.y), 0.0, 0.0001, "up its up")
 
-func test_the_same_delver_rolls_the_same_every_time():
+func test_rolls_repeat_when_seeded_the_same():
 	var first: Array[int] = []
 	for i in 30:
 		_drops.clear()
 		_site.surfaced(_npc)
 		first.append(_sum(_counts(&"crystal_grit")) * 10 + _sum(_counts(&"quantum_shard")))
 	var again := RockSite.new(_site.detail, SEED)
+	again.rolls.seed = 4242
 	again.drop = _site.drop
 	var second: Array[int] = []
 	for i in 30:
 		_drops.clear()
 		again.surfaced(_npc)
 		second.append(_sum(_counts(&"crystal_grit")) * 10 + _sum(_counts(&"quantum_shard")))
-	assert_eq(first, second, "a fresh site and the same record: the same luck")
+	assert_eq(first, second, "the same seed through the hook: the same rolls")
+
+## The rock leaves detail and comes back: its site is built again. The dice must
+## not start over, or a Delver whose first roll is a shard pays one at every return.
+func test_two_fresh_sites_for_the_same_rock_do_not_roll_alike():
+	var sequences: Array = []
+	for k in 2:
+		var site := RockSite.new(_site.detail, SEED)
+		site.drop = _site.drop
+		var rolled: Array[int] = []
+		for i in 80:
+			_drops.clear()
+			site.surfaced(_npc)
+			rolled.append(_sum(_counts(&"crystal_grit")) * 10 + _sum(_counts(&"quantum_shard")))
+		sequences.append(rolled)
+	assert_ne(sequences[0], sequences[1], "80 rolls apiece, not the same 80")
+	var again := RockSite.new(_site.detail, SEED)
+	assert_ne(again.rolls.seed, hash(_npc.record.seed), "and not seeded from the record")
 
 func test_grit_stops_at_8_near_the_rock_and_one_shard_at_a_time():
 	_near = {&"crystal_grit": 8, &"quantum_shard": 8}
@@ -226,12 +245,13 @@ func test_a_real_delver_coming_up_leaves_grit_in_the_stray_field():
 	var before := strays.count_of(&"crystal_grit", here, 10000.0)
 	var round := site.burrow_points(site.group_of(made[0]))
 	assert_gte(round.size(), 6, "a dev Delver has a round")
+	var came_from := npc.surfaced_at
 	npc.intent = Intent.go(round[1], 1.0, &"burrow")
 	for i in 60 * 30:
-		if site._surfacings.has(made[0].id):
+		if npc.surfaced_at != came_from:
 			break
 		await wait_physics_frames(1)
-	assert_true(site._surfacings.has(made[0].id), "it came up")
+	assert_ne(npc.surfaced_at, came_from, "it came up")
 	await wait_physics_frames(5)
 	var left := strays.count_of(&"crystal_grit", npc.global_position, 6.0)
 	assert_between(left, 2, 4, "2 to 4 grit lie where it came up")

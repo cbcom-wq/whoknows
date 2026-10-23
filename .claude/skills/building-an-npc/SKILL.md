@@ -132,8 +132,10 @@ Do these in order. Each names the check that proves it.
    **A creature that pays** (the Delver's grit, the Limpet's husks): the body tells its site
    (`Npc.surfaced()` -> `RockSite.surfaced`, `died`) and the site asks the flight scene for the items
    through `drop` and `count_near`. Cap what it can pay near the place (`GRIT_CAP`, one shard at a
-   time), roll from an RNG seeded by the record and a count of its payments (never a bare `randf()`: the
-   same Delver pays the same luck), and **drop it outside the body** (`RockSite.behind`: half a metre
+   time), roll from an RNG owned by the site and `randomize()`d when it is built (`RockSite.rolls`; a test sets
+   `rolls.seed`). Never seed it from the record: the site is rebuilt whenever its rock leaves and
+   re-enters detail, so every return would roll the same first dice, and a Delver whose first roll is a
+   shard would farm one; fresh dice keep the 1-in-12 rate across returns, and **drop it outside the body** (`RockSite.behind`: half a metre
    past a 3 m body's tail): items spawned under a collider are shoved about, and the heap is lost.
 9. **Sound** (inside only): new `Synth` builders, `species.move_sound` for a loop, behaviours set
    `ctx.voice`. Proof: `test_synth.gd` lengths.

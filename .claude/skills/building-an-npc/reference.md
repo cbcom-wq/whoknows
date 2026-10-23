@@ -244,8 +244,8 @@ direction, vein or not: `RockSite.add_group` gives a dev Delver one, so F10 puts
 `Vector2(180, 360)` s.
 
 **`RockSite`:** `burrow_points(g)` (the round as site-local surface points, cached per group), `cycle_of(record)` (`lerpf(CYCLE.x, CYCLE.y,
-randf)` from `record.seed`, cached), `_fill_delver(ctx, record)`. Pay: `surfaced(npc)` rolls from `hash([record.seed, n])`, `n` the Delver's
-count of surfacings (so the same Delver pays the same luck): `GRIT` (2, 4) grit always rolled, and a shard when `randi_range(0,
+randf)` from `record.seed`, cached), `_fill_delver(ctx, record)`. Pay: `surfaced(npc)` rolls from `rolls`, a `RandomNumberGenerator` per site, `randomize()`d when the site is built
+(not seeded from the record: the site is rebuilt on every return to the rock, which would repeat the first roll; a test sets `rolls.seed`): `GRIT` (2, 4) grit always rolled, and a shard when `randi_range(0,
 SHARD_ODDS - 1) == 0` (`SHARD_ODDS` 12); the grit is dropped unless `count_near(&"crystal_grit", the rock's centre, cap_radius())` is
 `GRIT_CAP` 8 or more, the shard unless one `quantum_shard` already lies within `cap_radius()` (`rock.radius + CAP_MARGIN` 50 m). With no
 `count_near` wired there is no cap. Both go to `behind(npc)`: `TAIL_CLEAR` 0.5 m past the tail, up the Delver's up. **Both items are strays**

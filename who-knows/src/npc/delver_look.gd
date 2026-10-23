@@ -5,7 +5,7 @@ extends Node3D
 ## 2026-10-10-rock-creatures-design.md §5, §9): a 3 m armoured worm -- six chunky
 ## plates, each a bevelled hexagon that steps up toward the tail like a
 ## pangolin's, trailing a blunt head with two pale eyes and a snout of lavender
-## crystal, a pair of crystal spikes standing on each plate. No legs: it
+## crystal, a lavender crystal standing on each plate. No legs: it
 ## crawls on its belly and goes under the ground. Plates in the scrap colours
 ## (not its rock's, so it reads against any ground), alternating light and
 ## dark so the segments show from afar. Eating brightens the snout to the
@@ -25,7 +25,8 @@ const PLATES := 6
 ## about 0.7 of the ground on screen. What stands out from afar is the crystal.)
 const PLATE_A := SpacePalette.UMBER
 const PLATE_B := SpacePalette.RUST
-## The head is lighter and warmer than the plates, so it reads as a head.
+## The head is RUST, as plate B is but at the head's own shade (not scree), so it
+## is lighter than the plates and reads as a head.
 const HEAD := SpacePalette.RUST
 ## The snout's tip, z, and the length of its long crystal along its (slightly
 ## raised) axis, which reaches the tip from the head's face; and the head's own
