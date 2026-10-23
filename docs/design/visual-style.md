@@ -367,6 +367,17 @@ until then these are the rules they were built to:
   lunge, bite), two pale `SpacePalette.SKITTER_EYE` facets show on its face. It wears the salvage glint as its
   lure; its tell is the rhythm, one beat of 1.6 s for a whole nest where real salvage flashes at its own 2-4 s.
   At most 120 triangles; it fades in by the dither; silent.
+- **The Delver is an armoured worm with a crystal snout** (`DelverLook`, approved by the owner 2026-10-23),
+  3 m long, 0.4 m high: six bevelled hexagonal plates, each lower at its front than its rear so the back
+  steps up toward the tail, banded in the scrap colours (`UMBER` and `RUST` at the dark step, not its
+  rock's colour) so it reads against any ground; one lavender `SpacePalette.CRYSTAL` crystal standing on
+  each plate, swept toward the tail; a blunt `RUST` head with two pale `SpacePalette.SKITTER_EYE` facets;
+  and a snout of three `CRYSTAL` crystals that goes to the brightest `SHADES` step while it eats. No legs:
+  it crawls on its belly and goes under the ground. Surfacing puffs a ring of ten `Puffs` spheres round
+  it, made in the look's own space so the floating origin never leaves them behind. It leaves a heap of
+  a few lavender crystal crumbs (`crystal_grit`, 0.09 m, from `InteriorPalette`) 0.5 m behind its tail.
+  Up close it is a creature; from 40 m a thin streak, and the lavender is what shows. At most 300
+  triangles (built: 228); it fades in by the dither; silent.
 - **Sensor contacts on the HUD are coloured by kind** (`HudPalette.for_kind`): signs of life a
   soft green, salvage the quantum violet, anything else the readout blue.
 - **Legs never stretch.** A foot left behind by a bolting body is drawn at the end of its reach.

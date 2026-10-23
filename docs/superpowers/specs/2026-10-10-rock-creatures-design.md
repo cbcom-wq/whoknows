@@ -4,8 +4,9 @@
 **Status:** Design, awaiting the owner's review of this written spec. Nothing is built. Every row
 of §2 was decided by the owner in the brainstorm. Refreshed 2026-10-18 against `main` at `85aa4d4`:
 the hose, its prerequisite, has merged (§13), and ship weapons now target creatures (§8.1).
-**Built so far (2026-10-19):** the shared rock-life code, F10, the Limpet and the Glinter, as §19 records.
-The owner approved both looks on 2026-10-19. The Delver is not built yet.
+**Built so far (2026-10-23):** the shared rock-life code, F10, the Limpet, the Glinter and the Delver, as
+§19 records. The owner approved the Limpet's and Glinter's looks on 2026-10-19 and the Delver's on
+2026-10-23. Not done: the frame probe (the 1 ms budget on the worst rock) and the final whole-branch review.
 **Depends on:** `main` at `85aa4d4`: the NPC foundation (skitters, the droid, `NpcDirector`,
 `StimulusBus`), health and damage (bites, `NpcLedger`), habitat modules Phases A–C (bases, drills and
 `Bases.quiet`), quantum energy's Tasks 1–8 (the store, the machine, the suit cell, the near cloud),
@@ -520,14 +521,14 @@ sizes. None of them blocks the design.
 
 ---
 
-## 19. As built (Limpet and Glinter, 2026-10-19)
+## 19. As built (Limpet and Glinter, 2026-10-19; Delver, 2026-10-23)
 
 **Built:** `RockLife` and `RockLifeSource` (which replaces `RockHerdSource`), one `RockSite` for every
 species on a rock, the species fields (the bite and drain are data, so `Npc.BITE_*` are gone), F10
-(`CreaturePanel`, `DevCreatures`), the Limpet and the Glinter, with their renders. The owner approved both
-looks on 2026-10-19. **Not built:** the Delver (§5: `DelverBurrows`, the `burrower` locomotor, the grit and
-the shards), so `RockLife.ORDER` names it and the `surfaced` hook has no caller yet. Where the build
-differs from the text above:
+(`CreaturePanel`, `DevCreatures`), the Limpet, the Glinter and the Delver (§5: `DelverBurrows`, the
+`burrower` locomotor, the grit and the shards), with their renders. The owner approved the Limpet's and
+Glinter's looks on 2026-10-19 and the Delver's on 2026-10-23. **Not done:** Task 13's frame probe (the 1 ms
+budget on the worst rock) and the final whole-branch review. Where the build differs from the text above:
 
 - **`grips_bases`** is a species field beside `shy_of_drills` (default false; the Limpet's is true). The
   crawler rays layer 1 as well as the rock for a species that has it, and drops a hit there that is not a
@@ -561,3 +562,34 @@ differs from the text above:
 - **For the owner:** the sip budget is a bucket (`Avatar.SIP_CAP` 1.2 QE/s, refilled at the same rate), so a
   suit that has idled can lose about 2.4 QE in a second; and a `limpet_husk` can be made at the quantum
   machine (cost 40) and wielded like any valued item, which pays 20.
+The Delver's differences:
+
+- **Directions go through `RockDetail.dir_of`**, never `normalized()`, for the burrow route's ends and the
+  surfacing pose. Under the rock the pace is divided by the local metres-per-unit of `surface_point`, so
+  2 m/s holds on a stretched rock.
+- **The crawler hands over to the burrower on a burrow ask only on a `RockSite`**, and the burrower clears
+  the spent `&"burrow"` intent as it hands back, or the crawler would dive again at once. Off a rock the
+  burrower starts done and hands straight back.
+- **A body killed mid-burrow lies solid and drawn**: `Burrower.exit` restores the collider, the look and
+  its height before the corpse is left.
+- **The pay drops 0.5 m behind the tail** (`RockSite.behind`, `TAIL_CLEAR`), also for a dead Delver's
+  shard and six grit. Dropped inside the 3 m body it was shoved about and floated off the ground.
+- **The pay's dice are fresh for every site** (a `RandomNumberGenerator` randomized in the site's `_init`,
+  with `rolls.seed` as the hook for tests). Seeded from the record and a surfacing count, the count reset
+  each time the rock was rebuilt, so a shard-first Delver paid a shard after every return, a farm. The
+  1 in 12 holds across returns; the pay is not reproducible across playthroughs.
+- **`dive` ignores vibrations under 0.25** (`FELT`), above the drill hum's 0.2 (`HabitatValues.HUM_STRENGTH`),
+  or a drill within 80 m would send a Delver under every few seconds. Bumps (0.7), touches and thruster
+  burns (0.6) still send it down.
+- **`CAP_RADIUS` is `RockSite.cap_radius()`**, a method: rock radius plus a 50 m margin, so it depends on
+  the rock.
+- **`ORDER` puts `delver` before `limpet`**, so now that `DelverBurrows` exists every veined rock has a
+  Delver group first, and the Limpet groups on veined rocks number one higher (and keep 30 m from the
+  Delver's home). Skitter and Glinter records and the golden file are untouched. A saved game's dead Limpets
+  on veined rocks would come back; there is no live save to move yet.
+- **No head collider was needed** (§16): the 3 m body does not snag. The crawler reads the ground with rays
+  and steps along it, and a probe over five legs (craters and open ground) held 1.09 to 1.19 m/s with no
+  stall.
+- **Legibility:** readable as a creature up close (from 5 m and 2.6 m), but a streak from 40 m (39 px on a
+  1280 px screen) and unnoticed at 100 m. What shows from afar is the lavender, so its real finders are
+  the sensor contact and the glint of the grit it leaves.
