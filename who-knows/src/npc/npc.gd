@@ -86,6 +86,11 @@ var _flinch_left := 0.0
 var sipped := 0.0
 ## The look's scale as built, which its pose keeps.
 var _look_scale := 1.0
+## When it last came up out of the ground, or woke: the director's clock,
+## seconds (rock creatures spec §5.2). think() hands the mind how long ago.
+var surfaced_at := 0.0
+## How far the look has sunk below its feet, metres: a burrower going under.
+var look_drop := 0.0
 
 func _init() -> void:
 	collision_layer = LAYER
@@ -148,6 +153,11 @@ func setup(p_record: NpcRecord, p_species: NpcSpecies, p_site: NpcSite, p_inside
 	down_left = 0.0
 	_flinch_left = 0.0
 	sipped = 0.0
+	# A node demoted under a rock comes back solid and drawn.
+	look_drop = 0.0
+	set_solid(true)
+	look.visible = true
+	surfaced_at = _clock()
 	_pose_look()
 	if active != null:
 		active.enter(self)
@@ -160,6 +170,8 @@ static func make_locomotor(id: StringName) -> Locomotor:
 			loco = DeckWalker.new()
 		&"surface_crawler":
 			loco = SurfaceCrawler.new()
+		&"burrower":
+			loco = Burrower.new()
 		&"zero_g_drift":
 			loco = ZeroGDrift.new()
 		_:
@@ -271,6 +283,7 @@ func think(time: float, dt: float) -> void:
 	ctx.memory = memory
 	ctx.time = time
 	ctx.dt = dt
+	ctx.extra[&"surfaced_ago"] = time - surfaced_at
 	var local := local_transform()
 	ctx.position = local.origin
 	ctx.forward = -local.basis.z.normalized()
@@ -374,6 +387,9 @@ func _go_down() -> void:
 	down = true
 	intent = Intent.idle()
 	velocity = Vector3.ZERO
+	# Brought down going under or coming up: it lies where it is, drawn and solid.
+	if active is Burrower:
+		active.exit(self)
 	if species.knocked_out_for > 0.0:
 		down_left = species.knocked_out_for
 		if look != null and look.has_method(&"act"):
@@ -417,7 +433,33 @@ func _pose_look() -> void:
 	if _flinch_left > 0.0 and not down:
 		squash = Vector3(1.0 / FLINCH, FLINCH, 1.0 / FLINCH)
 	look.transform = Transform3D(basis * Basis.from_scale(squash * maxf(scale, 0.001)),
-		Vector3(0.0, lift, 0.0))
+		Vector3(0.0, lift - look_drop, 0.0))
+
+## Its body and its skin feel things, or not: a burrower under the rock has
+## neither (rock creatures spec §5.2).
+func set_solid(on: bool) -> void:
+	_shape.disabled = not on
+	_skin_shape.disabled = not on
+
+## The look sunk `depth` metres below its feet (a burrower going under or
+## coming up); 0 is standing.
+func sink_look(depth: float) -> void:
+	look_drop = depth
+	_pose_look()
+
+## It has just come up out of the ground (rock creatures spec §5.2): the mind
+## hears how long ago, its place is told, and the look comes up with a flourish.
+func surfaced() -> void:
+	surfaced_at = _clock()
+	if site != null:
+		site.surfaced(self)
+	if look != null and look.has_method(&"act"):
+		look.call(&"act", &"emerge")
+
+## Its director's clock, or 0 when it has none.
+func _clock() -> float:
+	var t: Variant = director.get(&"time") if director != null else null
+	return float(t) if t != null else 0.0
 
 ## An impulse, N·s: each locomotor decides what it does to its grip.
 func shove(impulse: Vector3) -> void:

@@ -296,3 +296,97 @@ func test_salvage_glints_behave_as_before():
 			lit += 1
 	assert_gt(lit, 0)
 	assert_lt(lit, 600)
+
+# --- The Delver (rock creatures spec §5, §9) ----------------------------------
+
+func _delver(seed := 0.4, colour := SpacePalette.UNTINTED) -> DelverLook:
+	return autofree(NpcLooks.build(&"delver", seed, false, colour, Vector2(180, 230))) as DelverLook
+
+func test_the_delver_is_a_segmented_animal_and_cheap():
+	var look := _delver()
+	assert_not_null(look)
+	assert_null(look.get_node_or_null("Placeholder"), "not a placeholder")
+	assert_lte(_triangles(look), 300, "at most 300 triangles")
+	assert_gt(_triangles(look), 120, "plates, a head and a snout, not a lump")
+	assert_almost_eq(NpcLooks.built_size(&"delver"), 3.0, 0.0001)
+	assert_not_null(look.get_node_or_null("Plates"), "chunky plates")
+	assert_not_null(look.get_node_or_null("Head"), "a blunt head")
+	assert_not_null(look.get_node_or_null("Snout"), "and a crystal snout")
+	assert_null(look.get_node_or_null("Legs"), "no legs")
+	assert_eq(DelverLook.PLATES, 6)
+	for mi: MeshInstance3D in look.find_children("*", "MeshInstance3D", true, false):
+		assert_eq(mi.layers, 1, "%s outside" % mi.name)
+		var m := mi.material_override as StandardMaterial3D
+		assert_eq(m.distance_fade_mode, BaseMaterial3D.DISTANCE_FADE_PIXEL_DITHER, "%s fades" % mi.name)
+		assert_almost_eq(m.distance_fade_min_distance, 230.0, 0.001)
+		assert_almost_eq(m.distance_fade_max_distance, 180.0, 0.001)
+
+func test_the_delver_is_3_m_long_low_and_headed_down_minus_z():
+	var look := _delver()
+	var low := Vector3(INF, INF, INF)
+	var high := -low
+	for mi: MeshInstance3D in look.find_children("*", "MeshInstance3D", true, false):
+		for v in (mi.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]:
+			low = low.min(v)
+			high = high.max(v)
+	assert_almost_eq(high.z - low.z, 3.0, 0.1, "3 m from snout to tail")
+	assert_lte(high.y, 0.42, "no taller than the species' 0.4 m, bar a crystal's point")
+	assert_gte(low.y, -0.001, "on the ground, not under it")
+	assert_lte(high.x - low.x, 0.52, "no wider than its 0.5 m")
+	var snout := look.get_node("Snout") as MeshInstance3D
+	var front := INF
+	for v in (snout.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]:
+		front = minf(front, v.z)
+	assert_almost_eq(front, low.z, 0.001, "the snout leads, down -z where the body goes")
+	assert_almost_eq(front, DelverLook.SNOUT_TIP, 0.01, "to its tip")
+
+func test_the_delvers_plates_are_palette_shades_and_its_snout_is_crystal():
+	var look := _delver()
+	var plates := _colours(look.get_node("Plates") as MeshInstance3D)
+	var snout := _colours(look.get_node("Snout") as MeshInstance3D)
+	var in_palette := 0
+	for base in [DelverLook.PLATE_A, DelverLook.PLATE_B]:
+		for k in SpacePalette.SHADES.size():
+			if _has(plates, SpacePalette.shade(SpacePalette.scree(base), k)):
+				in_palette += 1
+	assert_gt(in_palette, 3, "plates in the palette's shades, in two colours banded")
+	assert_true(_has(plates, SpacePalette.shade(SpacePalette.scree(DelverLook.PLATE_A), 2)) 		and _has(plates, SpacePalette.shade(SpacePalette.scree(DelverLook.PLATE_B), 2)), "both bands show on top")
+	assert_false(_has(plates, SpacePalette.CRYSTAL), "no crystal in the plates themselves")
+	assert_true(_has(snout, SpacePalette.shade(SpacePalette.CRYSTAL, 0)) or _has(snout, SpacePalette.CRYSTAL),
+		"a lavender snout")
+	assert_true(_has(_colours(look.get_node("Head") as MeshInstance3D), SpacePalette.SKITTER_EYE), "pale eyes on its head")
+
+func test_a_delver_eating_brightens_its_snout_and_stops():
+	var look := _delver()
+	var snout := look.get_node("Snout") as MeshInstance3D
+	var rest := SpacePalette.shade(SpacePalette.CRYSTAL, 0)
+	var brightest := SpacePalette.shade(SpacePalette.CRYSTAL, SpacePalette.SHADES.size() - 1)
+	assert_true(_has(_colours(snout), rest))
+	look.act(&"eat")
+	assert_true(_has(_colours(snout), brightest), "eating: the brightest step")
+	assert_false(_has(_colours(snout), rest))
+	look.act(&"burrow")
+	assert_true(_has(_colours(snout), rest), "anything else, and it dims")
+
+func test_a_delver_emerging_puffs_a_ring_in_its_own_space_and_it_clears():
+	var look := _delver()
+	add_child(look)
+	look.global_position = Vector3(500, 0, 0)
+	assert_eq(look.find_children("Puff*", "MeshInstance3D", true, false).size(), 0, "none at first")
+	look.act(&"emerge")
+	var puffs := look.find_children("Puff*", "MeshInstance3D", true, false)
+	assert_eq(puffs.size(), DelverLook.PUFFS, "a ring of puffs")
+	for p: MeshInstance3D in puffs:
+		assert_eq(p.get_parent(), look, "a child of the look: moved with it and its rock")
+		assert_false(p.top_level, "not world-space")
+	var span := Vector2.ZERO
+	for p: MeshInstance3D in puffs:
+		span.x = maxf(span.x, absf(p.position.x))
+		span.y = maxf(span.y, absf(p.position.z))
+	assert_gt(span.y, span.x, "the ring is as long as the body")
+	await wait_seconds(DelverLook.PUFF_TIME + 0.4)
+	assert_eq(look.find_children("Puff*", "MeshInstance3D", true, false).size(), 0, "and they are gone")
+	look.act(&"emerge")
+	assert_eq(look.find_children("Puff*", "MeshInstance3D", true, false).size(), DelverLook.PUFFS,
+		"and it puffs again at the next surfacing")
+	remove_child(look)

@@ -35,6 +35,11 @@ Worked examples, inside and outside. Read the one nearest to what you are making
 - **The Glinter** (outside, 0.25 m, lures with a glint and springs at a spacewalker): `data/npcs/glinter.tres`,
   `GlinterNests` (a recipe with real salvage), `behaviours/{lure,ambush,hide}.gd`, `GlinterLook`;
   the leap is `SurfaceCrawler.aim_leap` + `ZeroGDrift`, the bite `Npc.bite`.
+- **The Delver** (outside, 3 m, burrows under a veined rock and pays in grit): `data/npcs/delver.tres`,
+  `DelverBurrows` (a recipe with a round of burrow points), `behaviours/{feed,delve,dive}.gd`, `DelverLook`;
+  the digging is `Burrower` (the mind only asks `Intent.go(point, speed, &"burrow")`), the pay is
+  `RockSite.surfaced` / `died` through the `drop` and `count_near` Callables, the items `crystal_grit` and
+  `quantum_shard`.
 
 **Read first:** `CLAUDE.md` (style guide binding; floating origin; no `#` in `.tscn`/`.tres`),
 `docs/superpowers/specs/2026-09-26-npc-foundation-design.md` (§2 the layers, §21 *As built*: why
@@ -124,6 +129,14 @@ Do these in order. Each names the check that proves it.
    longer `Weapons.usable`: turrets drop it at once and its list entry leaves after
    `WeaponValues.MISSING_GRACE` 2 s. A new population needs nothing for this beyond going through
    that director; the interior director leaves `targets` false, so crew are never shot at.
+   **A creature that pays** (the Delver's grit, the Limpet's husks): the body tells its site
+   (`Npc.surfaced()` -> `RockSite.surfaced`, `died`) and the site asks the flight scene for the items
+   through `drop` and `count_near`. Cap what it can pay near the place (`GRIT_CAP`, one shard at a
+   time), roll from an RNG owned by the site and `randomize()`d when it is built (`RockSite.rolls`; a test sets
+   `rolls.seed`). Never seed it from the record: the site is rebuilt whenever its rock leaves and
+   re-enters detail, so every return would roll the same first dice, and a Delver whose first roll is a
+   shard would farm one; fresh dice keep the 1-in-12 rate across returns, and **drop it outside the body** (`RockSite.behind`: half a metre
+   past a 3 m body's tail): items spawned under a collider are shoved about, and the heap is lost.
 9. **Sound** (inside only): new `Synth` builders, `species.move_sound` for a loop, behaviours set
    `ctx.voice`. Proof: `test_synth.gd` lengths.
 10. **Run the whole suite.** Masks and the floating-origin coverage test catch a lot.
@@ -142,7 +155,13 @@ Do these in order. Each names the check that proves it.
     `skitter_render.gd`: inside at eye height (1.6 m), outside from a spacewalk, lamp on and off,
     and each reaction caught mid-act. Print the counts (how many froze, scattered). Green tests
     prove structure, not looks: the droid read as part of the walls and the skitter as a spider
-    until they were rendered.
+    until they were rendered. **A creature that hugs the ground** (the Delver, 0.4 m high) is hidden by
+    the rock's curve from eye height at 40 m (the horizon is about 30 m on a 284 m rock) and a sliver at a
+    grazing angle: shoot it from where a spacewalker is, looking down 35 degrees (`delver_render.gd`
+    `_far`), with its flank to the camera, and print its length in pixels. A palette colour cannot make a
+    creature much darker than the rock (`scree` is 0.68 of a colour, about 0.7 of the ground on screen):
+    what reads from afar is shape and the bright crystal, so say so, and ask the owner before adding a
+    colour.
 14. **Update this skill and the spec's *As built*** in the same branch: new checks here, new
     lessons in *Mistakes*, new numbers and APIs in `reference.md`.
 
@@ -226,6 +245,12 @@ Do these in order. Each names the check that proves it.
 | "Would I notice it?" answered from the numbers | The first Limpet (a flat cone in its rock's colour) read as a pebble: specks at 40 m, gone at 100 m. The owner: "too much like just rocks" | Render it from a spacewalk at 40-100 m before showing it; give it a shape no stone has (a fluted shell, eight crystal ribs from a raised apex) and a state that shows (the ribs go to the brightest `SHADES` step while sipping); `limpet_render.gd` |
 | `normalized()` for a point's direction on a stretched rock | A dev spawn and a test aimed at `home.normalized()` landed up to 43 m from the surface point the home was made from | `RockDetail.dir_of(p)`, the exact inverse of `surface_point`; and a record's `RockSite.dirs` entry when it has one |
 | Taking `stream.details.live.values()[0]` as the start rock | Once rocks moved into belts (system skeleton spec §6), a neighbour was in detail too and had no herds | `stream.details.nearest(ship.exterior.global_position)`; and count only its own site's contacts |
+| Dropping a creature's pay under its body | A Delver's 3 m capsule (layer 128, which items include) shoved the grit it left: the heap's middle moved 2.4 m and the pieces floated 0.7 m off the ground, and the render showed three specks 30 m away | `RockSite.behind(npc)`: the drop lies `TAIL_CLEAR` 0.5 m past the tail of a body lying along its z, up its up; `test_delver_pay.gd`, `delver_render.gd` (the heap's move is printed) |
+| A far shot of a ground-hugger at eye height | The 40 m and 100 m Delver shots were of bare ground: it lies 0.4 m high behind the rock's curve, and head-on it is 3 px | Look down at 35 degrees (and 12 for nearly along the ground), turn its flank to the camera first, print its pixels. At 40 m it is a 39 px streak with pale dots, at 100 m 15 px, which nobody notices: it is found by the glint of its grit and the life sensor's region, not its look |
+| A recipe joining `RockLife.ORDER` late | `ORDER` listed `delver` before `limpet` while `DelverBurrows` did not exist; the day it did, the Delver took a home on every veined rock and the Limpet groups after it there moved up one number (and their homes, as the Delver's is taken) | Expect it: a species listed in `ORDER` renumbers the groups of those after it on the rocks it takes homes on (a dead Limpet of a veined rock in a save comes back); say so in the report |
+| Float equality in a "has it come up since" test | A brain simulation that surfaced the Delver the very think after it dived saw `surfaced_ago` 0.2 equal `running` 0.2 and kept the dive going | Real surfacings are seconds after the ask: model that (10 s under), as `test_the_mind_cycles_feed_digest_burrow` does |
+| A hull far off a rock in a scene test | A dev Delver sent under 20-70 m was demoted about 14 s into the burrow with the hull 400 m above the rock (cause not pinned: its live radius 250 plus `DEMOTE_MARGIN` 100 is short of that from the hull alone) | Keep the hull within 120 m of the rock in a scene test of anything that travels: `test_delver_pay.gd` |
+| A hand-over that reads the intent that caused it | A burrow ask is still the intent after the burrower hands back (the mind thinks 5 times a second): the crawler sent it straight down again; and off a rock crawler and burrower would swap every tick | The burrower clears a spent `&"burrow"` intent as it hands back; `SurfaceCrawler.burrow_asked` needs a `RockSite`, the locomotor and a `move_to`; `test_burrower.gd` |
 
 ## Not built yet (plan for it; don't assume it works)
 

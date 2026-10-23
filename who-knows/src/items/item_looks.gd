@@ -18,11 +18,12 @@ const LOOKS: Array[StringName] = [&"plasma_pistol", &"mug", &"canister", &"crate
 	&"toolbox", &"spare_helmet", &"power_cell", &"o2_tank", &"spanner", &"spare_module", &"medkit",
 	&"ration_tin", &"rock_sample", &"hand_lamp", &"flare", &"datapad",
 	&"rock_chunk", &"ice_chunk", &"scrap_plate", &"wire_coil", &"broken_module", &"quantum_shard",
-	&"limpet_husk", &"repair_torch", &"package_hub", &"package_drill", &"package_store", &"hose_nozzle"]
+	&"limpet_husk", &"crystal_grit", &"repair_torch", &"package_hub", &"package_drill", &"package_store", &"hose_nozzle"]
 ## Salvage (quantum energy spec §10.5): the looks that glint outside.
-## The Limpet's husk glints too (rock creatures spec §6.4): it is salvage.
+## The Limpet's husk glints too (rock creatures spec §6.4): it is salvage. So
+## does the Delver's crystal grit (§5.4).
 const GLINTS: Array[StringName] = [&"rock_chunk", &"ice_chunk", &"scrap_plate", &"wire_coil",
-	&"broken_module", &"quantum_shard", &"limpet_husk"]
+	&"broken_module", &"quantum_shard", &"limpet_husk", &"crystal_grit"]
 
 ## Head room a module package leaves above its case for the carrying handle.
 const PACKAGE_HANDLE_ROOM := 0.08
@@ -107,6 +108,8 @@ static func build(kit: InteriorKit, look: StringName, size: Vector3, variety: fl
 			quantum_shard(kit, size)
 		&"limpet_husk":
 			limpet_husk(kit, size)
+		&"crystal_grit":
+			crystal_grit(kit, size)
 		&"package_hub":
 			package(kit, size, InteriorPalette.MODULE_COLOURS[&"hub"])
 		&"package_drill":
@@ -526,6 +529,49 @@ static func limpet_husk(kit: InteriorKit, size: Vector3) -> void:
 	kit.annulus(SOLID, k * Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0, -0.035, 0)), 0.056, 0.068,
 		_c(InteriorPalette.TRIM))
 	kit.disc(SOLID, k * Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0, -0.03, 0)), 0.056, shade)
+
+## A Delver's grit (rock creatures spec §5.4): a crumb of three lavender crystal
+## splinters, one upright and two leaning out, each a four-sided point with its
+## faces shaded by turns. Solid, not lit. Designed at 0.09 x 0.07 x 0.09.
+static func crystal_grit(kit: InteriorKit, size: Vector3) -> void:
+	var k := _scale(size, Vector3(0.09, 0.07, 0.09))
+	var light := _c(InteriorPalette.LAVENDER)
+	var shade := _c(InteriorPalette.HOLO_DIM)
+	# Base point, lean (the way its tip goes), radius, length.
+	var splinters := [
+		[Vector3(0.005, -0.035, 0.0), Vector3(0.0, 1.0, 0.0), 0.014, 0.07],
+		[Vector3(-0.026, -0.035, 0.008), Vector3(-0.45, 1.0, 0.1), 0.012, 0.045],
+		[Vector3(0.022, -0.035, -0.02), Vector3(0.3, 1.0, -0.5), 0.01, 0.04],
+	]
+	for s in splinters:
+		_splinter(kit, k, s[0], (s[1] as Vector3).normalized(), s[2], s[3], light, shade)
+
+## One crystal splinter for crystal_grit: a four-sided prism from `base` along
+## `axis`, narrowing over its last third to a point, its faces alternately
+## `light` and `shade`.
+static func _splinter(kit: InteriorKit, k: Transform3D, base: Vector3, axis: Vector3, radius: float,
+		length: float, light: Color, shade: Color) -> void:
+	var u := axis.cross(Vector3.RIGHT if absf(axis.x) < 0.9 else Vector3.BACK).normalized()
+	var v := axis.cross(u)
+	var foot: Array[Vector3] = []
+	var neck: Array[Vector3] = []
+	for i in 4:
+		var turn := u * cos(TAU * (i + 0.5) / 4.0) + v * sin(TAU * (i + 0.5) / 4.0)
+		foot.append(k * (base + turn * radius))
+		neck.append(k * (base + axis * length * 0.66 + turn * radius * 0.8))
+	var tip := k * (base + axis * length)
+	var inside := k * (base + axis * length * 0.4)
+	for i in 4:
+		var j := (i + 1) % 4
+		var colour := light if i % 2 == 0 else shade
+		var side := (foot[j] - foot[i]).cross(neck[i] - foot[i]).normalized()
+		if side.dot((foot[i] + foot[j]) * 0.5 - inside) < 0.0:
+			side = -side
+		kit.quad(SOLID, foot[i], foot[j], neck[j], neck[i], side, colour)
+		var cap := (neck[j] - neck[i]).cross(tip - neck[i]).normalized()
+		if cap.dot((neck[i] + neck[j] + tip) / 3.0 - inside) < 0.0:
+			cap = -cap
+		kit.tri(SOLID, neck[i], neck[j], tip, cap, light if i % 2 == 1 else shade)
 
 ## One flat facet of a solid round the origin, a triangle or a quad, facing
 ## away from it: glowing, unless `batch` says otherwise.

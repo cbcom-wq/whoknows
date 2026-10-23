@@ -172,8 +172,8 @@ func test_the_salvage_set_stows_and_sits_in_the_hand_as_authored():
 ## The sixteen aboard, the six salvage kinds, the repair torch (health and
 ## damage spec §8.1), the three module packages (habitat modules spec §4.1)
 ## and the hose's nozzle (quantum energy spec §11.1).
-func test_the_catalogue_has_28_kinds():
-	assert_eq(_cat.ids().size(), 28)
+func test_the_catalogue_has_29_kinds():
+	assert_eq(_cat.ids().size(), 29)
 
 func test_the_hose_nozzle():
 	var n := _cat.get_def(&"hose_nozzle")
@@ -224,3 +224,21 @@ func test_the_limpet_husk():
 	assert_false(h.eva_tool)
 	assert_null(h.use, "a husk does nothing when used")
 	assert_almost_eq(h.size, Vector3(0.14, 0.08, 0.14), Vector3.ONE * 0.0001)
+
+## Rock creatures spec §5.4, read back from its .tres: the crumb of crystal a
+## Delver leaves where it surfaces, worth 15 QE.
+func test_the_crystal_grit():
+	var g := _cat.get_def(&"crystal_grit")
+	assert_not_null(g, "data/items has crystal_grit")
+	if g == null:
+		return
+	assert_eq(g.display_name, "Crystal grit")
+	assert_eq(g.look, &"crystal_grit")
+	assert_eq(g.quantum_value, 15)
+	assert_eq(g.stow_class, &"small")
+	assert_eq(g.grip, ItemDefinition.Grip.WIELD)
+	assert_false(g.eva_tool)
+	assert_null(g.use, "grit does nothing when used")
+	var husk := _cat.get_def(&"limpet_husk")
+	assert_lt(g.size.x * g.size.y * g.size.z, husk.size.x * husk.size.y * husk.size.z, "small: smaller than a husk")
+	assert_lte(g.mass_kg, 0.3)

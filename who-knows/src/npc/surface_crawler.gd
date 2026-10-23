@@ -75,7 +75,8 @@ func enter(npc: Npc) -> void:
 	_leap_to = null
 
 func step(npc: Npc, intent: Intent, delta: float) -> void:
-	if _resting(npc, intent):
+	# Asked to burrow, it does not walk on: handover sends it under this tick.
+	if burrow_asked(npc, intent) or _resting(npc, intent):
 		return
 	var space := npc.get_world_3d().direct_space_state
 	var basis := npc.global_basis.orthonormalized()
@@ -242,7 +243,16 @@ func handover(npc: Npc) -> StringName:
 		return &"zero_g_drift"
 	if _let_go or _lost_for >= LOST_AFTER:
 		return &"zero_g_drift"
+	if burrow_asked(npc, npc.intent):
+		return &"burrower"
 	return &""
+
+## Whether `intent` asks it to go under the rock it is on and it can: it is on
+## a rock (a Burrower has no surface to go under anywhere else), has the
+## locomotor, and was told where to come up (rock creatures spec §5.2).
+static func burrow_asked(npc: Npc, intent: Intent) -> bool:
+	return intent.action == &"burrow" and intent.move_to != null and npc.site is RockSite \
+		and npc.locomotors.has(&"burrower")
 
 func grounded() -> bool:
 	return gripping

@@ -41,6 +41,10 @@ static func build(look: StringName, variety: float, inside: bool, tint := SpaceP
 			var glinter := GlinterLook.new()
 			glinter.build(variety, tint, fade)
 			return glinter
+		&"delver":
+			var delver := DelverLook.new()
+			delver.build(variety, tint, fade)
+			return delver
 		_:
 			return placeholder(inside)
 
@@ -54,6 +58,8 @@ static func built_size(look: StringName) -> float:
 			return 1.0
 		&"glinter":
 			return GlinterLook.LENGTH
+		&"delver":
+			return DelverLook.LENGTH
 	return 0.0
 
 ## A box: an NPC with no look yet.
