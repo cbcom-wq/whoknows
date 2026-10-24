@@ -30,7 +30,7 @@ func _in(section: StringName) -> Vector3i:
 			return coord
 	return Vector3i(99, 99, 99)
 
-func test_six_sections_and_four_components_share_every_block_s_hp():
+func test_six_sections_four_components_and_the_turrets_share_every_block_s_hp():
 	var total := 0.0
 	for coord: Vector3i in _grid.coords():
 		total += _cat.get_def(_grid.get_block(coord).block_id).hp
@@ -38,12 +38,21 @@ func test_six_sections_and_four_components_share_every_block_s_hp():
 	for id in ShipDamage.SECTIONS:
 		assert_gt(_d.section_hp[id], 500.0, "%s has hull to it" % id)
 		parts += _d.section_hp[id]
-	assert_eq(_d.component_hp.size(), 4)
+	# Each turret is a component of its own (ship weapons spec §3.4): the dorsal and ventral ones.
+	var turrets := 0.0
+	var turret_count := 0
+	for part in _d.component_hp:
+		if ShipDamage.is_turret_part(part):
+			turrets += _d.component_hp[part]
+			turret_count += 1
+	assert_eq(turret_count, 2, "the starter's two light turrets")
+	assert_eq(turrets, 400.0, "200 each")
+	assert_eq(_d.component_hp.size(), 4 + turret_count)
 	assert_eq(_d.component_hp[&"engines"], 750.0, "five thrusters")
 	assert_eq(_d.component_hp[&"quantum_core"], 250.0)
 	assert_eq(_d.component_hp[&"computer"], 300.0, "raised from the block's 60")
 	assert_eq(_d.component_hp[&"cockpit"], 300.0, "raised from 240")
-	assert_almost_eq(parts + 750.0 + 250.0 + 60.0 + 240.0, total, 0.01)
+	assert_almost_eq(parts + turrets + 750.0 + 250.0 + 60.0 + 240.0, total, 0.01)
 
 func test_the_sections_are_thirds_along_and_halves_across():
 	for coord: Vector3i in _d.sections_of:
