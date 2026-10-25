@@ -45,17 +45,17 @@
 
 The assist already cancels "velocity nobody asked for" on every axis without input, toward 0 (or the locked speed fore and aft). The hold changes only what it cancels *toward*: on an axis with no input, toward `held`'s component instead. Same budgets, same `DRIFT_AUTHORITY`, same speed limit: a pilot with a hold flies no better than the assist. Needs assist; turning assist off, or the assist refused, drops it (as it drops the speed lock). Not saved (the pilot re-asks every tactics tick).
 
-- [ ] **Step 1: Write the failing tests:**
+- [x] **Step 1: Write the failing tests:**
   - `test_without_a_hold_nothing_changes`: `translation_force(Vector3(3, 0, -5), Vector3.ZERO, 1000, budget, false, true, false, 0.0)` equals the same call with `held = null` and equals today's expected `(-3000, 0, 5000)` clamped by budget.
   - `test_a_hold_pulls_each_quiet_axis_toward_it`: `held = Vector3(10, 0, -20)`, velocity `Vector3(0, 0, -20)`, no input → force x > 0, z ≈ 0, y ≈ 0.
   - `test_input_on_an_axis_wins_over_the_hold`: input `x = -1` with the same hold → force x == `-lateral`.
   - `test_the_hold_needs_assist`: `hold_velocity(v)` with assist off leaves `velocity_hold` false; turning assist off drops a hold.
   - `test_the_hold_obeys_the_speed_limit`: a hold of 10× `CRUISE_LIMIT_MPS` on a simulated hull is clamped by the existing limit after a physics tick (use the existing test's hull fixture from `test_flight_computer.gd`).
 
-- [ ] **Step 2: Run** `./run_tests.ps1 '-gselect=test_velocity_hold.gd'`. Expected: FAIL (no `hold_velocity`).
+- [x] **Step 2: Run** `./run_tests.ps1 '-gselect=test_velocity_hold.gd'`. Expected: FAIL (no `hold_velocity`).
 
-- [ ] **Step 3: Implement** the API and the `held` parameter. In `_apply_translation`, pass `basis.inverse() * held_velocity` when `velocity_hold`, else null. A hold set replaces the speed lock's fore-and-aft target while it lasts; `speed_locked` itself is left as it was (the pilot never touches it).
+- [x] **Step 3: Implement** the API and the `held` parameter. In `_apply_translation`, pass `basis.inverse() * held_velocity` when `velocity_hold`, else null. A hold set replaces the speed lock's fore-and-aft target while it lasts; `speed_locked` itself is left as it was (the pilot never touches it).
 
-- [ ] **Step 4: Run** `test_velocity_hold.gd` and `test_flight_computer.gd`. Expected: pass.
+- [x] **Step 4: Run** `test_velocity_hold.gd` and `test_flight_computer.gd`. Expected: pass.
 
-- [ ] **Step 5: Commit** `feat: the assist can hold a velocity, for a pilot that is not you`.
+- [x] **Step 5: Commit** `feat: the assist can hold a velocity, for a pilot that is not you`.
