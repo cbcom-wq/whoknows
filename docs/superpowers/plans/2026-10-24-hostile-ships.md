@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-24-hostile-ships-design.md` (approved 2026-10-24). Read it with this plan; § numbers below are the spec's.
 
+**Run as one session per task** (the owner, 2026-10-24): each task's own plan is in `2026-10-24-hostile-ships/` (its `README.md` gives the waves), on a branch `hostiles-tNN` in `D:\git\whoknows-hostiles-tNN` cut from `hostiles`, merged back by the owner wave by wave.
+
 ## Global Constraints
 
 - **The pilot never cheats** (spec §5.1, decision 4): it writes only `FlightComputer.set_pilot_input`, `hold_velocity`/`release_velocity`, `clear_heading`, and `FireControl` (`mark`, `set_orders`, `clear`). Never a hull velocity, transform, force or a turret field. It knows only targets within `WeaponValues.CONTACT_RANGE` (5,000 m), its own ship, and bolts in flight.
