@@ -246,6 +246,8 @@ func _wire_ship(ship: Ship) -> void:
 	# outside; a shed plate is a stray.
 	ship.blocks_lost.connect(_on_blocks_lost.bind(ship))
 	ship.plate_shed.connect(func(item: Item) -> void: strays.adopt(item))
+	# A hit it takes knocks your view if you are in it (hostile ships spec §6.1).
+	ship.felt_hit.connect(_on_felt_hit.bind(ship))
 	# Its crew answers to the game's ledger, and shows on F4. The crew woke
 	# with the ship, before it had the ledger.
 	ship.npc_director.ledger = npc_ledger
@@ -553,6 +555,12 @@ func _rescue(avatar: Avatar) -> void:
 		else:
 			avatar.place(pose)
 		return
+
+## A hit on `ship` knocks the view you see through if you are in its cabin
+## (hostile ships spec §6.1), walking or seated; the gun camera takes its own.
+func _on_felt_hit(strength: float, from: Vector3, ship: Ship) -> void:
+	if _avatar.get_parent() == ship.interior:
+		_avatar.knock(strength, from)
 
 ## A hole where you stand puts you outside, moving as you were (health and
 ## damage spec §7.4): only a hole in the ship you stand in.
