@@ -160,6 +160,9 @@ func _ready() -> void:
 	_make_bases()
 	_make_suit_tie()
 	_place_avatar_on_deck()
+	# A target to hostiles on a spacewalk (hostile ships spec §4.2); Weapons
+	# keeps you out while aboard, and TargetContacts never lists the kind.
+	Weapons.join(_avatar, Weapons.YOU)
 	_set_interior_mood()
 	_set_outside_mood()
 	_wire_hud()
