@@ -52,7 +52,7 @@
   - `BoltPool.flying() -> Array[PhaserBolt]` — bolts armed and not yet landed or fading. `PhaserBolt` exposes `source: Node`, `direction`, `carrier`, `speed()` (from its spec) for the watcher.
   - `Broadside.inbound(bolts: Array, own_ship: Node, at: Vector3, own_v: Vector3, miss: float, horizon: float) -> int` — how many bolts not from `own_ship` pass within `miss` (25 m) of `at` within `horizon` (3 s), relative motion.
 
-- [ ] **Step 1: Write the failing tests:**
+- [x] **Step 1: Write the failing tests:**
   - `test_best_face_on_a_starter_is_up_or_down`: build the starter's turrets' sky maps (`SkyMap.build(layout, coord, normal)` for its two turrets) → best face has `abs(y) > 0.5` and both bear on it.
   - `test_a_wrecked_turret_does_not_count`: same, with the dorsal not live → the face is one only the ventral bears on.
   - `test_desired_basis_aims_the_face`: random `current`, `face_local = Vector3.UP`, `to_target = Vector3.RIGHT` → `(desired * Vector3.UP).dot(Vector3.RIGHT) > 0.999`.
@@ -60,7 +60,7 @@
   - `test_rock_avoid_steers_round_a_rock`: a `StaticBody3D` sphere (radius 50) on layer `AsteroidBody.LAYER` 400 m ahead of a body moving at 60 m/s → `steer` returns a vector with length > 0 perpendicular-ish (`abs(dot(normalized, velocity.normalized())) < 0.3`); the same with the rock 40 m off the path's side beyond clearance → zero.
   - `test_inbound_counts_only_bolts_that_pass_close`: three fake bolt dicts/objects (one aimed at you, one wide by 200 m, one from your own ship) → 1.
 
-- [ ] **Step 2: Run** `./run_tests.ps1 '-gselect=test_pilot_steering.gd'`. Expected: FAIL.
-- [ ] **Step 3: Implement** both files and `BoltPool.flying()`. `inbound` takes duck-typed bolts (`global_position`, `direction`, `carrier`, `speed()`, `source`) so tests can pass stubs.
-- [ ] **Step 4: Run** it and `test_phaser_bolt.gd`. Expected: pass.
-- [ ] **Step 5: Commit** `feat: a pilot knows which face to show, what to steer round, and what is coming`.
+- [x] **Step 2: Run** `./run_tests.ps1 '-gselect=test_pilot_steering.gd'`. Expected: FAIL.
+- [x] **Step 3: Implement** both files and `BoltPool.flying()`. `inbound` takes duck-typed bolts (`global_position`, `direction`, `carrier`, `speed()`, `source`) so tests can pass stubs.
+- [x] **Step 4: Run** it and `test_phaser_bolt.gd`. Expected: pass.
+- [x] **Step 5: Commit** `feat: a pilot knows which face to show, what to steer round, and what is coming`.
