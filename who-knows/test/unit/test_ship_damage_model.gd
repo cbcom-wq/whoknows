@@ -86,13 +86,7 @@ func test_damage_stops_at_nothing_left():
 	assert_eq(_d.section_damage[&"port_stern"], _d.section_hp[&"port_stern"])
 	_d.hit(_first(&"computer"), 1e9)
 	assert_eq(_d.component_stage(&"computer"), BlockDamage.Stage.WRECKED)
-	assert_almost_eq(_d.hull_whole(), 1.0 - _d.section_hp[&"port_stern"] / _total_section_hp(), 0.0001)
-
-func _total_section_hp() -> float:
-	var t := 0.0
-	for id in ShipDamage.SECTIONS:
-		t += _d.section_hp[id]
-	return t
+	assert_eq(_d.hull_whole(), 0.0, "what the port stern cannot take spills through every section (spill-over)")
 
 func test_a_component_is_damaged_below_half_and_wrecked_at_nothing():
 	var c := _first(&"quantum_core")

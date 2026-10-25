@@ -23,6 +23,16 @@ const SECTION_LABELS := {
 	&"port_mid": "PORT MIDSHIP", &"starboard_mid": "STARBOARD MIDSHIP",
 	&"port_stern": "PORT STERN", &"starboard_stern": "STARBOARD STERN",
 }
+## Each section's neighbours, where what it cannot take spills (hostile ships
+## spec §8.1): along the length on its side, and across in its third.
+const NEIGHBOURS := {
+	&"port_bow": [&"starboard_bow", &"port_mid"],
+	&"port_mid": [&"starboard_mid", &"port_bow", &"port_stern"],
+	&"port_stern": [&"starboard_stern", &"port_mid"],
+	&"starboard_bow": [&"port_bow", &"starboard_mid"],
+	&"starboard_mid": [&"port_mid", &"starboard_bow", &"starboard_stern"],
+	&"starboard_stern": [&"port_stern", &"starboard_mid"],
+}
 ## Component id -> the block ids it is made of.
 const COMPONENTS := {
 	&"engines": [&"thruster"],
@@ -283,8 +293,46 @@ func hit(coord: Vector3i, amount: float, side_x := 0.0) -> bool:
 		_hurt(sides[1], amount * 0.5)
 	return true
 
+## Deals `amount` to `section`. What a section at 0 cannot take spills (hostile
+## ships spec §8.1): split evenly between the nearest sections still standing,
+## through any at 0 between, and on again from each that fills. Dropped when
+## every section is at 0.
 func _hurt(section: StringName, amount: float) -> void:
-	section_damage[section] = minf(section_damage[section] + amount, section_hp[section])
+	var queue: Array = [[section, amount]]
+	while not queue.is_empty():
+		var next: Array = queue.pop_front()
+		var id: StringName = next[0]
+		var left: float = next[1]
+		var room: float = section_hp[id] - section_damage[id]
+		if left < room:
+			section_damage[id] += left
+			continue
+		section_damage[id] = section_hp[id]
+		left -= maxf(room, 0.0)
+		var standing := _nearest_standing(id)
+		for to: StringName in standing:
+			queue.append([to, left / standing.size()])
+
+## The sections still standing nearest `from` through those at 0, breadth
+## first along NEIGHBOURS; none when every section is at 0.
+func _nearest_standing(from: StringName) -> Array[StringName]:
+	var seen := {from: true}
+	var ring: Array[StringName] = [from]
+	while not ring.is_empty():
+		var out: Array[StringName] = []
+		var onward: Array[StringName] = []
+		for id: StringName in ring:
+			for n: StringName in NEIGHBOURS[id]:
+				if seen.has(n):
+					continue
+				seen[n] = true
+				onward.append(n)
+				if section_damage[n] < section_hp[n]:
+					out.append(n)
+		if not out.is_empty():
+			return out
+		ring = onward
+	return [] as Array[StringName]
 
 ## Mends `share` (0..1) of a section's hp; returns the share it used.
 func repair_section(section: StringName, share: float) -> float:
