@@ -43,11 +43,11 @@
 **Interfaces:**
 - Produces: `ShipDamage.NEIGHBOURS: Dictionary` — each section to its neighbours along the length on its side and across in its third: `port_bow → [starboard_bow, port_mid]`, `port_mid → [starboard_mid, port_bow, port_stern]`, `port_stern → [starboard_stern, port_mid]`, and the starboard mirror. `_hurt(section, amount)` keeps what fits; the rest is split evenly between neighbours not at 0, each recursively; when every section is at 0 the rest is dropped. Breadth-first with a visited set so it ends.
 
-- [ ] **Step 1: Write the failing tests** (`ShipDamage.build` on the starter's layout):
+- [x] **Step 1: Write the failing tests** (`ShipDamage.build` on the starter's layout):
   - `test_overflow_goes_to_neighbours`: deal `section_hp[port_bow] + 1000` to a port-bow block → port bow at 0, starboard bow + port mid share 1000 (500 each ± 1).
   - `test_overflow_skips_dead_neighbours`: port bow and starboard bow at 0 → the next 1000 on port bow goes all to port mid.
   - `test_one_face_can_reach_zero`: keep hitting one port-bow block → `hull_whole()` reaches 0.0 after about the total hp (± 1%).
   - `test_components_never_spill`: 5000 on the core → core at its hp, every section untouched.
   - `test_crash_damage_spills_too`: `Ship.take_damage_many` with a crash-sized amount past a section's hp → a neighbour takes the rest (scene-based).
-- [ ] **Step 2–4:** run (FAIL), implement, run `test_spill_over.gd`, `test_ship_damage_model.gd`, `test_ship_damage.gd` (pass).
-- [ ] **Step 5: Commit** `feat: a section at 0 passes the rest to its neighbours`.
+- [x] **Step 2–4:** run (FAIL), implement, run `test_spill_over.gd`, `test_ship_damage_model.gd`, `test_ship_damage.gd` (pass).
+- [x] **Step 5: Commit** `feat: a section at 0 passes the rest to its neighbours`.
