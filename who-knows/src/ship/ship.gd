@@ -46,6 +46,9 @@ var inner_cells := {}
 ## The ship's damage: six hull sections and four components (ship damage
 ## sections spec). The grid's per-block damage is its view (_apply_view).
 var damage: ShipDamage
+## Whose ship it is (hostile ships spec §4.1): Sides.CREW, yours, or
+## Sides.HOSTILE. Saved with it.
+var side: StringName = Sides.CREW
 ## The cabin's look the interior was last built at (ShipDamage.cabin_level).
 var _cabin_level := 0
 var stats: ShipStats
@@ -775,6 +778,7 @@ func to_dict(universe: Universe) -> Dictionary:
 	return {
 		"layout": ShipBlueprint.from_grid(grid, String(name)).to_dict(),
 		"launch": launch_blueprint.to_dict() if launch_blueprint != null else {},
+		"side": String(side),
 		"hull": {
 			"at": SaveCodec.upoint(hull_at),
 			"turn": SaveCodec.basis(hull_turn),
@@ -945,6 +949,7 @@ func restore_hull(d: Dictionary, universe: Universe) -> void:
 ## Everything aboard as the save had it: flight settings, store, airlocks
 ## and items. Call after set_grid(layout_of(d), false).
 func restore_aboard(d: Dictionary) -> void:
+	side = Sides.read(d.get("side"))
 	if d.has("damage") and damage != null:
 		damage.from_dict(d["damage"])
 		_apply_view()

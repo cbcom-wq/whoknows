@@ -34,7 +34,7 @@ func render(telemetry: VehicleTelemetry) -> void:
 			continue
 		var d: float = e["distance"]
 		marks.append({"index": i + 1, "position": cam.unproject_position(at), "solid": e["bearing"],
-			"hostile": Weapons.is_hostile(node),
+			"hostile": Weapons.is_hostile(fire_control.ship, node),
 			"text": "%d · %s" % [i + 1, ("%.1f KM" % (d / 1000.0)) if d >= 1000.0 else ("%d M" % roundi(d))]})
 	queue_redraw()
 

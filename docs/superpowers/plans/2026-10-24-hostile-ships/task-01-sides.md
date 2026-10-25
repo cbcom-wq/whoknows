@@ -45,17 +45,17 @@
 **Interfaces:**
 - Produces: `Sides.CREW`, `Sides.HOSTILE`; `Sides.hostile_to(a: StringName, b: StringName) -> bool`; `Sides.side_of(node: Node) -> StringName` (a hull's ship's `side`, a `Ship`'s own, `CREW` for the `Avatar`, `&""` otherwise); `Ship.side: StringName = Sides.CREW` (saved as `"side"` in `Ship.to_dict`, read in `restore_aboard`); `Weapons.YOU := &"you"`; `Weapons.is_hostile(shooter: Node, node: Node) -> bool`; `Weapons.hostile_rule` is now called as `hostile_rule.call(shooter, node)`.
 
-- [ ] **Step 1: Write the failing tests** in `test_sides.gd` (scene-based like `test_ship_turrets.gd`: instance `res://scenes/flight_test.tscn`, take `/Ship`, `fleet.spawn` a second starter grid):
+- [x] **Step 1: Write the failing tests** in `test_sides.gd` (scene-based like `test_ship_turrets.gd`: instance `res://scenes/flight_test.tscn`, take `/Ship`, `fleet.spawn` a second starter grid):
   - `test_crew_and_hostile_are_hostile_to_each_other`: `Sides.hostile_to(CREW, HOSTILE)` and the reverse true; `CREW`/`CREW`, `HOSTILE`/`HOSTILE`, `&""`/`HOSTILE` false.
   - `test_a_ship_is_crew_until_made_hostile`: a spawned ship's `side == Sides.CREW`; set `HOSTILE`; `Weapons.is_hostile(starter, other.exterior)` true and `Weapons.is_hostile(other, starter.exterior)` true; `Weapons.is_hostile(starter, starter.exterior)` false.
   - `test_fire_control_engages_a_hostile_unmarked`: starter `ENGAGE`, nothing listed, hostile ship placed 400 m off its dorsal turret's sky; after `fire_control.assign(0.2)` some turret's `target` is the hostile's hull. Same with the other ship `CREW`: no turret has a target.
   - `test_you_are_a_target_only_to_hostiles_on_a_spacewalk`: the avatar in `Weapons.TARGETS` with id `Weapons.YOU`; `Weapons.usable(avatar)` false while `mode == PLATING`, true in `SUIT`; `Weapons.is_hostile(hostile_ship, avatar)` true; `Weapons.is_hostile(starter, avatar)` false.
   - `test_side_survives_a_save`: `to_dict(universe)["side"] == "hostile"`; a fresh spawn given `restore_aboard(d)` reads `HOSTILE`; a dict without `"side"` reads `CREW`.
 
-- [ ] **Step 2: Run them to see them fail.** `godot --headless --path . --import`, then `./run_tests.ps1 '-gselect=test_sides.gd'`. Expected: failures naming `Sides`.
+- [x] **Step 2: Run them to see them fail.** `godot --headless --path . --import`, then `./run_tests.ps1 '-gselect=test_sides.gd'`. Expected: failures naming `Sides`.
 
-- [ ] **Step 3: Implement.** `Sides` as above. `Weapons.is_hostile(shooter, node)`: the stub first if valid, else `Sides.hostile_to(Sides.side_of(shooter), Sides.side_of(node))`. `Weapons.usable` returns false for an `Avatar` not in `Avatar.Mode.SUIT`. `FireControl._pick` passes `ship`. `TargetBrackets` passes the ship whose `fire_control` it draws (`fire_control.ship`). In `flight_test.gd`, `Weapons.join(_avatar, Weapons.YOU)` once the avatar exists (TargetContacts already skips the kind). Fix the two existing tests' stubs to `func(_s: Node, n: Node) -> bool`.
+- [x] **Step 3: Implement.** `Sides` as above. `Weapons.is_hostile(shooter, node)`: the stub first if valid, else `Sides.hostile_to(Sides.side_of(shooter), Sides.side_of(node))`. `Weapons.usable` returns false for an `Avatar` not in `Avatar.Mode.SUIT`. `FireControl._pick` passes `ship`. `TargetBrackets` passes the ship whose `fire_control` it draws (`fire_control.ship`). In `flight_test.gd`, `Weapons.join(_avatar, Weapons.YOU)` once the avatar exists (TargetContacts already skips the kind). Fix the two existing tests' stubs to `func(_s: Node, n: Node) -> bool`.
 
-- [ ] **Step 4: Run** `test_sides.gd`, `test_weapons.gd`, `test_fire_control.gd`, `test_weapons_hud.gd` (the brackets' tests), `test_ship_turrets.gd`. Expected: all pass.
+- [x] **Step 4: Run** `test_sides.gd`, `test_weapons.gd`, `test_fire_control.gd`, `test_weapons_hud.gd` (the brackets' tests), `test_ship_turrets.gd`. Expected: all pass.
 
-- [ ] **Step 5: Commit** `feat: ships have a side; hostile is crew against hostile`.
+- [x] **Step 5: Commit** `feat: ships have a side; hostile is crew against hostile`.
