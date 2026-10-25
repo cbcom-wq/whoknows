@@ -51,7 +51,7 @@
 
 Rules (the spec's §5.3, made exact): the score is scaled by `1 + rng.randf_range(-noise, noise)`. **Stand-off** when `own.reach > foe.reach + 100` (it can hit from where it cannot be hit), or the score is below 1; **brawler** otherwise. From brawler it needs the score under `1 − SWITCH_MARGIN` to switch, from stand-off over `1 + SWITCH_MARGIN`. A brawler whose `qe < 0.25 × qe_max` while the foe's is above it goes stand-off. Preferred range: brawler `BRAWL_RANGE`; stand-off `STAND_OFF_SHARE × own.reach`, but past `foe.reach + 50` when its reach allows. A ship with no live turret is stand-off at `foe.reach + 300` (it keeps away).
 
-- [ ] **Step 1: Write the failing tests** (dicts, no scene):
+- [x] **Step 1: Write the failing tests** (dicts, no scene):
   - `test_the_stronger_up_close_brawls`: own dps 60 hull 12000, foe dps 30 hull 12000, equal reach → `BRAWLER` at skill 1.
   - `test_the_longer_reach_stands_off`: own reach 1500, foe 1200 → `STAND_OFF`, preferred range 1350 (`0.9 × 1500`) ≥ `foe.reach + 50`.
   - `test_a_losing_brawler_stands_off`: current `BRAWLER`, score 0.8 → `STAND_OFF`; score 0.9 → stays `BRAWLER` (hysteresis).
@@ -60,7 +60,7 @@ Rules (the spec's §5.3, made exact): the score is scaled by `1 + rng.randf_rang
   - `test_reading_a_starter`: scene-based: the starter reads `dps` 60 (two lights: 15 × 4 / (4 × 0.125 + 1.5)), `reach` 1200, `whole` 1.0, `hull` ≈ 12,410 (±50).
   - `test_skill_knobs_span_their_ends`: `PilotSkill.new(0).reaction == 1.0`, `PilotSkill.new(1).reaction == 0.2`, etc.
 
-- [ ] **Step 2: Run** `./run_tests.ps1 '-gselect=test_fight_assessment.gd'` (after `--import`). Expected: FAIL.
-- [ ] **Step 3: Implement** the three files.
-- [ ] **Step 4: Run** it. Expected: pass.
-- [ ] **Step 5: Commit** `feat: a pilot reads the fight and picks a style`.
+- [x] **Step 2: Run** `./run_tests.ps1 '-gselect=test_fight_assessment.gd'` (after `--import`). Expected: FAIL.
+- [x] **Step 3: Implement** the three files.
+- [x] **Step 4: Run** it. Expected: pass.
+- [x] **Step 5: Commit** `feat: a pilot reads the fight and picks a style`.
