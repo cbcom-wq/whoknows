@@ -12,6 +12,11 @@ signal blocks_lost(coords: Array[Vector3i])
 ## §8.1): already outside, in space and in EXTERIOR_SPACE. The flight scene
 ## makes it a stray.
 signal plate_shed(item: Item)
+## A hit landed that is felt aboard (hostile ships spec §6.1): a bolt on the
+## hull or a crash, of HitFeel.strength, from the world direction `from` (from
+## the ship toward where it came from). The cabin's lights dip on their own;
+## the flight scene knocks your view when this is the ship you are in.
+signal felt_hit(strength: float, from: Vector3)
 ## Every ship is in this group, for things that must find one without being
 ## given it (the repair torch aimed at a hole).
 const GROUP := &"ships"
@@ -76,6 +81,9 @@ var damage_log := DamageLog.new()
 ## Sparks, bursts and chunks on the hull (health and damage spec §9).
 var damage_show: DamageShow
 var _rebuild_queued := false
+## The ceiling lights' dip as hits land (hostile ships spec §6.1), under the
+## interior and bound to its lights after every rebuild.
+var cabin_dip: CabinDip
 
 ## Who lives aboard (NPC foundation spec §4.2, §14): the interior's director,
 ## the holder its NPCs stand under, and the place they live in.
@@ -240,6 +248,7 @@ func _crash(body: Node, knock: float) -> void:
 		return
 
 func _deal_crash(cell: Vector3i, amount: float, side_x := 0.0) -> void:
+	_feel(amount, exterior.global_basis * ShipGrid.cell_center(cell))
 	var hits := {cell: amount}
 	var sides := {cell: side_x}
 	for n in grid.neighbours(cell):
@@ -263,6 +272,17 @@ func _on_hull_hit(hit: Hit) -> void:
 		take_damage_many({cell: hit.damage}, {cell: at.x - ShipGrid.cell_center(cell).x})
 	if hit.kind == &"phaser":
 		hull_struck(clampf(hit.damage / 4.0, 2.0, 8.0))
+	_feel(hit.damage, -hit.direction if hit.direction != Vector3.ZERO else hit.position - exterior.global_position)
+
+## A hit of `damage` hp felt aboard from the world direction `from`: the
+## lights dip, and felt_hit tells whoever is in the cabin.
+func _feel(damage: float, from: Vector3) -> void:
+	if damage <= 0.0:
+		return
+	var strength := HitFeel.strength(damage)
+	if cabin_dip != null:
+		cabin_dip.dip(strength)
+	felt_hit.emit(strength, from.normalized())
 
 ## A hit on an interior surface: the block behind it (spec §5.1), and a hull
 ## block's section on the side the shot landed (ship damage sections spec §3).
@@ -584,6 +604,7 @@ func _rebuild_everything(hull := true) -> void:
 	interior_builder.hull_wear = _cabin_level
 	interior_builder.hull_flicker = _cabin_level == 2
 	interior_builder.rebuild()
+	_bind_dip()
 	_place_seat()
 	interior_builder.geometry_body().set_meta(&"receive_hit", _on_interior_hit)
 	interior_builder.geometry_body().set_meta(&"ship", self)
@@ -616,6 +637,16 @@ func _rebuild_everything(hull := true) -> void:
 	_apply_own()
 	_apply_livery()
 	Weapons.join(exterior, Weapons.ship_id(self))
+
+## The cabin's dip, made once under the interior, finds the lights the rebuild
+## just dressed.
+func _bind_dip() -> void:
+	if cabin_dip == null:
+		cabin_dip = CabinDip.new()
+		cabin_dip.name = "CabinDip"
+		interior.add_child(cabin_dip)
+	if interior_builder.geometry_body() != null:
+		cabin_dip.bind(interior_builder.geometry_body())
 
 ## A Turret for each turret block (spec §3), on the hull: one kept from the
 ## last build by cell and kind, so a rebuild on every hit never resets an aim.

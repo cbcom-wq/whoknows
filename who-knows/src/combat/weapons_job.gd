@@ -28,6 +28,9 @@ var camera: Camera3D
 var sight: GunSight
 var _layer: CanvasLayer
 var _whine: AudioStreamPlayer
+## A hit on the ship knocking the gun camera (hostile ships spec §6.1): shifted
+## only, as the camera never rolls and the aim follows its basis.
+var _knock := HitFeel.new()
 
 func _ready() -> void:
 	_layer = CanvasLayer.new()
@@ -52,16 +55,22 @@ func sat(_avatar: Avatar) -> void:
 	active = true
 	if ship != null:
 		ship.flight_computer.gunner_hold = true
+		if not ship.felt_hit.is_connected(knock):
+			ship.felt_hit.connect(knock)
 	_take()
 
 func stood(_avatar: Avatar) -> void:
 	active = false
 	if ship != null:
 		ship.flight_computer.gunner_hold = false
+		if ship.felt_hit.is_connected(knock):
+			ship.felt_hit.disconnect(knock)
 		for t in ship.heavy_turrets():
 			t.manual = false
+	_knock = HitFeel.new()
 	if is_instance_valid(camera):
 		camera.current = false
+		_show_knock()
 	sight.visible = false
 	_whine.stop()
 
@@ -127,11 +136,31 @@ func _pose_camera() -> void:
 	camera.transform = Transform3D(Basis.from_euler(Vector3(aim.y, -aim.x, 0.0)),
 		Vector3(0, WeaponValues.MUZZLE_UP + CAMERA_UP, 0))
 
-func _process(_delta: float) -> void:
+## A hit on the ship (Ship.felt_hit) from the world direction `from`, while
+## you man the gun.
+func knock(strength: float, from: Vector3) -> void:
+	if not active or not is_instance_valid(camera):
+		return
+	_knock.knock(strength, camera.global_basis.inverse() * from)
+	_show_knock()
+
+## Settles a knock by `delta` seconds. Called every frame while manned; tests
+## call it directly.
+func tick_knock(delta: float) -> void:
+	_knock.settle(delta)
+	if is_instance_valid(camera):
+		_show_knock()
+
+func _show_knock() -> void:
+	camera.h_offset = _knock.shift.x
+	camera.v_offset = _knock.shift.y
+
+func _process(delta: float) -> void:
 	if not active or not _sync():
 		return
 	var t := heavy()
 	_pose_camera()
+	tick_knock(delta)
 	t.manual_aim = -camera.global_basis.z
 	sight.barrel_point = t.muzzle() + t.barrel_dir() * 1000.0
 	sight.lead_point = _lead(t)
