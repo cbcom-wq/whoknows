@@ -50,7 +50,7 @@
   - `CabinDip` (Node under the interior): `dip(strength: float)`, `factor() -> float` (1 at rest); one dip at a time — a new one replaces the running one only if stronger; `register(lamp: OmniLight3D)` captures its built energy; `_process` writes `energy × factor()` into plain lamps; `LightFlicker` multiplies its own output by `dip.factor()` when it has one. Screens and glow plinths untouched (spec §6.1). Re-registered on every interior rebuild.
   - `WeaponsJob` shakes its gun camera with `Camera3D.h_offset`/`v_offset` by the same rule while sat.
 
-- [ ] **Step 1: Write the failing tests:**
+- [x] **Step 1: Write the failing tests:**
   - `test_strength_scales_with_damage`: 15 → 0.125, 120 → 1.0, 5 → 0.1, 500 → 1.0.
   - `test_a_heavy_knock_is_bigger_and_settles`: `knock(1.0, Vector3.RIGHT)` → head roll magnitude ≈ `ROLL_MOST`; `knock(0.125, ...)` ≈ an eighth; after `SETTLE` + 0.05 s both back to 0.
   - `test_a_burst_storm_is_capped`: twelve `knock(1.0)` in one frame → roll ≤ `ROLL_MOST × CEILING`.
@@ -58,6 +58,6 @@
   - `test_flicker_follows_the_dip`: a `LightFlicker` with `dip` set; at its bright phase, `dip(1.0)` → lamp energy ≤ `lamp_energy × DIP_HEAVY_LEVEL`.
   - `test_a_hull_hit_is_felt_aboard`: scene: you seated in the starter, a phaser `Hit` of 120 on its hull → `felt_hit` emitted with strength 1.0, the avatar's head roll non-zero next frame, the cabin's dip factor < 1.
 
-- [ ] **Step 2–4:** run (FAIL), implement, run `test_hit_feel.gd`, `test_light_flicker.gd`, `test_avatar.gd`, `test_weapons_job.gd` (pass).
-- [ ] **Step 5: Render** (eye height, seated at the starter's helm, a heavy `Hit` dealt by script): a frame at the dip's deepest and one 0.6 s later, into `.superpowers/renders/task-8/`. Send them to the owner (SendUserFile) and carry on.
-- [ ] **Step 6: Commit** `feat: hits jolt the cabin and dip its lights, by their strength`.
+- [x] **Step 2–4:** run (FAIL), implement, run `test_hit_feel.gd`, `test_light_flicker.gd`, `test_avatar.gd`, `test_weapons_job.gd` (pass).
+- [x] **Step 5: Render** (eye height, seated at the starter's helm, a heavy `Hit` dealt by script): a frame at the dip's deepest and one 0.6 s later, into `.superpowers/renders/task-8/`. Send them to the owner (SendUserFile) and carry on.
+- [x] **Step 6: Commit** `feat: hits jolt the cabin and dip its lights, by their strength`.
