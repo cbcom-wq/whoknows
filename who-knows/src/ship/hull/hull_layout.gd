@@ -211,8 +211,14 @@ func _open_faces() -> Array[Dictionary]:
 
 func _plan_mounts() -> void:
 	var faces := _open_faces()
-	_plan_floods(faces.filter(func(f): return f["normal"].dot(Vector3.DOWN) > 0.99))
+	# A turret stands proud of the keel, so its underside is not the belly: left in,
+	# it would be the lowest face and pull every flood onto the centreline.
+	_plan_floods(faces.filter(func(f): return f["normal"].dot(Vector3.DOWN) > 0.99 and not _is_turret(f["coord"])))
 	_plan_forward(faces)
+
+func _is_turret(coord: Vector3i) -> bool:
+	var inst := _grid.get_block(coord)
+	return inst != null and WeaponValues.is_turret(inst.block_id)
 
 ## Floods (spec §6.1): one at each corner of the belly, then along the keel
 ## every FLOOD_SPACING between the bow and stern corners.
