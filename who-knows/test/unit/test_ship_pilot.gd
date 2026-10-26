@@ -110,6 +110,14 @@ func test_closes_to_brawl_and_holds_range():
 	assert_almost_eq(_range(), PilotValues.BRAWL_RANGE, PilotValues.BRAWL_BAND,
 		"40 s on, it is in the brawl band")
 
+func test_a_brawler_boosts_in():
+	await _spawn(Vector3(0, 0, -1500))
+	_pilot.style_choice = ShipPilot.Style.BRAWLER
+	_engage()
+	await wait_physics_frames(30)
+	assert_eq(_pilot.intent, &"boosting", "far outside its band")
+	assert_true(_hostile.flight_computer.boosting, "and the flight computer boosts")
+
 func test_jinks_when_fired_on():
 	await _spawn(Vector3(0, 0, -800))
 	_engage()

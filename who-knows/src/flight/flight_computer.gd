@@ -284,12 +284,16 @@ func _apply_translation(delta: float) -> void:
 	# "Boost with translation input" (spec §8.2): held, and asking for some
 	# thrust -- holding it with the stick centred costs nothing, because the
 	# multiplier below would have nothing to multiply anyway.
-	var wants_boost := _boost and not is_zero_approx(_translate_input.length())
+	var held: Variant = basis.inverse() * held_velocity if velocity_hold else null
+	# A held velocity is pushed toward like input (hostile ships spec §5.3: a
+	# brawler boosts in), but only while the hold is short of thrust.
+	var wants_boost := _boost and (not is_zero_approx(_translate_input.length())
+		or (held != null and hold_short(local_velocity, _translate_input, _hull.mass,
+			_authority_budget(thrust_budget), held)))
 	boosting = wants_boost and full_power
 	boost_refused = wants_boost and not full_power
 	if boosting and quantum != null:
 		quantum.spend_continuous(QuantumValues.BOOST_COST * delta, &"boost")
-	var held: Variant = basis.inverse() * held_velocity if velocity_hold else null
 	commanded_force_local = translation_force(local_velocity, _translate_input, _hull.mass,
 		_authority_budget(thrust_budget), boosting, assist_enabled, speed_locked, locked_speed,
 		held)
@@ -324,7 +328,8 @@ func _authority_budget(budget: Dictionary) -> Dictionary:
 ## own budget.
 ##
 ## `held`, a velocity in hull axes or null, is the velocity hold's target: the
-## quiet axes cancel toward it instead, at the same budgets.
+## quiet axes cancel toward it instead, at the same budgets -- boosted, at
+## BOOST_MULTIPLIER of them, as input is.
 static func translation_force(local_velocity: Vector3, input: Vector3, mass: float,
 		budget: Dictionary, boost: bool, assist: bool, locked: bool,
 		locked_speed: float, held: Variant = null) -> Vector3:
@@ -349,11 +354,24 @@ static func translation_force(local_velocity: Vector3, input: Vector3, mass: flo
 		target.y - local_velocity.y if is_zero_approx(input.y) else 0.0,
 		target.z - local_velocity.z if is_zero_approx(input.z) else 0.0,
 	) * mass
+	var share := DRIFT_AUTHORITY * (BOOST_MULTIPLIER if boost and held != null else 1.0)
 	return force + Vector3(
-		clampf(wanted.x, -lateral * DRIFT_AUTHORITY, lateral * DRIFT_AUTHORITY),
-		clampf(wanted.y, -vertical * DRIFT_AUTHORITY, vertical * DRIFT_AUTHORITY),
-		clampf(wanted.z, -forward * DRIFT_AUTHORITY, reverse * DRIFT_AUTHORITY),
+		clampf(wanted.x, -lateral * share, lateral * share),
+		clampf(wanted.y, -vertical * share, vertical * share),
+		clampf(wanted.z, -forward * share, reverse * share),
 	)
+
+## Whether the velocity hold (`held`, hull axes) wants more than the assist's
+## unboosted budget on some quiet axis: the only time a boost buys it anything.
+static func hold_short(local_velocity: Vector3, input: Vector3, mass: float, budget: Dictionary,
+		held: Vector3) -> bool:
+	var want := (held - local_velocity) * mass
+	var cap := Vector3(budget[&"lateral"], budget[&"vertical"],
+		budget[&"forward"] if want.z < 0.0 else budget[&"reverse"]) * DRIFT_AUTHORITY
+	for i in 3:
+		if is_zero_approx(input[i]) and absf(want[i]) > cap[i]:
+			return true
+	return false
 
 func _apply_rotation(_delta: float) -> void:
 	var basis := _hull.global_transform.basis
