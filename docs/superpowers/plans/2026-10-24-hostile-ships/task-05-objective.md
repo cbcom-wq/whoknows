@@ -52,7 +52,7 @@ The test named there is part of this task; write it with the others.
   - `DestroyObjective.new(id: StringName)`: in contact → fighting, remembers `dir` (world direction from `from` to the target), its velocity, and its `UniversePoint` (the pilot passes a `Universe` or a callable `to_universe`); out of contact → `pursuing()` true and a clock runs; back in contact → clock reset; after `PilotValues.PURSUE_FOR` → `done()` true. Target **destroyed or freed** (not found and not merely out of range: `Weapons.find` null *and* no node with that id in the tree) → `retarget` to the nearest `CREW` ship in contact (`Weapons.TARGETS`, kind `ship`, `Sides.side_of == CREW`), else `done()`.
   - `DestroyObjective.retarget(tree, from) -> bool`.
 
-- [ ] **Step 1: Write the failing tests** (nodes in `Weapons.TARGETS` with ids, positions set; `from` given):
+- [x] **Step 1: Write the failing tests** (nodes in `Weapons.TARGETS` with ids, positions set; `from` given):
   - `test_fights_while_in_contact`: target at 2 km → `pursuing()` false, `done()` false, `last_seen().dir` toward it.
   - `test_pursues_out_of_contact_then_gives_up`: target moved to 6 km → `pursuing()` true; `step` 59 s → not done; 61 s → `done()`.
   - `test_contact_again_resets_the_clock`: out 50 s, back in 1 s, out 50 s → not done.
@@ -60,5 +60,5 @@ The test named there is part of this task; write it with the others.
   - `test_never_retargets_a_hostile`: the only other ship is `HOSTILE` → `done()`.
   - `test_round_trips`: `to_dict` → `from_dict` keeps id, pursuing, the clock.
 
-- [ ] **Step 2–4:** run (expected FAIL), implement, run (pass).
-- [ ] **Step 5: Commit** `feat: Destroy, with a minute's pursuit`.
+- [x] **Step 2–4:** run (expected FAIL), implement, run (pass).
+- [x] **Step 5: Commit** `feat: Destroy, with a minute's pursuit`.
