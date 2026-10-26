@@ -362,14 +362,59 @@ func _hold_station() -> void:
 	flight.hold_velocity(Vector3.ZERO)
 	_desired = ship.exterior.global_basis.orthonormalized()
 
-## Holds `wanted`, steered round rocks, under the limit.
+## Holds `wanted`, steered round rocks and other ships, under the limit. A
+## swerve alone, still asking for full speed ahead, is clamped away and flies
+## straight in, so it also gives up speed ahead: toward a rock, all it could not
+## stop from, turned aside instead; toward a ship, the share it swerves by.
 func _hold(wanted: Vector3) -> void:
 	var hull := ship.exterior
+	var v := hull.linear_velocity
+	var speed := v.length()
+	var brake := _brake()
 	var exclude: Array[RID] = [hull.get_rid()]
 	var radius := float(hull.get_meta(AsteroidStream.ANCHOR_RADIUS, 10.0))
-	wanted += RockAvoid.steer(hull.get_world_3d().direct_space_state, hull.global_position,
-		hull.linear_velocity, radius, exclude)
+	var rock := RockAvoid.rock_ahead(hull.get_world_3d().direct_space_state, hull.global_position, v,
+		radius, exclude, brake)
+	var swerve := RockAvoid.swerve(rock, v)
+	var from := Weapons.point_of(hull)
+	var shy := RockAvoid.steer_ships(from, v, radius, brake, _others(from))
+	if speed > 0.01:
+		var ahead := v / speed
+		var on_ahead := wanted.dot(ahead)
+		if not rock.is_empty():
+			var too_fast := on_ahead - RockAvoid.stopping_speed(float(rock["distance"]), brake)
+			if too_fast > 0.0:
+				var aside := swerve.normalized() if not swerve.is_zero_approx() else RockAvoid.side_of(ahead)
+				wanted += (aside - ahead) * too_fast
+				on_ahead -= too_fast
+		if not shy.is_zero_approx() and on_ahead > 0.0:
+			wanted -= ahead * on_ahead * clampf(shy.length() / speed, 0.0, 1.0)
+	wanted += swerve + shy
 	flight.hold_velocity(wanted.limit_length(flight.current_limit))
+
+## Every other awake ship in contact, as steer_ships sees them.
+func _others(from: Vector3) -> Array:
+	var out := []
+	for node in ship.get_tree().get_nodes_in_group(Ship.GROUP):
+		var other := node as Ship
+		if other == null or other == ship or other.exterior == null or not other.exterior.is_inside_tree():
+			continue
+		if other.is_in_group(Fleet.ASLEEP):
+			continue
+		var at := Weapons.point_of(other.exterior)
+		if at.distance_to(from) > WeaponValues.CONTACT_RANGE:
+			continue
+		out.append({"at": at, "v": other.exterior.linear_velocity,
+			"radius": float(other.exterior.get_meta(AsteroidStream.ANCHOR_RADIUS, 10.0))})
+	return out
+
+## The least it can brake by on any axis, m/s².
+func _brake() -> float:
+	if ship.stats == null:
+		return 1.0
+	var t: Dictionary = ship.stats.thrust_budget
+	var least := minf(float(t[&"reverse"]), minf(float(t[&"lateral"]), float(t[&"vertical"])))
+	return least / maxf(ship.stats.total_mass_kg, 1.0)
 
 func _set_orders(o: FireControl.Orders) -> void:
 	if fire_control != null and fire_control.orders != o:

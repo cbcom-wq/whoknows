@@ -160,6 +160,66 @@ func test_rock_avoid_ignores_what_it_excludes():
 	var ex: Array[RID] = [rock.get_rid()]
 	assert_eq(RockAvoid.steer(space, Vector3.ZERO, Vector3(0, 0, -60), 10.0, ex), Vector3.ZERO)
 
+func test_a_ship_that_brakes_slowly_looks_as_far_as_it_needs_to_stop():
+	_rock(Vector3(0, 0, -700))
+	await wait_physics_frames(2)
+	var space := _world.get_world_3d().direct_space_state
+	var v := Vector3(0, 0, -60)
+	assert_true(RockAvoid.rock_ahead(space, Vector3.ZERO, v, 10.0, []).is_empty(),
+		"8 s at 60 m/s is 480 m: past that, unseen")
+	var seen := RockAvoid.rock_ahead(space, Vector3.ZERO, v, 10.0, [], 1.0)
+	assert_false(seen.is_empty(), "braking at 1 m/s² takes 1800 m: seen")
+	assert_almost_eq(float(seen["distance"]), 650.0, 1.0, "to its near face, along the path")
+	assert_gt(RockAvoid.steer(space, Vector3.ZERO, v, 10.0, [], 1.0).length(), 0.0)
+
+func test_the_speed_it_can_still_stop_from():
+	assert_eq(RockAvoid.stopping_speed(RockAvoid.CLEARANCE, 4.0), 0.0, "at the clearance, none")
+	assert_eq(RockAvoid.stopping_speed(RockAvoid.CLEARANCE - 10.0, 4.0), 0.0)
+	assert_almost_eq(RockAvoid.stopping_speed(RockAvoid.CLEARANCE + 50.0, 1.0), 10.0, 0.001,
+		"v² = 2 a d")
+
+## Another ship, as the pilot sees it: where, how fast, how big.
+func _other(at: Vector3, v := Vector3.ZERO, radius := 10.0) -> Dictionary:
+	return {"at": at, "v": v, "radius": radius}
+
+func test_ship_avoid_steers_round_a_ship_dead_ahead():
+	var v := Vector3(0, 0, -60)
+	var away := RockAvoid.steer_ships(Vector3.ZERO, v, 10.0, 1.0, [_other(Vector3(0, 0, -300))])
+	assert_gt(away.length(), 0.0, "a ship dead ahead is steered round")
+	assert_lt(absf(away.normalized().dot(v.normalized())), 0.3, "across the path")
+
+func test_a_ship_that_will_pass_wide_is_left_alone():
+	var wide := 10.0 + 10.0 + RockAvoid.CLEARANCE + 40.0
+	assert_eq(RockAvoid.steer_ships(Vector3.ZERO, Vector3(0, 0, -60), 10.0, 1.0,
+		[_other(Vector3(wide, 0, -300))]), Vector3.ZERO)
+
+func test_a_ship_it_can_stop_short_of_is_left_alone():
+	assert_eq(RockAvoid.steer_ships(Vector3.ZERO, Vector3(0, 0, -5), 10.0, 3.0,
+		[_other(Vector3(0, 0, -300))]), Vector3.ZERO, "5 m/s brakes in 4 m")
+
+func test_a_ship_drawing_away_is_left_alone():
+	assert_eq(RockAvoid.steer_ships(Vector3.ZERO, Vector3(0, 0, -60), 10.0, 1.0,
+		[_other(Vector3(0, 0, -300), Vector3(0, 0, -100))]), Vector3.ZERO)
+
+func test_a_ship_coming_at_a_still_one_is_steered_from():
+	var away := RockAvoid.steer_ships(Vector3.ZERO, Vector3.ZERO, 10.0, 1.0,
+		[_other(Vector3(0, 0, -300), Vector3(0, 0, 80))])
+	assert_gt(away.length(), 0.0, "relative motion, not its own")
+
+func test_two_ships_head_on_steer_opposite_ways():
+	var a := RockAvoid.steer_ships(Vector3.ZERO, Vector3(0, 0, -60), 10.0, 1.0,
+		[_other(Vector3(0, 0, -400), Vector3(0, 0, 60))])
+	var b := RockAvoid.steer_ships(Vector3(0, 0, -400), Vector3(0, 0, 60), 10.0, 1.0,
+		[_other(Vector3.ZERO, Vector3(0, 0, -60))])
+	assert_lt(a.dot(b), 0.0, "they part, not dodge into each other")
+
+func test_a_nearer_ship_steers_harder():
+	var v := Vector3(0, 0, -60)
+	var far := RockAvoid.steer_ships(Vector3.ZERO, v, 10.0, 1.0, [_other(Vector3(20, 0, -400))]).length()
+	var near := RockAvoid.steer_ships(Vector3.ZERO, v, 10.0, 1.0, [_other(Vector3(20, 0, -150))]).length()
+	assert_gt(far, 0.0)
+	assert_gt(near, far)
+
 func test_inbound_counts_only_bolts_that_pass_close():
 	var own := Node.new()
 	add_child_autofree(own)

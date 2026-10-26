@@ -118,6 +118,52 @@ func test_a_brawler_boosts_in():
 	assert_eq(_pilot.intent, &"boosting", "far outside its band")
 	assert_true(_hostile.flight_computer.boosting, "and the flight computer boosts")
 
+## Whether a rock lies on the line from the hostile to yours.
+func _rock_between() -> bool:
+	var space := _starter.exterior.get_world_3d().direct_space_state
+	var q := PhysicsRayQueryParameters3D.create(_hostile.exterior.global_position,
+		_starter.exterior.global_position, AsteroidBody.LAYER)
+	return not space.intersect_ray(q).is_empty()
+
+## Every rock the hostile's hull touches, while `frames` physics frames pass.
+func _rock_strikes(frames: int) -> int:
+	var struck := [0]
+	var count := func(body: Node) -> void:
+		if body is CollisionObject3D and (body as CollisionObject3D).collision_layer & AsteroidBody.LAYER:
+			struck[0] += 1
+	_hostile.exterior.body_entered.connect(count)
+	await wait_physics_frames(frames)
+	_hostile.exterior.body_entered.disconnect(count)
+	return struck[0]
+
+func test_a_brawler_steers_round_a_rock_in_its_path():
+	await _spawn(Vector3(0, 0, -1500))   # the rock off your nose is between
+	assert_true(_rock_between(), "the scene still has a rock on this line")
+	_pilot.style_choice = ShipPilot.Style.BRAWLER
+	_engage()
+	var strikes: int = await _rock_strikes(1500)
+	assert_eq(strikes, 0, "it never touches the rock")
+	assert_eq(_hostile.damage.component_stage(&"computer"), BlockDamage.Stage.INTACT)
+	assert_lt(_range(), 1000.0, "and it still closed")
+
+func test_a_brawler_steers_round_a_ship_in_its_path():
+	await _spawn(Vector3(1500, 0, 0))
+	assert_false(_rock_between(), "a clear line: only the ship is in the way")
+	var b := _starter.exterior.global_basis
+	var place := Transform3D(b, _starter.exterior.global_position + b * Vector3(750, 0, 0))
+	var between: Ship = _root.fleet.spawn(_root._starter_grid(), place)
+	await wait_process_frames(2)
+	_pilot.style_choice = ShipPilot.Style.BRAWLER
+	_engage()
+	var touch := float(_hostile.exterior.get_meta(AsteroidStream.ANCHOR_RADIUS)) 		+ float(between.exterior.get_meta(AsteroidStream.ANCHOR_RADIUS))
+	var closest := INF
+	for i in 1500:
+		await wait_physics_frames(1)
+		closest = minf(closest, Weapons.point_of(_hostile.exterior).distance_to(Weapons.point_of(between.exterior)))
+	print("T6 ship in its path: closest %.1f m, hulls touch at %.1f m, range now %.1f m" % [closest, touch, _range()])
+	assert_gt(closest, touch + RockAvoid.CLEARANCE * 0.75, "it keeps most of a hull's clearance")
+	assert_lt(_range(), 1000.0, "and it still closed")
+
 func test_jinks_when_fired_on():
 	await _spawn(Vector3(0, 0, -800))
 	_engage()
