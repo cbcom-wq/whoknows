@@ -99,6 +99,13 @@ var warp_panel: WarpPanel
 var spawn_panel: SpawnPanel
 ## The creature panel (rock creatures spec §7.2): F10.
 var creature_panel: CreaturePanel
+## The pilot readout (hostile ships spec §10.2): F2.
+var pilot_readout: PilotReadout
+## The side of your nose the next hostile comes from, +1 or -1: it alternates
+## (hostile ships spec §10.1).
+var _hostile_side := 1.0
+## A hostile's skill is drawn from this.
+var _hostile_rng := RandomNumberGenerator.new()
 var body_markers: Array[BodyMarker] = []
 ## Every turret bolt (ship weapons spec §6.3), under Outside.
 var bolt_pool: BoltPool
@@ -248,6 +255,8 @@ func _wire_ship(ship: Ship) -> void:
 	ship.plate_shed.connect(func(item: Item) -> void: strays.adopt(item))
 	# A hit it takes knocks your view if you are in it (hostile ships spec §6.1).
 	ship.felt_hit.connect(_on_felt_hit.bind(ship))
+	# HOLD while a hostile is out for it warns on the band (hostile ships spec §4.3).
+	ship.flight_computer.hostile_engaging = _hostile_engaging.bind(ship)
 	# Its crew answers to the game's ledger, and shows on F4. The crew woke
 	# with the ship, before it had the ledger.
 	ship.npc_director.ledger = npc_ledger
@@ -422,8 +431,7 @@ func board_nearest() -> bool:
 	var target: Ship = null
 	if why == "":
 		target = fleet.nearest(aboard.exterior.global_position, aboard)
-		if target == null:
-			why = "NO OTHER SHIP NEAR"
+		why = "NO OTHER SHIP NEAR" if target == null else _board_refusal(target)
 	if why != "":
 		if warp_panel != null:
 			warp_panel.toast(why)
@@ -432,8 +440,12 @@ func board_nearest() -> bool:
 	return true
 
 ## Why F8 must wait, or "": on a spacewalk, in a base, at a computer, mid-sit,
-## during a warp, or while an airlock of the ship you are aboard cycles.
-func _board_refusal() -> String:
+## during a warp, or while an airlock of the ship you are aboard cycles; or
+## why it may not board `target`: a hostile (hostile ships spec §4.3; boarding
+## a live enemy is the disable project's).
+func _board_refusal(target: Ship = null) -> String:
+	if target != null and target.side == Sides.HOSTILE:
+		return "HOSTILE SHIP"
 	if _avatar.mode == Avatar.Mode.SUIT:
 		return "NOT ON A SPACEWALK"
 	if home != aboard:
@@ -854,6 +866,7 @@ func _wire_weapons() -> void:
 	target_brackets.clear()
 	for m in _mount_per_view(func() -> WorldMarker: return TargetBrackets.new(), "Targets"):
 		(m as TargetBrackets).fire_control = aboard.fire_control
+		(m as TargetBrackets).hostiles = _hostiles_in_contact
 		target_brackets.append(m)
 	exterior_npcs.targets = true
 
@@ -892,9 +905,12 @@ func _wire_spawn() -> void:
 	spawn_panel.entries = lines
 	spawn_panel.spawn_asked.connect(func(i: int) -> void:
 		spawn_panel.say(spawn_from_library(library.ids()[i])))
+	spawn_panel.hostile_asked.connect(func(i: int) -> void:
+		spawn_panel.say(spawn_hostile(library.ids()[i])))
 	spawn_panel.remove_asked.connect(func() -> void: spawn_panel.say(remove_nearest_spawned()))
 	$Prompt.add_child(spawn_panel)
 	_wire_creatures()
+	_wire_pilot_readout()
 
 ## The creature panel (rock creatures spec §7.2): F10 lists the species the
 ## catalog has, in CreaturePanel.ORDER; a number makes one at the crosshair.
@@ -989,18 +1005,9 @@ func _view_camera() -> Camera3D:
 ## of the way you are going, so a spawn while cruising is not parked in your
 ## path. Says what it did, or why not.
 func spawn_from_library(id: StringName) -> String:
-	if not library.has(id):
-		return "NO SHIP CALLED %s" % id
-	for ship in fleet.ships():
-		if ship.warp.is_spinning():
-			return "WARP ENGAGED"
-	if fleet.busy() != "":
-		return "A SHIP IS ARRIVING"
-	if fleet.ships().size() >= fleet.max_ships:
-		return "THE FLEET IS FULL"
-	# Bases hold interior slots too (habitat modules spec §9.3).
-	if fleet.slots.free_count() == 0:
-		return "NO BERTH FREE"
+	var why := _spawn_refusal(id)
+	if why != "":
+		return why
 	var view := _spawn_view()
 	var others: Array[Vector3] = []
 	for ship in fleet.awake():
@@ -1016,6 +1023,161 @@ func spawn_from_library(id: StringName) -> String:
 		return "NO BERTH FREE"
 	WarpArrival.play(ship.exterior, place, Vector3.ZERO, SpawnSpot.arrival_line(place))
 	return "SPAWNED %s · %s · %d m away" % [ship.name, library.name_of(id), roundi(view.origin.distance_to(place.origin))]
+
+## Why library ship `id` cannot be spawned now, or "".
+func _spawn_refusal(id: StringName) -> String:
+	if not library.has(id):
+		return "NO SHIP CALLED %s" % id
+	for ship in fleet.ships():
+		if ship.warp.is_spinning():
+			return "WARP ENGAGED"
+	if fleet.busy() != "":
+		return "A SHIP IS ARRIVING"
+	if fleet.ships().size() >= fleet.max_ships:
+		return "THE FLEET IS FULL"
+	# Bases hold interior slots too (habitat modules spec §9.3).
+	if fleet.slots.free_count() == 0:
+		return "NO BERTH FREE"
+	return ""
+
+## The angles off your nose a hostile tries, degrees: its own side first, then
+## the other, nearest the nose first (hostile ships spec §10.1).
+const HOSTILE_ANGLES: Array[float] = [30.0, 60.0, 90.0]
+
+## Spawns library ship `id` as a hostile, as Shift and the panel's number keys
+## do (hostile ships spec §10.1): PilotValues.SPAWN_RANGE off, 30° to one side
+## of your nose (the sides alternate), facing you, at rest and already there,
+## with a random skill, its style left to it, and out for you. Says what came,
+## or why not.
+func spawn_hostile(id: StringName) -> String:
+	var why := _spawn_refusal(id)
+	if why != "":
+		return why
+	var spot: Variant = _hostile_spot(_spawn_view())
+	if spot == null:
+		return "NO CLEAR SPOT NEAR"
+	var grid := library.grid(id)
+	var ship := fleet.spawn(grid, spot, true, "", ShipBlueprint.from_grid(grid, library.name_of(id)))
+	if ship == null:
+		return "NO BERTH FREE"
+	ship.side = Sides.HOSTILE
+	var pilot := ship.ship_pilot
+	pilot.skill = _hostile_rng.randf_range(PilotValues.SPAWN_SKILL.x, PilotValues.SPAWN_SKILL.y)
+	pilot.style_choice = ShipPilot.Style.AUTO
+	pilot.engage(_hostile_target())
+	return "HOSTILE %s · SKILL %.1f · AUTO" % [library.name_of(id).to_upper(), pilot.skill]
+
+## Where a hostile comes from `view`: SPAWN_RANGE off at the first of
+## HOSTILE_ANGLES, either side, clear of rocks as a warp's drop-out is and
+## SpawnSpot.CLEAR of every hull; null when none is.
+func _hostile_spot(view: Transform3D) -> Variant:
+	var up := view.basis.y.normalized()
+	var ahead := -view.basis.z.normalized()
+	var side := _hostile_side
+	_hostile_side = -_hostile_side
+	for angle in HOSTILE_ANGLES:
+		for s: float in [side, -side]:
+			var dir := ahead.rotated(up, deg_to_rad(angle * s))
+			var p := view.origin + dir * PilotValues.SPAWN_RANGE
+			if _rock_near(p) or _near_a_hull(p):
+				continue
+			return Transform3D(Basis.looking_at(-dir, up), p)
+	return null
+
+func _near_a_hull(p: Vector3) -> bool:
+	for ship in fleet.awake():
+		if ship.exterior.global_position.distance_to(p) < SpawnSpot.CLEAR:
+			return true
+	return false
+
+## What a hostile goes for: the ship you are aboard, or you when it is asleep
+## far off.
+func _hostile_target() -> StringName:
+	return Weapons.ship_id(aboard) if aboard != null and not fleet.sleeping(aboard) else Weapons.YOU
+
+## Every other awake ship within contact range of the ship you are aboard
+## (WeaponValues.CONTACT_RANGE), nearest first.
+func _ships_in_contact() -> Array[Ship]:
+	var out: Array[Ship] = []
+	if aboard == null or fleet.sleeping(aboard):
+		return out
+	var here := aboard.exterior.global_position
+	for ship in fleet.awake():
+		if ship != aboard and ship.exterior.global_position.distance_to(here) <= WeaponValues.CONTACT_RANGE:
+			out.append(ship)
+	out.sort_custom(func(a: Ship, b: Ship) -> bool:
+		return a.exterior.global_position.distance_to(here) < b.exterior.global_position.distance_to(here))
+	return out
+
+## The hulls of the hostiles in contact, for the brackets (hostile ships spec
+## §4.3).
+func _hostiles_in_contact() -> Array[Node3D]:
+	var out: Array[Node3D] = []
+	for ship in _ships_in_contact():
+		if Weapons.is_hostile(aboard, ship):
+			out.append(ship.exterior)
+	return out
+
+## Whether a hostile's pilot is out for `ship`, or for you on a spacewalk from
+## it.
+func _hostile_engaging(ship: Ship) -> bool:
+	for other in fleet.awake():
+		if other == ship or other.ship_pilot == null or not Weapons.is_hostile(other, ship):
+			continue
+		if other.ship_pilot.targets(ship) or (ship == aboard and other.ship_pilot.targets(_avatar)):
+			return true
+	return false
+
+## The pilot readout (hostile ships spec §10.2): F2 shows every ship in contact
+## with its pilot's reading, and sets a selected one's style, skill and side.
+func _wire_pilot_readout() -> void:
+	_hostile_rng.randomize()
+	pilot_readout = PilotReadout.new()
+	pilot_readout.name = "PilotReadout"
+	pilot_readout.rows = _pilot_rows
+	pilot_readout.style_asked.connect(func(id: StringName) -> void:
+		var pilot := _ship_called(id).ship_pilot
+		pilot.style_choice = wrapi(pilot.style_choice + 1, 0, ShipPilot.Style.size()) as ShipPilot.Style)
+	pilot_readout.skill_asked.connect(func(id: StringName, step: float) -> void:
+		var pilot := _ship_called(id).ship_pilot
+		pilot.skill = clampf(pilot.skill + step, 0.0, 1.0))
+	pilot_readout.side_asked.connect(_flip_side)
+	$Prompt.add_child(pilot_readout)
+
+## The readout's rows: one per ship in contact.
+func _pilot_rows() -> Array:
+	var rows := []
+	var here := aboard.exterior.global_position
+	for ship in _ships_in_contact():
+		var pilot := ship.ship_pilot
+		var reading: Dictionary = pilot.last_reading
+		var store := ship.quantum.store if ship.quantum != null else null
+		rows.append({"id": Weapons.ship_id(ship), "name": Weapons.label_of(ship.exterior), "side": ship.side,
+			"style": ShipPilot.Style.keys()[pilot.style], "style_choice": ShipPilot.Style.keys()[pilot.style_choice],
+			"skill": pilot.skill, "preferred": float(reading.get("preferred", 0.0)),
+			"range": ship.exterior.global_position.distance_to(here), "intent": pilot.intent,
+			"qe": store.amount if store != null else 0, "qe_max": store.capacity if store != null else 0,
+			"hull": ship.hull_whole(), "score": float(reading.get("score", 0.0))})
+	return rows
+
+func _ship_called(id: StringName) -> Ship:
+	for ship in fleet.ships():
+		if Weapons.ship_id(ship) == id:
+			return ship
+	return null
+
+## H on the readout: a hostile turns crew and its pilot lets go; a crew ship
+## turns hostile and goes for you.
+func _flip_side(id: StringName) -> void:
+	var ship := _ship_called(id)
+	if ship == null:
+		return
+	if ship.side == Sides.HOSTILE:
+		ship.side = Sides.CREW
+		ship.ship_pilot.on = false
+	else:
+		ship.side = Sides.HOSTILE
+		ship.ship_pilot.engage(_hostile_target())
 
 ## Removes the nearest spawned ship (any but the starter, awake and arrived)
 ## other than the one you are aboard, as the panel's Delete does (§5). Says

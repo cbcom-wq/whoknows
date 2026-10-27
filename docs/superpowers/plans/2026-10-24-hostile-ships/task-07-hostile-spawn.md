@@ -51,13 +51,13 @@
   - `_board_refusal()` returns `"HOSTILE SHIP"` for a target with `side == HOSTILE`.
   - `PilotReadout` (Label, plain F3 style, key **F2**, `CreaturePanel.GROUP` so it shuts the others): one block per hostile in contact — name, `style`/`style_choice`, skill, preferred and actual range, `intent`, QE, `HULL %`, the last brawl score. Keys while open: `[`/`]` select a ship, `S` cycles its style choice, `-`/`=` skill ∓ 0.1, `H` flips its side (CREW ⇄ HOSTILE; making it hostile `engage`s the ship you are aboard).
 
-- [ ] **Step 1: Write the failing tests:**
+- [x] **Step 1: Write the failing tests:**
   - `test_shift_number_asks_for_a_hostile` (in `test_spawn_panel.gd`): Shift+2 emits `hostile_asked(1)`, not `spawn_asked`.
   - `test_a_hostile_spawns_three_km_off_facing_you`: `spawn_hostile(&"starter")` → a new ship, `side == HOSTILE`, distance 3000 ± 50 m, `(-hull.basis.z).dot(to_you) > 0.95`, `ship_pilot.on`, skill in 0.2..0.8, objective target `ship:Ship`.
   - `test_brackets_show_an_unlisted_hostile_with_its_hull`: after a render, `marks` has an entry with `hostile` true and text containing `HULL 100%`.
   - `test_hold_with_a_hostile_warns`: orders `HOLD`, a hostile engaging → `WeaponsStrip.orders_text() == "HOSTILE · WEAPONS ON HOLD"`.
   - `test_f8_refuses_a_hostile`: nearest ship hostile → `board_nearest()` false and the toast `HOSTILE SHIP`.
 
-- [ ] **Step 2–4:** run (FAIL), implement, run `test_hostile_spawn.gd`, `test_spawn_panel.gd`, `test_weapons_hud.gd` (pass).
-- [ ] **Step 5: Play it once** (windowed: `godot --path who-knows`): F6, Shift+1, watch the starter come at you; F2 shows it. Note anything wrong for Task 16; do not tune yet.
-- [ ] **Step 6: Commit** `feat: Shift+F6 brings a hostile; its bracket, its hull, and the HOLD warning`.
+- [x] **Step 2–4:** run (FAIL), implement, run `test_hostile_spawn.gd`, `test_spawn_panel.gd`, `test_weapons_hud.gd` (pass).
+- [x] **Step 5: Play it once** (windowed: `godot --path who-knows`): F6, Shift+1, watch the starter come at you; F2 shows it. Note anything wrong for Task 16; do not tune yet.
+- [x] **Step 6: Commit** `feat: Shift+F6 brings a hostile; its bracket, its hull, and the HOLD warning`.

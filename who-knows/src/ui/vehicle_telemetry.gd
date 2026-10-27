@@ -95,6 +95,9 @@ var has_weapons := false
 var weapons_engage := false
 var weapons_pips: Array[StringName] = []
 var weapons_low_power := false
+## Your orders are HOLD while a hostile is out for you (hostile ships spec
+## §4.3): the strip warns.
+var hostile_on_hold := false
 
 ## Takes plain values rather than a body on purpose: it is the seam that lets
 ## every derivation here be tested headless, with no nodes and no physics

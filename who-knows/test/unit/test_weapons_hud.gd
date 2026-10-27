@@ -3,6 +3,9 @@ extends GutTest
 ## The weapons on the HUD (ship weapons spec §9.2): the strip's orders and
 ## pips, and a numbered bracket on each listed target.
 
+func after_each():
+	Weapons.hostile_rule = Callable()
+
 func _telemetry(engage: bool, pips: Array[StringName], low := false) -> VehicleTelemetry:
 	var t := VehicleTelemetry.new()
 	t.has_weapons = true
@@ -20,6 +23,24 @@ func test_the_strip_shows_orders_and_a_pip_a_turret():
 	assert_eq(strip.pip_colours(), [HudPalette.for_pip(&"firing"), HudPalette.for_pip(&"no_arc")])
 	strip.render(_telemetry(true, [&"tracking"] as Array[StringName], true))
 	assert_eq(strip.orders_text(), "WEAPONS · LOW POWER")
+
+## Your orders at HOLD while a hostile is out for you (hostile ships spec
+## §4.3): the strip warns, and the warning outranks the low-power line.
+func test_hold_with_a_hostile_warns():
+	var strip := WeaponsStrip.new()
+	add_child_autofree(strip)
+	var t := _telemetry(false, [&"idle"] as Array[StringName])
+	t.hostile_on_hold = true
+	strip.render(t)
+	assert_eq(strip.orders_text(), "HOSTILE · WEAPONS ON HOLD")
+	assert_eq(strip._label.get_theme_color("font_color"), HudPalette.WARNING)
+	assert_lte(strip._label.get_minimum_size().x, strip.custom_minimum_size.x, "it fits the strip, on the band")
+	assert_gt(strip.pip_top(), strip._label.position.y + strip._label.get_minimum_size().y, "the pips below it")
+	t.weapons_low_power = true
+	strip.render(t)
+	assert_eq(strip.orders_text(), "HOSTILE · WEAPONS ON HOLD", "above the low-power line")
+	strip.render(_telemetry(false, [&"idle"] as Array[StringName]))
+	assert_eq(strip.orders_text(), "HOLD", "no hostile, no warning")
 
 func test_no_turrets_no_strip():
 	var strip := WeaponsStrip.new()
@@ -74,6 +95,23 @@ func test_a_bracket_is_drawn_on_a_listed_target():
 	assert_eq(brackets.marks[0]["index"], 1)
 	assert_true(brackets.marks[0]["solid"], "a turret can bear")
 	assert_eq(brackets.marks[0]["text"], "1 · 100 M")
+
+## A hostile in contact is bracketed whether listed or not (hostile ships spec
+## §4.3): unnumbered, red, once, and a listed one is not drawn twice.
+func test_an_unlisted_hostile_is_bracketed_unnumbered():
+	var rig := _brackets_rig()
+	var brackets: TargetBrackets = rig["brackets"]
+	var other := Node3D.new()
+	(rig["target"] as Node3D).get_parent().add_child(other)
+	other.global_position = Vector3(0.0, 0.0, -1500.0)
+	Weapons.join(other, &"ship:Red")
+	Weapons.hostile_rule = func(_shooter: Node, node: Node) -> bool: return node == other
+	brackets.hostiles = func() -> Array[Node3D]: return [rig["target"], other] as Array[Node3D]
+	brackets.render(_telemetry(false, [] as Array[StringName]))
+	assert_eq(brackets.marks.size(), 2, "the listed one once, the unlisted one once")
+	assert_eq(brackets.marks[1]["index"], 0)
+	assert_true(brackets.marks[1]["hostile"])
+	assert_eq(brackets.marks[1]["text"], "1.5 KM")
 
 func test_a_target_freed_since_the_last_assign_draws_nothing_and_raises_nothing():
 	var rig := _brackets_rig()
