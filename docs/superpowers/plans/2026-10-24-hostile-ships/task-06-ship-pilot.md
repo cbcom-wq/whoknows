@@ -61,7 +61,7 @@ What a tick does (the spec's §5.2 layers; exact cadence from `PilotValues`):
 
 `PilotControls._process`: when `ship_pilot != null and ship_pilot.on`, write nothing (Task 15 adds the takeback).
 
-- [ ] **Step 1: Write the failing tests** (scene: `flight_test.tscn`, `save_enabled = false`, a second starter spawned and made `HOSTILE`, `engage(Weapons.ship_id(starter))`; physics stepped with `await wait_physics_frames(n)`):
+- [x] **Step 1: Write the failing tests** (scene: `flight_test.tscn`, `save_enabled = false`, a second starter spawned and made `HOSTILE`, `engage(Weapons.ship_id(starter))`; physics stepped with `await wait_physics_frames(n)`):
   - `test_drives_only_through_the_flight_computer`: a `FlightComputer` spy (subclass recording `set_pilot_input` / `hold_velocity` calls) swapped in → calls recorded; the hull's `linear_velocity` never written by the pilot (assert the pilot's script has no `linear_velocity =`/`apply_` text: `FileAccess.get_file_as_string` on `ship_pilot.gd` does not contain `linear_velocity =`, `apply_central`, `apply_torque`, `global_transform =`).
   - `test_turns_its_best_face_to_the_target`: target 800 m off its starboard; after 8 s, the dorsal or ventral turret `can_engage` the target.
   - `test_closes_to_brawl_and_holds_range`: forced `BRAWLER`, start at 1.5 km → after 40 s the range is within `BRAWL_RANGE ± BRAWL_BAND`.
@@ -72,7 +72,7 @@ What a tick does (the spec's §5.2 layers; exact cadence from `PilotValues`):
   - `test_off_lets_go`: `on = false` → `flight.velocity_hold` false, orders back to what they were before `engage`.
   - `test_pilot_round_trips`: `to_dict` / `from_dict` keep on, skill, style choice, objective id.
 
-- [ ] **Step 2: Run** `./run_tests.ps1 '-gselect=test_ship_pilot.gd'`. Expected: FAIL.
-- [ ] **Step 3: Implement** `ShipPilot`, its build in `Ship._ready` (after `fire_control`), `"pilot"` in `to_dict`/`restore_aboard`, `since_hostile_fire` (ticked in `_physics_process`), and the `PilotControls` guard.
-- [ ] **Step 4: Run** `test_ship_pilot.gd`, `test_ship_turrets.gd`, `test_weapons_job.gd`, `test_fleet.gd`. Expected: pass.
-- [ ] **Step 5: Commit** `feat: ShipPilot flies and fights through the flight computer and fire control`.
+- [x] **Step 2: Run** `./run_tests.ps1 '-gselect=test_ship_pilot.gd'`. Expected: FAIL.
+- [x] **Step 3: Implement** `ShipPilot`, its build in `Ship._ready` (after `fire_control`), `"pilot"` in `to_dict`/`restore_aboard`, `since_hostile_fire` (ticked in `_physics_process`), and the `PilotControls` guard.
+- [x] **Step 4: Run** `test_ship_pilot.gd`, `test_ship_turrets.gd`, `test_weapons_job.gd`, `test_fleet.gd`. Expected: pass.
+- [x] **Step 5: Commit** `feat: ShipPilot flies and fights through the flight computer and fire control`.

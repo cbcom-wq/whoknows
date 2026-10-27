@@ -71,11 +71,16 @@ var warp: WarpDrive
 ## every turret block, on the hull, kept across rebuilds by cell.
 var fire_control: FireControl
 var turrets: Array[Turret] = []
+## The AI pilot on the ship's computer (hostile ships spec §5.1): off until
+## engaged or handed the ship, and saved with it.
+var ship_pilot: ShipPilot
 ## Each turret's sky map, from the launch layout (spec §3.3): coord -> SkyMap.
 var _skies := {}
 
 ## Seconds since a rock last struck the hull.
 var since_struck := INF
+## Seconds since a hostile ship's bolt last hit the hull (spec §8.4).
+var since_hostile_fire := INF
 ## When anything aboard last took damage (health and damage spec §10).
 var damage_log := DamageLog.new()
 ## Sparks, bursts and chunks on the hull (health and damage spec §9).
@@ -168,6 +173,13 @@ func _ready() -> void:
 	add_child(fire_control)
 	flight_computer.fire_control = fire_control
 	pilot.fire_control = fire_control
+	ship_pilot = ShipPilot.new()
+	ship_pilot.name = "ShipPilot"
+	ship_pilot.ship = self
+	ship_pilot.flight = flight_computer
+	ship_pilot.fire_control = fire_control
+	add_child(ship_pilot)
+	pilot.ship_pilot = ship_pilot
 	AudioBuses.ensure()
 	Synth.warm_up()
 	_hum = AudioStreamPlayer.new()
@@ -213,6 +225,7 @@ func _update_hum() -> void:
 func _physics_process(delta: float) -> void:
 	_last_hull_velocity = exterior.linear_velocity
 	since_struck += delta
+	since_hostile_fire += delta
 	damage_log.tick(delta)
 	_blast_in -= delta
 	if _blast_in <= 0.0:
@@ -266,6 +279,8 @@ static func crash_damage(knock: float) -> float:
 
 ## A hit on the hull, in world space (a bolt from a spacewalk, a bite).
 func _on_hull_hit(hit: Hit) -> void:
+	if Sides.hostile_to(side, Sides.side_of(hit.source)):
+		since_hostile_fire = 0.0
 	var at := exterior.to_local(hit.position)
 	var cell := ShipCells.hull_cell(grid, exterior, hit.shape, at, exterior.global_basis.inverse() * hit.normal)
 	if cell != ShipCells.NONE:
@@ -818,6 +833,7 @@ func to_dict(universe: Universe) -> Dictionary:
 		},
 		"warp": warp.to_dict() if warp != null else {},
 		"weapons": fire_control.to_dict(),
+		"pilot": ship_pilot.to_dict(),
 		"flight": flight_computer.to_dict(),
 		"store": quantum.store.to_dict() if quantum.store != null else {},
 		"damage": damage.to_dict() if damage != null else {},
@@ -991,6 +1007,7 @@ func restore_aboard(d: Dictionary) -> void:
 		lights.from_dict(d.get("lights", {}))
 	warp.from_dict(d.get("warp", {}))
 	fire_control.from_dict(d.get("weapons", {}))
+	ship_pilot.from_dict(d.get("pilot", {}))
 	var saved_airlocks: Dictionary = d.get("airlocks", {})
 	for key: String in saved_airlocks:
 		var airlock: Airlock = airlocks.get(SaveCodec.to_cell(key))

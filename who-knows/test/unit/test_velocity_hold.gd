@@ -94,3 +94,27 @@ func test_the_hold_obeys_the_speed_limit():
 	_fc._physics_process(1.0 / 60.0)
 	assert_almost_eq(_hull.linear_velocity.length(), limit, 0.001, "clamped as ever")
 	assert_true(_fc.velocity_hold, "the hold stays; only the speed is refused")
+
+func test_boost_lends_the_hold_its_multiplier():
+	var far := Vector3(10_000.0, 0.0, 0.0)
+	var plain := FlightComputer.translation_force(Vector3.ZERO, Vector3.ZERO, MASS, THRUST, false,
+		true, false, 0.0, far)
+	var boosted := FlightComputer.translation_force(Vector3.ZERO, Vector3.ZERO, MASS, THRUST, true,
+		true, false, 0.0, far)
+	assert_almost_eq(plain.x, THRUST[&"lateral"], 0.001, "a hold pushes at the budget")
+	assert_almost_eq(boosted.x, THRUST[&"lateral"] * FlightComputer.BOOST_MULTIPLIER, 0.001,
+		"boosted, at the budget times the multiplier")
+
+func test_boost_without_a_hold_still_needs_input():
+	var f := FlightComputer.translation_force(Vector3(5.0, 0.0, 0.0), Vector3.ZERO, MASS, THRUST,
+		true, true, false, 0.0)
+	assert_almost_eq(f.x, -5.0 * MASS, 0.001, "your drift damping is not boosted")
+
+func test_a_boosted_hold_boosts_only_while_it_pushes_hard():
+	_fc.set_pilot_input(Vector3.ZERO, Vector3.ZERO, true)
+	_fc.hold_velocity(Vector3(0.0, 0.0, -100.0))
+	_fc._physics_process(1.0 / 60.0)
+	assert_true(_fc.boosting, "far from the held velocity, boost applies")
+	_hull.linear_velocity = Vector3(0.0, 0.0, -100.0)
+	_fc._physics_process(1.0 / 60.0)
+	assert_false(_fc.boosting, "at it, boost would buy nothing and costs nothing")

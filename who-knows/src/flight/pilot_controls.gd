@@ -28,6 +28,9 @@ var pointer := Vector2.ZERO
 var lights: ShipLights
 ## The ship's fire control, set by the ship: T, Shift+T and B work it.
 var fire_control: FireControl
+## The ship's AI pilot, set by the ship: while it is on, the helm writes
+## nothing (hostile ships spec §9.1).
+var ship_pilot: ShipPilot
 ## The game's one camera director (many ships spec §3.2). A ship's scene
 ## cannot reach it by path, so the flight scene hands it over.
 var director: CameraDirector
@@ -128,7 +131,7 @@ func _orbiting() -> bool:
 	return director != null and director.is_orbiting
 
 func _process(_delta: float) -> void:
-	if not seated:
+	if not seated or (ship_pilot != null and ship_pilot.on):
 		return
 	var keys := Vector2(
 		Input.get_axis(&"pitch_down", &"pitch_up"),
