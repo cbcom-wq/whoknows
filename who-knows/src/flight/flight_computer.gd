@@ -92,6 +92,9 @@ var quantum: QuantumStore = null
 ## The hull's state for the band (health and damage spec §11): returns
 ## [how whole it is, 0..1; why it is crippled, or ""]. Given by Ship.
 var hull_status: Callable
+## Whether a hostile is out for this ship or its crew (hostile ships spec
+## §4.3), set by the flight scene: with the orders at HOLD the HUD warns.
+var hostile_engaging: Callable
 ## The ship's warp drive, or null. While it travels it flies the hull, and
 ## this ignores the pilot (the warp spec §5.2).
 var warp: WarpDrive = null
@@ -495,4 +498,5 @@ func build_telemetry() -> VehicleTelemetry:
 		t.weapons_engage = fire_control.orders == FireControl.Orders.ENGAGE
 		t.weapons_pips = fire_control.pips()
 		t.weapons_low_power = t.weapons_engage and quantum != null and quantum.is_low_power()
+		t.hostile_on_hold = not t.weapons_engage and hostile_engaging.is_valid() and bool(hostile_engaging.call())
 	return t
