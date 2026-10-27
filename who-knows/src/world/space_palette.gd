@@ -19,6 +19,11 @@ const WARP := Color("fff3e0")
 ## amber-gold, warm like every light in the game, never the rejected blue.
 const PHASER := Color("ffbf4d")
 
+## Gas venting from a badly hurt hull (hostile ships spec §7): a pale warm
+## grey, a shade under the airlock's steam, so it reads as vapour off
+## the hull and never as a whiteout. Flat lit. Tuned at the renders.
+const VENT_GAS := Color("cdc3b4")
+
 const ASH := Color(0.36, 0.34, 0.32)
 const UMBER := Color(0.33, 0.26, 0.21)
 const SLATE := Color(0.28, 0.28, 0.29)

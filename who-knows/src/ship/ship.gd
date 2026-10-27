@@ -85,6 +85,8 @@ var since_hostile_fire := INF
 var damage_log := DamageLog.new()
 ## Sparks, bursts and chunks on the hull (health and damage spec §9).
 var damage_show: DamageShow
+## Gas from a badly hurt hull (hostile ships spec §7).
+var gas_vents: GasVents
 var _rebuild_queued := false
 ## The ceiling lights' dip as hits land (hostile ships spec §6.1), under the
 ## interior and bound to its lights after every rebuild.
@@ -143,6 +145,9 @@ func _ready() -> void:
 	damage_show.name = "DamageShow"
 	exterior.add_child(damage_show)
 	damage_show.setup(exterior, outside, interior, _inside_face)
+	gas_vents = GasVents.new()
+	gas_vents.name = "GasVents"
+	exterior.add_child(gas_vents)
 	rcs_show = RcsShow.new()
 	rcs_show.name = "RcsShow"
 	exterior.add_child(rcs_show)
@@ -444,17 +449,28 @@ func _apply_view(quiet := false) -> Array[Vector3i]:
 	if quiet:
 		grid.replace_many(remove, add)
 		return remove
+	_share_damage()
 	for coord: Vector3i in staged:
 		grid.note_staged(coord, staged[coord])
 	if ShipDamage.cabin_level(damage.hull_whole()) != _cabin_level:
 		_queue_rebuild()   # the cabin's look follows HULL % (spec §5)
 	if not remove.is_empty() or not add.is_empty():
 		grid.replace_many(remove, add)
+	gas_vents.sync(GasVents.vents(damage, grid))
 	if not remove.is_empty():
 		damage_show.lost(remove)
 		_shed_plate(remove)
 		blocks_lost.emit(remove)
 	return remove
+
+## Each hull block's section damage share reaches its sparks (hostile ships
+## spec §7): the worse of two sections on the centre line.
+func _share_damage() -> void:
+	for coord: Vector3i in damage.sections_of:
+		var share := 0.0
+		for side: StringName in damage.sections_of[coord]:
+			share = maxf(share, 1.0 - damage.health(side))
+		damage_show.share(coord, share)
 
 ## One scrap plate from the first block knocked off, if it had a face onto
 ## space: it drifts out from that face at SHED_SPEED (spec §8.1).
@@ -650,6 +666,9 @@ func _rebuild_everything(hull := true) -> void:
 		rcs_show.rebuild(grid, catalog, stats.center_of_mass)
 	stats_changed.emit(stats)
 	if damage_show != null:
+		if damage != null:
+			_share_damage()
+			gas_vents.sync(GasVents.vents(damage, grid))
 		damage_show.sync(grid, catalog)
 		damage_show.cabin(_cabin_level, _cabin_walls())
 	_set_anchor_radius()

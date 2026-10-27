@@ -48,12 +48,12 @@
   - `GasVents` (Node3D on the hull): `sync(list)` makes or retunes one `GPUParticles3D` per vent, `local_coords = true` (rides the hull; never holds the shift), chunky puffs like the airlock's steam (built-in `ParticleProcessMaterial`, sphere-ish low-poly mesh, `SpacePalette.VENT_GAS`, a pale warm grey), amount and speed by strength; removes vents no longer listed.
   - `SpacePalette.VENT_GAS: Color` (new; the owner sees it in the renders).
 
-- [ ] **Step 1: Write the failing tests:**
+- [x] **Step 1: Write the failing tests:**
   - `test_no_vents_above_half`: every section at 60% → `vents()` empty.
   - `test_vents_grow_as_a_section_falls`: a section at 45% → 1 vent; at 5% → 4; each has a face onto space.
   - `test_vents_ride_the_hull`: scene: a vented starter, `GasVents` emitters `local_coords` true, children of the hull; after `Universe.shift`, their positions relative to the hull unchanged; not in `HOLDS_SHIFT`.
   - `test_sparks_quicken_with_damage`: `DamageShow.share(coord, 1.0)` → that block's next spit within `SPIT_EVERY_WORST.y`.
   - Visual-style and floating-origin suites gain `gas_vents.gd` and pass.
-- [ ] **Step 2–4:** run (FAIL), implement, run `test_gas_vents.gd`, `test_block_damage.gd`, `test_visual_style_rules.gd`, `test_floating_origin_scene.gd` (pass).
-- [ ] **Step 5: Measure and render:** a starter at 10% HULL venting from all six sections; chase view at 30 m and from a second starter's helm at 200 m; fps over 10 s each (`Engine.get_frames_per_second`) on the dev GPU. Must hold 120; if not, fewer, smaller puffs. Renders to `.superpowers/renders/task-11/`, sent to the owner.
-- [ ] **Step 6: Commit** `feat: a damaged hull sparks harder and vents gas`.
+- [x] **Step 2–4:** run (FAIL), implement, run `test_gas_vents.gd`, `test_block_damage.gd`, `test_visual_style_rules.gd`, `test_floating_origin_scene.gd` (pass).
+- [x] **Step 5: Measure and render:** a starter at 10% HULL venting from all six sections; chase view at 30 m and from a second starter's helm at 200 m; fps over 10 s each (`Engine.get_frames_per_second`) on the dev GPU. Must hold 120; if not, fewer, smaller puffs. Renders to `.superpowers/renders/task-11/`, sent to the owner.
+- [x] **Step 6: Commit** `feat: a damaged hull sparks harder and vents gas`.
