@@ -78,6 +78,9 @@ var component_of := {}
 var exposure := {}
 ## Section id -> its pieces that can break away, most exposed first.
 var pieces := {}
+## Section id -> pieces knocked off by heavy hits (hostile ships spec §6.2),
+## lost on top of what its health loses.
+var chipped := {}
 ## coord -> [block id, orientation, hp], the launch layout.
 var launch := {}
 ## Each turret's label, by its part: "TURRET 1" bow first.
@@ -91,6 +94,7 @@ static func build(layout: ShipGrid, catalog: BlockCatalog, held: Dictionary = {}
 	for id in SECTIONS:
 		d.section_hp[id] = 0.0
 		d.section_damage[id] = 0.0
+		d.chipped[id] = 0
 	var by_block := {}
 	for comp: StringName in COMPONENTS:
 		for block_id: StringName in COMPONENTS[comp]:
@@ -334,13 +338,29 @@ func _nearest_standing(from: StringName) -> Array[StringName]:
 		ring = onward
 	return [] as Array[StringName]
 
-## Mends `share` (0..1) of a section's hp; returns the share it used.
+## Knocks one more piece off the section a hit on `coord` from `side_x` goes
+## to (hostile ships spec §6.2), up to its piece count. True if that changed
+## lost().
+func chip(coord: Vector3i, side_x := 0.0) -> bool:
+	if not sections_of.has(coord):
+		return false
+	var section := part_of(coord, side_x)
+	if chipped[section] >= pieces[section].size():
+		return false
+	var before := lost()
+	chipped[section] += 1
+	return lost() != before
+
+## Mends `share` (0..1) of a section's hp; returns the share it used. Its
+## chips come back once it is at BREAK_BELOW or above.
 func repair_section(section: StringName, share: float) -> float:
 	var hp: float = section_hp.get(section, 0.0)
 	if hp <= 0.0 or share <= 0.0:
 		return 0.0
 	var used := minf(share * hp, section_damage[section])
 	section_damage[section] -= used
+	if health(section) >= BREAK_BELOW:
+		chipped[section] = 0
 	return used / hp
 
 ## Mends up to `hp` of a component; returns what it used.
@@ -413,12 +433,14 @@ func lost() -> Dictionary:
 		out.erase(order.pop_back())
 	return out
 
-## How many of a section's pieces are lost at its health now.
+## How many of a section's pieces are lost: at its health now, and one more
+## for each chip, up to all of them.
 func lost_count(section: StringName) -> int:
 	var h := health(section)
-	if h >= BREAK_BELOW:
-		return 0
-	return ceili(pieces[section].size() * (BREAK_BELOW - h) / BREAK_BELOW)
+	var by_health := 0
+	if h < BREAK_BELOW:
+		by_health = ceili(pieces[section].size() * (BREAK_BELOW - h) / BREAK_BELOW)
+	return mini(pieces[section].size(), by_health + chipped[section])
 
 # --- saving (spec §8) ----------------------------------------------------------------
 
@@ -429,7 +451,11 @@ func to_dict() -> Dictionary:
 	var c := {}
 	for comp: StringName in component_damage:
 		c[String(comp)] = component_damage[comp]
-	return {"sections": s, "components": c}
+	var k := {}
+	for id in SECTIONS:
+		if chipped[id] > 0:
+			k[String(id)] = chipped[id]
+	return {"sections": s, "components": c, "chipped": k}
 
 ## Takes saved damage, each clamped to its part's hp. Parts the save does not
 ## name keep what they have.
@@ -444,6 +470,11 @@ func from_dict(d: Dictionary) -> void:
 		var id := StringName(key)
 		if component_hp.has(id):
 			component_damage[id] = clampf(float(c[key]), 0.0, component_hp[id])
+	var k: Dictionary = d.get("chipped", {})
+	for key in k:
+		var id := StringName(key)
+		if chipped.has(id):
+			chipped[id] = clampi(int(k[key]), 0, pieces[id].size())
 
 ## Damage read off a grid's blocks (a save from before sections, spec §8): a
 ## section takes what its blocks had taken, each up to its hp, and all of a

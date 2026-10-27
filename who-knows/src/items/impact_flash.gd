@@ -14,6 +14,7 @@ const DURATION := {Kind.MUZZLE: 0.05, Kind.IMPACT: 0.15}
 const SIZE := {Kind.MUZZLE: 0.08, Kind.IMPACT: 0.3}
 const LIGHT_ENERGY := 0.8
 const LIGHT_RANGE := 3.0
+const BRIGHT_LONGEST := 2.0
 
 static var _mesh: Mesh
 
@@ -21,16 +22,20 @@ var kind: Kind = Kind.IMPACT
 var outside := false
 ## Its burst's size and its light's range against a pistol bolt's.
 var grow := 1.0
+## Its light's brightness against a pistol bolt's; a brighter burst also
+## lasts longer, up to BRIGHT_LONGEST times (hostile ships spec §6.2).
+var bright := 1.0
 var _age := 0.0
 var _burst: MeshInstance3D
 var _light: OmniLight3D
 
 static func spawn(parent: Node, at: Vector3, normal: Vector3, flash_kind: Kind, out := false,
-		grow_by := 1.0) -> ImpactFlash:
+		grow_by := 1.0, bright_by := 1.0) -> ImpactFlash:
 	var flash := ImpactFlash.new()
 	flash.kind = flash_kind
 	flash.outside = out
 	flash.grow = grow_by
+	flash.bright = bright_by
 	parent.add_child(flash)
 	var up := Vector3.UP if absf(normal.dot(Vector3.UP)) < 0.99 else Vector3.RIGHT
 	flash.global_transform = Transform3D(Basis.looking_at(-normal, up), at + normal * 0.01)
@@ -48,7 +53,7 @@ func _ready() -> void:
 	add_child(_burst)
 	_light = OmniLight3D.new()
 	_light.light_color = InteriorPalette.LIGHT_WARM
-	_light.light_energy = LIGHT_ENERGY
+	_light.light_energy = LIGHT_ENERGY * bright
 	_light.omni_range = LIGHT_RANGE * grow
 	_light.light_cull_mask = PlasmaBolt.light_mask(outside)
 	_light.shadow_enabled = false
@@ -56,12 +61,16 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_age += delta
-	var t: float = _age / DURATION[kind]
+	var t: float = _age / life()
 	if t >= 1.0:
 		queue_free()
 		return
 	_burst.scale = Vector3.ONE * maxf(sin(t * PI) * SIZE[kind] * grow, 0.001)
-	_light.light_energy = LIGHT_ENERGY * (1.0 - t)
+	_light.light_energy = LIGHT_ENERGY * bright * (1.0 - t)
+
+## How long it burns, s: its kind's time, longer the brighter it is.
+func life() -> float:
+	return DURATION[kind] * minf(1.0 + 0.5 * (bright - 1.0), BRIGHT_LONGEST)
 
 ## A unit burst facing +z: a plasma disc with a hot core and a chunky centre.
 static func _shared_mesh() -> Mesh:
