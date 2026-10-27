@@ -110,8 +110,11 @@ func render(telemetry: VehicleTelemetry) -> void:
 	if telemetry.limit_raised:
 		mode_label.text += "   LIMIT %d" % roundi(telemetry.cruise_limit)
 
-	# What the flight computer is holding (flight controls spec §8).
+	# What the flight computer is holding (flight controls spec §8), and who
+	# flies it while you sit (hostile ships spec §9.1).
 	var holds := PackedStringArray()
+	if telemetry.ai_pilot != "":
+		holds.append(telemetry.ai_pilot)
 	if telemetry.speed_locked:
 		holds.append("LOCK %d M/S" % roundi(telemetry.locked_speed))
 	if telemetry.heading_hold:

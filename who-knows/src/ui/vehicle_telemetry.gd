@@ -98,6 +98,9 @@ var weapons_low_power := false
 ## Your orders are HOLD while a hostile is out for you (hostile ships spec
 ## §4.3): the strip warns.
 var hostile_on_hold := false
+## Your ship's pilot flies it (hostile ships spec §9.1): "AI PILOT · AUTO",
+## "· STAND-OFF" or "· BRAWLER", its style choice; "" while you fly.
+var ai_pilot := ""
 
 ## Takes plain values rather than a body on purpose: it is the seam that lets
 ## every derivation here be tested headless, with no nodes and no physics
