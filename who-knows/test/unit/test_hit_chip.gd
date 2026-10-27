@@ -104,6 +104,13 @@ func test_a_chip_stops_at_the_section_s_pieces():
 	assert_false(_ship.damage.chip(plate[0]), "nothing left to knock off")
 	assert_eq(_ship.damage.lost_count(section), count)
 
+func test_a_chip_on_a_bare_section_banks_nothing():
+	var plate := _bow_plate()
+	var section: StringName = plate[1]
+	_set_health(section, 0.0)
+	assert_false(_ship.damage.chip(plate[0]), "nothing left to knock off")
+	assert_eq(_ship.damage.chipped[section], 0, "no chip held over for the torch")
+
 func test_a_component_never_chips():
 	for coord: Vector3i in _ship.damage.component_of:
 		assert_false(_ship.damage.chip(coord))

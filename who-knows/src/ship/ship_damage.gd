@@ -340,7 +340,7 @@ func _nearest_standing(from: StringName) -> Array[StringName]:
 
 ## Knocks one more piece off the section a hit on `coord` from `side_x` goes
 ## to (hostile ships spec §6.2), up to its piece count. True if that changed
-## lost().
+## lost(); a chip that knocks nothing off is not kept.
 func chip(coord: Vector3i, side_x := 0.0) -> bool:
 	if not sections_of.has(coord):
 		return false
@@ -349,7 +349,10 @@ func chip(coord: Vector3i, side_x := 0.0) -> bool:
 		return false
 	var before := lost()
 	chipped[section] += 1
-	return lost() != before
+	if lost() == before:
+		chipped[section] -= 1
+		return false
+	return true
 
 ## Mends `share` (0..1) of a section's hp; returns the share it used. Its
 ## chips come back once it is at BREAK_BELOW or above.
