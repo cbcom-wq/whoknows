@@ -109,6 +109,23 @@ func test_a_spacewalk_across_a_shift_keeps_you_beside_your_ship():
 func test_everything_outside_is_covered():
 	assert_eq(_uncovered(), [], "every body and mesh outside the interior shifts")
 
+## A hull venting gas (hostile ships spec §7): the puffs are in the hull's own
+## frame, so the hull carries them and they never hold the shift.
+func test_a_venting_hull_is_covered_and_its_gas_is_local_to_it():
+	for id in ShipDamage.SECTIONS:
+		_ship.damage.section_damage[id] = _ship.damage.section_hp[id] * 0.9
+	_ship._apply_view()
+	var vents := _ship.gas_vents.emitters()
+	assert_gt(vents.size(), 0)
+	var holding := get_tree().get_nodes_in_group(Universe.HOLDS_SHIFT)
+	for e in vents:
+		assert_true(e.local_coords and _ship.exterior.is_ancestor_of(e), "%s rides the hull" % e.name)
+		assert_false(holding.has(e), "%s never holds the shift" % e.name)
+	# The pieces knocked off go in world-space bursts, which hold the shift
+	# for their two seconds instead (DamageShow).
+	var held := holding.map(func(n: Node) -> String: return str(_root.get_path_to(n)))
+	assert_eq(_uncovered().filter(func(path: String) -> bool: return not held.has(path)), [])
+
 func test_bolts_in_flight_are_covered():
 	var pool: BoltPool = _root.bolt_pool
 	var ex: Array[RID] = []
