@@ -28,8 +28,9 @@ var pointer := Vector2.ZERO
 var lights: ShipLights
 ## The ship's fire control, set by the ship: T, Shift+T and B work it.
 var fire_control: FireControl
-## The ship's AI pilot, set by the ship: while it is on, the helm writes
-## nothing (hostile ships spec §9.1).
+## The ship's AI pilot, set by the ship (hostile ships spec §9.1): P hands it
+## the ship and takes it back. While it is on the helm writes nothing, until
+## the stick, an arrow key or a translation key takes it back, that same frame.
 var ship_pilot: ShipPilot
 ## The game's one camera director (many ships spec §3.2). A ship's scene
 ## cannot reach it by path, so the flight scene hands it over.
@@ -74,7 +75,9 @@ func handle(event: InputEvent) -> void:
 	if not seated:
 		return
 	var motion := event as InputEventMouseMotion
-	if motion != null and _orbiting():
+	if motion == null and event.is_action_pressed(&"pilot_ai"):
+		_toggle_pilot()
+	elif motion != null and _orbiting():
 		director.orbit(motion.relative)
 	elif motion != null:
 		var view := _view_size()
@@ -85,6 +88,8 @@ func handle(event: InputEvent) -> void:
 			pointer = (pointer + motion.relative / view.y).clamp(-half, half)
 		else:
 			stick.move(motion.relative, view.y)
+			if not stick.is_centred():
+				_take_back()
 	elif event.is_action_pressed(&"orbit_camera"):
 		if director != null:
 			director.begin_orbit()
@@ -126,28 +131,51 @@ func handle(event: InputEvent) -> void:
 	elif event.is_action_pressed(&"toggle_assist"):
 		_flight.assist_enabled = not _flight.assist_enabled
 
+## P: the ship to its pilot, or back to you. Handed over, the stick centres,
+## so the hand that pressed P does not take it straight back.
+func _toggle_pilot() -> void:
+	if ship_pilot == null:
+		return
+	if ship_pilot.on:
+		ship_pilot.on = false
+	else:
+		stick.centre()
+		ship_pilot.fight_for_you()
+
+## Your hand on the controls takes the ship back from its pilot: the hold it
+## flew by let go at once, so it does not fight your input.
+func _take_back() -> void:
+	if ship_pilot != null and ship_pilot.on:
+		ship_pilot.on = false
+
 ## True while C is held: the mouse swings the camera, not the stick.
 func _orbiting() -> bool:
 	return director != null and director.is_orbiting
 
 func _process(_delta: float) -> void:
-	if not seated or (ship_pilot != null and ship_pilot.on):
+	if not seated:
 		return
 	var keys := Vector2(
 		Input.get_axis(&"pitch_down", &"pitch_up"),
 		Input.get_axis(&"yaw_right", &"yaw_left"),
 	)
-	# Flying by hand takes the ship back from a heading hold (spec §4.2). Roll
-	# does not: it turns about the nose and leaves the heading alone.
-	if not stick.is_centred() or not keys.is_zero_approx():
-		_flight.clear_heading()
-	var steer := (stick.command() + keys).clamp(-Vector2.ONE, Vector2.ONE)
 	var translate := Vector3(
 		Input.get_axis(&"move_left", &"move_right"),
 		Input.get_axis(&"crouch", &"sprint"),
 		Input.get_axis(&"move_forward", &"move_back"),
 	)
-	var rotate := Vector3(steer.x, steer.y, Input.get_axis(&"roll_left", &"roll_right"))
+	var roll := Input.get_axis(&"roll_left", &"roll_right")
+	var by_hand := not stick.is_centred() or not keys.is_zero_approx()
+	if ship_pilot != null and ship_pilot.on:
+		if not by_hand and translate.is_zero_approx() and is_zero_approx(roll):
+			return
+		_take_back()
+	# Flying by hand takes the ship back from a heading hold (spec §4.2). Roll
+	# does not: it turns about the nose and leaves the heading alone.
+	if by_hand:
+		_flight.clear_heading()
+	var steer := (stick.command() + keys).clamp(-Vector2.ONE, Vector2.ONE)
+	var rotate := Vector3(steer.x, steer.y, roll)
 	_flight.set_pilot_input(translate, rotate, Input.is_action_pressed(&"boost"))
 
 ## The world direction under the pointer (spec §4.2), seen through `cam`, or
@@ -174,6 +202,8 @@ func build_telemetry() -> VehicleTelemetry:
 	t.stick_deadzone = PilotStick.DEADZONE
 	t.pointing = pointing
 	t.pointer = pointer
+	if ship_pilot != null and ship_pilot.on:
+		t.ai_pilot = "AI PILOT · %s" % ShipPilot.style_name(ship_pilot.style_choice)
 	if lights != null:
 		t.has_lights = true
 		t.floods_on = lights.floods

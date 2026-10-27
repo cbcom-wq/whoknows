@@ -17,6 +17,13 @@ extends Node
 
 ## How it fights (§5.3). FightAssessment mirrors STAND_OFF and BRAWLER.
 enum Style { AUTO, STAND_OFF, BRAWLER }
+## Each style as the HUD and the computer's PILOT page say it.
+const STYLE_NAMES := ["AUTO", "STAND-OFF", "BRAWLER"]
+
+## Turned on, and turned off: the weapons station holds the ship only while
+## nobody else flies it (§9.2).
+signal handed_over
+signal handed_back
 
 ## Seconds it means to close the gap to the range it wants in, at full
 ## positioning: the wanted speed along the line of sight is the gap over this.
@@ -51,8 +58,10 @@ var on := false:
 		on = value
 		if on:
 			_start()
+			handed_over.emit()
 		else:
 			_let_go()
+			handed_back.emit()
 var skill := 0.5
 var style_choice := Style.AUTO
 ## The style in use: style_choice, or the one the assessment picked.
@@ -67,6 +76,9 @@ var intent: StringName = &""
 var last_reading := {}
 ## The hull-local face it shows its target: where most live turrets bear.
 var face := Vector3.FORWARD
+## Flying your ship for you (§9.1): it fights hostiles only where they are,
+## never follows one out of contact, and looks for one while it holds station.
+var for_you := false
 
 var _preferred := 0.0
 var _chosen := false
@@ -103,9 +115,60 @@ func _physics_process(delta: float) -> void:
 
 ## Fight the ship (or you) called `id` until it is destroyed (§5.5).
 func engage(id: StringName) -> void:
+	for_you = false
 	objective = DestroyObjective.new(id)
 	_bind_universe()
 	on = true
+
+## Your ship handed to its pilot (§9.1): at PilotValues.YOUR_SKILL it fights
+## the hostile fire control lists first, else the nearest in contact; with
+## none it holds station and looks again every ASSESS_EVERY.
+func fight_for_you() -> void:
+	for_you = true
+	skill = PilotValues.YOUR_SKILL
+	var id := _your_foe()
+	objective = _destroy(id) if id != &"" else null
+	_bind_universe()
+	on = true
+	if objective == null and ship != null and flight != null and ship.exterior != null:
+		_hold_station()
+
+## The style as the HUD says it.
+static func style_name(s: int) -> String:
+	return STYLE_NAMES[clampi(s, 0, STYLE_NAMES.size() - 1)]
+
+## The id of the hostile it fights for you: the first listed, else the
+## nearest in contact; &"" with none.
+func _your_foe() -> StringName:
+	if ship == null or ship.exterior == null or not ship.is_inside_tree():
+		return &""
+	var tree := ship.get_tree()
+	var from := Weapons.point_of(ship.exterior)
+	if fire_control != null:
+		for id in fire_control.list:
+			if _foe(Weapons.find(tree, id), from):
+				return id
+	var best: StringName = &""
+	var best_d := INF
+	for node in tree.get_nodes_in_group(Weapons.TARGETS):
+		if not node is Node3D or Weapons.kind_of(Weapons.id_of(node)) != &"ship" or not _foe(node, from):
+			continue
+		var d := from.distance_to(Weapons.point_of(node))
+		if d < best_d:
+			best = Weapons.id_of(node)
+			best_d = d
+	return best
+
+## Destroy `id`, and after it the next hostile, never a friend.
+func _destroy(id: StringName) -> DestroyObjective:
+	var o := DestroyObjective.new(id)
+	o.against = Sides.CREW if ship.side == Sides.HOSTILE else Sides.HOSTILE
+	return o
+
+## A usable hostile ship in contact.
+func _foe(node: Node3D, from: Vector3) -> bool:
+	return node != null and Weapons.usable(node) and Weapons.is_hostile(ship, node) \
+		and from.distance_to(Weapons.point_of(node)) <= WeaponValues.CONTACT_RANGE
 
 ## Whether it is out for `node` (a ship, its hull, or you): its objective's
 ## target, fighting or pursuing.
@@ -159,6 +222,7 @@ func to_dict() -> Dictionary:
 		"objective": objective.to_dict() if objective != null else {},
 		"orders_before": "engage" if _orders_before == FireControl.Orders.ENGAGE else "hold",
 		"marked": String(_marked) if _added else "",
+		"for_you": for_you,
 	}
 
 func from_dict(d: Dictionary) -> void:
@@ -168,6 +232,7 @@ func from_dict(d: Dictionary) -> void:
 	if style == Style.AUTO:
 		style = Style.STAND_OFF
 	objective = PilotObjective.from_dict(d.get("objective"))
+	for_you = bool(d.get("for_you", false))
 	_bind_universe()
 	on = bool(d.get("on", false))
 	_orders_before = FireControl.Orders.ENGAGE if str(d.get("orders_before", "hold")) == "engage" \
@@ -220,6 +285,9 @@ func _let_go() -> void:
 
 func _think(elapsed: float) -> void:
 	_knobs = PilotSkill.new(effective_skill())
+	if for_you and _since_assess >= PilotValues.ASSESS_EVERY and (objective == null or objective.done()
+			or objective.pursuing()):
+		_look_for_a_foe()
 	if objective == null:
 		_hold_station()
 		return
@@ -232,7 +300,11 @@ func _think(elapsed: float) -> void:
 		_hold_station()
 		return
 	if objective.pursuing():
-		_pursue()
+		# Yours fights where it is: it does not follow (§9.1).
+		if for_you:
+			_hold_station()
+		else:
+			_pursue()
 		return
 	var node := objective.target(tree, from)
 	if node == null:
@@ -242,6 +314,18 @@ func _think(elapsed: float) -> void:
 		_assess(node)
 		_since_assess = 0.0
 	_fight(node, from, elapsed)
+
+## Holding station for you, or its foe gone out of contact: a hostile in
+## contact now is its new foe, assessed at once.
+func _look_for_a_foe() -> void:
+	_since_assess = 0.0
+	var id := _your_foe()
+	if id == &"" or (objective != null and id == objective.target_id() and not objective.done()):
+		return
+	objective = _destroy(id)
+	_bind_universe()
+	_chosen = false
+	_since_assess = PilotValues.ASSESS_EVERY
 
 ## Its mark on fire control follows the objective's target: the old one off
 ## (if it listed it), the new one marked once, at the top.

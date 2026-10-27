@@ -55,12 +55,12 @@ The test named there is part of this task; write it with the others.
   - `PilotPage` (a `ComputerPage`, added to the computer beside WEAPONS when the ship has turrets — the spec's §9.1 put the switch on the WEAPONS page, whose five buttons are all in use, so it gets a page of its own): lines `PILOT · ON/OFF`, `STYLE · AUTO`, the intent, the target; `big` toggles, `prev`/`next` cycle `style_choice`.
   - `WeaponsJob.sat`: sets `gunner_hold` only while `ship.ship_pilot == null or not ship.ship_pilot.on`; turning the pilot on while sat drops the hold, off restores it.
 
-- [ ] **Step 1: Write the failing tests:**
+- [x] **Step 1: Write the failing tests:**
   - `test_p_hands_over_and_hands_back`: seated in the starter, a hostile in contact; `pilot_controls.handle(P)` → `ship_pilot.on`, objective on the hostile, telemetry `ai_pilot == "AI PILOT · AUTO"`; P again → off.
   - `test_stick_releases_the_held_velocity`: pilot on with a hold; a stick motion event → same frame `ship_pilot.on` false and `flight_computer.velocity_hold` false.
   - `test_orders_come_back`: orders `HOLD` before; pilot on sets `ENGAGE`; off → `HOLD`.
   - `test_no_hostile_holds_station`: pilot on with nothing in contact → `held_velocity == Vector3.ZERO`, intent `&"holding_station"`.
   - `test_the_station_without_the_hold`: the Warden; pilot on, sit at the weapons station → `gunner_hold` false and the pilot still writes input; pilot off → `gunner_hold` true.
   - `test_the_pilot_page`: `PilotPage.press(&"big")` toggles; `&"next"` cycles AUTO → STAND-OFF → BRAWLER → AUTO.
-- [ ] **Step 2–4:** run (FAIL), implement, run `test_your_pilot.gd`, `test_weapons_job.gd`, `test_weapons_page.gd`, `test_flight_computer.gd` (pass).
-- [ ] **Step 5: Commit** `feat: hand your ship to its pilot with P; take it back with the stick`.
+- [x] **Step 2–4:** run (FAIL), implement, run `test_your_pilot.gd`, `test_weapons_job.gd`, `test_weapons_page.gd`, `test_flight_computer.gd` (pass).
+- [x] **Step 5: Commit** `feat: hand your ship to its pilot with P; take it back with the stick`.

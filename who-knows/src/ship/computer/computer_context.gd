@@ -19,6 +19,9 @@ var damage: ShipDamage
 ## The ship's fire control, for the WEAPONS page (ship weapons spec §7.4); null
 ## in tests.
 var fire_control: FireControl
+## The ship's AI pilot, for the PILOT page (hostile ships spec §9.1); null in
+## tests.
+var ship_pilot: ShipPilot
 ## Whoever last pressed one of the table's buttons.
 var operator: Node
 var time := 0.0

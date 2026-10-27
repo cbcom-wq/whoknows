@@ -766,6 +766,7 @@ func _bind_computers() -> void:
 		context.warp = warp
 		context.damage = damage
 		context.fire_control = fire_control
+		context.ship_pilot = ship_pilot
 		c.bind(context)
 		if _computer_state.has(c.cell):
 			c.restore(_computer_state[c.cell])

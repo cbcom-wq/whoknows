@@ -111,11 +111,15 @@ func test_the_table_opens_on_the_map_and_page_reaches_the_status():
 	assert_true(c.screen_text().begins_with("MAP · 10 KM"))
 	c.press(&"page")
 	assert_true(c.page() is StatusPage)
-	# The starter is armed (ship weapons spec §13), so it has a third page, WEAPONS.
-	assert_eq(c.pages.size(), 3, "the armed starter's table has MAP, STATUS and WEAPONS")
+	# The starter is armed (ship weapons spec §13), so it has a third page, WEAPONS,
+	# and beside it the PILOT page (hostile ships spec §9.1).
+	assert_eq(c.pages.size(), 4, "the armed starter's table has MAP, STATUS, WEAPONS and PILOT")
 	c.press(&"page")
 	assert_true(c.page() is WeaponsPage)
 	assert_eq(c.ctx.fire_control, _ship.fire_control)
+	c.press(&"page")
+	assert_true(c.page() is PilotPage)
+	assert_eq(c.ctx.ship_pilot, _ship.ship_pilot)
 	c.press(&"page")
 	assert_true(c.page() is MapPage, "and round again")
 
@@ -125,7 +129,7 @@ func test_the_weapons_page_survives_a_rebuild_once():
 	(c.pages[2] as WeaponsPage).selected = 1
 	_ship._rebuild_everything()
 	var after := _computer()
-	assert_eq(after.pages.size(), 3, "bound again, the page is not added twice")
+	assert_eq(after.pages.size(), 4, "bound again, the pages are not added twice")
 	assert_eq(after.page_index, 2)
 	assert_eq((after.pages[2] as WeaponsPage).selected, 1)
 	assert_true(after.screen_text().begins_with("WEAPONS"))
