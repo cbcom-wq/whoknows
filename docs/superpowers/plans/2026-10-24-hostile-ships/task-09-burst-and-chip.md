@@ -47,11 +47,11 @@
   - `ShipDamage.chip(coord: Vector3i, side_x := 0.0) -> bool` — the hit's section gets one more lost piece than its health says (`chipped[section] += 1`, up to its piece count); true if that changed `lost()`. `lost_count(section)` becomes `min(pieces.size(), health_count + chipped[section])`. `repair_section` clears that section's `chipped` once its health reaches `BREAK_BELOW` or above (the torch's rebuild puts pieces back in reverse order as now). Saved in `to_dict()["chipped"]`; read in `from_dict`.
   - `Ship._on_hull_hit`: after the damage, `if hit.damage >= HitFeel.CHIP_FROM: damage.chip(cell, side_x)` and `_apply_view()` (one rebuild).
 
-- [ ] **Step 1: Write the failing tests:**
+- [x] **Step 1: Write the failing tests:**
   - `test_a_heavy_hit_chips_a_whole_section`: a full-health starter, `Hit` of 120 on a bow plate → one piece of that section lost; `health(section) > 0.9`.
   - `test_a_light_hit_never_chips`: 15 hp → nothing lost.
   - `test_chips_come_back_with_the_torch`: chip twice, `repair_section(section, 0.2)` until health ≥ 0.5 → `lost()` empty.
   - `test_chipped_round_trips`: `to_dict`/`from_dict` keeps it.
   - `test_the_flash_is_brighter_for_a_heavy`: `ImpactFlash.spawn(..., 3.0, 6.0)` → its light's energy at spawn = `LIGHT_ENERGY × 6.0`.
-- [ ] **Step 2–4:** run (FAIL), implement, run `test_hit_chip.gd`, `test_ship_damage_model.gd`, `test_ship_damage.gd`, `test_phaser_bolt.gd` (pass).
-- [ ] **Step 5: Commit** `feat: brighter bursts; a heavy hit can knock a plate off a whole section`.
+- [x] **Step 2–4:** run (FAIL), implement, run `test_hit_chip.gd`, `test_ship_damage_model.gd`, `test_ship_damage.gd`, `test_phaser_bolt.gd` (pass).
+- [x] **Step 5: Commit** `feat: brighter bursts; a heavy hit can knock a plate off a whole section`.

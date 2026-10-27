@@ -14,15 +14,16 @@ const STATION := &"weapons_station"
 ## Per turret: slew deg/s; bolts a burst, seconds between them, recharge after
 ## a burst; bolt speed m/s, damage hp, life s, push N·s; engagement range m,
 ## and how far a gunner may fire it by hand; spread deg; QE a bolt; the bolt's
-## length and thickness, m; its impact flash against a pistol bolt's; and the
-## barrel's length from its pivot, m, where bolts leave.
+## length and thickness, m; its impact flash's size and brightness against a
+## pistol bolt's (the brightness must read at 1 km from the helm, hostile ships
+## spec §6.2); and the barrel's length from its pivot, m, where bolts leave.
 const SPECS := {
 	LIGHT: {"slew": 90.0, "burst": 4, "gap": 0.125, "recharge": 1.5, "speed": 600.0, "damage": 15.0,
 		"life": 3.0, "push": 20.0, "range": 1200.0, "manned_range": 1200.0, "spread": 0.4, "qe": 1,
-		"length": 2.0, "thickness": 0.25, "flash": 1.5, "barrel": 1.0},
+		"length": 2.0, "thickness": 0.25, "flash": 1.5, "flash_bright": 3.0, "barrel": 1.0},
 	HEAVY: {"slew": 30.0, "burst": 1, "gap": 0.0, "recharge": 3.0, "speed": 450.0, "damage": 120.0,
 		"life": 7.0, "push": 400.0, "range": 1500.0, "manned_range": 3000.0, "spread": 0.0, "qe": 15,
-		"length": 4.0, "thickness": 0.5, "flash": 3.0, "barrel": 2.4},
+		"length": 4.0, "thickness": 0.5, "flash": 3.0, "flash_bright": 6.0, "barrel": 2.4},
 }
 
 ## A turret fires when its barrel is this close to its solution (spec §5.3).

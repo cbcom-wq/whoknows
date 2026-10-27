@@ -27,6 +27,9 @@ const DIP_HEAVY_LEVEL := 0.08
 const DIP_FLICKS := 2
 const DIP_FLICK_LEVEL := 0.6
 const DIP_STUTTER := 0.7
+## A single hit of this many hp or more may knock a piece off its section at
+## any health (spec §6.2): a heavy bolt does, a light one never.
+const CHIP_FROM := 100.0
 
 ## The view's roll, radians, and its shift in the view's own right and up, m.
 var roll := 0.0

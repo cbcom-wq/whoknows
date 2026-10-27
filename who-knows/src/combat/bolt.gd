@@ -25,6 +25,8 @@ var kind: StringName = &"plasma"
 var ray_mask := 0
 ## Its impact flash's size against a pistol bolt's.
 var flash_scale := 1.0
+## Its impact flash's brightness against a pistol bolt's.
+var flash_bright := 1.0
 var exclude: Array[RID] = []
 var source: Node = null
 var age := 0.0
@@ -87,7 +89,8 @@ func impact(result: Dictionary) -> void:
 	hit.shape = int(result.get("shape", -1))
 	Hit.deliver(collider, hit)
 	_tell_npcs(point, collider)
-	ImpactFlash.spawn(get_parent(), point, normal, ImpactFlash.Kind.IMPACT, outside, flash_scale)
+	ImpactFlash.spawn(get_parent(), point, normal, ImpactFlash.Kind.IMPACT, outside, flash_scale,
+		flash_bright)
 	struck.emit(point, collider)
 	_done()
 

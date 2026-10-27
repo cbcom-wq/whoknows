@@ -284,7 +284,12 @@ func _on_hull_hit(hit: Hit) -> void:
 	var at := exterior.to_local(hit.position)
 	var cell := ShipCells.hull_cell(grid, exterior, hit.shape, at, exterior.global_basis.inverse() * hit.normal)
 	if cell != ShipCells.NONE:
-		take_damage_many({cell: hit.damage}, {cell: at.x - ShipGrid.cell_center(cell).x})
+		var side_x := at.x - ShipGrid.cell_center(cell).x
+		# A heavy hit knocks a piece off too (spec §6.2); chipped first, so the
+		# hit's own rebuild shows both.
+		if hit.damage >= HitFeel.CHIP_FROM and grid.has_block(cell):
+			damage.chip(cell, side_x)
+		take_damage_many({cell: hit.damage}, {cell: side_x})
 	if hit.kind == &"phaser":
 		hull_struck(clampf(hit.damage / 4.0, 2.0, 8.0))
 	_feel(hit.damage, -hit.direction if hit.direction != Vector3.ZERO else hit.position - exterior.global_position)
