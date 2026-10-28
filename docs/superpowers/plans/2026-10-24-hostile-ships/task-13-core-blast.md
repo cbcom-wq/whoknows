@@ -54,12 +54,12 @@ The test named there is part of this task; write it with the others.
   - `ShipBreakup.go(ship: Ship, outside: Node3D) -> void` — the ship's present blocks grouped into 6–10 large chunks (a flood-fill of the grid in seeded clusters) and 20–30 small, each a `RigidBody3D` (`collision_layer = 0`, `collision_mask = AsteroidBody.LAYER`) carrying a merged mesh of its cells from the exterior builder's look (or flat-shaded `HullPalette` boxes, scorched/charred by `ExteriorBuilder.stage_colour`), the hull's velocity plus 5–25 m/s outward from the core and a spin; in `EXTERIOR_SPACE`; freed after a random 20–60 s with a shrink over its last 2 s. A spark burst and a gas puff from the core (`DamageShow`'s burst, world-space, `HOLDS_SHIFT` for its 2 s).
   - Order in `flight_test` on `destroyed`: `CoreBlast.go` → `ShipBreakup.go` → deaths (Task 12) → `fleet.destroy` next frame. A ship destroyed by a blast in the same frame queues its own sequence; `Ship.is_destroyed()` guards against a second.
 
-- [ ] **Step 1: Write the failing tests:**
+- [x] **Step 1: Write the failing tests:**
   - `test_blast_falls_off`: `damage_at(0, 1) == 400`, `damage_at(60, 1) == 200`, `damage_at(130, 1) == 0`, `damage_at(200, 2) > 0`.
   - `test_blast_hurts_what_is_near_not_far`: scene: two other starters at 50 m and 300 m → the near one's `hull_whole() < 1`, the far one untouched; an NPC at 30 m loses health.
   - `test_a_chain_of_blasts_destroys_each_once`: a second starter at 40 m with 100 hp of hull left → it is destroyed by the first blast; each emits `destroyed` once; `fleet.destroy` called once each (spy on the signal count).
   - `test_chunks_are_outside_and_go`: after `ShipBreakup.go`, ≥ 26 bodies in `EXTERIOR_SPACE` with `collision_layer == 0`; after simulating 61 s (`await` with the time scale up, or by calling their timers), none left.
   - Visual-style and floating-origin suites gain both files and pass.
-- [ ] **Step 2–4:** run (FAIL), implement, run `test_core_blast.gd`, `test_visual_style_rules.gd`, `test_floating_origin_scene.gd`, `test_ship_destroyed.gd` (pass).
+- [x] **Step 2–4:** run (FAIL), implement, run `test_core_blast.gd`, `test_visual_style_rules.gd`, `test_floating_origin_scene.gd`, `test_ship_destroyed.gd` (pass).
 - [ ] **Step 5: Render and measure:** a starter destroyed 400 m ahead of your helm: frames at 0.1, 0.4 and 2 s from the helm and from a chase view at 80 m; the fps over the 3 s after. Renders into `.superpowers/renders/task-13/`, sent to the owner. If the fps dips under 120 for more than a few frames, cut the small chunks first.
 - [ ] **Step 6: Commit** `feat: the core goes up, the blast reaches what is near, the ship breaks apart`.

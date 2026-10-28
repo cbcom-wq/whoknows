@@ -292,10 +292,23 @@ func _wire_ship(ship: Ship) -> void:
 	# At 0% HULL it goes, and everyone aboard (hostile ships spec §8.2).
 	ship.destroyed.connect(_on_ship_destroyed)
 
-## A ship at 0% HULL (hostile ships spec §8.2): everyone aboard it dies, in
-## the ledger so they never wake, the items aboard are lost, and the fleet
-## lets it go a frame later.
+## A ship at 0% HULL (hostile ships spec §8.2): its core goes up and it
+## breaks apart, everyone aboard it dies, in the ledger so they never wake,
+## the items aboard are lost, and the fleet lets it go a frame later. A
+## neighbour the blast destroys runs all of this itself, at once and once:
+## Ship.destroyed is said only the first time.
 func _on_ship_destroyed(ship: Ship) -> void:
+	_blow_up(ship)
+	_kill_aboard(ship)
+	fleet.destroy.call_deferred(ship)
+
+## The core goes up, and the ship breaks into chunks (§8.2 steps 1 and 2).
+func _blow_up(ship: Ship) -> void:
+	CoreBlast.go(fleet.outside, CoreBlast.core_of(ship), CoreBlast.scale_of(ship), ship)
+	ShipBreakup.go(ship, fleet.outside)
+
+## Everyone aboard dies, and the items aboard are lost (§8.2 step 3).
+func _kill_aboard(ship: Ship) -> void:
 	var director := ship.npc_director
 	for npc: Npc in director.live_npcs():
 		npc_ledger.mark_dead(npc.record.id)
@@ -307,7 +320,6 @@ func _on_ship_destroyed(ship: Ship) -> void:
 		var item := node as Item
 		if item != null and item.state != Item.State.HELD:
 			item.queue_free()
-	fleet.destroy.call_deferred(ship)
 
 func _on_ship_left(ship: Ship) -> void:
 	dev_creatures.erase(ship.npc_director)
