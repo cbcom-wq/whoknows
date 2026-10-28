@@ -61,5 +61,5 @@ The test named there is part of this task; write it with the others.
   - `test_chunks_are_outside_and_go`: after `ShipBreakup.go`, ≥ 26 bodies in `EXTERIOR_SPACE` with `collision_layer == 0`; after simulating 61 s (`await` with the time scale up, or by calling their timers), none left.
   - Visual-style and floating-origin suites gain both files and pass.
 - [x] **Step 2–4:** run (FAIL), implement, run `test_core_blast.gd`, `test_visual_style_rules.gd`, `test_floating_origin_scene.gd`, `test_ship_destroyed.gd` (pass).
-- [ ] **Step 5: Render and measure:** a starter destroyed 400 m ahead of your helm: frames at 0.1, 0.4 and 2 s from the helm and from a chase view at 80 m; the fps over the 3 s after. Renders into `.superpowers/renders/task-13/`, sent to the owner. If the fps dips under 120 for more than a few frames, cut the small chunks first.
-- [ ] **Step 6: Commit** `feat: the core goes up, the blast reaches what is near, the ship breaks apart`.
+- [x] **Step 5: Render and measure:** a starter destroyed 400 m ahead of your helm: frames at 0.1, 0.4 and 2 s from the helm and from a chase view at 80 m; the fps over the 3 s after. Renders into `.superpowers/renders/task-13/`, sent to the owner. If the fps dips under 120 for more than a few frames, cut the small chunks first.
+- [x] **Step 6: Commit** `feat: the core goes up, the blast reaches what is near, the ship breaks apart`.

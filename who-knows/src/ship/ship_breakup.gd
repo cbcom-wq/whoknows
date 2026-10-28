@@ -6,7 +6,8 @@ extends Node
 ## large chunks and many small ones, flung out from the core with a spin and
 ## carrying the hull's velocity, with a burst of sparks and a puff of gas. A
 ## chunk is a loose body of chunky bevelled blocks in the hull's plate colour,
-## scorched or charred (ExteriorBuilder.stage_colour); it touches rocks and
+## some whole, most scorched or charred (ExteriorBuilder.stage_colour), drawn
+## as one MultiMesh of a shared block, so nothing is built; it touches rocks and
 ## nothing else, never another chunk, and shrinks away over its last SHRINK
 ## seconds of a life between LIFE's.
 ##
@@ -38,17 +39,21 @@ const SHRINK := 2.0
 const BLOCK := ShipGrid.CELL_SIZE * 0.96
 const BEVEL := 0.2
 const BLOCK_KG := 400.0
-## The share of blocks only scorched; the rest are charred.
+## The share of a large chunk's blocks left whole, and of any chunk's only
+## scorched; the rest are charred.
+const WHOLE := 0.3
 const SCORCHED := 0.35
 ## The gas: a puff of PUFFS from the core, out at PUFF_SPEED m/s, PUFF_SIZE m
 ## across growing PUFF_GROW times over PUFF_LIFE s, at most PUFF_PEAK opaque.
-const PUFFS := 18
+## Lit, and the vent gas darkened by scorch: smoke off a fire, not steam.
+const PUFFS := 14
 const PUFF_LIFE := 2.0
-const PUFF_SPEED := Vector2(3.0, 8.0)
+const PUFF_SPEED := Vector2(4.0, 10.0)
 const PUFF_SIZE := Vector2(1.5, 3.0)
 const PUFF_GROW := 4.0
-const PUFF_PEAK := 0.45
+const PUFF_PEAK := 0.32
 
+static var _block_mesh: Mesh
 static var _puff_mesh: Mesh
 static var _puff_ramp: GradientTexture1D
 
@@ -186,11 +191,14 @@ func _chunk(cells: Array, hull: RigidBody3D, core: Vector3, rng: RandomNumberGen
 		lo = lo.min(p)
 		hi = hi.max(p)
 	centre /= cells.size()
-	var kit := InteriorKit.new(null)
-	for c: Vector3i in cells:
-		var stage := BlockDamage.Stage.DAMAGED if rng.randf() < SCORCHED else BlockDamage.Stage.WRECKED
-		kit.bevel_box(InteriorKit.Batch.SOLID, InteriorKit.at(ShipGrid.cell_center(c) - centre),
-			Vector3.ONE * BLOCK, BEVEL, InteriorKit.solid(HullPalette.PLATE * ExteriorBuilder.stage_colour(stage)))
+	var blocks := MultiMesh.new()
+	blocks.transform_format = MultiMesh.TRANSFORM_3D
+	blocks.use_colors = true
+	blocks.mesh = _block()
+	blocks.instance_count = cells.size()
+	for i in cells.size():
+		blocks.set_instance_transform(i, Transform3D(Basis.IDENTITY, ShipGrid.cell_center(cells[i]) - centre))
+		blocks.set_instance_color(i, InteriorKit.solid(HullPalette.PLATE * ExteriorBuilder.stage_colour(_stage(rng, small))))
 	var body := RigidBody3D.new()
 	body.name = "Chunk"
 	body.collision_layer = 0
@@ -202,9 +210,9 @@ func _chunk(cells: Array, hull: RigidBody3D, core: Vector3, rng: RandomNumberGen
 	body.angular_damp = 0.0
 	body.mass = BLOCK_KG * cells.size()
 	body.set_meta(&"cells", cells.size())
-	var look := MeshInstance3D.new()
+	var look := MultiMeshInstance3D.new()
 	look.name = "Look"
-	look.mesh = kit.mesh(InteriorKit.Batch.SOLID)
+	look.multimesh = blocks
 	look.material_override = HullMaterials.trim()
 	look.layers = 1
 	if small:
@@ -232,11 +240,29 @@ func _chunk(cells: Array, hull: RigidBody3D, core: Vector3, rng: RandomNumberGen
 	body.angular_velocity = hull.angular_velocity + _random_dir(rng) * spin
 	_chunks.append({"body": body, "look": look, "life": rng.randf_range(LIFE.x, LIFE.y)})
 
+## A block's look: a large chunk keeps some of its plate whole, so it reads
+## as a piece of the ship; the rest, and every small one, scorched or charred.
+static func _stage(rng: RandomNumberGenerator, small: bool) -> int:
+	var r := rng.randf()
+	if not small and r < WHOLE:
+		return BlockDamage.Stage.INTACT
+	return BlockDamage.Stage.DAMAGED if r < WHOLE + SCORCHED else BlockDamage.Stage.WRECKED
+
+## One block, white, chamfered: every chunk draws its blocks with it, each
+## coloured by the chunk's MultiMesh.
+static func _block() -> Mesh:
+	if _block_mesh == null:
+		var kit := InteriorKit.new(null)
+		kit.bevel_box(InteriorKit.Batch.SOLID, Transform3D.IDENTITY, Vector3.ONE * BLOCK, BEVEL,
+			InteriorKit.solid(HullPalette.UNHURT))
+		_block_mesh = kit.mesh(InteriorKit.Batch.SOLID)
+	return _block_mesh
+
 static func _random_dir(rng: RandomNumberGenerator) -> Vector3:
 	var v := Vector3(rng.randf_range(-1, 1), rng.randf_range(-1, 1), rng.randf_range(-1, 1))
 	return v.normalized() if v.length() > 0.01 else Vector3.UP
 
-## The gas from the core: one puff of chunky vapour, as the hull vents (style
+## The gas from the core: one puff of chunky smoke, as the hull vents (style
 ## guide §3.4), drifting on at the hull's `velocity`.
 func _puff(at: Vector3, velocity: Vector3) -> void:
 	var p := GPUParticles3D.new()
@@ -296,17 +322,17 @@ func tick(delta: float) -> void:
 			body.queue_free()
 			continue
 		if to_go < SHRINK:
-			(c["look"] as MeshInstance3D).scale = Vector3.ONE * maxf(to_go / SHRINK, 0.01)
+			(c["look"] as Node3D).scale = Vector3.ONE * maxf(to_go / SHRINK, 0.01)
 		keep.append(c)
 	_chunks = keep
 	if _chunks.is_empty():
 		queue_free()
 
-## The shared puff, flat lit, in the vent gas colour.
+## The shared puff, lit, in the vent gas scorched.
 static func _puff_look() -> Mesh:
 	if _puff_mesh == null:
-		var m := Puffs.mesh(true)
-		(m.material as StandardMaterial3D).albedo_color = SpacePalette.VENT_GAS
+		var m := Puffs.mesh(false)
+		(m.material as StandardMaterial3D).albedo_color = SpacePalette.VENT_GAS * HullPalette.SCORCH
 		_puff_mesh = m
 	return _puff_mesh
 

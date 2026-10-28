@@ -23,8 +23,11 @@ const SCALE := Vector2(0.5, 2.0)
 ## reaches LIGHT_RANGE × scale.
 const FLASH_SIZE := 20.0
 const FLASH_LIFE := 1.2
-const FLASH_GROW := 0.25
-## The white-hot middle, against the flash.
+const FLASH_GROW := 0.1
+## How far past white its colours burn, so the outside's glow halos it and it
+## reads from far off; and the white-hot middle, against the flash.
+const FLASH_HOT := 3.0
+const CORE_HOT := 5.0
 const CORE_SHARE := 0.55
 const LIGHT_RANGE := 300.0
 const LIGHT_ENERGY := 16.0
@@ -91,8 +94,8 @@ func _ready() -> void:
 	flash.name = "Flash"
 	flash.scale = Vector3.ONE * 0.01
 	add_child(flash)
-	_shell(SpacePalette.PHASER, 1.0)
-	_shell(SpacePalette.WARP, CORE_SHARE)
+	_shell(SpacePalette.PHASER, FLASH_HOT, 1.0)
+	_shell(SpacePalette.WARP, CORE_HOT, CORE_SHARE)
 	light = OmniLight3D.new()
 	light.name = "Light"
 	light.light_color = SpacePalette.PHASER
@@ -102,14 +105,17 @@ func _ready() -> void:
 	light.shadow_enabled = false
 	add_child(light)
 
-## A glowing sphere of `colour`, `share` of the flash across: unshaded, added
-## to what is behind it, its own material so it fades alone.
-func _shell(colour: Color, share: float) -> void:
+## A glowing sphere of `colour` burning `hot` times past it, `share` of the
+## flash across: unshaded, added to what is behind it, its own material so it
+## fades alone.
+func _shell(colour: Color, hot: float, share: float) -> void:
 	var m := StandardMaterial3D.new()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-	m.albedo_color = colour
+	var burn := colour * hot
+	burn.a = 1.0
+	m.albedo_color = burn
 	_shells.append(m)
 	var mi := MeshInstance3D.new()
 	mi.name = "Shell"
