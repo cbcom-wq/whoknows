@@ -54,12 +54,12 @@ The test named there is part of this task; write it with the others.
   - Leaving `Weapons.TARGETS`: a destroyed starter calls `Weapons.leave(exterior)`.
   - In `flight_test.gd`, on `destroyed`: every NPC of `ship.npc_director` and every record `ship.records(...)` marked dead in `npc_ledger` (`mark_dead`); items aboard dropped (freed with the ship); then `fleet.destroy(ship)` deferred one frame (Task 13 plays the blast before it; Task 14 handles you aboard).
 
-- [ ] **Step 1: Write the failing tests:**
+- [x] **Step 1: Write the failing tests:**
   - `test_zero_hull_destroys_once`: deal past the total → `destroyed` emitted once; more damage does nothing.
   - `test_a_spawned_ship_is_removed`: after the frame, `fleet.ships()` lacks it, its slot is free, `Weapons.find(tree, ship_id)` null, a fire control listing it drops it within 2.2 s.
   - `test_the_starter_is_held_destroyed`: aboard another ship; destroy the starter → still in `fleet.ships()`, `fleet.is_destroyed` true, `sleeping` true, invisible, `process_mode` disabled, out of `Weapons.TARGETS`; `check_sleep` with you beside it never wakes it.
   - `test_a_destroyed_starter_survives_a_save`: `capture` → part has `"destroyed": true`; a new scene restored from it holds it destroyed.
   - `test_the_crew_aboard_die`: the starter's droid (`ship.npc_director.live_npcs()`) → `npc_ledger.is_dead(record.id)` after the destruction.
-- [ ] **Step 2–4:** run (FAIL), implement, run `test_ship_destroyed.gd`, `test_fleet.gd`, `test_ship_turrets.gd` (pass).
-- [ ] **Step 5: Run** `test/probes/fleet_play.gd` as its header says (CLAUDE.md: after a change to how ships come and go). Expected: its pass line.
-- [ ] **Step 6: Commit** `feat: a ship at 0% hull is destroyed and leaves the fleet; the starter is held destroyed`.
+- [x] **Step 2–4:** run (FAIL), implement, run `test_ship_destroyed.gd`, `test_fleet.gd`, `test_ship_turrets.gd` (pass).
+- [x] **Step 5: Run** `test/probes/fleet_play.gd` as its header says (CLAUDE.md: after a change to how ships come and go). Expected: its pass line.
+- [x] **Step 6: Commit** `feat: a ship at 0% hull is destroyed and leaves the fleet; the starter is held destroyed`.
