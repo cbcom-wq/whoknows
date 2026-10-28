@@ -66,7 +66,8 @@ func test_a_spawned_ship_is_removed():
 
 func test_the_starter_is_held_destroyed():
 	var other := _spawn()
-	_root.board(other, true)
+	# Across to its helm, as F8 does: standing in the starter, you would go with it.
+	_root.board_at_helm(other)
 	watch_signals(_fleet)
 	_wreck(_starter)
 	await wait_process_frames(2)
@@ -97,7 +98,8 @@ func test_a_destroyed_starter_survives_a_save():
 	_fleet = _root.fleet
 	_starter = _root.get_node("Ship")
 	var other := _spawn()
-	_root.board(other, true)
+	# Across to its helm, as F8 does: standing in the starter, you would go with it.
+	_root.board_at_helm(other)
 	_wreck(_starter)
 	await wait_process_frames(2)
 	var part: Dictionary = _root._part_named(_root.capture(), Fleet.STARTER)
@@ -132,7 +134,8 @@ func test_the_crew_aboard_die():
 	var crew: Array = _starter.npc_director.live_npcs()
 	assert_false(crew.is_empty(), "the starter has its droid")
 	var other := _spawn()
-	_root.board(other, true)
+	# Across to its helm, as F8 does: standing in the starter, you would go with it.
+	_root.board_at_helm(other)
 	_wreck(_starter)
 	await wait_process_frames(2)
 	for npc: Npc in crew:

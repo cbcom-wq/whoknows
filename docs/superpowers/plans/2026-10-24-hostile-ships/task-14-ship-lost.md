@@ -56,12 +56,12 @@ The test named there is part of this task; write it with the others.
   - `_rescue(avatar)`: if `home` is null, freed or destroyed → `lose("SUIT LOST")` instead of placing you.
   - The save source `_under_attack() -> String`: `"under attack"` while any awake ship with `side == HOSTILE` and its pilot on has an objective (fighting or pursuing) whose target is **you** (`targets(_avatar)`) or **any crew ship within `CONTACT_RANGE` of you** (so boarding another ship mid-fight does not open a save), or while `aboard.since_hostile_fire < PilotValues.ENGAGED_CALM`.
 
-- [ ] **Step 1: Write the failing tests:**
+- [x] **Step 1: Write the failing tests:**
   - `test_your_ship_destroyed_loses_the_game`: seated in a spawned ship you boarded; destroy it → `lose` called once with `"SHIP LOST"`, `save_enabled` false, the `LostScreen` playing (do not let it reload in the test: a `reload` callable injected and recorded).
   - `test_a_spacewalk_survives_your_ship_but_not_nowhere_to_wake`: on a spacewalk 400 m off; your ship destroyed → no `lose`; then downed (`_avatar.health.take(999)`) → when `Downed` reaches `WAKING`, `lose("SUIT LOST")`.
   - `test_no_save_under_attack`: a hostile engaging → `save_gate.busy()` contains `"under attack"`; its objective pursuing you out of contact → still; it gives up (61 s) and 10 s pass since its last hit → not busy for that reason.
   - `test_engaged_follows_you_between_ships`: a hostile targets your ship; you board another crew ship 200 m away (`board_at_helm`) → still `"under attack"`; move the ship it targets 6 km from you and the hostile's objective pursuing it → still (pursuing a crew ship near you counts only while that ship is within contact of you, so this case reads `""` once the 10 s calm has passed — assert exactly that).
   - `test_winning_lets_saving_resume`: the only hostile destroyed → after `ENGAGED_CALM` the source returns `""`.
-- [ ] **Step 2–4:** run (FAIL), implement, run `test_ship_lost.gd`, `test_save_gate.gd`, `test_downed.gd` (pass).
-- [ ] **Step 5: Play it once:** spawn a hostile Warden and let it win; the white, the black, *SHIP LOST*, and the game back at the save from before the fight.
-- [ ] **Step 6: Commit** `feat: losing your ship goes back to the last save; no save while under attack`.
+- [x] **Step 2–4:** run (FAIL), implement, run `test_ship_lost.gd`, `test_save_gate.gd`, `test_downed.gd` (pass).
+- [x] **Step 5: Play it once:** spawn a hostile Warden and let it win; the white, the black, *SHIP LOST*, and the game back at the save from before the fight.
+- [x] **Step 6: Commit** `feat: losing your ship goes back to the last save; no save while under attack`.
