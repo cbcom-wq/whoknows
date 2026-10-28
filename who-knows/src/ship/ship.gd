@@ -17,6 +17,10 @@ signal plate_shed(item: Item)
 ## the ship toward where it came from). The cabin's lights dip on their own;
 ## the flight scene knocks your view when this is the ship you are in.
 signal felt_hit(strength: float, from: Vector3)
+## HULL % reached 0 (hostile ships spec §8.1): said once, by the hit that did
+## it. The flight scene answers: everyone aboard dies and Fleet.destroy lets
+## the ship go (§8.2). Nothing lands on it after.
+signal destroyed(ship: Ship)
 ## Every ship is in this group, for things that must find one without being
 ## given it (the repair torch aimed at a hole).
 const GROUP := &"ships"
@@ -54,6 +58,8 @@ var damage: ShipDamage
 ## Whose ship it is (hostile ships spec §4.1): Sides.CREW, yours, or
 ## Sides.HOSTILE. Saved with it.
 var side: StringName = Sides.CREW
+## Set once HULL % reaches 0, or by a save that held it destroyed.
+var _destroyed := false
 ## The cabin's look the interior was last built at (ShipDamage.cabin_level).
 var _cabin_level := 0
 var stats: ShipStats
@@ -292,7 +298,7 @@ func _on_hull_hit(hit: Hit) -> void:
 		var side_x := at.x - ShipGrid.cell_center(cell).x
 		# A heavy hit knocks a piece off too (spec §6.2); chipped first, so the
 		# hit's own rebuild shows both.
-		if hit.damage >= HitFeel.CHIP_FROM and grid.has_block(cell):
+		if hit.damage >= HitFeel.CHIP_FROM and grid.has_block(cell) and not _destroyed:
 			damage.chip(cell, side_x)
 		take_damage_many({cell: hit.damage}, {cell: side_x})
 	if hit.kind == &"phaser":
@@ -407,6 +413,9 @@ func take_damage(cell: Vector3i, amount: float) -> Array[Vector3i]:
 ## grid shows it: pieces lost go in one rebuild. Returns them.
 func take_damage_many(hits: Dictionary, sides: Dictionary = {}) -> Array[Vector3i]:
 	var landed := false
+	if _destroyed:
+		var none: Array[Vector3i] = []
+		return none
 	for cell: Vector3i in hits:
 		if cell != ShipCells.NONE and hits[cell] > 0.0 and grid.has_block(cell):
 			landed = damage.hit(cell, hits[cell], float(sides.get(cell, 0.0))) or landed
@@ -414,7 +423,19 @@ func take_damage_many(hits: Dictionary, sides: Dictionary = {}) -> Array[Vector3
 		var none: Array[Vector3i] = []
 		return none
 	damage_log.note()
-	return _apply_view()
+	var lost := _apply_view()
+	if damage.hull_whole() <= 0.0:
+		_destroyed = true
+		destroyed.emit(self)
+	return lost
+
+## Whether HULL % has reached 0 (hostile ships spec §8.1).
+func is_destroyed() -> bool:
+	return _destroyed
+
+## Destroyed without a hit and without a word: a save held it so (Fleet).
+func mark_destroyed() -> void:
+	_destroyed = true
 
 ## Writes the damage model into the grid (spec §4): each block's damage is
 ## what its section or component shows, a piece lost is removed and one

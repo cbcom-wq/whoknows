@@ -289,6 +289,25 @@ func _wire_ship(ship: Ship) -> void:
 	ship.warp.travel_ended.connect(_on_warp_ended)
 	# In through its airlock, you are aboard it (§4.3).
 	ship.airlock_crossed.connect(_on_airlock_crossed.bind(ship))
+	# At 0% HULL it goes, and everyone aboard (hostile ships spec §8.2).
+	ship.destroyed.connect(_on_ship_destroyed)
+
+## A ship at 0% HULL (hostile ships spec §8.2): everyone aboard it dies, in
+## the ledger so they never wake, the items aboard are lost, and the fleet
+## lets it go a frame later.
+func _on_ship_destroyed(ship: Ship) -> void:
+	var director := ship.npc_director
+	for npc: Npc in director.live_npcs():
+		npc_ledger.mark_dead(npc.record.id)
+	for source in director.sources:
+		for entry: Array in source.records(director):
+			npc_ledger.mark_dead((entry[0] as NpcRecord).id)
+	# A spawned ship's go with it; the starter is held, so its own are freed.
+	for node in ship.items.get_children():
+		var item := node as Item
+		if item != null and item.state != Item.State.HELD:
+			item.queue_free()
+	fleet.destroy.call_deferred(ship)
 
 func _on_ship_left(ship: Ship) -> void:
 	dev_creatures.erase(ship.npc_director)
@@ -1495,11 +1514,15 @@ func _restore_places(saved: Dictionary) -> void:
 ## apart beside the starter instead of where they were.
 func _restore_fleet(saved: Dictionary, in_place: bool) -> void:
 	fleet.from_dict(saved.get("fleet", {}))
+	var starter_part := _part_named(saved, Fleet.STARTER)
 	if in_place:
 		# Through the fleet, as every other ship: a starter left far off (you
 		# were in a base, or aboard another ship) is held asleep there, never
-		# put in engine space 25 km out for a second.
-		fleet.restore_hull(_starter, _part_named(saved, Fleet.STARTER))
+		# put in engine space 25 km out for a second. One saved destroyed is
+		# held destroyed (hostile ships spec §8.2).
+		fleet.restore_hull(_starter, starter_part)
+	elif starter_part.get("destroyed", false):
+		fleet.destroy(_starter)
 	var row := 0
 	for part in saved.get("ships", []):
 		if not (part is Dictionary) or String(part.get("name", "")) == Fleet.STARTER:

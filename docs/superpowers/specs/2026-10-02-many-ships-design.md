@@ -262,6 +262,11 @@ The droid's record id is `droid:<ship name>:0`, so names never change: the start
 authored `/Ship`, and each other ship is spawned under its saved name. That is why
 `Fleet.remove()` refuses `Ship`.
 
+*Amended 2026-10-27 (hostile ships spec §8.2, Task 12):* a ship at 0% HULL leaves through
+`Fleet.destroy`. Any other ship is removed (even the one you are aboard), but `Ship` stays: it is
+held asleep where it was destroyed, for good: hidden, out of physics and of `Weapons.TARGETS`,
+never woken by `check_sleep`, and saved with `"destroyed": true`, which a load holds again.
+
 ### 6.3 Load order
 
 1. The origin goes near the aboard ship's hull, or near you on a spacewalk (`_restore_places`).
