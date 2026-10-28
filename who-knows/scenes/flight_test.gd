@@ -81,9 +81,10 @@ var since_fired_on := INF
 var lost_screen: LostScreen
 var reload: Callable
 var _lost := false
-## Set by the reload after a death, so a game launched with --new-game resumes
-## the save it lost back to rather than setting it aside again.
-static var _back_to_save := false
+## Set on the tree by the reload after a death, which keeps it, so a game
+## launched with --new-game resumes the save it lost back to rather than
+## setting it aside again.
+const BACK_TO_SAVE := &"back_to_save"
 
 var _reticle: Reticle
 var _interact_prompt := ""
@@ -396,7 +397,7 @@ func _back_to_last_save() -> void:
 	if get_tree().current_scene != self:
 		push_warning("FlightTest: lost, but not the current scene; no reload")
 		return
-	_back_to_save = true
+	get_tree().set_meta(BACK_TO_SAVE, true)
 	get_tree().reload_current_scene()
 
 ## The core goes up, and the ship breaks into chunks (§8.2 steps 1 and 2).
@@ -1487,8 +1488,9 @@ func _save_readout() -> String:
 ## `resumed`; {} for a new game.
 func _read_save() -> Dictionary:
 	resumed = false
-	var back := _back_to_save
-	_back_to_save = false
+	var back := bool(get_tree().get_meta(BACK_TO_SAVE, false)) if is_inside_tree() else false
+	if is_inside_tree():
+		get_tree().remove_meta(BACK_TO_SAVE)
 	if not save_enabled:
 		return {}
 	save_game = SaveGame.new(save_path)
