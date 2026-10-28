@@ -87,6 +87,8 @@ const PAINTING_FILES := [
 	"res://src/ship/exterior_builder.gd",
 	"res://src/ship/damage_show.gd",
 	"res://src/ship/gas_vents.gd",
+	"res://src/combat/core_blast.gd",
+	"res://src/ship/ship_breakup.gd",
 	"res://src/items/repair_torch.gd",
 	"res://src/ui/hurt_edge.gd",
 	"res://src/ui/hull_panel.gd",

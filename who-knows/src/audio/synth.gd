@@ -25,6 +25,7 @@ const NAMES: Array[StringName] = [
 	&"unfold", &"leg_stamp", &"drill_hum",
 	&"hose_draw", &"hose_gulp",
 	&"phaser_thrum", &"phaser_heavy", &"phaser_whine", &"phaser_crack",
+	&"core_boom",
 ]
 ## Sounds that play as seamless loops.
 const LOOPED: Array[StringName] = [&"ship_hum", &"breath", &"thruster_puff", &"core_hum", &"charge", &"droid_whir",
@@ -141,6 +142,8 @@ static func build(sound_name: StringName) -> AudioStreamWAV:
 			x = _phaser_whine()
 		&"phaser_crack":
 			x = _phaser_crack()
+		&"core_boom":
+			x = _core_boom()
 		_:
 			push_error("Synth: no sound called %s" % sound_name)
 			return null
@@ -516,6 +519,24 @@ static func _phaser_crack() -> PackedFloat32Array:
 		var t := float(i) / MIX_RATE
 		x[i] = crack[i] * exp(-t / 0.015) + body[i] * exp(-t / 0.07) * 1.5
 	return _gain(x, 0.6)
+
+## A ship's core going up (hostile ships spec §8.2): a deep boom -- a short
+## crack, a sine falling to the bottom of hearing, and a long rumble rolling
+## off -- soft-edged, never a bang.
+static func _core_boom() -> PackedFloat32Array:
+	var n := _len(2.8)
+	var crack := _lowpass(_highpass(_noise(n, 89), 600.0), 3000.0)
+	var rumble := _lowpass(_noise(n, 97), 180.0)
+	var roll := _lowpass(_noise(n, 101), 70.0)
+	var x := PackedFloat32Array()
+	x.resize(n)
+	var phase := 0.0
+	for i in n:
+		var t := float(i) / MIX_RATE
+		phase += TAU * lerpf(58.0, 22.0, minf(t / 1.2, 1.0)) / MIX_RATE
+		var onset := minf(t / 0.008, 1.0)
+		x[i] = (sin(phase) * exp(-t / 0.55) + crack[i] * exp(-t / 0.03) * 0.5 			+ rumble[i] * exp(-t / 0.35) * 2.4 + roll[i] * _ramp(t, 0.15, 2.8, 1.6) * 3.0) * onset
+	return _gain(x, 0.95)
 
 ## Converting (spec §13): a rising shimmer -- filtered noise swept up and a
 ## sine gliding up an octave and more over the convert's 1.2 s -- ending in a

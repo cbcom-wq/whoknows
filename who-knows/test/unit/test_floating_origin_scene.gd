@@ -126,6 +126,31 @@ func test_a_venting_hull_is_covered_and_its_gas_is_local_to_it():
 	var held := holding.map(func(n: Node) -> String: return str(_root.get_path_to(n)))
 	assert_eq(_uncovered().filter(func(path: String) -> bool: return not held.has(path)), [])
 
+## Hostile ships spec §8.2: a ship blowing up -- the flash and its light, the
+## chunks -- is covered, and a shift carries the chunks; its sparks and gas
+## are world-space and hold the shift for their two seconds instead.
+func test_a_ship_blowing_up_is_covered():
+	var place := Transform3D(Basis.IDENTITY, _ship.exterior.global_position + Vector3(300, 0, 0))
+	var ship: Ship = _root.fleet.spawn(_root._starter_grid(), place)
+	await wait_physics_frames(2)
+	var cell: Vector3i = ship.damage.sections_of.keys()[0]
+	ship.take_damage_many({cell: 1e9})
+	await wait_process_frames(2)
+	assert_false(is_instance_valid(ship), "the ship is gone")
+	var blasts := _outside.get_children().filter(func(n: Node) -> bool: return n is CoreBlast)
+	assert_eq(blasts.size(), 1, "the core went up")
+	assert_true(blasts[0].is_in_group(Universe.EXTERIOR_SPACE))
+	var chunks := get_tree().get_nodes_in_group(ShipBreakup.CHUNKS)
+	assert_gt(chunks.size(), 0, "it broke apart")
+	var holding := get_tree().get_nodes_in_group(Universe.HOLDS_SHIFT)
+	assert_gt(holding.size(), 0, "its sparks and gas hold the shift")
+	var held := holding.map(func(n: Node) -> String: return str(_root.get_path_to(n)))
+	assert_eq(_uncovered().filter(func(path: String) -> bool: return not held.has(path)), [])
+	var chunk: Node3D = chunks[0]
+	var before := chunk.global_position
+	_universe.shift(Vector3(2000, 0, 0))
+	assert_almost_eq(chunk.global_position, before - Vector3(2000, 0, 0), Vector3.ONE * 0.01, "a shift carries it")
+
 func test_bolts_in_flight_are_covered():
 	var pool: BoltPool = _root.bolt_pool
 	var ex: Array[RID] = []
