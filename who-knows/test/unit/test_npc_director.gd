@@ -211,3 +211,40 @@ func test_inside_a_promoted_npc_is_never_a_target():
 	_source.entries = [[rec, _site]]
 	_director.review()
 	assert_false(_director.live[rec.id].is_in_group(Weapons.TARGETS))
+
+## A free hull at the holder's origin (where the floating origin keeps your
+## ship), its contacts watched, as Ship's exterior is.
+func _hull_at_origin() -> RigidBody3D:
+	var hull := RigidBody3D.new()
+	hull.collision_layer = 1
+	hull.collision_mask = Npc.LAYER
+	hull.gravity_scale = 0.0
+	hull.contact_monitor = true
+	hull.max_contacts_reported = 8
+	hull.can_sleep = false
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(10, 4, 20)
+	shape.shape = box
+	hull.add_child(shape)
+	_holder.add_child(hull)
+	return hull
+
+## An NPC promoted outside, far from your ship, never touches it: the body is
+## placed before it joins the world. Added at the holder's origin and moved
+## after, it overlapped the hull there for a step, then jumped 970 m to its
+## site -- your ship once went off at ~9,900 m/s and broke up, "hit by rock
+## creatures 1 km away" (the duel probe, T16).
+func test_a_promoted_npc_never_touches_a_hull_at_the_origin():
+	var hull := _hull_at_origin()
+	var touched: Array = []
+	hull.body_entered.connect(func(body: Node) -> void: touched.append(body.name))
+	await wait_physics_frames(3)
+	_site.at = Vector3(-105, 65, -967)
+	_anchor(_site.at)
+	_source.entries = [[_record(1), _site], [_record(2), _site], [_record(3), _site]]
+	_director.review()
+	assert_eq(_director.live.size(), 3, "promoted outside, by distance")
+	await wait_physics_frames(10)
+	assert_eq(touched, [], "no NPC touched the hull")
+	assert_almost_eq(hull.linear_velocity.length(), 0.0, 0.01, "and the hull never moved")
