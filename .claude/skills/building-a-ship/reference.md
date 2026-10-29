@@ -989,7 +989,7 @@ marks). Every number the weapons use is in this one file:
 |---|---|---|
 | Slew | 90°/s | 30°/s |
 | Fire | bursts of 4, 0.125 s apart, 1.5 s recharge | one bolt, 3 s recharge |
-| Bolt speed, damage, life, push | 600 m/s, 15 hp, 3 s, 20 N·s | 450 m/s, 120 hp, 7 s, 400 N·s |
+| Bolt speed, damage, life, push | 350 m/s, 60 hp, 3.6 s, 20 N·s (600 m/s, 15 hp, 3 s before hostile ships T16) | 450 m/s, 120 hp, 7 s, 400 N·s |
 | Engagement range | 1,200 m | 1,500 m alone; 3,000 m by hand |
 | Spread, QE a bolt | 0.4°, 1 | 0, 15 |
 | Bolt look (length × thickness), impact flash, barrel from pivot | 2.0 × 0.25 m, ×1.5, 1.0 m | 4.0 × 0.5 m, ×3.0, 2.4 m |

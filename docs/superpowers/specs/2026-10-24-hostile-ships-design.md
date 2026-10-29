@@ -88,7 +88,7 @@ Built, and used as it is:
   each turret given the first entry it can engage, else **the nearest hostile it can**. Turrets lead,
   slew, burst and recharge on their own (`turret.gd`, `weapon_values.gd`).
 - **Bolts** (`bolt.gd`, `phaser_bolt.gd`, `bolt_pool.gd`): pooled, ray-per-tick, carry the shooter's
-  velocity, amber with trails. Light 15 hp at 600 m/s in bursts of 4; heavy 120 hp at 450 m/s.
+  velocity, amber with trails. Light 15 hp at 600 m/s in bursts of 4 (60 hp at 350 m/s, 3.6 s life, since T16); heavy 120 hp at 450 m/s.
 - **Hits on a ship** (`Ship._on_hull_hit`): the cell's section or component takes the damage, a small
   push (light 20 N·s, heavy 400 N·s), and aboard a `hull_thump` scaled by damage.
 - **The damage model** (`ship_damage.gd`, `damage_show.gd`): six sections, components (engines, core,
