@@ -25,27 +25,6 @@ const STYLE_NAMES := ["AUTO", "STAND-OFF", "BRAWLER"]
 signal handed_over
 signal handed_back
 
-## Seconds it means to close the gap to the range it wants in, at full
-## positioning: the wanted speed along the line of sight is the gap over this.
-const CLOSE_TIME := 2.0
-## A jink's change of velocity is this many seconds of lateral thrust, and is
-## held this long.
-const JINK_PUSH := 1.5
-## Jinks at intervals come every jink_every, give or take this share.
-const JINK_JITTER := 0.3
-## A bolt is inbound when it passes within INBOUND_MISS m of the hull within
-## INBOUND_HORIZON s.
-const INBOUND_MISS := 60.0
-const INBOUND_HORIZON := 3.0
-## The turn's gain, 1/s, at full positioning (Broadside.rotate_input).
-const TURN_GAIN := 2.0
-## A brawler boosts while it is more than this many BRAWL_BANDs off its range.
-const BOOST_BANDS := 2.0
-## A turret counts toward a face only if it still bears this far off it, every
-## way: a face on the very edge of a sky (the starter's nose, on the rim of both
-## its turrets' half-skies) bears for neither once the muzzles' height shows.
-const FACE_MARGIN := deg_to_rad(10.0)
-
 var ship: Ship
 var flight: FlightComputer
 var fire_control: FireControl
@@ -369,29 +348,39 @@ func _fight(node: Node3D, from: Vector3, elapsed: float) -> void:
 	var los := to / maxf(dist, 0.001)
 	var gap := dist - _preferred
 	var band := PilotValues.BRAWL_BAND if style == Style.BRAWLER else PilotValues.STAND_OFF_BAND
-	var wanted := Weapons.velocity_of(node) + los * _knobs.position_gain * gap / CLOSE_TIME
+	# Only a share of the foe's velocity: matched in full, two pilots each
+	# holding the other's never lose the drift they share, and race off together.
+	var wanted := Weapons.velocity_of(node) * PilotValues.MATCH_SHARE \
+		+ los * _knobs.position_gain * gap / PilotValues.CLOSE_TIME
 	intent = &"closing" if absf(gap) > band else &"holding_range"
 	if _fire(dist):
 		intent = &"holding_fire"
-	_boost = style == Style.BRAWLER and absf(gap) > BOOST_BANDS * PilotValues.BRAWL_BAND
+	_boost = style == Style.BRAWLER and absf(gap) > PilotValues.BOOST_BANDS * PilotValues.BRAWL_BAND
 	if _boost:
 		intent = &"boosting"
 	if _jinking(from, los, dist, elapsed):
 		wanted += _jink
 		intent = &"jinking"
-	_hold(wanted)
+	_hold(wanted, flight.current_limit if _harmless() else minf(PilotValues.FIGHT_SPEED, flight.current_limit))
 	_refresh_face()
 	_desired = Broadside.desired_basis(ship.exterior.global_basis.orthonormalized(), face, los)
 
 ## Fire control's orders: engage, but hold while it is far past where its
-## shots land and its store is low (fire discipline, §5.4). True when holding.
+## shots land and its store is low (fire discipline, §5.4), unless the foe
+## has no live turret. True when holding.
 func _fire(dist: float) -> bool:
 	var reach := float(last_reading.get("own", {}).get("reach", 0.0))
 	var store := ship.quantum.store if ship.quantum != null else null
 	var low := store != null and store.amount < PilotValues.HOLD_FIRE_QE * store.capacity
-	var hold := low and dist > _knobs.hold_fire_past * reach
+	# Against a foe that cannot fire back, holding gains nothing: it is the
+	# only way the fight ends.
+	var hold := low and dist > _knobs.hold_fire_past * reach and not _harmless()
 	_set_orders(FireControl.Orders.HOLD if hold else FireControl.Orders.ENGAGE)
 	return hold
+
+## Whether its foe, at the last assessment, had no live turret.
+func _harmless() -> bool:
+	return float(last_reading.get("foe", {}).get("dps", 0.0)) <= 0.0
 
 ## Whether a jink runs now, starting one when it is due: reaction s after
 ## bolts are seen inbound, or every jink_every while in the target's reach.
@@ -400,8 +389,8 @@ func _jinking(from: Vector3, los: Vector3, dist: float, elapsed: float) -> bool:
 	_jink_in -= elapsed
 	var pool := BoltPool.find(ship.get_tree())
 	var bolts: Array = pool.flying() if pool != null else []
-	var coming := Broadside.inbound(bolts, ship, from, ship.exterior.linear_velocity, INBOUND_MISS,
-		INBOUND_HORIZON)
+	var coming := Broadside.inbound(bolts, ship, from, ship.exterior.linear_velocity, PilotValues.INBOUND_MISS,
+		PilotValues.INBOUND_HORIZON)
 	if coming <= 0:
 		_seen_for = -1.0
 	elif _seen_for < 0.0:
@@ -417,12 +406,12 @@ func _jinking(from: Vector3, los: Vector3, dist: float, elapsed: float) -> bool:
 		return false
 	if dodge:
 		_seen_for = 0.0
-	_jink_in = _knobs.jink_every * (1.0 + _rng.randf_range(-JINK_JITTER, JINK_JITTER))
-	_jink_left = JINK_PUSH
+	_jink_in = _knobs.jink_every * (1.0 + _rng.randf_range(-PilotValues.JINK_JITTER, PilotValues.JINK_JITTER))
+	_jink_left = PilotValues.JINK_PUSH
 	var lateral: float = ship.stats.thrust_budget[&"lateral"] if ship.stats != null else 0.0
 	var mass := maxf(ship.stats.total_mass_kg if ship.stats != null else 1.0, 1.0)
 	var side := los.cross(Vector3.UP if absf(los.dot(Vector3.UP)) < 0.9 else Vector3.RIGHT).normalized()
-	_jink = side.rotated(los, _rng.randf() * TAU) * _knobs.jink_share * lateral / mass * JINK_PUSH
+	_jink = side.rotated(los, _rng.randf() * TAU) * _knobs.jink_share * lateral / mass * PilotValues.JINK_PUSH
 	return true
 
 ## Out of contact: at its best speed the way it last saw the target, nose first,
@@ -446,11 +435,12 @@ func _hold_station() -> void:
 	flight.hold_velocity(Vector3.ZERO)
 	_desired = ship.exterior.global_basis.orthonormalized()
 
-## Holds `wanted`, steered round rocks and other ships, under the limit. A
+## Holds `wanted`, steered round rocks and other ships, under `limit` (the
+## flight computer's when not given). A
 ## swerve alone, still asking for full speed ahead, is clamped away and flies
 ## straight in, so it also gives up speed ahead: toward a rock, all it could not
 ## stop from, turned aside instead; toward a ship, the share it swerves by.
-func _hold(wanted: Vector3) -> void:
+func _hold(wanted: Vector3, limit := -1.0) -> void:
 	var hull := ship.exterior
 	var v := hull.linear_velocity
 	var speed := v.length()
@@ -474,7 +464,7 @@ func _hold(wanted: Vector3) -> void:
 		if not shy.is_zero_approx() and on_ahead > 0.0:
 			wanted -= ahead * on_ahead * clampf(shy.length() / speed, 0.0, 1.0)
 	wanted += swerve + shy
-	flight.hold_velocity(wanted.limit_length(flight.current_limit))
+	flight.hold_velocity(wanted.limit_length(limit if limit >= 0.0 else flight.current_limit))
 
 ## Every other awake ship in contact, as steer_ships sees them.
 func _others(from: Vector3) -> Array:
@@ -545,7 +535,7 @@ static func _bears_round(sky: SkyMap, dir: Vector3) -> bool:
 	var a := dir.cross(Vector3.UP if absf(dir.dot(Vector3.UP)) < 0.9 else Vector3.RIGHT).normalized()
 	var b := dir.cross(a)
 	for off: Vector3 in [a, -a, b, -b]:
-		if not sky.can_bear(dir * cos(FACE_MARGIN) + off * sin(FACE_MARGIN)):
+		if not sky.can_bear(dir * cos(PilotValues.FACE_MARGIN) + off * sin(PilotValues.FACE_MARGIN)):
 			return false
 	return true
 
@@ -556,7 +546,7 @@ func _fly() -> void:
 	var hull := ship.exterior
 	var basis := hull.global_basis.orthonormalized()
 	var spin := basis.inverse() * hull.angular_velocity
-	var rotate := Broadside.rotate_input(basis, _desired, spin, TURN_GAIN * _knobs.position_gain)
+	var rotate := Broadside.rotate_input(basis, _desired, spin, PilotValues.TURN_GAIN * _knobs.position_gain)
 	flight.set_pilot_input(Vector3.ZERO, rotate, _boost)
 	flight.clear_heading()
 

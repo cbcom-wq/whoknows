@@ -60,14 +60,22 @@ static func brawl_score(own: Dictionary, foe: Dictionary) -> float:
 
 ## The style to fight in, from `current` (AUTO before the first choice).
 ## Judgement noise from `skill` scales the score; hysteresis keeps it from
-## dithering at 1; reach and a dry store override the score.
+## dithering at 1; reach (its own, or a foe with none) and a dry store
+## override the score.
 static func choose(own: Dictionary, foe: Dictionary, skill: float, current: int,
 		rng: RandomNumberGenerator) -> int:
 	var noise := PilotSkill.new(skill).noise
 	var score := brawl_score(own, foe) * (1.0 + rng.randf_range(-noise, noise))
-	if own["reach"] <= 0.0 or own["reach"] > foe["reach"] + PilotValues.REACH_EDGE:
+	if own["reach"] <= 0.0:
 		return STAND_OFF
-	var style := BRAWLER if score >= 1.0 else STAND_OFF
+	# A foe with no live turret has nothing to stand off from: close and finish
+	# it, where the shots land (the duel probe: a reach "edge" over 0 kept the
+	# armed ship out at 1 km, spending its store on shots it mostly missed).
+	if foe["reach"] <= 0.0:
+		return BRAWLER
+	if own["reach"] > foe["reach"] + PilotValues.REACH_EDGE:
+		return STAND_OFF
+	var style := BRAWLER if score >= PilotValues.BRAWL_FROM else STAND_OFF
 	if current == BRAWLER:
 		style = STAND_OFF if score < 1.0 - PilotValues.SWITCH_MARGIN else BRAWLER
 	elif current == STAND_OFF:

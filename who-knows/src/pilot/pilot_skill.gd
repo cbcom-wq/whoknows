@@ -25,4 +25,4 @@ func _init(p_skill: float = 0.5) -> void:
 	jink_every = lerpf(2.5, 0.8, skill)
 	position_gain = lerpf(0.4, 1.0, skill)
 	noise = lerpf(PilotValues.NOISE_AT_ZERO, 0.0, skill)
-	hold_fire_past = lerpf(1.0, 0.75, skill)
+	hold_fire_past = lerpf(1.0, PilotValues.HOLD_FIRE_ACE, skill)
