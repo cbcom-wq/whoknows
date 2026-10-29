@@ -13,6 +13,9 @@ extends Node3D
 signal aboard_changed(ship: Ship)
 ## Where you are changed (habitat modules spec §5.5): a ship or a base.
 signal home_changed(home: GridHome)
+## You died with nowhere to wake (hostile ships spec §8.3): SHIP LOST or SUIT
+## LOST is on the screen, and the game goes back to the last save after it.
+signal lost(text: String)
 
 @onready var _starter: Ship = $Ship
 @onready var _hud: HudRoot = $HudRoot
@@ -69,6 +72,19 @@ var save_gate := SaveGate.new()
 var play_time := 0.0
 ## True when this session resumed a saved game rather than starting a new one.
 var resumed := false
+## Seconds since a hostile bolt last hit a ship you were aboard (hostile
+## ships spec §8.4): it runs on when you board another, so boarding mid-fight
+## opens no save.
+var since_fired_on := INF
+## The end of a life (§8.3): the white, the black and the line, then `reload`,
+## which goes back to the last save as a launch does. A test injects its own.
+var lost_screen: LostScreen
+var reload: Callable
+var _lost := false
+## Set on the tree by the reload after a death, which keeps it, so a game
+## launched with --new-game resumes the save it lost back to rather than
+## setting it aside again.
+const BACK_TO_SAVE := &"back_to_save"
 
 var _reticle: Reticle
 var _interact_prompt := ""
@@ -125,6 +141,8 @@ const RESTART_ROW := 300.0
 ## a new game.
 const RESET_WINDOW := 3.0
 var _reset_armed_at := -INF
+## Why a save waits on a fight (hostile ships spec §8.4).
+const UNDER_ATTACK := "under attack"
 
 ## The interior's own mood (spec §3.3): dim and warm, with bloom turning the
 ## thin lit strips into light. It goes on the interior camera, not the world,
@@ -185,6 +203,7 @@ func _ready() -> void:
 	_wire_weapons()
 	_wire_spawn()
 	_wire_saving()
+	_wire_lost()
 	for ship in fleet.ships():
 		_wire_ship(ship)
 	fleet.joined.connect(_wire_ship)
@@ -297,10 +316,89 @@ func _wire_ship(ship: Ship) -> void:
 ## the items aboard are lost, and the fleet lets it go a frame later. A
 ## neighbour the blast destroys runs all of this itself, at once and once:
 ## Ship.destroyed is said only the first time.
+##
+## You aboard it die with it (§8.3): SHIP LOST, first, so the white comes with
+## the flash. That ship is never let go: freeing its interior would free you,
+## and the game goes back to the last save anyway.
 func _on_ship_destroyed(ship: Ship) -> void:
+	var you_too := you_aboard(ship)
+	if you_too:
+		lose("SHIP LOST")
 	_blow_up(ship)
 	_kill_aboard(ship)
+	if you_too:
+		return
+	_out_of_your_ship(ship)
 	fleet.destroy.call_deferred(ship)
+
+## Whether you are aboard `ship` (§8.2 step 3): walking or seated in its
+## interior -- at its weapons station's gun camera you are still in its seat --
+## or in one of its airlocks, an alcove's too.
+func you_aboard(ship: Ship) -> bool:
+	if ship == null or _avatar == null:
+		return false
+	if _avatar.mode == Avatar.Mode.PLATING:
+		return _avatar.get_parent() == ship.interior
+	for airlock: Airlock in ship.airlocks.values():
+		if not airlock.occupancy()["room_empty"]:
+			return true
+	return false
+
+## Your ship destroyed while you are out of it, on a spacewalk or in a base
+## (§8.3): the starter, never freed, stands in as `aboard`, so nothing holds a
+## freed ship; and outside you have nowhere to wake until your suit belongs to
+## another ship (SuitTie), so blacking out loses the game (_rescue).
+func _out_of_your_ship(ship: Ship) -> void:
+	# Your suit's speed is no longer relative to a hull that is gone.
+	if _avatar.hull == ship.exterior:
+		_avatar.hull = null
+	if ship != aboard:
+		return
+	var base := home as Base
+	if ship != _starter:
+		board(_starter, true)
+		if base != null:
+			board_base(base, true)
+	if base == null:
+		home = null
+
+## The end (§8.3), once: nothing more is saved in this scene, you let go of
+## the controls, the screen whites out and goes black with `text`, and then
+## the game goes back to the last save, as a launch would. Never F9's
+## new_game: the save is not set aside.
+func lose(text: String) -> void:
+	if _lost:
+		return
+	_lost = true
+	save_enabled = false
+	_avatar.set_control_enabled(false)
+	# Frozen as you were, so a blackout under the screen never wakes you.
+	_avatar.process_mode = Node.PROCESS_MODE_DISABLED
+	set_process_unhandled_key_input(false)
+	lost_screen.play(text)
+	lost.emit(text)
+
+## The screen over everything, and the way back to the save.
+func _wire_lost() -> void:
+	var layer := CanvasLayer.new()
+	layer.name = "Lost"
+	layer.layer = 128
+	add_child(layer)
+	lost_screen = LostScreen.new()
+	lost_screen.name = "LostScreen"
+	layer.add_child(lost_screen)
+	lost_screen.finished.connect(func() -> void: reload.call())
+	if not reload.is_valid():
+		reload = _back_to_last_save
+
+## Only as the game's own scene: under a test or a probe the current scene is
+## theirs, and reloading it would start them over.
+func _back_to_last_save() -> void:
+	if get_tree().current_scene != self:
+		push_warning("FlightTest: lost, but not the current scene; no reload")
+		return
+	get_tree().set_meta(BACK_TO_SAVE, true)
+	get_tree().reload_current_scene()
 
 ## The core goes up, and the ship breaks into chunks (§8.2 steps 1 and 2).
 func _blow_up(ship: Ship) -> void:
@@ -582,14 +680,21 @@ func _wire_hurt() -> void:
 	_avatar.seated_source = func() -> bool: return _director.is_seated
 	_avatar.rescue = _rescue
 	_avatar.rescue_cost = func(n: int) -> int:
-		return home.quantum.store.drain(n, &"rescue") if home.quantum.store != null else 0
+		if not _can_wake() or home.quantum.store == null:
+			return 0
+		return home.quantum.store.drain(n, &"rescue")
 	_avatar.let_fall.connect(func(item: Item, outside: bool) -> void:
 		if outside and strays != null:
 			strays.adopt(item))
 
 ## Puts a blacked-out `avatar` in where it fits first (§7.2): the ship you are
-## aboard, or the base you are in (habitat modules spec §11.3).
+## aboard, or the base you are in (habitat modules spec §11.3). With nowhere
+## to wake -- your ship gone, or the starter held destroyed -- it is the end
+## (hostile ships spec §8.3).
 func _rescue(avatar: Avatar) -> void:
+	if not _can_wake():
+		lose("SUIT LOST")
+		return
 	for pose in home.wake_spots():
 		if not avatar.can_stand_at(pose) and avatar.mode == Avatar.Mode.PLATING:
 			continue
@@ -598,6 +703,14 @@ func _rescue(avatar: Avatar) -> void:
 		else:
 			avatar.place(pose)
 		return
+
+## Whether there is somewhere for you to wake: a ship or base, not freed, and
+## not a ship destroyed.
+func _can_wake() -> bool:
+	if not is_instance_valid(home):
+		return false
+	var ship := home as Ship
+	return ship == null or not (ship.is_destroyed() or fleet.is_destroyed(ship))
 
 ## A hit on `ship` knocks the view you see through if you are in its cabin
 ## (hostile ships spec §6.1), walking or seated; the gun camera takes its own.
@@ -1375,10 +1488,13 @@ func _save_readout() -> String:
 ## `resumed`; {} for a new game.
 func _read_save() -> Dictionary:
 	resumed = false
+	var back := bool(get_tree().get_meta(BACK_TO_SAVE, false)) if is_inside_tree() else false
+	if is_inside_tree():
+		get_tree().remove_meta(BACK_TO_SAVE)
 	if not save_enabled:
 		return {}
 	save_game = SaveGame.new(save_path)
-	if SaveGame.new_game_asked():
+	if SaveGame.new_game_asked() and not back:
 		save_game.set_aside()
 		return {}
 	var data := save_game.read()
@@ -1391,6 +1507,9 @@ func _read_save() -> Dictionary:
 ## The gate's sources (§5), the SAVED tag, and a settling spell after the
 ## game begins.
 func _wire_saving() -> void:
+	save_gate.add_source(_under_attack)
+	# A save adrift with nowhere to wake would come back to the same end.
+	save_gate.add_source(func() -> String: return "" if _can_wake() else "nowhere to wake")
 	save_gate.add_source(func() -> String: return "sitting" if _director.is_moving() else "")
 	save_gate.add_source(_fleet_busy)
 	save_gate.add_source(_avatar.busy)
@@ -1402,9 +1521,44 @@ func _wire_saving() -> void:
 	if save_game != null and save_game.locked:
 		_saved_tag.show_locked()
 
+## Why a save must wait on a fight (hostile ships spec §8.4), or "": a
+## hostile's pilot out for you, or for any crew ship within contact of you --
+## fighting or pursuing, so boarding another ship mid-fight opens no save --
+## or a hostile bolt on a ship you were aboard less than ENGAGED_CALM ago.
+## Once every pursuer gives up, or the last hostile is gone, the calm after
+## lets saving resume.
+func _under_attack() -> String:
+	var calm := since_fired_on
+	if is_instance_valid(aboard):
+		calm = minf(calm, aboard.since_hostile_fire)
+	if calm < PilotValues.ENGAGED_CALM:
+		return UNDER_ATTACK
+	var here := _you_at()
+	var near: Array[Ship] = []
+	for ship in fleet.awake():
+		if ship.side == Sides.CREW and ship.exterior.global_position.distance_to(here) <= WeaponValues.CONTACT_RANGE:
+			near.append(ship)
+	for ship in fleet.awake():
+		var pilot := ship.ship_pilot
+		if ship.side != Sides.HOSTILE or ship.is_destroyed() or pilot == null or not pilot.on:
+			continue
+		if pilot.targets(_avatar):
+			return UNDER_ATTACK
+		for crew in near:
+			if pilot.targets(crew):
+				return UNDER_ATTACK
+	return ""
+
+## Where you are outside: you on a spacewalk, else the hull you are in.
+func _you_at() -> Vector3:
+	if _avatar.mode == Avatar.Mode.SUIT or not is_instance_valid(home):
+		return _avatar.global_position
+	return home.exterior.global_position
+
 func _physics_process(delta: float) -> void:
 	if star_system != null:
 		star_system.streak = aboard.warp.streak()
+	since_fired_on = minf(since_fired_on + delta, aboard.since_hostile_fire)
 	play_time += delta
 	if not save_enabled:
 		return
@@ -1553,6 +1707,13 @@ func _restore_fleet(saved: Dictionary, in_place: bool) -> void:
 			fleet.restore_hull(ship, part)
 	var named := fleet.named(StringName(saved.get("aboard", Fleet.STARTER)))
 	aboard = named if named != null else _starter
+	# The ship you were aboard left out, and the starter held destroyed: any
+	# ship still standing (hostile ships spec §8.2).
+	if named == null and fleet.is_destroyed(_starter):
+		for ship in fleet.ships():
+			if not fleet.is_destroyed(ship) and ship.side == Sides.CREW:
+				aboard = ship
+				break
 	home = aboard
 
 ## The saved ship called `ship_name`, or {}.
