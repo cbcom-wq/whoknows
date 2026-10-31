@@ -178,6 +178,7 @@ func tick(delta: float) -> void:
 		if intent != &"no_pilot":
 			intent = &"no_pilot"
 			_boost = false
+			ship.exterior.remove_meta(AsteroidStream.ANCHOR_AHEAD)
 			flight.release_velocity()
 			flight.clear_pilot_input()
 		return
@@ -249,6 +250,8 @@ func _start() -> void:
 func _let_go() -> void:
 	_boost = false
 	intent = &""
+	if ship != null and ship.exterior != null:
+		ship.exterior.remove_meta(AsteroidStream.ANCHOR_AHEAD)
 	if flight != null:
 		flight.release_velocity()
 		flight.set_pilot_input(Vector3.ZERO, Vector3.ZERO, false)
@@ -447,6 +450,9 @@ func _hold(wanted: Vector3, limit := -1.0) -> void:
 	var brake := _brake()
 	var exclude: Array[RID] = [hull.get_rid()]
 	var radius := float(hull.get_meta(AsteroidStream.ANCHOR_RADIUS, 10.0))
+	# Its rays see only bodies, and the bubble makes rocks bodies only 1.5 s
+	# ahead: the Warden flew into rubble at 76 m/s (hostile ships T16).
+	hull.set_meta(AsteroidStream.ANCHOR_AHEAD, RockAvoid.reach(speed, brake))
 	var rock := RockAvoid.rock_ahead(hull.get_world_3d().direct_space_state, hull.global_position, v,
 		radius, exclude, brake)
 	var swerve := RockAvoid.swerve(rock, v)

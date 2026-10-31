@@ -239,6 +239,26 @@ func test_off_lets_go():
 	assert_false(_hostile.fire_control.list.has(&"ship:Ship"), "and its mark gone")
 	assert_eq(_pilot.intent, &"")
 
+## Its rays see only bodies, and rocks are bodies only where the bubble makes
+## them: so it tells the bubble how far it looks (hostile ships T16).
+func test_has_rocks_made_solid_as_far_as_it_looks():
+	await _spawn(Vector3(0, 0, -1500))
+	assert_false(_hostile.exterior.has_meta(AsteroidStream.ANCHOR_AHEAD), "off, the bubble's own look")
+	_engage()
+	for i in 120:
+		await wait_physics_frames(1)
+	_pilot.tick(PilotValues.TACTICS_EVERY)   # it holds a velocity on the tactics beat
+	var hull := _hostile.exterior
+	var speed := hull.linear_velocity.length()
+	assert_gt(speed, 1.0, "it is flying")
+	var mass := maxf(_hostile.stats.total_mass_kg, 1.0)
+	var t: Dictionary = _hostile.stats.thrust_budget
+	var brake := minf(float(t[&"reverse"]), minf(float(t[&"lateral"]), float(t[&"vertical"]))) / mass
+	assert_almost_eq(float(hull.get_meta(AsteroidStream.ANCHOR_AHEAD, 0.0)), RockAvoid.reach(speed, brake),
+		1.0, "as far as rock_ahead looks")
+	_pilot.on = false
+	assert_false(hull.has_meta(AsteroidStream.ANCHOR_AHEAD), "let go, back to the bubble's own")
+
 func test_targets_its_objectives_ship():
 	await _spawn(Vector3(0, 0, -600))
 	assert_false(_pilot.targets(_starter), "off, nobody")

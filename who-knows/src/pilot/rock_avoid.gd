@@ -38,9 +38,7 @@ static func rock_ahead(space: PhysicsDirectSpaceState3D, from: Vector3, velocity
 	if space == null or speed < 0.01:
 		return {}
 	var ahead := velocity / speed
-	var reach := maxf(speed * LOOK_AHEAD, CLEARANCE)
-	if brake > 0.0:
-		reach = maxf(reach, speed * speed / (2.0 * brake) + CLEARANCE)
+	var reach := reach(speed, brake)
 	var clear := radius + CLEARANCE
 	var side := side_of(ahead)
 	var nearest := INF
@@ -74,6 +72,16 @@ static func rock_ahead(space: PhysicsDirectSpaceState3D, from: Vector3, velocity
 	if nearest == INF:
 		return {}
 	return {"distance": nearest, "normal": normal, "reach": reach}
+
+## How far ahead rock_ahead looks at `speed`: max(speed * LOOK_AHEAD,
+## CLEARANCE), or as far as `brake` takes to stop plus CLEARANCE, if further.
+## Its rays see only bodies, so the pilot asks the bubble to make rocks solid
+## this far (AsteroidStream.ANCHOR_AHEAD).
+static func reach(speed: float, brake := 0.0) -> float:
+	var out := maxf(speed * LOOK_AHEAD, CLEARANCE)
+	if brake > 0.0:
+		out = maxf(out, speed * speed / (2.0 * brake) + CLEARANCE)
+	return out
 
 ## The first rock a sphere of `radius` meets swept from `from` along `motion`:
 ## {distance, normal}, or {}.

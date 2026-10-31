@@ -18,6 +18,9 @@ var holder: Node3D
 var max_adrift := MAX_ADRIFT
 ## id -> AsteroidBody
 var live := {}
+## id -> true: rocks that loaded inside a pilot's look ahead, left pictures
+## until they are out of every look (cell_loaded).
+var _unseen := {}
 
 var _pool: Array[AsteroidBody] = []
 
@@ -56,6 +59,26 @@ func step(delta: float) -> void:
 		for i in adrift.size() - max_adrift:
 			_drop(adrift[i].rock.id())
 
+## Its cell has come: rocks load only round you, so one could appear on a far
+## ship's nose with no warning, and no pilot can steer round that (the Warden,
+## 11 m from it, 0.25 s before it hit; hostile ships T16). So a rock inside a
+## pilot's look ahead is not solid until it has left every look. It is past its
+## fade from you, so nobody sees it pass through. A rock that loads beyond the
+## look is met as usual.
+func cell_loaded(tier: int, cell: Vector3i) -> void:
+	var rocks := stream.loaded_rocks(tier, cell)
+	if rocks.is_empty():
+		return
+	var corner := stream.cell_origin(tier, cell)
+	for node in stream.get_tree().get_nodes_in_group(AsteroidStream.SPACE_ANCHOR):
+		var anchor := node as Node3D
+		if anchor == null or not anchor.is_inside_tree() or not anchor.has_meta(AsteroidStream.ANCHOR_AHEAD):
+			continue
+		var path := _path_of(anchor)
+		for rock in rocks:
+			if segment_distance(corner + rock.local, path[0], path[1]) <= path[2] + rock.radius:
+				_unseen[rock.id()] = true
+
 ## Its cell has gone: untouched bodies there go with it.
 func cell_unloaded(tier: int, cell: Vector3i) -> void:
 	for id: Vector4i in live.keys():
@@ -76,24 +99,52 @@ static func segment_distance(p: Vector3, a: Vector3, b: Vector3) -> float:
 		t = clampf((p - a).dot(ab) / ab.length_squared(), 0.0, 1.0)
 	return p.distance_to(a + ab * t)
 
-## Rocks within reach of an anchor's path: id -> rock.
+## An anchor's path: [from, to, reach].
+func _path_of(anchor: Node3D) -> Array:
+	var a := anchor.global_position
+	var v := AsteroidStream.velocity_of(anchor)
+	var b := a + v * LOOKAHEAD
+	# A pilot's rays see only bodies: it asks for rocks solid as far as it
+	# looks (AsteroidStream.ANCHOR_AHEAD).
+	var ahead := float(anchor.get_meta(AsteroidStream.ANCHOR_AHEAD, 0.0))
+	if ahead > v.length() * LOOKAHEAD:
+		b = a + v.normalized() * ahead
+	return [a, b, PAD + float(anchor.get_meta(AsteroidStream.ANCHOR_RADIUS, 1.0))]
+
+## Rocks within reach of an anchor's path: id -> rock. An unseen rock is not
+## one of them, and stays unseen only while it is.
 func _near_paths() -> Dictionary:
 	var out := {}
+	var unseen := {}
 	for node in stream.get_tree().get_nodes_in_group(AsteroidStream.SPACE_ANCHOR):
 		var anchor := node as Node3D
 		if anchor == null or not anchor.is_inside_tree():
 			continue
-		var a := anchor.global_position
-		var b := a + AsteroidStream.velocity_of(anchor) * LOOKAHEAD
-		var reach := PAD + float(anchor.get_meta(AsteroidStream.ANCHOR_RADIUS, 1.0))
+		var path := _path_of(anchor)
+		var a: Vector3 = path[0]
+		var b: Vector3 = path[1]
+		var reach: float = path[2]
 		for tier in AsteroidRecipe.TIERS:
 			# Big rocks are fixed; up close AsteroidDetails makes them solid.
 			if tier == AsteroidRecipe.Tier.GIANT:
 				continue
 			var grow := reach + AsteroidRecipe.BOUND * AsteroidRecipe.D_MAX[tier] * AsteroidRecipe.STRETCH_MAX
 			var box := AABB(a, Vector3.ZERO).expand(b).grow(grow)
-			for cell in stream.cells_in(tier, box):
-				var corner := stream.cell_origin(tier, cell)
+			var cells := stream.cells_in(tier, box)
+			if cells.is_empty():
+				continue
+			# Corners by whole cells from the first: cell_origin makes a
+			# UniversePoint, too dear to call for every cell of a long box.
+			var size := float(AsteroidRecipe.CELL[tier])
+			var half := size * 0.5
+			var first := cells[0]
+			var first_corner := stream.cell_origin(tier, first)
+			for cell in cells:
+				var corner := first_corner + Vector3(cell - first) * size
+				# A long path's box is mostly cells far off it: one too far for
+				# any of it to be within `grow` is passed over.
+				if segment_distance(corner + Vector3.ONE * half, a, b) > grow + half * sqrt(3.0):
+					continue
 				for rock in stream.loaded_rocks(tier, cell):
 					var at := corner + rock.local
 					if not box.has_point(at):
@@ -102,7 +153,11 @@ func _near_paths() -> Dictionary:
 					if out.has(id) or (not live.has(id) and stream.is_hidden(rock)):
 						continue
 					if segment_distance(at, a, b) <= reach + rock.radius:
-						out[id] = rock
+						if _unseen.has(id):
+							unseen[id] = true
+						else:
+							out[id] = rock
+	_unseen = unseen
 	return out
 
 func _promote(rock: AsteroidRock) -> void:
