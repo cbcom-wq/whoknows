@@ -989,7 +989,7 @@ marks). Every number the weapons use is in this one file:
 |---|---|---|
 | Slew | 90°/s | 30°/s |
 | Fire | bursts of 4, 0.125 s apart, 1.5 s recharge | one bolt, 3 s recharge |
-| Bolt speed, damage, life, push | 350 m/s, 60 hp, 3.6 s, 20 N·s (600 m/s, 15 hp, 3 s before hostile ships T16) | 450 m/s, 120 hp, 7 s, 400 N·s |
+| Bolt speed, damage, life, push | 350 m/s, 55 hp, 3.6 s, 20 N·s (600 m/s, 15 hp, 3 s before hostile ships T16) | 450 m/s, 120 hp, 7 s, 400 N·s |
 | Engagement range | 1,200 m | 1,500 m alone; 3,000 m by hand |
 | Spread, QE a bolt | 0.4°, 1 | 0, 15 |
 | Bolt look (length × thickness), impact flash, barrel from pivot | 2.0 × 0.25 m, ×1.5, 1.0 m | 4.0 × 0.5 m, ×3.0, 2.4 m |
@@ -1020,7 +1020,7 @@ bolts' colour is `SpacePalette.PHASER` (`ffbf4d`).
 | Input | `weapons_mark` T (nearest the crosshair within `MARK_CONE` and 5 km; items too), `weapons_clear` Shift+T, `weapons_orders` B (`HOLD` ⇄ `ENGAGE`), in `project.godot` |
 
 **What a bolt does:** a ship's section or a turret component (with a small push), an NPC's
-`receive_hit`, a spacewalker (15 hp a light bolt, 120 a heavy: a heavy bolt downs you), a loose
+`receive_hit`, a spacewalker (55 hp a light bolt, 120 a heavy: two light bolts or one heavy down you), a loose
 item, a base's module, and on an asteroid a flash and nothing else. A held or stowed item is not a
 target. A ship's bolts exclude its own colliders.
 
