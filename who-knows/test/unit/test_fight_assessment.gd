@@ -32,18 +32,19 @@ func test_the_longer_reach_stands_off():
 	assert_eq(FightAssessment.choose(stronger, foe, 1.0, BRAWLER, _rng()), STAND_OFF,
 		"it can hit from where it cannot be hit, however strong up close")
 	var at := FightAssessment.preferred_range(STAND_OFF, own, foe)
-	assert_almost_eq(at, 1350.0, 0.01, "0.9 of its reach")
+	assert_almost_eq(at, maxf(PilotValues.STAND_OFF_SHARE * 1500.0, 1200.0 + PilotValues.PAST_REACH), 0.01,
+		"its share of its reach, or past the foe's")
 	assert_true(at >= foe["reach"] + 50.0, "past the foe's reach")
 
 func test_a_stand_off_keeps_past_the_foes_reach_when_it_can():
 	var own := _side(30.0, 12000.0, 1300.0)
 	var foe := _side(30.0, 12000.0, 1200.0)
 	assert_almost_eq(FightAssessment.preferred_range(STAND_OFF, own, foe), 1250.0, 0.01,
-		"0.9 × 1300 is inside the foe's reach; 1250 is still within its own")
+		"its share of 1300 is inside the foe's reach; 1250 is still within its own")
 	var shorter := _side(30.0, 12000.0, 1200.0)
 	var longer := _side(30.0, 12000.0, 1500.0)
-	assert_almost_eq(FightAssessment.preferred_range(STAND_OFF, shorter, longer), 1080.0, 0.01,
-		"outranged, it stands off at the edge of its own reach")
+	assert_almost_eq(FightAssessment.preferred_range(STAND_OFF, shorter, longer),
+		PilotValues.STAND_OFF_SHARE * 1200.0, 0.01, "outranged, it stands off at its share of its own reach")
 
 func test_a_losing_brawler_stands_off():
 	var foe := _side(50.0, 10000.0)
@@ -54,8 +55,10 @@ func test_a_losing_brawler_stands_off():
 	assert_almost_eq(FightAssessment.brawl_score(close, foe), 0.9, 0.0001)
 	assert_eq(FightAssessment.choose(close, foe, 1.0, BRAWLER, _rng()), BRAWLER,
 		"inside the margin it keeps brawling")
-	assert_eq(FightAssessment.choose(close, foe, 1.0, FightAssessment.AUTO, _rng()), STAND_OFF,
-		"fresh, under 1 is stand-off")
+	assert_eq(FightAssessment.choose(close, foe, 1.0, FightAssessment.AUTO, _rng()), BRAWLER,
+		"fresh, from BRAWL_FROM it brawls")
+	assert_eq(FightAssessment.choose(losing, foe, 1.0, FightAssessment.AUTO, _rng()), STAND_OFF,
+		"fresh, under BRAWL_FROM it stands off")
 	var ahead := _side(55.0, 10000.0)
 	assert_eq(FightAssessment.choose(ahead, foe, 1.0, STAND_OFF, _rng()), STAND_OFF,
 		"1.1 is inside the margin from stand-off")
@@ -88,7 +91,16 @@ func test_no_turret_keeps_away():
 	var own := _side(0.0, 12000.0, 0.0)
 	var foe := _side(30.0, 2000.0, 1500.0)
 	assert_eq(FightAssessment.choose(own, foe, 1.0, BRAWLER, _rng()), STAND_OFF)
-	assert_almost_eq(FightAssessment.preferred_range(STAND_OFF, own, foe), 1800.0, 0.01)
+	assert_almost_eq(FightAssessment.preferred_range(STAND_OFF, own, foe), 1500.0 + PilotValues.KEEP_AWAY, 0.01)
+
+func test_a_foe_with_no_turret_is_closed_on():
+	var own := _side(30.0, 2000.0, 1200.0)
+	var disarmed := _side(0.0, 12000.0, 0.0)
+	assert_eq(FightAssessment.choose(own, disarmed, 1.0, STAND_OFF, _rng()), BRAWLER,
+		"nothing to stand off from, however much hull it has")
+	var longer := _side(30.0, 12000.0, 1500.0)
+	assert_eq(FightAssessment.choose(longer, disarmed, 1.0, FightAssessment.AUTO, _rng()), BRAWLER,
+		"a longer reach is no reason to stay out")
 
 func test_reading_a_starter():
 	var root: Node = load("res://scenes/flight_test.tscn").instantiate()
@@ -96,7 +108,9 @@ func test_reading_a_starter():
 	await wait_process_frames(2)
 	var ship: Ship = root.get_node("Ship")
 	var r := FightAssessment.read(ship)
-	assert_almost_eq(r["dps"], 60.0, 0.001, "two lights: 15 × 4 / (4 × 0.125 + 1.5) each")
+	var light := WeaponValues.spec(WeaponValues.LIGHT)
+	var each: float = light["damage"] * light["burst"] / (light["burst"] * light["gap"] + light["recharge"])
+	assert_almost_eq(r["dps"], 2.0 * each, 0.001, "two lights: damage × burst / (burst × gap + recharge) each")
 	assert_eq(r["reach"], 1200.0)
 	assert_eq(r["whole"], 1.0)
 	assert_almost_eq(r["hull"], 12330.0, 50.0, "the starter's six sections' hp, whole")
@@ -106,10 +120,12 @@ func test_reading_a_starter():
 	assert_almost_eq(r["burn"], 4.0, 0.001, "two lights: 4 bolts of 1 QE every 2 s each")
 
 func test_a_damaged_turret_reads_slower_and_a_wrecked_one_not_at_all():
+	var spec := WeaponValues.spec(WeaponValues.LIGHT)
+	var burst: float = spec["damage"] * spec["burst"]
 	var light := FightAssessment.turret_reading(WeaponValues.LIGHT, BlockDamage.Stage.INTACT)
-	assert_almost_eq(light["dps"], 30.0, 0.001)
+	assert_almost_eq(light["dps"], burst / (0.5 + 1.5), 0.001)
 	var damaged := FightAssessment.turret_reading(WeaponValues.LIGHT, BlockDamage.Stage.DAMAGED)
-	assert_almost_eq(damaged["dps"], 60.0 / (0.5 + 3.0), 0.001, "recharges twice as long")
+	assert_almost_eq(damaged["dps"], burst / (0.5 + 3.0), 0.001, "recharges twice as long")
 	assert_eq(damaged["reach"], 1200.0)
 	var wrecked := FightAssessment.turret_reading(WeaponValues.HEAVY, BlockDamage.Stage.WRECKED)
 	assert_eq(wrecked["dps"], 0.0)
@@ -129,6 +145,6 @@ func test_skill_knobs_span_their_ends():
 	assert_eq(novice.noise, PilotValues.NOISE_AT_ZERO)
 	assert_eq(ace.noise, 0.0)
 	assert_eq(novice.hold_fire_past, 1.0)
-	assert_almost_eq(ace.hold_fire_past, 0.75, 0.0001)
+	assert_almost_eq(ace.hold_fire_past, PilotValues.HOLD_FIRE_ACE, 0.0001)
 	assert_almost_eq(PilotSkill.new(0.5).reaction, 0.6, 0.0001)
 	assert_eq(PilotSkill.new(2.0).reaction, ace.reaction, "skill is held to 0..1")

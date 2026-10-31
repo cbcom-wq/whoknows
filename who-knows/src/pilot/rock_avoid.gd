@@ -62,9 +62,40 @@ static func rock_ahead(space: PhysicsDirectSpaceState3D, from: Vector3, velocity
 		if along < nearest:
 			nearest = along
 			normal = hit["normal"]
+	# The rays are thin: a piece of rubble a few metres off the line slips
+	# between them and still meets the hull. The hull's own sphere, swept along
+	# the path, sees whatever it would touch.
+	var sweep := _sweep(space, from, ahead * reach, radius, exclude)
+	# Measured as the rays are, from the hull's middle to the rock's face: the
+	# sphere meets it `radius` sooner.
+	if not sweep.is_empty() and float(sweep["distance"]) + radius < nearest:
+		nearest = float(sweep["distance"]) + radius
+		normal = sweep["normal"]
 	if nearest == INF:
 		return {}
 	return {"distance": nearest, "normal": normal, "reach": reach}
+
+## The first rock a sphere of `radius` meets swept from `from` along `motion`:
+## {distance, normal}, or {}.
+static func _sweep(space: PhysicsDirectSpaceState3D, from: Vector3, motion: Vector3, radius: float,
+		exclude: Array[RID]) -> Dictionary:
+	var sphere := SphereShape3D.new()
+	sphere.radius = radius
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = sphere
+	query.transform = Transform3D(Basis.IDENTITY, from)
+	query.motion = motion
+	query.collision_mask = AsteroidBody.LAYER
+	query.exclude = exclude
+	var fractions := space.cast_motion(query)
+	if fractions.size() < 2 or fractions[1] >= 1.0:
+		return {}
+	var distance := motion.length() * fractions[1]
+	query.motion = Vector3.ZERO
+	query.transform = Transform3D(Basis.IDENTITY, from + motion * fractions[1])
+	var rest := space.get_rest_info(query)
+	var normal: Vector3 = rest.get("normal", -motion.normalized())
+	return {"distance": distance, "normal": normal}
 
 ## The velocity change away from a rock rock_ahead saw, flying at `velocity`:
 ## the hit's normal across the path, harder the nearer; a rock dead ahead turns

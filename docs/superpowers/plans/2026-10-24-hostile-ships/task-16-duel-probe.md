@@ -54,7 +54,7 @@ The probe, in the style of `combat_probe.gd` (`extends SceneTree`, windowed, `--
 
 **Pass** (spec §12.2): starter-vs-starter at 0.5/0.5 averages **4–6 minutes**; the 0.8 pilot wins at least 4 of 5 against 0.2; neither style wins every one of its six; `rock_contacts` 0 everywhere; seated **≥ 120 fps** in the starter duel, the Warden's ≥ 109; light-bolt hit rates in the 400 m band ≥ 70% and the 1 km band ≤ 40% (the dance holds).
 
-- [ ] **Step 1: Write the probe** and run it once (`godot --path who-knows --resolution 1280x720 --script res://test/probes/duel_probe.gd -- D:\git\whoknows-hostiles\.superpowers\renders\task-16`). Expected: lines printed; record the first numbers.
-- [ ] **Step 2: Tune** `PilotValues` (ranges, jink, gains, hold-fire) toward the pass marks, re-running between changes; only if the fight length cannot reach 4–6 minutes by the pilot alone, move `WeaponValues` damage or the light recharge, one at a time. Log each run to `run<n>.log` in the output dir.
-- [ ] **Step 3: Send the renders and the numbers to the owner** (SendUserFile), with the pass table filled in. The owner judges the look.
-- [ ] **Step 4: Commit** `test: the duel probe; pilots tuned to a five-minute fight` with the values changed listed in the body.
+- [x] **Step 1: Write the probe** and run it once (`godot --path who-knows --resolution 1280x720 --script res://test/probes/duel_probe.gd -- D:\git\whoknows-hostiles\.superpowers\renders\task-16`). Expected: lines printed; record the first numbers.
+- [x] **Step 2: Tune** `PilotValues` (ranges, jink, gains, hold-fire) toward the pass marks, re-running between changes; only if the fight length cannot reach 4–6 minutes by the pilot alone, move `WeaponValues` damage or the light recharge, one at a time. Log each run to `run<n>.log` in the output dir.
+- [x] **Step 3: Send the renders and the numbers to the owner** (SendUserFile), with the pass table filled in. The owner judges the look.
+- [x] **Step 4: Commit** `test: the duel probe; pilots tuned to a five-minute fight` with the values changed listed in the body.

@@ -218,10 +218,17 @@ func promote(record: NpcRecord, site: NpcSite) -> Npc:
 		npc = _make_npc()
 	npc.director = self
 	npc.bus = bus
+	# Placed before it joins the world. Added first, it was there for a step
+	# at the holder's origin -- outside, where the floating origin keeps your
+	# ship -- touching your hull, then moved a kilometre off to its site in one
+	# step: your ship once flew off at ~9,900 m/s from it and broke up (the
+	# duel probe, hostile ships T16).
+	var pose := site.start_pose(record, time)
+	npc.transform = holder.global_transform.affine_inverse() * site.frame() * pose
 	holder.add_child(npc)
 	if targets:
 		Weapons.join(npc, Weapons.npc_id(record.id))
-	npc.setup(record, species, site, rule == Rule.BY_SITE, site.start_pose(record, time))
+	npc.setup(record, species, site, rule == Rule.BY_SITE, pose)
 	if ledger != null:
 		npc.health.current = ledger.health_of(record.id, species.max_health)
 	npc.think_group = group_of(record, 1 << 20)
