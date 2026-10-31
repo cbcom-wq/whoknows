@@ -1026,6 +1026,8 @@ target. A ship's bolts exclude its own colliders.
 
 **A pilot's rocks** (`RockAvoid`, `src/pilot/`): `rock_ahead` casts five rays and sweeps the hull's sphere `RockAvoid.reach(speed, brake)` ahead: max(8 s of flight, 80 m), or the stopping distance plus 80 m if that is further. Physics sees only bodies, so `ShipPilot._hold` sets `AsteroidStream.ANCHOR_AHEAD` on the hull to that reach. `AsteroidBubble` then makes rocks solid along the whole stretch, not just its own 1.5 s. For a 1.15 km diagonal path `_near_paths` costs about 0.3 ms (0.06 ms for 1.5 s), because cells far off the path are skipped. `_let_go` and a wrecked computer take the meta off. A rock whose cell loads inside that look gets no warning, so `AsteroidBubble.cell_loaded` keeps it a picture until it has left every look (`_unseen`).
 
+**A pilot with a wrecked cockpit** flies on: `assist_allowed` is false, so `hold_velocity` does nothing and `ShipPilot._fly` sets the stick to `ShipPilot.raw_stick(error, mass, budget)`, the force that closes the velocity error in a second as a share of each axis's budget, clamped to ±1. Nothing clamps its speed now, so `_held` is the only limit. `rotate_input` drives raw torque, its own damping term keeping the turn steady.
+
 **Tests worth copying:** `test_sky_map.gd`, `test_turret.gd` (the flip and its near ties),
 `test_fire_control.gd`, `test_turret_damage.gd`, `test_ship_turrets.gd`, `test_weapons_job.gd` (the
 sight's size equal to the viewport's), `test_weapons_scene.gd`, `test_weapons_station.gd` and

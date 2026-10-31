@@ -152,6 +152,9 @@ flight computer's driver in `PilotControls`' place: it calls only `set_pilot_inp
 hull, sets velocities or touches turrets directly. That is decision 4: no cheating on thrust, turn
 rate, QE or damage. A damaged cockpit's sluggish assist, half engines and low power slow it exactly
 as they slow you.
+A **wrecked** cockpit refuses the assist but leaves the ship flyable (damage spec §2.2), for it as for
+you: the hold is gone, so it pushes `set_pilot_input`'s stick itself toward the velocity it wants,
+with no more thrust than the stick gives (built in T16; before, it coasted for the rest of the fight).
 
 **What it may know** is what your ship could: contacts within 5 km (`TargetContacts`), their
 positions and velocities, their HULL % (shown on your brackets too), its own ship's state, and

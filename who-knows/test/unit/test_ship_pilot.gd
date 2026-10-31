@@ -259,6 +259,65 @@ func test_has_rocks_made_solid_as_far_as_it_looks():
 	_pilot.on = false
 	assert_false(hull.has_meta(AsteroidStream.ANCHOR_AHEAD), "let go, back to the bubble's own")
 
+## Wrecks the hostile's cockpit: the assist is off and refused.
+func _wreck_cockpit() -> void:
+	var damage := _hostile.damage
+	for coord: Vector3i in damage.component_of:
+		if damage.component_of[coord] == &"cockpit":
+			_hostile.take_damage(coord, damage.component_hp[&"cockpit"] * 2.0)
+			break
+	assert_false(_hostile.flight_computer.assist_allowed, "the assist is refused")
+
+## A wrecked cockpit is "still flyable" (damage spec §2.2): the pilot flies the
+## raw stick, as you would. It used to ask the refused assist to hold a
+## velocity, and coast for the rest of the fight (hostile ships T16).
+func test_a_wrecked_cockpit_still_flies_on_the_raw_stick():
+	await _spawn(Vector3(0, 0, -1500))
+	_pilot.style_choice = ShipPilot.Style.BRAWLER
+	_engage()
+	await wait_physics_frames(2)
+	_wreck_cockpit()
+	await wait_physics_frames(2400)
+	assert_false(_hostile.flight_computer.assist_enabled, "still no assist")
+	assert_almost_eq(_range(), PilotValues.BRAWL_RANGE, PilotValues.BRAWL_BAND * 2.0,
+		"40 s on, it has closed all the same")
+	assert_lt(_hostile.exterior.linear_velocity.length(), PilotValues.FIGHT_SPEED + 10.0,
+		"and it keeps its own speed down: nothing clamps it now")
+	assert_lt(_hostile.exterior.angular_velocity.length(), 1.0, "and it is not spinning")
+
+func test_a_wrecked_cockpit_only_moves_the_stick():
+	await _spawn(Vector3(0, 0, -1500))
+	_engage()
+	_wreck_cockpit()
+	var spy := _spy()
+	spy.assist_allowed = false
+	_pilot.tick(PilotValues.TACTICS_EVERY)
+	var stick: Vector3 = spy.inputs.back()[0]
+	assert_false(stick.is_zero_approx(), "it pushes the stick itself")
+	assert_eq(stick, stick.clamp(-Vector3.ONE, Vector3.ONE), "no further than a stick goes")
+
+func test_a_raw_stick_never_goes_past_full():
+	var budget := {&"forward": 100.0, &"reverse": 50.0, &"lateral": 40.0, &"vertical": 20.0}
+	assert_eq(ShipPilot.raw_stick(Vector3(1, -1, -1), 10.0, budget), Vector3(0.25, -0.5, -0.1))
+	assert_eq(ShipPilot.raw_stick(Vector3(0, 0, 1), 10.0, budget), Vector3(0, 0, 0.2), "aft on the retros")
+	assert_eq(ShipPilot.raw_stick(Vector3(100, 0, -100), 10.0, budget), Vector3(1, 0, -1))
+
+## With the computer gone it must let go of the stick: a burn would stay latched.
+func test_a_wrecked_cockpit_lets_go_of_the_stick_if_the_pilot_goes_too():
+	await _spawn(Vector3(0, 0, -1500))
+	_engage()
+	_wreck_cockpit()
+	await wait_physics_frames(10)
+	for coord: Vector3i in _hostile.damage.component_of:
+		if _hostile.damage.component_of[coord] == &"computer":
+			_hostile.take_damage(coord, _hostile.damage.component_hp[&"computer"] * 2.0)
+			break
+	var spy := _spy()
+	spy.assist_allowed = false
+	_pilot.tick(PilotValues.TACTICS_EVERY)
+	assert_eq(_pilot.intent, &"no_pilot")
+	assert_eq(spy.inputs.back()[0], Vector3.ZERO, "the stick is centred")
+
 func test_targets_its_objectives_ship():
 	await _spawn(Vector3(0, 0, -600))
 	assert_false(_pilot.targets(_starter), "off, nobody")
