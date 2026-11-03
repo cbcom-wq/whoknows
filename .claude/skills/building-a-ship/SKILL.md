@@ -75,7 +75,10 @@ Do these in order. Each one names the check that proves it.
      is `TURRET_BURIED`. A turret takes the place of a fairing half or a hull plate, never an extra
      cell, so read the new mass, power and balance from the check (see *Mistakes*). **At most one `weapons_station`
      (`TWO_WEAPONS_STATIONS`); a heavy turret without one fires on its own.** A station takes the
-     place of a `crew_station` and passes the same seat rules.
+     place of a `crew_station` and passes the same seat rules. **Spread them so they bear
+     together:** a pilot shows one face, and only the turrets that bear on it fire. The probe's
+     `face` line says how many; the starter's dorsal and ventral pair bear together only on the
+     rim of their skies, so it fights with one (`reference.md` *The pilot and the end of a ship*).
 3. **Damage** (`docs/superpowers/specs/2026-10-03-ship-damage-sections-design.md`): a ship
    takes damage as **six hull sections and its components**, not block by block (`ShipDamage`):
    - **the sections** are the launch layout's thirds (bow, midship, stern) split port and
@@ -100,6 +103,11 @@ Do these in order. Each one names the check that proves it.
    - **the hull is mended from outside only** (`RepairTorch.SECTION_RATE`): a section a
      spacewalker cannot reach the outside of cannot be mended;
    - the ship must not be **crippled as built**: the probe's `damage` line says so;
+   - **HULL % at 0 destroys the ship** (`docs/superpowers/specs/2026-10-24-hostile-ships-design.md`
+     §8): a section at 0 passes what it cannot take to its neighbours (`ShipDamage.NEIGHBOURS`),
+     components never do, and a wrecked core alone still only cripples. The core goes up at the
+     middle of the `quantum_core` blocks (`CoreBlast.core_of`), the blast scaled by mass, the ship
+     breaks up, everything aboard dies and no wreck is left. A new ship needs nothing for this;
    - **damage shows on the skin:** a hurt cell's plating, trim and glass are multiplied by its
      stage colour (`ExteriorBuilder.set_stage`, in place). A new hull piece must be marked to its
      cell in `HullDressing` (`reference.md`), or it stays clean when its section is scorched.
@@ -207,6 +215,9 @@ Do these in order. Each one names the check that proves it.
    - **the turrets:** a `turret` line each (`turret  Turret_0_2_0 turret_light at (0, 2, 0), sky
      100%`), or `turret  none`. Read the sky: under 25% is `TURRET_BLIND`, and the Warden's
      flank pair at 92% is the lowest on a library ship;
+   - **the face:** `face    best (0.0, 0.0, -1.0), 2 of 2 bear; flown (0.0, -0.71, -0.71), 1 bear`:
+     `Broadside.best_face`, then `ShipPilot.sure_face`, the one a pilot flies. The second count
+     is what a ship fights with. The three library ships' are in `reference.md`;
    - fps.
 
    It also sits, stands and walks, and flags `STUCK`; on a bridge it sits in **every** seat (the
@@ -234,6 +245,14 @@ Do these in order. Each one names the check that proves it.
     reruns `test/probes/combat_probe.gd` (`reference.md` *Weapons*) and its renders, and
     `test/probes/fleet_play.gd` (seats and ships change). Aim it at targets above and below as
     well as ahead, or the dorsal and ventral turrets read `NO ARC` and fire nothing.
+13. **Its pilot** (`docs/superpowers/specs/2026-10-24-hostile-ships-design.md`): every ship has a
+    `ShipPilot`, so any ship can fight you, and yours can fight for you, with nothing wired.
+    What it needs from the blueprint: turrets that bear together (the `face` line), a `computer`
+    (it runs there: wrecked, the pilot is gone; a ship with none has a pilot nothing can kill),
+    and the same side and brake figures you do (a jink is `lateral / mass`; the least of `reverse`,
+    `lateral` and `vertical` over mass is how far ahead it looks for rocks). Anything that changes
+    how a ship flies, fights, or takes damage reruns `test/probes/duel_probe.gd` (`reference.md`
+    *Commands*), and `test_ship_pilot.gd`, `test_pilot_steering.gd` and `test_ship_destroyed.gd`.
 
 ## What the blueprint decides about flying
 
@@ -386,13 +405,25 @@ thrust.
 | Casting rays for rocks a pilot cannot see | `RockAvoid.rock_ahead` looks 8 s ahead, or further if it needs that long to stop, but its rays hit only bodies. `AsteroidBubble` made rubble and mid-size rocks bodies only 1.5 s down an anchor's path. At 80 m/s a piece of rubble became solid about 160 m off, about 2 s before contact: too late to sidestep. The Warden flew into one at 76 m/s (hostile ships T16). Giants were fine: `AsteroidDetails` makes them solid 4 km out | Anything that looks ahead with physics queries must have the world solid that far. A pilot sets `AsteroidStream.ANCHOR_AHEAD` on its hull to `RockAvoid.reach(speed, brake)` and takes it off when it lets go. `test_asteroid_bubble.gd` and `test_ship_pilot.gd` hold this |
 | Forgetting that small rocks exist only round you | Rubble loads only within 900 m of the focus, so a ship flying that edge has rocks appear on its nose. The Warden, about 940 m off, met 52 within 80 m of its path, one 11 m ahead and 0.25 s before it hit, so no amount of looking helps | `AsteroidBubble.cell_loaded` leaves a rock that loads inside a pilot's look a picture until it has left every look. It is past its fade from you, so nobody sees it |
 | Flying a pilot only through the assist | `hold_velocity` needs assist, and a wrecked cockpit refuses it. Most duels lost the cockpit by about 2 minutes, so the loser coasted for good: 40 s on it had moved 16 m, and two fights ended with both ships adrift | With the assist off, `ShipPilot._fly` pushes the stick toward `_held` (`raw_stick`). You fly a wrecked ship the same way. Centre the stick if the pilot goes too: `clear_pilot_input` leaves a burn latched |
+| Fighting at the speed limit | Equal top speeds make every stern chase permanent: a stand-off backing off and a brawler following both reached 120 m/s, and a foe whose cockpit went coasted at it forever (hostile ships T16) | A pilot fights under `PilotValues.FIGHT_SPEED` 80 m/s, and uses the whole limit only on a foe with no live turret (`_harmless`) |
+| A pilot holding all of its foe's velocity | Two pilots each matching the other never lose the drift they share, and race off together at the limit | `PilotValues.MATCH_SHARE` 0.6: only a share of it, so the shared drift dies away |
+| Taking the face with most turrets as the face to show | The starter's nose lies on the rim of both turrets' half-skies. `best_face` picks it; the muzzles' height then puts the target just below the dorsal's face and just above the ventral's, so neither could engage | `ShipPilot.sure_face` counts a turret only where it still bears `FACE_MARGIN` 10° off the face every way. The starter shows forward-down 45° and fights with its ventral turret. The probe's `face` line prints both |
+| A fresh judgement noise every assessment | At skill 0.5 a ±25% draw every second beat the 15% hysteresis, and equal starters flipped style every second | Seed the noise per ship and target (`_judge`): a steady misjudgement, which the hysteresis holds |
+| Tuning a fight without counting its QE | A ship spawns with half its store, nothing refills it in a fight and turrets stop at the low-power line, so a starter has 480 light bolts. At 15 hp those cannot take a 12,330 hp hull. About a third of landed hits go to components, not HULL %, and QE, not hull, was the fight's clock | Count bolts against hull first. A light bolt is 55 hp now; check `WeaponValues` and the store before moving a pilot's knobs |
+| A blast landing on the nearest cell | The nearest cell of a ship is often a turret or an engine, a component, and a component never moves HULL %, so a blast did nothing you could read | `CoreBlast` lands on the nearest hull-section cell of a ship (`_nearer`); a base takes it on its nearest cell |
+| `fleet.destroy` on the ship you are in | Freeing its interior frees your avatar under the SHIP LOST screen | `_on_ship_destroyed` loses first and never destroys the ship you are in (`you_aboard`): the reload takes it. A ship you are not in that was `aboard` goes through `_out_of_your_ship`, so `aboard` and `home` never hold a freed ship |
+| One-shotting a fresh ship in a probe | Every piece of a whole hull lost in one rebuild: about 465 ms in `_apply_view`, a hitch no fight ever has | Wear the hull first, as `duel_probe.gd` and the blast probes do. A fight's last hit is cheap (12–22 ms for the blast frame) |
+| A `static var` in `flight_test.gd` | Godot 4.5.1 crashed at exit (0xC0000005 after the leak report) on every `fleet_play.gd`, though the run was ALL OK | A tree meta (`back_to_save`). Watch the exit code |
+| A knock on the avatar's head | Seated, `CameraDirector` hangs the camera from the seat's eye, so a head shake never reaches the view | The knock is on the camera (`Avatar.knock`, rotation.z and h/v offset); the gun camera has its own (`WeaponsJob.knock`) |
+| Projecting a world point to the screen from the helm | The eye camera is in the interior, 5 km down, so the point lands nowhere near the ship you see | Go through `aboard.canopy_camera`, and draw cockpit marks on `aboard.canopy_overlay`, not on a CanvasLayer |
 
 ## Not built yet (plan for it; don't assume it works)
 
 - **Per-cell rebuilds.** Any removal rebuilds the whole ship (~220 ms headless on the 2.8 GHz
   dev Xeon for the starter since the generated skin), and a stage seen from inside rebuilds the
   interior (~125 ms; the hull recolours in place). Fine for now; a hitch in a big fight.
-- **Debris and breaches.** A piece cut off vanishes in a burst; a hole has no air to lose.
+- **Debris and breaches.** On a ship still flying, a piece cut off vanishes in a burst; a hole has
+  no air to lose. Only a destroyed ship leaves chunks (`ShipBreakup`), and they fade in 20–60 s.
 - **Damage beyond the components** (the engines, core, computer, cockpit and each turret). RCS, cells, rooms and the airlock never break; a
   section's health changes only looks and pieces. No per-section effect on flight, no repairing
   a section from inside, no droid repairing the ship.
@@ -419,17 +450,18 @@ thrust.
   turned so it widens away from the lamp), the cones go, fog goes on in `_set_outside_mood` with
   a 150 m length. See the ship exterior spec §6.4 and the Task 13 report.
 - **Asteroid tunnels.** None exist; the forward lights (220 m, shadowed) are sized for them.
-- **Weapons beyond the turrets** (ship weapons spec §14): no shields, no hostile ship or AI
-  that sets targets (`Weapons.is_hostile` is false for everything; tests set a stub), no fixed
-  guns for a fighter, no missiles, no NPC gunner. Its known edges, and the 120 fps floor, are in `reference.md` *Weapons*.
+- **Weapons beyond the turrets** (ship weapons spec §14): no shields, no fixed guns for a
+  fighter, no missiles, no NPC gunner. Its known edges, and the 120 fps floor, are in `reference.md` *Weapons*.
+- **Hostiles beyond the dev key** (hostile ships spec §14): only F6's Shift+1–9 brings one in, and
+  Destroy is the only objective. No *disable*, looting, boarding a live enemy, wrecks, or factions
+  beyond `Sides.CREW` and `Sides.HOSTILE`; nobody flees or surrenders. Stand-off won none of its
+  six duels and no Warden fight has decided: `reference.md` *The pilot and the end of a ship*.
 - **Migrating a saved starter.** A resumed game keeps its saved layout, the flat starter; only a
   new game gets the reshaped one.
 - **Dust kicked up by the floods** near a surface, and a rendered low-power frame of the beams
   (their dimming is tested by property only).
-- **Docking** (two hulls held airlock to airlock), **ships flown by NPCs**, and a ship that moves
-  while asleep (one coasting when it falls asleep is found where it fell asleep).
-- **A way to spawn a chosen ship in play** (a debug key, a library of blueprints in
-  `data/ships/`): project 2 of the ship-designer plan. Until then a second ship comes only from
-  code (`fleet.spawn`), as the probes do.
+- **Docking** (two hulls held airlock to airlock), **ships flown by crew** (the computer's
+  `ShipPilot` flies and fights; no NPC takes the helm), and a ship that moves while asleep (one
+  coasting when it falls asleep is found where it fell asleep, and its pilot stops with it).
 - **The shipyard** (blueprints are built in code for now). Blueprints save with
   `ShipBlueprint.from_grid(grid, name)`, sorted and diffable.

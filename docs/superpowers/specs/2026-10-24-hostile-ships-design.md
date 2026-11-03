@@ -1,7 +1,7 @@
 # Hostile ships — an AI pilot that flies and fights
 
 **Date:** 2026-10-24
-**Status:** design, awaiting the owner's approval
+**Status:** approved and built (approved 2026-10-24; §17 records what was built and what it left open)
 **Depends on:** `main` at `1a58d32` (weapons, ship damage sections, many ships, the ship library merged)
 **Amends:** the ship weapons spec (`2026-10-11-ship-weapons-design.md`) §4.3 *Hostile* (filled here),
 §4.4 *Your own*, §7.1 the gunner hold; the ship damage sections spec
@@ -9,7 +9,8 @@
 into its neighbours), §4 (pieces off sooner
 for big hits); the health and damage spec (`2026-09-29-health-and-damage-design.md`) §7 (downed with
 nowhere to wake); the saving spec (`2026-09-26-saving-design.md`) §5 (no save under attack); the many
-ships spec (`2026-10-02-many-ships-design.md`) §6.2 (the starter can be destroyed).
+ships spec (`2026-10-02-many-ships-design.md`) §6.2 (the starter can be destroyed); the rock creatures
+spec (`2026-10-10-rock-creatures-design.md`) §8.1 (a light bolt's damage, §17.1 here).
 **Governed by:** `docs/design/visual-style.md` (binding: palettes, the three-shader interior budget,
 120 fps on the GTX 960, renders at eye height), `CLAUDE.md` (floating origin; every ship is usable;
 every ship lives in `data/ships/`; keep `building-a-ship` current)
@@ -504,3 +505,174 @@ This project changes how ships fly, fight and end. Before it is done, in the sam
   `ship_probe.gd` for anything checkable (for example, which faces' turrets can bear together).
 - **`designing-a-ship`:** what makes a ship a brawler or a stand-off fighter, for the designer agent.
 - **`building-an-npc`:** NPCs aboard a destroyed ship die; the blast reaches creatures.
+
+## 17. As built (2026-11-02)
+
+The plan ran in 17 tasks (`docs/superpowers/plans/2026-10-24-hostile-ships/`). The APIs and every
+number are in the `building-a-ship` skill's `reference.md`, *The pilot and the end of a ship*. This
+section keeps what differs from the text above, what the proof showed, and what it left open.
+
+**Not proved at the end of the build:** the full test suite was not run by any task (the owner's call
+at the end). Targeted tests passed task by task. The final duel run was on `hostiles-t16`.
+
+### 17.1 Numbers that moved
+
+| What | The text above | As built | Why |
+|---|---|---|---|
+| Light bolt speed | 600 m/s | **350 m/s** | At 600 m/s a jink dodged little: 76% landed at 1 km against the 40% mark. It is now slower than the heavy bolt, 450 m/s. The owner chose this ("option B") and it stands |
+| Light bolt life | 3 s | **3.6 s** | Keeps the reach at 1,260 m, past the turret's 1,200 m range |
+| Light bolt damage | 15 hp | **55 hp** | §11's sum was wrong: a ship spawns with half its store (a starter 600 QE) that nothing refills, so 480 usable bolts, and at 15 hp they cannot take 12,330 hp. 50 hit the 720 s cap too often; 60 came in under 4 minutes once losers flew to the end |
+| A light turret's firepower | 30 hp/s | **110 hp/s** | Follows. A heavy stays 40 hp/s for 5 QE/s against a light's 2 QE/s, so a heavy now buys reach, not firepower |
+| Starter's hull | about 12,400 hp | **12,330 hp** | The turrets' cells took 80 hp off the midship sections |
+| A stand-off's range | near the edge of its reach | **0.7 of it** (`STAND_OFF_SHARE`; 840 m on light turrets) | At 0.9 it sat past the hold-fire line, and a stand-off low on QE never fired |
+| A disarmed ship | | keeps `KEEP_AWAY` −150 m, just inside the foe's reach (1,050 m from a starter) | Past the reach it flew off with its foe at its heels and the duel never ended (nobody flees, call F) |
+| Fight speed | the limit | **`FIGHT_SPEED` 80 m/s**, the full limit only on a foe with no live turret | Equal top speeds made every stern chase permanent |
+| Blast | around 100 m | **120 m and 400 hp** × `SCALE` 0.5..2 (the scale moves the radius only) | The starter is about 1. A spacewalker within about 90 m of a starter's core is downed |
+
+**What the light bolt's 55 hp does elsewhere.** Two light bolts down a spacewalker (100 hp; at 15 hp
+it took seven). One kills a Skitter (40 hp), a Glinter (20) or a Limpet (15); a Delver (60) takes two.
+The rock creatures spec's §8.1 "A light turret bolt is 15 hp" is stale; its heavy-bolt line stands.
+Its "60 hp, six bolts" is the Delver and "20 hp (two bolts)" the Glinter, both counted in the pistol's
+10 hp bolts, and both still true.
+
+### 17.2 What differs from the text
+
+- **The pilot's flying.** It flies by a velocity hold (`FlightComputer.hold_velocity`, built for it),
+  not `set_heading` and the assist toggle, and the hold's correction may boost. §5.1's list is
+  otherwise kept: it writes only the stick, the hold, `clear_heading` and fire control.
+- **The face.** The pilot flies `ShipPilot.sure_face`, not `Broadside.best_face`: a turret counts only
+  where it still bears 10° off the face every way. `best_face` picks the nose on all three ships, on
+  the rim of every half-sky, where the muzzles' height then takes the shot away.
+
+  | Ship | `best_face`, bearing | Flown, bearing |
+  |---|---|---|
+  | starter | nose, 2 of 2 | forward-down 45°, 1 of 2 |
+  | lamplighter | nose, 1 of 1 | forward-up 45°, 1 of 1 |
+  | warden | nose, 7 of 7 | forward, up and to port, 4 of 7 |
+
+- **The numbers' home.** The turn gain, jink push and the rest moved from `ShipPilot` into
+  `PilotValues` in T16. `Broadside.DAMPING`, `RockAvoid.FEELER_ANGLE` and `RockAvoid.URGENCY` stayed in
+  their own files.
+- **Judgement noise** is drawn per ship and target, a steady misjudgement. A fresh draw each second
+  flipped equal starters' style every second.
+- **The first read.** An even fight is closed on: `BRAWL_FROM` 0.9 on a first read, and a foe with no
+  live turret is always brawled.
+- **The PILOT page beside WEAPONS.** §9.1 put the switch on the WEAPONS page. It is a page of its own,
+  after WEAPONS, on any ship with turrets: `PILOT · ON/OFF`, `STYLE · <choice>`, and while on its
+  intent and target. The key is P.
+- **The pilot readout** is on F2 at the top right, not an F3-style overlay. It lists every other ship
+  in contact, crew too, so H can make a crew ship hostile.
+- **§8.2 step 4, for the ship you are in.** `fleet.destroy` is not called: freeing the interior would
+  free your avatar, and the scene reloads anyway. `lose("SHIP LOST")` comes first, so the white comes
+  with the flash.
+- **The starter is held, not removed** (many ships spec §6.2 amended): asleep, hidden, out of the
+  weapons group, saved `"destroyed": true`, never woken.
+- **The blast lands on a ship's nearest hull-section cell,** not its nearest cell: that is often a
+  component, which never moves HULL %.
+- **Chunks** are `RigidBody3D`s with a `MultiMesh` of one shared block, touching only rocks. The
+  break-up's gas is local to a node drifting with the hull, in `EXTERIOR_SPACE`, not world-space
+  particles. The white of *SHIP LOST* is the core flash's warm white.
+- **Your pilot never pursues** (§9.1 "does not follow"): out of contact it holds station and looks
+  again every second.
+
+### 17.3 Built beyond the plan
+
+All in T16, each found by the duel probe.
+
+- **The slower light bolt** (§17.1).
+- **A wrecked cockpit is flown on the raw stick** (`ShipPilot.raw_stick`, 1692c8b). A wrecked cockpit
+  refuses the assist, so a loser coasted for good; most duels lose the cockpit by about 120 s. It now
+  pushes the stick toward the velocity it wants, as you would. A wrecked *computer* still ends the
+  pilot (§5.6).
+- **The creature launch fix** (21c26cf). `NpcDirector.promote` added a body at the holder's origin,
+  your hull under the floating origin, then moved it to its site. A skitter touched the hull for a step
+  from about 1 km off, and once flew it off at about 9,900 m/s. This was very likely the T6 crash with
+  the hull at 0. `promote` now sets the transform first.
+- **The rubble fixes** (fe43f25). A pilot's rays see only bodies, and rubble became a body 1.5 s
+  ahead: the Warden flew into one at 76 m/s. A pilot sets `AsteroidStream.ANCHOR_AHEAD` so rocks are
+  solid as far as it looks, `RockAvoid` also sweeps the hull's sphere, and a rock that loads inside the
+  look stays a picture until it has left every look (`AsteroidBubble.cell_loaded`).
+
+### 17.4 The duel probe (§12.2)
+
+`duel_probe.gd`, real time, windowed at 1280×720, 20 fights, 2026-10-31 (run17). The even fight's fps is
+from the same fight re-run alone, the rule in CLAUDE.md for a reading under 120.
+
+| Mark | Needed | Result | |
+|---|---|---|---|
+| Starter v starter, 0.5/0.5 | mean 4–6 min | **5.95 min** (219, 315, 336, 720, 195 s; 4 of 5 decided) | pass, at the edge |
+| 0.8 pilot v 0.2 | wins most | **3 of 5** (one loss, one draw) | **miss** against the plan's 4 of 5 |
+| Styles | neither wins all six | brawler 5, **stand-off 0**, one draw | pass, on the letter only |
+| Rock contacts, flying | 0 | **0** over 20 fights (one adrift, computer wrecked) | pass |
+| Seated fps, starter duel | ≥ 120 | **131** alone; 92 in the full run | pass, see below |
+| Seated fps, Warden | ≥ 109 | **128**, **127** | pass |
+| Seated fps, yours / ship lost | ≥ 120 | **125**, **129** | pass |
+| Light hits, 400 m | ≥ 70% | **95%** (5951/6236) | pass |
+| Light hits, 1 km | ≤ 40% | **36%** (763/2133) | pass |
+| Your pilot | | lost in 222 s, flown to the end | |
+| Ship lost | | *SHIP LOST*, finished 3.65 s after; reload called | OK |
+
+Light hits by band: 200 m 100%, 400 m 95%, 600 m 86%, 800 m 36%, 1 km 36%, 1.2 km 11%.
+
+**What passed narrowly or missed, and why:**
+
+- **The even mean, 5.95 min,** holds one 720 s draw at full value. The four decided fights average
+  266 s. A second draw in five would miss. In that draw (even 3) ship a's computer was wrecked before
+  60 s, so it coasted (§5.6); ship b lost both turrets by 80 s and stayed out at 1.1 km. Ship a hit a
+  rock at 49 m/s and stopped firing with 119 QE left. *Why it stopped was not traced.*
+- **Skill, 3 of 5.** The spread between runs is wide (1 of 5 to 3 of 5), so five fights show little.
+  Fights settle at 400–600 m, where 86–95% of bolts land whoever flies, and a jink moves about 2 m. A
+  turret goes at about 25 s, and a loser spends only 27–95 QE after that. A better number will not fix
+  it: the miss needs a change to what decides a fight.
+- **Stand-off won 0 of 6.** Its bolts land about one in three at its 840 m; a brawler's land nine in
+  ten at 350–450 m. The mark passes only because one fight drew. As tuned, standing off is a losing
+  choice, and the assessment still makes it. (The pass table's "chosen 1,050 m" is a misreading: in
+  the logs 1,050 is a *disarmed* ship's range, still shown as STAND-OFF, and it fires nothing.)
+- **Both Warden fights were 720 s draws:** stand-off v stand-off at about 960 m, the starter out of
+  usable QE at 481. The Warden's reach makes it stand off and neither gives up the range. Its fps and
+  rocks pass, but **no Warden fight has decided**, so §11's "a Warden on a starter: about a minute" is
+  unproved against a pilot (it took 36 s against a hull worn to 4%).
+- **The skill and style draws:** a ship with the upper hand spends its 600 QE at 800–1,000 m against a
+  foe that will not close, and has nothing left to finish it.
+- **The 92 fps reading** (even 0, in the full run) came a few minutes after the machine woke. What took
+  the frames was not traced. Alone the same fight read 131, minimum second 35. Spawns and blasts take
+  the seated minimum seconds to 3–12 fps.
+
+**`ship_probe.gd` on the three library ships** (§12.2, 2026-11-02): 0 rules broken and no line
+flagged. The first run read under 120 in the rock views, so each ship was run again alone. Seated by a
+rock with both light groups on, then with a second ship 300 m off:
+
+| Ship | First run | Alone | In its `.md` when designed |
+|---|---|---|---|
+| starter | 114, 81 | **128, 123** | 130, 130 (2026-10-02) |
+| warden | 121, 89 | **117, 109** | 123, 122 |
+| lamplighter | 125, 101 | **126, 104** | 127, 126 |
+
+**The second-ship reading has fallen** and was not traced: the Lamplighter's 104 is under the 120
+floor, and the Warden's 109 and 117 are under the 122–123 its `.md` records, though inside the 109–117
+accepted with its guns firing. No fight or pilot is running in that view. The one-ship reading held
+on the Lamplighter and the starter, so look at what a second awake ship now costs.
+
+**`fleet_play.gd`** (§12.2), after every task: ALL OK, exit 0, 2026-11-02.
+
+### 17.5 Known edges
+
+- **The burst at 1 km (§6.2 "must read clearly").** At 400 m a starter is about 16 px and the burst a
+  few warm pixels; at 1 km it is one yellow pixel. With the HUD on, the contact diamond sits over the
+  ship and hides the burst. The owner has the renders to judge; nothing was tuned.
+- **Spawn and blast hitches.** A blast frame's work is 12–22 ms. A tool that one-shots a whole hull
+  costs about 465 ms in `_apply_view`; a fight wears the hull first, so play never does.
+- **S on the open F2 readout** cycles a style and, being `move_back`, also takes your ship back from its
+  pilot. Not exercised by the probe.
+- **P is not on the controls card** (nor are T and B).
+- **Your suit can tie to a hostile** within 500 m (`SuitTie` predates this project), and you would wake
+  there. Not exercised by the probe.
+- **A hostile bolt that hits you on a spacewalk** does not start the 10 s calm (the avatar records no
+  hit source). A hostile out for you still holds the save through `targets()`.
+- **A ship with no `computer` block** has a pilot nothing can kill. Every library ship has one.
+- **The dorsal and ventral turrets of a starter never both bear,** so it always fights with one: a
+  blueprint matter, left as it is. Task 4 suggested a flank; `sure_face` chose forward-down 45°.
+- **The white of *SHIP LOST*** passes through a warm grey going to black. The owner may want it warmer
+  or quicker.
+- **`test_hull_lights`:** T16's accidental wide run failed one test here (light counts), on files T16
+  does not touch. It was not looked into.

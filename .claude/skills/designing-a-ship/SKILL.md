@@ -109,8 +109,46 @@ turns slowly unless it has rcs at **both ends**.
   are the example (`data/ships/warden.md`, *Weapons*).
 - One heavy at most per gun you want a gunner to aim: it fires on its own as well. One
   `weapons_station`, and it must pass the seat rules (`NO_STAND`, `SEAT_FACES_WALL`, reachable).
+  A heavy also decides how its pilot fights (§2b).
 - A turret's mass moves the balance: a ventral one lowers the centre of mass, a dorsal one lifts it.
   Read the pitch imbalance after each swap.
+
+## 2b. How it fights
+
+Every ship can be flown by its pilot, yours or a hostile's, so a design decides how it fights
+whether or not the brief asks (`docs/superpowers/specs/2026-10-24-hostile-ships-design.md` §5).
+A pilot never gets more than the blueprint gives it. Three things decide:
+
+- **Reach** comes from its guns: a light turret 1,200 m, a heavy 1,500 m. A ship whose reach beats
+  its foe's by over 100 m always **stands off**, so one heavy makes a ship a stand-off fighter
+  against any light-only ship, however strong it is up close (the Warden does).
+- **Firepower that bears together on one face.** A pilot picks firepower × hull against its foe's
+  (`FightAssessment.brawl_score`): at about even or better it **brawls**, closing to 350 m; under
+  it stands off at 0.7 of its reach. That counts every live turret, but only those bearing on the
+  face it shows will fire. Read the probe's `face` line: the second count is what the ship fights
+  with. The starter's two turrets, dorsal and ventral, never both bear (1 of 2); the Warden's seven
+  bring 4. Turrets on one face bear together; on neighbouring faces (dorsal and flank) they share
+  a quarter of the sky; on opposite faces only the rim, which does not count.
+- **Thrust and mass.** A jink is `lateral / mass` and `reverse`, `lateral` and `vertical` over
+  mass (the least of them) is how far ahead it must look and how fast it may run at a rock. Side
+  thrust keeps a ship alive past 600 m; forward thrust does little, since a pilot fights under
+  80 m/s whatever its engines (`PilotValues.FIGHT_SPEED`).
+
+| Wanted | Build |
+|---|---|
+| **A brawler** | light turrets only, so nothing pushes it to stand off; as many as possible on one half of the sky; hull and armour for the score; strong RCS so its face keeps up with a foe at 350 m |
+| **A stand-off fighter** | one heavy turret for the reach, then side thrust above the starter's 4.7 m/s² to dodge. Know what you are buying: see below |
+
+**As tuned, brawling wins.** Duels gave brawler 5, stand-off 0, one draw: a stand-off's bolts land
+about one in three at 840 m, a brawler's nine in ten at 350–450 m. Both Warden fights against
+a starter were 12-minute draws at about 960 m. A light turret is 110 hp/s for 2 QE/s; a heavy is
+40 hp/s for 5 QE/s: **a heavy buys reach, never firepower**, and a ship made only to stand off runs
+dry first. A ship spawns with half its store, and nothing refills it in a fight: a starter has
+600 QE, about 480 light bolts above the low-power line.
+
+A pilot runs on the `computer`, 300 hp, and one even duel lost it before 60 s. Wrecked, the pilot is
+gone and the ship coasts with its guns still firing. **The core goes up at HULL 0**, so a big ship's blast is
+bigger (120 m × its mass over 105 t, between half and double), and it reaches anyone close.
 
 ## 3. Be creative
 
@@ -294,5 +332,7 @@ z 2   Fh2
 | Rcs as pods on the hull | The Warden's first draft read as clutter at the bow | Rcs as outer hull cells, exhaust face open |
 | A quantum core off the centreline | 3% yaw imbalance on a 260 t ship | Centre it, or mirror two |
 | Putting the guns on last | A turret takes a cell of the skin, so a late one moves the mass, the power margin and the pitch balance together; see *Budgets* for how thin the Warden's margin is | Place the turrets in the shape pass (§4 step 5), then re-read power and balance |
+| Counting turrets, not the ones that bear | The starter has two turrets and fights with one: dorsal and ventral share only the rim of their skies, and on that rim neither can engage. `best_face` said 2 of 2 and the pilot could fire none | Read the probe's `face` line, the flown count; §2b says how to raise it |
+| A heavy on a ship meant to brawl | Reach over the foe's by 100 m forces stand-off, so the Warden, 3.2 times a starter's firepower and 2.4 its hull, stood at 960 m for 12 minutes and never decided a fight | Light turrets only on a brawler, or accept what §2b says about stand-off |
 | Judging shape from `ship_check` alone | A first draft broke no rule and looked like a shuttle on a pole | Probe inside the design loop; the `.md` last |
 | The arrival render to judge looks | At 200–400 m the new ship is a few pixels | It proves the arrival; judge the ship from the probe's hull views |
