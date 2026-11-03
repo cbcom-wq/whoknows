@@ -82,7 +82,7 @@ them.
 | Balance | < 5% each axis | pitch 2.31%, yaw 0.14%, roll 0% |
 | Rules | 0 broken | 0 broken, no `RCS_BLOCKED` note (all 16 rcs puff in the open) |
 | Droid | every job | dock in the closet, 19 jobs, none unreachable |
-| fps | ≥ 120 | 127 seated by a rock with both light groups (126 with a second ship 300 m off) |
+| fps | ≥ 120 | 127 seated by a rock with both light groups (126 with a second ship 300 m off); 128 and 125–127 on a quiet machine, 2026-11-03 |
 
 ## The bridge (y = 0, z −5 .. −3)
 
