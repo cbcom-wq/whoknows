@@ -65,6 +65,9 @@ var _since_assess := 0.0
 var _since_tactics := 0.0
 var _knobs := PilotSkill.new()
 var _desired := Basis.IDENTITY
+## The velocity it last chose (world). The hold flies it; with the assist
+## refused, its own stick does.
+var _held := Vector3.ZERO
 var _boost := false
 ## The orders fire control had when it took over, and the id it marked
 ## (`_added`: it listed it, so it unlists it).
@@ -178,8 +181,12 @@ func tick(delta: float) -> void:
 		if intent != &"no_pilot":
 			intent = &"no_pilot"
 			_boost = false
+			ship.exterior.remove_meta(AsteroidStream.ANCHOR_AHEAD)
 			flight.release_velocity()
 			flight.clear_pilot_input()
+			# That leaves a burn latched, and on the raw stick it has one.
+			if not flight.assist_enabled:
+				flight.set_pilot_input(Vector3.ZERO, Vector3.ZERO, false)
 		return
 	if intent == &"no_pilot":
 		# Mended: it looks again at once.
@@ -249,6 +256,8 @@ func _start() -> void:
 func _let_go() -> void:
 	_boost = false
 	intent = &""
+	if ship != null and ship.exterior != null:
+		ship.exterior.remove_meta(AsteroidStream.ANCHOR_AHEAD)
 	if flight != null:
 		flight.release_velocity()
 		flight.set_pilot_input(Vector3.ZERO, Vector3.ZERO, false)
@@ -432,7 +441,8 @@ func _hold_station() -> void:
 	_boost = false
 	_jink_left = 0.0
 	intent = &"holding_station"
-	flight.hold_velocity(Vector3.ZERO)
+	_held = Vector3.ZERO
+	flight.hold_velocity(_held)
 	_desired = ship.exterior.global_basis.orthonormalized()
 
 ## Holds `wanted`, steered round rocks and other ships, under `limit` (the
@@ -447,6 +457,9 @@ func _hold(wanted: Vector3, limit := -1.0) -> void:
 	var brake := _brake()
 	var exclude: Array[RID] = [hull.get_rid()]
 	var radius := float(hull.get_meta(AsteroidStream.ANCHOR_RADIUS, 10.0))
+	# Its rays see only bodies, and the bubble makes rocks bodies only 1.5 s
+	# ahead: the Warden flew into rubble at 76 m/s (hostile ships T16).
+	hull.set_meta(AsteroidStream.ANCHOR_AHEAD, RockAvoid.reach(speed, brake))
 	var rock := RockAvoid.rock_ahead(hull.get_world_3d().direct_space_state, hull.global_position, v,
 		radius, exclude, brake)
 	var swerve := RockAvoid.swerve(rock, v)
@@ -464,7 +477,8 @@ func _hold(wanted: Vector3, limit := -1.0) -> void:
 		if not shy.is_zero_approx() and on_ahead > 0.0:
 			wanted -= ahead * on_ahead * clampf(shy.length() / speed, 0.0, 1.0)
 	wanted += swerve + shy
-	flight.hold_velocity(wanted.limit_length(limit if limit >= 0.0 else flight.current_limit))
+	_held = wanted.limit_length(limit if limit >= 0.0 else flight.current_limit)
+	flight.hold_velocity(_held)
 
 ## Every other awake ship in contact, as steer_ships sees them.
 func _others(from: Vector3) -> Array:
@@ -541,14 +555,26 @@ static func _bears_round(sky: SkyMap, dir: Vector3) -> bool:
 
 # --- flying: every physics tick ---------------------------------------------------
 
-## The stick that turns the face it wants; translation is all the hold's.
+## The stick that turns the face it wants; translation is all the hold's,
+## unless the assist is refused (a wrecked cockpit): "still flyable" (damage
+## spec §2.2), so it pushes the stick itself, as you would.
 func _fly() -> void:
 	var hull := ship.exterior
 	var basis := hull.global_basis.orthonormalized()
 	var spin := basis.inverse() * hull.angular_velocity
 	var rotate := Broadside.rotate_input(basis, _desired, spin, PilotValues.TURN_GAIN * _knobs.position_gain)
-	flight.set_pilot_input(Vector3.ZERO, rotate, _boost)
+	var translate := Vector3.ZERO
+	if not flight.assist_enabled and ship.stats != null:
+		translate = raw_stick(basis.inverse() * (_held - hull.linear_velocity), hull.mass, ship.stats.thrust_budget)
+	flight.set_pilot_input(translate, rotate, _boost)
 	flight.clear_heading()
+
+## The stick that closes `error` (m/s, hull axes) as the hold would: the force
+## that does it in a second, as a share of each axis's budget. Pure.
+static func raw_stick(error: Vector3, mass: float, budget: Dictionary) -> Vector3:
+	var along: float = budget[&"forward"] if error.z < 0.0 else budget[&"reverse"]
+	var share := error * mass / Vector3(maxf(budget[&"lateral"], 1.0), maxf(budget[&"vertical"], 1.0), maxf(along, 1.0))
+	return share.clamp(-Vector3.ONE, Vector3.ONE)
 
 func _computer() -> int:
 	if ship == null or ship.damage == null:

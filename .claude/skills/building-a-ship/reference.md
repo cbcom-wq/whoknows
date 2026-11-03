@@ -989,7 +989,7 @@ marks). Every number the weapons use is in this one file:
 |---|---|---|
 | Slew | 90°/s | 30°/s |
 | Fire | bursts of 4, 0.125 s apart, 1.5 s recharge | one bolt, 3 s recharge |
-| Bolt speed, damage, life, push | 350 m/s, 60 hp, 3.6 s, 20 N·s (600 m/s, 15 hp, 3 s before hostile ships T16) | 450 m/s, 120 hp, 7 s, 400 N·s |
+| Bolt speed, damage, life, push | 350 m/s, 55 hp, 3.6 s, 20 N·s (600 m/s, 15 hp, 3 s before hostile ships T16) | 450 m/s, 120 hp, 7 s, 400 N·s |
 | Engagement range | 1,200 m | 1,500 m alone; 3,000 m by hand |
 | Spread, QE a bolt | 0.4°, 1 | 0, 15 |
 | Bolt look (length × thickness), impact flash, barrel from pivot | 2.0 × 0.25 m, ×1.5, 1.0 m | 4.0 × 0.5 m, ×3.0, 2.4 m |
@@ -1020,9 +1020,13 @@ bolts' colour is `SpacePalette.PHASER` (`ffbf4d`).
 | Input | `weapons_mark` T (nearest the crosshair within `MARK_CONE` and 5 km; items too), `weapons_clear` Shift+T, `weapons_orders` B (`HOLD` ⇄ `ENGAGE`), in `project.godot` |
 
 **What a bolt does:** a ship's section or a turret component (with a small push), an NPC's
-`receive_hit`, a spacewalker (15 hp a light bolt, 120 a heavy: a heavy bolt downs you), a loose
+`receive_hit`, a spacewalker (55 hp a light bolt, 120 a heavy: two light bolts or one heavy down you), a loose
 item, a base's module, and on an asteroid a flash and nothing else. A held or stowed item is not a
 target. A ship's bolts exclude its own colliders.
+
+**A pilot's rocks** (`RockAvoid`, `src/pilot/`): `rock_ahead` casts five rays and sweeps the hull's sphere `RockAvoid.reach(speed, brake)` ahead: max(8 s of flight, 80 m), or the stopping distance plus 80 m if that is further. Physics sees only bodies, so `ShipPilot._hold` sets `AsteroidStream.ANCHOR_AHEAD` on the hull to that reach. `AsteroidBubble` then makes rocks solid along the whole stretch, not just its own 1.5 s. For a 1.15 km diagonal path `_near_paths` costs about 0.3 ms (0.06 ms for 1.5 s), because cells far off the path are skipped. `_let_go` and a wrecked computer take the meta off. A rock whose cell loads inside that look gets no warning, so `AsteroidBubble.cell_loaded` keeps it a picture until it has left every look (`_unseen`).
+
+**A pilot with a wrecked cockpit** flies on: `assist_allowed` is false, so `hold_velocity` does nothing and `ShipPilot._fly` sets the stick to `ShipPilot.raw_stick(error, mass, budget)`, the force that closes the velocity error in a second as a share of each axis's budget, clamped to ±1. Nothing clamps its speed now, so `_held` is the only limit. `rotate_input` drives raw torque, its own damping term keeping the turn steady.
 
 **Tests worth copying:** `test_sky_map.gd`, `test_turret.gd` (the flip and its near ties),
 `test_fire_control.gd`, `test_turret_damage.gd`, `test_ship_turrets.gd`, `test_weapons_job.gd` (the

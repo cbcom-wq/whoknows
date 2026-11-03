@@ -22,8 +22,9 @@ extends SceneTree
 # lies everywhere in the field (AsteroidRecipe.SPRINKLE: rubble every ~270 m,
 # a mid-size rock every ~1.5 km), so there is no patch with no rock at all
 # within 5 km; dodging those is the pilot's job, and rock_contacts counts it.
-# A ship whose cockpit is wrecked has no assist (Ship: assist_allowed), so its
-# pilot cannot steer at all: its contacts are counted apart, as adrift.
+# A ship whose computer is wrecked has no pilot (ShipPilot: no_pilot), so nobody
+# can steer it: its contacts are counted apart, as adrift. A wrecked cockpit is
+# not that: its pilot still flies, on the raw stick.
 #
 # One line per fight:
 #   duel <a> <skill> <style> vs <b> <skill> <style> · <s> · winner <x> · hits a <band>:<rate> ... b ... · qe <a>/<b> · switches <n> · rock_contacts <n> (<n> adrift)
@@ -69,7 +70,7 @@ class Fighter:
 	var last_style := -1
 	var styles: Array[String] = []
 	var rocks := 0
-	## Rock contacts with its assist off: nobody flying it.
+	## Rock contacts with its computer wrecked: nobody flying it.
 	var adrift := 0
 	var touches := 0
 	## turret part -> s into the fight it was wrecked
@@ -316,14 +317,14 @@ func _watch(side: Fighter, foe_of: Callable) -> void:
 			_tag(pool, side, kind, band, foe_of))
 	side.ship.exterior.body_entered.connect(func(body: Node) -> void:
 		if _is_rock(body):
-			var flown := side.ship.flight_computer.assist_enabled
+			var flown := side.ship.ship_pilot.intent != &"no_pilot"
 			if flown:
 				side.rocks += 1
 			else:
 				side.adrift += 1
 			print("  ROCK  %s hit %s (%s) at %.0f m/s, hull %.0f %%%s" % [side.label, body.name, body.get_class(),
 				side.ship.exterior.linear_velocity.length(), side.ship.hull_whole() * 100.0,
-				"" if flown else ", adrift (assist off)"])
+				"" if flown else ", adrift (no pilot)"])
 		elif body is RigidBody3D and body.has_meta(&"ship"):
 			side.touches += 1)
 
@@ -844,7 +845,7 @@ func _table() -> void:
 	for r in _results:
 		rocks += int(r["rocks"])
 		adrift += int(r["adrift"])
-	print("  rock_contacts %d over %d fights: %s (and %d adrift, cockpit wrecked, nobody flying)" % [rocks,
+	print("  rock_contacts %d over %d fights: %s (and %d adrift, computer wrecked, nobody flying)" % [rocks,
 		_results.size(), "PASS" if rocks == 0 else "MISS", adrift])
 	for key: String in _fps_lines:
 		var fps: Dictionary = _fps_lines[key]
