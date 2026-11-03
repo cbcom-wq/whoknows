@@ -124,11 +124,18 @@ Do these in order. Each names the check that proves it.
    **Ship weapons reach it:** NPCs outside are targets (`Weapons.TARGETS`; the exterior director
    has `NpcDirector.targets = true`, set in `flight_test._wire_weapons`, and joins each NPC as
    `npc:<record id>` on `promote`, leaving on `demote`), so a turret can be sent after one. A
-   phaser bolt reaches it through `receive_hit` like the pistol's: 15 hp from a light bolt, 120 from
-   a heavy, so a species with `max_health` under 120 dies to one heavy bolt. A dead NPC is no
+   phaser bolt reaches it through `receive_hit` like the pistol's: 55 hp from a light bolt, 120 from
+   a heavy (a pistol bolt is 10), so one light bolt kills a Skitter, a Glinter or a Limpet and a
+   Delver takes two. A dead NPC is no
    longer `Weapons.usable`: turrets drop it at once and its list entry leaves after
    `WeaponValues.MISSING_GRACE` 2 s. A new population needs nothing for this beyond going through
    that director; the interior director leaves `targets` false, so crew are never shot at.
+   **A ship's end reaches it** (hostile ships spec §8.2), with nothing to wire. Outside, `CoreBlast`
+   delivers a hit of kind `&"blast"` through `receive_hit`: up to 400 hp at the core, nothing past
+   120 m × the ship's scale, so most creatures near a dying ship die with it. It skips an NPC with
+   `inside`. Aboard, the blast never reaches you: `flight_test._kill_aboard` marks every live NPC and
+   every record of every source of `ship.npc_director` dead in the `NpcLedger`, so nothing wakes
+   again, droid included. A new interior population needs only to be a source of that director.
    **A creature that pays** (the Delver's grit, the Limpet's husks): the body tells its site
    (`Npc.surfaced()` -> `RockSite.surfaced`, `died`) and the site asks the flight scene for the items
    through `drop` and `count_near`. Cap what it can pay near the place (`GRIT_CAP`, one shard at a
@@ -257,15 +264,16 @@ Do these in order. Each names the check that proves it.
 
 - **Memory beyond health.** `NpcLedger` keeps the dead and the wounds of the sleeping (through
   `NpcDirector.amend`); nothing else about an NPC is remembered when it sleeps.
-- **A dead droid, and repairs by others.** The droid is only ever knocked out; the repair torch
-  brings it round.
+- **A dead droid, and repairs by others.** Short of its ship being destroyed, the droid is only
+  ever knocked out; the repair torch brings it round.
 - **Local avoidance.** A walker does not path round people: a droid heading through you steps
   aside (`give_way`) and tries again. A player standing still in a doorway blocks it.
 - **Ladders and upper storeys for walkers.** `DeckPaths` joins one storey only.
 - **Interactions** beyond the seam; the hose; carrying an NPC.
 - **Sound outside** (never, by the style guide) and **sensors** (`LifeContacts` for the bridge
   computer).
-- **Hunters and combat** beyond `defend` (which only bites back), `GroundWalker` (worlds),
-  `ShipPilot` (wingmen).
+- **Hunters and combat** beyond `defend` (which only bites back), `GroundWalker` (worlds), and
+  NPC wingmen or crew at a helm. `ShipPilot` is the ship computer's pilot, not an NPC: it has no
+  `NpcRecord`, and a hostile carries no crew (hostile ships spec, call I).
 - **The frame budget on the target PC.** Measured 1.2 ms for 32 + the droid on a shared 2.1 GHz
   Xeon; unmeasured on the GTX 960 machine.

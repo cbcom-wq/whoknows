@@ -39,7 +39,7 @@
 **Files:**
 - Modify: `.claude/skills/building-a-ship/SKILL.md` (checklist, *Mistakes already made*), `reference.md` (the pilot's and the blast's numbers, `Fleet.destroy`, `Ship.side`, `felt_hit`, `destroyed`), `ship_probe.gd` (a line: for each ship, `Broadside.best_face` and how many turrets bear on it); `.claude/skills/designing-a-ship/` (what makes a brawler or a stand-off fighter: reach, turrets that bear together on one face, thrust/mass); `.claude/skills/building-an-npc/` (NPCs aboard a destroyed ship die through the ledger; the blast reaches creatures as a `&"blast"` hit); `docs/superpowers/specs/2026-10-24-hostile-ships-design.md` (§17 *As built*: numbers that moved, the probe's table, what differs from the spec — at least the PILOT page beside WEAPONS — and known edges); the status line to *approved and built*.
 
-- [ ] **Step 1:** run `ship_probe.gd` on the three library ships with the new line; record the faces.
-- [ ] **Step 2:** write the skill and spec changes. Check every name the skills mention still exists (`Grep`).
-- [ ] **Step 3: Commit** `docs: hostile ships as built; the ship skills learn the pilot and the end of a ship`.
+- [x] **Step 1:** run `ship_probe.gd` on the three library ships with the new line; record the faces.
+- [x] **Step 2:** write the skill and spec changes. Check every name the skills mention still exists (`Grep`).
+- [x] **Step 3: Commit** `docs: hostile ships as built; the ship skills learn the pilot and the end of a ship`.
 - [ ] **Step 4:** ask the owner whether to run the full suite before finishing the branch (superpowers:finishing-a-development-branch).
