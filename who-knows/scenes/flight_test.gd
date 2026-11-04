@@ -57,6 +57,8 @@ var keep_saving := false
 ## world seed, and the node that draws its star, planets and moons.
 var system: SystemRecipe
 var star_system: StarSystem
+## What pulls where, one for every ship (desert-world spec §5.1); built in _wire_universe.
+var world_gravity: WorldGravity
 ## Every salvage cloud, under Outside (quantum energy spec §10.2).
 var salvage: SalvageField
 ## Every stray item adrift outside (saving spec §7), under Outside.
@@ -300,6 +302,7 @@ func _wire_ship(ship: Ship) -> void:
 	# The speed limit climbs with altitude in a world's well (the world scale
 	# spec §6).
 	ship.flight_computer.whereabouts = star_system.whereabouts
+	ship.flight_computer.gravity = world_gravity
 	# Its warp (the warp spec §5): J at its helm engages it.
 	ship.warp.bind(system, _universe, star_system.whereabouts, ship.sensors, _stream.recipe,
 		warp_busy_for.bind(ship))
@@ -823,6 +826,8 @@ func _wire_star_system() -> void:
 	star_system.name = "StarSystem"
 	add_child(star_system)
 	star_system.setup(system, _universe, $DirectionalLight3D)
+	world_gravity = WorldGravity.new()
+	world_gravity.setup(system, _universe, star_system.whereabouts)
 
 ## Salvage (quantum energy spec §10.2, §14): the field under Outside, at the
 ## identity, with the same world seed as the rocks; and the near cloud out of

@@ -103,6 +103,10 @@ var fire_control: FireControl = null
 ## Where you are, for the limit; null means the cruise ceiling everywhere, as
 ## in every test that never sets it.
 var whereabouts: Whereabouts = null
+## What pulls here (desert-world spec §5.2), set by the flight scene; null means
+## deep space, as in every test that never sets it. Every ship flies through this
+## script, so every ship feels a world's pull and holds against it.
+var gravity: WorldGravity = null
 ## This tick's limit with the assist on, m/s.
 var current_limit := CRUISE_LIMIT_MPS
 ## True while boost is actually applying this tick: held, with translation
@@ -270,6 +274,17 @@ func _physics_process(delta: float) -> void:
 		commanded_force_local = Vector3.ZERO
 		commanded_torque_local = Vector3.ZERO
 		return
+	if _hull.freeze:
+		# A frozen hull (parked, asleep) feels nothing and commands nothing.
+		boosting = false
+		boost_refused = false
+		commanded_force_local = Vector3.ZERO
+		commanded_torque_local = Vector3.ZERO
+		return
+	if gravity != null:
+		# The pull itself (spec §5.2; Planetfall §8.2): an acceleration, so a
+		# force of g x mass, at the hull's centre, in the world frame.
+		_hull.apply_central_force(gravity.at(_hull.global_position) * _hull.mass)
 	_apply_translation(delta)
 	_apply_rotation(delta)
 
@@ -297,13 +312,56 @@ func _apply_translation(delta: float) -> void:
 	boost_refused = wants_boost and not full_power
 	if boosting and quantum != null:
 		quantum.spend_continuous(QuantumValues.BOOST_COST * delta, &"boost")
-	commanded_force_local = translation_force(local_velocity, _translate_input, _hull.mass,
+	var pilot_force := translation_force(local_velocity, _translate_input, _hull.mass,
 		_authority_budget(thrust_budget), boosting, assist_enabled, speed_locked, locked_speed,
 		held)
+	# The gravity hold (spec §5.2): with the assist on, the engines first cancel
+	# the pull, from the *unscaled* budget -- low power halves only the pilot's
+	# command and drift correction, never the hold (Planetfall §8.2).
+	var hold := Vector3.ZERO
+	if assist_enabled and gravity != null:
+		var g_local := basis.inverse() * gravity.at(_hull.global_position)
+		if not g_local.is_zero_approx():
+			hold = gravity_hold(g_local, _hull.mass, thrust_budget)
+	commanded_force_local = within_budget(hold + pilot_force, thrust_budget,
+		BOOST_MULTIPLIER if boosting else 1.0)
 	_hull.apply_central_force(basis * commanded_force_local)
 
 	if assist_enabled and _hull.linear_velocity.length() > current_limit:
 		_hull.linear_velocity = _hull.linear_velocity.normalized() * current_limit
+
+## The force, in hull axes, that cancels a pull of `g_local` (m/s², hull axes)
+## on `mass`, clamped to what the engines have: lateral and vertical either way,
+## and fore (-z) and aft (+z) by their own budgets (spec §5.2). Pure.
+static func gravity_hold(g_local: Vector3, mass: float, budget: Dictionary) -> Vector3:
+	return within_budget(-g_local * mass, budget)
+
+## `force` (hull axes) clamped to the budget times `scale`: the one ceiling the
+## sum of hold and pilot command never exceeds. Pure.
+static func within_budget(force: Vector3, budget: Dictionary, scale := 1.0) -> Vector3:
+	var lateral: float = budget[&"lateral"] * scale
+	var vertical: float = budget[&"vertical"] * scale
+	var forward: float = budget[&"forward"] * scale
+	var reverse: float = budget[&"reverse"] * scale
+	return Vector3(
+		clampf(force.x, -lateral, lateral),
+		clampf(force.y, -vertical, vertical),
+		clampf(force.z, -forward, reverse),
+	)
+
+## How many times over the engines can lift the hull against the pull here:
+## vertical thrust over weight; INF outside a world's well (spec §5.2).
+func lift_margin() -> float:
+	if gravity == null:
+		return INF
+	var g := gravity.surface_gravity_at(_hull.global_position)
+	if g <= 0.0:
+		return INF
+	return float(thrust_budget[&"vertical"]) / (_hull.mass * g)
+
+## The pilot's latched translation input, each axis in -1..1 (hull axes).
+func translation_input() -> Vector3:
+	return _translate_input
 
 ## The share of the RCS's rated force or torque the core still delivers
 ## right now: half in low power, all of it otherwise (spec §8.3). A null
@@ -485,6 +543,7 @@ func build_telemetry() -> VehicleTelemetry:
 	else:
 		t.energy_state = &"full"
 	t.boost_refused = boost_refused
+	t.lift_margin = lift_margin()
 	if hull_status.is_valid():
 		var status: Array = hull_status.call()
 		t.has_hull = true

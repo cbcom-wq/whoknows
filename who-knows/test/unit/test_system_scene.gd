@@ -119,3 +119,7 @@ func test_the_hull_glides_into_a_world_at_the_limit_and_stays_above_it():
 
 func test_the_hull_dives_straight_into_a_world_at_the_limit_and_stays_above_it():
 	await _dive_into_the_ground(90.0)
+
+func test_every_ship_flies_through_the_one_world_gravity():
+	assert_not_null(_root.world_gravity)
+	assert_eq(_ship.flight_computer.gravity, _root.world_gravity)

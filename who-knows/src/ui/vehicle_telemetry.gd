@@ -26,6 +26,8 @@ var world_velocity: Vector3 = Vector3.ZERO
 var local_velocity: Vector3 = Vector3.ZERO
 ## Rotation about the hull's own axes as (pitch, yaw, roll), radians/sec.
 var local_angular_velocity: Vector3 = Vector3.ZERO
+## Vertical thrust over weight in a world's well; INF elsewhere (desert-world spec §5.2).
+var lift_margin: float = INF
 var assist_enabled: bool = false
 var boost_active: bool = false
 var hull_origin: Vector3 = Vector3.ZERO
