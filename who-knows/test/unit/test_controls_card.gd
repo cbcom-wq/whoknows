@@ -36,6 +36,16 @@ func test_key_names_come_from_the_bindings():
 	assert_eq(ControlsCard.key_name(&"point_mode"), "RMB")
 	assert_eq(ControlsCard.key_name(&"set_heading"), "LMB")
 	assert_eq(ControlsCard.keys_text([&"point_mode", &"set_heading"], " + "), "RMB + LMB")
+	assert_eq(ControlsCard.key_name(&"weapons_clear"), "Shift+T", "with its modifiers")
+
+## The weapons keys are on the card, not only on the band.
+func test_the_weapons_keys_are_on_the_card():
+	var actions: Array = []
+	for row in ControlsCard.ROWS:
+		if not row[0] is String:
+			actions.append_array(row[0])
+	for a in [&"weapons_orders", &"weapons_mark", &"weapons_clear"]:
+		assert_has(actions, a)
 
 func test_it_is_open_the_first_time_you_sit():
 	var c := _card()
