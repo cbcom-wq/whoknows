@@ -535,7 +535,8 @@ it lands), then puts you back in the view you were in; C again mid-glide picks i
 | API | Does |
 |---|---|
 | `scenes/ship.tscn` | a whole ship: hull, interior, seat, flight computer, controls, canopy view, motion coupling. No avatar, no director |
-| `Fleet.adopt(ship)`, `spawn(grid, place, stock, ship_name, launch)`, `remove(ship)` | take in the starter; a new ship at rest with the next free slot and a never-reused name (`Ship2`...), not own; free one (never `Ship` or the one aboard) |
+| `Fleet.adopt(ship)`, `spawn(grid, place, stock, ship_name, launch)`, `remove(ship, force := false)` | take in the starter; a new ship at rest with the next free slot and a never-reused name (`Ship2`...), not own; free one (never `Ship`, nor the one aboard unless `force`) |
+| `Fleet.destroy(ship)`, `is_destroyed(ship)`, signal `ship_destroyed(ship_name)` | the one way a ship leaves by being destroyed, once per ship. Any other: `remove(ship, true)` (emits `left`). The starter is held: asleep, hidden, out of the weapons group, `mark_destroyed`, saved `"destroyed": true`, never woken. `check_sleep` and `wake` skip a destroyed ship |
 | `Fleet.ships()`, `awake()`, `named(n)`, `nearest(p, except)`, `sleeping(s)`, `place_of(s)` | |
 | `Fleet.MAX_SHIPS` 16, `SLEEP_AT` 20 km, `WAKE_AT` 18 km, `CHECK_EVERY` 1 s, `ASLEEP`, `STARTER` `&"Ship"`, `next_number` | a ship asleep is out of `EXTERIOR_SPACE` and `SPACE_ANCHOR`, held as a `UniversePoint`, `PROCESS_MODE_DISABLED`, hidden, its emitters stopped |
 | `Fleet.capture(universe)`, `to_dict()`, `from_dict(d)`, `restore_hull(ship, part)` | the save's `"ships"` and `"fleet"`; a far ship loads asleep |
@@ -783,6 +784,11 @@ hull's layer, mask or freeze must check this as it does `warp.travelling()`. It 
 in the worst view (137 → 131); `test/probes/arrival_render.gd` renders it from the seat, the chase
 view and side-on.
 
+**Shift+1–9 on the F6 panel** spawn that ship as a hostile (`SpawnPanel.hostile_asked`,
+`FlightTest.spawn_hostile(id)`): `PilotValues.SPAWN_RANGE` 3 km off, 30° off your nose, then the
+other side, 60° and 90°, clear of rocks and hulls, facing you, at rest, with no `WarpArrival`; a
+skill from `SPAWN_SKILL` 0.2–0.8, style AUTO, engaging you. It shares the refusals above.
+
 ## Deck plans (`ShipPlan`, `ship_plan.gd`)
 
 `ShipPlan.parse(text, catalog, file) -> {id, name, description, grid, notes} | {error}` and
@@ -846,7 +852,7 @@ What a ship contributes:
 
 | API | Does |
 |---|---|
-| `Ship.to_dict(universe)` | layout (`ShipBlueprint.to_dict`), hull place and motion (during a warp, the drop-out point, moving in), `FlightComputer.to_dict`, `QuantumStore.to_dict`, `WarpDrive.to_dict` (the chart), each `Airlock.to_dict`, `ShipLights.to_dict` (`lights`), `FireControl.to_dict` (`weapons`: orders and the list; ids that no longer exist are dropped on load), every item aboard (`Item.to_dict`) |
+| `Ship.to_dict(universe)` | layout (`ShipBlueprint.to_dict`), hull place and motion (during a warp, the drop-out point, moving in), `side`, `FlightComputer.to_dict`, `QuantumStore.to_dict`, `WarpDrive.to_dict` (the chart), each `Airlock.to_dict`, `ShipLights.to_dict` (`lights`), `FireControl.to_dict` (`weapons`: orders and the list; ids that no longer exist are dropped on load), `ShipPilot.to_dict` (`pilot`), `damage`, every item aboard (`Item.to_dict`) |
 | `Ship.layout_of(d)` → `ShipGrid` | the grid a save was built from |
 | `Ship.set_grid(grid, false)` | builds without stocking the shelves: a loaded game brings its own items |
 | `Ship.restore_hull(d, universe)` / `restore_aboard(d)` / `restore_item(d)` | puts it all back; an item whose stow point is gone comes loose |
@@ -871,7 +877,8 @@ They are the truth; each block's `damage` in the grid is their view, written by
 | `ShipDamage.build(launch_layout, catalog, held)` | the model, from the launch layout (so it never changes as pieces come and go). Sections: the z span in thirds, bow and then stern taking a row that does not divide; port x < centre, starboard x > centre; a centre-line block is in **both** of its third. Components: `engines` (every `thruster`, as one), `quantum_core`, `computer`, `cockpit` (`pilot_seat` + every `canopy`); everything else is a hull block |
 | `section_hp`, `section_damage`, `health(id)`, `hull_whole()` | a section's hp is its blocks' (a centre-line block half each side); health 1 → 0; HULL % is hp-weighted |
 | `component_hp`, `component_damage`, `component_health`, `component_stage(id)` | hp is its blocks', at least `COMPONENT_HP_MIN` (computer and cockpit 300); damaged under half, wrecked at 0. A component's blocks are never knocked off |
-| `hit(coord, amount, side_x)` | to the block's component, else its section; a centre-line hit to the side `side_x` says (< 0 port), half each at 0. Capped at hp |
+| `hit(coord, amount, side_x)` | to the block's component, else its section; a centre-line hit to the side `side_x` says (< 0 port), half each at 0. A section at 0 passes what it cannot take to its neighbours (`NEIGHBOURS`, along and across) still standing, split between them, and on outward; a component stays capped at its hp and passes nothing on |
+| `chip(coord, side_x := 0.0)`, `chipped` | a hit of `HitFeel.CHIP_FROM` 100 hp or more knocks the section's next piece off at any health. `lost_count` is min(pieces, by health + chipped); `repair_section` zeroes a section's chips once its health is back over `BREAK_BELOW`; saved in `to_dict()["chipped"]` |
 | `repair_section(id, share)`, `repair_component(id, hp)`, `part_of(coord, side_x)`, `label(part)` | the torch's side |
 | `shown_damage(coord)` | a component's blocks its share; a hull block its section's share × (`SHELTERED` 0.6 + `EXPOSED` 1.8 × exposure), exposure from open faces with `PATCHY` 0.3 of it chance, so a section scorches in patches, worst at its edges |
 | `pieces[id]`, `lost()`, `lost_count(id)`, `BREAK_BELOW` 0.5 | the pieces that break away: `STRUCTURE` blocks (plating, fairings) outside the shell whose loss with all the others cuts nothing off, most exposed first. Below half health a section loses them in that order, all at 0; welded up they come back in reverse |
@@ -896,8 +903,9 @@ They are the truth; each block's `damage` in the grid is their view, written by
 | `Ship.crash_damage(knock)` | nothing below `CRASH_FROM` 2 m/s, then `CRASH_K` 5.5 × (knock − 2)² on the struck cell and half on each neighbour, dealt after the physics step |
 | `Ship.blocks_lost(coords)`, `plate_shed(item)`, `wake_spots()`, `launch_blueprint` | as before: chunks and a plate from a lost piece; where you wake; the launch layout |
 
-The starter (probe, 2026-10-03): sections port/starboard bow 1,430/1,490 hp with 3 pieces each,
-midship 1,965/2,005 with 6, stern 2,760 with 12; engines 750, core 250, computer 300, cockpit
+The starter (probe, 2026-11-02): sections port/starboard bow 1,430/1,490 hp with 3 pieces each,
+midship 1,925/1,965 with 5, stern 2,760 with 12, 12,330 hp in all (its two turrets took 80 hp and
+a piece a side from the midship's figures); engines 750, core 250, computer 300, cockpit
 300. Crashes nose on (crash probe): 3 m/s takes the struck bow section and the cockpit to 99%,
 5 m/s to 92%, 8 m/s to 67%, no pieces off, not crippled. A section's pieces going at once costs
 one full rebuild, ~220 ms (headless, dev Xeon).
@@ -982,14 +990,16 @@ A ship has one `FireControl`; its turrets are blocks that aim and fire on their 
 you marked. Nothing here is hand-placed: a `Turret` node is made for each turret block, on the hull,
 and kept across rebuilds by cell. Paths are under `src/combat/` unless they say otherwise.
 
-**`WeaponValues` as tuned** (the combat probe moved nothing: the starting values already met its
-marks). Every number the weapons use is in this one file:
+**`WeaponValues` as tuned.** The combat probe moved nothing: the starting values already met its
+marks. The hostile ships duel probe then moved the light bolt (the *Bolt speed* row: it is now
+slower than the heavy bolt, and a light turret's 110 hp/s beats a heavy's 40). Every number the
+weapons use is in this one file:
 
 | | `turret_light` | `turret_heavy` |
 |---|---|---|
 | Slew | 90°/s | 30°/s |
 | Fire | bursts of 4, 0.125 s apart, 1.5 s recharge | one bolt, 3 s recharge |
-| Bolt speed, damage, life, push | 600 m/s, 15 hp, 3 s, 20 N·s | 450 m/s, 120 hp, 7 s, 400 N·s |
+| Bolt speed, damage, life, push | 350 m/s, 55 hp, 3.6 s, 20 N·s (600 m/s, 15 hp, 3 s before hostile ships T16) | 450 m/s, 120 hp, 7 s, 400 N·s |
 | Engagement range | 1,200 m | 1,500 m alone; 3,000 m by hand |
 | Spread, QE a bolt | 0.4°, 1 | 0, 15 |
 | Bolt look (length × thickness), impact flash, barrel from pivot | 2.0 × 0.25 m, ×1.5, 1.0 m | 4.0 × 0.5 m, ×3.0, 2.4 m |
@@ -1008,7 +1018,7 @@ bolts' colour is `SpacePalette.PHASER` (`ffbf4d`).
 | `Ship.turrets`, `Ship.heavy_turrets()` | the `Turret`s, one per turret block, numbered and ordered bow first, then port to starboard (`ShipDamage`'s own comparator); the heavy ones alone, in the same order, for the station's Q and E |
 | `Ship.fire_control` | the `FireControl` node, a sibling of `FlightComputer` (which and the pilot hold a reference); saved as `"weapons"` |
 | `FireControl` | `orders` (`Orders.HOLD` / `ENGAGE`; a new ship starts in `HOLD`), `list` (up to 3 ids, priority order), `entries` (`{id, node, label, distance, bearing}`, for the HUD and the board). `mark(id)` (a new one last, a full list's last place, one already listed to the top; it refuses its own hull), `mark_nearest(from, dir, cone, reach)`, `unmark`, `clear`, `set_orders(o)`, `toggle_orders`, `rotate_list`, `bearing(id)`, `pips()`. Every `ASSIGN_EVERY` it gives each turret the first listed target it can engage, else the nearest hostile, else none; a listed target gone for 2 s leaves the list |
-| `Weapons` (`weapons.gd`) | `TARGETS` (group `weapon_targets`), `join(node, id)` / `leave(node)`, `id_of`, `ship_id(ship)` = `ship:<name>`, `base_id`, `npc_id`, `item_id` (good for the session only: a listed item is dropped on load), `kind_of`, `usable(node)` (alive, in the tree, not a ship asleep, not an item held or stowed), `find(tree, id)`, `point_of` and `velocity_of` (take the exterior body), `label_of`, `is_hostile` (false for everything; `hostile_rule` is the enemy project's hook), `is_own` |
+| `Weapons` (`weapons.gd`) | `TARGETS` (group `weapon_targets`), `join(node, id)` / `leave(node)`, `id_of`, `ship_id(ship)` = `ship:<name>`, `base_id`, `npc_id`, `item_id` (good for the session only: a listed item is dropped on load), `kind_of`, `usable(node)` (alive, in the tree, not a ship asleep, not an item held or stowed), `find(tree, id)`, `point_of` and `velocity_of` (take the exterior body), `label_of`, `is_hostile(shooter, node)` (by `Sides`; `hostile_rule`, called the same way, is the tests' stub), `is_own`. `YOU` `&"you"` is the avatar's id: a target only on a spacewalk, to hostiles only |
 | `Turret` (`turret.gd`) | `kind`, `coord`, `normal`, `sky`, `target`, `no_arc`, `state` (`tracking`, `firing`, `idle`, `damaged`, `low_power`, `no_arc`), `manual` and `manual_aim` for the gunner; `can_engage(node)`, `muzzle()`, `barrel_dir()`, `pull_trigger()`, `recharge_left()`. It fires when the barrel is inside 1° of the solution, the flight distance is inside its range, the recharge is done, the store is above the low-power line and can pay, the sky map allows it, and a ray from the muzzle is clear of its own hull |
 | `Turret.choose_pose(now, a)`, `pose_toward(dir)`, `upright_angles(dir)`, `barrel_angles()` | **the barrels pitch 0..180° over the top** (owner, 2026-10-16: `ELEVATION_MAX` π). A direction has an upright pose and a flipped one (`yaw + π`, `π − elevation`); the turret takes whichever it reaches sooner and keeps its branch unless the other is shorter by `FLIP_MARGIN`. The park goal stays upright. `upright_angles` keeps elevation in 0..π/2, the half-sky |
 | `SkyMap.build(layout, coord, normal)` | `normal_of(o)`, `mount_basis(n)`, `muzzle(coord, n)`, `can_bear(dir_local)`, `coverage()`; 32 × 16 bits over the half-sky above the face, marched through the **launch layout** with every cell a cube. Yaw 0 ahead and positive to the right, elevation 0 along the face. The upright and the flipped pose cover the same half-sky, so the flip leaves the map unchanged |
@@ -1020,7 +1030,7 @@ bolts' colour is `SpacePalette.PHASER` (`ffbf4d`).
 | Input | `weapons_mark` T (nearest the crosshair within `MARK_CONE` and 5 km; items too), `weapons_clear` Shift+T, `weapons_orders` B (`HOLD` ⇄ `ENGAGE`), in `project.godot` |
 
 **What a bolt does:** a ship's section or a turret component (with a small push), an NPC's
-`receive_hit`, a spacewalker (15 hp a light bolt, 120 a heavy: a heavy bolt downs you), a loose
+`receive_hit`, a spacewalker (55 hp a light bolt, 120 a heavy: two light bolts or one heavy down you), a loose
 item, a base's module, and on an asteroid a flash and nothing else. A held or stowed item is not a
 target. A ship's bolts exclude its own colliders.
 
@@ -1064,6 +1074,9 @@ three `fps` lines (baseline, guns idle, firing) with the renderer's own gpu and 
 | 1,150 m | 14% (6 of 44) |
 | 1,200 m and 1,400 m | no bolt fired: the lead distance is over the 1.2 km range |
 
+That table is the 600 m/s bolt on a target jinking at 5 m/s². Against the pilot's jinks the 350 m/s
+bolt lands as *The pilot and the end of a ship* gives; re-run the combat probe before comparing.
+
 The heavy hit 5 of 5 by hand at 2 km. The fps, on the GTX 960 at 1280 × 720: baseline 114-127, guns
 idle 115-120, **firing 109-117** (86 and 96 in two noisy runs). The Warden alone is around 120 (114-127),
 so the floor is a property of the scene on this card; the bolts cost 0.3-0.5 ms. The owner accepted
@@ -1079,6 +1092,96 @@ the `TURRETS` note reads "sky clear" even for a blind turret (the `TURRET_BLIND`
 trails are not a `MultiMesh` (spec §15): the probe showed it would not move the frame rate. The gun
 camera sits outside the hull and takes the chase camera's cull mask, so it sees the world, the hull
 and the bolts and not the interior.
+
+## The pilot and the end of a ship (`docs/superpowers/specs/2026-10-24-hostile-ships-design.md`, §17 *As built*)
+
+Every ship has a `ShipPilot` (`Ship.ship_pilot`, under the ship beside `FlightComputer` and
+`FireControl`) and a `side`; nothing is wired per ship. Paths are under `src/pilot/` or
+`src/combat/` unless they say otherwise.
+
+**The rule it never breaks** (spec §5.1): it writes only `FlightComputer.set_pilot_input`,
+`hold_velocity`, `release_velocity`, `clear_heading`, and `FireControl`'s `mark`, `unmark` and
+`set_orders`. It knows targets within `CONTACT_RANGE`, its own ship and bolts in flight. It stores
+directions, ids and a `UniversePoint`, never an engine position.
+
+**What each library ship shows** (`ship_probe.gd`'s `face` line, 2026-11-02, all turrets live):
+
+| Ship | Turrets | hp/s, QE/s | Reach | Hull hp | `best_face`, bearing | The face it flies (`sure_face`), bearing |
+|---|---|---|---|---|---|---|
+| starter | 2 light | 220, 4 | 1,200 m | 12,330 | nose, 2 of 2 | forward-down 45° `(0, −0.71, −0.71)`, 1 |
+| lamplighter | 1 light | 110, 2 | 1,200 m | 11,320 | nose, 1 of 1 | forward-up 45° `(0, 0.71, −0.71)`, 1 |
+| warden | 6 light, 1 heavy | 700, 17 | 1,500 m | 29,160 | nose, 7 of 7 | forward-up-port corner `(−0.58, 0.58, −0.58)`, 4 |
+
+The nose wins `best_face` on every ship only because it lies on the rim of every half-sky, where
+the muzzles' height takes it away again; `sure_face` is the truth. A light turret is 110 hp/s for
+2 QE/s and a heavy 40 hp/s for 5 QE/s, so a heavy buys reach, not firepower.
+
+| Name | What it is |
+|---|---|
+| `Ship.side`, `Sides.CREW`, `Sides.HOSTILE`, `hostile_to(a, b)`, `side_of(node)`, `read(value)` | saved as `"side"`; every ship is `CREW` unless made hostile, and only ships have a side |
+| `Ship.signal felt_hit(strength, from)`, `_feel(damage, from)` | a hit or a crash, felt: `flight_test._on_felt_hit` knocks you only if you are in that interior; `Ship.cabin_dip` dips its lights |
+| `Ship.signal destroyed(ship)`, `is_destroyed()`, `mark_destroyed()`, `since_hostile_fire` | `destroyed` fires once, at the end of `take_damage_many`, the first time `hull_whole() <= 0`. After it `take_damage_many` returns [] and `_on_hull_hit` no longer chips. `since_hostile_fire` (INF to start) is 0 at each hit from a hostile side |
+| `ShipPilot.engage(id)`, `fight_for_you()`, `on`, `targets(node)`, `effective_skill()`, `tick(delta)`, `to_dict`, `from_dict` | a hostile's objective, or your ship handed over; `on = false` lets go (hold released, stick centred, orders put back, its own mark off). Runs at `process_physics_priority` −1, before the flight computer; skips ticking while its ship is in `Fleet.ASLEEP` |
+| `ShipPilot.skill`, `style_choice`, `style`, `face`, `intent`, `last_reading`, `for_you`, signals `handed_over`, `handed_back` | `style_choice` is `Style.AUTO`, `STAND_OFF` or `BRAWLER`; `intent` `&"closing"`, `&"holding_range"`, `&"jinking"`, `&"boosting"`, `&"holding_fire"`, `&"pursuing"`, `&"holding_station"` or `&"no_pilot"` |
+| `ShipPilot.sure_face(skies, live)`, `raw_stick(error, mass, budget)`, `style_name(s)` | static: the face it flies; the stick for a wrecked cockpit; "AUTO", "STAND-OFF", "BRAWLER" |
+| `PilotSkill.new(skill)` | `reaction` 1.0..0.2 s, `jink_share` 0.4..1, `jink_every` 2.5..0.8 s, `position_gain` 0.4..1, `noise` 0.5..0, `hold_fire_past` 1..0.9 of its reach |
+| `FightAssessment.read(ship)`, `turret_reading(kind, stage)`, `brawl_score(own, foe)`, `choose(own, foe, skill, current, rng)`, `preferred_range(style, own, foe)` | the score is firepower ratio × hull ratio. Reach settles it first: none of its own stands off, a foe with none is brawled, reach over the foe's by `REACH_EDGE` stands off. A dry brawler (under `DRY_SHARE`, the foe not) stands off |
+| `PilotObjective`, `DestroyObjective` (`target_id`, `target`, `step`, `done`, `pursuing`, `last_seen`, `against`) | swappable (*disable* is a new one). `against` is the side it retargets to. Keep calling `step` while `done()`: one that gave up engages again when its target is back in contact |
+| `Broadside.best_face(skies, live)`, `desired_basis`, `rotate_input`, `inbound(bolts, own_ship, at, own_v, miss, horizon)` | pure: 26 sample directions, ties to the nose. The chosen face turns onto the line of sight; jinks start from `inbound` |
+| `RockAvoid.rock_ahead`, `reach(speed, brake)`, `swerve`, `stopping_speed`, `side_of`, `steer_ships`, `steer` | avoidance, rocks and other ships (`others` are `{at, v, radius}`), pure bar the physics query |
+| `FlightComputer.hold_velocity(v)`, `release_velocity()`, `hold_short`, `hostile_engaging` | a pilot's flying: the assist holds a world velocity; boost works through the hold only while it is short of thrust on some quiet axis, and buys acceleration, not top speed |
+| `HitFeel` | `strength(damage)` 0.1..1 (a light bolt 0.46 now, a heavy 1), `heaviness(s)`, an instance is one view's knock (`knock`, `settle`, `roll`, `shift`, `live`); `ROLL_MOST` 0.03, `SHIFT_MOST` 0.06, `SETTLE` 0.25, `CEILING` 1, `DIP_LIGHT_TIME` 0.1, `DIP_LIGHT_LEVEL` 0.5, `DIP_HEAVY_TIME` 0.5, `DIP_HEAVY_LEVEL` 0.08, `DIP_FLICKS` 2, `CHIP_FROM` 100 |
+| `CabinDip` (`Ship.cabin_dip`), `Avatar.knock`, `WeaponsJob.knock` | `dip(s)`, `factor()`, `register(lamp)`, `bind(root)`, `tick`; the knock is on the camera, never the head |
+| `ImpactFlash.spawn(parent, at, normal, kind, out, grow_by, bright_by)`, `SPECS[*]["flash_bright"]` | light 3, heavy 6; `life` grows with brightness to `BRIGHT_LONGEST` 2 × |
+| `DamageShow.spit_every(share)`, `share(coord, share)`, `SPIT_EVERY_WORST`, `SPIT_QUICKEN_FROM` | spits quicken from 25% of a section down to every 0.05–0.2 s, read as a crackle |
+| `GasVents` (`Ship.gas_vents`, `src/ship/`), `VENT_BELOW` 0.5, `MOST_PER_SECTION` 4 | `vents(damage, grid)` → `{coord, normal, strength}`, `sync(list)`, `emitters()`; local to the hull. 10% HULL is 3 a section, 18 on the starter. Colour `SpacePalette.VENT_GAS` |
+| `CoreBlast.go(outside, at, scale, source)`, `damage_at(d, scale)`, `scale_for(mass_t)`, `scale_of(ship)`, `core_of(ship)` | `RADIUS` 120 m and `PEAK` 400 hp × `SCALE` 0.5..2 of `MASS_T` 105 (radius only: the peak stays 400), falling linearly. Hulls on the nearest hull-section cell, NPCs and items outside as `&"blast"` hits, you in the suit only. `FLASH_SIZE` 20 m × scale, `FLASH_LIFE` 1.2 s, `LIGHT_RANGE` 300 × scale, `BOOM_REACH` 2,000 m, `THUMP_REACH` 500 m, `PUSH` 0.5 N·s per hp, gone after `LIFE` 3 s |
+| `ShipBreakup.go(ship, outside)`, `clusters(grid, rng)`, `tick`, group `CHUNKS` | `src/ship/`. 6–10 large and 20–30 small chunks, seeded by the ship's name, 5–12 and 10–25 m/s, live 20–60 s, shrink over 2 s. One `MultiMesh` of a shared block each, a `RigidBody3D` that touches only rocks, in `EXTERIOR_SPACE`. Hides `ship.exterior` at once |
+| `LostScreen` (`src/ui/`) | `play(text)`, `advance(delta)`, `finished`; white `SpacePalette.WARP` in 0.15 s, black by 1.65 s, the line to `TOTAL` 3.65 s; layer 128 |
+| flight scene `_on_ship_destroyed(ship)`, `_blow_up`, `_kill_aboard`, `lose(text)`, `signal lost(text)`, `you_aboard(ship)`, `reload`, `_can_wake()` | in order: `lose("SHIP LOST")` if you are aboard, the blast and breakup, the deaths and items, then `fleet.destroy` deferred, unless you are aboard. A neighbour the blast destroys runs all of it at once, nested. `reload` is a Callable: a probe injects its own, and the default acts only if the flight scene is the tree's current scene |
+| the save gate's sources `FlightTest._under_attack` and *nowhere to wake* | no save while an awake hostile's pilot `targets()` you or a crew ship near you, or for `ENGAGED_CALM` 10 s after a hostile bolt, or adrift with no ship to wake on |
+| `PilotControls.ship_pilot`, P (`pilot_ai`), `VehicleTelemetry.ai_pilot`, `PilotPage` (`src/ship/computer/`), `ComputerContext.ship_pilot` | P hands over at the helm; a stick past the dead zone, an arrow, Q/E or a translation key takes back. The HUD says *AI PILOT · <STYLE>*. A PILOT page after WEAPONS, on any ship with turrets. The weapons station holds the ship only while the pilot is off |
+| `PilotReadout` (`src/ui/`, F2), `TargetBrackets.hostiles`, `WeaponsStrip` | every other ship in contact; `[` `]` pick one, S its style, `-` `=` its skill, H its side. Brackets gain `HULL n%`; a hostile engaging you with orders on `HOLD` shows *HOSTILE · WEAPONS ON HOLD* |
+| `AsteroidStream.ANCHOR_AHEAD`, `AsteroidBubble.cell_loaded` | below |
+
+**`PilotValues`** (every number the pilot uses; tuned by the duel probe). A brawler wants
+`BRAWL_RANGE` 350 ± `BRAWL_BAND` 150 m, boosting past `BOOST_BANDS` 2 bands off; a stand-off
+`STAND_OFF_SHARE` 0.7 of its reach ± `STAND_OFF_BAND` 150 m, or `PAST_REACH` 50 m past the foe's when
+its own allows; with no live turret `KEEP_AWAY` −150 m, so just inside the foe's reach (nobody flees).
+`BRAWL_FROM` 0.9 on a first read, then `SWITCH_MARGIN` 0.15 either side of 1. `ASSESS_EVERY` 1 s,
+`TACTICS_EVERY` 0.2 s, `PURSUE_FOR` 60 s, `NOISE_AT_ZERO` 0.5, `HOLD_FIRE_QE` 0.5, `HOLD_FIRE_ACE` 0.9,
+`COMPUTER_DAMAGED_SKILL` 0.5, `SPAWN_RANGE` 3 km, `SPAWN_SKILL` 0.2–0.8, `YOUR_SKILL` 0.5,
+`ENGAGED_CALM` 10 s, `REACH_EDGE` 100 m, `DRY_SHARE` 0.25, `CLOSE_TIME` 2 s, `MATCH_SHARE` 0.6,
+`JINK_PUSH` 2.5 s, `JINK_JITTER` 0.3, `INBOUND_MISS` 60 m, `INBOUND_HORIZON` 3 s, `TURN_GAIN` 2,
+`FIGHT_SPEED` 80 m/s, `FACE_MARGIN` 10°.
+
+**A pilot's rocks:** `rock_ahead` casts five rays and sweeps the hull's sphere `RockAvoid.reach(speed, brake)` ahead: max(8 s of flight, 80 m), or the stopping distance plus 80 m if that is further. Physics sees only bodies, so `ShipPilot._hold` sets `AsteroidStream.ANCHOR_AHEAD` on the hull to that reach. `AsteroidBubble` then makes rocks solid along the whole stretch, not just its own 1.5 s. For a 1.15 km diagonal path `_near_paths` costs about 0.3 ms (0.06 ms for 1.5 s), because cells far off the path are skipped. `_let_go` and a wrecked computer take the meta off. A rock whose cell loads inside that look gets no warning, so `AsteroidBubble.cell_loaded` keeps it a picture until it has left every look (`_unseen`).
+
+**A pilot with a wrecked cockpit** flies on: `assist_allowed` is false, so `hold_velocity` does nothing and `ShipPilot._fly` sets the stick to `ShipPilot.raw_stick(error, mass, budget)`, the force that closes the velocity error in a second as a share of each axis's budget, clamped to ±1. Nothing clamps its speed now, so `_held` is the only limit. `rotate_input` drives raw torque, its own damping term keeping the turn steady. **A wrecked computer** is different: the pilot is gone (`&"no_pilot"`), it lets go once, the ship coasts, and fire control keeps its orders and list. Mended, it looks again at once.
+
+**What a fight is like** (`duel_probe.gd`, full run 2026-10-31; skills 0.5 unless given):
+
+| Mark | Needed | Result |
+|---|---|---|
+| Starter v starter | mean 4–6 min | 5.95 min, at the edge: 219, 315, 336, 720 and 195 s, the 720 a draw at the cap |
+| 0.8 pilot v 0.2 | ≥ 4 of 5 | **3 of 5, a miss** |
+| Styles | neither wins all six | brawler 5, stand-off **0**, one draw: a pass on the letter |
+| Warden v starter | | both 720 s draws, stand-off v stand-off at about 960 m |
+| Rock contacts, flying | 0 | 0 over 20 fights |
+| Seated fps | starter ≥ 120; Warden ≥ 109 | 131 alone (92 once, in the full run), Warden 128 and 127, yours 125, ship lost 129 |
+| Light hits | 400 m ≥ 70%, 1 km ≤ 40% | 95%, 36%; by band 200 m 100, 600 m 86, 800 m 36, 1.2 km 11 |
+
+**How a fight goes, for anyone tuning one.** Fights settle at 400–600 m, where 86–95% of bolts land
+whoever flies; a jink moves about 2 m there, so skill has no lever. The bolt only starts missing past
+about 600 m. A turret goes at about 25 s, about 10% of hits land on turrets from any face, and about
+a third of landed hits go to components. The cockpit is wrecked in most duels by about 120 s. The
+store is the clock (a ship spawns with half of it, a starter 600 QE): a ship with the upper hand
+can spend it at 800–1,000 m against a foe that will not close, and have nothing left to finish it.
+A spacewalker takes two light bolts.
+
+**Known edges** (spec §17): S on the open F2 readout also takes your ship back from its pilot. P is
+not on the controls card, nor are T and B. Your suit can tie to a hostile within 500 m, and you would
+wake there. A hostile bolt that hits you on a spacewalk is not counted as a hit for the save gate.
 
 ## Commands
 
@@ -1098,7 +1201,13 @@ and the bolts and not the interior.
   logged to a file.
 - **Combat probe:** `<godot> --path who-knows --resolution 1280x720 --script res://test/probes/combat_probe.gd -- <abs out dir>`
   (windowed). The Warden in `ENGAGE` on a jinking starter: `hit` lines by range, three `fps`
-  lines, `heavy`, and the `combat_*.png` renders (*Weapons* below).
+  lines, `heavy`, and the `combat_*.png` renders (*Weapons* above).
+- **Duel probe:** `<godot> --path who-knows --resolution 1280x720 --script res://test/probes/duel_probe.gd --
+  <abs out dir> [only=<groups>] [count=<n>] [rep=<k>] [fast]`, windowed. Groups: renders, even, skill,
+  style, warden, yours, lost. `rep` is the repeat within a group, not the fight's label: `style rep=0`
+  runs style 0 and its reverse, style 3. `fast` is for tuning, run as `--headless --fixed-fps 60`:
+  game time only, no fps or renders; run one process a fight, side by side. A fight is capped at
+  `CAP` 720 s, so a 720 is a draw, not a slow win. A full run is real time, so run it in the background.
 - **Damage probes** (`who-knows/test/probes/`, run like the ship probe):
   - `damage_review.gd`: the renders to show the owner for any damage work (step 10): the port
     sections at 70%, 35% and 0% from outside, the cabin at 60%, 35% and 15% HULL;
@@ -1134,3 +1243,4 @@ and the bolts and not the interior.
   the budgets, the RCS show, and (§9.4) what the starter's layout does to the feel.
 - `docs/superpowers/specs/2026-09-26-saving-design.md`: what a ship saves, and when.
 - `docs/superpowers/specs/2026-10-11-ship-weapons-design.md`: the turrets, fire control, the weapons station, and (§16) what the build did differently.
+- `docs/superpowers/specs/2026-10-24-hostile-ships-design.md`: sides, the pilot, how hits feel, the end of a ship, your own pilot, and (§17) what the build did differently and what is left unproved.

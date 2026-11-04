@@ -24,6 +24,7 @@ extends SceneTree
 # probe_hull_* (the skin, fill-lit) and prints skin, windows, lights and tint lines.
 # It prints the rules line (ShipRules: every rule broken, or 0) and the notes,
 # a turret line per turret (name, kind, cell, sky coverage; or "turret  none"),
+# a face line (the face a pilot shows, and how many turrets bear on it),
 # and a hose line per airlock (its alcove's reel, and the nozzle stocked on it).
 # Then a two-ship pass (docs/superpowers/specs/2026-10-02-many-ships-design.md
 # §8.2): fps in the worst view with a second ship 300 m off,
@@ -513,6 +514,21 @@ func _run(scene: Node) -> void:
 		print("turret  %s %s at %s, sky %d%%" % [t.name, t.kind, t.coord, roundi(t.sky.coverage() * 100.0)])
 	if ship.turrets.is_empty():
 		print("turret  none")
+	else:
+		# The face a pilot shows its target (hostile ships spec §5.2): where most
+		# turrets bear (Broadside.best_face), then the one it flies, where they
+		# bear 10° off every way (ShipPilot.sure_face).
+		var skies := []
+		var live := []
+		for t in ship.turrets:
+			skies.append(t.sky)
+			live.append(true)
+		var bearing := func(dir: Vector3) -> int:
+			return skies.filter(func(sky: SkyMap) -> bool: return sky.can_bear(dir)).size()
+		var best := Broadside.best_face(skies, live)
+		var sure := ShipPilot.sure_face(skies, live)
+		print("face    best %s, %d of %d bear; flown %s, %d bear" % [best.snapped(Vector3.ONE * 0.01),
+			bearing.call(best), skies.size(), sure.snapped(Vector3.ONE * 0.01), bearing.call(sure)])
 
 	# The ship's part of a save must bring back the same grid and store.
 	var universe: Universe = scene.get_node_or_null("Universe")

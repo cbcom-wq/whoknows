@@ -3,13 +3,15 @@ extends Label
 
 ## The spawn panel (docs/superpowers/specs/2026-10-02-ship-library-design.md
 ## §5), a debug tool in the plain style of the F3 readout: F6 opens and shuts
-## it; while it is open 1-9 ask for that ship and Delete asks to remove the
-## nearest spawned one. Opening it shuts the creature panel (F10), and the
+## it; while it is open 1-9 ask for that ship, Shift + 1-9 for it as a hostile
+## (hostile ships spec §10.1), and Delete asks to remove the nearest spawned
+## one. Opening it shuts the creature panel (F10), and the
 ## other way round. Shut, those keys do nothing, and a held key's repeats
 ## never do. It only asks: the flight scene does the work and says how it went
 ## on the last line, so src/ui never learns about Fleet or Ship.
 
 signal spawn_asked(index: int)
+signal hostile_asked(index: int)
 signal remove_asked
 
 const KEY := KEY_F6
@@ -50,7 +52,10 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		var i: int = key.keycode - KEY_1
 		if i >= mini(entries.size(), MOST):
 			return
-		spawn_asked.emit(i)
+		if key.shift_pressed:
+			hostile_asked.emit(i)
+		else:
+			spawn_asked.emit(i)
 	elif key.keycode == KEY_DELETE:
 		remove_asked.emit()
 	else:
@@ -62,6 +67,7 @@ func _redraw() -> void:
 	var lines := PackedStringArray(["SPAWN                F6 closes"])
 	for i in mini(entries.size(), MOST):
 		lines.append("%d  %s" % [i + 1, entries[i]])
+	lines.append("Shift+n  hostile")
 	lines.append("Del  remove the nearest spawned ship")
 	if _said != "":
 		lines.append(_said)

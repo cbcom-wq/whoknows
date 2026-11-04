@@ -10,10 +10,14 @@ signal joined(ship: Ship)
 signal left(ship: Ship)
 signal slept(ship: Ship)
 signal woke(ship: Ship)
+## A ship was destroyed (hostile ships spec §8.2): after `left` for one let
+## go, alone for the starter, held destroyed.
+signal ship_destroyed(ship_name: StringName)
 
 const SHIP_SCENE: PackedScene = preload("res://scenes/ship.tscn")
 ## The starter's name. The save's ship of that name is always built into the
-## scene's own /Ship, and it is never removed (§6.2).
+## scene's own /Ship, and it is never removed (§6.2): destroyed, it is held
+## asleep where it was for good instead (hostile ships spec §8.2).
 const STARTER := &"Ship"
 ## Interiors stand GridHome.SLOT_SPACING apart on x: slot 15 is 30 km out, where a
 ## float still holds about 2 mm.
@@ -45,6 +49,7 @@ var next_number := 2
 
 var _ships: Array[Ship] = []
 var _asleep: Dictionary = {}   # Ship -> {"at": UniversePoint, "turn": Basis, "v": Vector3, "w": Vector3}
+var _destroyed: Dictionary = {}   # Ship -> true: the starter, held destroyed
 var _check_in := 0.0
 
 func _physics_process(delta: float) -> void:
@@ -109,11 +114,12 @@ func spawn(grid: ShipGrid, place: Transform3D, stock := true, ship_name := "",
 	return ship
 
 ## Lets `ship` go, freeing it and its slot. Refuses the starter and the ship
-## you stand in (`aboard`; in a base, none). True if it went.
-func remove(ship: Ship) -> bool:
+## you stand in (`aboard`; in a base, none), unless `force` (destroyed). True
+## if it went.
+func remove(ship: Ship, force := false) -> bool:
 	if ship == null or not _ships.has(ship) or ship.name == STARTER:
 		return false
-	if aboard.is_valid() and aboard.call() == ship:
+	if not force and aboard.is_valid() and aboard.call() == ship:
 		return false
 	_ships.erase(ship)
 	_asleep.erase(ship)
@@ -122,6 +128,31 @@ func remove(ship: Ship) -> bool:
 	ship.get_parent().remove_child(ship)
 	ship.queue_free()
 	return true
+
+## A ship at 0% HULL leaves (hostile ships spec §8.2): removed, even the one
+## you stand in, or, the starter, held asleep where it is for good: hidden,
+## out of physics and of Weapons.TARGETS, never woken, never `aboard` again,
+## and saved destroyed. Once only.
+func destroy(ship: Ship) -> void:
+	if ship == null or not _ships.has(ship) or _destroyed.has(ship):
+		return
+	var ship_name := ship.name
+	if ship_name != STARTER:
+		if remove(ship, true):
+			ship_destroyed.emit(ship_name)
+		return
+	sleep(ship)
+	_hold_destroyed(ship)
+	ship_destroyed.emit(ship_name)
+
+func is_destroyed(ship: Ship) -> bool:
+	return _destroyed.has(ship)
+
+## Already held asleep: now for good.
+func _hold_destroyed(ship: Ship) -> void:
+	_destroyed[ship] = true
+	Weapons.leave(ship.exterior)
+	ship.mark_destroyed()
 
 ## The awake ship whose hull is nearest `point`, other than `except` and any
 ## still arriving; null if there is none.
@@ -167,6 +198,8 @@ func check_sleep() -> void:
 	var here := universe.to_universe(universe.focus.global_position)
 	var mine: Ship = aboard.call() if aboard.is_valid() else null
 	for ship in _ships:
+		if _destroyed.has(ship):
+			continue
 		if ship == mine:
 			if _asleep.has(ship):
 				wake(ship)
@@ -206,7 +239,7 @@ func _hold(ship: Ship, held: Dictionary) -> void:
 
 ## Back where it was held, moving as it was.
 func wake(ship: Ship) -> void:
-	if not _asleep.has(ship):
+	if not _asleep.has(ship) or _destroyed.has(ship):
 		return
 	var held: Dictionary = _asleep[ship]
 	_asleep.erase(ship)
@@ -222,7 +255,8 @@ func wake(ship: Ship) -> void:
 	woke.emit(ship)
 
 ## Every ship's part of a save, each with its name (many ships spec §6.1). A
-## sleeping ship's hull is where it is held, not an engine position.
+## sleeping ship's hull is where it is held, not an engine position; the
+## starter held destroyed says so.
 func capture(universe_now: Universe) -> Array:
 	var out := []
 	for ship in _ships:
@@ -232,6 +266,8 @@ func capture(universe_now: Universe) -> Array:
 			var held: Dictionary = _asleep[ship]
 			part["hull"] = {"at": SaveCodec.upoint(held["at"]), "turn": SaveCodec.basis(held["turn"]),
 				"v": SaveCodec.vec3(held["v"]), "w": SaveCodec.vec3(held["w"])}
+		if _destroyed.has(ship):
+			part["destroyed"] = true
 		out.append(part)
 	return out
 
@@ -243,13 +279,16 @@ func from_dict(d: Dictionary) -> void:
 
 ## Puts a loaded ship's hull back (§6.3): where the save had it, or asleep
 ## there when that is past SLEEP_AT of the origin, never placed far off in
-## engine space.
+## engine space. One saved destroyed is held there destroyed, however near.
 func restore_hull(ship: Ship, part: Dictionary) -> void:
 	var hull: Dictionary = part.get("hull", {})
 	var at := SaveCodec.to_upoint(hull.get("at"))
-	if at.minus(universe.origin).length() > SLEEP_AT:
+	var gone := bool(part.get("destroyed", false))
+	if gone or at.minus(universe.origin).length() > SLEEP_AT:
 		_hold(ship, {"at": at, "turn": SaveCodec.to_basis(hull.get("turn")),
 			"v": SaveCodec.to_vec3(hull.get("v")), "w": SaveCodec.to_vec3(hull.get("w"))})
+		if gone:
+			_hold_destroyed(ship)
 	else:
 		ship.restore_hull(part, universe)
 

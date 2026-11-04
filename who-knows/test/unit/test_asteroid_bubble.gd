@@ -80,6 +80,59 @@ func test_the_reach_runs_ahead_along_your_velocity():
 	_stream.bubble.step(DT)
 	assert_true(_stream.bubble.live.has(rock.id()), "1.5 s ahead at 60 m/s")
 
+## A pilot looks further ahead than 1.5 s, and its rays see only bodies: a
+## rock still a picture is one it flies into (hostile ships T16, the Warden
+## into rubble at 76 m/s).
+func test_an_anchor_that_looks_further_ahead_has_rocks_solid_that_far():
+	var rock := _beside_a_rock(AsteroidBubble.PAD + 300.0)
+	_arm()
+	_anchor.linear_velocity = Vector3(-60, 0, 0)
+	_stream.bubble.step(DT)
+	assert_false(_stream.bubble.live.has(rock.id()), "300 m on, past 1.5 s at 60 m/s")
+	_anchor.set_meta(AsteroidStream.ANCHOR_AHEAD, 400.0)
+	_stream.bubble.step(DT)
+	assert_true(_stream.bubble.live.has(rock.id()), "looking 400 m ahead, it is solid")
+	_anchor.linear_velocity = Vector3.ZERO
+	for i in 5:
+		_stream.bubble.step(0.5)
+	assert_false(_stream.bubble.live.has(rock.id()), "only ahead: stopped, it lets go")
+
+## Rubble loads only round you, so a ship on the edge of that has it appear
+## just ahead with no warning: 11 m off the Warden's nose, 0.25 s before it hit
+## (hostile ships T16). That rock waits until the pilot has passed.
+func test_a_rock_loaded_inside_a_pilots_look_waits_until_it_has_passed():
+	var rock := _beside_a_rock(10.0)
+	_arm()
+	_anchor.linear_velocity = Vector3(-60, 0, 0)
+	_anchor.set_meta(AsteroidStream.ANCHOR_AHEAD, 400.0)
+	_stream.bubble.cell_loaded(rock.tier, rock.cell)
+	_stream.bubble.step(DT)
+	assert_false(_stream.bubble.live.has(rock.id()), "no warning, so not solid")
+	assert_false(_stream.is_hidden(rock), "still its picture")
+	# Passed: back on its way out of every look, and met as any other next time.
+	_anchor.global_position -= Vector3(600, 0, 0)
+	_stream.bubble.step(DT)
+	_anchor.global_position += Vector3(1000, 0, 0)
+	_stream.bubble.step(DT)
+	assert_true(_stream.bubble.live.has(rock.id()), "a later pass meets it")
+
+func test_a_rock_loaded_past_a_pilots_look_is_met_as_usual():
+	var rock := _beside_a_rock(AsteroidBubble.PAD + 300.0)
+	_arm()
+	_anchor.linear_velocity = Vector3(-60, 0, 0)
+	_anchor.set_meta(AsteroidStream.ANCHOR_AHEAD, 200.0)
+	_stream.bubble.cell_loaded(rock.tier, rock.cell)
+	_anchor.set_meta(AsteroidStream.ANCHOR_AHEAD, 400.0)
+	_stream.bubble.step(DT)
+	assert_true(_stream.bubble.live.has(rock.id()), "it was out of the look when it loaded")
+
+func test_a_loaded_cell_with_nobody_looking_changes_nothing():
+	var rock := _beside_a_rock(10.0)
+	_arm()
+	_stream.bubble.cell_loaded(rock.tier, rock.cell)
+	_stream.bubble.step(DT)
+	assert_true(_stream.bubble.live.has(rock.id()), "your own hull meets it")
+
 func test_an_untouched_body_goes_back_to_a_picture_after_you_pass():
 	var rock := _beside_a_rock(10.0)
 	_arm()

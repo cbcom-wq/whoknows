@@ -14,6 +14,9 @@ extends Node3D
 const SPACE_ANCHOR := &"space_anchor"
 ## Meta on an anchor: how far it reaches from its origin, metres.
 const ANCHOR_RADIUS := &"anchor_radius"
+## Meta on an anchor: how far along its velocity it needs rocks solid, metres
+## (a pilot's look ahead, RockAvoid.reach); AsteroidBubble.LOOKAHEAD's when less.
+const ANCHOR_AHEAD := &"anchor_ahead"
 
 ## Per tier: whole within FADE_START, gone beyond FADE_END; loaded within
 ## LOAD, unloaded beyond UNLOAD.
@@ -538,6 +541,7 @@ func _collect(focus: UniversePoint, all_now: bool) -> void:
 			_block_cells[job.tier][b] = {}
 		_block_cells[job.tier][b][job.cell] = true
 		_dirty[job.tier][b] = true
+		bubble.cell_loaded(job.tier, job.cell)
 		if not all_now and not cell.rocks.is_empty():
 			var size := float(AsteroidRecipe.CELL[job.tier])
 			if box_distance(focus.minus(AsteroidRecipe.cell_corner(job.tier, job.cell)), size) < FADE_END[job.tier]:

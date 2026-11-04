@@ -93,7 +93,7 @@ func test_after_the_list_the_nearest_hostile():
 	_fc.set_orders(FireControl.Orders.ENGAGE)
 	_fc.assign(0.2)
 	assert_null(t.target, "nothing is hostile")
-	Weapons.hostile_rule = func(n: Node) -> bool: return n == near or n == far
+	Weapons.hostile_rule = func(_s: Node, n: Node) -> bool: return n == near or n == far
 	_fc.assign(0.2)
 	assert_same(t.target, near)
 

@@ -1,8 +1,9 @@
 extends GutTest
 
 ## ShipDamage on the starter's layout (docs/superpowers/specs/
-## 2026-10-03-ship-damage-sections-design.md): six sections and four
-## components, hits routed to them, the view the grid shows, and saving.
+## 2026-10-03-ship-damage-sections-design.md): six sections, four
+## components and a part for each turret, hits routed to them, the view the
+## grid shows, and saving.
 
 var _cat: BlockCatalog
 var _grid: ShipGrid
@@ -30,7 +31,7 @@ func _in(section: StringName) -> Vector3i:
 			return coord
 	return Vector3i(99, 99, 99)
 
-func test_six_sections_and_four_components_share_every_block_s_hp():
+func test_six_sections_four_components_and_two_turrets_share_every_block_s_hp():
 	var total := 0.0
 	for coord: Vector3i in _grid.coords():
 		total += _cat.get_def(_grid.get_block(coord).block_id).hp
@@ -38,12 +39,19 @@ func test_six_sections_and_four_components_share_every_block_s_hp():
 	for id in ShipDamage.SECTIONS:
 		assert_gt(_d.section_hp[id], 500.0, "%s has hull to it" % id)
 		parts += _d.section_hp[id]
-	assert_eq(_d.component_hp.size(), 4)
+	var turrets := 0.0
+	var turret_parts := 0
+	for part: StringName in _d.component_hp:
+		if ShipDamage.is_turret_part(part):
+			turrets += _d.component_hp[part]
+			turret_parts += 1
+	assert_eq(turret_parts, 2, "the starter's two turrets, a part each")
+	assert_eq(_d.component_hp.size(), 6)
 	assert_eq(_d.component_hp[&"engines"], 750.0, "five thrusters")
 	assert_eq(_d.component_hp[&"quantum_core"], 250.0)
 	assert_eq(_d.component_hp[&"computer"], 300.0, "raised from the block's 60")
 	assert_eq(_d.component_hp[&"cockpit"], 300.0, "raised from 240")
-	assert_almost_eq(parts + 750.0 + 250.0 + 60.0 + 240.0, total, 0.01)
+	assert_almost_eq(parts + 750.0 + 250.0 + 60.0 + 240.0 + turrets, total, 0.01)
 
 func test_the_sections_are_thirds_along_and_halves_across():
 	for coord: Vector3i in _d.sections_of:
@@ -86,13 +94,7 @@ func test_damage_stops_at_nothing_left():
 	assert_eq(_d.section_damage[&"port_stern"], _d.section_hp[&"port_stern"])
 	_d.hit(_first(&"computer"), 1e9)
 	assert_eq(_d.component_stage(&"computer"), BlockDamage.Stage.WRECKED)
-	assert_almost_eq(_d.hull_whole(), 1.0 - _d.section_hp[&"port_stern"] / _total_section_hp(), 0.0001)
-
-func _total_section_hp() -> float:
-	var t := 0.0
-	for id in ShipDamage.SECTIONS:
-		t += _d.section_hp[id]
-	return t
+	assert_eq(_d.hull_whole(), 0.0, "what the port stern cannot take spills through every section (spill-over)")
 
 func test_a_component_is_damaged_below_half_and_wrecked_at_nothing():
 	var c := _first(&"quantum_core")

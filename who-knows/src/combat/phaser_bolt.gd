@@ -76,6 +76,7 @@ func arm(p_kind: StringName, from: Vector3, dir: Vector3, p_carrier: Vector3, p_
 	damage = s["damage"]
 	push = s["push"]
 	flash_scale = s["flash"]
+	flash_bright = s["flash_bright"]
 	carrier = p_carrier
 	source = p_source
 	exclude = p_exclude

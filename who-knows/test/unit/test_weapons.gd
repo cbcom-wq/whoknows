@@ -52,9 +52,9 @@ func test_own_and_hostile():
 	hull.set_meta(&"ship", ship)
 	assert_true(Weapons.is_own(ship, hull))
 	assert_false(Weapons.is_own(ship, _body(&"ship:B")))
-	assert_false(Weapons.is_hostile(hull), "nothing is hostile in this project")
-	Weapons.hostile_rule = func(n: Node) -> bool: return n == hull
-	assert_true(Weapons.is_hostile(hull))
+	assert_false(Weapons.is_hostile(ship, hull), "a ship with no side is hostile to nothing")
+	Weapons.hostile_rule = func(_s: Node, n: Node) -> bool: return n == hull
+	assert_true(Weapons.is_hostile(ship, hull))
 
 func test_an_item_outside_is_a_target_and_aboard_is_not():
 	var d := ItemDefinition.new()

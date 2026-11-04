@@ -63,6 +63,7 @@ var assist_enabled: bool = true:
 		if not assist_enabled:
 			speed_locked = false
 			heading_hold = false
+			velocity_hold = false
 
 ## The speed lock (spec §5.3): a forward speed, m/s, that assist holds while W
 ## and S are released. Signed, so a backward drift locks backward.
@@ -75,6 +76,11 @@ var commanded_force_local := Vector3.ZERO
 ## held on. A direction, not a position, so the floating origin never moves it.
 var heading_hold := false
 var heading := Vector3.FORWARD
+## The velocity hold (hostile ships spec §5.1): a world velocity, m/s, the
+## assist cancels toward on every axis with no input, in place of rest (or the
+## locked speed). Asked for by a pilot that is not you; never saved.
+var velocity_hold := false
+var held_velocity := Vector3.ZERO
 ## This tick's twist, after clamping, in the hull's own axes, newton-metres.
 ## RcsShow reads it.
 var commanded_torque_local := Vector3.ZERO
@@ -86,6 +92,9 @@ var quantum: QuantumStore = null
 ## The hull's state for the band (health and damage spec §11): returns
 ## [how whole it is, 0..1; why it is crippled, or ""]. Given by Ship.
 var hull_status: Callable
+## Whether a hostile is out for this ship or its crew (hostile ships spec
+## §4.3), set by the flight scene: with the orders at HOLD the HUD warns.
+var hostile_engaging: Callable
 ## The ship's warp drive, or null. While it travels it flies the hull, and
 ## this ignores the pilot (the warp spec §5.2).
 var warp: WarpDrive = null
@@ -206,6 +215,19 @@ func set_heading(direction: Vector3) -> void:
 func clear_heading() -> void:
 	heading_hold = false
 
+## Holds the hull at `v_world` (world, m/s) on every axis nobody pushes on.
+## Needs assist. The speed lock is left as it was; the hold overrides its
+## target while it lasts.
+func hold_velocity(v_world: Vector3) -> void:
+	if not assist_enabled:
+		return
+	held_velocity = v_world
+	velocity_hold = true
+
+## Hands the quiet axes back to the assist's own targets.
+func release_velocity() -> void:
+	velocity_hold = false
+
 ## What a save keeps (docs/superpowers/specs/2026-09-26-saving-design.md §3):
 ## assist, the speed lock, heading hold, and a burn latched when the pilot
 ## stood up (clear_pilot_input). Seated, the stick overwrites the burn on the
@@ -265,13 +287,19 @@ func _apply_translation(delta: float) -> void:
 	# "Boost with translation input" (spec §8.2): held, and asking for some
 	# thrust -- holding it with the stick centred costs nothing, because the
 	# multiplier below would have nothing to multiply anyway.
-	var wants_boost := _boost and not is_zero_approx(_translate_input.length())
+	var held: Variant = basis.inverse() * held_velocity if velocity_hold else null
+	# A held velocity is pushed toward like input (hostile ships spec §5.3: a
+	# brawler boosts in), but only while the hold is short of thrust.
+	var wants_boost := _boost and (not is_zero_approx(_translate_input.length())
+		or (held != null and hold_short(local_velocity, _translate_input, _hull.mass,
+			_authority_budget(thrust_budget), held)))
 	boosting = wants_boost and full_power
 	boost_refused = wants_boost and not full_power
 	if boosting and quantum != null:
 		quantum.spend_continuous(QuantumValues.BOOST_COST * delta, &"boost")
 	commanded_force_local = translation_force(local_velocity, _translate_input, _hull.mass,
-		_authority_budget(thrust_budget), boosting, assist_enabled, speed_locked, locked_speed)
+		_authority_budget(thrust_budget), boosting, assist_enabled, speed_locked, locked_speed,
+		held)
 	_hull.apply_central_force(basis * commanded_force_local)
 
 	if assist_enabled and _hull.linear_velocity.length() > current_limit:
@@ -301,9 +329,13 @@ func _authority_budget(budget: Dictionary) -> Dictionary:
 ## at up to DRIFT_AUTHORITY of that axis's budget. Fore and aft, a push forward
 ## (-z) is the main engines' and a push aft the retros', each clamped by its
 ## own budget.
+##
+## `held`, a velocity in hull axes or null, is the velocity hold's target: the
+## quiet axes cancel toward it instead, at the same budgets -- boosted, at
+## BOOST_MULTIPLIER of them, as input is.
 static func translation_force(local_velocity: Vector3, input: Vector3, mass: float,
 		budget: Dictionary, boost: bool, assist: bool, locked: bool,
-		locked_speed: float) -> Vector3:
+		locked_speed: float, held: Variant = null) -> Vector3:
 	var forward: float = budget[&"forward"]
 	var reverse: float = budget[&"reverse"]
 	var lateral: float = budget[&"lateral"]
@@ -317,17 +349,32 @@ static func translation_force(local_velocity: Vector3, input: Vector3, mass: flo
 		force *= BOOST_MULTIPLIER
 	if not assist:
 		return force
-	var target_z := -locked_speed if locked else 0.0
+	var target := Vector3(0.0, 0.0, -locked_speed if locked else 0.0)
+	if held != null:
+		target = held
 	var wanted := Vector3(
-		-local_velocity.x if is_zero_approx(input.x) else 0.0,
-		-local_velocity.y if is_zero_approx(input.y) else 0.0,
-		target_z - local_velocity.z if is_zero_approx(input.z) else 0.0,
+		target.x - local_velocity.x if is_zero_approx(input.x) else 0.0,
+		target.y - local_velocity.y if is_zero_approx(input.y) else 0.0,
+		target.z - local_velocity.z if is_zero_approx(input.z) else 0.0,
 	) * mass
+	var share := DRIFT_AUTHORITY * (BOOST_MULTIPLIER if boost and held != null else 1.0)
 	return force + Vector3(
-		clampf(wanted.x, -lateral * DRIFT_AUTHORITY, lateral * DRIFT_AUTHORITY),
-		clampf(wanted.y, -vertical * DRIFT_AUTHORITY, vertical * DRIFT_AUTHORITY),
-		clampf(wanted.z, -forward * DRIFT_AUTHORITY, reverse * DRIFT_AUTHORITY),
+		clampf(wanted.x, -lateral * share, lateral * share),
+		clampf(wanted.y, -vertical * share, vertical * share),
+		clampf(wanted.z, -forward * share, reverse * share),
 	)
+
+## Whether the velocity hold (`held`, hull axes) wants more than the assist's
+## unboosted budget on some quiet axis: the only time a boost buys it anything.
+static func hold_short(local_velocity: Vector3, input: Vector3, mass: float, budget: Dictionary,
+		held: Vector3) -> bool:
+	var want := (held - local_velocity) * mass
+	var cap := Vector3(budget[&"lateral"], budget[&"vertical"],
+		budget[&"forward"] if want.z < 0.0 else budget[&"reverse"]) * DRIFT_AUTHORITY
+	for i in 3:
+		if is_zero_approx(input[i]) and absf(want[i]) > cap[i]:
+			return true
+	return false
 
 func _apply_rotation(_delta: float) -> void:
 	var basis := _hull.global_transform.basis
@@ -451,4 +498,5 @@ func build_telemetry() -> VehicleTelemetry:
 		t.weapons_engage = fire_control.orders == FireControl.Orders.ENGAGE
 		t.weapons_pips = fire_control.pips()
 		t.weapons_low_power = t.weapons_engage and quantum != null and quantum.is_low_power()
+		t.hostile_on_hold = not t.weapons_engage and hostile_engaging.is_valid() and bool(hostile_engaging.call())
 	return t

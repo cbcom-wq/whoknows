@@ -22,11 +22,12 @@ func after_each():
 	if is_instance_valid(_starter):
 		_starter.warp.stage = WarpDrive.Stage.IDLE
 
-func _key(code: Key, echo := false) -> void:
+func _key(code: Key, echo := false, shift := false) -> void:
 	var ev := InputEventKey.new()
 	ev.keycode = code
 	ev.pressed = true
 	ev.echo = echo
+	ev.shift_pressed = shift
 	_panel._unhandled_key_input(ev)
 
 func _open_and_spawn() -> Ship:
@@ -53,9 +54,20 @@ func test_f6_opens_and_shuts_it():
 	_key(KEY_F6)
 	assert_true(_panel.visible)
 	assert_string_contains(_panel.text, "1  Starter shuttle")
+	assert_string_contains(_panel.text, "Shift+n  hostile")
 	assert_string_contains(_panel.text, "Del  remove the nearest spawned ship")
 	_key(KEY_F6)
 	assert_false(_panel.visible)
+
+## Shift + a number asks for that library ship as a hostile (hostile ships
+## spec §10.1), and never for a plain spawn.
+func test_shift_number_asks_for_a_hostile():
+	watch_signals(_panel)
+	_key(KEY_F6)
+	_key(KEY_2, false, true)
+	assert_signal_emitted_with_parameters(_panel, "hostile_asked", [1])
+	assert_signal_not_emitted(_panel, "spawn_asked")
+	assert_true(_last_line().begins_with("HOSTILE "), "the panel says what came: " + _last_line())
 
 func test_shut_1_and_delete_do_nothing():
 	_key(KEY_1)

@@ -13,6 +13,9 @@ extends Node3D
 signal aboard_changed(ship: Ship)
 ## Where you are changed (habitat modules spec §5.5): a ship or a base.
 signal home_changed(home: GridHome)
+## You died with nowhere to wake (hostile ships spec §8.3): SHIP LOST or SUIT
+## LOST is on the screen, and the game goes back to the last save after it.
+signal lost(text: String)
 
 @onready var _starter: Ship = $Ship
 @onready var _hud: HudRoot = $HudRoot
@@ -69,6 +72,19 @@ var save_gate := SaveGate.new()
 var play_time := 0.0
 ## True when this session resumed a saved game rather than starting a new one.
 var resumed := false
+## Seconds since a hostile bolt last hit a ship you were aboard (hostile
+## ships spec §8.4): it runs on when you board another, so boarding mid-fight
+## opens no save.
+var since_fired_on := INF
+## The end of a life (§8.3): the white, the black and the line, then `reload`,
+## which goes back to the last save as a launch does. A test injects its own.
+var lost_screen: LostScreen
+var reload: Callable
+var _lost := false
+## Set on the tree by the reload after a death, which keeps it, so a game
+## launched with --new-game resumes the save it lost back to rather than
+## setting it aside again.
+const BACK_TO_SAVE := &"back_to_save"
 
 var _reticle: Reticle
 var _interact_prompt := ""
@@ -99,6 +115,13 @@ var warp_panel: WarpPanel
 var spawn_panel: SpawnPanel
 ## The creature panel (rock creatures spec §7.2): F10.
 var creature_panel: CreaturePanel
+## The pilot readout (hostile ships spec §10.2): F2.
+var pilot_readout: PilotReadout
+## The side of your nose the next hostile comes from, +1 or -1: it alternates
+## (hostile ships spec §10.1).
+var _hostile_side := 1.0
+## A hostile's skill is drawn from this.
+var _hostile_rng := RandomNumberGenerator.new()
 var body_markers: Array[BodyMarker] = []
 ## Every turret bolt (ship weapons spec §6.3), under Outside.
 var bolt_pool: BoltPool
@@ -118,6 +141,8 @@ const RESTART_ROW := 300.0
 ## a new game.
 const RESET_WINDOW := 3.0
 var _reset_armed_at := -INF
+## Why a save waits on a fight (hostile ships spec §8.4).
+const UNDER_ATTACK := "under attack"
 
 ## The interior's own mood (spec §3.3): dim and warm, with bloom turning the
 ## thin lit strips into light. It goes on the interior camera, not the world,
@@ -160,6 +185,9 @@ func _ready() -> void:
 	_make_bases()
 	_make_suit_tie()
 	_place_avatar_on_deck()
+	# A target to hostiles on a spacewalk (hostile ships spec §4.2); Weapons
+	# keeps you out while aboard, and TargetContacts never lists the kind.
+	Weapons.join(_avatar, Weapons.YOU)
 	_set_interior_mood()
 	_set_outside_mood()
 	_wire_hud()
@@ -175,6 +203,7 @@ func _ready() -> void:
 	_wire_weapons()
 	_wire_spawn()
 	_wire_saving()
+	_wire_lost()
 	for ship in fleet.ships():
 		_wire_ship(ship)
 	fleet.joined.connect(_wire_ship)
@@ -243,6 +272,10 @@ func _wire_ship(ship: Ship) -> void:
 	# outside; a shed plate is a stray.
 	ship.blocks_lost.connect(_on_blocks_lost.bind(ship))
 	ship.plate_shed.connect(func(item: Item) -> void: strays.adopt(item))
+	# A hit it takes knocks your view if you are in it (hostile ships spec §6.1).
+	ship.felt_hit.connect(_on_felt_hit.bind(ship))
+	# HOLD while a hostile is out for it warns on the band (hostile ships spec §4.3).
+	ship.flight_computer.hostile_engaging = _hostile_engaging.bind(ship)
 	# Its crew answers to the game's ledger, and shows on F4. The crew woke
 	# with the ship, before it had the ledger.
 	ship.npc_director.ledger = npc_ledger
@@ -275,6 +308,116 @@ func _wire_ship(ship: Ship) -> void:
 	ship.warp.travel_ended.connect(_on_warp_ended)
 	# In through its airlock, you are aboard it (§4.3).
 	ship.airlock_crossed.connect(_on_airlock_crossed.bind(ship))
+	# At 0% HULL it goes, and everyone aboard (hostile ships spec §8.2).
+	ship.destroyed.connect(_on_ship_destroyed)
+
+## A ship at 0% HULL (hostile ships spec §8.2): its core goes up and it
+## breaks apart, everyone aboard it dies, in the ledger so they never wake,
+## the items aboard are lost, and the fleet lets it go a frame later. A
+## neighbour the blast destroys runs all of this itself, at once and once:
+## Ship.destroyed is said only the first time.
+##
+## You aboard it die with it (§8.3): SHIP LOST, first, so the white comes with
+## the flash. That ship is never let go: freeing its interior would free you,
+## and the game goes back to the last save anyway.
+func _on_ship_destroyed(ship: Ship) -> void:
+	var you_too := you_aboard(ship)
+	if you_too:
+		lose("SHIP LOST")
+	_blow_up(ship)
+	_kill_aboard(ship)
+	if you_too:
+		return
+	_out_of_your_ship(ship)
+	fleet.destroy.call_deferred(ship)
+
+## Whether you are aboard `ship` (§8.2 step 3): walking or seated in its
+## interior -- at its weapons station's gun camera you are still in its seat --
+## or in one of its airlocks, an alcove's too.
+func you_aboard(ship: Ship) -> bool:
+	if ship == null or _avatar == null:
+		return false
+	if _avatar.mode == Avatar.Mode.PLATING:
+		return _avatar.get_parent() == ship.interior
+	for airlock: Airlock in ship.airlocks.values():
+		if not airlock.occupancy()["room_empty"]:
+			return true
+	return false
+
+## Your ship destroyed while you are out of it, on a spacewalk or in a base
+## (§8.3): the starter, never freed, stands in as `aboard`, so nothing holds a
+## freed ship; and outside you have nowhere to wake until your suit belongs to
+## another ship (SuitTie), so blacking out loses the game (_rescue).
+func _out_of_your_ship(ship: Ship) -> void:
+	# Your suit's speed is no longer relative to a hull that is gone.
+	if _avatar.hull == ship.exterior:
+		_avatar.hull = null
+	if ship != aboard:
+		return
+	var base := home as Base
+	if ship != _starter:
+		board(_starter, true)
+		if base != null:
+			board_base(base, true)
+	if base == null:
+		home = null
+
+## The end (§8.3), once: nothing more is saved in this scene, you let go of
+## the controls, the screen whites out and goes black with `text`, and then
+## the game goes back to the last save, as a launch would. Never F9's
+## new_game: the save is not set aside.
+func lose(text: String) -> void:
+	if _lost:
+		return
+	_lost = true
+	save_enabled = false
+	_avatar.set_control_enabled(false)
+	# Frozen as you were, so a blackout under the screen never wakes you.
+	_avatar.process_mode = Node.PROCESS_MODE_DISABLED
+	set_process_unhandled_key_input(false)
+	lost_screen.play(text)
+	lost.emit(text)
+
+## The screen over everything, and the way back to the save.
+func _wire_lost() -> void:
+	var layer := CanvasLayer.new()
+	layer.name = "Lost"
+	layer.layer = 128
+	add_child(layer)
+	lost_screen = LostScreen.new()
+	lost_screen.name = "LostScreen"
+	layer.add_child(lost_screen)
+	lost_screen.finished.connect(func() -> void: reload.call())
+	if not reload.is_valid():
+		reload = _back_to_last_save
+
+## Only as the game's own scene: under a test or a probe the current scene is
+## theirs, and reloading it would start them over.
+func _back_to_last_save() -> void:
+	if get_tree().current_scene != self:
+		push_warning("FlightTest: lost, but not the current scene; no reload")
+		return
+	get_tree().set_meta(BACK_TO_SAVE, true)
+	get_tree().reload_current_scene()
+
+## The core goes up, and the ship breaks into chunks (§8.2 steps 1 and 2).
+func _blow_up(ship: Ship) -> void:
+	CoreBlast.go(fleet.outside, CoreBlast.core_of(ship), CoreBlast.scale_of(ship), ship)
+	ShipBreakup.go(ship, fleet.outside)
+
+## Everyone aboard dies, and the items aboard are lost (§8.2 step 3).
+func _kill_aboard(ship: Ship) -> void:
+	var director := ship.npc_director
+	for npc: Npc in director.live_npcs():
+		npc_ledger.mark_dead(npc.record.id)
+	for source in director.sources:
+		for entry: Array in source.records(director):
+			npc_ledger.mark_dead((entry[0] as NpcRecord).id)
+	# A spawned ship's go with it; the starter is held, so its own are freed.
+	for node in ship.items.get_children():
+		var item := node as Item
+		if item != null and item.state != Item.State.HELD:
+			item.queue_free()
 
 func _on_ship_left(ship: Ship) -> void:
 	dev_creatures.erase(ship.npc_director)
@@ -417,8 +560,7 @@ func board_nearest() -> bool:
 	var target: Ship = null
 	if why == "":
 		target = fleet.nearest(aboard.exterior.global_position, aboard)
-		if target == null:
-			why = "NO OTHER SHIP NEAR"
+		why = "NO OTHER SHIP NEAR" if target == null else _board_refusal(target)
 	if why != "":
 		if warp_panel != null:
 			warp_panel.toast(why)
@@ -427,8 +569,12 @@ func board_nearest() -> bool:
 	return true
 
 ## Why F8 must wait, or "": on a spacewalk, in a base, at a computer, mid-sit,
-## during a warp, or while an airlock of the ship you are aboard cycles.
-func _board_refusal() -> String:
+## during a warp, or while an airlock of the ship you are aboard cycles; or
+## why it may not board `target`: a hostile (hostile ships spec §4.3; boarding
+## a live enemy is the disable project's).
+func _board_refusal(target: Ship = null) -> String:
+	if target != null and target.side == Sides.HOSTILE:
+		return "HOSTILE SHIP"
 	if _avatar.mode == Avatar.Mode.SUIT:
 		return "NOT ON A SPACEWALK"
 	if home != aboard:
@@ -534,14 +680,21 @@ func _wire_hurt() -> void:
 	_avatar.seated_source = func() -> bool: return _director.is_seated
 	_avatar.rescue = _rescue
 	_avatar.rescue_cost = func(n: int) -> int:
-		return home.quantum.store.drain(n, &"rescue") if home.quantum.store != null else 0
+		if not _can_wake() or home.quantum.store == null:
+			return 0
+		return home.quantum.store.drain(n, &"rescue")
 	_avatar.let_fall.connect(func(item: Item, outside: bool) -> void:
 		if outside and strays != null:
 			strays.adopt(item))
 
 ## Puts a blacked-out `avatar` in where it fits first (§7.2): the ship you are
-## aboard, or the base you are in (habitat modules spec §11.3).
+## aboard, or the base you are in (habitat modules spec §11.3). With nowhere
+## to wake -- your ship gone, or the starter held destroyed -- it is the end
+## (hostile ships spec §8.3).
 func _rescue(avatar: Avatar) -> void:
+	if not _can_wake():
+		lose("SUIT LOST")
+		return
 	for pose in home.wake_spots():
 		if not avatar.can_stand_at(pose) and avatar.mode == Avatar.Mode.PLATING:
 			continue
@@ -550,6 +703,20 @@ func _rescue(avatar: Avatar) -> void:
 		else:
 			avatar.place(pose)
 		return
+
+## Whether there is somewhere for you to wake: a ship or base, not freed, and
+## not a ship destroyed.
+func _can_wake() -> bool:
+	if not is_instance_valid(home):
+		return false
+	var ship := home as Ship
+	return ship == null or not (ship.is_destroyed() or fleet.is_destroyed(ship))
+
+## A hit on `ship` knocks the view you see through if you are in its cabin
+## (hostile ships spec §6.1), walking or seated; the gun camera takes its own.
+func _on_felt_hit(strength: float, from: Vector3, ship: Ship) -> void:
+	if _avatar.get_parent() == ship.interior:
+		_avatar.knock(strength, from)
 
 ## A hole where you stand puts you outside, moving as you were (health and
 ## damage spec §7.4): only a hole in the ship you stand in.
@@ -843,6 +1010,7 @@ func _wire_weapons() -> void:
 	target_brackets.clear()
 	for m in _mount_per_view(func() -> WorldMarker: return TargetBrackets.new(), "Targets"):
 		(m as TargetBrackets).fire_control = aboard.fire_control
+		(m as TargetBrackets).hostiles = _hostiles_in_contact
 		target_brackets.append(m)
 	exterior_npcs.targets = true
 
@@ -881,9 +1049,12 @@ func _wire_spawn() -> void:
 	spawn_panel.entries = lines
 	spawn_panel.spawn_asked.connect(func(i: int) -> void:
 		spawn_panel.say(spawn_from_library(library.ids()[i])))
+	spawn_panel.hostile_asked.connect(func(i: int) -> void:
+		spawn_panel.say(spawn_hostile(library.ids()[i])))
 	spawn_panel.remove_asked.connect(func() -> void: spawn_panel.say(remove_nearest_spawned()))
 	$Prompt.add_child(spawn_panel)
 	_wire_creatures()
+	_wire_pilot_readout()
 
 ## The creature panel (rock creatures spec §7.2): F10 lists the species the
 ## catalog has, in CreaturePanel.ORDER; a number makes one at the crosshair.
@@ -978,18 +1149,9 @@ func _view_camera() -> Camera3D:
 ## of the way you are going, so a spawn while cruising is not parked in your
 ## path. Says what it did, or why not.
 func spawn_from_library(id: StringName) -> String:
-	if not library.has(id):
-		return "NO SHIP CALLED %s" % id
-	for ship in fleet.ships():
-		if ship.warp.is_spinning():
-			return "WARP ENGAGED"
-	if fleet.busy() != "":
-		return "A SHIP IS ARRIVING"
-	if fleet.ships().size() >= fleet.max_ships:
-		return "THE FLEET IS FULL"
-	# Bases hold interior slots too (habitat modules spec §9.3).
-	if fleet.slots.free_count() == 0:
-		return "NO BERTH FREE"
+	var why := _spawn_refusal(id)
+	if why != "":
+		return why
 	var view := _spawn_view()
 	var others: Array[Vector3] = []
 	for ship in fleet.awake():
@@ -1005,6 +1167,161 @@ func spawn_from_library(id: StringName) -> String:
 		return "NO BERTH FREE"
 	WarpArrival.play(ship.exterior, place, Vector3.ZERO, SpawnSpot.arrival_line(place))
 	return "SPAWNED %s · %s · %d m away" % [ship.name, library.name_of(id), roundi(view.origin.distance_to(place.origin))]
+
+## Why library ship `id` cannot be spawned now, or "".
+func _spawn_refusal(id: StringName) -> String:
+	if not library.has(id):
+		return "NO SHIP CALLED %s" % id
+	for ship in fleet.ships():
+		if ship.warp.is_spinning():
+			return "WARP ENGAGED"
+	if fleet.busy() != "":
+		return "A SHIP IS ARRIVING"
+	if fleet.ships().size() >= fleet.max_ships:
+		return "THE FLEET IS FULL"
+	# Bases hold interior slots too (habitat modules spec §9.3).
+	if fleet.slots.free_count() == 0:
+		return "NO BERTH FREE"
+	return ""
+
+## The angles off your nose a hostile tries, degrees: its own side first, then
+## the other, nearest the nose first (hostile ships spec §10.1).
+const HOSTILE_ANGLES: Array[float] = [30.0, 60.0, 90.0]
+
+## Spawns library ship `id` as a hostile, as Shift and the panel's number keys
+## do (hostile ships spec §10.1): PilotValues.SPAWN_RANGE off, 30° to one side
+## of your nose (the sides alternate), facing you, at rest and already there,
+## with a random skill, its style left to it, and out for you. Says what came,
+## or why not.
+func spawn_hostile(id: StringName) -> String:
+	var why := _spawn_refusal(id)
+	if why != "":
+		return why
+	var spot: Variant = _hostile_spot(_spawn_view())
+	if spot == null:
+		return "NO CLEAR SPOT NEAR"
+	var grid := library.grid(id)
+	var ship := fleet.spawn(grid, spot, true, "", ShipBlueprint.from_grid(grid, library.name_of(id)))
+	if ship == null:
+		return "NO BERTH FREE"
+	ship.side = Sides.HOSTILE
+	var pilot := ship.ship_pilot
+	pilot.skill = _hostile_rng.randf_range(PilotValues.SPAWN_SKILL.x, PilotValues.SPAWN_SKILL.y)
+	pilot.style_choice = ShipPilot.Style.AUTO
+	pilot.engage(_hostile_target())
+	return "HOSTILE %s · SKILL %.1f · AUTO" % [library.name_of(id).to_upper(), pilot.skill]
+
+## Where a hostile comes from `view`: SPAWN_RANGE off at the first of
+## HOSTILE_ANGLES, either side, clear of rocks as a warp's drop-out is and
+## SpawnSpot.CLEAR of every hull; null when none is.
+func _hostile_spot(view: Transform3D) -> Variant:
+	var up := view.basis.y.normalized()
+	var ahead := -view.basis.z.normalized()
+	var side := _hostile_side
+	_hostile_side = -_hostile_side
+	for angle in HOSTILE_ANGLES:
+		for s: float in [side, -side]:
+			var dir := ahead.rotated(up, deg_to_rad(angle * s))
+			var p := view.origin + dir * PilotValues.SPAWN_RANGE
+			if _rock_near(p) or _near_a_hull(p):
+				continue
+			return Transform3D(Basis.looking_at(-dir, up), p)
+	return null
+
+func _near_a_hull(p: Vector3) -> bool:
+	for ship in fleet.awake():
+		if ship.exterior.global_position.distance_to(p) < SpawnSpot.CLEAR:
+			return true
+	return false
+
+## What a hostile goes for: the ship you are aboard, or you when it is asleep
+## far off.
+func _hostile_target() -> StringName:
+	return Weapons.ship_id(aboard) if aboard != null and not fleet.sleeping(aboard) else Weapons.YOU
+
+## Every other awake ship within contact range of the ship you are aboard
+## (WeaponValues.CONTACT_RANGE), nearest first.
+func _ships_in_contact() -> Array[Ship]:
+	var out: Array[Ship] = []
+	if aboard == null or fleet.sleeping(aboard):
+		return out
+	var here := aboard.exterior.global_position
+	for ship in fleet.awake():
+		if ship != aboard and ship.exterior.global_position.distance_to(here) <= WeaponValues.CONTACT_RANGE:
+			out.append(ship)
+	out.sort_custom(func(a: Ship, b: Ship) -> bool:
+		return a.exterior.global_position.distance_to(here) < b.exterior.global_position.distance_to(here))
+	return out
+
+## The hulls of the hostiles in contact, for the brackets (hostile ships spec
+## §4.3).
+func _hostiles_in_contact() -> Array[Node3D]:
+	var out: Array[Node3D] = []
+	for ship in _ships_in_contact():
+		if Weapons.is_hostile(aboard, ship):
+			out.append(ship.exterior)
+	return out
+
+## Whether a hostile's pilot is out for `ship`, or for you on a spacewalk from
+## it.
+func _hostile_engaging(ship: Ship) -> bool:
+	for other in fleet.awake():
+		if other == ship or other.ship_pilot == null or not Weapons.is_hostile(other, ship):
+			continue
+		if other.ship_pilot.targets(ship) or (ship == aboard and other.ship_pilot.targets(_avatar)):
+			return true
+	return false
+
+## The pilot readout (hostile ships spec §10.2): F2 shows every ship in contact
+## with its pilot's reading, and sets a selected one's style, skill and side.
+func _wire_pilot_readout() -> void:
+	_hostile_rng.randomize()
+	pilot_readout = PilotReadout.new()
+	pilot_readout.name = "PilotReadout"
+	pilot_readout.rows = _pilot_rows
+	pilot_readout.style_asked.connect(func(id: StringName) -> void:
+		var pilot := _ship_called(id).ship_pilot
+		pilot.style_choice = wrapi(pilot.style_choice + 1, 0, ShipPilot.Style.size()) as ShipPilot.Style)
+	pilot_readout.skill_asked.connect(func(id: StringName, step: float) -> void:
+		var pilot := _ship_called(id).ship_pilot
+		pilot.skill = clampf(pilot.skill + step, 0.0, 1.0))
+	pilot_readout.side_asked.connect(_flip_side)
+	$Prompt.add_child(pilot_readout)
+
+## The readout's rows: one per ship in contact.
+func _pilot_rows() -> Array:
+	var rows := []
+	var here := aboard.exterior.global_position
+	for ship in _ships_in_contact():
+		var pilot := ship.ship_pilot
+		var reading: Dictionary = pilot.last_reading
+		var store := ship.quantum.store if ship.quantum != null else null
+		rows.append({"id": Weapons.ship_id(ship), "name": Weapons.label_of(ship.exterior), "side": ship.side,
+			"style": ShipPilot.Style.keys()[pilot.style], "style_choice": ShipPilot.Style.keys()[pilot.style_choice],
+			"skill": pilot.skill, "preferred": float(reading.get("preferred", 0.0)),
+			"range": ship.exterior.global_position.distance_to(here), "intent": pilot.intent,
+			"qe": store.amount if store != null else 0, "qe_max": store.capacity if store != null else 0,
+			"hull": ship.hull_whole(), "score": float(reading.get("score", 0.0))})
+	return rows
+
+func _ship_called(id: StringName) -> Ship:
+	for ship in fleet.ships():
+		if Weapons.ship_id(ship) == id:
+			return ship
+	return null
+
+## H on the readout: a hostile turns crew and its pilot lets go; a crew ship
+## turns hostile and goes for you.
+func _flip_side(id: StringName) -> void:
+	var ship := _ship_called(id)
+	if ship == null:
+		return
+	if ship.side == Sides.HOSTILE:
+		ship.side = Sides.CREW
+		ship.ship_pilot.on = false
+	else:
+		ship.side = Sides.HOSTILE
+		ship.ship_pilot.engage(_hostile_target())
 
 ## Removes the nearest spawned ship (any but the starter, awake and arrived)
 ## other than the one you are aboard, as the panel's Delete does (§5). Says
@@ -1171,10 +1488,13 @@ func _save_readout() -> String:
 ## `resumed`; {} for a new game.
 func _read_save() -> Dictionary:
 	resumed = false
+	var back := bool(get_tree().get_meta(BACK_TO_SAVE, false)) if is_inside_tree() else false
+	if is_inside_tree():
+		get_tree().remove_meta(BACK_TO_SAVE)
 	if not save_enabled:
 		return {}
 	save_game = SaveGame.new(save_path)
-	if SaveGame.new_game_asked():
+	if SaveGame.new_game_asked() and not back:
 		save_game.set_aside()
 		return {}
 	var data := save_game.read()
@@ -1187,6 +1507,9 @@ func _read_save() -> Dictionary:
 ## The gate's sources (§5), the SAVED tag, and a settling spell after the
 ## game begins.
 func _wire_saving() -> void:
+	save_gate.add_source(_under_attack)
+	# A save adrift with nowhere to wake would come back to the same end.
+	save_gate.add_source(func() -> String: return "" if _can_wake() else "nowhere to wake")
 	save_gate.add_source(func() -> String: return "sitting" if _director.is_moving() else "")
 	save_gate.add_source(_fleet_busy)
 	save_gate.add_source(_avatar.busy)
@@ -1198,9 +1521,44 @@ func _wire_saving() -> void:
 	if save_game != null and save_game.locked:
 		_saved_tag.show_locked()
 
+## Why a save must wait on a fight (hostile ships spec §8.4), or "": a
+## hostile's pilot out for you, or for any crew ship within contact of you --
+## fighting or pursuing, so boarding another ship mid-fight opens no save --
+## or a hostile bolt on a ship you were aboard less than ENGAGED_CALM ago.
+## Once every pursuer gives up, or the last hostile is gone, the calm after
+## lets saving resume.
+func _under_attack() -> String:
+	var calm := since_fired_on
+	if is_instance_valid(aboard):
+		calm = minf(calm, aboard.since_hostile_fire)
+	if calm < PilotValues.ENGAGED_CALM:
+		return UNDER_ATTACK
+	var here := _you_at()
+	var near: Array[Ship] = []
+	for ship in fleet.awake():
+		if ship.side == Sides.CREW and ship.exterior.global_position.distance_to(here) <= WeaponValues.CONTACT_RANGE:
+			near.append(ship)
+	for ship in fleet.awake():
+		var pilot := ship.ship_pilot
+		if ship.side != Sides.HOSTILE or ship.is_destroyed() or pilot == null or not pilot.on:
+			continue
+		if pilot.targets(_avatar):
+			return UNDER_ATTACK
+		for crew in near:
+			if pilot.targets(crew):
+				return UNDER_ATTACK
+	return ""
+
+## Where you are outside: you on a spacewalk, else the hull you are in.
+func _you_at() -> Vector3:
+	if _avatar.mode == Avatar.Mode.SUIT or not is_instance_valid(home):
+		return _avatar.global_position
+	return home.exterior.global_position
+
 func _physics_process(delta: float) -> void:
 	if star_system != null:
 		star_system.streak = aboard.warp.streak()
+	since_fired_on = minf(since_fired_on + delta, aboard.since_hostile_fire)
 	play_time += delta
 	if not save_enabled:
 		return
@@ -1322,11 +1680,15 @@ func _restore_places(saved: Dictionary) -> void:
 ## apart beside the starter instead of where they were.
 func _restore_fleet(saved: Dictionary, in_place: bool) -> void:
 	fleet.from_dict(saved.get("fleet", {}))
+	var starter_part := _part_named(saved, Fleet.STARTER)
 	if in_place:
 		# Through the fleet, as every other ship: a starter left far off (you
 		# were in a base, or aboard another ship) is held asleep there, never
-		# put in engine space 25 km out for a second.
-		fleet.restore_hull(_starter, _part_named(saved, Fleet.STARTER))
+		# put in engine space 25 km out for a second. One saved destroyed is
+		# held destroyed (hostile ships spec §8.2).
+		fleet.restore_hull(_starter, starter_part)
+	elif starter_part.get("destroyed", false):
+		fleet.destroy(_starter)
 	var row := 0
 	for part in saved.get("ships", []):
 		if not (part is Dictionary) or String(part.get("name", "")) == Fleet.STARTER:
@@ -1345,6 +1707,13 @@ func _restore_fleet(saved: Dictionary, in_place: bool) -> void:
 			fleet.restore_hull(ship, part)
 	var named := fleet.named(StringName(saved.get("aboard", Fleet.STARTER)))
 	aboard = named if named != null else _starter
+	# The ship you were aboard left out, and the starter held destroyed: any
+	# ship still standing (hostile ships spec §8.2).
+	if named == null and fleet.is_destroyed(_starter):
+		for ship in fleet.ships():
+			if not fleet.is_destroyed(ship) and ship.side == Sides.CREW:
+				aboard = ship
+				break
 	home = aboard
 
 ## The saved ship called `ship_name`, or {}.

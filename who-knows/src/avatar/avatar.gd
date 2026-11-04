@@ -137,6 +137,11 @@ var rescue: Callable
 ## What waking costs, paid by the ship (§7.2): returns what it took.
 var rescue_cost: Callable
 var _jolt := 0.0
+## A hit on the ship you are in, knocking the camera you see through (hostile
+## ships spec §6.1): on the camera, not the head, as seated it hangs from the
+## seat's eye. Whether it was shown last frame, to put the camera back once.
+var _knock := HitFeel.new()
+var _knock_shown := false
 var _hurt_sound: AudioStreamPlayer
 
 var _control_enabled: bool = true
@@ -327,6 +332,7 @@ func _physics_process(delta: float) -> void:
 
 func _process(delta: float) -> void:
 	tick_righting(delta)
+	tick_knock(delta)
 	since_bumped += delta
 	health.tick(delta)
 	_jolt = move_toward(_jolt, 0.0, JOLT / JOLT_BACK * delta)
@@ -368,6 +374,32 @@ func take_damage(amount: float, from := Vector3.ZERO) -> float:
 			_hurt_sound.play()
 		hurt.emit(taken, from)
 	return taken
+
+## A hit on the ship you are in (Ship.felt_hit): the view knocked away from
+## the world direction `from` by HitFeel's rule, settling. Only the camera
+## moves: the stick, the aim and your body are untouched.
+func knock(strength: float, from: Vector3) -> void:
+	_knock.knock(strength, camera.global_basis.inverse() * from)
+	_show_knock()
+
+## Settles a knock by `delta` seconds. Called every frame; tests call it
+## directly.
+func tick_knock(delta: float) -> void:
+	_knock.settle(delta)
+	_show_knock()
+
+## The camera's roll from a knock, radians.
+func view_roll() -> float:
+	return camera.rotation.z
+
+func _show_knock() -> void:
+	# Righting from a spacewalk owns the camera's turn for its moment.
+	if (not _knock.live() and not _knock_shown) or _righting_t < RIGHTING_TIME:
+		return
+	camera.rotation.z = _knock.roll
+	camera.h_offset = _knock.shift.x
+	camera.v_offset = _knock.shift.y
+	_knock_shown = _knock.live()
 
 func is_seated() -> bool:
 	return seated_source.is_valid() and bool(seated_source.call())

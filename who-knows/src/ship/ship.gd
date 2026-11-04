@@ -12,6 +12,15 @@ signal blocks_lost(coords: Array[Vector3i])
 ## §8.1): already outside, in space and in EXTERIOR_SPACE. The flight scene
 ## makes it a stray.
 signal plate_shed(item: Item)
+## A hit landed that is felt aboard (hostile ships spec §6.1): a bolt on the
+## hull or a crash, of HitFeel.strength, from the world direction `from` (from
+## the ship toward where it came from). The cabin's lights dip on their own;
+## the flight scene knocks your view when this is the ship you are in.
+signal felt_hit(strength: float, from: Vector3)
+## HULL % reached 0 (hostile ships spec §8.1): said once, by the hit that did
+## it. The flight scene answers: everyone aboard dies and Fleet.destroy lets
+## the ship go (§8.2). Nothing lands on it after.
+signal destroyed(ship: Ship)
 ## Every ship is in this group, for things that must find one without being
 ## given it (the repair torch aimed at a hole).
 const GROUP := &"ships"
@@ -46,6 +55,11 @@ var inner_cells := {}
 ## The ship's damage: six hull sections and four components (ship damage
 ## sections spec). The grid's per-block damage is its view (_apply_view).
 var damage: ShipDamage
+## Whose ship it is (hostile ships spec §4.1): Sides.CREW, yours, or
+## Sides.HOSTILE. Saved with it.
+var side: StringName = Sides.CREW
+## Set once HULL % reaches 0, or by a save that held it destroyed.
+var _destroyed := false
 ## The cabin's look the interior was last built at (ShipDamage.cabin_level).
 var _cabin_level := 0
 var stats: ShipStats
@@ -63,16 +77,26 @@ var warp: WarpDrive
 ## every turret block, on the hull, kept across rebuilds by cell.
 var fire_control: FireControl
 var turrets: Array[Turret] = []
+## The AI pilot on the ship's computer (hostile ships spec §5.1): off until
+## engaged or handed the ship, and saved with it.
+var ship_pilot: ShipPilot
 ## Each turret's sky map, from the launch layout (spec §3.3): coord -> SkyMap.
 var _skies := {}
 
 ## Seconds since a rock last struck the hull.
 var since_struck := INF
+## Seconds since a hostile ship's bolt last hit the hull (spec §8.4).
+var since_hostile_fire := INF
 ## When anything aboard last took damage (health and damage spec §10).
 var damage_log := DamageLog.new()
 ## Sparks, bursts and chunks on the hull (health and damage spec §9).
 var damage_show: DamageShow
+## Gas from a badly hurt hull (hostile ships spec §7).
+var gas_vents: GasVents
 var _rebuild_queued := false
+## The ceiling lights' dip as hits land (hostile ships spec §6.1), under the
+## interior and bound to its lights after every rebuild.
+var cabin_dip: CabinDip
 
 ## Who lives aboard (NPC foundation spec §4.2, §14): the interior's director,
 ## the holder its NPCs stand under, and the place they live in.
@@ -127,6 +151,9 @@ func _ready() -> void:
 	damage_show.name = "DamageShow"
 	exterior.add_child(damage_show)
 	damage_show.setup(exterior, outside, interior, _inside_face)
+	gas_vents = GasVents.new()
+	gas_vents.name = "GasVents"
+	exterior.add_child(gas_vents)
 	rcs_show = RcsShow.new()
 	rcs_show.name = "RcsShow"
 	exterior.add_child(rcs_show)
@@ -157,6 +184,13 @@ func _ready() -> void:
 	add_child(fire_control)
 	flight_computer.fire_control = fire_control
 	pilot.fire_control = fire_control
+	ship_pilot = ShipPilot.new()
+	ship_pilot.name = "ShipPilot"
+	ship_pilot.ship = self
+	ship_pilot.flight = flight_computer
+	ship_pilot.fire_control = fire_control
+	add_child(ship_pilot)
+	pilot.ship_pilot = ship_pilot
 	AudioBuses.ensure()
 	Synth.warm_up()
 	_hum = AudioStreamPlayer.new()
@@ -202,6 +236,7 @@ func _update_hum() -> void:
 func _physics_process(delta: float) -> void:
 	_last_hull_velocity = exterior.linear_velocity
 	since_struck += delta
+	since_hostile_fire += delta
 	damage_log.tick(delta)
 	_blast_in -= delta
 	if _blast_in <= 0.0:
@@ -237,6 +272,7 @@ func _crash(body: Node, knock: float) -> void:
 		return
 
 func _deal_crash(cell: Vector3i, amount: float, side_x := 0.0) -> void:
+	_feel(amount, exterior.global_basis * ShipGrid.cell_center(cell))
 	var hits := {cell: amount}
 	var sides := {cell: side_x}
 	for n in grid.neighbours(cell):
@@ -254,12 +290,30 @@ static func crash_damage(knock: float) -> float:
 
 ## A hit on the hull, in world space (a bolt from a spacewalk, a bite).
 func _on_hull_hit(hit: Hit) -> void:
+	if Sides.hostile_to(side, Sides.side_of(hit.source)):
+		since_hostile_fire = 0.0
 	var at := exterior.to_local(hit.position)
 	var cell := ShipCells.hull_cell(grid, exterior, hit.shape, at, exterior.global_basis.inverse() * hit.normal)
 	if cell != ShipCells.NONE:
-		take_damage_many({cell: hit.damage}, {cell: at.x - ShipGrid.cell_center(cell).x})
+		var side_x := at.x - ShipGrid.cell_center(cell).x
+		# A heavy hit knocks a piece off too (spec §6.2); chipped first, so the
+		# hit's own rebuild shows both.
+		if hit.damage >= HitFeel.CHIP_FROM and grid.has_block(cell) and not _destroyed:
+			damage.chip(cell, side_x)
+		take_damage_many({cell: hit.damage}, {cell: side_x})
 	if hit.kind == &"phaser":
 		hull_struck(clampf(hit.damage / 4.0, 2.0, 8.0))
+	_feel(hit.damage, -hit.direction if hit.direction != Vector3.ZERO else hit.position - exterior.global_position)
+
+## A hit of `damage` hp felt aboard from the world direction `from`: the
+## lights dip, and felt_hit tells whoever is in the cabin.
+func _feel(damage: float, from: Vector3) -> void:
+	if damage <= 0.0:
+		return
+	var strength := HitFeel.strength(damage)
+	if cabin_dip != null:
+		cabin_dip.dip(strength)
+	felt_hit.emit(strength, from.normalized())
 
 ## A hit on an interior surface: the block behind it (spec §5.1), and a hull
 ## block's section on the side the shot landed (ship damage sections spec §3).
@@ -359,6 +413,9 @@ func take_damage(cell: Vector3i, amount: float) -> Array[Vector3i]:
 ## grid shows it: pieces lost go in one rebuild. Returns them.
 func take_damage_many(hits: Dictionary, sides: Dictionary = {}) -> Array[Vector3i]:
 	var landed := false
+	if _destroyed:
+		var none: Array[Vector3i] = []
+		return none
 	for cell: Vector3i in hits:
 		if cell != ShipCells.NONE and hits[cell] > 0.0 and grid.has_block(cell):
 			landed = damage.hit(cell, hits[cell], float(sides.get(cell, 0.0))) or landed
@@ -366,7 +423,19 @@ func take_damage_many(hits: Dictionary, sides: Dictionary = {}) -> Array[Vector3
 		var none: Array[Vector3i] = []
 		return none
 	damage_log.note()
-	return _apply_view()
+	var lost := _apply_view()
+	if damage.hull_whole() <= 0.0:
+		_destroyed = true
+		destroyed.emit(self)
+	return lost
+
+## Whether HULL % has reached 0 (hostile ships spec §8.1).
+func is_destroyed() -> bool:
+	return _destroyed
+
+## Destroyed without a hit and without a word: a save held it so (Fleet).
+func mark_destroyed() -> void:
+	_destroyed = true
 
 ## Writes the damage model into the grid (spec §4): each block's damage is
 ## what its section or component shows, a piece lost is removed and one
@@ -401,17 +470,28 @@ func _apply_view(quiet := false) -> Array[Vector3i]:
 	if quiet:
 		grid.replace_many(remove, add)
 		return remove
+	_share_damage()
 	for coord: Vector3i in staged:
 		grid.note_staged(coord, staged[coord])
 	if ShipDamage.cabin_level(damage.hull_whole()) != _cabin_level:
 		_queue_rebuild()   # the cabin's look follows HULL % (spec §5)
 	if not remove.is_empty() or not add.is_empty():
 		grid.replace_many(remove, add)
+	gas_vents.sync(GasVents.vents(damage, grid))
 	if not remove.is_empty():
 		damage_show.lost(remove)
 		_shed_plate(remove)
 		blocks_lost.emit(remove)
 	return remove
+
+## Each hull block's section damage share reaches its sparks (hostile ships
+## spec §7): the worse of two sections on the centre line.
+func _share_damage() -> void:
+	for coord: Vector3i in damage.sections_of:
+		var share := 0.0
+		for side: StringName in damage.sections_of[coord]:
+			share = maxf(share, 1.0 - damage.health(side))
+		damage_show.share(coord, share)
 
 ## One scrap plate from the first block knocked off, if it had a face onto
 ## space: it drifts out from that face at SHED_SPEED (spec §8.1).
@@ -581,6 +661,7 @@ func _rebuild_everything(hull := true) -> void:
 	interior_builder.hull_wear = _cabin_level
 	interior_builder.hull_flicker = _cabin_level == 2
 	interior_builder.rebuild()
+	_bind_dip()
 	_place_seat()
 	interior_builder.geometry_body().set_meta(&"receive_hit", _on_interior_hit)
 	interior_builder.geometry_body().set_meta(&"ship", self)
@@ -606,6 +687,9 @@ func _rebuild_everything(hull := true) -> void:
 		rcs_show.rebuild(grid, catalog, stats.center_of_mass)
 	stats_changed.emit(stats)
 	if damage_show != null:
+		if damage != null:
+			_share_damage()
+			gas_vents.sync(GasVents.vents(damage, grid))
 		damage_show.sync(grid, catalog)
 		damage_show.cabin(_cabin_level, _cabin_walls())
 	_set_anchor_radius()
@@ -613,6 +697,16 @@ func _rebuild_everything(hull := true) -> void:
 	_apply_own()
 	_apply_livery()
 	Weapons.join(exterior, Weapons.ship_id(self))
+
+## The cabin's dip, made once under the interior, finds the lights the rebuild
+## just dressed.
+func _bind_dip() -> void:
+	if cabin_dip == null:
+		cabin_dip = CabinDip.new()
+		cabin_dip.name = "CabinDip"
+		interior.add_child(cabin_dip)
+	if interior_builder.geometry_body() != null:
+		cabin_dip.bind(interior_builder.geometry_body())
 
 ## A Turret for each turret block (spec §3), on the hull: one kept from the
 ## last build by cell and kind, so a rebuild on every hit never resets an aim.
@@ -693,6 +787,7 @@ func _bind_computers() -> void:
 		context.warp = warp
 		context.damage = damage
 		context.fire_control = fire_control
+		context.ship_pilot = ship_pilot
 		c.bind(context)
 		if _computer_state.has(c.cell):
 			c.restore(_computer_state[c.cell])
@@ -775,6 +870,7 @@ func to_dict(universe: Universe) -> Dictionary:
 	return {
 		"layout": ShipBlueprint.from_grid(grid, String(name)).to_dict(),
 		"launch": launch_blueprint.to_dict() if launch_blueprint != null else {},
+		"side": String(side),
 		"hull": {
 			"at": SaveCodec.upoint(hull_at),
 			"turn": SaveCodec.basis(hull_turn),
@@ -783,6 +879,7 @@ func to_dict(universe: Universe) -> Dictionary:
 		},
 		"warp": warp.to_dict() if warp != null else {},
 		"weapons": fire_control.to_dict(),
+		"pilot": ship_pilot.to_dict(),
 		"flight": flight_computer.to_dict(),
 		"store": quantum.store.to_dict() if quantum.store != null else {},
 		"damage": damage.to_dict() if damage != null else {},
@@ -945,6 +1042,7 @@ func restore_hull(d: Dictionary, universe: Universe) -> void:
 ## Everything aboard as the save had it: flight settings, store, airlocks
 ## and items. Call after set_grid(layout_of(d), false).
 func restore_aboard(d: Dictionary) -> void:
+	side = Sides.read(d.get("side"))
 	if d.has("damage") and damage != null:
 		damage.from_dict(d["damage"])
 		_apply_view()
@@ -955,6 +1053,7 @@ func restore_aboard(d: Dictionary) -> void:
 		lights.from_dict(d.get("lights", {}))
 	warp.from_dict(d.get("warp", {}))
 	fire_control.from_dict(d.get("weapons", {}))
+	ship_pilot.from_dict(d.get("pilot", {}))
 	var saved_airlocks: Dictionary = d.get("airlocks", {})
 	for key: String in saved_airlocks:
 		var airlock: Airlock = airlocks.get(SaveCodec.to_cell(key))

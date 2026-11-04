@@ -124,11 +124,18 @@ Do these in order. Each names the check that proves it.
    **Ship weapons reach it:** NPCs outside are targets (`Weapons.TARGETS`; the exterior director
    has `NpcDirector.targets = true`, set in `flight_test._wire_weapons`, and joins each NPC as
    `npc:<record id>` on `promote`, leaving on `demote`), so a turret can be sent after one. A
-   phaser bolt reaches it through `receive_hit` like the pistol's: 15 hp from a light bolt, 120 from
-   a heavy, so a species with `max_health` under 120 dies to one heavy bolt. A dead NPC is no
+   phaser bolt reaches it through `receive_hit` like the pistol's: 55 hp from a light bolt, 120 from
+   a heavy (a pistol bolt is 10), so one light bolt kills a Skitter, a Glinter or a Limpet and a
+   Delver takes two. A dead NPC is no
    longer `Weapons.usable`: turrets drop it at once and its list entry leaves after
    `WeaponValues.MISSING_GRACE` 2 s. A new population needs nothing for this beyond going through
    that director; the interior director leaves `targets` false, so crew are never shot at.
+   **A ship's end reaches it** (hostile ships spec §8.2), with nothing to wire. Outside, `CoreBlast`
+   delivers a hit of kind `&"blast"` through `receive_hit`: up to 400 hp at the core, nothing past
+   120 m × the ship's scale, so most creatures near a dying ship die with it. It skips an NPC with
+   `inside`. Aboard, the blast never reaches you: `flight_test._kill_aboard` marks every live NPC and
+   every record of every source of `ship.npc_director` dead in the `NpcLedger`, so nothing wakes
+   again, droid included. A new interior population needs only to be a source of that director.
    **A creature that pays** (the Delver's grit, the Limpet's husks): the body tells its site
    (`Npc.surfaced()` -> `RockSite.surfaced`, `died`) and the site asks the flight scene for the items
    through `drop` and `count_near`. Cap what it can pay near the place (`GRIT_CAP`, one shard at a
@@ -250,21 +257,23 @@ Do these in order. Each names the check that proves it.
 | A recipe joining `RockLife.ORDER` late | `ORDER` listed `delver` before `limpet` while `DelverBurrows` did not exist; the day it did, the Delver took a home on every veined rock and the Limpet groups after it there moved up one number (and their homes, as the Delver's is taken) | Expect it: a species listed in `ORDER` renumbers the groups of those after it on the rocks it takes homes on (a dead Limpet of a veined rock in a save comes back); say so in the report |
 | Float equality in a "has it come up since" test | A brain simulation that surfaced the Delver the very think after it dived saw `surfaced_ago` 0.2 equal `running` 0.2 and kept the dive going | Real surfacings are seconds after the ask: model that (10 s under), as `test_the_mind_cycles_feed_digest_burrow` does |
 | A hull far off a rock in a scene test | A dev Delver sent under 20-70 m was demoted about 14 s into the burrow with the hull 400 m above the rock (cause not pinned: its live radius 250 plus `DEMOTE_MARGIN` 100 is short of that from the hull alone) | Keep the hull within 120 m of the rock in a scene test of anything that travels: `test_delver_pay.gd` |
+| Adding a body to the world, then placing it | `NpcDirector.promote` added the NPC at the holder's origin and `setup` moved it to its site. Outside, the floating origin keeps *your ship* at that origin: for a step the skitter overlapped your hull, then jumped a kilometre to its site in one step. Your hull reported a touch by creatures ~1 km off and, once, flew off at ~9,900 m/s and broke up (the T6 crash; found by T16's duel probe through `test_ship_pilot`) | Set the transform before `add_child` (`promote` does: `holder.global_transform.affine_inverse() * site.frame() * pose`); any CharacterBody you move far, place before it joins or disable its shape across the move. `test_a_promoted_npc_never_touches_a_hull_at_the_origin` |
 | A hand-over that reads the intent that caused it | A burrow ask is still the intent after the burrower hands back (the mind thinks 5 times a second): the crawler sent it straight down again; and off a rock crawler and burrower would swap every tick | The burrower clears a spent `&"burrow"` intent as it hands back; `SurfaceCrawler.burrow_asked` needs a `RockSite`, the locomotor and a `move_to`; `test_burrower.gd` |
 
 ## Not built yet (plan for it; don't assume it works)
 
 - **Memory beyond health.** `NpcLedger` keeps the dead and the wounds of the sleeping (through
   `NpcDirector.amend`); nothing else about an NPC is remembered when it sleeps.
-- **A dead droid, and repairs by others.** The droid is only ever knocked out; the repair torch
-  brings it round.
+- **A dead droid, and repairs by others.** Short of its ship being destroyed, the droid is only
+  ever knocked out; the repair torch brings it round.
 - **Local avoidance.** A walker does not path round people: a droid heading through you steps
   aside (`give_way`) and tries again. A player standing still in a doorway blocks it.
 - **Ladders and upper storeys for walkers.** `DeckPaths` joins one storey only.
 - **Interactions** beyond the seam; the hose; carrying an NPC.
 - **Sound outside** (never, by the style guide) and **sensors** (`LifeContacts` for the bridge
   computer).
-- **Hunters and combat** beyond `defend` (which only bites back), `GroundWalker` (worlds),
-  `ShipPilot` (wingmen).
+- **Hunters and combat** beyond `defend` (which only bites back), `GroundWalker` (worlds), and
+  NPC wingmen or crew at a helm. `ShipPilot` is the ship computer's pilot, not an NPC: it has no
+  `NpcRecord`, and a hostile carries no crew (hostile ships spec, call I).
 - **The frame budget on the target PC.** Measured 1.2 ms for 32 + the droid on a shared 2.1 GHz
   Xeon; unmeasured on the GTX 960 machine.

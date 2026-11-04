@@ -151,7 +151,7 @@ func _pick(turret, listed: Array[Node3D], tree: SceneTree) -> Node3D:
 	var best_d := INF
 	for n in tree.get_nodes_in_group(Weapons.TARGETS):
 		var node := n as Node3D
-		if node == null or Weapons.is_own(ship, node) or not Weapons.usable(node) or not Weapons.is_hostile(node):
+		if node == null or Weapons.is_own(ship, node) or not Weapons.usable(node) or not Weapons.is_hostile(ship, node):
 			continue
 		if not turret.can_engage(node):
 			continue

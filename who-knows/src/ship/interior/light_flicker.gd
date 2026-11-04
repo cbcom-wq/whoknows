@@ -6,7 +6,7 @@ extends Node
 ## at full. It drives the cell's lamp and its own copy of the glow material
 ## on the light's disc together, so the fixture and the room flicker as one.
 ## The interior is rebuilt on any stage change, so a mended light simply
-## comes back built without one.
+## comes back built without one. A hit's dip (CabinDip) dims it further.
 
 ## The share of full it sits at between bursts.
 const DIM := 0.1
@@ -25,6 +25,9 @@ var lamp: OmniLight3D
 var material: ShaderMaterial
 var lamp_energy := 0.0
 var glow_energy := 0.0
+## The cabin's dip as hits land, when the ship has bound one: it scales all
+## this light gives.
+var dip: CabinDip
 ## Where in its pattern this light is, so no two flicker together.
 var phase := 0.0
 var _clock := 0.0
@@ -47,6 +50,8 @@ func _process(delta: float) -> void:
 	_show(level_at(_clock, phase))
 
 func _show(level: float) -> void:
+	if dip != null:
+		level *= dip.factor()
 	if lamp != null:
 		lamp.light_energy = lamp_energy * level
 	if material != null:

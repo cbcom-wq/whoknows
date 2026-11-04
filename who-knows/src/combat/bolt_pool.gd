@@ -34,6 +34,15 @@ func fire(kind: StringName, from: Vector3, dir: Vector3, carrier: Vector3, sourc
 	bolt.arm(kind, from, dir, carrier, source, exclude)
 	return bolt
 
+## The bolts armed and not yet landed or fading: what a pilot watches for.
+func flying() -> Array[PhaserBolt]:
+	var out: Array[PhaserBolt] = []
+	for child in get_children():
+		var bolt := child as PhaserBolt
+		if bolt != null and not bolt.is_spent():
+			out.append(bolt)
+	return out
+
 func release(bolt: PhaserBolt) -> void:
 	live -= 1
 	_free.append(bolt)

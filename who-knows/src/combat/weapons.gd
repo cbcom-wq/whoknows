@@ -3,16 +3,19 @@ extends RefCounted
 
 ## What turrets may shoot (ship weapons spec §4): every target outside is in
 ## TARGETS, its id in meta ID. Ships, bases, NPCs outside and loose items in
-## space join; you never do. Nothing here holds a node: fire control keeps ids
-## and finds them again.
+## space join, and you as YOU, a target only on a spacewalk and only to a
+## hostile (hostile ships spec §4.2). Nothing here holds a node: fire control
+## keeps ids and finds them again.
 
 const TARGETS := &"weapon_targets"
 const ID := &"target_id"
+## Your id as a target.
+const YOU := &"you"
 ## An NPC is aimed at this far up its own body from its feet, m.
 const NPC_CENTRE := 0.4
 
-## Whether a node is hostile, for tests and the enemy project (spec §4.3):
-## nothing is in this one.
+## Whether `node` is hostile to `shooter`, for tests: called as
+## (shooter, node), it overrides the sides when set.
 static var hostile_rule: Callable
 
 static func join(node: Node, id: StringName) -> void:
@@ -48,11 +51,13 @@ static func kind_of(id: StringName) -> StringName:
 
 ## Whether `node` can be shot at now: alive, in the tree, a target, not dead,
 ## not a ship asleep, not an item that is held or stowed (a nozzle in its reel,
-## a tool in hand: only loose ones are targets).
+## a tool in hand: only loose ones are targets), not you aboard.
 static func usable(node: Node) -> bool:
 	if node == null or not is_instance_valid(node) or not node.is_inside_tree() or not node.is_in_group(TARGETS):
 		return false
 	if node is Npc and (node as Npc).is_dead():
+		return false
+	if node is Avatar and (node as Avatar).mode != Avatar.Mode.SUIT:
 		return false
 	if node is Item and (node as Item).state != Item.State.LOOSE:
 		return false
@@ -101,8 +106,12 @@ static func label_of(node: Node) -> String:
 		return (node as Item).definition.display_name.to_upper()
 	return String(id_of(node)).to_upper()
 
-static func is_hostile(node: Node) -> bool:
-	return hostile_rule.is_valid() and bool(hostile_rule.call(node))
+## Whether `node` is on a side hostile to `shooter`'s (hostile ships spec
+## §4.2): crew against hostile, both ways.
+static func is_hostile(shooter: Node, node: Node) -> bool:
+	if hostile_rule.is_valid():
+		return bool(hostile_rule.call(shooter, node))
+	return Sides.hostile_to(Sides.side_of(shooter), Sides.side_of(node))
 
 ## Whether `node` is `ship`'s own hull (spec §4.4): ships have no owner yet.
 static func is_own(ship: Node, node: Node) -> bool:

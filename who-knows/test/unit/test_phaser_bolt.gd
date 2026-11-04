@@ -38,7 +38,8 @@ func test_it_flies_at_its_speed_plus_its_carrier():
 	await wait_physics_frames(30)
 	var t := bolt.age
 	assert_almost_eq(bolt.global_position.x, 10.0 * t, 0.2, "carried sideways with its ship")
-	assert_almost_eq(bolt.global_position.z, -600.0 * t, 2.0, "and out at 600 m/s")
+	var speed: float = WeaponValues.spec(WeaponValues.LIGHT)["speed"]
+	assert_almost_eq(bolt.global_position.z, -speed * t, 2.0, "and out at its speed")
 
 func test_a_hit_carries_its_damage_and_kind():
 	var target := _slab(-60.0, Target.new()) as Target

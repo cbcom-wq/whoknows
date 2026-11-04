@@ -3,7 +3,8 @@ extends Node3D
 
 ## What damage looks like on the hull, beyond its colour (docs/superpowers/
 ## specs/2026-09-29-health-and-damage-design.md §9): a damaged block spits a
-## few sparks now and then, and a block knocked off goes in a burst of sparks
+## few sparks now and then, more often the more its section is hurt (share();
+## hostile ships spec §7), and a block knocked off goes in a burst of sparks
 ## and a few charred chunks. Inside, a few walls spit sparks into the cabin, more
 ## the more the hull is hurt (cabin(); ship damage sections spec §5: the
 ## inside follows HULL %, and changes style, never shape).
@@ -19,6 +20,11 @@ const SPARKS := 6
 const SPARK_LIFE := 0.3
 ## Seconds between a damaged block's spits, at random between these.
 const SPIT_EVERY := Vector2(0.8, 2.5)
+## ...and as its section nears nothing (hostile ships spec §7): near
+## continuous, so a dying ship fizzes all over. Between, by the section's
+## damage share from SPIT_QUICKEN_FROM (spit_every()).
+const SPIT_EVERY_WORST := Vector2(0.05, 0.2)
+const SPIT_QUICKEN_FROM := 0.25
 const BURST_SPARKS := 32
 const BURST_LIFE := 2.0
 const CHUNKS := Vector2i(3, 5)
@@ -46,6 +52,8 @@ var inside_face: Callable
 var _spitting: Dictionary = {}
 ## coord -> {emitter, next}: walls spitting into the cabin.
 var _inside: Dictionary = {}
+## coord -> its section's damage share, 0..1 (share()); kept across sync().
+var _shares: Dictionary = {}
 var _rng := RandomNumberGenerator.new()
 static var _spark_mesh: Mesh
 static var _chunk_mesh: Mesh
@@ -74,7 +82,25 @@ func stage(grid: ShipGrid, coord: Vector3i, stage: int) -> void:
 	elif not _spitting.has(coord):
 		var at: Variant = _outer_face(grid, coord)
 		if at != null:
-			_spitting[coord] = _spit(self, at, layer | 1, coord)
+			_spitting[coord] = _spit(self, at, layer | 1, coord, spit_every(_shares.get(coord, 0.0)))
+
+## The block at `coord` is in a section `share` (0..1) damaged: it spits more
+## often the more that is (spit_every()). Its next spit comes no later than
+## the new interval allows.
+func share(coord: Vector3i, p_share: float) -> void:
+	_shares[coord] = p_share
+	if _spitting.has(coord):
+		var every := spit_every(p_share)
+		var e: Dictionary = _spitting[coord]
+		if e["next"] > every.y:
+			e["next"] = _rng.randf_range(0.0, every.y)
+
+## Seconds between spits, at random between these, for a block whose section
+## is `p_share` damaged: SPIT_EVERY to SPIT_QUICKEN_FROM, then quicker, to
+## SPIT_EVERY_WORST at 1.
+static func spit_every(p_share: float) -> Vector2:
+	var t := clampf((p_share - SPIT_QUICKEN_FROM) / (1.0 - SPIT_QUICKEN_FROM), 0.0, 1.0)
+	return SPIT_EVERY.lerp(SPIT_EVERY_WORST, t)
 
 ## The cabin at `level` (Ship.cabin_level): CABIN_SPITS of the `walls` (the
 ## cabin's shell, in a fixed order) spit into it, the first that show inside.
@@ -89,15 +115,15 @@ func cabin(level: int, walls: Array) -> void:
 			break
 		var at: Variant = inside_face.call(coord)
 		if at != null:
-			_inside[coord] = _spit(interior, at, InteriorKit.LAYER, coord)
+			_inside[coord] = _spit(interior, at, InteriorKit.LAYER, coord, SPIT_EVERY)
 
-func _spit(parent: Node3D, at: Vector3, layers: int, coord: Vector3i) -> Dictionary:
+func _spit(parent: Node3D, at: Vector3, layers: int, coord: Vector3i, every: Vector2) -> Dictionary:
 	var emitter := _emitter(SPARKS, SPARK_LIFE, 3.5, true)
 	emitter.layers = layers
 	emitter.position = at
 	parent.add_child(emitter)
 	_rng.seed = hash(coord)
-	return {"emitter": emitter, "next": _rng.randf_range(0.0, SPIT_EVERY.y)}
+	return {"emitter": emitter, "next": _rng.randf_range(0.0, every.y)}
 
 ## Blocks at `coords` are gone: a burst and chunks at each of the first few.
 func lost(coords: Array[Vector3i]) -> void:
@@ -121,7 +147,8 @@ func _process(delta: float) -> void:
 			var e: Dictionary = spits[coord]
 			e["next"] -= delta
 			if e["next"] <= 0.0:
-				e["next"] = _rng.randf_range(SPIT_EVERY.x, SPIT_EVERY.y)
+				var every := spit_every(_shares.get(coord, 0.0)) if is_same(spits, _spitting) else SPIT_EVERY
+				e["next"] = _rng.randf_range(every.x, every.y)
 				var emitter: GPUParticles3D = e["emitter"]
 				if is_instance_valid(emitter):
 					emitter.restart()
