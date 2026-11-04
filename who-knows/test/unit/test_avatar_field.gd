@@ -411,6 +411,42 @@ func test_a_thing_taken_outside_goes_onto_the_hands_layer():
 		assert_eq((node as MeshInstance3D).layers, Avatar.HANDS_LAYER, str(node.name))
 	assert_gt(seen, 0, "the crate has meshes")
 
+## The other way (after the final review): a thing let go of on foot leaves
+## the hands' layer for the world's, or the head lamp's beam, which leaves that
+## layer out, would never light it where it lies at night.
+func test_a_thing_dropped_on_foot_leaves_the_hands_layer():
+	var crate := _crate_in_hand_on_foot()
+	_avatar.grasp.drop()
+	assert_eq(crate.state, Item.State.LOOSE, "let go")
+	_assert_on_the_world_layer(crate)
+
+func test_a_thing_thrown_on_foot_leaves_the_hands_layer():
+	var crate := _crate_in_hand_on_foot()
+	_avatar.grasp.throw(0.5)
+	assert_eq(crate.state, Item.State.LOOSE, "thrown")
+	_assert_on_the_world_layer(crate)
+
+func _crate_in_hand_on_foot() -> Item:
+	_lone()
+	_field()
+	var crate := Item.new()
+	crate.setup(ItemCatalog.load_from_dir().get_def(&"crate"))
+	_world.add_child(crate)
+	crate.global_position = _avatar.global_position + Vector3(0, 1.0, -1.0)
+	crate.set_space(true)
+	crate.set_loose()
+	assert_true(_avatar.grasp.take(crate), "hands work on the ground")
+	return crate
+
+func _assert_on_the_world_layer(item: Item) -> void:
+	var seen := 0
+	for node in item.find_children("*", "MeshInstance3D", true, false):
+		seen += 1
+		var layers := (node as MeshInstance3D).layers
+		assert_eq(layers & Avatar.HANDS_LAYER, 0, "%s is off the hands' layer" % node.name)
+		assert_ne(layers & Item.SPACE_LAYER, 0, "%s is on the world's layer" % node.name)
+	assert_gt(seen, 0, "the crate has meshes")
+
 func test_l_does_nothing_aboard():
 	_lone()
 	_avatar._unhandled_input(_action(&"lights_flood"))

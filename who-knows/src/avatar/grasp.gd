@@ -29,6 +29,10 @@ signal taken(item: Item, from: Transform3D)
 ## anything dropped or thrown there -- an item in space (Item.in_space) let
 ## loose -- is reported the same way (desert world spec §5.5).
 signal let_go(item: Item)
+## Out of the hands, whichever way: dropped, thrown, stowed, let fall, let go
+## on a spacewalk, or wound home to its reel. The holder puts it back on the
+## world's layers if it moved it off them (Avatar.HANDS_LAYER).
+signal released(item: Item)
 
 enum Mode { EMPTY, CARRYING, WIELDING }
 
@@ -356,6 +360,7 @@ func _release() -> void:
 	charge = -1.0
 	if it.definition.eva_tool and it.use_node != null and it.use_node.go_home(it):
 		_ignore(it, false)
+		released.emit(it)
 		return
 	var size := it.definition.size
 	var at := _clear_point(it.global_position, maxf(size.x, maxf(size.y, size.z)) * 0.5)
@@ -365,6 +370,7 @@ func _release() -> void:
 	it.linear_velocity = _body.velocity
 	it.angular_velocity = Vector3.ZERO
 	_releasing.append([it, RELEASE_GRACE])
+	released.emit(it)
 
 ## The point on the way from the eye to `to` that a ray proves is clear, far
 ## enough short of any wall for something `half_size` across.

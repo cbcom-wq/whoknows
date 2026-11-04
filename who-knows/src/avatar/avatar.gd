@@ -225,6 +225,7 @@ func _ready() -> void:
 	grasp.bind(self, head, hands.wield_socket, hands.carry_socket)
 	grasp.let_go.connect(func(item: Item) -> void: let_fall.emit(item, true))
 	grasp.taken.connect(_on_item_taken)
+	grasp.released.connect(_on_item_released)
 	hands.bind(grasp, self)
 	var sounds := SuitSounds.new()
 	sounds.name = "SuitSounds"
@@ -296,6 +297,13 @@ func _on_item_taken(item: Item, _from: Transform3D) -> void:
 	var use := item.use_node
 	if use != null and use.has_signal(&"swallowed") and not use.is_connected(&"swallowed", _on_swallowed):
 		use.connect(&"swallowed", _on_swallowed)
+
+## Let go of outside in any way (dropped, thrown, stowed, home to its reel), a
+## thing leaves your hands' layer for the world's: Item.set_space rebuilds its
+## look there, so the head lamp's beam lights it where it lies.
+func _on_item_released(item: Item) -> void:
+	if is_outside() and is_instance_valid(item):
+		item.set_space(true)
 
 func _on_swallowed(label: String, value: int) -> void:
 	toast.emit("+%d QE · %s" % [value, label])
