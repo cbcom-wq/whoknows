@@ -422,7 +422,8 @@ pieces, all under `src/ship/` unless stated:
   - `to_dict()` / `from_dict(d)`: the save's `lights` part, `{"floods": bool, "forward": bool}`;
     missing means both off. Both start off;
   - `SETTINGS`: floods cone 55°, reach 40 m, energy 4, **shadows on**; forward cone 22°, reach
-    220 m, energy 16, shadows on. `LIGHT_MASK` `1 | 4`, `BEAM_LAYER` 1, `BEAM_FRACTION` 0.6,
+    220 m, energy 16, shadows on. `LIGHT_MASK` `1 | 4 | 8` (world, `OWN_HULL_LAYER`,
+    `Avatar.HANDS_LAYER`: your hands outside are lit by the floods), `BEAM_LAYER` 1, `BEAM_FRACTION` 0.6,
     `LOW_POWER_LEVEL` 0.5. A spot's `spot_angle` is half the cone;
   - the beams' `transparency` follows `exterior_level`; the lenses' glow energy and the windows'
     follow their levels.
@@ -998,6 +999,7 @@ thrust over weight here (INF outside a well); under 1.0 the HUD says `TOO HEAVY 
 | Settling | LANDED after `SETTLE_TIME` 1 s under `SETTLE_SPEED` 0.5 m/s and `SETTLE_SPIN` 0.1 rad/s; touching at more than `MAX_TILT` 25° reads `Uneven ground` and does not settle | constants |
 | Contact lost | `LIFT_GRACE` 0.25 s of grace before TOUCHING falls back to FLYING | `LIFT_GRACE` |
 | LANDED | the hull is frozen `FREEZE_MODE_STATIC`. You leave it only by translating (Ruling 2): a frozen hull may report no contacts | `_set_state` |
+| Translating | the pilot's translation input, or a velocity hold climbing faster than `HOLD_LIFTS` 0.5 m/s along the world's up, so a pilot's climb lifts a landed ship off; a level or downward hold leaves it landed | static `LandingMonitor.translating(flight, up)` |
 | On the ground | `FlightComputer.on_ground` is set only by `_publish()`: true when LANDED, or TOUCHING with terrain contact this tick. With it and the translation input zero, `_resting_on_ground()` skips both the hold and the levelling (Ruling 7a), so weight reaches the ground. Any translation input brings both back at once | `_publish`, `on_ground` |
 | Asking | `refusal()` (`""` when landed, else `Uneven ground · tilt n°` or `Not landed`), `ground_status()` (the HUD's word), `is_landed()`, `tilt()`, `static is_ground(body)` | `LandingMonitor` |
 | Saving | `hull.landed` is saved (`Ship.to_dict`), and carried through `Fleet`'s sleep and wake (Ruling 9). `restore_landed()` lands it frozen on load | `restore_landed`, `Fleet` |
@@ -1011,8 +1013,17 @@ thrust over weight here (INF outside a well); under 1.0 the HUD says `TOO HEAVY 
   (`BODY_RADIUS`), height 1.8 (`Avatar.STAND_HEIGHT`), centred 1.35 m over the outer hatch floor
   (its bottom `HATCH_STEP` 0.45 m up, Ruling 10), stepped out to `HATCH_CLEAR` 2.5 m, masks
   terrain and rocks, the ship's own exterior excluded. It is cached per physics frame.
+- No way up, no way out: after `outside_refusal()` and before the hatch-clear cast,
+  `world_refusal()` says `No ramp · <sill> m drop` (`No ramp · 4 m drop` on the Warden) when the
+  alcove's `way_up` is `AirlockAlcove.NONE`, so nobody steps out onto a drop they cannot climb
+  back up. In open space the same hatch cycles as ever.
 - The threshold calls `Avatar.enter_field` on a world, so you step out on foot (FIELD), not on a
   spacewalk (SUIT).
+- A breach blows you out on foot (FIELD) only when the ship is on a world **and landed**
+  (`flight_test._on_blocks_lost`); flying over one, it is a spacewalk (SUIT), so you never stand
+  in mid-air. Blacking out on foot wakes you aboard (`_rescue`, `enter_plating`).
+- On foot (FIELD) the HUD shows no suit charge: `build_telemetry` blanks `energy_label` and the
+  energy panel shows only the tool's text (`EnergyPanel.render`).
 - `Ship.on_world()` and `Ship.outside_refusal()` override `GridHome`'s defaults (false and ""),
   which a `Base` still has. **Phase 3 must override them on `Base`** for the oasis buildings,
   or a base on a world steps you out in SUIT mode and asks for charge. The same goes for a
@@ -1032,17 +1043,18 @@ its outer hatch when the plan wants one and nothing is in its way. A blueprint p
 
 | What | Value | Where |
 |---|---|---|
-| Wants one | a horizontal outer hatch whose sill is over `Airlock.HATCH_STEP` (0.45 m) above the keel's plane; at or under it, a step; facing up or down, none: not boardable | `LandingRamp.need`, `wants_ramp` |
+| Wants one | a horizontal outer hatch whose sill is over `Airlock.HATCH_STEP` (0.45 m) above the keel's plane; at or under it, a step; facing up or down, none: not boardable | `LandingRamp.need` |
+| The way up | `STEP`; `RAMP` when one is wanted and nothing is in its way; else `AirlockAlcove.NONE`, and the airlock refuses the step out on a world (`No ramp · 4 m drop`). Kept on the alcove as `way_up` with its `hatch_plan`. Starter and Lamplighter `RAMP`, Warden `NONE` | static `AirlockAlcove.way_up_for(plan)` |
 | The sill | `floor_y(at) - storey_offset(at.y) + Ship.keel_depth_of(grid)`: 2.05 m on the starter and the Lamplighter, 4.05 m on the Warden | `ramp_plan` |
 | Length | sill / sin 30°: 4.10 m for 2.05 m | `length_for`, `SLOPE` |
-| Angle | asin((sill + drop) / length), from a ray (`BodyProxy.LAYER`) to the ground under the tip, then a second ray where that puts the tip; clamped 15°–38°, under the avatar's 45° `floor_max_angle` less 5°. With no ground found it is 30° and retried every 0.5 s while down | `angle_for`, `settle`, `LEAST`, `MOST`, `SETTLE_EVERY` |
+| Angle | asin((sill + drop) / length), from a ray (`BodyProxy.LAYER`) to the ground under the tip, then a second ray where that puts the tip; clamped 15°–38°, under the avatar's 45° `floor_max_angle` less 5°. With no ground found it is 30° and retried every 0.5 s while down; after an instant deploy, every physics tick for the first `SETTLE_EAGER` 1 s, since a loaded game's ground colliders come a tick or two later | `angle_for`, `settle`, `LEAST`, `MOST`, `SETTLE_EVERY`, `SETTLE_EAGER` |
 | In the way | the cells `sample_points` (across the width, top and underside, from 0.25 m out) fall in that hold a block, the airlock's own cell aside: no ramp is built | `ramp_plan`'s `through` |
 | Frame | on the hatch's plane at the sill, mid-doorway, +z out, +y up | `AirlockAlcove.hinge_frame` |
 | Shape | a slab 1.3 × 0.18 m (`DOOR_WIDTH` + 0.3, `THICKNESS`), its top flush with the sill; two rails 0.12 m tall, 0.1 wide, from 0.25 m; 4 raised treads (3 on a ramp under 3.2 m, `TREADS_FOUR`) 0.03 × 0.14 m in `PANEL_LINE`, the one accent; a foot pad kept level; a hinge barrel and two knuckles. `HullPalette` only through `HullMaterials.trim()`, no new shader, on `OWN_HULL_LAYER` | `_draw_slab`, `_draw_pad`, `_draw_housing` |
 | Travel | slides 0.5 s out of its slot, then swings 1.1 s down (1.6 s), the `hatch_motor` at the start of each; hidden while stowed | `SLIDE_TIME`, `SWING_TIME`, `TRAVEL`, `SOUND` |
 | Collider | a `BoxShape3D` the slab's size on the hull body (layer 1), named `LandingRamp`, in the alcove's `colliders`: on only once fully down, off the moment it starts up. The airlock's hatch-clear cast leaves the hull out, so it never sees it | `collider`, `slab_frame` |
 | When | down while `landing.is_landed() and on_world()`, up otherwise | `Ship._on_landing_changed`, `_sync_ramps` |
-| At once | `LandingMonitor.restored` (set by `restore_landed`, cleared on leaving LANDED) and a rebuild while landed put it down with no travel. `_sync_ramps` runs every physics tick while landed, because a save restores LANDED before the ship has its gravity | `Ship._rebuild_everything` |
+| At once | `LandingMonitor.restored` (set by `restore_landed`, cleared on leaving LANDED) and a hull rebuild while landed put it down with no travel: `Ship._rebuild_everything` calls `_sync_ramps(hull)` itself. `_sync_ramps` also runs every physics tick while landed, because a save restores LANDED before the ship has its gravity | `Ship._rebuild_everything`, `_sync_ramps` |
 | Asking | `is_down()`, `is_stowed()`, `progress()` (0 stowed, 1 down), `top_edge()`, `tip()`, `sill_height`, `length`, `angle` | `LandingRamp` |
 
 You walk up it on your feet and in through the outer hatch; `Airlock._watch_threshold` takes you
@@ -1053,7 +1065,7 @@ floating origin carries it.
 - **Probe lines:** `ship_probe.gd` and `ship_check.gd` print one per airlock: `ramp    airlock
   (0, 0, 3): ramp: 2.05 m, 4.10 m at 30°` (the starter), `step (sill … m over the keel)`, or
   `… — NOT BOARDABLE ON A WORLD` with the blocks in the way. The probe adds `<-- NOT BUILT` if
-  the alcove disagrees with the plan.
+  the alcove disagrees with the plan (`way_up_for(plan) == LandingRamp.RAMP`).
 - **Proof:** `test_landing_ramp.gd` (the geometry; down about 2 s after LANDED with its top at
   the sill and its tip on the ground; a liftoff stows it; from its foot you walk up and in; out of
   the hatch you walk down it on your feet; a save
