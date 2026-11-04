@@ -137,6 +137,21 @@ func test_plating_is_unchanged():
 	assert_eq(g.asked, 0, "PLATING never asks the world")
 	assert_eq(_avatar.up_direction, Vector3.UP)
 
+## Ruling 3, the other half: a spacewalk feels no world's pull, however hard it
+## would pull -- the world is never asked, and a tick leaves you drifting as you
+## were.
+func test_on_a_spacewalk_no_world_pulls():
+	_lone()
+	var g := _fake_gravity(Vector3(0, -50, 0))
+	_avatar.gravity = g
+	_avatar.enter_suit(_world, Transform3D.IDENTITY, Vector3(0.5, 0, 0), null)
+	_avatar.suit_cell.charge = SuitCell.CAPACITY
+	_avatar.suit_assist = false   # the assist's braking is not the world's
+	_avatar._physics_process(DT)
+	assert_eq(_avatar.mode, Avatar.Mode.SUIT)
+	assert_eq(g.asked, 0, "SUIT never asks the world")
+	assert_almost_eq(_avatar.velocity, Vector3(0.5, 0, 0), Vector3.ONE * 1e-6, "drifting as you were")
+
 func test_out_onto_a_world_you_are_outside_on_your_feet():
 	_lone()
 	var root := _avatar.grasp.world_root
@@ -150,9 +165,33 @@ func test_out_onto_a_world_you_are_outside_on_your_feet():
 	assert_false(_avatar.grasp.suspended, "hands work on the ground")
 	assert_eq(_avatar.grasp.world_root, _world, "what you let go of lands outside")
 	assert_ne(root, _world)
+	assert_eq(_avatar.grasp.ray_mask, Grasp.OUTSIDE_RAY_MASK, "the hands' ray stops at hulls, ground and rocks")
 	assert_null(_avatar.camera.environment, "the world's look")
 	assert_eq(_avatar.up, Vector3.UP)
 	assert_eq(_avatar.up_direction, Vector3.UP)
+
+## Fix round 1: a thing let go against the ground lands on your side of it,
+## never 0.3 m inside -- the hands' ray stops at the ground outside.
+func test_on_a_world_a_drop_against_the_ground_lands_on_your_side():
+	_lone()
+	_field()
+	_avatar.set_physics_process(false)
+	var eye := _avatar.grasp.aim()
+	var forward := -eye.basis.z
+	var wall := StaticBody3D.new()
+	wall.collision_layer = BodyProxy.LAYER
+	var box := BoxShape3D.new()
+	box.size = Vector3(4, 4, 0.1)
+	var shape := CollisionShape3D.new()
+	shape.shape = box
+	wall.add_child(shape)
+	_world.add_child(wall)
+	wall.global_transform = Transform3D(eye.basis, eye.origin + forward * 0.6)
+	await wait_physics_frames(1)
+	var at: Vector3 = _avatar.grasp._clear_point(eye.origin + forward * 1.0, 0.2)
+	var along := (at - eye.origin).dot(forward)
+	assert_lt(along, 0.55 - 0.2, "short of the ground's face by the thing's half size")
+	assert_gt(along, 0.0, "and still in front of you")
 
 func test_on_the_suit_and_aboard_you_are_where_you_were():
 	_lone()
@@ -305,6 +344,7 @@ func test_coming_back_in_puts_back_everything_the_field_changed():
 	assert_eq(_avatar.mode, Avatar.Mode.PLATING)
 	assert_false(_avatar.is_outside())
 	assert_eq(_avatar.grasp.world_root, root, "drops land aboard again")
+	assert_eq(_avatar.grasp.ray_mask, Grasp.RAY_MASK, "the hands' ray as aboard")
 	assert_false(_avatar.grasp.suspended)
 	assert_eq(_avatar.motion_mode, CharacterBody3D.MOTION_MODE_GROUNDED)
 	assert_eq(_avatar.up, Vector3.UP)
@@ -337,10 +377,10 @@ var _root: Node
 var _ship: Ship
 var _airlock: Airlock
 
-## The starter in the flight scene, its airlock stepped by hand, with you in
-## the room and the outer hatch open: on a world (landed) if `on_world`, else
-## in open space or a ring, with a full suit.
-func _scene(on_world: bool) -> void:
+## The starter in the flight scene, you aboard with a full suit, its airlock
+## stepped by hand: on a world (landed) if `on_world`, else in open space or a
+## ring.
+func _flight(on_world: bool) -> void:
 	_root = load("res://scenes/flight_test.tscn").instantiate()
 	add_child_autofree(_root)
 	_ship = _root.get_node("Ship")
@@ -351,6 +391,10 @@ func _scene(on_world: bool) -> void:
 	if on_world:
 		_ship.flight_computer.gravity = OnWorld.new()
 		_ship.landing.restore_landed()
+
+## As _flight, with you in the airlock room and the outer hatch open.
+func _scene(on_world: bool) -> void:
+	_flight(on_world)
 	_airlock.room.corridor_panel.interact(null)
 	_step(AirlockCycle.OPEN_TIME + 0.1)
 	_avatar.position = _airlock.room.room_frame.origin
@@ -436,4 +480,34 @@ func test_you_cannot_sit_from_outside_on_a_world():
 	director.sit(_root.get_node("Ship/Interior/PilotSeat"))
 	assert_false(director.is_seated)
 	assert_false(_root.board_nearest(), "F8 waits for you to come aboard")
-	assert_eq(_root.warp_panel.toast_label.text, "NOT ON A WORLD")
+	assert_eq(_root.warp_panel.toast_label.text, "NOT ON FOOT")
+
+## A hole where you stand (health and damage spec §7.4) on a landed ship puts
+## you on the ground beside it, on your feet -- never adrift in a suit beside
+## the ground.
+func test_a_hole_where_you_stand_on_a_world_puts_you_on_your_feet():
+	_flight(true)
+	assert_true(_ship.on_world())
+	_stand_in_a_hole()
+	assert_eq(_avatar.mode, Avatar.Mode.FIELD)
+	assert_eq(_avatar.get_parent(), _ship.outside)
+	assert_true(_avatar.beacon_source.is_valid(), "the way home on the HUD")
+
+## In open space, or a ring, it is a spacewalk, as it always was.
+func test_a_hole_where_you_stand_in_open_space_is_a_spacewalk():
+	_flight(false)
+	assert_false(_ship.on_world())
+	_stand_in_a_hole()
+	assert_eq(_avatar.mode, Avatar.Mode.SUIT)
+	assert_eq(_avatar.get_parent(), _ship.outside)
+
+## Stands you, aboard, in a cell the ship has no block in -- two past its
+## furthest -- and tells the scene blocks were lost.
+func _stand_in_a_hole() -> void:
+	var far := 0
+	for c: Vector3i in _ship.grid.coords():
+		far = maxi(far, c.x)
+	var cell := Vector3i(far + 2, 0, 0)
+	assert_false(_ship.grid.has_block(cell))
+	_avatar.global_position = _ship.interior.to_global(ShipGrid.cell_center(cell))
+	_root._on_blocks_lost([] as Array[Vector3i], _ship)

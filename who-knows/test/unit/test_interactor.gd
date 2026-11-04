@@ -60,9 +60,9 @@ func test_never_reports_what_you_hold():
 	await wait_physics_frames(3)
 	assert_ne(_interactor.current(), item)
 
-func _wall(z: float) -> void:
+func _wall(z: float, layer := 2) -> void:
 	var wall := StaticBody3D.new()
-	wall.collision_layer = 2
+	wall.collision_layer = layer
 	var box := BoxShape3D.new()
 	box.size = Vector3(4, 4, 0.1)
 	var shape := CollisionShape3D.new()
@@ -117,3 +117,46 @@ func test_does_not_offer_an_item_behind_a_wall():
 	_small(eye + Vector3(0.12, 0, -1.6))
 	await wait_physics_frames(3)
 	assert_null(_interactor.current())
+
+## Outside (desert world spec §5.5) the ground, hulls and rocks stand in the
+## way as walls do aboard: an item behind a rise of ground is not offered...
+func test_outside_an_item_behind_the_ground_is_not_offered():
+	_interactor.set_mask(Interactor.SUIT_MASK)
+	var eye := _interactor.global_position
+	_wall(eye.z - 1.0, BodyProxy.LAYER)
+	_small(eye + Vector3(0.12, 0, -1.6))
+	await wait_physics_frames(3)
+	assert_null(_interactor.current())
+
+## ...nor one behind a hull or a rock.
+func test_outside_an_item_behind_a_hull_or_a_rock_is_not_offered():
+	_interactor.set_mask(Interactor.SUIT_MASK)
+	var eye := _interactor.global_position
+	_wall(eye.z - 1.0, 1)
+	_small(eye + Vector3(0.12, 0, -1.6))
+	_wall(eye.z + 1.0, AsteroidBody.LAYER)
+	_small(eye + Vector3(-0.12, 0, 1.6))
+	_avatar.rotate_y(PI)
+	await wait_physics_frames(3)
+	assert_null(_interactor.current(), "behind the rock")
+	_avatar.rotate_y(PI)
+	await wait_physics_frames(3)
+	assert_null(_interactor.current(), "behind the hull")
+
+## ...but one lying on the ground in front of you still is: the ground under it
+## is no wall.
+func test_outside_an_item_lying_on_the_ground_is_offered():
+	_interactor.set_mask(Interactor.SUIT_MASK)
+	var eye := _interactor.global_position
+	var ground := StaticBody3D.new()
+	ground.collision_layer = BodyProxy.LAYER
+	var box := BoxShape3D.new()
+	box.size = Vector3(4, 1, 4)
+	var shape := CollisionShape3D.new()
+	shape.shape = box
+	ground.add_child(shape)
+	_world.add_child(ground)
+	ground.global_position = eye + Vector3(0, -0.08 - 0.5, -1.5)
+	var item := _small(eye + Vector3(0.12, -0.03, -1.5))
+	await wait_physics_frames(3)
+	assert_eq(_interactor.current(), item)

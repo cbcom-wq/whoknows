@@ -50,8 +50,12 @@ const WALL_MARGIN := 0.15
 ## head-local, until Hands provides sockets.
 const DEFAULT_WIELD_SOCKET := Vector3(0.17, -0.2, -0.42)
 const DEFAULT_CARRY_SOCKET := Vector3(0.0, -0.34, -0.4)
-## interior_geometry | items.
+## interior_geometry | items: what the hands' ray (where a drop lands, what a
+## stow aims at) stops at aboard.
 const RAY_MASK := 2 | 32
+## Outside (desert world spec §5.5): hulls, the ground, rocks, exterior props
+## and items, so a thing let go against any of them lands on your side of it.
+const OUTSIDE_RAY_MASK := 1 | BodyProxy.LAYER | AsteroidBody.LAYER | 16 | 32
 const STOW_PROMPT := "[G] Stow"
 
 var mode: Mode = Mode.EMPTY
@@ -74,6 +78,9 @@ var wield_socket: Node3D
 var carry_socket: Node3D
 ## Where released items go.
 var world_root: Node3D
+## What the hands' ray stops at: RAY_MASK aboard, OUTSIDE_RAY_MASK outside. The
+## holder switches it on the way out and back in.
+var ray_mask := RAY_MASK
 
 var _body: CharacterBody3D
 var _head: Node3D
@@ -372,7 +379,7 @@ func _ray(from: Vector3, to: Vector3) -> Dictionary:
 	var exclude: Array[RID] = [_body.get_rid()]
 	if item != null:
 		exclude.append(item.get_rid())
-	var query := PhysicsRayQueryParameters3D.create(from, to, RAY_MASK, exclude)
+	var query := PhysicsRayQueryParameters3D.create(from, to, ray_mask, exclude)
 	return _body.get_world_3d().direct_space_state.intersect_ray(query)
 
 func _tick_grace(delta: float) -> void:

@@ -45,7 +45,7 @@ func _leash() -> Item:
 	return item
 
 func test_the_spacewalk_interactor_sees_items_as_well_as_the_hull_panel():
-	assert_eq(Interactor.SUIT_MASK, 16 | 32)
+	assert_eq(Interactor.SUIT_MASK & (16 | 32), 16 | 32)
 
 func test_the_suit_cell_pays_nothing_for_the_tethers_pull():
 	var item := _leash()

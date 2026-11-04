@@ -616,6 +616,8 @@ func _go_out(outside: Node3D, pose: Transform3D, start_velocity: Vector3, ship_h
 	camera.environment = null
 	if interactor != null:
 		interactor.set_mask(Interactor.SUIT_MASK)
+	# A thing let go against a hull, the ground or a rock lands on your side.
+	grasp.ray_mask = Grasp.OUTSIDE_RAY_MASK
 	# What you hold comes out with you, drawn for outside.
 	if grasp.item != null:
 		grasp.item.set_space(true)
@@ -655,6 +657,7 @@ func enter_plating(interior: Node3D, pose: Transform3D, pitch: float, start_velo
 	camera.environment = _interior_environment
 	if interactor != null:
 		interactor.set_mask(Interactor.MASK)
+	grasp.ray_mask = Grasp.RAY_MASK
 	grasp.suspended = false
 	if grasp.item != null:
 		grasp.item.set_space(false)

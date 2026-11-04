@@ -27,11 +27,11 @@ signal lost(text: String)
 @onready var _stream: AsteroidStream = $AsteroidStream
 
 ## Every ship in the world (many ships spec §5), and the one you are in, or
-## the one your suit belongs to on a spacewalk (§3.4).
+## the one your suit belongs to outside (§3.4).
 var fleet: Fleet
 var aboard: Ship
 ## Where you are (habitat modules spec §5.5): the ship you are aboard or the
-## base you are in, or the one your suit belongs to on a spacewalk. A ship
+## base you are in, or the one your suit belongs to outside. A ship
 ## here is always `aboard`.
 var home: GridHome
 ## The base a loaded game had you in (habitat modules spec §11.2): woken in
@@ -187,8 +187,9 @@ func _ready() -> void:
 	_make_bases()
 	_make_suit_tie()
 	_place_avatar_on_deck()
-	# A target to hostiles on a spacewalk (hostile ships spec §4.2); Weapons
-	# keeps you out while aboard, and TargetContacts never lists the kind.
+	# A target to hostiles outside, on a spacewalk or on foot on a world
+	# (hostile ships spec §4.2); Weapons keeps you out while aboard, and
+	# TargetContacts never lists the kind.
 	Weapons.join(_avatar, Weapons.YOU)
 	_set_interior_mood()
 	_set_outside_mood()
@@ -587,7 +588,7 @@ func _board_refusal(target: Ship = null) -> String:
 	if target != null and target.side == Sides.HOSTILE:
 		return "HOSTILE SHIP"
 	if _avatar.is_outside():
-		return "NOT ON A SPACEWALK" if _avatar.mode == Avatar.Mode.SUIT else "NOT ON A WORLD"
+		return "NOT ON A SPACEWALK" if _avatar.mode == Avatar.Mode.SUIT else "NOT ON FOOT"
 	if home != aboard:
 		return "IN A BASE"
 	if _director.is_at_station:
@@ -733,7 +734,9 @@ func _on_felt_hit(strength: float, from: Vector3, ship: Ship) -> void:
 		_avatar.knock(strength, from)
 
 ## A hole where you stand puts you outside, moving as you were (health and
-## damage spec §7.4): only a hole in the ship you stand in.
+## damage spec §7.4): only a hole in the ship you stand in. On a landed ship
+## that is on your feet on the world (desert world spec §5.5), as its airlock
+## would put you; anywhere else, a spacewalk.
 func _on_blocks_lost(_coords: Array[Vector3i], ship: Ship) -> void:
 	if _avatar.mode != Avatar.Mode.PLATING or _avatar.get_parent() != ship.interior:
 		return
@@ -745,7 +748,10 @@ func _on_blocks_lost(_coords: Array[Vector3i], ship: Ship) -> void:
 		_avatar.global_transform, InteriorBuilder.storey_offset(cell.y))
 	var v := Threshold.carry_velocity_out(ship.exterior.linear_velocity, ship.exterior.global_basis,
 		_avatar.velocity)
-	_avatar.enter_suit(ship.outside, world, v, ship.exterior)
+	if ship.on_world():
+		_avatar.enter_field(ship.outside, world, v, ship.exterior)
+	else:
+		_avatar.enter_suit(ship.outside, world, v, ship.exterior)
 	for airlock: Airlock in ship.airlocks.values():
 		_avatar.beacon_source = airlock.beacon
 		_avatar.home_source = airlock.home
@@ -779,8 +785,8 @@ func _on_view_changed(view: CameraDirector.View, moving: bool) -> void:
 	_reticle.visible = first_person and not moving
 
 ## The floating origin (asteroids spec §4) follows whoever is outside: the
-## hull, or you on a spacewalk. Wired here so neither Ship nor Avatar needs to
-## know about Universe. F3 shows where you are in the universe.
+## hull, or you when you are out there. Wired here so neither Ship nor Avatar
+## needs to know about Universe. F3 shows where you are in the universe.
 ##
 ## A resumed game puts the origin where you were, then the hull and you back
 ## where the save had you, before the rocks load (saving spec §6.1). A save

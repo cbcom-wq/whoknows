@@ -3,9 +3,9 @@ extends RefCounted
 
 ## What turrets may shoot (ship weapons spec §4): every target outside is in
 ## TARGETS, its id in meta ID. Ships, bases, NPCs outside and loose items in
-## space join, and you as YOU, a target only on a spacewalk and only to a
-## hostile (hostile ships spec §4.2). Nothing here holds a node: fire control
-## keeps ids and finds them again.
+## space join, and you as YOU, a target only outside -- on a spacewalk or on
+## foot on a world -- and only to a hostile (hostile ships spec §4.2). Nothing
+## here holds a node: fire control keeps ids and finds them again.
 
 const TARGETS := &"weapon_targets"
 const ID := &"target_id"
