@@ -54,7 +54,7 @@ this is the land it lives in).
 >   not wash them white. And the HUD on foot says `SUIT n%`, not the spacewalk's "returning".
 >
 > **Measured** (`test/probes/landing_play.gd`, GTX 960, 1280 by 720, windowed; the floor is 120
-> fps): **140 fps** seated at the helm on the ground; **177** standing 6 m off the ship; **149**
+> fps): **140 fps** seated at the helm on the ground; **187** standing 6 m off the ship; **149**
 > at the foot of the ramp looking up it. The Warden (265 t, the heaviest) levels from 15° to
 > **0.03°** with no overshoot, and touchdown damage is **0**.
 >
