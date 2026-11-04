@@ -1063,7 +1063,21 @@ func restore_aboard(d: Dictionary) -> void:
 		if entry is Dictionary:
 			restore_item(entry)
 
+## Metres from the hull's origin down to the bottom face of the lowest cell. The
+## exterior's colliders sit at ShipGrid.cell_center in the hull body's own frame,
+## so the grid's origin is the hull's origin.
+func keel_depth() -> float:
+	var lowest := 0.0
+	var any := false
+	for c: Vector3i in grid.coords():
+		var bottom := ShipGrid.cell_center(c).y - ShipGrid.CELL_SIZE / 2.0
+		if not any or bottom < lowest:
+			lowest = bottom
+			any = true
+	return -lowest if any else 0.0
+
 func _apply_stats() -> void:
+	flight_computer.keel_depth = keel_depth()
 	exterior.mass = maxf(stats.total_mass_kg, 1.0)
 	exterior.center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
 	exterior.center_of_mass = stats.center_of_mass

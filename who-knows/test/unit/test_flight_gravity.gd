@@ -9,8 +9,13 @@ const MASS := 105_700.0
 ## A well that pulls the same everywhere, so no system is needed.
 class FakeGravity extends WorldGravity:
 	var g := Vector3.ZERO
+	var alt := INF
 	func at(_p: Vector3) -> Vector3:
 		return g
+	func up_at(_p: Vector3) -> Vector3:
+		return -g.normalized()
+	func altitude_at(_p: Vector3) -> float:
+		return alt
 	func surface_gravity_at(_p: Vector3) -> float:
 		return g.length()
 
@@ -139,3 +144,55 @@ func test_input_down_in_a_well_adds_to_the_hold():
 	_fc.set_pilot_input(Vector3(0, -1, 0), Vector3.ZERO, false)
 	_fc._apply_translation(1.0 / 60.0)
 	assert_almost_eq(_fc.commanded_force_local.y, 2.0 * MASS - 1e6, 0.5)
+
+## Horizon levelling (desert-world spec §5.2).
+func test_level_rates_fade_in_below_150():
+	var tilted := Basis(Vector3.RIGHT, deg_to_rad(20))
+	assert_eq(FlightComputer.level_rates(tilted, Vector3.UP, 200.0, Vector3.ZERO), Vector3.ZERO)
+	var half := FlightComputer.level_rates(tilted, Vector3.UP, 125.0, Vector3.ZERO)
+	var full := FlightComputer.level_rates(tilted, Vector3.UP, 50.0, Vector3.ZERO)
+	assert_almost_eq(half.x, full.x * 0.5, 1e-4)
+	assert_almost_eq(absf(full.x), minf(FlightComputer.LEVEL_GAIN * deg_to_rad(20), FlightComputer.ASSIST_TURN_RATE), 1e-4)
+	assert_eq(full.y, 0.0)
+
+func test_the_stick_wins():
+	var tilted := Basis(Vector3.RIGHT, deg_to_rad(20))
+	assert_eq(FlightComputer.level_rates(tilted, Vector3.UP, 50.0, Vector3(1, 0, 0)).x, 0.0)
+
+func test_levelling_turns_toward_up_in_pitch():
+	var tilted := Basis(Vector3.RIGHT, deg_to_rad(20))
+	var r := FlightComputer.level_rates(tilted, Vector3.UP, 50.0, Vector3.ZERO)
+	var after := tilted * Basis(Vector3.RIGHT, r.x * 0.1)
+	assert_lt(after.y.angle_to(Vector3.UP), deg_to_rad(20))
+
+func test_levelling_turns_toward_up_in_roll():
+	var tilted := Basis(Vector3.BACK, deg_to_rad(20))
+	var r := FlightComputer.level_rates(tilted, Vector3.UP, 50.0, Vector3.ZERO)
+	assert_ne(r.z, 0.0)
+	var after := tilted * Basis(Vector3.BACK, r.z * 0.1)
+	assert_lt(after.y.angle_to(Vector3.UP), deg_to_rad(20))
+
+func test_keel_altitude_is_infinite_without_a_well():
+	assert_eq(_fc.keel_altitude(), INF)
+
+func test_the_assist_levels_a_tilted_hull_near_the_ground():
+	_fc.gravity = _fake_gravity(Vector3(0, -2.0, 0))
+	(_fc.gravity as FakeGravity).alt = 50.0
+	_fc.torque_budget = Vector3(1e6, 1e6, 1e6)
+	_fc.inertia = Vector3(1e5, 1e5, 1e5)
+	_hull.global_transform = Transform3D(Basis(Vector3.BACK, deg_to_rad(20)), Vector3.ZERO)
+	_fc._apply_rotation(1.0 / 60.0)
+	# Rolled +20 about local Z: the torque must roll it back, the way level_rates says.
+	var want := FlightComputer.level_rates(_hull.global_transform.basis, Vector3.UP, 50.0 - _fc.keel_depth, Vector3.ZERO)
+	assert_ne(_fc.commanded_torque_local.z, 0.0)
+	assert_eq(signf(_fc.commanded_torque_local.z), signf(want.z))
+	assert_lt(want.z * 1.0, 0.0 + 1e-9, "rolls back toward up")
+
+func test_no_levelling_with_the_assist_off():
+	_fc.assist_enabled = false
+	_fc.gravity = _fake_gravity(Vector3(0, -2.0, 0))
+	(_fc.gravity as FakeGravity).alt = 50.0
+	_fc.torque_budget = Vector3(1e6, 1e6, 1e6)
+	_hull.global_transform = Transform3D(Basis(Vector3.BACK, deg_to_rad(20)), Vector3.ZERO)
+	_fc._apply_rotation(1.0 / 60.0)
+	assert_eq(_fc.commanded_torque_local, Vector3.ZERO)

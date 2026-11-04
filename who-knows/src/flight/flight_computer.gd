@@ -107,6 +107,16 @@ var whereabouts: Whereabouts = null
 ## deep space, as in every test that never sets it. Every ship flies through this
 ## script, so every ship feels a world's pull and holds against it.
 var gravity: WorldGravity = null
+
+## Metres from the hull's origin down to the bottom of its lowest cell; the
+## ship sets it from its grid (desert-world spec §5.2).
+var keel_depth := 0.0
+
+## Levelling begins this high above the keel, fully on by LEVEL_FULL, turning
+## the hull toward up at LEVEL_GAIN per second per radian of error.
+const LEVEL_FROM := 150.0
+const LEVEL_FULL := 100.0
+const LEVEL_GAIN := 1.5
 ## This tick's limit with the assist on, m/s.
 var current_limit := CRUISE_LIMIT_MPS
 ## True while boost is actually applying this tick: held, with translation
@@ -362,6 +372,33 @@ static func within_budget(force: Vector3, budget: Dictionary, scale := 1.0) -> V
 		clampf(force.z, -forward, reverse),
 	)
 
+## Height of the keel over the ground under the hull; INF outside a well.
+func keel_altitude() -> float:
+	if gravity == null:
+		return INF
+	return gravity.altitude_at(_hull.global_position) - keel_depth
+
+## Pitch and roll rates (rad/s, hull axes) that swing the hull's up onto `up`
+## (desert-world spec §5.2): LEVEL_GAIN times the angle between them, clamped
+## to ASSIST_TURN_RATE and faded in from 0 at LEVEL_FROM to full at LEVEL_FULL.
+## An axis the pilot is deflecting (`input` non-zero) is left alone; yaw never
+## levels. Pure.
+static func level_rates(hull_basis: Basis, up: Vector3, keel_altitude: float, input: Vector3) -> Vector3:
+	var fade := clampf((LEVEL_FROM - keel_altitude) / (LEVEL_FROM - LEVEL_FULL), 0.0, 1.0)
+	if fade <= 0.0 or up.is_zero_approx():
+		return Vector3.ZERO
+	var up_local := (hull_basis.inverse() * up).normalized()
+	var angle := Vector3.UP.angle_to(up_local)
+	var axis := Vector3.UP.cross(up_local)
+	if angle < 0.0001 or axis.length() < 0.0001:
+		return Vector3.ZERO
+	axis = axis.normalized()
+	var rate := minf(LEVEL_GAIN * angle, ASSIST_TURN_RATE) * fade
+	return Vector3(
+		0.0 if not is_zero_approx(input.x) else axis.x * rate,
+		0.0,
+		0.0 if not is_zero_approx(input.z) else axis.z * rate)
+
 ## How many times over the engines can lift the hull against the pull here:
 ## vertical thrust over weight; INF outside a world's well (spec §5.2).
 func lift_margin() -> float:
@@ -457,6 +494,12 @@ func _apply_rotation(_delta: float) -> void:
 		# target rate, just more slowly.
 		var rate := heading_rate(basis.inverse() * heading, torque_budget * _authority(), inertia)
 		rotate = Vector3(rate.x / ASSIST_TURN_RATE, rate.y / ASSIST_TURN_RATE, _rotate_input.z)
+	if assist_enabled and gravity != null and keel_altitude() < LEVEL_FROM:
+		# Near the ground the assist levels pitch and roll to the local up. The
+		# heading hold owns pitch, so it levels roll only; the stick wins its axes.
+		var stick := Vector3(1.0 if heading_hold else _rotate_input.x, 0.0, _rotate_input.z)
+		var level := level_rates(basis, gravity.up_at(_hull.global_position), keel_altitude(), stick)
+		rotate += level / ASSIST_TURN_RATE
 	commanded_torque_local = attitude_torque(rotate, local_spin)
 	_hull.apply_torque(basis * commanded_torque_local)
 

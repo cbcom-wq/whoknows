@@ -98,6 +98,9 @@ func _dive_into_the_ground(steep: float) -> void:
 	var along := out.cross(Vector3.UP).normalized()
 	var limit: float = _ship.flight_computer.speed_limit_now()
 	assert_between(limit, 120.0, 130.0, "the low-altitude limit")
+	# Levelled near the ground the hull meets it flat at ~100 m/s and may break;
+	# this test is about the ground holding it, not the loss screen.
+	_root._lost = true
 	var speed := limit - 3.0
 	_ship.exterior.linear_velocity = (-out * sin(deg_to_rad(steep)) + along * cos(deg_to_rad(steep))) * speed
 	var lowest := INF
