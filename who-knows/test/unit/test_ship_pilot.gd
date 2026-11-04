@@ -389,3 +389,61 @@ func test_the_helm_stands_aside_while_the_pilot_flies():
 	assert_eq(spy.inputs.size(), 1, "the pilot on, it writes nothing")
 	_starter.ship_pilot.on = false
 	helm.seated = false
+
+## --- Hostiles keep above a world's air (desert world spec; plan task 10) ---
+
+## A well whose body, up and altitude the test chooses.
+class StubGravity extends WorldGravity:
+	var body: SystemBody
+	var alt := 0.0
+	func body_at(_p: Vector3) -> SystemBody:
+		return body
+	func up_at(_p: Vector3) -> Vector3:
+		return Vector3.UP
+	func altitude_at(_p: Vector3) -> float:
+		return alt
+
+func _low_in_a_well(floor_alt: float) -> StubGravity:
+	var g := StubGravity.new()
+	g.body = SystemRecipe.from_seed(1337).planets()[0]
+	g.alt = floor_alt
+	return g
+
+func test_above_the_floor_nothing_changes():
+	assert_eq(ShipPilot.above_air(Vector3(0, -50, 10), Vector3.UP, 9000.0, 6000.0), Vector3(0, -50, 10))
+
+func test_under_the_floor_it_climbs():
+	var v := ShipPilot.above_air(Vector3(0, -50, 10), Vector3.UP, 5000.0, 6000.0)
+	assert_eq(v, Vector3(0, 100, 10))
+
+func test_a_hostile_low_over_a_world_is_sent_up():
+	await _spawn(Vector3(0, 0, 500))
+	var spy := _spy()
+	var g := _low_in_a_well(10.0)
+	spy.gravity = g
+	_pilot._hold_station()
+	assert_gt(spy.holds.back().y, 0.0, "told to climb")
+
+func test_a_crew_ships_pilot_is_never_floored():
+	await _spawn(Vector3(0, 0, 500))
+	_hostile.side = Sides.CREW
+	var spy := _spy()
+	spy.gravity = _low_in_a_well(10.0)
+	_pilot._hold_station()
+	assert_eq(spy.holds.back(), Vector3.ZERO)
+
+func test_a_hostile_in_deep_space_is_unchanged():
+	await _spawn(Vector3(0, 0, 500))
+	var spy := _spy()
+	spy.gravity = null
+	_pilot._hold_station()
+	assert_eq(spy.holds.back(), Vector3.ZERO)
+
+func test_a_hostile_outside_any_well_is_unchanged():
+	await _spawn(Vector3(0, 0, 500))
+	var spy := _spy()
+	var g := _low_in_a_well(10.0)
+	g.body = null
+	spy.gravity = g
+	_pilot._hold_station()
+	assert_eq(spy.holds.back(), Vector3.ZERO)

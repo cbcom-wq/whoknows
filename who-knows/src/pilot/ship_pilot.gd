@@ -115,6 +115,33 @@ func fight_for_you() -> void:
 	if objective == null and ship != null and flight != null and ship.exterior != null:
 		_hold_station()
 
+## Hostiles never come below a world's air top plus this (m): they have no
+## business in the weather and the ground has no colliders out there.
+const AIR_FLOOR_MARGIN := 2000.0
+
+## `target_v` with its downward part swapped for a climb while `altitude` is
+## under `floor_m`: up × min(120, (floor_m − altitude) × 0.1). Above the floor
+## it is returned unchanged.
+static func above_air(target_v: Vector3, up: Vector3, altitude: float, floor_m: float) -> Vector3:
+	if altitude >= floor_m:
+		return target_v
+	var climb := minf(120.0, (floor_m - altitude) * 0.1)
+	return target_v + up * (maxf(target_v.dot(up), climb) - target_v.dot(up))
+
+## What a hostile hands the flight computer: `v` kept above the air of the
+## world whose well it is in. Your own ship, flown by the pilot at your word,
+## stays free to fly low, and in deep space nothing changes.
+func _floored(v: Vector3) -> Vector3:
+	if ship == null or ship.side != Sides.HOSTILE or ship.exterior == null or flight == null \
+			or flight.gravity == null:
+		return v
+	var at := ship.exterior.global_position
+	var body := flight.gravity.body_at(at)
+	if body == null:
+		return v
+	return above_air(v, flight.gravity.up_at(at), flight.gravity.altitude_at(at),
+		body.recipe.air_top() + AIR_FLOOR_MARGIN)
+
 ## The style as the HUD says it.
 static func style_name(s: int) -> String:
 	return STYLE_NAMES[clampi(s, 0, STYLE_NAMES.size() - 1)]
@@ -442,7 +469,7 @@ func _hold_station() -> void:
 	_jink_left = 0.0
 	intent = &"holding_station"
 	_held = Vector3.ZERO
-	flight.hold_velocity(_held)
+	flight.hold_velocity(_floored(_held))
 	_desired = ship.exterior.global_basis.orthonormalized()
 
 ## Holds `wanted`, steered round rocks and other ships, under `limit` (the
@@ -478,7 +505,7 @@ func _hold(wanted: Vector3, limit := -1.0) -> void:
 			wanted -= ahead * on_ahead * clampf(shy.length() / speed, 0.0, 1.0)
 	wanted += swerve + shy
 	_held = wanted.limit_length(limit if limit >= 0.0 else flight.current_limit)
-	flight.hold_velocity(_held)
+	flight.hold_velocity(_floored(_held))
 
 ## Every other awake ship in contact, as steer_ships sees them.
 func _others(from: Vector3) -> Array:
