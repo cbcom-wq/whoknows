@@ -95,6 +95,47 @@ func test_a_rock_outside_the_hatch_blocks_it():
 	assert_eq(_airlock.world_refusal(), "Hatch blocked")
 	assert_eq(_airlock.prompt(&"room"), "Hatch blocked")
 
+## A wide slab whose top is level with the keel (the hatch floor is 0.05 above
+## it), running out under the hatch: the ship is landed on flat ground.
+func _flat_ground() -> Transform3D:
+	var hatch := _airlock.alcove.outer_hatch.global_transform
+	var top := hatch.origin.y - 0.05
+	var body := StaticBody3D.new()
+	body.collision_layer = BodyProxy.LAYER
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(40, 1, 40)
+	shape.shape = box
+	body.add_child(shape)
+	_root.add_child(body)
+	body.global_position = Vector3(hatch.origin.x, top - 0.5, hatch.origin.z)
+	return hatch
+
+func test_flat_ground_does_not_block():
+	_build()
+	_ship.landing.restore_landed()
+	_flat_ground()
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	assert_eq(_airlock.world_refusal(), "")
+
+func test_a_step_you_can_climb_does_not_block():
+	_build()
+	_ship.landing.restore_landed()
+	var hatch := _flat_ground()
+	var bump := StaticBody3D.new()
+	bump.collision_layer = BodyProxy.LAYER
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(2, 0.3, 2)
+	shape.shape = box
+	bump.add_child(shape)
+	_root.add_child(bump)
+	bump.global_position = hatch * Vector3(0, -0.05 + 0.15, -1.5)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	assert_eq(_airlock.world_refusal(), "")
+
 func test_open_space_costs_no_query_and_still_asks_for_charge():
 	_build()
 	_ship.flight_computer.gravity = null

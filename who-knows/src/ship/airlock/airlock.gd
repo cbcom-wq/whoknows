@@ -37,6 +37,8 @@ const HOME_OUT := 1.5
 ## How far outside the outer hatch must be clear of ground and rock before the
 ## room panel lets you out onto a world (desert world spec).
 const HATCH_CLEAR := 2.5
+## Ground a walker can step over does not block: the capsule's bottom sits this high above the hatch floor.
+const HATCH_STEP := 0.45
 
 var coord := Vector3i.ZERO
 var cycle := AirlockCycle.new()
@@ -49,6 +51,10 @@ var warning := {"level": 0, "text": ""}
 var show: AirlockShow
 
 var _ship: GridHome
+## The hatch-clearance capsule query, made once, and its answer for one physics frame.
+var _query: PhysicsShapeQueryParameters3D
+var _blocked_frame := -1
+var _blocked := false
 ## While the viewer's camera is in the room it wears a copy of its own
 ## environment with the haze in it; the original is put back on leaving.
 var _hazed_camera: Camera3D
@@ -162,23 +168,31 @@ func world_refusal() -> String:
 func _hatch_blocked() -> bool:
 	if not is_instance_valid(alcove) or alcove.outer_hatch == null or not alcove.outer_hatch.is_inside_tree():
 		return false
+	var frame := Engine.get_physics_frames()
+	if frame == _blocked_frame:
+		return _blocked
+	_blocked_frame = frame
+	_blocked = false
+	if _query == null:
+		var capsule := CapsuleShape3D.new()
+		capsule.radius = BODY_RADIUS
+		capsule.height = Avatar.STAND_HEIGHT
+		_query = PhysicsShapeQueryParameters3D.new()
+		_query.shape = capsule
+		_query.collision_mask = BodyProxy.LAYER | AsteroidBody.LAYER
+	_query.exclude = [_ship.exterior.get_rid()]
 	var space := _ship.exterior.get_world_3d().direct_space_state
-	var capsule := CapsuleShape3D.new()
-	capsule.radius = BODY_RADIUS
-	capsule.height = Avatar.STAND_HEIGHT
-	var query := PhysicsShapeQueryParameters3D.new()
-	query.shape = capsule
-	query.collision_mask = BodyProxy.LAYER | AsteroidBody.LAYER
-	query.exclude = [_ship.exterior.get_rid()]
 	var hatch := alcove.outer_hatch.global_transform
 	# The hatch's local -Z is outward (home() uses -HOME_OUT for "outside").
 	var depth := BODY_RADIUS
 	while depth <= HATCH_CLEAR + 0.001:
-		query.transform = Transform3D(hatch.basis, hatch * Vector3(0, InteriorProps.HATCH_HEIGHT * 0.5, -depth))
-		if not space.intersect_shape(query, 1).is_empty():
-			return true
+		_query.transform = Transform3D(hatch.basis,
+			hatch * Vector3(0, HATCH_STEP + Avatar.STAND_HEIGHT * 0.5, -depth))
+		if not space.intersect_shape(_query, 1).is_empty():
+			_blocked = true
+			break
 		depth += BODY_RADIUS
-	return false
+	return _blocked
 
 ## True while the ship's warp drive spools or travels
 ## (docs/superpowers/specs/2026-09-28-warp-design.md §5): no panel works and
