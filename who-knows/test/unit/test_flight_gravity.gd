@@ -183,10 +183,44 @@ func test_the_assist_levels_a_tilted_hull_near_the_ground():
 	_hull.global_transform = Transform3D(Basis(Vector3.BACK, deg_to_rad(20)), Vector3.ZERO)
 	_fc._apply_rotation(1.0 / 60.0)
 	# Rolled +20 about local Z: the torque must roll it back, the way level_rates says.
-	var want := FlightComputer.level_rates(_hull.global_transform.basis, Vector3.UP, 50.0 - _fc.keel_depth, Vector3.ZERO)
+	var want := FlightComputer.level_rates(_hull.global_transform.basis, Vector3.UP, 50.0, Vector3.ZERO)
 	assert_ne(_fc.commanded_torque_local.z, 0.0)
 	assert_eq(signf(_fc.commanded_torque_local.z), signf(want.z))
-	assert_lt(want.z * 1.0, 0.0 + 1e-9, "rolls back toward up")
+	assert_lt(want.z, 0.0, "rolls back toward up")
+
+func _near_ground(basis: Basis) -> void:
+	_fc.gravity = _fake_gravity(Vector3(0, -2.0, 0))
+	(_fc.gravity as FakeGravity).alt = 50.0
+	_fc.torque_budget = Vector3(1e6, 1e6, 1e6)
+	_fc.inertia = Vector3(1e5, 1e5, 1e5)
+	_hull.global_transform = Transform3D(basis, Vector3.ZERO)
+
+func test_the_assist_levels_pitch_near_the_ground():
+	_near_ground(Basis(Vector3.RIGHT, deg_to_rad(20)))
+	_fc._apply_rotation(1.0 / 60.0)
+	var want := FlightComputer.level_rates(_hull.global_transform.basis, Vector3.UP, 50.0, Vector3.ZERO)
+	assert_ne(_fc.commanded_torque_local.x, 0.0)
+	assert_eq(signf(_fc.commanded_torque_local.x), signf(want.x))
+
+func test_heading_hold_is_levelled_in_roll_only():
+	# Tilted in pitch and roll; the hold already points the nose at its heading
+	# (-Z), so it commands no pitch and levelling must not add any.
+	_near_ground(Basis(Vector3.BACK, deg_to_rad(20)))
+	_fc.heading_hold = true
+	_fc.heading = _hull.global_transform.basis * Vector3.FORWARD
+	_fc._apply_rotation(1.0 / 60.0)
+	assert_ne(_fc.commanded_torque_local.z, 0.0, "roll still levels")
+	assert_eq(_fc.commanded_torque_local.x, 0.0, "pitch is the hold's")
+
+func test_the_roll_stick_wins():
+	var tilted := Basis(Vector3.BACK, deg_to_rad(20))
+	assert_eq(FlightComputer.level_rates(tilted, Vector3.UP, 50.0, Vector3(0, 0, 1)).z, 0.0)
+
+func test_an_inverted_hull_rolls_to_right_itself():
+	var r := FlightComputer.level_rates(Basis(Vector3.BACK, PI), Vector3.UP, 50.0, Vector3.ZERO)
+	assert_ne(r.z, 0.0)
+	assert_eq(r.x, 0.0)
+	assert_eq(r.y, 0.0)
 
 func test_no_levelling_with_the_assist_off():
 	_fc.assist_enabled = false

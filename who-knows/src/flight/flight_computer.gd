@@ -383,15 +383,18 @@ func keel_altitude() -> float:
 ## to ASSIST_TURN_RATE and faded in from 0 at LEVEL_FROM to full at LEVEL_FULL.
 ## An axis the pilot is deflecting (`input` non-zero) is left alone; yaw never
 ## levels. Pure.
-static func level_rates(hull_basis: Basis, up: Vector3, keel_altitude: float, input: Vector3) -> Vector3:
-	var fade := clampf((LEVEL_FROM - keel_altitude) / (LEVEL_FROM - LEVEL_FULL), 0.0, 1.0)
+static func level_rates(hull_basis: Basis, up: Vector3, altitude: float, input: Vector3) -> Vector3:
+	var fade := clampf((LEVEL_FROM - altitude) / (LEVEL_FROM - LEVEL_FULL), 0.0, 1.0)
 	if fade <= 0.0 or up.is_zero_approx():
 		return Vector3.ZERO
 	var up_local := (hull_basis.inverse() * up).normalized()
 	var angle := Vector3.UP.angle_to(up_local)
 	var axis := Vector3.UP.cross(up_local)
-	if angle < 0.0001 or axis.length() < 0.0001:
-		return Vector3.ZERO
+	if axis.length() < 0.0001:
+		# Level, or exactly inverted: upside down there is no axis, so roll.
+		if angle < PI / 2.0:
+			return Vector3.ZERO
+		axis = Vector3.BACK
 	axis = axis.normalized()
 	var rate := minf(LEVEL_GAIN * angle, ASSIST_TURN_RATE) * fade
 	return Vector3(
@@ -494,11 +497,12 @@ func _apply_rotation(_delta: float) -> void:
 		# target rate, just more slowly.
 		var rate := heading_rate(basis.inverse() * heading, torque_budget * _authority(), inertia)
 		rotate = Vector3(rate.x / ASSIST_TURN_RATE, rate.y / ASSIST_TURN_RATE, _rotate_input.z)
-	if assist_enabled and gravity != null and keel_altitude() < LEVEL_FROM:
+	var height := keel_altitude() if assist_enabled else INF
+	if height < LEVEL_FROM:
 		# Near the ground the assist levels pitch and roll to the local up. The
 		# heading hold owns pitch, so it levels roll only; the stick wins its axes.
 		var stick := Vector3(1.0 if heading_hold else _rotate_input.x, 0.0, _rotate_input.z)
-		var level := level_rates(basis, gravity.up_at(_hull.global_position), keel_altitude(), stick)
+		var level := level_rates(basis, gravity.up_at(_hull.global_position), height, stick)
 		rotate += level / ASSIST_TURN_RATE
 	commanded_torque_local = attitude_torque(rotate, local_spin)
 	_hull.apply_torque(basis * commanded_torque_local)
