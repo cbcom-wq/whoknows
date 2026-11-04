@@ -323,8 +323,21 @@ func _apply_translation(delta: float) -> void:
 		var g_local := basis.inverse() * gravity.at(_hull.global_position)
 		if not g_local.is_zero_approx():
 			hold = gravity_hold(g_local, _hull.mass, thrust_budget)
-	commanded_force_local = within_budget(hold + pilot_force, thrust_budget,
-		BOOST_MULTIPLIER if boosting else 1.0)
+	# Boost raises the ceiling only on the axes it boosts (plan constraint: that
+	# direction's cap rises 2.5x, and the sum never exceeds the budget): an axis
+	# with pilot input, or every axis under a velocity hold, which
+	# translation_force boosts too. A forward boost must not let the vertical
+	# thrusters fire past their budget against a hold plus drift.
+	var total := hold + pilot_force
+	var plain := within_budget(total, thrust_budget)
+	if boosting:
+		var boosted := within_budget(total, thrust_budget, BOOST_MULTIPLIER)
+		commanded_force_local = Vector3(
+			boosted.x if held != null or not is_zero_approx(_translate_input.x) else plain.x,
+			boosted.y if held != null or not is_zero_approx(_translate_input.y) else plain.y,
+			boosted.z if held != null or not is_zero_approx(_translate_input.z) else plain.z)
+	else:
+		commanded_force_local = plain
 	_hull.apply_central_force(basis * commanded_force_local)
 
 	if assist_enabled and _hull.linear_velocity.length() > current_limit:

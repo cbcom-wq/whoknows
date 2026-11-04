@@ -112,3 +112,30 @@ func test_lift_margin_is_infinite_in_deep_space():
 func test_translation_input_is_the_latched_stick():
 	_fc.set_pilot_input(Vector3(1, 0, -1), Vector3.ZERO, false)
 	assert_eq(_fc.translation_input(), Vector3(1, 0, -1))
+
+## Boost raises the ceiling only on the axes it boosts (plan constraint: that
+## direction's cap rises 2.5x; the sum never exceeds the budget elsewhere).
+func test_boost_forward_does_not_lift_the_vertical_ceiling():
+	_fc.thrust_budget = BUDGET
+	_fc.gravity = _fake_gravity(Vector3(0, -7.0, 0))
+	_hull.linear_velocity = Vector3(0, -5.0, 0)   # sinking: drift correction adds to the hold
+	_fc.set_pilot_input(Vector3(0, 0, -1), Vector3.ZERO, true)
+	_fc._apply_translation(1.0 / 60.0)
+	assert_true(_fc.boosting)
+	assert_lte(_fc.commanded_force_local.y, 1e6)
+	assert_gte(_fc.commanded_force_local.y, -1e6)
+	assert_gt(absf(_fc.commanded_force_local.z), 1.5e6, "the boosted axis may exceed 1x")
+
+func test_input_up_in_a_well_is_clamped_at_the_vertical_budget():
+	_fc.thrust_budget = BUDGET
+	_fc.gravity = _fake_gravity(Vector3(0, -2.0, 0))
+	_fc.set_pilot_input(Vector3(0, 1, 0), Vector3.ZERO, false)
+	_fc._apply_translation(1.0 / 60.0)
+	assert_eq(_fc.commanded_force_local.y, 1e6)
+
+func test_input_down_in_a_well_adds_to_the_hold():
+	_fc.thrust_budget = BUDGET
+	_fc.gravity = _fake_gravity(Vector3(0, -2.0, 0))
+	_fc.set_pilot_input(Vector3(0, -1, 0), Vector3.ZERO, false)
+	_fc._apply_translation(1.0 / 60.0)
+	assert_almost_eq(_fc.commanded_force_local.y, 2.0 * MASS - 1e6, 0.5)

@@ -57,7 +57,7 @@ var keep_saving := false
 ## world seed, and the node that draws its star, planets and moons.
 var system: SystemRecipe
 var star_system: StarSystem
-## What pulls where, one for every ship (desert-world spec §5.1); built in _wire_universe.
+## What pulls where, one for every ship (desert-world spec §5.1); built in _wire_star_system (which _wire_universe calls).
 var world_gravity: WorldGravity
 ## Every salvage cloud, under Outside (quantum energy spec §10.2).
 var salvage: SalvageField
