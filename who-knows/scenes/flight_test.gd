@@ -313,6 +313,14 @@ func _wire_ship(ship: Ship) -> void:
 	ship.airlock_crossed.connect(_on_airlock_crossed.bind(ship))
 	# At 0% HULL it goes, and everyone aboard (hostile ships spec §8.2).
 	ship.destroyed.connect(_on_ship_destroyed)
+	# A hard landing is a warning and a thud, no damage yet (desert-world spec
+	# §5.2): the thud is the one the hull already has, heard only aboard.
+	ship.landing.hard_landing.connect(_on_hard_landing.bind(ship))
+
+func _on_hard_landing(speed: float, ship: Ship) -> void:
+	ship.hull_struck(speed)
+	if ship == aboard and warp_panel != null:
+		warp_panel.toast("HARD LANDING · %.1f M/S" % speed)
 
 ## A ship at 0% HULL (hostile ships spec §8.2): its core goes up and it
 ## breaks apart, everyone aboard it dies, in the ledger so they never wake,

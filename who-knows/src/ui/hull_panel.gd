@@ -33,4 +33,7 @@ func render(telemetry: VehicleTelemetry) -> void:
 	hull_label.text = "HULL %d%%" % floori(clampf(telemetry.hull, 0.0, 1.0) * 100.0)
 	var crippled := telemetry.crippled_reason != ""
 	hull_label.add_theme_color_override("font_color", HudPalette.WARNING if crippled else HudPalette.READOUT)
-	status_label.text = "CRIPPLED · %s" % telemetry.crippled_reason.to_upper() if crippled else ""
+	if crippled:
+		status_label.text = "CRIPPLED · %s" % telemetry.crippled_reason.to_upper()
+	else:
+		status_label.text = telemetry.ground_status

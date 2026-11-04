@@ -231,3 +231,40 @@ func test_no_levelling_with_the_assist_off():
 	_hull.global_transform = Transform3D(Basis(Vector3.BACK, deg_to_rad(20)), Vector3.ZERO)
 	_fc._apply_rotation(1.0 / 60.0)
 	assert_eq(_fc.commanded_torque_local, Vector3.ZERO)
+
+## On the ground (Ruling 7): the landing monitor says the hull rests on it, and
+## with the stick centred the hold and the levelling stand down, so the ship's
+## weight reaches the ground and it can settle.
+func test_on_the_ground_with_a_centred_stick_the_hold_stands_down():
+	_fc.thrust_budget = BUDGET
+	_fc.gravity = _fake_gravity(Vector3(0, -7.0, 0))
+	_fc.on_ground = true
+	_fc._apply_translation(1.0 / 60.0)
+	assert_eq(_fc.commanded_force_local, Vector3.ZERO)
+
+func test_on_the_ground_the_levelling_stands_down():
+	_near_ground(Basis(Vector3.RIGHT, deg_to_rad(20)))
+	_fc.on_ground = true
+	_fc._apply_rotation(1.0 / 60.0)
+	assert_eq(_fc.commanded_torque_local.x, 0.0)
+
+func test_any_translation_input_restores_the_hold():
+	_fc.thrust_budget = BUDGET
+	_fc.gravity = _fake_gravity(Vector3(0, -7.0, 0))
+	_fc.on_ground = true
+	_fc.set_pilot_input(Vector3(0, 0, -0.1), Vector3.ZERO, false)
+	_fc._apply_translation(1.0 / 60.0)
+	assert_almost_eq(_fc.commanded_force_local.y, 7.0 * MASS, 1.0)
+
+func test_any_translation_input_restores_the_levelling():
+	_near_ground(Basis(Vector3.RIGHT, deg_to_rad(20)))
+	_fc.on_ground = true
+	_fc.set_pilot_input(Vector3(0, 0, -0.1), Vector3.ZERO, false)
+	_fc._apply_rotation(1.0 / 60.0)
+	assert_ne(_fc.commanded_torque_local.x, 0.0)
+
+func test_off_the_ground_the_hold_still_holds():
+	_fc.thrust_budget = BUDGET
+	_fc.gravity = _fake_gravity(Vector3(0, -7.0, 0))
+	_fc._apply_translation(1.0 / 60.0)
+	assert_almost_eq(_fc.commanded_force_local.y, 7.0 * MASS, 1.0)

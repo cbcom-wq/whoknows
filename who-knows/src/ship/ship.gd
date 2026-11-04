@@ -105,6 +105,8 @@ var npc_bus: StimulusBus
 ## What the ship knows is out there (NPC foundation spec §22.3): the flight
 ## scene gives it the universe and its sources.
 var sensors: ShipSensors
+## Touchdown, settling and standing frozen on a world (desert-world spec §5.3).
+var landing: LandingMonitor
 var npcs: Node3D
 var crew_site: ShipSite
 var _crew: Array = []
@@ -147,7 +149,13 @@ func _ready() -> void:
 	sensors = ShipSensors.new()
 	sensors.name = "Sensors"
 	add_child(sensors)
-	damage_show = DamageShow.new()
+	landing = LandingMonitor.new()
+	landing.name = "Landing"
+	landing.hull = exterior
+	landing.flight = flight_computer
+	add_child(landing)
+	flight_computer.landing = landing
+	damage_show =DamageShow.new()
 	damage_show.name = "DamageShow"
 	exterior.add_child(damage_show)
 	damage_show.setup(exterior, outside, interior, _inside_face)

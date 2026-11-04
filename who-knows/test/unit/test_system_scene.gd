@@ -126,3 +126,86 @@ func test_the_hull_dives_straight_into_a_world_at_the_limit_and_stays_above_it()
 func test_every_ship_flies_through_the_one_world_gravity():
 	assert_not_null(_root.world_gravity)
 	assert_eq(_ship.flight_computer.gravity, _root.world_gravity)
+
+## The starter put upright a few metres over flat-ish ground of the biggest
+## planet, the assist on, at rest in the hover. Returns the ground's up.
+func _hover_over_flat_ground(clearance: float) -> Vector3:
+	var system: SystemRecipe = _root.system
+	var planet: SystemBody = system.planets()[0]
+	for p in system.planets():
+		if p.radius > planet.radius:
+			planet = p
+	_root.hop_index = system.bodies.find(planet) - 1
+	assert_true(_root.hop(1))
+	await wait_physics_frames(2)
+	var surface: WorldSurface = (_root.star_system.proxy(planet.id) as BodyProxy).surface()
+	assert_not_null(surface, "3 km off: its ground is drawn")
+	var centre := _universe.to_engine(planet.point)
+	var out := (_ship.exterior.global_position - centre).normalized()
+	# The flattest of a ring of spots: the lowest spread of ground heights across
+	# the hull's own length, so the keel meets it level.
+	var best := out
+	var flattest := INF
+	var tries: Array[Vector3] = [out]
+	for k in 12:
+		tries.append((out + Vector3(cos(k * 0.52), 0.0, sin(k * 0.52)) * 0.02 * (1 + k % 3)).normalized())
+	for dir in tries:
+		var spread := 0.0
+		var h0: float = surface.terrain.height_at(dir)
+		for k in 8:
+			var o := Vector3(cos(k * 0.785), 0.0, sin(k * 0.785)) * (40.0 / planet.radius)
+			spread = maxf(spread, absf(surface.terrain.height_at((dir + o).normalized()) - h0))
+		if spread < flattest:
+			flattest = spread
+			best = dir
+	out = best
+	var ground := planet.radius + surface.terrain.height_at(out)
+	var along := out.cross(Vector3.UP).normalized()
+	var basis := Basis(along, out, along.cross(out).normalized())
+	_ship.exterior.global_transform = Transform3D(basis, centre + out * (ground + _ship.keel_depth() + clearance))
+	_ship.exterior.linear_velocity = Vector3.ZERO
+	_ship.exterior.angular_velocity = Vector3.ZERO
+	_ship.flight_computer.assist_enabled = true
+	_root.reload = func() -> void: pass
+	await wait_physics_frames(30)
+	return out
+
+func _push(y: float) -> void:
+	_ship.flight_computer.set_pilot_input(Vector3(0.0, y, 0.0), Vector3.ZERO, false)
+
+func test_a_ship_set_down_gently_lands_freezes_and_stays_put():
+	await _hover_over_flat_ground(3.0)
+	assert_eq(_ship.landing.state, LandingMonitor.State.FLYING, "hovering, not yet down")
+	assert_false(_ship.flight_computer.on_ground)
+	_push(-0.1)
+	var frames := 0
+	while _ship.landing.state == LandingMonitor.State.FLYING and frames < 600:
+		await wait_physics_frames(1)
+		frames += 1
+	assert_ne(_ship.landing.state, LandingMonitor.State.FLYING, "it came down (%d frames)" % frames)
+	_push(0.0)
+	await wait_physics_frames(60 * 4)
+	assert_eq(_ship.landing.state, LandingMonitor.State.LANDED, "tilt %.1f deg" % rad_to_deg(_ship.landing.tilt()))
+	assert_true(_ship.exterior.freeze, "frozen")
+	assert_eq(_ship.landing.ground_status(), "LANDED")
+	var at := _ship.exterior.global_position
+	await wait_physics_frames(120)
+	assert_eq(_ship.landing.state, LandingMonitor.State.LANDED)
+	assert_eq(_ship.exterior.global_position, at, "it stays put")
+
+func test_translation_lifts_a_landed_ship_off_and_thaws_it():
+	await _hover_over_flat_ground(3.0)
+	_push(-0.1)
+	var frames := 0
+	while _ship.landing.state == LandingMonitor.State.FLYING and frames < 600:
+		await wait_physics_frames(1)
+		frames += 1
+	_push(0.0)
+	await wait_physics_frames(60 * 4)
+	assert_eq(_ship.landing.state, LandingMonitor.State.LANDED, "tilt %.1f deg" % rad_to_deg(_ship.landing.tilt()))
+	var at := _ship.exterior.global_position
+	_push(1.0)
+	await wait_physics_frames(90)
+	assert_eq(_ship.landing.state, LandingMonitor.State.FLYING)
+	assert_false(_ship.exterior.freeze, "thawed")
+	assert_gt((_ship.exterior.global_position - at).length(), 0.5, "and rising")

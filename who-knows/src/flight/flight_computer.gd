@@ -112,6 +112,17 @@ var gravity: WorldGravity = null
 ## ship sets it from its grid (desert-world spec §5.2).
 var keel_depth := 0.0
 
+## True while the landing monitor has the hull touching or landed. With the
+## stick's translation centred, the gravity hold and the levelling then stand
+## down, so the ship's weight reaches the ground and it can settle; any
+## translation input restores both at once (desert-world spec §5.3). Set by
+## LandingMonitor every tick; false while flying, so always false in deep space.
+var on_ground := false
+
+## What the landing monitor says of the ground, for the telemetry; null in
+## deep space and in tests that never set it.
+var landing: LandingMonitor = null
+
 ## Levelling begins this high above the keel, fully on by LEVEL_FULL, turning
 ## the hull toward up at LEVEL_GAIN per second per radian of error.
 const LEVEL_FROM := 150.0
@@ -329,7 +340,7 @@ func _apply_translation(delta: float) -> void:
 	# the pull, from the *unscaled* budget -- low power halves only the pilot's
 	# command and drift correction, never the hold (Planetfall §8.2).
 	var hold := Vector3.ZERO
-	if assist_enabled and gravity != null:
+	if assist_enabled and gravity != null and not (on_ground and _translate_input.is_zero_approx()):
 		var g_local := basis.inverse() * gravity.at(_hull.global_position)
 		if not g_local.is_zero_approx():
 			hold = gravity_hold(g_local, _hull.mass, thrust_budget)
@@ -498,7 +509,7 @@ func _apply_rotation(_delta: float) -> void:
 		var rate := heading_rate(basis.inverse() * heading, torque_budget * _authority(), inertia)
 		rotate = Vector3(rate.x / ASSIST_TURN_RATE, rate.y / ASSIST_TURN_RATE, _rotate_input.z)
 	var height := keel_altitude() if assist_enabled else INF
-	if height < LEVEL_FROM:
+	if height < LEVEL_FROM and not (on_ground and _translate_input.is_zero_approx()):
 		# Near the ground the assist levels pitch and roll to the local up. The
 		# heading hold owns pitch, so it levels roll only; the stick wins its axes.
 		var stick := Vector3(1.0 if heading_hold else _rotate_input.x, 0.0, _rotate_input.z)
@@ -604,6 +615,7 @@ func build_telemetry() -> VehicleTelemetry:
 		t.energy_state = &"full"
 	t.boost_refused = boost_refused
 	t.lift_margin = lift_margin()
+	t.ground_status = landing.ground_status() if landing != null else ""
 	if hull_status.is_valid():
 		var status: Array = hull_status.call()
 		t.has_hull = true
