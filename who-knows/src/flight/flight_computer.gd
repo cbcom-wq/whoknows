@@ -112,12 +112,18 @@ var gravity: WorldGravity = null
 ## ship sets it from its grid (desert-world spec §5.2).
 var keel_depth := 0.0
 
-## True while the landing monitor has the hull touching or landed. With the
+## True while the hull is landed, or touching and in contact with terrain this
+## tick (not through the grace after contact is lost). With the
 ## stick's translation centred, the gravity hold and the levelling then stand
 ## down, so the ship's weight reaches the ground and it can settle; any
 ## translation input restores both at once (desert-world spec §5.3). Set by
 ## LandingMonitor every tick; false while flying, so always false in deep space.
 var on_ground := false
+
+## On the ground with the stick's translation centred: the hold and the
+## levelling stand down. Any translation input ends it.
+func _resting_on_ground() -> bool:
+	return on_ground and _translate_input.is_zero_approx()
 
 ## What the landing monitor says of the ground, for the telemetry; null in
 ## deep space and in tests that never set it.
@@ -340,7 +346,7 @@ func _apply_translation(delta: float) -> void:
 	# the pull, from the *unscaled* budget -- low power halves only the pilot's
 	# command and drift correction, never the hold (Planetfall §8.2).
 	var hold := Vector3.ZERO
-	if assist_enabled and gravity != null and not (on_ground and _translate_input.is_zero_approx()):
+	if assist_enabled and gravity != null and not _resting_on_ground():
 		var g_local := basis.inverse() * gravity.at(_hull.global_position)
 		if not g_local.is_zero_approx():
 			hold = gravity_hold(g_local, _hull.mass, thrust_budget)
@@ -509,7 +515,7 @@ func _apply_rotation(_delta: float) -> void:
 		var rate := heading_rate(basis.inverse() * heading, torque_budget * _authority(), inertia)
 		rotate = Vector3(rate.x / ASSIST_TURN_RATE, rate.y / ASSIST_TURN_RATE, _rotate_input.z)
 	var height := keel_altitude() if assist_enabled else INF
-	if height < LEVEL_FROM and not (on_ground and _translate_input.is_zero_approx()):
+	if height < LEVEL_FROM and not _resting_on_ground():
 		# Near the ground the assist levels pitch and roll to the local up. The
 		# heading hold owns pitch, so it levels roll only; the stick wins its axes.
 		var stick := Vector3(1.0 if heading_hold else _rotate_input.x, 0.0, _rotate_input.z)

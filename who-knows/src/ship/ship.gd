@@ -37,6 +37,10 @@ const BLAST_REACH := 50.0
 ## damage sections spec §3; the crash probe).
 const CRASH_FROM := 2.0
 const CRASH_K := 5.5
+## A world's ground crashes you only above this, m/s: a hard landing (over
+## LandingMonitor.HARD_LANDING) is a warning and a thud, never damage
+## (desert-world spec §5.2).
+const TERRAIN_CRASH_FROM := 10.0
 ## What a block knocked off the outside sheds, how far out and how fast.
 const SHED_ITEM := &"scrap_plate"
 const SHED_OUT := 1.4
@@ -155,7 +159,7 @@ func _ready() -> void:
 	landing.flight = flight_computer
 	add_child(landing)
 	flight_computer.landing = landing
-	damage_show =DamageShow.new()
+	damage_show = DamageShow.new()
 	damage_show.name = "DamageShow"
 	exterior.add_child(damage_show)
 	damage_show.setup(exterior, outside, interior, _inside_face)
@@ -263,7 +267,7 @@ func _on_hull_struck(body: Node) -> void:
 ## while the contact is reported, and dealt after the physics step: a removal
 ## rebuilds the hull's colliders, which can't change while it is flushing.
 func _crash(body: Node, knock: float) -> void:
-	var amount := crash_damage(knock)
+	var amount := crash_damage(knock, TERRAIN_CRASH_FROM if LandingMonitor.is_ground(body) else CRASH_FROM)
 	if amount <= 0.0:
 		return
 	var state := PhysicsServer3D.body_get_direct_state(exterior.get_rid())
@@ -291,10 +295,11 @@ func _deal_crash(cell: Vector3i, amount: float, side_x := 0.0) -> void:
 
 ## hp a crash with this knock (the hull's change of speed, m/s) deals to the
 ## cell it lands on.
-static func crash_damage(knock: float) -> float:
-	if knock <= CRASH_FROM:
+## Nothing at or below `from`, m/s: CRASH_FROM, or TERRAIN_CRASH_FROM on ground.
+static func crash_damage(knock: float, from := CRASH_FROM) -> float:
+	if knock <= from:
 		return 0.0
-	return CRASH_K * (knock - CRASH_FROM) * (knock - CRASH_FROM)
+	return CRASH_K * (knock - from) * (knock - from)
 
 ## A hit on the hull, in world space (a bolt from a spacewalk, a bite).
 func _on_hull_hit(hit: Hit) -> void:

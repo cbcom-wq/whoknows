@@ -12,7 +12,8 @@ extends Node
 ## starter's numbers, so every ship can land.
 ##
 ## Hard landings (over HARD_LANDING m/s closing) are a warning and a thud, with
-## no damage yet (desert-world spec §5.2).
+## no damage yet (desert-world spec §5.2): Ship gives terrain its own crash
+## threshold, TERRAIN_CRASH_FROM, above any landing.
 
 enum State { FLYING, TOUCHING, LANDED }
 
@@ -38,6 +39,8 @@ var flight: FlightComputer
 var state: State = State.FLYING
 var _s := {state = State.FLYING, held = 0.0, apart = 0.0}
 var _tilt := 0.0
+## Whether the hull is in contact with terrain this tick.
+var _in_contact := false
 ## The hull's velocity at the previous tick: the contact is reported after the
 ## step that took the speed off, so the closing speed is read from before it.
 var _last_velocity := Vector3.ZERO
@@ -91,16 +94,16 @@ func tilt() -> float:
 func refusal() -> String:
 	if state == State.LANDED:
 		return ""
-	if state == State.TOUCHING and _tilt > MAX_TILT:
-		return "Uneven ground · tilt %d°" % roundi(rad_to_deg(_tilt))
+	if _uneven():
+		return "Uneven ground · tilt %d°" % _tilt_degrees()
 	return "Not landed"
 
 ## The HUD's word for the ground under the ship, or "".
 func ground_status() -> String:
 	if state == State.LANDED:
 		return "LANDED"
-	if state == State.TOUCHING and _tilt > MAX_TILT:
-		return "UNEVEN GROUND · TILT %d°" % roundi(rad_to_deg(_tilt))
+	if _uneven():
+		return "UNEVEN GROUND · TILT %d°" % _tilt_degrees()
 	if flight != null and flight.lift_margin() < 1.0:
 		return "TOO HEAVY FOR THIS WORLD"
 	return ""
@@ -119,17 +122,14 @@ func _physics_process(delta: float) -> void:
 	if up.is_zero_approx():
 		# Out of a well nothing steps: a flying ship stays flying, and one
 		# restored landed stays landed.
-		flight.on_ground = state != State.FLYING
+		_in_contact = false
+		_publish()
 		return
 	var velocity := hull.linear_velocity
 	_tilt = (hull.global_transform.basis * Vector3.UP).angle_to(up)
-	var touching := false
-	for body in hull.get_colliding_bodies():
-		if body is CollisionObject3D and (body.collision_layer & BodyProxy.LAYER) != 0:
-			touching = true
-			break
+	_in_contact = _touching_ground()
 	var inputs := {
-		touching = touching,
+		touching = _in_contact,
 		closing = -_last_velocity.dot(up),
 		speed = velocity.length(),
 		spin = hull.angular_velocity.length(),
@@ -140,9 +140,35 @@ func _physics_process(delta: float) -> void:
 	var result := step(_s, inputs, delta)
 	_s = {state = result.state, held = result.held, apart = result.apart}
 	_set_state(result.state)
-	flight.on_ground = state != State.FLYING
+	_publish()
 	if result.hard > 0.0:
 		hard_landing.emit(result.hard)
+
+## Whether the hull reports a contact with the ground this tick.
+func _touching_ground() -> bool:
+	for body in hull.get_colliding_bodies():
+		if is_ground(body):
+			return true
+	return false
+
+## A body that is a world's ground: on the terrain layer (not rocks, hulls or
+## NPCs). Pure.
+static func is_ground(body: Object) -> bool:
+	return body is CollisionObject3D and ((body as CollisionObject3D).collision_layer & BodyProxy.LAYER) != 0
+
+## The one place `on_ground` is set (Ruling 7a): landed, or touching and in
+## contact this tick. Through the grace with no contact the hold and the
+## levelling are back at once.
+func _publish() -> void:
+	if flight != null:
+		flight.on_ground = state == State.LANDED or (state == State.TOUCHING and _in_contact)
+
+## Over MAX_TILT while touching: the ship rests but will not land.
+func _uneven() -> bool:
+	return state == State.TOUCHING and _tilt > MAX_TILT
+
+func _tilt_degrees() -> int:
+	return roundi(rad_to_deg(_tilt))
 
 func _set_state(next: State) -> void:
 	if next == state and (next != State.LANDED or (hull == null or hull.freeze)):
@@ -157,7 +183,6 @@ func _set_state(next: State) -> void:
 			hull.freeze = true
 		elif was == State.LANDED:
 			hull.freeze = false
-	if flight != null:
-		flight.on_ground = state != State.FLYING
+	_publish()
 	if next != was:
 		state_changed.emit(next)

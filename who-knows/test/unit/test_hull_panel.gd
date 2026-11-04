@@ -44,3 +44,12 @@ func test_crippled_outranks_the_ground_status():
 	t.ground_status = "LANDED"
 	_panel.render(t)
 	assert_eq(_panel.status_label.text, "CRIPPLED · NO THRUST")
+
+func test_landed_is_readout_and_uneven_ground_is_warning():
+	var t := _t(1.0)
+	t.ground_status = "LANDED"
+	_panel.render(t)
+	assert_eq(_panel.status_label.get_theme_color("font_color"), HudPalette.READOUT)
+	t.ground_status = "UNEVEN GROUND · TILT 31°"
+	_panel.render(t)
+	assert_eq(_panel.status_label.get_theme_color("font_color"), HudPalette.WARNING)

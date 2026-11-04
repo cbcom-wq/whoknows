@@ -209,3 +209,24 @@ func test_translation_lifts_a_landed_ship_off_and_thaws_it():
 	assert_eq(_ship.landing.state, LandingMonitor.State.FLYING)
 	assert_false(_ship.exterior.freeze, "thawed")
 	assert_gt((_ship.exterior.global_position - at).length(), 0.5, "and rising")
+
+func _total_damage() -> float:
+	var total := 0.0
+	for c in _ship.grid.coords():
+		total += _ship.grid.get_block(c).damage
+	return total
+
+## A hard landing (Planetfall §9; desert-world spec §5.2) is a warning and a
+## thud: terrain has its own, higher crash threshold, so no block takes damage.
+func test_a_hard_landing_warns_and_damages_nothing():
+	var out := await _hover_over_flat_ground(0.5)
+	_ship.flight_computer.assist_enabled = false
+	var speeds: Array[float] = []
+	_ship.landing.hard_landing.connect(func(s: float) -> void: speeds.append(s))
+	var before := _total_damage()
+	_ship.exterior.linear_velocity = -out * 6.0
+	await wait_physics_frames(60)
+	assert_gt(speeds.size(), 0, "hard_landing fired")
+	if not speeds.is_empty():
+		assert_gt(speeds[0], 4.0)
+	assert_eq(_total_damage(), before, "no block lost hp")

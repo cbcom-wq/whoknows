@@ -408,3 +408,10 @@ func test_a_blackout_aboard_wakes_you_in_the_bunk_room_and_costs_the_ship():
 			nearest = minf(nearest, Vector3(c).distance_to(Vector3(cell)))
 	assert_lt(nearest, 1.5, "woke at %s" % cell)
 
+
+func test_terrain_crashes_only_above_its_own_threshold():
+	var from := Ship.TERRAIN_CRASH_FROM
+	assert_eq(Ship.crash_damage(9.9, from), 0.0)
+	assert_eq(Ship.crash_damage(from, from), 0.0)
+	assert_almost_eq(Ship.crash_damage(10.5, from), 5.5 * 0.25, 0.001)
+	assert_almost_eq(Ship.crash_damage(5.0), 49.5, 0.001, "the old curve is unchanged")

@@ -140,3 +140,76 @@ func test_out_of_a_well_a_restored_landed_ship_stays_landed_and_frozen():
 	assert_true(r[0].freeze)
 	assert_eq(r[0].freeze_mode, RigidBody3D.FREEZE_MODE_STATIC)
 	assert_true(r[1].on_ground)
+
+## Ruling 7a: touching AND in contact this tick; through the grace it is false.
+class StubContact extends LandingMonitor:
+	var contact := true
+	func _touching_ground() -> bool:
+		return contact
+
+class Pull extends WorldGravity:
+	func at(_p: Vector3) -> Vector3:
+		return Vector3(0, -3.0, 0)
+	func up_at(_p: Vector3) -> Vector3:
+		return Vector3.UP
+
+func test_touching_with_no_contact_this_tick_is_not_on_ground():
+	var hull := RigidBody3D.new()
+	add_child_autofree(hull)
+	var fc := FlightComputer.new()
+	fc.hull_path = NodePath("../" + hull.name)
+	hull.get_parent().add_child(fc)
+	autofree(fc)
+	fc.gravity = Pull.new()
+	var m := StubContact.new()
+	m.hull = hull
+	m.flight = fc
+	add_child_autofree(m)
+	m._physics_process(1.0 / 60.0)
+	assert_eq(m.state, LandingMonitor.State.TOUCHING)
+	assert_true(fc.on_ground, "touching and in contact")
+	m.contact = false
+	m._physics_process(1.0 / 60.0)
+	assert_eq(m.state, LandingMonitor.State.TOUCHING, "still in the grace")
+	assert_false(fc.on_ground, "the hold is back at once")
+
+func test_the_status_strings():
+	var m := LandingMonitor.new()
+	autofree(m)
+	m.state = LandingMonitor.State.TOUCHING
+	m._tilt = deg_to_rad(31.0)
+	assert_eq(m.refusal(), "Uneven ground · tilt 31°")
+	assert_eq(m.ground_status(), "UNEVEN GROUND · TILT 31°")
+	m._tilt = deg_to_rad(10.0)
+	assert_eq(m.refusal(), "Not landed")
+	assert_eq(m.ground_status(), "")
+
+func test_too_heavy_for_this_world():
+	var m := LandingMonitor.new()
+	autofree(m)
+	var fc := FlightComputer.new()
+	m.flight = fc
+	autofree(fc)
+	assert_eq(m.ground_status(), "", "INF margin outside a well")
+	m.flight = HeavyFlight.new()
+	autofree(m.flight)
+	assert_eq(m.ground_status(), "TOO HEAVY FOR THIS WORLD")
+
+class HeavyFlight extends FlightComputer:
+	func lift_margin() -> float:
+		return 0.8
+
+func test_only_terrain_is_ground():
+	var terrain := StaticBody3D.new()
+	terrain.collision_layer = BodyProxy.LAYER
+	var rock := StaticBody3D.new()
+	rock.collision_layer = AsteroidBody.LAYER
+	var hull := StaticBody3D.new()
+	hull.collision_layer = 1
+	autofree(terrain)
+	autofree(rock)
+	autofree(hull)
+	assert_true(LandingMonitor.is_ground(terrain))
+	assert_false(LandingMonitor.is_ground(rock))
+	assert_false(LandingMonitor.is_ground(hull))
+	assert_false(LandingMonitor.is_ground(null))
