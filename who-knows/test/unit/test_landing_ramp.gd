@@ -40,15 +40,45 @@ func test_ground_lower_makes_it_steeper_up_to_38_degrees():
 func test_a_hatch_within_a_step_of_the_keel_gets_no_ramp():
 	assert_eq(LandingRamp.need(Vector3(0, 0, 1), Airlock.HATCH_STEP), LandingRamp.STEP, "at the step")
 	assert_eq(LandingRamp.need(Vector3(1, 0, 0), 0.05), LandingRamp.STEP, "a base's hatch, 5 cm up")
-	assert_false(LandingRamp.wants_ramp(Vector3(-1, 0, 0), 0.3))
+	assert_eq(LandingRamp.need(Vector3(-1, 0, 0), 0.3), LandingRamp.STEP)
 	assert_eq(LandingRamp.need(Vector3(0, 0, -1), Airlock.HATCH_STEP + 0.01), LandingRamp.RAMP, "just over it")
-	assert_true(LandingRamp.wants_ramp(Vector3(0, 0, 1), STARTER_SILL))
+	assert_eq(LandingRamp.need(Vector3(0, 0, 1), STARTER_SILL), LandingRamp.RAMP)
 
 func test_a_hatch_facing_up_or_down_gets_no_ramp():
 	assert_eq(LandingRamp.need(Vector3.UP, STARTER_SILL), LandingRamp.UP_OR_DOWN)
 	assert_eq(LandingRamp.need(Vector3.DOWN, STARTER_SILL), LandingRamp.UP_OR_DOWN)
-	assert_false(LandingRamp.wants_ramp(Vector3.UP, STARTER_SILL))
-	assert_false(LandingRamp.wants_ramp(Vector3.DOWN, STARTER_SILL))
+
+## Final review I4 (Ruling 15): the one home of the ramp condition. A step is a
+## step; a ramp with nothing in its way is a ramp; a ramp through the hull, or
+## a hatch in a floor or a ceiling, is no way up at all.
+func _plan(need: StringName, through: Array[Vector3i] = []) -> Dictionary:
+	return {"need": need, "sill": 4.05, "length": 0.0, "angle": LandingRamp.SLOPE, "through": through}
+
+func test_the_way_up_to_a_hatch():
+	assert_eq(AirlockAlcove.way_up_for(_plan(LandingRamp.STEP)), LandingRamp.STEP)
+	assert_eq(AirlockAlcove.way_up_for(_plan(LandingRamp.RAMP)), LandingRamp.RAMP)
+	var blocked: Array[Vector3i] = [Vector3i(-4, -1, 2)]
+	assert_eq(AirlockAlcove.way_up_for(_plan(LandingRamp.RAMP, blocked)), AirlockAlcove.NONE, "through the hull")
+	assert_eq(AirlockAlcove.way_up_for(_plan(LandingRamp.UP_OR_DOWN)), AirlockAlcove.NONE, "a hatch in a floor")
+
+## Every library ship, built: the alcove keeps its plan and way up, builds a
+## ramp exactly for RAMP, and the Warden's (through its own hull) is NONE.
+func test_every_library_ship_s_alcove_knows_its_way_up():
+	var catalog := BlockCatalog.load_from_dir("res://data/blocks")
+	var expected := {&"starter": LandingRamp.RAMP, &"lamplighter": LandingRamp.RAMP, &"warden": AirlockAlcove.NONE}
+	for id: StringName in expected:
+		var grid: ShipGrid = ShipLibrary.read("res://data/ships/%s.json" % id)["grid"]
+		for c: Vector3i in grid.coords():
+			if grid.get_block(c).block_id != AirlockSite.AIRLOCK_ID:
+				continue
+			var parent := Node3D.new()
+			var body := StaticBody3D.new()
+			add_child_autofree(parent)
+			add_child_autofree(body)
+			var alcove := AirlockAlcove.build(parent, body, grid, catalog, c)
+			assert_eq(alcove.way_up, expected[id], "%s's airlock %s" % [id, c])
+			assert_eq(alcove.way_up, AirlockAlcove.way_up_for(AirlockAlcove.ramp_plan(grid, c)))
+			assert_eq(alcove.ramp != null, alcove.way_up == LandingRamp.RAMP, "%s builds a ramp only for RAMP" % id)
 
 func test_the_steepest_rest_stays_walkable_with_margin():
 	var avatar: Avatar = load("res://scenes/avatar.tscn").instantiate()
@@ -58,6 +88,32 @@ func test_the_steepest_rest_stays_walkable_with_margin():
 		"38 deg is at least 5 deg under the avatar's floor_max_angle (%.1f deg)" % rad_to_deg(floor_max))
 	assert_lt(LandingRamp.SLOPE, LandingRamp.MOST)
 	assert_gt(LandingRamp.SLOPE, LandingRamp.LEAST)
+
+## Final review M4: after an instant deploy (a save loaded landed) it looks for
+## the ground every physics tick for its first second, so ground whose
+## collider comes a tick later settles it then -- not half a second on, when it
+## could nudge you, saved standing on it.
+func test_after_an_instant_deploy_it_finds_ground_that_comes_a_tick_later():
+	var parent := Node3D.new()
+	add_child_autofree(parent)
+	var body := StaticBody3D.new()
+	add_child_autofree(body)
+	var ramp := LandingRamp.build(parent, body, Transform3D.IDENTITY, STARTER_SILL)
+	ramp.set_down(true, true)
+	assert_true(ramp.is_down(), "down at once")
+	assert_almost_eq(ramp.angle, LandingRamp.SLOPE, EPS, "no ground yet: the design slope")
+	var ground := StaticBody3D.new()
+	ground.collision_layer = BodyProxy.LAYER
+	var box := BoxShape3D.new()
+	box.size = Vector3(20, 1, 20)
+	var shape := CollisionShape3D.new()
+	shape.shape = box
+	ground.add_child(shape)
+	add_child_autofree(ground)
+	ground.global_position = Vector3(0, -(STARTER_SILL + 0.3) - 0.5, 0)
+	await wait_physics_frames(3)
+	assert_almost_eq(ramp.angle, asin((STARTER_SILL + 0.3) / ramp.length), 0.01,
+		"settled on ground 0.3 m under the keel's plane within 3 ticks")
 
 func test_its_shape_is_the_brief_s():
 	assert_almost_eq(LandingRamp.WIDTH, InteriorProps.DOOR_WIDTH + 0.3, EPS)

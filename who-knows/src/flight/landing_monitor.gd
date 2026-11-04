@@ -4,7 +4,8 @@ extends Node
 ## The hull's relationship with a world's ground (Planetfall §9; desert-world
 ## spec §5.3). FLYING touches down, settles, and is LANDED: frozen in place, so
 ## it cannot creep or jitter and the airlock's step-out point cannot move. Only
-## the pilot's translation lifts it off again.
+## the pilot's translation lifts it off again -- or, handed to its AI pilot, a
+## velocity hold that climbs (translating()).
 ##
 ## The transition table is a static pure function, `step`, tested headless (the
 ## VelocityMarker state-policy pattern); the node only gathers inputs and
@@ -29,6 +30,10 @@ const SETTLE_SPIN := 0.1
 const MAX_TILT := deg_to_rad(25.0)
 ## Seconds without ground contact before TOUCHING gives up and flies.
 const LIFT_GRACE := 0.25
+## A velocity hold climbing faster than this, m/s along up, is translating:
+## your ship handed to its pilot flies on the hold with the stick centred, and
+## must lift off as the stick would (final review M1).
+const HOLD_LIFTS := 0.5
 
 signal state_changed(state: State)
 signal hard_landing(speed: float)
@@ -139,7 +144,7 @@ func _physics_process(delta: float) -> void:
 		speed = velocity.length(),
 		spin = hull.angular_velocity.length(),
 		tilt = _tilt,
-		translating = not flight.translation_input().is_zero_approx(),
+		translating = translating(flight, up),
 	}
 	_last_velocity = velocity
 	var result := step(_s, inputs, delta)
@@ -148,6 +153,14 @@ func _physics_process(delta: float) -> void:
 	_publish()
 	if result.hard > 0.0:
 		hard_landing.emit(result.hard)
+
+## Whether `fc` is asked to move the hull, with `up` the local up: the pilot's
+## translation, or a velocity hold climbing over HOLD_LIFTS (the AI pilot's, a
+## stick centred). Only this lifts a landed ship off.
+static func translating(fc: FlightComputer, up: Vector3) -> bool:
+	if not fc.translation_input().is_zero_approx():
+		return true
+	return fc.velocity_hold and fc.held_velocity.dot(up) > HOLD_LIFTS
 
 ## Whether the hull reports a contact with the ground this tick.
 func _touching_ground() -> bool:

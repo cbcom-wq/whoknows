@@ -608,7 +608,8 @@ func _on_landing_changed(_state: LandingMonitor.State) -> void:
 
 ## Puts each airlock's landing ramp down while the hull is landed on a world,
 ## and up otherwise (desert world phase 0, Task 14): at once when `instant` (a
-## rebuild) or when the landing was restored (a save loaded, a ship woken),
+## hull rebuild, which builds them stowed) or when the landing was restored (a
+## save loaded, a ship woken),
 ## else sliding and swinging. Called as the landing monitor changes state, so
 ## lifting off takes the ramp's collider away in the same tick; after every
 ## rebuild; and every tick while landed, because a save loads landed before the
@@ -713,7 +714,9 @@ func _rebuild_everything(hull := true) -> void:
 	interior_builder.geometry_body().set_meta(&"receive_hit", _on_interior_hit)
 	interior_builder.geometry_body().set_meta(&"ship", self)
 	_bind_airlocks()
-	_sync_ramps(true)
+	# Snapped down only when the hull (and so its alcoves and ramps) was rebuilt:
+	# an interior restyle leaves a ramp mid-travel to finish its swing.
+	_sync_ramps(hull)
 	_reseat(stowed)
 	if not _stocked:
 		_stock()

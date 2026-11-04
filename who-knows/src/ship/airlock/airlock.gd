@@ -151,15 +151,19 @@ func must_charge() -> bool:
 	return _avatar().suit_cell.charge < SuitCell.GO_OUT_MIN
 
 ## Why the room panel will not let you out onto ground, or "" (desert world
-## spec): the ship's own word first (not landed, uneven ground), then a capsule
-## cast from the outer hatch finding something in the way. No physics query is
-## made unless the ship is on a world and the room would let you out.
+## spec): the ship's own word first (not landed, uneven ground), then no way
+## back up to the outer hatch -- no step and no ramp (AirlockAlcove.way_up;
+## Ruling 15: out there you could never climb back in) -- then a capsule cast
+## from the outer hatch finding something in the way. No physics query is made
+## unless the ship is on a world and the room would let you out.
 func world_refusal() -> String:
 	if _ship == null or not _going_out() or not _ship.on_world():
 		return ""
 	var why := _ship.outside_refusal()
 	if why != "":
 		return why
+	if is_instance_valid(alcove) and alcove.way_up == AirlockAlcove.NONE:
+		return "No ramp · %d m drop" % roundi(float(alcove.hatch_plan["sill"]))
 	return "Hatch blocked" if _hatch_blocked() else ""
 
 ## True if an upright capsule, from just outside the outer hatch's middle out

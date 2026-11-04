@@ -498,7 +498,7 @@ func _run(scene: Node) -> void:
 	# the heaviest planet's pull. ShipRules.LIFT_MARGIN times that pull is the least.
 	var pull: float = WorldRecipe.GRAVITY[WorldRecipe.Kind.PLANET].y
 	var lift: float = s.thrust_budget[&"vertical"] / kg
-	print("lift    %.1f m/s2 up, %.2f times a %.0f m/s2 world's pull (needs %.1f)%s" % [
+	print("lift    %.1f m/s2 up, %.2f× a %.0f m/s2 world's pull (needs ×%.1f)%s" % [
 		lift, lift / pull, pull, ShipRules.LIFT_MARGIN,
 		"" if lift / pull >= ShipRules.LIFT_MARGIN else "  <-- CANNOT LIFT"])
 	# An rcs block whose exhaust face touches another block puffs inside it.
@@ -568,11 +568,13 @@ func _run(scene: Node) -> void:
 			"yes" if reel != null and reel.item != null else "NONE  <-- NO NOZZLE"])
 	# Boardable on a world (desert world phase 0, Task 14): every horizontal
 	# outer hatch over Airlock.HATCH_STEP above the keel has a landing ramp, and
-	# none faces up or down; the alcove built what the plan says.
+	# none faces up or down; the alcove built what the plan says. The way up is
+	# AirlockAlcove.way_up_for's, as the alcove and the airlock read it: a NONE
+	# hatch refuses the step out on a world ("No ramp · 4 m drop").
 	for coord: Vector3i in ship.airlocks:
 		var lock: Airlock = ship.airlocks[coord]
 		var plan := AirlockAlcove.ramp_plan(ship.grid, coord)
-		var wanted: bool = plan["need"] == LandingRamp.RAMP and (plan["through"] as Array).is_empty()
+		var wanted: bool = AirlockAlcove.way_up_for(plan) == LandingRamp.RAMP
 		var built := is_instance_valid(lock.alcove) and lock.alcove.ramp != null
 		print("ramp    airlock %s: %s%s" % [coord, AirlockAlcove.ramp_words(plan),
 			"" if built == wanted else ("  <-- NOT BUILT" if wanted else "  <-- BUILT IN THE WAY")])

@@ -23,9 +23,9 @@ extends Node3D
 ## phase 0, Task 14; ramp_plan), stowed until the ship lands on a world.
 
 const LAYER := ExteriorBuilder.OWN_HULL_LAYER
-## Lights here light the hull layer and anything of the world's on layer 1 --
-## a spacewalker's gloves.
-const LIGHT_MASK := 1 | ExteriorBuilder.OWN_HULL_LAYER
+## Lights here light the hull layer, anything of the world's on layer 1, and a
+## spacewalker's gloves and what they hold (Avatar.HANDS_LAYER).
+const LIGHT_MASK := 1 | ExteriorBuilder.OWN_HULL_LAYER | Avatar.HANDS_LAYER
 ## The room light, stronger out here: there is no warm interior ambient to
 ## help it, and the two rooms must read the same at the threshold.
 const LIGHT_BOOST := 1.6
@@ -56,6 +56,11 @@ var reel: HoseReel
 ## null where the hatch needs none or something is in its way (ramp_plan).
 ## Ship puts it down on a world once landed; its collider is in `colliders`.
 var ramp: LandingRamp
+## This airlock's ramp_plan, and the way up to its outer hatch from a world's
+## ground that it gives (way_up_for): STEP, RAMP or NONE. The airlock asks it
+## before it lets you out on a world (Airlock.world_refusal).
+var hatch_plan := {}
+var way_up: StringName = LandingRamp.STEP
 var show: AirlockShow
 ## Every collider this alcove put on the hull body, for whoever clears it.
 var colliders: Array[CollisionShape3D] = []
@@ -108,7 +113,26 @@ static func hinge_frame(at: Vector3i, normal: Vector3i) -> Transform3D:
 	origin.y = InteriorBuilder.floor_y(at) - InteriorBuilder.storey_offset(at.y)
 	return Transform3D(Basis(Vector3.UP.cross(n), Vector3.UP, n), origin)
 
-## Words for a plan: the probe's and ship_check's ramp line.
+## No way up to an outer hatch from the ground (way_up_for): too high to step
+## up to and no ramp -- its path runs through the hull -- or a hatch in a
+## floor or a ceiling.
+const NONE := &"none"
+
+## How you get back up to the outer hatch a ramp_plan `p` is for, from a
+## world's ground (Ruling 15): LandingRamp.STEP, a step up; LandingRamp.RAMP, a
+## ramp is built; or NONE. The one home of the ramp condition: the alcove
+## builds a ramp only for RAMP, the airlock refuses the step out on a world for
+## NONE, and ship_probe and ship_check read it. Pure.
+static func way_up_for(p: Dictionary) -> StringName:
+	match p["need"]:
+		LandingRamp.STEP:
+			return LandingRamp.STEP
+		LandingRamp.RAMP:
+			return LandingRamp.RAMP if (p["through"] as Array).is_empty() else NONE
+	return NONE
+
+## Words for a plan: the probe's and ship_check's ramp line. NOT BOARDABLE ON A
+## WORLD wherever way_up_for says NONE.
 static func ramp_words(plan: Dictionary) -> String:
 	match plan["need"]:
 		LandingRamp.STEP:
@@ -116,7 +140,7 @@ static func ramp_words(plan: Dictionary) -> String:
 		LandingRamp.UP_OR_DOWN:
 			return "faces up/down — NOT BOARDABLE ON A WORLD"
 	var words := "ramp: %.2f m, %.2f m at %d°" % [plan["sill"], plan["length"], roundi(rad_to_deg(plan["angle"]))]
-	if not (plan["through"] as Array).is_empty():
+	if way_up_for(plan) == NONE:
 		words += " through the hull at %s — NOT BOARDABLE ON A WORLD" % [plan["through"]]
 	return words
 
@@ -164,9 +188,10 @@ func _build(body: CollisionObject3D, grid: ShipGrid) -> void:
 	hull_panel.transform = face * InteriorKit.at(Vector3(0.84, 1.2, PLATE_OUT))
 	add_child(hull_panel)
 	_build_reel(kit, face)
-	var plan := ramp_plan(grid, coord)
-	if plan["need"] == LandingRamp.RAMP and (plan["through"] as Array).is_empty():
-		ramp = LandingRamp.build(self, body, hinge_frame(coord, hatch_normal), plan["sill"])
+	hatch_plan = ramp_plan(grid, coord)
+	way_up = way_up_for(hatch_plan)
+	if way_up == LandingRamp.RAMP:
+		ramp = LandingRamp.build(self, body, hinge_frame(coord, hatch_normal), hatch_plan["sill"])
 		colliders.append(ramp.collider)
 	for normal in _ALL:
 		if normal != hatch_normal and not grid.has_block(coord + normal):

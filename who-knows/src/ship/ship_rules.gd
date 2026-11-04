@@ -88,10 +88,10 @@ static func _check_flight(s: ShipStats, rules: Array) -> void:
 		rules.append(item(&"CANNOT_THRUST", "no forward thrust: no main thruster pushes it forward"))
 	if s.thrust_budget[&"reverse"] <= 0.0:
 		rules.append(item(&"CANNOT_BRAKE", "no reverse thrust: it can never slow down (give it a retro pair)"))
-	var need := LIFT_MARGIN * s.total_mass_kg * WorldRecipe.GRAVITY[WorldRecipe.Kind.PLANET].y
+	var heaviest: float = WorldRecipe.GRAVITY[WorldRecipe.Kind.PLANET].y
+	var need := LIFT_MARGIN * s.total_mass_kg * heaviest
 	if s.thrust_budget[&"vertical"] < need:
-		var heaviest: float = WorldRecipe.GRAVITY[WorldRecipe.Kind.PLANET].y
-		rules.append(item(&"CANNOT_LIFT", "%.1f m/s² of lift: it needs %.1f to leave a %.0f m/s² world"
+		rules.append(item(&"CANNOT_LIFT", "%.1f m/s² of lift: it needs %.1f to leave a %.1f m/s² world"
 			% [s.thrust_budget[&"vertical"] / maxf(s.total_mass_kg, 1.0), need / maxf(s.total_mass_kg, 1.0), heaviest]))
 	for axis in 3:
 		var authority: float = s.torque_budget[axis]

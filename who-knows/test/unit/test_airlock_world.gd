@@ -40,11 +40,16 @@ func test_base_never_refuses_for_ground():
 
 # --- in the real scene -------------------------------------------------------
 
-func _build() -> void:
+## The flight scene with `starter` (a library ship's id; the starter itself by
+## default) as the ship you are aboard, you in its airlock room, the inner
+## hatch open, on a world but not landed. Every library ship has one airlock.
+func _build(starter := "") -> void:
 	_root = load("res://scenes/flight_test.tscn").instantiate()
+	if starter != "":
+		_root.starter_ship = starter
 	add_child_autofree(_root)
 	_ship = _root.get_node("Ship")
-	_airlock = _ship.airlocks.get(Vector3i(0, 0, 3))
+	_airlock = _ship.airlocks.values()[0]
 	_avatar = _root.get_node("Ship/Interior/Avatar")
 	_avatar.suit_cell.charge = 0.0
 	_airlock.set_physics_process(false)
@@ -135,6 +140,45 @@ func test_a_step_you_can_climb_does_not_block():
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 	assert_eq(_airlock.world_refusal(), "")
+
+## Final review I4 (Ruling 15): an outer hatch with neither a step nor a ramp
+## refuses the step out on a world -- out there you could never climb back in.
+## The Warden's sill is 4.05 m over its keel and its ramp would come down
+## through its own hull, so it has none.
+func test_a_landed_warden_refuses_the_step_out_onto_a_drop():
+	_build("warden")
+	_ship.landing.restore_landed()
+	_step(DT)
+	assert_null(_airlock.alcove.ramp, "no ramp is built through the hull")
+	assert_eq(_airlock.world_refusal(), "No ramp · 4 m drop")
+	assert_eq(_airlock.prompt(&"room"), "No ramp · 4 m drop")
+	assert_eq(_airlock.room.room_panel.readout_text(), "PRESSURE 101 kPa\nNO RAMP · 4 M DROP")
+	_airlock.room.room_panel.interact(null)
+	_step(5.0)
+	assert_eq(_airlock.cycle.stage, AirlockCycle.Stage.IDLE)
+	assert_eq(_airlock.room.outer_hatch.open_amount, 0.0, "the outer hatch stays shut")
+
+## ...after the ship's own word: flying, it is "Not landed" first.
+func test_a_flying_warden_says_not_landed_first():
+	_build("warden")
+	assert_eq(_airlock.world_refusal(), "Not landed")
+
+## ...and it refuses nothing off a world.
+func test_the_warden_lets_you_out_in_open_space():
+	_build("warden")
+	_ship.flight_computer.gravity = null
+	_avatar.suit_cell.charge = SuitCell.CAPACITY
+	assert_eq(_airlock.world_refusal(), "")
+	assert_eq(_airlock.prompt(&"room"), "Depressurize")
+
+## ...and the starter, whose ramp comes down, still lets you out.
+func test_a_landed_starter_still_lets_you_out():
+	_build()
+	_ship.landing.restore_landed()
+	_step(DT)
+	assert_not_null(_airlock.alcove.ramp, "the starter has a ramp")
+	assert_eq(_airlock.world_refusal(), "")
+	assert_eq(_airlock.prompt(&"room"), "Depressurize")
 
 func test_open_space_costs_no_query_and_still_asks_for_charge():
 	_build()

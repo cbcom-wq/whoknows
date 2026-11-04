@@ -8,7 +8,8 @@ extends SceneTree
 # The ship file is an absolute path or a res:// one, named for its id. Prints
 # each rule broken, with its cell, then the notes, then a lift line (vertical
 # thrust over mass, against a 7 m/s2 world), then a ramp line per airlock
-# (its landing ramp, or NOT BOARDABLE ON A WORLD); exits 0 when no rule is
+# (its landing ramp, or NOT BOARDABLE ON A WORLD: AirlockAlcove.way_up_for says
+# NONE, and that airlock refuses the step out on a world); exits 0 when no rule is
 # broken, and 1 when one is or the file will not load.
 
 func _initialize() -> void:
@@ -40,7 +41,7 @@ func _initialize() -> void:
 	var stats := ShipStats.compute(grid, BlockCatalog.load_from_dir("res://data/blocks"))
 	var pull: float = WorldRecipe.GRAVITY[WorldRecipe.Kind.PLANET].y
 	var lift: float = stats.thrust_budget[&"vertical"] / maxf(stats.total_mass_kg, 1.0)
-	print("lift    %.1f m/s2 up, %.2f times a %.0f m/s2 world's pull (needs %.1f)" % [
+	print("lift    %.1f m/s2 up, %.2f× a %.0f m/s2 world's pull (needs ×%.1f)" % [
 		lift, lift / pull, pull, ShipRules.LIFT_MARGIN])
 	# Boardable on a world (desert world phase 0, Task 14): the landing ramp each
 	# airlock's outer hatch needs, or why it has none. Not a rule: printed.

@@ -173,6 +173,47 @@ func test_touching_with_no_contact_this_tick_is_not_on_ground():
 	assert_eq(m.state, LandingMonitor.State.TOUCHING, "still in the grace")
 	assert_false(fc.on_ground, "the hold is back at once")
 
+## Final review M1: your ship handed to its pilot (P) flies on a velocity hold
+## with the stick centred. A hold with an upward part -- over 0.5 m/s along up
+## (LandingMonitor.HOLD_LIFTS) -- lifts a landed ship off, as the stick would;
+## one along the ground, down, or barely up leaves it landed.
+func _landed_rig() -> Array:
+	var hull := RigidBody3D.new()
+	add_child_autofree(hull)
+	var fc := FlightComputer.new()
+	fc.hull_path = NodePath("../" + hull.name)
+	hull.get_parent().add_child(fc)
+	autofree(fc)
+	fc.gravity = Pull.new()
+	var m := StubContact.new()
+	m.hull = hull
+	m.flight = fc
+	add_child_autofree(m)
+	m.restore_landed()
+	return [hull, fc, m]
+
+func test_a_landed_ship_given_an_upward_hold_lifts_off():
+	var r := _landed_rig()
+	var fc: FlightComputer = r[1]
+	var m: LandingMonitor = r[2]
+	assert_true(fc.assist_enabled, "a hold needs the assist")
+	fc.hold_velocity(Vector3(3.0, 2.0, 0.0))
+	m._physics_process(1.0 / 60.0)
+	assert_eq(m.state, LandingMonitor.State.FLYING, "the pilot's climb lifts it off")
+	assert_false((r[0] as RigidBody3D).freeze, "thawed")
+
+func test_a_landed_ship_given_a_level_or_downward_hold_stays_landed():
+	var r := _landed_rig()
+	var fc: FlightComputer = r[1]
+	var m: LandingMonitor = r[2]
+	for v: Vector3 in [Vector3(5.0, 0.0, 0.0), Vector3(0.0, -2.0, 0.0), Vector3(0.0, 0.2, 0.0)]:
+		fc.hold_velocity(v)
+		m._physics_process(1.0 / 60.0)
+		assert_eq(m.state, LandingMonitor.State.LANDED, "held at %s" % v)
+	fc.release_velocity()
+	m._physics_process(1.0 / 60.0)
+	assert_eq(m.state, LandingMonitor.State.LANDED, "no hold")
+
 func test_the_status_strings():
 	var m := LandingMonitor.new()
 	autofree(m)
