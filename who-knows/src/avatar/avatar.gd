@@ -59,6 +59,12 @@ const JUMP_SPEED := 3.1
 const LAMP_RANGE := 25.0
 const LAMP_ANGLE := 35.0
 const LAMP_ENERGY := 3.0
+## The render layer (bit 4, unnamed in the project) your hands are on outside:
+## the camera sees it and the sun lights it, but the lamp's cull mask omits it.
+const HANDS_LAYER := 8
+## The lamp's dimmer light for the hands, which only they see.
+const HANDS_FILL_ENERGY := 0.5
+const HANDS_FILL_RANGE := 3.0
 ## A world's pull weaker than this (m/s², squared) has no direction to take up
 ## from: up stays as it was (Planetfall §11.1).
 const MIN_PULL_SQUARED := 1e-6
@@ -235,6 +241,16 @@ func _make_lamp() -> void:
 	lamp.shadow_enabled = false
 	lamp.visible = false
 	head.add_child(lamp)
+	# The lamp's gentler half for your hands, which are off its mask so it
+	# cannot blow them out; a child, so it is on and off with the lamp.
+	var fill := SpotLight3D.new()
+	fill.name = "HandsFill"
+	fill.light_color = HullPalette.WORK_LIGHT
+	fill.light_energy = HANDS_FILL_ENERGY
+	fill.spot_range = HANDS_FILL_RANGE
+	fill.spot_angle = LAMP_ANGLE * 1.5
+	fill.shadow_enabled = false
+	lamp.add_child(fill)
 
 ## Switches the suit lamp. It shines only outside: aboard it is always off.
 func set_lamp(on: bool) -> void:
@@ -622,6 +638,10 @@ func _go_out(outside: Node3D, pose: Transform3D, start_velocity: Vector3, ship_h
 	if grasp.item != null:
 		grasp.item.set_space(true)
 	_set_render_layer(1, 1 | ExteriorBuilder.OWN_HULL_LAYER)
+	# Your hands sit a hand's breadth from the lamp: off its mask, they take the
+	# sun and the ship's lights but are never blown out by the lamp.
+	_set_hands_layer(HANDS_LAYER)
+	(lamp.get_node("HandsFill") as Light3D).light_cull_mask = HANDS_LAYER
 	_righting_t = RIGHTING_TIME
 	camera.quaternion = Quaternion.IDENTITY
 
@@ -693,7 +713,9 @@ func build_telemetry() -> VehicleTelemetry:
 	t.energy_capacity = int(SuitCell.CAPACITY)
 	t.energy_line = 0
 	t.energy_label = &"SUIT"
-	t.energy_state = suit_cell.level()
+	# The dry-suit trip home is a spacewalk's: on foot the thrusters are off and
+	# nothing returns you, so FIELD shows the charge alone.
+	t.energy_state = suit_cell.level() if mode != Mode.FIELD else &"ok"
 	if grasp != null and grasp.item != null and grasp.item.use_node != null:
 		t.tool_text = grasp.item.use_node.tool_text()
 	return t
@@ -946,6 +968,13 @@ func _set_render_layer(layer: int, light_mask: int) -> void:
 			node.layers = layer
 		if node is Light3D:
 			node.light_cull_mask = light_mask
+
+## Moves your hands, and what is in them, to render layer `layer`, leaving the
+## rest of you (and the lamp) where `_set_render_layer` put them.
+func _set_hands_layer(layer: int) -> void:
+	for node in hands.find_children("*", "", true, false):
+		if node is VisualInstance3D:
+			node.layers = layer
 
 ## Nudges the loose things you walk into (hands-and-items spec §7.5), instead
 ## of stopping dead against them as if they were walls.

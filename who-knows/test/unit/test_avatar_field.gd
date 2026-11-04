@@ -301,6 +301,35 @@ func test_the_suit_thrusters_never_run_on_a_world():
 	assert_lt(_avatar.global_position.z, -1.0, "you walked instead")
 	assert_true(_avatar.is_on_floor())
 
+## What the energy panel's status line says for the avatar as it stands.
+func _suit_status() -> String:
+	var panel := EnergyPanel.new()
+	add_child_autofree(panel)
+	panel.render(_avatar.build_telemetry())
+	return panel.status_label.text
+
+## The dry-suit trip home is a spacewalk's (airlock spec §9): on foot the
+## thrusters are off and nothing returns you, so the HUD shows the charge only.
+func test_on_foot_with_a_dry_suit_the_hud_does_not_say_returning():
+	_lone()
+	_ground()
+	_field(Vector3(0, 0.02, 0))
+	_avatar.suit_cell.charge = 0.0
+	var t := _avatar.build_telemetry()
+	assert_eq(t.energy, 0)
+	var status := _suit_status()
+	assert_false(status.contains("RETURNING"), status)
+	assert_false(status.contains("SUIT DRY"), status)
+
+## ...and the spacewalk's wording is pinned.
+func test_on_a_spacewalk_with_a_dry_suit_the_hud_says_dry_and_returning():
+	_lone()
+	_avatar.enter_suit(_world, Transform3D.IDENTITY, Vector3.ZERO, null)
+	_avatar.suit_cell.charge = 0.0
+	var status := _suit_status()
+	assert_true(status.contains("SUIT DRY"), status)
+	assert_true(status.contains("RETURNING"), status)
+
 # --- the suit lamp (Planetfall §11.3) ------------------------------------------
 
 func test_the_lamp_is_a_spot_on_your_head_and_starts_off():
@@ -325,6 +354,19 @@ func test_l_switches_the_lamp_outside():
 	assert_eq(_avatar.lamp.layers, 1)
 	_avatar._unhandled_input(_action(&"lights_flood"))
 	assert_false(_avatar.lamp.visible, "and off")
+
+func test_the_lamp_spares_your_hands_and_a_dimmer_fill_lights_them():
+	_lone()
+	_field()
+	assert_eq(_avatar.lamp.light_cull_mask & Avatar.HANDS_LAYER, 0, "the lamp's mask omits the hands' layer")
+	var fill := _avatar.lamp.get_node("HandsFill") as SpotLight3D
+	assert_eq(fill.light_cull_mask, Avatar.HANDS_LAYER, "the fill lights only the hands")
+	assert_lt(fill.light_energy, Avatar.LAMP_ENERGY)
+	var seen := 0
+	for node in _avatar.hands.find_children("*", "MeshInstance3D", true, false):
+		seen += 1
+		assert_eq((node as MeshInstance3D).layers, Avatar.HANDS_LAYER)
+	assert_gt(seen, 0, "the hands have meshes")
 
 func test_l_does_nothing_aboard():
 	_lone()
