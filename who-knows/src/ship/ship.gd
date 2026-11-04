@@ -889,6 +889,7 @@ func to_dict(universe: Universe) -> Dictionary:
 			"turn": SaveCodec.basis(hull_turn),
 			"v": SaveCodec.vec3(hull_v),
 			"w": SaveCodec.vec3(Vector3.ZERO if not place.is_empty() else exterior.angular_velocity),
+			"landed": landing != null and landing.is_landed(),
 		},
 		"warp": warp.to_dict() if warp != null else {},
 		"weapons": fire_control.to_dict(),
@@ -1051,6 +1052,10 @@ func restore_hull(d: Dictionary, universe: Universe) -> void:
 	exterior.linear_velocity = SaveCodec.to_vec3(hull.get("v"))
 	exterior.angular_velocity = SaveCodec.to_vec3(hull.get("w"))
 	_last_hull_velocity = exterior.linear_velocity
+	# A landed ship loads frozen on the ground, however the ground streams in
+	# (desert world spec §5.3). Absent means flying, so old saves load as before.
+	if bool(hull.get("landed", false)):
+		landing.restore_landed()
 
 ## Everything aboard as the save had it: flight settings, store, airlocks
 ## and items. Call after set_grid(layout_of(d), false).
