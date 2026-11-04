@@ -168,6 +168,7 @@ turn_module={
 3d_render/layer_1="exterior"
 3d_render/layer_2="interior"
 3d_render/layer_3="own_hull"
+3d_render/layer_5="own_hull_seen_inside"
 
 [physics]
 

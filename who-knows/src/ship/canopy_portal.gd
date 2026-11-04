@@ -17,9 +17,12 @@ extends Node
 @export var hull_path: NodePath
 @export var interior_path: NodePath
 
-## While you stand in an open airlock, the view out of it includes your own
-## hull (airlock spec §7.3) -- the engine pods beside the door are there before
-## you cross. Its Airlock sets this.
+## Every window shows your own hull beyond the cabin
+## (ExteriorBuilder.SEEN_INSIDE_LAYER); the pieces that wrap the cabin, the
+## windows themselves and the alcoves stay out, as they would stand between the
+## eye and the glass. While you stand in an open airlock, the view out of it
+## includes all of it (airlock spec §7.3) -- the engine pods beside the door are
+## there before you cross. Its Airlock sets this.
 var include_hull := false
 var _base_mask := -1
 
@@ -55,7 +58,7 @@ func sync(viewer: Camera3D) -> void:
 	_camera.near = viewer.near
 	if _base_mask < 0:
 		_base_mask = _camera.cull_mask
-	_camera.cull_mask = _base_mask | (ExteriorBuilder.OWN_HULL_LAYER if include_hull else 0)
+	_camera.cull_mask = _base_mask | ExteriorBuilder.SEEN_INSIDE_LAYER 		| (ExteriorBuilder.OWN_HULL_LAYER if include_hull else 0)
 	_place(viewer.global_transform)
 
 ## Stands the canopy camera where `at`, a pose in interior space, would be if

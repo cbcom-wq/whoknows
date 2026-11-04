@@ -57,6 +57,11 @@ var unmatched: Array[Dictionary] = []
 var wanted := 0
 ## The open faces of every cube cell: Vector3i -> {Vector3i normal: true}.
 var skin: Dictionary = {}
+## The cells the interior shows as room or glass: every walkable cell, the
+## canopy cell each canopy face looks through, and each pod's cell
+## (Vector3i -> true). The canopy camera stands in them, so no piece in one or
+## facing into one is drawn through the windows (`wraps_cabin`).
+var cabin: Dictionary = {}
 
 var _grid: ShipGrid
 var _alcoves: Dictionary = {}
@@ -70,6 +75,7 @@ static func plan(grid: ShipGrid, _catalog: BlockCatalog, interior: InteriorLayou
 			l._alcoves[coord] = true
 	if interior != null:
 		l._plan_pods(interior)
+		l._plan_cabin(interior)
 	l._plan_skin()
 	l._plan_nozzles()
 	if interior != null:
@@ -80,6 +86,52 @@ static func plan(grid: ShipGrid, _catalog: BlockCatalog, interior: InteriorLayou
 
 func is_pod_cell(coord: Vector3i) -> bool:
 	return _pod_cells.has(coord)
+
+## The cabin, and the block over each of its cells: a storey is taller than a
+## cell (InteriorBuilder.STOREY_HEIGHT against ShipGrid.CELL_SIZE), so the top
+## of every room and window reaches into the block above it in hull space.
+## Without them the Warden's bridge glass showed the backs of its brow and roof
+## fairings across its top. An empty cell above is open space, not cabin.
+func _plan_cabin(interior: InteriorLayout) -> void:
+	var rooms := {}
+	for coord: Vector3i in interior.walkable_coords():
+		rooms[coord] = true
+	for group in interior.canopy_groups():
+		for coord: Vector3i in group["coords"]:
+			rooms[coord + Vector3i(group["normal"])] = true
+	for coord: Vector3i in _pod_cells:
+		rooms[coord] = true
+	for coord: Vector3i in rooms:
+		cabin[coord] = true
+		if _grid.has_block(coord + Vector3i.UP):
+			cabin[coord + Vector3i.UP] = true
+
+## Whether a piece of `coord`'s skin wraps the cabin: the cell is one of
+## `cabin`, or the piece faces into one across any of `toward` (its normals).
+## From inside such a piece would stand between the eye and the glass.
+func wraps_cabin(coord: Vector3i, toward: Array) -> bool:
+	if cabin.has(coord):
+		return true
+	for n: Vector3i in toward:
+		if cabin.has(coord + n):
+			return true
+	return false
+
+## The normals a record's piece faces across, for `wraps_cabin`: a plate's or
+## a nozzle's face, a chamfer's two, a corner's three, a shaped block's side
+## (none for a slope: it lies within its own cell), a light's mount face.
+func faces_of(record: Dictionary) -> Array:
+	if record.has("a"):
+		return [record["a"], record["b"]]
+	if record.has("sign"):
+		var s: Vector3i = record["sign"]
+		return [Vector3i(s.x, 0, 0), Vector3i(0, s.y, 0), Vector3i(0, 0, s.z)]
+	if record.has("shape"):
+		var side: Vector3i = facet_face(record)["side"]
+		return [] if side == Vector3i.ZERO else [_round(BlockOrientation.basis_for(record["orientation"]) * Vector3(side))]
+	if record.has("normal"):
+		return [_round(Vector3(record["normal"]))]
+	return []
 
 ## Each cockpit pod (spec §5.2): the pod shell in the interior's own pod frame,
 ## brought down from its storey into hull space. The skin leaves its canopy

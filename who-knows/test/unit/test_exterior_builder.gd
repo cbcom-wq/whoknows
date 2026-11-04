@@ -119,14 +119,17 @@ func test_parity_survives_random_mutation():
 ## The canopy camera looks out from the pilot's eye, which is inside the
 ## hull. Own-hull meshes therefore need a render layer of their own so that
 ## camera can exclude them; without it the windshield renders the inside of
-## the ship's own blocks.
+## the ship's own blocks. The part beyond the cabin is on SEEN_INSIDE_LAYER
+## too (test_hull_seen_inside.gd); nothing is on the world's layer.
 func test_hull_meshes_are_drawn_on_the_own_hull_layer():
 	_put(Vector3i.ZERO, &"hull")
 	_builder.rebuild()
 	var drawn := _builder.find_children("*", "GeometryInstance3D", true, false)
 	assert_gt(drawn.size(), 0)
 	for g in drawn:
-		assert_eq(g.layers, ExteriorBuilder.OWN_HULL_LAYER, "%s" % g.name)
+		assert_ne(g.layers & ExteriorBuilder.OWN_HULL_LAYER, 0, "%s" % g.name)
+		assert_eq(g.layers & ~(ExteriorBuilder.OWN_HULL_LAYER | ExteriorBuilder.SEEN_INSIDE_LAYER), 0,
+			"%s is on the own layers alone" % g.name)
 	assert_gt(_builder.hull_meshes().size(), 0, "the plating and trim, for the miniature")
 
 ## Ship exterior spec §3.3: the skin casts the sun's shadows, as the block

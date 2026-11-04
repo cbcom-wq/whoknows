@@ -565,6 +565,22 @@ func _run(scene: Node) -> void:
 	print("windows %d outside for %d inside%s" % [hull.windows.size(), hull.wanted,
 		"" if hull.unmatched.is_empty() else "  <-- UNMATCHED %s" % [hull.unmatched]])
 	print("lights  %d floods, %d forward" % [ship.lights.spots(&"flood").size(), ship.lights.spots(&"forward").size()])
+	# Your own hull through your windows (2026-11-03): the skin beyond the cabin
+	# is seen from inside, and none of it may lie in a cabin cell
+	# (HullLayout.cabin), where it would stand between the eye and the glass.
+	var seen_skin := ship.exterior_builder.skin().get_node("Hull")
+	var in_cabin := {}
+	var seen_vertices := 0
+	for mi: MeshInstance3D in seen_skin.find_children("*", "MeshInstance3D", true, false):
+		for si in mi.mesh.get_surface_count():
+			for v: Vector3 in mi.mesh.surface_get_arrays(si)[Mesh.ARRAY_VERTEX]:
+				seen_vertices += 1
+				var c := Vector3i((v / ShipGrid.CELL_SIZE).round())
+				var off := (v - ShipGrid.cell_center(c)).abs()
+				if hull.cabin.has(c) and maxf(off.x, maxf(off.y, off.z)) < ShipGrid.CELL_SIZE * 0.5 - 0.01:
+					in_cabin[c] = true
+	print("seen    %d skin vertices seen through the windows; %d cabin cells (and the blocks over them) left clear%s" % [
+		seen_vertices, hull.cabin.size(), "" if in_cabin.is_empty() else "  <-- IN THE CABIN %s" % [in_cabin.keys()]])
 	# The damage tint (health and damage spec §9): every tinted skin vertex is
 	# one cell's, so a hurt block never leaves a piece of itself clean.
 	var owned := {}   # ArrayMesh -> vertices claimed
