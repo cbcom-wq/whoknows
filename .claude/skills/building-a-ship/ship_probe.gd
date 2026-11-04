@@ -26,6 +26,7 @@ extends SceneTree
 # a turret line per turret (name, kind, cell, sky coverage; or "turret  none"),
 # a face line (the face a pilot shows, and how many turrets bear on it),
 # a hose line per airlock (its alcove's reel, and the nozzle stocked on it),
+# a lift line (vertical thrust over mass, and its margin against a 7 m/s2 world),
 # and a ramp line per airlock (its landing ramp: a step, the ramp's sill,
 # length and angle, or NOT BOARDABLE ON A WORLD).
 # Then a two-ship pass (docs/superpowers/specs/2026-10-02-many-ships-design.md
@@ -493,6 +494,13 @@ func _run(scene: Node) -> void:
 	print("feel    m/s2 side %.1f vert %.1f brake %.1f fwd %.1f; 100 m/s sideways gone in %.0f s" % [
 		side, s.thrust_budget[&"vertical"] / kg, s.thrust_budget[&"reverse"] / kg,
 		s.thrust_budget[&"forward"] / kg, 100.0 / maxf(side, 0.001)])
+	# Lift off a world (desert world phase 0): vertical thrust over mass, against
+	# the heaviest planet's pull. ShipRules.LIFT_MARGIN times that pull is the least.
+	var pull: float = WorldRecipe.GRAVITY[WorldRecipe.Kind.PLANET].y
+	var lift: float = s.thrust_budget[&"vertical"] / kg
+	print("lift    %.1f m/s2 up, %.2f times a %.0f m/s2 world's pull (needs %.1f)%s" % [
+		lift, lift / pull, pull, ShipRules.LIFT_MARGIN,
+		"" if lift / pull >= ShipRules.LIFT_MARGIN else "  <-- CANNOT LIFT"])
 	# An rcs block whose exhaust face touches another block puffs inside it.
 	var blocked := []
 	var rcs := RcsShow.gather(ship.grid, ship.catalog, s.center_of_mass)

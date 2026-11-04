@@ -392,6 +392,29 @@ Delver kept 1.1-1.2 m/s on every leg, arrived on all five and never stalled for 
   `wait_process_frames` for overlays and looks.
 - Expected warnings and errors: `assert_engine_error(text)` / `assert_push_error(text)`.
 
+## Worlds (desert world phase 0; `docs/superpowers/specs/2026-11-03-desert-world-design.md` §5)
+
+**Nothing lives on a world yet.** No NPC, creature or droid stands on one. Phase 1 onward puts
+fauna there; what follows is what it must respect.
+
+- **`WorldGravity` exists** (`src/world/world_gravity.gd`): `at(p)`, `up_at(p)`, `altitude_at(p)`,
+  `surface_gravity_at(p)`, `on_world_at(p)` and `body_at(p)`. **Anything outside, on a world, must
+  ask it** for its pull and its up: the avatar, loose items and strays already do. Gravity on
+  them applies only below the world's air top (`on_world_at`); ships feel the whole well, out to 2
+  radii. The star does not pull.
+- **Strays freeze at rest** (`StrayField`, `src/world/stray_field.gd`): on a world, one slower than
+  `REST_SPEED` 0.1 m/s for `REST_TIME` 0.5 s goes `FREEZE_MODE_STATIC` and feels no pull; one loaded
+  from the ledger at a point on a world loads frozen; taking one in hand thaws it (Ruling 12).
+  World ground is solid only near a `SPACE_ANCHOR`, while strays stay live within 3 km
+  (`SalvageField.LOAD_WITHIN`), so a stray left awake where the ground has no collider falls
+  through the world. **A new thing that rests on a world needs the same.**
+- **Hostile pilots stay high.** `ShipPilot.AIR_FLOOR_MARGIN` 2000 m: a hostile ship flies no lower
+  than a world's air top plus that, through the static `ShipPilot.above_air(target_v, up, altitude,
+  floor_m)`. It applies to `Sides.HOSTILE` only: the same pilot flies your ship when you hand it
+  over, and that must be free to fly low or land (Ruling 11).
+- **The floating origin still applies** to anything outside on a world (`CLAUDE.md`): join
+  `Universe.EXTERIOR_SPACE` or listen to `Universe.shifted`.
+
 ## Commands
 
 - **Tests (Windows):** `& .\who-knows\run_tests.ps1`, or `'-gselect=test_name'`.

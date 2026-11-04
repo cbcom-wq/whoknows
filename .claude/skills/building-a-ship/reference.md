@@ -962,6 +962,69 @@ frozen kinematic with layer and mask 0; `QuantumPlant` runs the cores at `&"warp
 The hull is a space anchor (`AsteroidStream.SPACE_ANCHOR`), so a world's surface keeps ground
 solid under it with no wiring. A ghosted hull (mask 0, at warp) is never lifted.
 
+## Gravity and landing (desert world phase 0; `docs/superpowers/specs/2026-11-03-desert-world-design.md` §5)
+
+Every ship feels a world's pull through `FlightComputer.gravity` (a `WorldGravity`, set by the
+flight scene; null in deep space). Planets pull 2 to 7 m/s², moons 1 to 4
+(`WorldRecipe.GRAVITY`). The ship feels the whole well, out to 2 radii.
+
+**`WorldGravity`** (`src/world/world_gravity.gd`): `at(p)`, `up_at(p)`, `altitude_at(p)`,
+`surface_gravity_at(p)`, `on_world_at(p)` (below the air top), `body_at(p)` (the world whose
+well holds `p`, or null; the star never counts). The air top is `WorldRecipe.air_top()`: 0.12 of
+the radius over it (thin air), 0.20 (thick), 0.15 (no air).
+
+**Lift.** `ShipRules.LIFT_MARGIN` 1.3: `thrust_budget[&"vertical"]` must be at least 1.3 × mass ×
+7 m/s² (`CANNOT_LIFT`). The budget counts both directions (*One quirk*, above). Measured: starter
+9.5 m/s² (margin 1.35), Warden 13.2, Lamplighter 15.8. `FlightComputer.lift_margin()` is vertical
+thrust over weight here (INF outside a well); under 1.0 the HUD says `TOO HEAVY FOR THIS WORLD`
+(`LandingMonitor.ground_status`). `ship_check` and the probe print a `lift` line.
+
+| What | Value | Where |
+|---|---|---|
+| The hold | with the assist on, the engines first cancel the pull: `-g × mass`, clamped to the budget | `FlightComputer.gravity_hold(g_local, mass, budget)` |
+| The ceiling | the hold plus the pilot's command never pass the budget | static `within_budget(force, budget, scale)` |
+| Boost | an axis's ceiling rises to `BOOST_MULTIPLIER` (2.5) × its budget only if the pilot pushes on that axis or a velocity hold is set (Ruling 4); every other axis stays at 1x | `_apply_translation` |
+| Low power | the hold uses the **unscaled** `thrust_budget`. Low power halves only the pilot's command and the drift correction (`_authority_budget`), so a ship on low power still hovers and climbs (`landing_play` step 9: 300 m up with the store at 60 of 1200 QE) | `_apply_translation`, `_authority_budget` |
+| Levelling | from 150 m above the keel, fully on by 100 m, 1.5 per second per radian of error; pitch and roll only, never yaw; faded by **height only**, not speed (Ruling 6); the stick wins on any axis it moves; rolls about BACK when the hull is inverted | `LEVEL_FROM`, `LEVEL_FULL`, `LEVEL_GAIN`, static `level_rates` |
+| Keel | metres from the hull's origin to the bottom of its lowest cell; the height over the ground is `altitude_at` minus it | `keel_depth`, `Ship.keel_depth_of(grid)`, `keel_altitude()` |
+| Asking | `translation_input()` (the pilot's latched input, each axis -1..1) | `FlightComputer` |
+
+**`LandingMonitor`** (`src/flight/landing_monitor.gd`, a child of the ship):
+
+| What | Value | Where |
+|---|---|---|
+| States | FLYING, TOUCHING, LANDED | `LandingMonitor.State` |
+| Hard landing | closing speed over 4 m/s is a toast and a thud, with **no damage** | `HARD_LANDING` |
+| Settling | LANDED after `SETTLE_TIME` 1 s under `SETTLE_SPEED` 0.5 m/s and `SETTLE_SPIN` 0.1 rad/s; touching at more than `MAX_TILT` 25° reads `Uneven ground` and does not settle | constants |
+| Contact lost | `LIFT_GRACE` 0.25 s of grace before TOUCHING falls back to FLYING | `LIFT_GRACE` |
+| LANDED | the hull is frozen `FREEZE_MODE_STATIC`. You leave it only by translating (Ruling 2): a frozen hull may report no contacts | `_set_state` |
+| On the ground | `FlightComputer.on_ground` is set only by `_publish()`: true when LANDED, or TOUCHING with terrain contact this tick. With it and the translation input zero, `_resting_on_ground()` skips both the hold and the levelling (Ruling 7a), so weight reaches the ground. Any translation input brings both back at once | `_publish`, `on_ground` |
+| Asking | `refusal()` (`""` when landed, else `Uneven ground · tilt n°` or `Not landed`), `ground_status()` (the HUD's word), `is_landed()`, `tilt()`, `static is_ground(body)` | `LandingMonitor` |
+| Saving | `hull.landed` is saved (`Ship.to_dict`), and carried through `Fleet`'s sleep and wake (Ruling 9). `restore_landed()` lands it frozen on load | `restore_landed`, `Fleet` |
+| Crash | terrain deals crash damage only from `Ship.TERRAIN_CRASH_FROM` 10 m/s (a touchdown is not a crash, Ruling 8); everything else from `CRASH_FROM` 2. `crash_damage(knock, from)` | `Ship` |
+
+**The airlock on a world** (`src/ship/airlock/airlock.gd`):
+- The room panel's refusal order is **warping, then the world (not landed, uneven ground, hatch
+  blocked), then charge**: static `refusal_order(warping, world, charge)`. `must_charge()` is
+  false on a world: the suit's thrusters are off there.
+- `world_refusal()` asks `Ship.outside_refusal()` first, then a capsule cast: radius 0.35
+  (`BODY_RADIUS`), height 1.8 (`Avatar.STAND_HEIGHT`), centred 1.35 m over the outer hatch floor
+  (its bottom `HATCH_STEP` 0.45 m up, Ruling 10), stepped out to `HATCH_CLEAR` 2.5 m, masks
+  terrain and rocks, the ship's own exterior excluded. It is cached per physics frame.
+- The threshold calls `Avatar.enter_field` on a world, so you step out on foot (FIELD), not on a
+  spacewalk (SUIT).
+- `Ship.on_world()` and `Ship.outside_refusal()` override `GridHome`'s defaults (false and ""),
+  which a `Base` still has. **Phase 3 must override them on `Base`** for the oasis buildings,
+  or a base on a world steps you out in SUIT mode and asks for charge. The same goes for a
+  ramp: nothing lowers one on a `Base` (the ramp comes down from `Ship._sync_ramps`).
+- Proof: `test_landing_monitor.gd`, `test_landing_save.gd`, the `test_airlock_world.gd` file, and
+  `test/probes/landing_play.gd` (windowed; hover, level, land, step out, walk, jump, drop, walk
+  back in, lift off, low power, a spacewalk over the air, the head lamp at night).
+
+Measured by `landing_play` on a GTX 960 at 1280×720: 140 fps seated landed, 187 standing beside
+the ship, 149 at the foot of the ramp looking up it. The Warden (265 t) levels from 15° to 0.03°
+in about 8 s with no overshoot; touchdown deals 0.0 hp.
+
 ## Landing ramps (desert world phase 0, Task 14; `src/ship/airlock/landing_ramp.gd`)
 
 Every airlock's alcove asks `AirlockAlcove.ramp_plan(grid, at)` and builds a `LandingRamp` under

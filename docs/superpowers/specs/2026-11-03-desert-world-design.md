@@ -21,6 +21,65 @@ every ship being usable, and on `.tscn`/`.tres` comments.
 `2026-11-03-desert-world/beast-concept.webp` (the owner's concept art; the beast is later, but
 this is the land it lives in).
 
+> **Status, 2026-11-04: phase 0 is built** (branch `desert-world`, to merge after the owner's
+> look). The skills (`building-a-ship`, `designing-a-ship`, `building-an-npc`) record it.
+> Phases 1 to 3 are not started.
+>
+> **Differences as built** (each is a ruling in the branch's progress file):
+> - **The hold is per axis (Ruling 4).** Boost raises an axis's ceiling to 2.5 times its budget
+>   only where the pilot pushes or a velocity hold is set. Every other axis stays at 1 times, so
+>   hold plus command never pass the budget.
+> - **Levelling goes by height only (Ruling 6).** It fades in from 150 m to 100 m over the keel and
+>   not by speed. A pilot who dives low must hold the stick to keep the nose down. Revisit at
+>   playtest.
+> - **On the ground, weight reaches the ground (Rulings 2, 7a).** LANDED freezes the hull and you
+>   leave it only by translating. While LANDED, or TOUCHING with terrain contact this tick, the
+>   hold and the levelling stand down if the stick's translation is centred. Any translation input
+>   brings both back at once.
+> - **Touchdown is not a crash (Ruling 8).** Terrain deals crash damage only above 10 m/s
+>   (`Ship.TERRAIN_CRASH_FROM`); everything else still from 2 m/s. A 6 m/s touchdown had dealt
+>   665 hp. It now deals 0.
+> - **The hatch cast clears small bumps (Ruling 10).** The capsule's bottom is 0.45 m over the
+>   outer hatch floor, so ground a walker can step over does not read "Hatch blocked".
+> - **Hostiles keep above the air (Ruling 11)** by 2 km, for `Sides.HOSTILE` only. Your own ship
+>   flown by its pilot is free to land.
+> - **Strays freeze at rest on a world (Ruling 12)**, since the ground has no collider far from an
+>   anchor.
+> - **A landing ramp, added in the branch.** The plan had you jump into a landed ship. A landed
+>   starter's hatch is **2.05 m** over the ground (the keel row under the cabin), a jump peaks at
+>   0.89 m, and nobody could get back in. The owner chose a ramp (2026-11-04). Every horizontal
+>   outer hatch over 0.45 m above the keel gets one: 30°, `sill / sin 30°` long, 4.10 m on the
+>   starter. It lowers when the ship lands on a world and stows as it lifts off.
+> - **The head lamp spares your hands.** The hands are on `Avatar.HANDS_LAYER`, so the lamp does
+>   not wash them white. And the HUD on foot says `SUIT n%`, not the spacewalk's "returning".
+>
+> **Measured** (`test/probes/landing_play.gd`, GTX 960, 1280 by 720, windowed; the floor is 120
+> fps): **140 fps** seated at the helm on the ground; **177** standing 6 m off the ship; **149**
+> at the foot of the ramp looking up it. The Warden (265 t, the heaviest) levels from 15° to
+> **0.03°** with no overshoot, and touchdown damage is **0**.
+>
+> **Known gap: the Warden cannot be boarded on a world (Ruling 14).** Its hatch is 4.05 m over the
+> keel; its 8.1 m ramp would come down through its RCS block at (-4, -1, 2), so none is built.
+> You can land it and step out, not walk back in. The fix is a reshape through the `ship-designer`
+> agent after this branch merges. Boardability is a printed line (`ship_check`, `ship_probe`), not
+> a `ShipRules` rule yet.
+>
+> **Open for phase 1:** the sky is black; the hover puff reads as a white blob; the help card
+> shows the pilot's keys while you are on foot; and step 10 of the probe (a spacewalk in a ring)
+> is untested because no planet in the seeded system had a ring (it flies up through the air top
+> instead).
+>
+> **Notes for phase 3:**
+> - **Override `Base.on_world()` and `Base.outside_refusal()`.** `GridHome` returns false and "".
+>   Without that, a base on a world steps you out in SUIT mode and asks for a charge.
+> - **A base can build a ramp that nothing lowers.** A ramp comes down from `Ship._sync_ramps`
+>   only. A `Base` with a high hatch would build one that stays stowed, so give it its own call.
+> - **Items taken by hand from another shift field stay in `EXTERIOR_SPACE` while held.** Placed
+>   oasis items must handle that.
+> - **Hover puffs and the floating origin:** a hovering ship's RCS puffs are in `HOLDS_SHIFT`, and
+>   in a well the hold puffs all the time, so a re-centre may always wait for the forced one at
+>   4 km. Read from the code, not measured.
+
 ---
 
 ## 1. Why

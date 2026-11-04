@@ -258,6 +258,18 @@ z -1  H    Qk12 D    D    Qm   Qk8  H
   canopy, seat and weapons station 0.5, deck and rooms 0.4, fairings 0.3. **A turret replaces a
   cell**, so the net is its mass less the cell's: a light is +0.5 t over a fairing half and 0.2 t
   under a hull plate, a heavy +1.7 t over a half.
+- **Lift:** a ship must lift off a 7 m/s² world with a margin of 1.3 (`CANNOT_LIFT`): its
+  `vertical` thrust over its mass at least 9.1 m/s². `ship_check` prints the `lift` line. The
+  starter has 9.5 (margin 1.35), the Warden 13.2, the Lamplighter 15.8. Every tonne you add
+  (turrets, cores, rooms) costs it, so **add vertical rcs pairs with the mass**. A ship that
+  cannot lift can land on a world and never leave.
+- **Boardable on a world:** a landed hull rests on its keel, so a hatch is often well off the
+  ground. An outer hatch that faces up or down cannot be boarded on a world. A horizontal one
+  more than 0.45 m (`Airlock.HATCH_STEP`) above the keel gets a landing ramp by itself, but only
+  if its path is clear of the ship's own blocks: the ramp is `sill / sin 30°` long, so a hatch
+  4 m up needs 8 m of empty cells below and outside it. `ship_check` prints a `ramp` line per
+  airlock, and **it must not say `NOT BOARDABLE ON A WORLD`**. Keep the cells under the outer
+  hatch empty, and put the airlock low, near the keel.
 - **Size:** 400 blocks at most. A 400-block ship builds in about 1.2 s when it spawns, a freeze the
   owner accepted for now; its rules take 0.3 s; it holds 121 fps in the worst view, just over the
   120 floor, so **a big ship costs frames**: keep it no bigger than the brief needs.
@@ -334,5 +346,6 @@ z 2   Fh2
 | Putting the guns on last | A turret takes a cell of the skin, so a late one moves the mass, the power margin and the pitch balance together; see *Budgets* for how thin the Warden's margin is | Place the turrets in the shape pass (§4 step 5), then re-read power and balance |
 | Counting turrets, not the ones that bear | The starter has two turrets and fights with one: dorsal and ventral share only the rim of their skies, and on that rim neither can engage. `best_face` said 2 of 2 and the pilot could fire none | Read the probe's `face` line, the flown count; §2b says how to raise it |
 | A heavy on a ship meant to brawl | Reach over the foe's by 100 m forces stand-off, so the Warden, 3.2 times a starter's firepower and 2.4 its hull, stood at 960 m for 12 minutes and never decided a fight | Light turrets only on a brawler, or accept what §2b says about stand-off |
+| An outer hatch high on a big hull, with an RCS block under it | The Warden's hatch is 4.05 m over its keel, so its ramp is 8.1 m long and would come down through its own RCS block at (-4, -1, 2). No ramp is built, and the Warden cannot be boarded on a world: `ship_check` says `NOT BOARDABLE ON A WORLD`. A **known gap**, to be fixed by the ship-designer after the desert-world branch merges (move that block, or the airlock) | Read the `ramp` line on every airlock before you finish. It is a printed line, not a rule yet, so nothing fails a ship that can't be boarded |
 | Judging shape from `ship_check` alone | A first draft broke no rule and looked like a shuttle on a pole | Probe inside the design loop; the `.md` last |
 | The arrival render to judge looks | At 200–400 m the new ship is a few pixels | It proves the arrival; judge the ship from the probe's hull views |

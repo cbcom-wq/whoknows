@@ -134,6 +134,12 @@ Do these in order. Each one names the check that proves it.
    - `power_gen > power_draw`, with margin;
    - no zero component in `torque_budget`;
    - `thrust_budget[&"reverse"] > 0`;
+   - **it lifts off a 7 m/s² world: `CANNOT_LIFT` clear.** `thrust_budget[&"vertical"]` over mass
+     must be at least `ShipRules.LIFT_MARGIN` (1.3) times 7: 9.1 m/s². The starter's is 9.5
+     (margin 1.35), so it has little to spare: a heavier turret or a longer hull can break it.
+     `ship_check` and the probe print it as the `lift` line. Planets pull 2 to 7 m/s², moons 1 to
+     4, and the gravity hold spends this same vertical budget (`reference.md` *Gravity and
+     landing*);
    - `torque_imbalance` within a few % of `torque_budget` on each axis. Fix it by moving mass or
      thrust, not by weakening the RCS. Fairings above the thrust line count: the reshaped
      starter's spine and fins put pitch at **4.77% of the 5% limit** (4.91% before its two turrets), so leave headroom;
@@ -272,6 +278,7 @@ is the blueprint's budgets, so the grid decides the feel:
 | How fast a turn starts and stops | `torque_budget / inertia`, per axis | 1.48 / 0.71 / 1.84 rad/s² (pitch / yaw / roll) |
 | A clicked heading swinging on | the weaker of pitch and yaw above | 120° in 3.1 s on the flat starter; not re-measured on the reshaped or armed one, a little slower; yaw, the weaker axis, is 0.71 either way |
 | Travel swinging onto the nose after a turn | `thrust_budget[&"lateral"]` (and `vertical`) / mass | side 4.7 m/s², vertical 9.5: 100 m/s sideways takes about 21 s |
+| Lifting off a world; what the gravity hold has left to climb with | `vertical / mass` against the pull | 9.5 m/s² up against 7: margin 1.35 (`ShipRules.LIFT_MARGIN` 1.3) |
 | Braking; a speed lock slowing down | `reverse` / mass | 4.7 m/s² |
 | Accelerating; a speed lock catching up | `forward` / mass | 14.2 m/s² |
 | Thrusters the player sees | each `rcs` block's exhaust face open and in view | 6 of 8 blocked (only the pitch-down pair shows); none in the pilot's view |
@@ -427,6 +434,11 @@ thrust.
 | A block under the outside cell | The Warden's sill is 4.05 m up and its ramp would come down through its own RCS block at (-4, -1, 2), so it has none: the Warden cannot be boarded on a world | `ramp_plan` names the blocks in the way and the alcove builds no ramp. Keep the ramp's path clear when you draw a ship; a library ship changes through the ship designer, never in passing |
 | Stepping out of a hatch onto a slope | Crossing the threshold left the avatar with no floor contact, so it never snapped: out of the hatch at 4 m/s under 5.3 m/s² its arc stayed over the 30° ramp all the way and it landed at the foot, 0.5 m over the slab at worst (`landing_play` step 5). Snapping in `enter_field` itself, outside the physics step, broke `test_avatar_field`'s jump | `Avatar._stepping_out`: the first FIELD tick snaps to the floor within reach (`apply_floor_snap`) inside the step. `test_out_of_the_hatch_you_walk_down_the_ramp_on_your_feet` counts the ticks off your feet over the ramp |
 | Deciding a landed look once, on LANDED | A save restores LANDED before `_wire_ship` gives the ship its gravity, so `on_world()` was false that moment and the ramp would have stayed up on a loaded landed ship | `Ship._sync_ramps` runs every physics tick while landed, and `LandingMonitor.restored` makes it instant: `test_loaded_before_its_gravity_the_ramp_is_down_the_first_tick_it_has_it` |
+| Counting the vertical thrust one way | Counting the starter's lift one way gives 4.7 m/s². `thrust_budget[&"vertical"]` sums every vertical thruster in both directions (`reference.md`, *One quirk*), and the flight computer spends that sum as one central force | The starter's lift is **9.5 m/s²**, and that is what the gravity hold spends. Do not halve it. Read the `lift` line; `CANNOT_LIFT` needs `LIFT_MARGIN` (1.3) over a 7 m/s² world |
+| Boost scaling every axis | One boost scale for all three axes let a forward boost lift the vertical thrusters past their budget while the hold was fighting a sink: 27% over | Boost raises an axis's ceiling only where the pilot pushes or a velocity hold is set; every other axis stays at 1x (`FlightComputer._apply_translation`, `within_budget`) |
+| Crash damage on touchdown | A 6 m/s touchdown on terrain dealt 665 hp, so landing hurt the hull and broke the "hard landing is a toast and a thud" rule | Terrain crashes from `Ship.TERRAIN_CRASH_FROM` (10 m/s); everything else from `CRASH_FROM` (2). The playtest probe checks block damage is 0.0 before and after touchdown |
+| A hatch-clear capsule that touches the keel's plane | The capsule's bottom sat 7.5 cm over the hull's ground, so a bump or the slope read "Hatch blocked" on a clear landing | The capsule's bottom is `Airlock.HATCH_STEP` (0.45 m) over the outer hatch floor, centre at floor + 1.35 m: ground a walker can step over does not block |
+| A save that thaws a landed ship | A landed ship asleep or saved loaded hovering | `hull.landed` is saved and carried through `Fleet`'s sleep and wake (`restore_landed`) |
 
 ## Not built yet (plan for it; don't assume it works)
 
@@ -442,6 +454,13 @@ thrust.
   out and walk, and a high hatch gets a landing ramp (desert world phase 0). The hull rests on its
   keel: there are no legs or skids, and a hard landing is a warning and a thud with no damage yet.
   Do not give a ship legs or skids that assume they hold it up.
+- **The Warden is not boardable on a world** (a known gap, desert world Ruling 14). Its outer
+  hatch is 4.05 m over the keel, so its ramp is 8.1 m long and would come down through its own
+  RCS block at (-4, -1, 2); no ramp is built, and `ship_check` prints `NOT BOARDABLE ON A WORLD`.
+  You can land it and step out, but not walk back in. The fix is a reshape through the
+  `ship-designer` agent (move that block or the airlock), after the desert-world branch merges.
+  Boardability is a printed line, not a `ShipRules` rule yet: a rule would fail the Warden in
+  `test_ship_catalog` until then.
 
 - **Multi-storey interiors.** A `ladder` passes the validator, but every walkable cell still gets
   a solid floor and ceiling, so you can't climb. **Multi-level ships** can be written and checked
