@@ -879,6 +879,7 @@ func _wire_strays(saved: Dictionary) -> void:
 	strays.name = "StrayField"
 	$Outside.add_child(strays)
 	strays.setup(_universe, _starter.item_catalog)
+	strays.gravity = world_gravity
 	if not saved.is_empty():
 		strays.from_dict(saved)
 

@@ -21,8 +21,20 @@ var universe: Universe
 var catalog: ItemCatalog
 var ledger := StrayLedger.new()
 
+## What pulls (desert world spec §5.5), set by the flight scene; null where
+## nothing does. On a world a live stray falls, and once it comes to rest it
+## is frozen where it lies: world ground has colliders only near ships and
+## you, and strays stay live up to 3 km off, so one left awake would fall
+## through.
+var gravity: WorldGravity
+
+## A stray slower than this, for REST_TIME, is at rest.
+const REST_SPEED := 0.1
+const REST_TIME := 0.5
+
 var _live := {}   # int id -> Item
 var _hooks := {}  # int id -> the Callable its item's `consumed` calls
+var _calm := {}   # int id -> seconds spent under REST_SPEED
 
 func setup(p_universe: Universe, p_catalog: ItemCatalog) -> void:
 	universe = p_universe
@@ -75,7 +87,38 @@ func count_of(kind: StringName, at: Vector3, radius: float) -> int:
 	return n
 
 func _physics_process(delta: float) -> void:
+	pull(delta)
 	tick(delta)
+
+## Pulls each live, loose stray that is on a world, and freezes those that
+## have come to rest. A frozen stray feels nothing; one in hand or let go of
+## is no longer ours (let_go forgets it).
+func pull(delta: float) -> void:
+	if gravity == null:
+		return
+	for id: int in _live.keys():
+		var item: Variant = _live[id]
+		if not is_instance_valid(item) or item.freeze or item.state != Item.State.LOOSE:
+			_calm.erase(id)
+			continue
+		var p: Vector3 = item.global_position
+		if not gravity.on_world_at(p):
+			_calm.erase(id)
+			continue
+		item.apply_central_force(gravity.at(p) * item.mass)
+		if item.linear_velocity.length() < REST_SPEED:
+			_calm[id] = float(_calm.get(id, 0.0)) + delta
+			if _calm[id] >= REST_TIME:
+				_freeze(item)
+				_calm.erase(id)
+		else:
+			_calm[id] = 0.0
+
+static func _freeze(item: Item) -> void:
+	item.linear_velocity = Vector3.ZERO
+	item.angular_velocity = Vector3.ZERO
+	item.freeze_mode = RigidBody3D.FREEZE_MODE_STATIC
+	item.freeze = true
 
 ## Forgets strays you have been far from for long enough, and loads and
 ## unloads the rest as you come and go. Called every physics tick; tests
@@ -133,6 +176,8 @@ func _load(id: int) -> void:
 	item.angular_velocity = e["w"]
 	add_child(item, true)
 	item.add_to_group(Universe.EXTERIOR_SPACE)
+	if gravity != null and gravity.on_world_at(item.position):
+		_freeze(item)
 	_track(id, item)
 
 ## Frees a live stray, out of the group first. Its entry stays unless the
@@ -159,6 +204,7 @@ func _untrack(id: int) -> void:
 		item.consumed.disconnect(hook)
 	_live.erase(id)
 	_hooks.erase(id)
+	_calm.erase(id)
 
 func _on_consumed(id: int) -> void:
 	var item: Variant = _live.get(id)
