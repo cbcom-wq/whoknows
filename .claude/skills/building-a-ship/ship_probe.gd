@@ -25,7 +25,9 @@ extends SceneTree
 # It prints the rules line (ShipRules: every rule broken, or 0) and the notes,
 # a turret line per turret (name, kind, cell, sky coverage; or "turret  none"),
 # a face line (the face a pilot shows, and how many turrets bear on it),
-# and a hose line per airlock (its alcove's reel, and the nozzle stocked on it).
+# a hose line per airlock (its alcove's reel, and the nozzle stocked on it),
+# and a ramp line per airlock (its landing ramp: a step, the ramp's sill,
+# length and angle, or NOT BOARDABLE ON A WORLD).
 # Then a two-ship pass (docs/superpowers/specs/2026-10-02-many-ships-design.md
 # §8.2): fps in the worst view with a second ship 300 m off,
 # probe_fleet_from_starter{,_dark}.png, F8 to its helm, probe_fleet_from_second
@@ -556,6 +558,16 @@ func _run(scene: Node) -> void:
 		var reel: HoseReel = lock.alcove.reel if is_instance_valid(lock.alcove) else null
 		print("hose    airlock %s: reel %s, nozzle %s" % [coord, "yes" if reel != null else "NONE  <-- NO REEL",
 			"yes" if reel != null and reel.item != null else "NONE  <-- NO NOZZLE"])
+	# Boardable on a world (desert world phase 0, Task 14): every horizontal
+	# outer hatch over Airlock.HATCH_STEP above the keel has a landing ramp, and
+	# none faces up or down; the alcove built what the plan says.
+	for coord: Vector3i in ship.airlocks:
+		var lock: Airlock = ship.airlocks[coord]
+		var plan := AirlockAlcove.ramp_plan(ship.grid, coord)
+		var wanted: bool = plan["need"] == LandingRamp.RAMP and (plan["through"] as Array).is_empty()
+		var built := is_instance_valid(lock.alcove) and lock.alcove.ramp != null
+		print("ramp    airlock %s: %s%s" % [coord, AirlockAlcove.ramp_words(plan),
+			"" if built == wanted else ("  <-- NOT BUILT" if wanted else "  <-- BUILT IN THE WAY")])
 	# The skin (ship exterior spec §3): every interior window must have one outside
 	# and none may be UNMATCHED; the lights are the generator's, 5 floods and 2
 	# forward on the starter.

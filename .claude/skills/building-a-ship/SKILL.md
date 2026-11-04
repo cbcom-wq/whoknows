@@ -49,6 +49,12 @@ Do these in order. Each one names the check that proves it.
    - an `airlock` with **exactly one** horizontal face onto an empty cell (its outer hatch), and
      walkable deck straight through on the opposite side, not a room. Its hull alcove gets the
      hose's reel and nozzle by itself (`AirlockAlcove.reel`): there is nothing to place.
+   - **boardable on a world:** every horizontal outer hatch over 0.45 m (`Airlock.HATCH_STEP`)
+     above the keel has a ramp; none faces up or down. The ramp builds itself
+     (`AirlockAlcove.ramp_plan`, `LandingRamp`): straight out of the hatch at 30°, `sill / sin 30°`
+     long, so **keep the cells it comes down through empty**, below the outside cell too. The
+     probe's and `ship_check`'s `ramp` line per airlock says `step`, `ramp: <sill> m, <length> m
+     at <angle>°`, or `NOT BOARDABLE ON A WORLD` with the blocks in the way.
    - room blocks (`bunk_room`, `galley`...) each touching walkable space for their doorway.
    - **the maintenance droid's needs** (NPC foundation spec §14), on any ship with 12 or more
      walkable cells: a `closet` for its dock (otherwise it docks in the walkable cell farthest
@@ -417,6 +423,10 @@ thrust.
 | Reading fps on a busy machine | The 2026-11-02 probe read a second ship 300 m off at 104 (Lamplighter) and 109 (Warden), taken for a regression. It was the machine: browsers, then a Vite dev server on 2 cores. A fixed `sin()` loop timed beside the game slowed with the frame rate (2.05 ms at 118 fps, 2.47 at 90), bodies and pairs held, and `main` dipped the same way | Before a fps reading, check total CPU (`typeperf "\Processor(_Total)\% Processor Time"`) is a few percent. A one-ship reading under the ship's usual figure means the run is void. Only then compare branches, interleaved |
 | A knock on the avatar's head | Seated, `CameraDirector` hangs the camera from the seat's eye, so a head shake never reaches the view | The knock is on the camera (`Avatar.knock`, rotation.z and h/v offset); the gun camera has its own (`WeaponsJob.knock`) |
 | Projecting a world point to the screen from the helm | The eye camera is in the interior, 5 km down, so the point lands nowhere near the ship you see | Go through `aboard.canopy_camera`, and draw cockpit marks on `aboard.canopy_overlay`, not on a CanvasLayer |
+| A hatch 2.05 m over the ground, tested by putting you in it | Landed on a world, the starter's sill is 2.05 m up (the keel row under the cabin) and a jump peaks at 0.89 m: nobody could get back in. The airlock world tests stood the avatar in the room, and `landing_play` put it in the doorway by hand when the walk-in failed, so the tests passed with no way in | Every horizontal outer hatch over `HATCH_STEP` gets a `LandingRamp` (desert world Task 14). Prove boarding from the ground on your feet, W held (`test_from_the_ramp_s_foot_you_walk_up_and_in`, `landing_play` step 7), never by placing the avatar; a fallback that carries a probe on must count as a failure |
+| A block under the outside cell | The Warden's sill is 4.05 m up and its ramp would come down through its own RCS block at (-4, -1, 2), so it has none: the Warden cannot be boarded on a world | `ramp_plan` names the blocks in the way and the alcove builds no ramp. Keep the ramp's path clear when you draw a ship; a library ship changes through the ship designer, never in passing |
+| Stepping out of a hatch onto a slope | Crossing the threshold left the avatar with no floor contact, so it never snapped: out of the hatch at 4 m/s under 5.3 m/s² its arc stayed over the 30° ramp all the way and it landed at the foot, 0.5 m over the slab at worst (`landing_play` step 5). Snapping in `enter_field` itself, outside the physics step, broke `test_avatar_field`'s jump | `Avatar._stepping_out`: the first FIELD tick snaps to the floor within reach (`apply_floor_snap`) inside the step. `test_out_of_the_hatch_you_walk_down_the_ramp_on_your_feet` counts the ticks off your feet over the ramp |
+| Deciding a landed look once, on LANDED | A save restores LANDED before `_wire_ship` gives the ship its gravity, so `on_world()` was false that moment and the ramp would have stayed up on a loaded landed ship | `Ship._sync_ramps` runs every physics tick while landed, and `LandingMonitor.restored` makes it instant: `test_loaded_before_its_gravity_the_ramp_is_down_the_first_tick_it_has_it` |
 
 ## Not built yet (plan for it; don't assume it works)
 
@@ -428,9 +438,10 @@ thrust.
 - **Damage beyond the components** (the engines, core, computer, cockpit and each turret). RCS, cells, rooms and the airlock never break; a
   section's health changes only looks and pieces. No per-section effect on flight, no repairing
   a section from inside, no droid repairing the ship.
-- **Gravity and landing on a world.** Worlds are solid and you can skim and bump off them, but
-  there is no gravity, landing gear or step-out yet (Planetfall's). Do not give a ship legs or
-  skids that assume a pull.
+- **Landing gear.** Ships feel a world's pull, hover, level and land (`LandingMonitor`), you step
+  out and walk, and a high hatch gets a landing ramp (desert world phase 0). The hull rests on its
+  keel: there are no legs or skids, and a hard landing is a warning and a thud with no damage yet.
+  Do not give a ship legs or skids that assume they hold it up.
 
 - **Multi-storey interiors.** A `ladder` passes the validator, but every walkable cell still gets
   a solid floor and ceiling, so you can't climb. **Multi-level ships** can be written and checked

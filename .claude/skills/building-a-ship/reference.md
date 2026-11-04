@@ -962,6 +962,42 @@ frozen kinematic with layer and mask 0; `QuantumPlant` runs the cores at `&"warp
 The hull is a space anchor (`AsteroidStream.SPACE_ANCHOR`), so a world's surface keeps ground
 solid under it with no wiring. A ghosted hull (mask 0, at warp) is never lifted.
 
+## Landing ramps (desert world phase 0, Task 14; `src/ship/airlock/landing_ramp.gd`)
+
+Every airlock's alcove asks `AirlockAlcove.ramp_plan(grid, at)` and builds a `LandingRamp` under
+its outer hatch when the plan wants one and nothing is in its way. A blueprint places nothing.
+
+| What | Value | Where |
+|---|---|---|
+| Wants one | a horizontal outer hatch whose sill is over `Airlock.HATCH_STEP` (0.45 m) above the keel's plane; at or under it, a step; facing up or down, none: not boardable | `LandingRamp.need`, `wants_ramp` |
+| The sill | `floor_y(at) - storey_offset(at.y) + Ship.keel_depth_of(grid)`: 2.05 m on the starter and the Lamplighter, 4.05 m on the Warden | `ramp_plan` |
+| Length | sill / sin 30°: 4.10 m for 2.05 m | `length_for`, `SLOPE` |
+| Angle | asin((sill + drop) / length), from a ray (`BodyProxy.LAYER`) to the ground under the tip, then a second ray where that puts the tip; clamped 15°–38°, under the avatar's 45° `floor_max_angle` less 5°. With no ground found it is 30° and retried every 0.5 s while down | `angle_for`, `settle`, `LEAST`, `MOST`, `SETTLE_EVERY` |
+| In the way | the cells `sample_points` (across the width, top and underside, from 0.25 m out) fall in that hold a block, the airlock's own cell aside: no ramp is built | `ramp_plan`'s `through` |
+| Frame | on the hatch's plane at the sill, mid-doorway, +z out, +y up | `AirlockAlcove.hinge_frame` |
+| Shape | a slab 1.3 × 0.18 m (`DOOR_WIDTH` + 0.3, `THICKNESS`), its top flush with the sill; two rails 0.12 m tall, 0.1 wide, from 0.25 m; 4 raised treads (3 on a ramp under 3.2 m, `TREADS_FOUR`) 0.03 × 0.14 m in `PANEL_LINE`, the one accent; a foot pad kept level; a hinge barrel and two knuckles. `HullPalette` only through `HullMaterials.trim()`, no new shader, on `OWN_HULL_LAYER` | `_draw_slab`, `_draw_pad`, `_draw_housing` |
+| Travel | slides 0.5 s out of its slot, then swings 1.1 s down (1.6 s), the `hatch_motor` at the start of each; hidden while stowed | `SLIDE_TIME`, `SWING_TIME`, `TRAVEL`, `SOUND` |
+| Collider | a `BoxShape3D` the slab's size on the hull body (layer 1), named `LandingRamp`, in the alcove's `colliders`: on only once fully down, off the moment it starts up. The airlock's hatch-clear cast leaves the hull out, so it never sees it | `collider`, `slab_frame` |
+| When | down while `landing.is_landed() and on_world()`, up otherwise | `Ship._on_landing_changed`, `_sync_ramps` |
+| At once | `LandingMonitor.restored` (set by `restore_landed`, cleared on leaving LANDED) and a rebuild while landed put it down with no travel. `_sync_ramps` runs every physics tick while landed, because a save restores LANDED before the ship has its gravity | `Ship._rebuild_everything` |
+| Asking | `is_down()`, `is_stowed()`, `progress()` (0 stowed, 1 down), `top_edge()`, `tip()`, `sill_height`, `length`, `angle` | `LandingRamp` |
+
+You walk up it on your feet and in through the outer hatch; `Airlock._watch_threshold` takes you
+aboard as at any hatch. Out of the hatch you walk down it on your feet: your first FIELD tick
+snaps you to the floor within reach (`Avatar._stepping_out`). It is under the exterior, so the
+floating origin carries it.
+
+- **Probe lines:** `ship_probe.gd` and `ship_check.gd` print one per airlock: `ramp    airlock
+  (0, 0, 3): ramp: 2.05 m, 4.10 m at 30°` (the starter), `step (sill … m over the keel)`, or
+  `… — NOT BOARDABLE ON A WORLD` with the blocks in the way. The probe adds `<-- NOT BUILT` if
+  the alcove disagrees with the plan.
+- **Proof:** `test_landing_ramp.gd` (the geometry; down about 2 s after LANDED with its top at
+  the sill and its tip on the ground; a liftoff stows it; from its foot you walk up and in; out of
+  the hatch you walk down it on your feet; a save
+  loaded landed, gravity late and a rebuild all have it down at once);
+  `test_floating_origin_scene.gd`'s ramp case; `test/probes/landing_play.gd` steps 3, 5, 7 and 8,
+  windowed, with renders halfway, down from 25 m, and up the ramp from its foot.
+
 ## The hose (`docs/superpowers/specs/2026-09-24-quantum-energy-design.md` §11, *As built* §11.5)
 
 Every airlock that can cycle gets a reel on its hull alcove, with a nozzle stocked on it, on any

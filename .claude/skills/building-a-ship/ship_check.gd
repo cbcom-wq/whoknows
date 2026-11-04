@@ -6,7 +6,8 @@ extends SceneTree
 #   godot --headless --path who-knows --script <abs path>/ship_check.gd -- <ship .json>
 #
 # The ship file is an absolute path or a res:// one, named for its id. Prints
-# each rule broken, with its cell, then the notes; exits 0 when no rule is
+# each rule broken, with its cell, then the notes, then a ramp line per airlock
+# (its landing ramp, or NOT BOARDABLE ON A WORLD); exits 0 when no rule is
 # broken, and 1 when one is or the file will not load.
 
 func _initialize() -> void:
@@ -33,4 +34,11 @@ func _initialize() -> void:
 		print("  <--   %s %s%s" % [r["code"], r["text"], "" if r["cell"] == null else " at %s" % [r["cell"]]])
 	for n in found["notes"]:
 		print("note    %s %s" % [n["code"], n["text"]])
+	# Boardable on a world (desert world phase 0, Task 14): the landing ramp each
+	# airlock's outer hatch needs, or why it has none. Not a rule: printed.
+	for c: Vector3i in grid.coords():
+		if grid.get_block(c).block_id == AirlockSite.AIRLOCK_ID:
+			var words := "no outer hatch (it cannot cycle)" if AirlockSite.hatch_normal(grid, c) == Vector3i.ZERO \
+				else AirlockAlcove.ramp_words(AirlockAlcove.ramp_plan(grid, c))
+			print("ramp    airlock %s: %s" % [c, words])
 	quit(0 if found["rules"].is_empty() else 1)
