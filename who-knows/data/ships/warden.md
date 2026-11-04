@@ -128,7 +128,7 @@ command bridge in place of the pod, the silhouette, size and feel kept. The figu
 | Balanced under burn | under 5% of authority | pitch 0.22%, yaw 0.03%, roll 0% |
 | Military | armour, an armoury, a crew berth | 6 armour blocks on the cabin's flanks, a four-cell weapon room, a four-cell bunk room |
 | Usable | helm with a view, airlock, walkable cabin, the droid's needs | one airlock, 51 walkable cells on one storey, closet dock, 31 jobs all reachable; 20 windows outside for 20 inside |
-| Frames | every probe `fps` ≥ 120 | worst **123** seated by a rock with both light groups (and with a second ship 300 m off) |
+| Frames | every probe `fps` ≥ 120 | worst **121** seated by a rock with both light groups and a second ship 300 m off (123 without it), on a quiet machine, 2026-11-03 |
 
 **Turns.** Yaw is 0.04 under the first Warden's: the bridge row moved mass 2 m forward and yaw
 inertia grows with it. Pitch is 0.01 over: the bow's vertical rcs had to be rearranged (below), and
@@ -250,4 +250,5 @@ the 11 canopies) 720, light turrets 200 each, the heavy one 400; not crippled. S
 one forward light (on the sensor head). Seats: 5 (the helm, 2 crew stations, the weapons
 station, the captain's chair), each sat in and stood up from. Probe fps (GTX 960, 1280 × 720):
 275 standing, 136 seated, 132 with both light groups, 122 by a rock, 203 and 223 in the chase
-views, 122 with a second ship 300 m off. No validator issues; no rule broken.
+views, 122 with a second ship 300 m off; re-measured on a quiet machine on 2026-11-03, 123 by a
+rock and 121–122 with a second ship. No validator issues; no rule broken.

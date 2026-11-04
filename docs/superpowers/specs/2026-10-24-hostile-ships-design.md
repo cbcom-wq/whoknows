@@ -642,16 +642,32 @@ Light hits by band: 200 m 100%, 400 m 95%, 600 m 86%, 800 m 36%, 1 km 36%, 1.2 k
 flagged. The first run read under 120 in the rock views, so each ship was run again alone. Seated by a
 rock with both light groups on, then with a second ship 300 m off:
 
-| Ship | First run | Alone | In its `.md` when designed |
-|---|---|---|---|
-| starter | 114, 81 | **128, 123** | 130, 130 (2026-10-02) |
-| warden | 121, 89 | **117, 109** | 123, 122 |
-| lamplighter | 125, 101 | **126, 104** | 127, 126 |
+| Ship | First run | Alone | Quiet machine, 2026-11-03 | In its `.md` when designed |
+|---|---|---|---|---|
+| starter | 114, 81 | 128, 123 | **128, 127–129** | 130, 130 (2026-10-02) |
+| warden | 121, 89 | 117, 109 | **123, 121–122** | 123, 122 |
+| lamplighter | 125, 101 | 126, 104 | **128, 125–127** | 127, 126 |
 
-**The second-ship reading has fallen** and was not traced: the Lamplighter's 104 is under the 120
-floor, and the Warden's 109 and 117 are under the 122–123 its `.md` records, though inside the 109–117
-accepted with its guns firing. No fight or pilot is running in that view. The one-ship reading held
-on the Lamplighter and the starter, so look at what a second awake ship now costs.
+**The second-ship drop was the machine, not hostiles.** The quiet-machine column is three runs of
+each ship (the medians of 12 one-second samples with the second ship), taken with total CPU at a
+few percent. It uses a copy of `ship_probe.gd`'s fleet view that also times the script callbacks
+and a fixed reference loop. One starter run read 99 alone and is void; its second-ship reading
+matched the others.
+
+- **`main` against this branch, interleaved:** they read the same. On a quiet machine the
+  Lamplighter read 127.7 and 126.7–127.5, the starter 131.7 and 130.7. Under load they dipped
+  alike (the Warden 98–110 on `main`, 78–108 here).
+- **The dips follow the machine.** A fixed loop of 20,000 `sin()` calls, timed beside the game,
+  took 2.05 ms in seconds at 118 fps, 2.20 at 108 and 2.47 at 90. The script time grew in step
+  (physics callbacks 2.6 → 3.8 ms a tick), and bodies, contact pairs and ticks held. The CPU clock
+  did not throttle.
+- **The load** was Edge, Chrome and Spotify on 2026-11-02 and a Vite dev server on 2 cores on
+  2026-11-03.
+- **What a second idle ship costs:** about 0.8 ms of physics callbacks a tick and 0.35 ms of
+  process callbacks a frame. The profiler's top costs per ship (`DeckWalker.step`,
+  `WarpArrival.of`, `Airlock._apply`, `RcsShow`) were all on `main` before this branch.
+
+The Warden's 121–122 is at the floor, as when it was designed; there is no margin.
 
 **`fleet_play.gd`** (§12.2), after every task: ALL OK, exit 0, 2026-11-02.
 
