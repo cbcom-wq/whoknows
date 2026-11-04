@@ -1,5 +1,7 @@
 extends GutTest
 
+const LiftRule := preload("res://test/unit/helpers/lift_rule.gd")
+
 ## The bridge fixture (docs/superpowers/specs/2026-10-09-ship-bridge-design.md
 ## §7): no rule broken, usable as every ship is, and every seat sat in and
 ## stood up from, with somewhere to walk.
@@ -15,13 +17,9 @@ func after_each():
 		if FileAccess.file_exists(SAVE + suffix):
 			DirAccess.remove_absolute(SAVE + suffix)
 
-func _no_lift_rules(found: Dictionary) -> Array:
-	return found["rules"].filter(func(r: Dictionary) -> bool: return r["code"] != &"CANNOT_LIFT")
-
 func test_it_breaks_no_rule():
 	var found := ShipRules.check(ShipLibrary.read(BRIDGE)["grid"], BlockCatalog.load_from_dir("res://data/blocks"))
-	# Rooms fixture, not a ship to fly: CANNOT_LIFT (ShipRules.LIFT_MARGIN) is not what this checks.
-	assert_eq(_no_lift_rules(found), [])
+	assert_eq(LiftRule.without(found["rules"]), [])
 
 func test_it_is_usable():
 	await ShipUse.use(self, ShipLibrary.read(BRIDGE)["grid"], "Bridge test ship", SAVE, "bridge")

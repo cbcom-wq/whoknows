@@ -1,5 +1,7 @@
 extends GutTest
 
+const LiftRule := preload("res://test/unit/helpers/lift_rule.gd")
+
 ## ShipRules (docs/superpowers/specs/2026-10-02-ship-library-design.md §4):
 ## the starter breaks none, and each rule is broken by a copy of the starter
 ## broken just that way (spec §11 says how each was chosen). Notes never count.
@@ -143,9 +145,7 @@ func _bridge() -> ShipGrid:
 func _codes_of(grid: ShipGrid) -> Array:
 	var out := []
 	for r in ShipRules.check(grid, BlockCatalog.load_from_dir("res://data/blocks"))["rules"]:
-		# The bridge fixture is a rooms test, not a ship to fly: 8.5 m/s2 of lift.
-		if r["code"] != &"CANNOT_LIFT":
-			out.append(r["code"])
+		out.append(r["code"])
 	return out
 
 func _set_block(grid: ShipGrid, c: Vector3i, id: StringName, o := 0) -> void:
@@ -155,7 +155,7 @@ func _set_block(grid: ShipGrid, c: Vector3i, id: StringName, o := 0) -> void:
 	grid.set_block(c, inst)
 
 func test_the_bridge_fixture_breaks_no_rule():
-	assert_eq(_codes_of(_bridge()), [])
+	assert_eq(LiftRule.without(ShipRules.check(_bridge(), _cat)["rules"]), [], "the bridge fixture is a rooms test, not a ship to fly")
 
 func test_no_glass_ahead_of_the_helm_breaks_no_helm():
 	var g := _bridge()
@@ -229,6 +229,7 @@ func test_two_weapons_stations_break_the_rule():
 			grid.get_block(c).block_id = WeaponValues.STATION
 	var found := ShipRules.check(grid, BlockCatalog.load_from_dir("res://data/blocks"))
 	assert_true(_found_codes(found["rules"]).has(&"TWO_WEAPONS_STATIONS"))
+
 func test_cannot_lift_when_vertical_under_margin():
 	var s := ShipStats.new()
 	s.total_mass_kg = 100_000.0
@@ -236,7 +237,7 @@ func test_cannot_lift_when_vertical_under_margin():
 	var rules: Array = []
 	ShipRules._check_flight(s, rules)
 	assert_has(_codes(rules), &"CANNOT_LIFT")
-	s.thrust_budget[&"vertical"] = 100_000.0 * 7.0 * 1.3 + 1.0
+	s.thrust_budget[&"vertical"] = 100_000.0 * WorldRecipe.GRAVITY[WorldRecipe.Kind.PLANET].y * ShipRules.LIFT_MARGIN + 1.0
 	rules.clear()
 	ShipRules._check_flight(s, rules)
 	assert_does_not_have(_codes(rules), &"CANNOT_LIFT")
