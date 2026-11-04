@@ -11,12 +11,17 @@ extends SceneTree
 #   2. tilted 15 deg at 130 m with the stick centred, it levels; and so does
 #      the heaviest library ship, without overshooting;
 #   3. it comes down at 2 m/s and lands, with no hard landing and no damage;
-#      the frame rate seated at its helm on the ground;
-#   5. out of its airlock on foot (the hatch clear of the real ground), the
-#      frame rate standing beside it, 20 m off, and a jump;
+#      its landing ramp comes down under the outer hatch (Task 14), rendered
+#      halfway and down; the frame rate seated at its helm on the ground;
+#   5. out of its airlock on foot (the hatch clear of the real ground) and
+#      down the ramp on your feet, the frame rate standing beside it, 20 m
+#      off, and a jump;
 #   6. what you carried out, dropped, falls and rests;
-#   7. a second starter, landed 30 m off: in through its airlock;
-#   8. from its helm, up off the ground to a hover at 300 m;
+#   7. a second starter, landed 30 m off: from its ramp's foot (the frame
+#      rate there, the view up it), up the ramp on your feet, its hull panel
+#      within reach, and in through its outer hatch -- never put there by hand;
+#   8. from its helm, up off the ground to a hover at 300 m, the ramp
+#      stowing at once;
 #   9. the first starter on low power: F8 to its helm, and up again;
 #  10. the planet's ring, if it has one; above the air top a spacewalk does
 #      not fall; and the head lamp at night, at eye height.
@@ -44,6 +49,8 @@ const WALK_OUT := 20.0
 const SIDE := 30.0
 ## The flat-ground search: the ground within this many metres of a spot.
 const FLAT_REACH := 50.0
+## Eye height over the ground for the renders on foot, m.
+const EYE := 1.6
 
 var _out := ""
 var _fails := 0
@@ -277,7 +284,8 @@ func _lands() -> void:
 	_stick_y(0.0)
 	var touched := Time.get_ticks_msec()
 	var landed := await _until(func() -> bool: return landing.is_landed(), 10.0)
-	var took := (Time.get_ticks_msec() - touched) / 1000.0
+	var landed_at := Time.get_ticks_msec()
+	var took := (landed_at - touched) / 1000.0
 	var mean := 0.0
 	for s in sinks:
 		mean += s / maxf(sinks.size(), 1.0)
@@ -285,11 +293,12 @@ func _lands() -> void:
 		"3 down at %.2f m/s over the last 10 m (%.2f at touchdown): LANDED %.1f s after touchdown (within 10), tilt %.1f deg, frozen %s" % [
 		mean, touch, took, rad_to_deg(landing.tilt()), _starter.exterior.freeze])
 	_check(hard.is_empty(), "3 no hard landing (%s)" % ("none said" if hard.is_empty() else "said at %s m/s" % str(hard)))
+	var lock: Airlock = _starter.airlocks.values()[0]
+	await _ramp_comes_down(lock, landed_at)
 	await _frames(5)
 	var damage_after := _block_damage(_starter)
 	_check(damage_after == damage, "3 the blocks' damage %.1f hp before touchdown and %.1f after; HULL %.0f%% and %.0f%%" % [
 		damage, damage_after, hull * 100.0, _starter.hull_whole() * 100.0])
-	var lock: Airlock = _starter.airlocks.values()[0]
 	print("        keel %.2f m over the ground; the outer hatch floor %.2f m over the ground under it" % [
 		_alt(_starter), _hatch_floor_height(lock)])
 	await _outside_shot("landed", _starter, Vector3(16.0, 3.0, 18.0))
@@ -297,6 +306,40 @@ func _lands() -> void:
 	await _shot("seated_on_the_ground")
 	await _seconds(1.0)
 	print("fps     %.0f seated at the starter's helm, landed %s" % [await _fps(3.0), _ms()])
+
+## Step 3 (Task 14): the landing ramp under `lock`'s outer hatch comes down
+## once the hull is LANDED (`landed_at`, ms): rendered halfway down its swing,
+## held there for the render; then down, its top edge at the sill, its tip on
+## the real ground, its collider on; rendered from 25 m at eye height.
+func _ramp_comes_down(lock: Airlock, landed_at: int) -> void:
+	var ramp := lock.alcove.ramp
+	if ramp == null:
+		_check(false, "3 the starter's outer hatch has no landing ramp")
+		return
+	# Halfway down its swing, out of its slot: the middle of the swing.
+	var middle := (LandingRamp.SLIDE_TIME + LandingRamp.SWING_TIME * 0.5) / LandingRamp.TRAVEL
+	var halfway := await _until(func() -> bool: return ramp.progress() >= middle, 3.0)
+	var held := Time.get_ticks_msec()
+	ramp.set_process(false)
+	var at := ramp.progress()
+	await _ramp_shot("ramp_halfway", ramp, Vector3(7.5, 0.0, 6.5), Vector3(0.0, -ramp.sill_height * 0.45, 1.4))
+	ramp.set_process(true)
+	var frozen := Time.get_ticks_msec() - held
+	_check(halfway and ramp.visible and ramp.collider.disabled,
+		"3 its landing ramp on its way down, rendered %.0f%% of the way: seen, its collider off until it is down" % [at * 100.0])
+	var down := await _until(func() -> bool: return ramp.is_down(), 3.0)
+	var took := (Time.get_ticks_msec() - landed_at - frozen) / 1000.0
+	var sill := lock.alcove.outer_hatch.global_position
+	var gap := ramp.top_edge().distance_to(sill)
+	var tip := _gravity.altitude_at(ramp.tip())
+	var angle := rad_to_deg(ramp.angle)
+	_check(down and ramp.visible and not ramp.collider.disabled and gap < 0.05 and absf(tip) < 0.15
+		and angle >= 15.0 - 0.01 and angle <= 38.0 + 0.01,
+		"3 its landing ramp is down %.2f s after LANDED (the travel is %.1f s; held %.2f s for the render): sill %.2f m over the keel, %.2f m long at %.1f deg (15..38), its top edge %.3f m from the sill (under 0.05), its tip %.2f m over the ground (within 0.15), collider on" % [
+		took, LandingRamp.TRAVEL, frozen / 1000.0, ramp.sill_height, ramp.length, angle, gap, tip])
+	await _ramp_shot("ramp_down", ramp, Vector3(-12.0, 0.0, 22.0), Vector3(0.0, -0.6, 0.5))
+	print("        the landed starter and its ramp from %.0f m at eye height" % (
+		_flat(_cam.global_position - ramp.global_position).length()))
 
 ## Step 5, and the controller's check 4: out on foot with something in hand,
 ## the frame rate beside the ship, 20 m off, and a jump.
@@ -318,7 +361,25 @@ func _out_on_foot() -> void:
 		return
 	_check(carrying and _avatar.grasp.item == crate and crate.in_space, "5 the crate in hand came out with you")
 	var hatch := func() -> Vector3: return lock.beacon()
+	# Down the ramp on your feet: how long you were over it, how long off your
+	# feet while there, and how far your feet ever were off its top.
+	var ramp := lock.alcove.ramp
+	var on := [0, 0, 0.0]
+	var watch := func() -> void:
+		if ramp == null:
+			return
+		var p := ramp.global_transform.affine_inverse() * _avatar.global_position
+		if p.z > 0.3 and p.z < ramp.length * cos(ramp.angle) - 0.3 and absf(p.x) < LandingRamp.WIDTH * 0.5:
+			on[0] += 1
+			if not _avatar.is_on_floor():
+				on[1] += 1
+			on[2] = maxf(on[2], absf(p.y + p.z * tan(ramp.angle)))
+	physics_frame.connect(watch)
 	await _walk_away(hatch, BESIDE, 5.0)
+	physics_frame.disconnect(watch)
+	_check(ramp != null and on[0] > 10 and on[1] <= 3 and on[2] < 0.25,
+		"5 walked down the landing ramp on your feet: %d ticks over it, %d of them off your feet (at most 3), your feet at most %.2f m off its top (under 0.25)" % [
+		on[0], on[1], on[2]])
 	_face(lock.beacon() - _avatar.global_position)
 	await _seconds(1.0)
 	var eye := (_avatar.camera.global_position - _avatar.global_position).dot(_avatar.up)
@@ -390,38 +451,73 @@ func _second_ship() -> Ship:
 	var lock: Airlock = second.airlocks.values()[0]
 	print("        %s landed %.1f m from the starter, tilt %.1f deg; its hatch floor %.2f m over the ground under it" % [
 		second.name, apart, rad_to_deg(second.landing.tilt()), _hatch_floor_height(lock)])
-	var outside := func() -> Vector3:
-		return second.exterior.global_transform * (lock.alcove.outer_frame * Vector3(0.0, 0.0, -2.5))
+	# Its outer hatch is 2.05 m over the ground, over twice a jump: the landing
+	# ramp (Task 14) is the only way up, walked on your feet.
+	var ramp := lock.alcove.ramp
+	if ramp == null:
+		_check(false, "7 %s's outer hatch has no landing ramp: there is no way up to it" % second.name)
+		return null
+	var down := await _until(func() -> bool: return ramp.is_down(), 4.0)
+	_check(down and ramp.visible and not ramp.collider.disabled,
+		"7 its landing ramp is down: %.2f m long at %.1f deg, collider on" % [ramp.length, rad_to_deg(ramp.angle)])
+	# Out from the hatch along the ground.
+	var out := func() -> Vector3: return _flat(ramp.global_basis.z).normalized()
+	var foot := func() -> Vector3: return ramp.tip() + (out.call() as Vector3) * 1.0
 	var t0 := Time.get_ticks_msec()
-	var there := await _walk_to(outside, 0.4, 25.0)
-	_check(there, "7 walked to 2.5 m outside %s's outer hatch in %.1f s" % [second.name, (Time.get_ticks_msec() - t0) / 1000.0])
-	var inward := func() -> Vector3:
-		return second.exterior.global_basis * (lock.alcove.outer_frame.basis * Vector3(0.0, 0.0, 1.0))
-	_face(inward.call())
-	lock.alcove.hull_panel.interact(_avatar)
+	# Round onto its centre line well out, then in to 1 m past its foot.
+	var lined_up := await _walk_to(func() -> Vector3: return ramp.tip() + (out.call() as Vector3) * 6.0, 0.4, 30.0)
+	var there := false
+	if lined_up:
+		there = await _walk_to(foot, 0.25, 10.0)
+	var off_line: float = (ramp.global_transform.affine_inverse() * _avatar.global_position).x
+	_check(there, "7 walked to 1 m past the foot of %s's ramp in %.1f s, %.2f m off its centre line" % [
+		second.name, (Time.get_ticks_msec() - t0) / 1000.0, off_line])
+	_face(-(out.call() as Vector3))
+	_avatar.set_head_pitch(0.0)
+	await _seconds(1.0)
+	await _shot("up_the_ramp")
+	var fps := await _fps(3.0)
+	var eye := (_avatar.camera.global_position - _avatar.global_position).dot(_avatar.up)
+	_check(fps >= 120.0, "7 fps %.0f at the foot of the ramp looking up it, eye %.2f m (at least 120) %s" % [fps, eye, _ms()])
+	# Up the ramp on your feet to the shut hatch.
+	var front := func() -> Vector3: return lock.alcove.outer_hatch.global_position + (out.call() as Vector3) * 0.45
+	t0 = Time.get_ticks_msec()
+	var up_it := await _walk_to(front, 0.2, 10.0)
+	var under := _below_hatch_floor(lock)
+	_check(up_it and _avatar.mode == Avatar.Mode.FIELD and _avatar.is_on_floor() and absf(under) < 0.5,
+		"7 walked up the ramp on your feet in %.1f s to its shut outer hatch: feet %.2f m under the sill (within 0.5), standing %s" % [
+		(Time.get_ticks_msec() - t0) / 1000.0, under, _avatar.is_on_floor()])
+	# Its hull panel, as you would: look at it and press F.
+	var panel := lock.alcove.hull_panel
+	var to_panel := panel.global_position - _avatar.camera.global_position
+	_face(to_panel)
+	_avatar.set_head_pitch(atan2(to_panel.dot(_avatar.up), _flat(to_panel).length()))
+	var seen := await _until(func() -> bool: return _avatar.interactor.current() == panel, 1.0)
+	var reach := _avatar.camera.global_position.distance_to(panel.global_position)
+	_check(seen and reach <= 2.5, "7 its hull panel %.2f m from your eye (the reach is 2.5), in your sights: '%s'" % [
+		reach, panel.prompt_text() if seen else "not seen"])
+	if seen:
+		await _press(KEY_F)
+	else:
+		panel.interact(_avatar)
 	var opened := await _until(func() -> bool: return lock.cycle.outer_open >= 1.0, 12.0)
-	_check(opened, "7 its hull panel: the room empties and the outer hatch opens")
-	# In on your feet; a hatch above a step you can't walk up is jumped at.
+	_check(opened, "7 %s: the room empties and the outer hatch opens" % ("F on its hull panel" if seen else "its hull panel (F not taken)"))
+	# In on your feet, W held: no jump, never put in the doorway by hand.
+	_face(-(out.call() as Vector3))
+	_avatar.set_head_pitch(0.0)
 	Input.action_press(&"move_forward")
-	var inside := await _until(func() -> bool: return _avatar.mode == Avatar.Mode.PLATING, 2.5)
-	var jumped := false
-	if not inside:
-		jumped = true
-		await _press(KEY_SPACE)
-		inside = await _until(func() -> bool: return _avatar.mode == Avatar.Mode.PLATING, 2.5)
+	# Your feet under its floor on your last tick outside, and whether you stood.
+	var last := [0.0, false]
+	var inside := await _until(func() -> bool:
+		if _avatar.mode == Avatar.Mode.FIELD:
+			last[0] = _below_hatch_floor(lock)
+			last[1] = _avatar.is_on_floor()
+		return _avatar.mode == Avatar.Mode.PLATING, 4.0)
 	Input.action_release(&"move_forward")
-	_check(inside, "7 walked in through its outer hatch%s (feet %.2f m under its floor)" % [
-		", jumping" if jumped else "", _below_hatch_floor(lock)])
+	_check(inside and bool(last[1]),
+		"7 walked in off the ramp through its outer hatch on your feet (on your last tick outside: feet %.2f m under its floor, standing %s)" % [
+		float(last[0]), last[1]])
 	if not inside:
-		# Carry on as the airlock tests do: into the doorway by hand.
-		print("        put in its doorway by hand, to carry on")
-		if lock.cycle.outer_open < 1.0:
-			lock.alcove.hull_panel.interact(_avatar)
-			await _until(func() -> bool: return lock.cycle.outer_open >= 1.0, 12.0)
-		_avatar.global_position = second.exterior.global_transform * (lock.alcove.outer_frame * Vector3(0.0, 0.0, 0.1))
-		inside = await _until(func() -> bool: return _avatar.mode == Avatar.Mode.PLATING, 2.0)
-	if not inside:
-		_check(false, "7 never got in")
 		return null
 	# Off the sill and into the room on your feet: the hatch shuts on no one.
 	var depth := func() -> float:
@@ -449,12 +545,31 @@ func _second_ship() -> Ship:
 		lock.cycle.inner_open, lock.cycle.outer_open, lock.room.room_panel.readout_text().replace("\n", " / ")])
 	return second
 
-## Step 8: from its helm, translate up off the ground to a 300 m hover.
+## Step 8: from its helm, translate up off the ground to a 300 m hover; its
+## landing ramp stows at once, its collider off the tick it leaves LANDED.
 func _lifts_off(ship: Ship) -> void:
 	await _sit(ship)
 	_check(_director.seat_ship() == ship, "8 at %s's helm" % ship.name)
+	var ramp := (ship.airlocks.values()[0] as Airlock).alcove.ramp
+	# ms it left LANDED, ms it was hidden, its collider off the tick after.
+	var seen := [-1, -1, false]
+	var watch := func() -> void:
+		if ramp == null:
+			return
+		if int(seen[0]) < 0 and not ship.landing.is_landed():
+			seen[0] = Time.get_ticks_msec()
+			seen[2] = ramp.collider.disabled
+		if int(seen[0]) >= 0 and int(seen[1]) < 0 and not ramp.visible:
+			seen[1] = Time.get_ticks_msec()
+	physics_frame.connect(watch)
 	var r := await _climb(ship, func() -> float: return _alt(ship), HOVER, 45.0)
+	physics_frame.disconnect(watch)
 	_say_climb("8", ship, r)
+	var hid := (int(seen[1]) - int(seen[0])) / 1000.0
+	_check(ramp != null and bool(seen[2]) and int(seen[1]) >= 0 and hid <= 2.0 and ramp.is_stowed()
+		and ramp.collider.disabled,
+		"8 its landing ramp stows as it lifts off: the collider off the tick it left LANDED (%s), hidden %.2f s later (within 2), stowed %s" % [
+		seen[2], hid, ramp != null and ramp.is_stowed()])
 
 ## Step 9: the first starter on low power, F8 to its helm, and up again.
 func _low_power_lift_off() -> void:
@@ -743,6 +858,23 @@ func _sit(ship: Ship) -> void:
 ## A camera outside, `offset` in `ship`'s hull axes from its hull, looking at
 ## the middle of the hull, for one render.
 func _outside_shot(shot_name: String, ship: Ship, offset: Vector3) -> void:
+	var hull := ship.exterior.global_transform
+	var at := hull * offset
+	var middle := hull * Vector3(0.0, 1.0, -1.0)
+	await _camera_shot(shot_name, Transform3D(Basis.looking_at(middle - at, _up(at)), at))
+
+## A camera at eye height (EYE m over the real ground) at `flat` in `ramp`'s
+## hinge frame (x along the hull, z out of the hatch; its y is ignored),
+## looking at `target` in that frame, for one render.
+func _ramp_shot(shot_name: String, ramp: LandingRamp, flat: Vector3, target: Vector3) -> void:
+	var frame := ramp.global_transform
+	var at := frame * Vector3(flat.x, -ramp.sill_height, flat.z)
+	var up := _up(at)
+	at += up * (EYE - _gravity.altitude_at(at))
+	await _camera_shot(shot_name, Transform3D(Basis.looking_at(frame * target - at, up), at))
+
+## The probe's own camera, outside, at `pose`, for one render.
+func _camera_shot(shot_name: String, pose: Transform3D) -> void:
 	if _cam == null:
 		_cam = Camera3D.new()
 		_cam.name = "ProbeCamera"
@@ -751,10 +883,7 @@ func _outside_shot(shot_name: String, ship: Ship, offset: Vector3) -> void:
 		_scene.add_child(_cam)
 		_cam.add_to_group(Universe.EXTERIOR_SPACE)
 	var was := root.get_viewport().get_camera_3d()
-	var hull := ship.exterior.global_transform
-	var at := hull * offset
-	var middle := hull * Vector3(0.0, 1.0, -1.0)
-	_cam.global_transform = Transform3D(Basis.looking_at(middle - at, _up(at)), at)
+	_cam.global_transform = pose
 	_cam.current = true
 	await _shot(shot_name)
 	_cam.current = false

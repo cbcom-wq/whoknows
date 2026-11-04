@@ -170,6 +170,39 @@ func test_with_a_ship_asleep_everything_outside_is_covered():
 	assert_true(_root.fleet.sleeping(far))
 	assert_eq(_uncovered(), [])
 
+## Landed on a world, gravity that says so and no more (test_airlock_world).
+class OnWorld extends WorldGravity:
+	func on_world_at(_p: Vector3) -> bool:
+		return true
+	func at(_p: Vector3) -> Vector3:
+		return Vector3.ZERO
+	func up_at(_p: Vector3) -> Vector3:
+		return Vector3.UP
+	func altitude_at(_p: Vector3) -> float:
+		return INF
+
+## Desert world phase 0, Task 14: a landing ramp down is part of the hull --
+## its slab, rails and collider are under the exterior -- so it is covered and
+## a shift carries it with the hull.
+func test_a_landing_ramp_down_is_covered_and_moves_with_the_hull():
+	_ship.flight_computer.gravity = OnWorld.new()
+	_ship.landing.restore_landed()
+	var ramps: Array[LandingRamp] = []
+	for lock: Airlock in _ship.airlocks.values():
+		if lock.alcove.ramp != null:
+			ramps.append(lock.alcove.ramp)
+	assert_gt(ramps.size(), 0, "the starter has a ramp")
+	var ramp := ramps[0]
+	assert_true(ramp.is_down(), "restored landed, the ramp is down at once")
+	assert_true(_ship.exterior.is_ancestor_of(ramp))
+	assert_true(_ship.exterior.is_ancestor_of(ramp.collider))
+	assert_eq(_uncovered(), [])
+	var offset := ramp.global_position - _ship.exterior.global_position
+	_ship.exterior.global_position = Vector3(2500, 0, -40)
+	assert_true(_universe.check())
+	assert_almost_eq(ramp.global_position - _ship.exterior.global_position, offset, Vector3.ONE * 0.0001,
+		"a shift carries the ramp with the hull")
+
 func test_everything_outside_is_covered_on_a_spacewalk():
 	_out(Vector3(0, 0, 12))
 	assert_eq(_uncovered(), [])

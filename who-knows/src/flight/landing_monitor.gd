@@ -37,6 +37,10 @@ var hull: RigidBody3D
 var flight: FlightComputer
 
 var state: State = State.FLYING
+## True while LANDED by restore_landed() -- a save loaded, a ship woken --
+## rather than by settling: what shows the ship landed (the landing ramp, Task
+## 14) is there at once, with no animation. False again once it leaves LANDED.
+var restored := false
 var _s := {state = State.FLYING, held = 0.0, apart = 0.0}
 var _tilt := 0.0
 ## Whether the hull is in contact with terrain this tick.
@@ -111,6 +115,7 @@ func ground_status() -> String:
 ## A saved landed ship loads frozen on the ground (spec §5.3).
 func restore_landed() -> void:
 	_s = {state = State.LANDED, held = SETTLE_TIME, apart = 0.0}
+	restored = true
 	_set_state(State.LANDED)
 
 func _physics_process(delta: float) -> void:
@@ -175,6 +180,8 @@ func _set_state(next: State) -> void:
 		return
 	var was := state
 	state = next
+	if next != State.LANDED:
+		restored = false
 	if hull != null:
 		if next == State.LANDED:
 			hull.linear_velocity = Vector3.ZERO

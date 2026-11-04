@@ -197,6 +197,13 @@ var _footfall_in := 0.0
 ## Space pressed on a world: a jump at the next physics tick, if you stand on
 ## something then.
 var _jump_wanted := false
+## True from enter_field to your first step outside, which then starts on
+## whatever floor is within a snap under you -- the hatch's sill, a landing
+## ramp (desert world Task 14). Crossing a threshold leaves no floor contact of
+## its own, and without one the first step out of a hatch onto a ramp was a
+## leap off the sill to its foot. Snapped in the physics step, not in
+## enter_field.
+var _stepping_out := false
 ## In FIELD, where what you let go of lands once you are aboard again: your
 ## hands drop onto the ground meanwhile (set_aboard_root).
 var _aboard_root: Node3D
@@ -597,6 +604,8 @@ func enter_suit(outside: Node3D, pose: Transform3D, start_velocity: Vector3, shi
 ## from its centre (from `gravity` at `pose`, or `pose`'s own up with no pull
 ## to read), and hands that work as aboard -- what you let go of lands outside,
 ## and the root it landed in aboard is kept for enter_plating to put back.
+## Your first step out starts on whatever is within a snap under you
+## (_stepping_out).
 func enter_field(outside: Node3D, pose: Transform3D, start_velocity: Vector3, ship_hull: RigidBody3D) -> void:
 	if mode != Mode.FIELD:
 		_aboard_root = grasp.world_root
@@ -606,6 +615,7 @@ func enter_field(outside: Node3D, pose: Transform3D, start_velocity: Vector3, sh
 	var g := gravity.at(pose.origin) if gravity != null else Vector3.ZERO
 	up = -g.normalized() if g.length_squared() > MIN_PULL_SQUARED else pose.basis.y.normalized()
 	up_direction = up
+	_stepping_out = true
 	_jump_wanted = false
 	grasp.world_root = outside
 	grasp.suspended = false
@@ -833,6 +843,9 @@ func _stand_on_world() -> Vector3:
 ## `speed`, a jump if Space asked for one and you stand on something, the held
 ## tool's tether, and the slide, nudging loose things.
 func _field_move(g: Vector3, wish: Vector3, speed: float, delta: float) -> void:
+	if _stepping_out:
+		_stepping_out = false
+		apply_floor_snap()
 	velocity = field_velocity(velocity, up, wish, speed, ACCEL, g, delta)
 	if _jump_wanted and is_on_floor():
 		velocity += up * JUMP_SPEED

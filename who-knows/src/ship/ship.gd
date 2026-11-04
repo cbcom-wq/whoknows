@@ -159,6 +159,7 @@ func _ready() -> void:
 	landing.flight = flight_computer
 	add_child(landing)
 	flight_computer.landing = landing
+	landing.state_changed.connect(_on_landing_changed)
 	damage_show = DamageShow.new()
 	damage_show.name = "DamageShow"
 	exterior.add_child(damage_show)
@@ -247,6 +248,8 @@ func _update_hum() -> void:
 
 func _physics_process(delta: float) -> void:
 	_last_hull_velocity = exterior.linear_velocity
+	if landing != null and landing.is_landed():
+		_sync_ramps()
 	since_struck += delta
 	since_hostile_fire += delta
 	damage_log.tick(delta)
@@ -600,6 +603,25 @@ func on_world() -> bool:
 	var gravity := flight_computer.gravity
 	return gravity != null and gravity.on_world_at(exterior.global_position)
 
+func _on_landing_changed(_state: LandingMonitor.State) -> void:
+	_sync_ramps()
+
+## Puts each airlock's landing ramp down while the hull is landed on a world,
+## and up otherwise (desert world phase 0, Task 14): at once when `instant` (a
+## rebuild) or when the landing was restored (a save loaded, a ship woken),
+## else sliding and swinging. Called as the landing monitor changes state, so
+## lifting off takes the ramp's collider away in the same tick; after every
+## rebuild; and every tick while landed, because a save loads landed before the
+## scene gives the ship its gravity, and on_world() comes true only then.
+func _sync_ramps(instant := false) -> void:
+	if landing == null:
+		return
+	var down := landing.is_landed() and on_world()
+	var now := instant or landing.restored
+	for airlock: Airlock in airlocks.values():
+		if is_instance_valid(airlock.alcove) and airlock.alcove.ramp != null:
+			airlock.alcove.ramp.set_down(down, now)
+
 ## Why its airlocks will not open onto the ground, or "": nothing off a world;
 ## on one, the landing monitor's word.
 func outside_refusal() -> String:
@@ -691,6 +713,7 @@ func _rebuild_everything(hull := true) -> void:
 	interior_builder.geometry_body().set_meta(&"receive_hit", _on_interior_hit)
 	interior_builder.geometry_body().set_meta(&"ship", self)
 	_bind_airlocks()
+	_sync_ramps(true)
 	_reseat(stowed)
 	if not _stocked:
 		_stock()
@@ -1097,9 +1120,14 @@ func restore_aboard(d: Dictionary) -> void:
 ## exterior's colliders sit at ShipGrid.cell_center in the hull body's own frame,
 ## so the grid's origin is the hull's origin.
 func keel_depth() -> float:
+	return keel_depth_of(grid)
+
+## keel_depth for any grid: what an airlock's landing ramp is measured from
+## (AirlockAlcove.ramp_plan).
+static func keel_depth_of(layout: ShipGrid) -> float:
 	var lowest := 0.0
 	var any := false
-	for c: Vector3i in grid.coords():
+	for c: Vector3i in layout.coords():
 		var bottom := ShipGrid.cell_center(c).y - ShipGrid.CELL_SIZE / 2.0
 		if not any or bottom < lowest:
 			lowest = bottom

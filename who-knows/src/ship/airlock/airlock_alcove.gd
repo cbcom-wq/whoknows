@@ -18,6 +18,9 @@ extends Node3D
 ## opposite the hull panel: the cradle, the drum and the HoseReel stow point
 ## that holds the nozzle. Airlock.bind gives the reel its sink and stocks it,
 ## and a hull rebuild frees the reel with the alcove.
+##
+## And, under a hatch too high to step up to, the landing ramp (desert world
+## phase 0, Task 14; ramp_plan), stowed until the ship lands on a world.
 
 const LAYER := ExteriorBuilder.OWN_HULL_LAYER
 ## Lights here light the hull layer and anything of the world's on layer 1 --
@@ -49,6 +52,10 @@ var hull_panel: AirlockPanel
 ## The hose's reel (quantum energy spec §11.1); Airlock.bind gives it its sink
 ## and stocks it.
 var reel: HoseReel
+## The landing ramp under the outer hatch (desert world phase 0, Task 14), or
+## null where the hatch needs none or something is in its way (ramp_plan).
+## Ship puts it down on a world once landed; its collider is in `colliders`.
+var ramp: LandingRamp
 var show: AirlockShow
 ## Every collider this alcove put on the hull body, for whoever clears it.
 var colliders: Array[CollisionShape3D] = []
@@ -67,6 +74,51 @@ static func build(parent: Node3D, body: CollisionObject3D, grid: ShipGrid, catal
 	parent.add_child(alcove)
 	alcove._build(body, grid)
 	return alcove
+
+## The landing ramp the outer hatch of the airlock at `at` needs (desert world
+## phase 0, Task 14): {need: LandingRamp.RAMP, STEP or UP_OR_DOWN; sill: its
+## height in metres over the keel's plane (the bottom of the grid's lowest
+## cell, as Ship.keel_depth_of measures it); length and angle: the ramp's, at
+## the design slope; through: every block the ramp would pass through, coming
+## down at that slope}. A ramp is built only when it is needed and nothing is
+## in its way. Pure: the probe and ship_check print it.
+static func ramp_plan(layout: ShipGrid, at: Vector3i) -> Dictionary:
+	var normal := AirlockSite.hatch_normal(layout, at)
+	var sill := InteriorBuilder.floor_y(at) - InteriorBuilder.storey_offset(at.y) + Ship.keel_depth_of(layout)
+	var through: Array[Vector3i] = []
+	var plan := {"need": LandingRamp.need(Vector3(normal), sill), "sill": sill, "length": 0.0,
+		"angle": LandingRamp.SLOPE, "through": through}
+	if normal == Vector3i.ZERO or plan["need"] != LandingRamp.RAMP:
+		return plan
+	var length := LandingRamp.length_for(sill)
+	plan["length"] = length
+	var hinge := hinge_frame(at, normal)
+	for p in LandingRamp.sample_points(length, LandingRamp.SLOPE):
+		var cell := Vector3i(((hinge * p) / ShipGrid.CELL_SIZE).round())
+		if cell != at and layout.has_block(cell) and not through.has(cell):
+			through.append(cell)
+	return plan
+
+## The ramp's hinge frame for the airlock at `at` with its outer hatch facing
+## `normal`, in hull space: on the hatch's plane at the sill, in the middle of
+## the doorway, +z out, +y up (LandingRamp's frame).
+static func hinge_frame(at: Vector3i, normal: Vector3i) -> Transform3D:
+	var n := Vector3(normal)
+	var origin := ShipGrid.cell_center(at) + n * ShipGrid.CELL_SIZE * 0.5
+	origin.y = InteriorBuilder.floor_y(at) - InteriorBuilder.storey_offset(at.y)
+	return Transform3D(Basis(Vector3.UP.cross(n), Vector3.UP, n), origin)
+
+## Words for a plan: the probe's and ship_check's ramp line.
+static func ramp_words(plan: Dictionary) -> String:
+	match plan["need"]:
+		LandingRamp.STEP:
+			return "step (sill %.2f m over the keel)" % plan["sill"]
+		LandingRamp.UP_OR_DOWN:
+			return "faces up/down — NOT BOARDABLE ON A WORLD"
+	var words := "ramp: %.2f m, %.2f m at %d°" % [plan["sill"], plan["length"], roundi(rad_to_deg(plan["angle"]))]
+	if not (plan["through"] as Array).is_empty():
+		words += " through the hull at %s — NOT BOARDABLE ON A WORLD" % [plan["through"]]
+	return words
 
 ## A wall's frame (InteriorDressing.wall_frame's convention) in hull space.
 func wall(normal: Vector3i) -> Transform3D:
@@ -112,6 +164,10 @@ func _build(body: CollisionObject3D, grid: ShipGrid) -> void:
 	hull_panel.transform = face * InteriorKit.at(Vector3(0.84, 1.2, PLATE_OUT))
 	add_child(hull_panel)
 	_build_reel(kit, face)
+	var plan := ramp_plan(grid, coord)
+	if plan["need"] == LandingRamp.RAMP and (plan["through"] as Array).is_empty():
+		ramp = LandingRamp.build(self, body, hinge_frame(coord, hatch_normal), plan["sill"])
+		colliders.append(ramp.collider)
 	for normal in _ALL:
 		if normal != hatch_normal and not grid.has_block(coord + normal):
 			_plate_face(centre, normal)
