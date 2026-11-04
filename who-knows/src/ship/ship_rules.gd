@@ -17,6 +17,10 @@ const IMBALANCE_MOST := 0.05
 ## Power made must beat power drawn by this much, so a ship we give the player
 ## never browns out at its first addition.
 const POWER_HEADROOM := 1.1
+## Vertical thrust a ship needs, as a multiple of its weight on the heaviest
+## planet (WorldRecipe.GRAVITY): it must be able to leave any world (the desert
+## world spec §5.4).
+const LIFT_MARGIN := 1.3
 ## The most blocks a ship may have (ship designer spec §2.6, §9): the owner's
 ## first limit was 600, "and see how that goes"; at 600 the worst view fell to
 ## 116 fps, under the 120 floor, so the owner lowered it to 400 (2026-10-09).
@@ -84,6 +88,10 @@ static func _check_flight(s: ShipStats, rules: Array) -> void:
 		rules.append(item(&"CANNOT_THRUST", "no forward thrust: no main thruster pushes it forward"))
 	if s.thrust_budget[&"reverse"] <= 0.0:
 		rules.append(item(&"CANNOT_BRAKE", "no reverse thrust: it can never slow down (give it a retro pair)"))
+	var need := LIFT_MARGIN * s.total_mass_kg * WorldRecipe.GRAVITY[WorldRecipe.Kind.PLANET].y
+	if s.thrust_budget[&"vertical"] < need:
+		rules.append(item(&"CANNOT_LIFT", "%.1f m/s² of lift: it needs %.1f to leave a 7 m/s² world"
+			% [s.thrust_budget[&"vertical"] / maxf(s.total_mass_kg, 1.0), need / maxf(s.total_mass_kg, 1.0)]))
 	for axis in 3:
 		var authority: float = s.torque_budget[axis]
 		if authority <= 0.0:

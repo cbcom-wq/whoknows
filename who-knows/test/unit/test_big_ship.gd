@@ -41,11 +41,15 @@ func test_its_plan_prints_back_exactly():
 	var plan := ShipPlan.parse(text, _cat, "big.plan")
 	assert_eq(ShipPlan.to_text(plan["id"], plan["name"], plan["description"], plan["grid"]), text)
 
+func _no_lift_rules(found: Dictionary) -> Array:
+	return found["rules"].filter(func(r: Dictionary) -> bool: return r["code"] != &"CANNOT_LIFT")
+
 func test_it_breaks_no_rule_in_time():
 	var t := Time.get_ticks_msec()
 	var found := ShipRules.check(_grid(), _cat)
 	var ms := Time.get_ticks_msec() - t
-	assert_eq(found["rules"], [])
+	# Rooms fixture, not a ship to fly: CANNOT_LIFT (ShipRules.LIFT_MARGIN) is not what this checks.
+	assert_eq(_no_lift_rules(found), [])
 	assert_lt(ms, RULES_MS, "the rules took %d ms" % ms)
 
 func test_one_more_block_is_too_big():

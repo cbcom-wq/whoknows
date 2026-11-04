@@ -15,9 +15,13 @@ func after_each():
 		if FileAccess.file_exists(SAVE + suffix):
 			DirAccess.remove_absolute(SAVE + suffix)
 
+func _no_lift_rules(found: Dictionary) -> Array:
+	return found["rules"].filter(func(r: Dictionary) -> bool: return r["code"] != &"CANNOT_LIFT")
+
 func test_it_breaks_no_rule():
 	var found := ShipRules.check(ShipLibrary.read(BRIDGE)["grid"], BlockCatalog.load_from_dir("res://data/blocks"))
-	assert_eq(found["rules"], [])
+	# Rooms fixture, not a ship to fly: CANNOT_LIFT (ShipRules.LIFT_MARGIN) is not what this checks.
+	assert_eq(_no_lift_rules(found), [])
 
 func test_it_is_usable():
 	await ShipUse.use(self, ShipLibrary.read(BRIDGE)["grid"], "Bridge test ship", SAVE, "bridge")

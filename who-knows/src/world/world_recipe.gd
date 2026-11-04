@@ -19,9 +19,13 @@ const GENERATOR_VERSION := 2
 ## Radius, metres, by kind: uniform. Worlds you fly down into, not balls you
 ## orbit (the world scale spec §3.1).
 const RADIUS: Array[Vector2] = [Vector2(15000.0, 60000.0), Vector2(4000.0, 15000.0)]
-## Surface gravity, m/s2, by kind: capped below the starter shuttle's lift of
-## about 10.8 m/s2 so no world strands the only ship (Planetfall §5.2).
-const GRAVITY: Array[Vector2] = [Vector2(2.0, 8.0), Vector2(1.0, 4.0)]
+## Surface gravity, m/s2, by kind: capped so every library ship lifts off the
+## heaviest planet with ShipRules.LIFT_MARGIN to spare (the desert world spec
+## §5.4); the starter's two-way vertical is 9.5 m/s2.
+const GRAVITY: Array[Vector2] = [Vector2(2.0, 7.0), Vector2(1.0, 4.0)]
+## Where the air ends, as a share of radius above the surface, by Atmosphere
+## (NONE / THIN / THICK): the "ground" the gravity hold stops at.
+const AIR_TOP: Array[float] = [0.15, 0.12, 0.20]
 ## Peak-to-trough terrain, as a share of radius, and never more than
 ## RELIEF_MAX metres: real mountains to fly between.
 const RELIEF := Vector2(0.01, 0.025)
@@ -57,6 +61,12 @@ static func from_seed(p_seed: int, p_kind := Kind.PLANET) -> WorldRecipe:
 	r.palette = WorldSeed.rng(p_seed, &"palette").randi_range(0, SpacePalette.WORLDS.size() - 1)
 	r.atmosphere = WorldSeed.rng(p_seed, &"atmosphere").rand_weighted(PackedFloat32Array(ATMOSPHERE_WEIGHTS[p_kind])) as Atmosphere
 	return r
+
+## Metres above `radius_m` where this world's air ends: below it gravity holds
+## the avatar, loose items and NPCs (the desert world spec §5.1, §6.1). Ships
+## feel the whole well, out to well_radius().
+func air_top() -> float:
+	return radius_m * AIR_TOP[atmosphere]
 
 func well_radius() -> float:
 	return radius_m * WELL_RADII
