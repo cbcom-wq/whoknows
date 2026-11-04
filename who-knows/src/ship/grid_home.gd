@@ -99,6 +99,16 @@ func _setup_home() -> void:
 func is_warping() -> bool:
 	return false
 
+## True while it is below a world's air top, where its airlocks open onto
+## ground (desert world spec). Only a ship can be.
+func on_world() -> bool:
+	return false
+
+## Why its airlocks will not let anyone out onto the ground, or "". A base
+## never refuses for ground.
+func outside_refusal() -> String:
+	return ""
+
 ## Why a save must wait on it (saving spec §5), or "": an airlock cycling, the
 ## quantum machine busy, or a bolt in flight.
 func home_busy() -> String:

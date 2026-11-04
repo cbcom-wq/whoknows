@@ -34,6 +34,9 @@ const ENTRY_SIDEWAYS := 0.15
 ## Where a dry suit holds you, this far outside the outer hatch (quantum
 ## energy spec §9).
 const HOME_OUT := 1.5
+## How far outside the outer hatch must be clear of ground and rock before the
+## room panel lets you out onto a world (desert world spec).
+const HATCH_CLEAR := 2.5
 
 var coord := Vector3i.ZERO
 var cycle := AirlockCycle.new()
@@ -100,22 +103,82 @@ func _bind_reel() -> void:
 ## What pressing panel `role` would do now, or "": the cycle's prompt, unless
 ## the room panel is refusing to let an empty suit out.
 func prompt(role: StringName) -> String:
-	if warping():
+	var why := _refusal(role)
+	return why if why != "" else cycle.prompt(role)
+
+## The prompt the room panel shows when it refuses (desert world spec): a warp
+## wins, then the ground's word (`world`), then an empty suit. "" when nothing
+## refuses. The prompt, the press and the readout all go through this, so they
+## cannot disagree.
+static func refusal_order(warping: bool, world: String, charge: bool) -> String:
+	if warping:
 		return "Not during a warp"
-	if role == &"room" and must_charge():
+	if world != "":
+		return world
+	if charge:
 		return "Charge suit first"
-	return cycle.prompt(role)
+	return ""
+
+## What refuses panel `role` now: a warp refuses every panel; the room panel
+## also refuses on the ground and for an empty suit. Coming in is never refused.
+func _refusal(role: StringName) -> String:
+	if role != &"room":
+		return refusal_order(warping(), "", false)
+	return refusal_order(warping(), world_refusal(), must_charge())
+
+## True when the room is idle and pressurized -- pressing the room panel would
+## take you out -- and the avatar is aboard in it.
+func _going_out() -> bool:
+	if cycle.stage != AirlockCycle.Stage.IDLE or not cycle.pressurized():
+		return false
+	var avatar := _avatar()
+	return avatar != null and _ship != null and avatar.get_parent() == _ship.interior
 
 ## True while the room panel refuses to depressurize (quantum energy spec §9):
 ## the room is idle and pressurized -- pressing would take you out -- and
 ## the one aboard holds a suit under SuitCell.GO_OUT_MIN. Coming in, and a
-## cycle already running, are never refused.
+## cycle already running, are never refused. On a world the suit's thrusters
+## are off, so it asks for no charge.
 func must_charge() -> bool:
-	if cycle.stage != AirlockCycle.Stage.IDLE or not cycle.pressurized():
+	if not _going_out() or _ship.on_world():
 		return false
-	var avatar := _avatar()
-	return avatar != null and _ship != null and avatar.get_parent() == _ship.interior \
-		and avatar.suit_cell.charge < SuitCell.GO_OUT_MIN
+	return _avatar().suit_cell.charge < SuitCell.GO_OUT_MIN
+
+## Why the room panel will not let you out onto ground, or "" (desert world
+## spec): the ship's own word first (not landed, uneven ground), then a capsule
+## cast from the outer hatch finding something in the way. No physics query is
+## made unless the ship is on a world and the room would let you out.
+func world_refusal() -> String:
+	if _ship == null or not _going_out() or not _ship.on_world():
+		return ""
+	var why := _ship.outside_refusal()
+	if why != "":
+		return why
+	return "Hatch blocked" if _hatch_blocked() else ""
+
+## True if an upright capsule, from just outside the outer hatch's middle out
+## to HATCH_CLEAR, meets terrain or a rock. Only those layers are asked, so the
+## ship's own hull never blocks; its exterior is left out all the same.
+func _hatch_blocked() -> bool:
+	if not is_instance_valid(alcove) or alcove.outer_hatch == null or not alcove.outer_hatch.is_inside_tree():
+		return false
+	var space := _ship.exterior.get_world_3d().direct_space_state
+	var capsule := CapsuleShape3D.new()
+	capsule.radius = BODY_RADIUS
+	capsule.height = Avatar.STAND_HEIGHT
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = capsule
+	query.collision_mask = BodyProxy.LAYER | AsteroidBody.LAYER
+	query.exclude = [_ship.exterior.get_rid()]
+	var hatch := alcove.outer_hatch.global_transform
+	# The hatch's local -Z is outward (home() uses -HOME_OUT for "outside").
+	var depth := BODY_RADIUS
+	while depth <= HATCH_CLEAR + 0.001:
+		query.transform = Transform3D(hatch.basis, hatch * Vector3(0, InteriorProps.HATCH_HEIGHT * 0.5, -depth))
+		if not space.intersect_shape(query, 1).is_empty():
+			return true
+		depth += BODY_RADIUS
+	return false
 
 ## True while the ship's warp drive spools or travels
 ## (docs/superpowers/specs/2026-09-28-warp-design.md §5): no panel works and
@@ -348,7 +411,7 @@ func _on_pressed(role: StringName) -> void:
 		if panel.role == role and _players.has(&"panel"):
 			var beep: AudioStreamPlayer3D = _players[&"panel"]
 			beep.global_position = panel.global_position
-	if warping() or (role == &"room" and must_charge()):
+	if _refusal(role) != "":
 		cue.emit(&"refused", AirlockCycle.Door.NONE)
 		_play(&"panel", &"warning_chime")
 		return
@@ -440,9 +503,15 @@ func _apply() -> void:
 		hatch.bolts_out = cycle.outer_bolts
 		hatch.set_strip(outer_strip)
 		hatch.set_warning(not idle or warning["level"] > 0)
-	var refusing := must_charge()
-	var lines := PackedStringArray(["PRESSURE %d kPa" % roundi(cycle.pressure),
-		"CHARGE SUIT" if refusing else cycle.status()])
+	var world := world_refusal()
+	var charge := must_charge()
+	var refusing := world != "" or charge
+	var line := cycle.status()
+	if world != "":
+		line = world.to_upper()
+	elif charge:
+		line = "CHARGE SUIT"
+	var lines := PackedStringArray(["PRESSURE %d kPa" % roundi(cycle.pressure), line])
 	if warning["level"] > 0:
 		lines.append(warning["text"])
 	for panel in panels():

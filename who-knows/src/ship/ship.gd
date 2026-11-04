@@ -595,6 +595,18 @@ static func thump_db(knock: float) -> float:
 func is_warping() -> bool:
 	return warp != null and warp.is_spinning()
 
+## True while the hull is on a world: below its air top (desert world spec).
+func on_world() -> bool:
+	var gravity := flight_computer.gravity
+	return gravity != null and gravity.on_world_at(exterior.global_position)
+
+## Why its airlocks will not open onto the ground, or "": nothing off a world;
+## on one, the landing monitor's word.
+func outside_refusal() -> String:
+	if not on_world() or landing == null:
+		return ""
+	return landing.refusal()
+
 ## True while the camera you see through is aboard: one under the interior, or
 ## the gun camera of a turret on this hull (manning the gun is still being
 ## aboard: the hum plays, the hull is heard, the guns thud).
