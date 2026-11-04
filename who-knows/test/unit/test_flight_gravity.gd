@@ -203,9 +203,10 @@ func test_the_assist_levels_pitch_near_the_ground():
 	assert_eq(signf(_fc.commanded_torque_local.x), signf(want.x))
 
 func test_heading_hold_is_levelled_in_roll_only():
-	# Tilted in pitch and roll; the hold already points the nose at its heading
-	# (-Z), so it commands no pitch and levelling must not add any.
-	_near_ground(Basis(Vector3.BACK, deg_to_rad(20)))
+	# Tilted in both pitch and roll, so ungated levelling would add pitch; the hold
+	# already points the nose at its heading (-Z), so it commands none itself and
+	# levelling must not add any.
+	_near_ground(Basis(Vector3.RIGHT, deg_to_rad(15)) * Basis(Vector3.BACK, deg_to_rad(20)))
 	_fc.heading_hold = true
 	_fc.heading = _hull.global_transform.basis * Vector3.FORWARD
 	_fc._apply_rotation(1.0 / 60.0)
