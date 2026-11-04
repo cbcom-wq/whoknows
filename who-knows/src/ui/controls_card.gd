@@ -23,6 +23,8 @@ const ROWS := [
 	[[&"toggle_assist"], "Assist", " "],
 	[[&"lights_flood"], "Floods", " "],
 	[[&"lights_forward"], "Forward lights", " "],
+	[[&"weapons_orders"], "Weapons: hold or engage", " "],
+	[[&"weapons_mark", &"weapons_clear"], "Mark target ahead; clear", "  "],
 	[[&"cycle_camera"], "Camera", " "],
 	[[&"orbit_camera"], "Hold: look around the ship", " "],
 	[[&"interact"], "Stand up", " "],
@@ -80,7 +82,8 @@ static func keys_text(source: Variant, joiner: String) -> String:
 		names.append(key_name(action))
 	return joiner.join(names)
 
-## The name of the first key or mouse button bound to `action`.
+## The name of the first key or mouse button bound to `action`, with its
+## modifiers ("Shift+T").
 static func key_name(action: StringName) -> String:
 	if not InputMap.has_action(action):
 		return "?"
@@ -88,7 +91,7 @@ static func key_name(action: StringName) -> String:
 		var key := event as InputEventKey
 		if key != null:
 			var code := key.physical_keycode if key.physical_keycode != KEY_NONE else key.keycode
-			return OS.get_keycode_string(code)
+			return OS.get_keycode_string(code | key.get_modifiers_mask())
 		var button := event as InputEventMouseButton
 		if button != null:
 			match button.button_index:

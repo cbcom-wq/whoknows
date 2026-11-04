@@ -6,16 +6,24 @@ extends HudElement
 ## turrets. Low power holding the guns reads WEAPONS · LOW POWER in WARNING;
 ## HOLD while a hostile is out for you reads HOSTILE · WEAPONS ON HOLD in
 ## WARNING, before anything else (hostile ships spec §4.3).
+##
+## Under the pips, the keys that work it: "B ENGAGE · T MARK" on HOLD, "B HOLD
+## · T MARK" on ENGAGE, read from the input map. Dim, but in WARNING under the
+## hostile warning, since it is the way out of it.
 
 const PIP := 8.0
 const PIP_GAP := 4.0
 ## The pips sit this far under the orders' last line.
 const PIP_BELOW := 8.0
+## The key hint sits this far under the pips.
+const HINT_BELOW := 6.0
+const HINT_SIZE := 11
 ## The hostile warning, on two lines so it fits the band; orders_text() reads
 ## it as one.
 const HOSTILE_HOLD := "HOSTILE\nWEAPONS ON HOLD"
 
 var _label: Label
+var _hint: Label
 var _pips: Array[Color] = []
 
 func _ready() -> void:
@@ -28,6 +36,10 @@ func _ready() -> void:
 	_label.add_theme_color_override("font_color", HudPalette.READOUT)
 	_label.position = Vector2(0.0, 6.0)
 	add_child(_label)
+	_hint = Label.new()
+	_hint.add_theme_font_size_override("font_size", HINT_SIZE)
+	_hint.add_theme_color_override("font_color", HudPalette.DIM)
+	add_child(_hint)
 
 func render(telemetry: VehicleTelemetry) -> void:
 	if telemetry == null or not telemetry.has_weapons:
@@ -44,14 +56,31 @@ func render(telemetry: VehicleTelemetry) -> void:
 		_label.add_theme_color_override("font_color", HudPalette.WARNING)
 	else:
 		_label.text = "ENGAGE" if telemetry.weapons_engage else "HOLD"
-		_label.add_theme_color_override("font_color", HudPalette.READOUT if telemetry.weapons_engage else HudPalette.DIM)
+		_label.add_theme_color_override("font_color", HudPalette.READOUT)
 	_pips.clear()
 	for s in telemetry.weapons_pips:
 		_pips.append(HudPalette.for_pip(s))
+	_render_hint(telemetry)
 	queue_redraw()
+
+func _render_hint(telemetry: VehicleTelemetry) -> void:
+	var parts: Array[String] = []
+	var orders := ControlsCard.key_name(&"weapons_orders")
+	if orders != "?":
+		parts.append("%s %s" % [orders.to_upper(), "HOLD" if telemetry.weapons_engage else "ENGAGE"])
+	var mark := ControlsCard.key_name(&"weapons_mark")
+	if mark != "?":
+		parts.append("%s MARK" % mark.to_upper())
+	_hint.text = " · ".join(parts)
+	_hint.add_theme_color_override("font_color", HudPalette.WARNING if telemetry.hostile_on_hold else HudPalette.DIM)
+	_hint.position = Vector2(0.0, pip_top() + PIP + HINT_BELOW)
+	custom_minimum_size.y = maxf(64.0, _hint.position.y + _hint.get_minimum_size().y)
 
 func orders_text() -> String:
 	return _label.text.replace("\n", " · ") if _label != null else ""
+
+func hint_text() -> String:
+	return _hint.text if _hint != null else ""
 
 ## Where the pips' top edge is: under the orders, however many lines they take.
 func pip_top() -> float:

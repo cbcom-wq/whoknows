@@ -3,8 +3,15 @@ extends GutTest
 ## The weapons on the HUD (ship weapons spec §9.2): the strip's orders and
 ## pips, and a numbered bracket on each listed target.
 
+var _saved_orders_keys: Array[InputEvent] = []
+
 func after_each():
 	Weapons.hostile_rule = Callable()
+	if not _saved_orders_keys.is_empty():
+		InputMap.action_erase_events(&"weapons_orders")
+		for e in _saved_orders_keys:
+			InputMap.action_add_event(&"weapons_orders", e)
+		_saved_orders_keys.clear()
 
 func _telemetry(engage: bool, pips: Array[StringName], low := false) -> VehicleTelemetry:
 	var t := VehicleTelemetry.new()
@@ -41,6 +48,47 @@ func test_hold_with_a_hostile_warns():
 	assert_eq(strip.orders_text(), "HOSTILE · WEAPONS ON HOLD", "above the low-power line")
 	strip.render(_telemetry(false, [&"idle"] as Array[StringName]))
 	assert_eq(strip.orders_text(), "HOLD", "no hostile, no warning")
+
+## The keys under the orders, so the pilot knows what to press: B to flip
+## the orders, T to mark. HOLD reads as bright as ENGAGE; the hint recedes.
+func test_the_strip_says_which_keys_work_it():
+	var strip := WeaponsStrip.new()
+	add_child_autofree(strip)
+	strip.render(_telemetry(false, [&"idle"] as Array[StringName]))
+	assert_eq(strip.hint_text(), "B ENGAGE · T MARK")
+	assert_eq(strip._label.get_theme_color("font_color"), HudPalette.READOUT, "HOLD is not dimmed out of sight")
+	assert_eq(strip._hint.get_theme_color("font_color"), HudPalette.DIM)
+	strip.render(_telemetry(true, [&"idle"] as Array[StringName]))
+	assert_eq(strip.hint_text(), "B HOLD · T MARK")
+	strip.render(_telemetry(true, [&"idle"] as Array[StringName], true))
+	assert_eq(strip.hint_text(), "B HOLD · T MARK", "low power: the orders still flip")
+
+## Under the hostile warning the hint is in the warning's colour: it is the
+## way out of it.
+func test_the_hint_under_the_hostile_warning_says_how_to_engage():
+	var strip := WeaponsStrip.new()
+	add_child_autofree(strip)
+	var t := _telemetry(false, [&"idle", &"idle"] as Array[StringName])
+	t.hostile_on_hold = true
+	strip.render(t)
+	assert_eq(strip.hint_text(), "B ENGAGE · T MARK")
+	assert_eq(strip._hint.get_theme_color("font_color"), HudPalette.WARNING)
+	assert_gte(strip._hint.position.y, strip.pip_top() + WeaponsStrip.PIP, "below the pips")
+	assert_lte(strip._hint.get_minimum_size().x, strip.custom_minimum_size.x, "it fits the strip")
+	assert_gte(strip.custom_minimum_size.y, strip._hint.position.y + strip._hint.get_minimum_size().y,
+		"the strip is tall enough to hold it")
+
+## The hint reads the key from the input map, so a rebinding shows.
+func test_the_hint_follows_the_binding():
+	_saved_orders_keys = InputMap.action_get_events(&"weapons_orders")
+	InputMap.action_erase_events(&"weapons_orders")
+	var k := InputEventKey.new()
+	k.physical_keycode = KEY_K
+	InputMap.action_add_event(&"weapons_orders", k)
+	var strip := WeaponsStrip.new()
+	add_child_autofree(strip)
+	strip.render(_telemetry(false, [&"idle"] as Array[StringName]))
+	assert_eq(strip.hint_text(), "K ENGAGE · T MARK")
 
 func test_no_turrets_no_strip():
 	var strip := WeaponsStrip.new()
