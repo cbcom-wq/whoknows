@@ -1,0 +1,184 @@
+<h2>Coming down to a desert world</h2>
+<p class="subtitle">Today first, then a rough guess at the descent in four stages. Painted sketches, not renders. React to the feel, not the pixels.</p>
+
+<style>
+  .seq { display:grid; grid-template-columns: repeat(auto-fit, minmax(420px,1fr)); gap:18px; }
+  .stage { border-radius:10px; overflow:hidden; background:var(--bg-secondary, #1b1b1b); border:1px solid rgba(128,128,128,.25); }
+  .stage svg { display:block; width:100%; height:auto; }
+  .stage .txt { padding:10px 14px 14px; }
+  .stage h3 { margin:0 0 4px; font-size:15px; }
+  .stage .alt { font-size:12px; opacity:.65; margin-bottom:6px; }
+  .stage ul { margin:0; padding-left:18px; font-size:13px; line-height:1.45; }
+  .today { outline:2px dashed rgba(220,90,70,.6); outline-offset:-2px; }
+</style>
+
+<div class="seq">
+
+  <!-- TODAY -->
+  <div class="stage today">
+    <svg viewBox="0 0 320 180">
+      <rect width="320" height="180" fill="#05060c"/>
+      <g fill="#fff" opacity=".8">
+        <circle cx="30" cy="20" r=".8"/><circle cx="80" cy="45" r=".6"/><circle cx="140" cy="15" r=".9"/>
+        <circle cx="200" cy="60" r=".6"/><circle cx="240" cy="25" r=".7"/><circle cx="300" cy="70" r=".8"/>
+        <circle cx="110" cy="70" r=".5"/><circle cx="20" cy="85" r=".6"/><circle cx="180" cy="35" r=".5"/>
+      </g>
+      <circle cx="268" cy="38" r="7" fill="#fff"/>
+      <polygon points="20,120 34,72 58,68 70,120" fill="#a8683f"/><polygon points="58,68 70,120 80,120 66,74" fill="#6e4127"/>
+      <polygon points="200,120 212,88 250,84 262,120" fill="#a8683f"/><polygon points="250,84 262,120 272,120 258,90" fill="#6e4127"/>
+      <polygon points="0,180 0,122 90,112 170,124 250,114 320,124 320,180" fill="#c98f52"/>
+      <polygon points="0,180 0,150 120,136 220,152 320,140 320,180" fill="#b07a42"/>
+      <g fill="#8d8a86">
+        <rect x="60" y="96" width="3" height="3" transform="rotate(30 61 97)"/>
+        <rect x="120" y="104" width="2.5" height="2.5" transform="rotate(10 121 105)"/>
+        <rect x="160" y="88" width="3.5" height="3.5" transform="rotate(45 161 89)"/>
+        <rect x="190" y="132" width="3" height="3" transform="rotate(20 191 133)"/>
+        <rect x="95" y="128" width="2" height="2"/>
+        <rect x="230" y="100" width="2.5" height="2.5" transform="rotate(35 231 101)"/>
+        <rect x="280" y="112" width="3" height="3" transform="rotate(15 281 113)"/>
+      </g>
+    </svg>
+    <div class="txt">
+      <h3>Today</h3>
+      <div class="alt">standing on any world</div>
+      <ul>
+        <li>Black sky and stars right down to the ground. A hard white sun.</li>
+        <li>Space dust hangs in the air over the sand.</li>
+        <li>Far rocks are as sharp as near ones. Nothing says "air".</li>
+        <li>Silent. It feels like a big asteroid.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 1 APPROACH -->
+  <div class="stage">
+    <svg viewBox="0 0 320 180">
+      <defs>
+        <radialGradient id="rim" cx="160" cy="330" r="232" gradientUnits="userSpaceOnUse">
+          <stop offset="0.88" stop-color="#f3b36b" stop-opacity="0"/>
+          <stop offset="0.915" stop-color="#ffd59a" stop-opacity=".95"/>
+          <stop offset="0.95" stop-color="#f0a868" stop-opacity=".45"/>
+          <stop offset="1" stop-color="#f0a868" stop-opacity="0"/>
+        </radialGradient>
+        <radialGradient id="ball" cx="90" cy="150" r="260" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stop-color="#e6b072"/><stop offset=".6" stop-color="#b9784a"/><stop offset="1" stop-color="#3a2216"/>
+        </radialGradient>
+      </defs>
+      <rect width="320" height="180" fill="#05060c"/>
+      <g fill="#fff" opacity=".8">
+        <circle cx="30" cy="20" r=".8"/><circle cx="80" cy="45" r=".6"/><circle cx="140" cy="15" r=".9"/>
+        <circle cx="200" cy="40" r=".6"/><circle cx="250" cy="25" r=".7"/><circle cx="300" cy="60" r=".8"/>
+      </g>
+      <circle cx="30" cy="40" r="7" fill="#fff6dc"/>
+      <circle cx="160" cy="330" r="232" fill="url(#rim)"/>
+      <circle cx="160" cy="330" r="212" fill="url(#ball)"/>
+      <g fill="#a46a40" opacity=".55">
+        <polygon points="70,150 90,140 110,148 96,160"/><polygon points="180,128 205,122 222,134 196,140"/>
+      </g>
+    </svg>
+    <div class="txt">
+      <h3>1 · Approach</h3>
+      <div class="alt">far out, falling in</div>
+      <ul>
+        <li>The world has a soft warm glow round its edge: you can see it has air before you arrive.</li>
+        <li>Still space: stars, dust, silence.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 2 ENTRY -->
+  <div class="stage">
+    <svg viewBox="0 0 320 180">
+      <defs>
+        <linearGradient id="sky2" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#0f1229"/><stop offset=".5" stop-color="#33396a"/>
+          <stop offset=".8" stop-color="#c98a62"/><stop offset="1" stop-color="#f2c58f"/>
+        </linearGradient>
+      </defs>
+      <rect width="320" height="180" fill="url(#sky2)"/>
+      <g fill="#fff" opacity=".35"><circle cx="40" cy="14" r=".7"/><circle cx="150" cy="10" r=".6"/><circle cx="260" cy="18" r=".7"/></g>
+      <circle cx="262" cy="50" r="7" fill="#fff1cf"/>
+      <path d="M0,150 Q160,118 320,150 L320,180 L0,180 Z" fill="#d9b48b"/>
+      <path d="M0,162 Q160,134 320,162 L320,180 L0,180 Z" fill="#cfa477" opacity=".8"/>
+      <g fill="#c59a6e" opacity=".6"><polygon points="60,150 80,144 96,150"/><polygon points="200,141 226,136 240,142"/></g>
+    </svg>
+    <div class="txt">
+      <h3>2 · Into the air</h3>
+      <div class="alt">high up, the sky starts</div>
+      <ul>
+        <li>Black turns deep blue overhead, with a warm band along the curved horizon.</li>
+        <li>Stars fade out. The space dust thins and is gone.</li>
+        <li>The ground below is soft and hazy, not crisp.</li>
+        <li>A faint rush of wind starts up.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 3 LOW FLIGHT -->
+  <div class="stage">
+    <svg viewBox="0 0 320 180">
+      <defs>
+        <linearGradient id="sky3" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#6c84b5"/><stop offset=".65" stop-color="#c7b3a2"/><stop offset="1" stop-color="#f1d3a5"/>
+        </linearGradient>
+        <radialGradient id="halo3" cx="250" cy="52" r="46" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stop-color="#fff4d6" stop-opacity=".9"/><stop offset="1" stop-color="#fff4d6" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+      <rect width="320" height="180" fill="url(#sky3)"/>
+      <circle cx="250" cy="52" r="46" fill="url(#halo3)"/><circle cx="250" cy="52" r="10" fill="#fff8e6"/>
+      <g fill="#dcc0a0"><polygon points="10,112 22,84 46,82 56,112"/><polygon points="150,112 160,92 196,90 206,112"/><polygon points="270,112 280,96 300,95 312,112"/></g>
+      <g><polygon points="70,122 86,76 118,72 130,122" fill="#c28c60"/><polygon points="118,72 130,122 140,122 126,80" fill="#a87148"/></g>
+      <g><polygon points="220,130 236,92 262,90 276,130" fill="#a8683f"/><polygon points="262,90 276,130 288,130 270,98" fill="#7f4c2d"/></g>
+      <polygon points="0,180 0,118 80,110 160,124 240,116 320,128 320,180" fill="#dba765"/>
+      <polygon points="0,180 0,146 100,134 210,150 320,140 320,180" fill="#c58f50"/>
+    </svg>
+    <div class="txt">
+      <h3>3 · Flying low</h3>
+      <div class="alt">a kilometre or so up</div>
+      <ul>
+        <li>A full sky: pale blue overhead, sandy haze at the horizon, a soft glow round the sun.</li>
+        <li>Far mesas fade into the haze, near ones are strong and warm: you can judge distance.</li>
+        <li>Wind noise rises with speed.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 4 GROUND -->
+  <div class="stage">
+    <svg viewBox="0 0 320 180">
+      <defs>
+        <linearGradient id="sky4" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#7d93bd"/><stop offset=".7" stop-color="#d4bca3"/><stop offset="1" stop-color="#f0cf9c"/>
+        </linearGradient>
+        <radialGradient id="halo4" cx="282" cy="74" r="56" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stop-color="#fff0c8" stop-opacity=".95"/><stop offset="1" stop-color="#fff0c8" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+      <rect width="320" height="180" fill="url(#sky4)"/>
+      <circle cx="282" cy="74" r="56" fill="url(#halo4)"/><circle cx="282" cy="74" r="11" fill="#fffaea"/>
+      <g fill="#dcc3a6"><polygon points="0,104 8,70 30,66 40,104"/><polygon points="230,104 240,82 262,80 272,104"/></g>
+      <g><polygon points="40,108 54,58 84,54 96,108" fill="#c48d60"/><polygon points="84,54 96,108 106,108 92,62" fill="#a06a43"/></g>
+      <polygon points="0,180 0,106 120,100 200,108 320,102 320,180" fill="#e0ad6c"/>
+      <!-- oasis far off -->
+      <ellipse cx="176" cy="106" rx="14" ry="2" fill="#7fb3b8"/>
+      <g stroke="#5f6b3a" stroke-width="1.2" fill="none"><path d="M168,106 L169,96"/><path d="M182,106 L181,98"/></g>
+      <g fill="#6f7a3f"><polygon points="169,96 163,98 169,95 175,97"/><polygon points="181,98 176,100 181,97 186,99"/></g>
+      <polygon points="0,180 0,138 90,128 190,150 320,132 320,180" fill="#cf9655"/>
+      <g fill="#7a5233"><polygon points="30,160 50,146 70,150 66,164 36,166"/><polygon points="230,170 248,156 272,160 270,174"/></g>
+      <g stroke="#b9963a" stroke-width="1.4"><path d="M120,160 L114,146"/><path d="M122,160 L124,144"/><path d="M124,160 L132,148"/></g>
+      <g stroke="#fff3dc" stroke-width=".8" opacity=".55"><path d="M60,126 L110,122"/><path d="M150,134 L210,130"/><path d="M200,118 L240,115"/><path d="M20,142 L58,139"/></g>
+    </svg>
+    <div class="txt">
+      <h3>4 · On the ground</h3>
+      <div class="alt">stepping out of the airlock</div>
+      <ul>
+        <li>Big warm sky. The sun is soft and golden, not a white dot.</li>
+        <li>Sand blows in thin streaks; spiky dry grass, scattered rocks.</li>
+        <li>Mesas in the haze; the oasis a glint of water and palms far off.</li>
+        <li>You hear wind. It feels like standing outside, not on a rock in space.</li>
+      </ul>
+    </div>
+  </div>
+
+</div>

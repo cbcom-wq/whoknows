@@ -1,0 +1,84 @@
+<h2>The oasis, as I imagine it</h2>
+<p class="subtitle">Top-down sketch, roughly 150 m across. Everything here is my guess: mark what's wrong.</p>
+
+<style>
+  .map { max-width: 900px; margin: 0 auto; }
+  .map svg { width:100%; height:auto; display:block; border-radius:10px; }
+  .key { display:grid; grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); gap:10px 22px; margin-top:16px; font-size:13.5px; line-height:1.45; }
+  .key b { display:inline-block; min-width:22px; }
+</style>
+
+<div class="map">
+<svg viewBox="0 0 600 400">
+  <rect width="600" height="400" fill="#e2b072"/>
+  <!-- dune ripples -->
+  <g stroke="#cf9c5e" stroke-width="2" fill="none" opacity=".6">
+    <path d="M0,40 Q80,20 160,42 T320,40"/><path d="M380,30 Q460,10 600,36"/>
+    <path d="M0,360 Q100,340 200,362 T400,356"/><path d="M430,380 Q520,360 600,376"/>
+  </g>
+  <!-- rock outcrop shelter (north) -->
+  <polygon points="150,30 230,18 300,34 320,70 250,78 170,72" fill="#a8683f"/>
+  <polygon points="250,78 320,70 300,34" fill="#7f4c2d"/>
+  <!-- green ring -->
+  <ellipse cx="300" cy="200" rx="120" ry="88" fill="#b8a85c" opacity=".7"/>
+  <!-- pool -->
+  <path d="M250,190 Q260,150 310,155 Q360,160 352,200 Q345,240 300,238 Q246,236 250,190Z" fill="#6fb0b4"/>
+  <path d="M268,190 Q280,168 310,170" stroke="#bfe3df" stroke-width="2" fill="none" opacity=".7"/>
+  <!-- garden plots -->
+  <g fill="#8f9a49" stroke="#6d7636" stroke-width="1">
+    <rect x="365" y="215" width="34" height="22"/><rect x="365" y="242" width="34" height="22"/><rect x="404" y="242" width="30" height="22" opacity=".5"/>
+  </g>
+  <!-- palms -->
+  <g fill="#5f7a35">
+    <circle cx="232" cy="160" r="9"/><circle cx="220" cy="210" r="10"/><circle cx="250" cy="255" r="9"/>
+    <circle cx="360" cy="168" r="10"/><circle cx="378" cy="198" r="8"/><circle cx="300" cy="128" r="9"/><circle cx="330" cy="258" r="8"/>
+  </g>
+  <!-- pump -->
+  <rect x="352" y="186" width="10" height="10" fill="#4a5560"/>
+  <path d="M362,191 L380,226" stroke="#4a5560" stroke-width="2"/>
+  <!-- buildings -->
+  <g stroke="#5b3a24" stroke-width="2">
+    <rect x="150" y="150" width="46" height="34" fill="#c99a6a"/>
+    <rect x="160" y="230" width="52" height="38" fill="#c99a6a"/>
+    <rect x="300" y="290" width="40" height="30" fill="#b8bfc4"/>
+    <rect x="410" y="140" width="56" height="40" fill="#b8bfc4"/>
+    <circle cx="232" cy="306" r="18" fill="#c99a6a"/>
+  </g>
+  <!-- crushed hut -->
+  <polygon points="430,280 470,272 482,300 450,314 424,300" fill="#9a7553" stroke="#5b3a24" stroke-width="2" stroke-dasharray="4 3"/>
+  <!-- shade sails -->
+  <g fill="#e8d7b8" opacity=".85"><polygon points="196,190 232,184 226,214 192,216"/><polygon points="340,284 372,276 378,302 344,306"/></g>
+  <!-- broken wall -->
+  <path d="M480,120 L520,170 L528,230" stroke="#9a7553" stroke-width="6" fill="none"/>
+  <path d="M528,250 L520,300 L500,330" stroke="#9a7553" stroke-width="6" fill="none"/>
+  <g fill="#9a7553"><rect x="530" y="236" width="6" height="6"/><rect x="540" y="248" width="5" height="5"/><rect x="536" y="224" width="4" height="4"/></g>
+  <!-- tracks -->
+  <g fill="#b5824b">
+    <ellipse cx="560" cy="240" rx="7" ry="4"/><ellipse cx="575" cy="210" rx="7" ry="4"/><ellipse cx="588" cy="182" rx="7" ry="4"/>
+    <ellipse cx="548" cy="268" rx="7" ry="4"/><ellipse cx="490" cy="292" rx="7" ry="4"/>
+  </g>
+  <!-- landing pad -->
+  <rect x="40" y="270" width="90" height="90" fill="#c2a57f" stroke="#8a6d4b" stroke-width="2"/>
+  <path d="M55,315 L115,315 M85,285 L85,345" stroke="#8a6d4b" stroke-width="2" opacity=".6"/>
+  <!-- path -->
+  <path d="M130,315 Q180,300 214,300" stroke="#cfa877" stroke-width="6" fill="none" opacity=".8"/>
+  <!-- labels -->
+  <g font-family="sans-serif" font-size="13" font-weight="700" fill="#2a1a10">
+    <text x="78" y="262">1</text><text x="290" y="200">2</text><text x="166" y="146">3</text>
+    <text x="178" y="226">4</text><text x="226" y="282">5</text><text x="430" y="136">6</text>
+    <text x="312" y="286">7</text><text x="448" y="270">8</text><text x="536" y="160">9</text>
+    <text x="232" y="14">10</text><text x="388" y="232">11</text>
+  </g>
+</svg>
+</div>
+
+<div class="key">
+  <div><b>1</b> <strong>Landing pad.</strong> Packed stone, flat and clear: where you set the ship down.</div>
+  <div><b>2</b> <strong>The pool,</strong> ringed with palms and green. The one wet, living spot.</div>
+  <div><b>3–5</b> <strong>Homes:</strong> mud-brick with cloth shade sails. You can walk into two of them.</div>
+  <div><b>6, 7</b> <strong>Prefab modules</strong> the settlers flew in, patched with local brick. One is the workshop, one the comms hut with the last log.</div>
+  <div><b>8</b> <strong>A crushed hut.</strong> Roof caved in: the first sign something big came through.</div>
+  <div><b>9</b> <strong>The broken wall,</strong> knocked through from the desert side, with huge tracks heading off into the dunes.</div>
+  <div><b>10</b> <strong>A rock outcrop</strong> to the north: shade, and a lookout over the dunes.</div>
+  <div><b>11</b> <strong>Garden plots,</strong> watered by a pump at the pool, half dried out.</div>
+</div>
