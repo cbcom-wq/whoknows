@@ -5,11 +5,17 @@ extends CharacterBody3D
 ## ordinary character controller. All felt motion from the ship arrives
 ## through `external_accel`, written by MotionCoupling (Task 6).
 ##
-## Two modes (docs/superpowers/specs/2026-09-24-airlock-design.md §7.4, §8):
-## PLATING aboard -- walking, plating gravity, the ship's shoves -- and SUIT on
-## a spacewalk, in the real world under the scene's Outside root, floating on
-## suit thrusters (Suit). An airlock's threshold switches between them with
-## enter_suit() and enter_plating(); nothing else does.
+## Three modes (docs/superpowers/specs/2026-09-24-airlock-design.md §7.4, §8;
+## docs/superpowers/specs/2026-11-03-desert-world-design.md §5.5): PLATING
+## aboard -- walking, plating gravity, the ship's shoves -- SUIT on a
+## spacewalk, in the real world under the scene's Outside root, floating on
+## suit thrusters (Suit), and FIELD on foot on a world, out there too, walking
+## and jumping in the world's gravity with up away from its centre
+## (docs/superpowers/specs/2026-09-23-planetfall-design.md §11), the suit's
+## thrusters off. An airlock's threshold switches between them with
+## enter_suit(), enter_field() and enter_plating(); nothing else does. FIELD is
+## only reached by stepping out of a landed ship, so a spacewalk never crosses
+## into it. SUIT and FIELD are both outside (is_outside()).
 ##
 ## Its hands (docs/superpowers/specs/2026-09-23-hands-and-items-design.md §7)
 ## are a Grasp: take_item and can_take_item are the actor contract every Item
@@ -45,8 +51,20 @@ const JOLT_SPEED := 0.3
 const RIGHTING_TIME := 0.4
 ## How long after bumping a rock a save waits (saving spec §5).
 const BUMP_CALM := 5.0
+## A jump's take-off speed on a world, m/s (Planetfall §11.2): fixed, so the
+## height tells you the world's pull -- 2.4 m at 2 m/s², 0.6 m at 8.
+const JUMP_SPEED := 3.1
+## The suit lamp on your head (Planetfall §11.3): its reach, m, and its
+## spot_angle, degrees. Its energy is a first guess, for the renders to tune.
+const LAMP_RANGE := 25.0
+const LAMP_ANGLE := 35.0
+const LAMP_ENERGY := 3.0
+## A world's pull weaker than this (m/s², squared) has no direction to take up
+## from: up stays as it was (Planetfall §11.1).
+const MIN_PULL_SQUARED := 1e-6
 
-enum Mode { PLATING, SUIT }
+## Appended, never inserted: nothing may renumber a mode.
+enum Mode { PLATING, SUIT, FIELD }
 
 ## Health and damage (docs/superpowers/specs/
 ## 2026-09-29-health-and-damage-design.md §5.3, §7).
@@ -106,6 +124,16 @@ var home_source: Callable
 ## Local gravity, supplied by Grav Plating. Zero means the cell is unplated.
 var grav_strength: float = 9.8
 
+## What pulls where outside (desert world spec §5.1), set by the flight scene.
+## Only FIELD asks it: aboard the plating's gravity is all there is, and a
+## spacewalk feels no world's pull.
+var gravity: WorldGravity
+## Away from the world's centre, in FIELD (Planetfall §11.1); +Y otherwise.
+var up := Vector3.UP
+## The suit lamp (Planetfall §11.3): a spot on your head, L outside, off and
+## hidden aboard.
+var lamp: SpotLight3D
+
 ## Acceleration felt from the hull, in interior-space metres per second squared.
 var external_accel: Vector3 = Vector3.ZERO
 
@@ -160,6 +188,12 @@ var _camera_home := Vector3.ZERO
 
 ## Seconds to the next footfall while sprinting.
 var _footfall_in := 0.0
+## Space pressed on a world: a jump at the next physics tick, if you stand on
+## something then.
+var _jump_wanted := false
+## In FIELD, where what you let go of lands once you are aboard again: your
+## hands drop onto the ground meanwhile (set_aboard_root).
+var _aboard_root: Node3D
 
 func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -184,6 +218,40 @@ func _ready() -> void:
 	_hurt_sound.name = "HurtSound"
 	_hurt_sound.volume_db = -8.0
 	add_child(_hurt_sound)
+	_make_lamp()
+
+## The suit lamp, off: shining along your view, warm white as the ship's work
+## lights, and casting no shadows (Planetfall §11.3: a GTX 960). Going out
+## puts it on the world's layers with everything else you carry
+## (_set_render_layer): it lights layer 1, as Planetfall asks, and your own
+## hull's layer too, as the ship's floods do -- never the interior.
+func _make_lamp() -> void:
+	lamp = SpotLight3D.new()
+	lamp.name = "Lamp"
+	lamp.light_color = HullPalette.WORK_LIGHT
+	lamp.light_energy = LAMP_ENERGY
+	lamp.spot_range = LAMP_RANGE
+	lamp.spot_angle = LAMP_ANGLE
+	lamp.shadow_enabled = false
+	lamp.visible = false
+	head.add_child(lamp)
+
+## Switches the suit lamp. It shines only outside: aboard it is always off.
+func set_lamp(on: bool) -> void:
+	lamp.visible = on and is_outside()
+
+## Outside the ship: on a spacewalk (SUIT) or on foot on a world (FIELD).
+func is_outside() -> bool:
+	return mode == Mode.SUIT or mode == Mode.FIELD
+
+## Where what you let go of lands aboard: the items of the home you are in (the
+## flight scene's board()). On foot on a world your hands drop onto the ground
+## instead, so it is kept for enter_plating to put back.
+func set_aboard_root(root: Node3D) -> void:
+	if mode == Mode.FIELD:
+		_aboard_root = root
+	else:
+		grasp.world_root = root
 
 ## The actor contract Item talks to.
 func take_item(item: Item) -> void:
@@ -205,16 +273,16 @@ func _on_swallowed(label: String, value: int) -> void:
 ## in your body's way, and a floor underfoot.
 func can_stand_at(pose: Transform3D) -> bool:
 	var space := get_world_3d().direct_space_state
-	var up := pose.basis.y.normalized()
+	var pose_up := pose.basis.y.normalized()
 	var body := PhysicsShapeQueryParameters3D.new()
 	body.shape = _collider.shape
 	# Lifted a touch, so the floor you would stand on isn't in the way.
-	body.transform = pose.translated(up * 0.02) * _collider.transform
+	body.transform = pose.translated(pose_up * 0.02) * _collider.transform
 	body.collision_mask = COLLISION_MASK
 	body.exclude = [get_rid()]
 	if not space.intersect_shape(body, 1).is_empty():
 		return false
-	var ray := PhysicsRayQueryParameters3D.create(pose.origin + up * 0.3, pose.origin - up * 0.3,
+	var ray := PhysicsRayQueryParameters3D.create(pose.origin + pose_up * 0.3, pose.origin - pose_up * 0.3,
 		COLLISION_MASK, [get_rid()])
 	return not space.intersect_ray(ray).is_empty()
 
@@ -285,14 +353,32 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if mode == Mode.SUIT and event.is_action_pressed(&"toggle_assist"):
 		suit_assist = not suit_assist
+	# Space jumps only on a world (Planetfall §11.2): seated it is boost, which
+	# only the helm reads.
+	if mode == Mode.FIELD and event.is_action_pressed(&"jump"):
+		_jump_wanted = true
+	# L is the helm's floods while you sit; outside it is your lamp.
+	if is_outside() and event.is_action_pressed(&"lights_flood"):
+		set_lamp(not lamp.visible)
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		_pitch = clampf(_pitch - event.relative.y * MOUSE_SENSITIVITY, -PITCH_LIMIT, PITCH_LIMIT)
-		head.rotation.x = _pitch
-		if mode == Mode.SUIT:
-			# No up in space: turn about your own.
-			rotate_object_local(Vector3.UP, -event.relative.x * MOUSE_SENSITIVITY)
-		else:
-			_yaw -= event.relative.x * MOUSE_SENSITIVITY
+		look(event.relative)
+
+## Turns you by a mouse move of `relative` pixels: the head pitches, and the
+## body turns about your own up on a spacewalk (there is no other), about the
+## world's on foot on a world (Planetfall §11.1), and about +Y aboard. Split
+## from _unhandled_input so tests can drive it: a headless run cannot capture
+## the mouse.
+func look(relative: Vector2) -> void:
+	_pitch = clampf(_pitch - relative.y * MOUSE_SENSITIVITY, -PITCH_LIMIT, PITCH_LIMIT)
+	head.rotation.x = _pitch
+	var turn := -relative.x * MOUSE_SENSITIVITY
+	match mode:
+		Mode.SUIT:
+			rotate_object_local(Vector3.UP, turn)
+		Mode.FIELD:
+			global_basis = Basis(up, turn) * global_basis
+		_:
+			_yaw += turn
 			rotation.y = _yaw
 
 func _physics_process(delta: float) -> void:
@@ -307,6 +393,9 @@ func _physics_process(delta: float) -> void:
 		return
 	if mode == Mode.SUIT:
 		_suit_physics(delta)
+		return
+	if mode == Mode.FIELD:
+		_field_physics(delta)
 		return
 
 	# Gravity plus whatever the hull is doing to us. Both are just
@@ -338,7 +427,8 @@ func _process(delta: float) -> void:
 	_jolt = move_toward(_jolt, 0.0, JOLT / JOLT_BACK * delta)
 	head.rotation.z = _jolt
 	if downed != null:
-		downed.tick(delta, mode == Mode.PLATING or _home_reached())
+		# Only a spacewalk waits for the emergency cell to bring you home.
+		downed.tick(delta, mode != Mode.SUIT or _home_reached())
 
 # --- being hurt (health and damage spec §5.3, §7) ------------------------------
 
@@ -354,7 +444,7 @@ func receive_hit(hit: Hit) -> void:
 		return
 	velocity += hit.impulse / SUIT_MASS
 	take_damage(hit.damage, hit.direction)
-	if hit.drain > 0.0 and mode == Mode.SUIT:
+	if hit.drain > 0.0 and is_outside():
 		# A Limpet's sip: the suit's cell, within the budget all of them share.
 		hit.drained = suit_cell.drain(minf(hit.drain, _sip_budget))
 		_sip_budget -= hit.drained
@@ -411,7 +501,8 @@ func is_low() -> bool:
 func _black_out() -> void:
 	if downed != null:
 		return
-	var outside := mode == Mode.SUIT
+	_jump_wanted = false
+	var outside := is_outside()
 	var into: Node3D = get_parent() as Node3D if outside else grasp.world_root
 	var item := grasp.let_fall(into)
 	if item != null:
@@ -437,9 +528,14 @@ func _on_downed_step(step: Downed.Step) -> void:
 			set_control_enabled(true)
 			downed_changed.emit(false)
 
-## Blacked out: aboard you lie where you fell; outside, the suit's emergency
-## cell brings you home, as when it runs dry (quantum energy spec §9).
+## Blacked out: aboard you lie where you fell; on a spacewalk, the suit's
+## emergency cell brings you home, as when it runs dry (quantum energy spec
+## §9); on a world there is no trip home (desert world spec §5.5): you fall
+## and lie where you fell.
 func _downed_physics(delta: float) -> void:
+	if mode == Mode.FIELD:
+		_field_move(_stand_on_world(), Vector3.ZERO, 0.0, delta)
+		return
 	if mode != Mode.SUIT:
 		velocity = Vector3.ZERO
 		return
@@ -474,38 +570,70 @@ func _footfalls(sprinting: bool, delta: float) -> void:
 ## Steps off the ship onto a spacewalk, at `pose` in the world, moving at
 ## `velocity`, with `ship_hull` as the ship you left.
 func enter_suit(outside: Node3D, pose: Transform3D, start_velocity: Vector3, ship_hull: RigidBody3D) -> void:
-	_interior_environment = camera.environment
+	_go_out(outside, pose, start_velocity, ship_hull)
+	mode = Mode.SUIT
+	motion_mode = CharacterBody3D.MOTION_MODE_FLOATING
+	grasp.suspended = true
+	mode_changed.emit(mode)
+
+## Steps out of a landed ship onto a world (desert world spec §5.5), as
+## enter_suit, but on your feet: walking in the world's gravity with up away
+## from its centre (from `gravity` at `pose`, or `pose`'s own up with no pull
+## to read), and hands that work as aboard -- what you let go of lands outside,
+## and the root it landed in aboard is kept for enter_plating to put back.
+func enter_field(outside: Node3D, pose: Transform3D, start_velocity: Vector3, ship_hull: RigidBody3D) -> void:
+	if mode != Mode.FIELD:
+		_aboard_root = grasp.world_root
+	_go_out(outside, pose, start_velocity, ship_hull)
+	mode = Mode.FIELD
+	motion_mode = CharacterBody3D.MOTION_MODE_GROUNDED
+	var g := gravity.at(pose.origin) if gravity != null else Vector3.ZERO
+	up = -g.normalized() if g.length_squared() > MIN_PULL_SQUARED else pose.basis.y.normalized()
+	up_direction = up
+	_jump_wanted = false
+	grasp.world_root = outside
+	grasp.suspended = false
+	mode_changed.emit(mode)
+
+## What every way out shares: into the world under `outside` at `pose`, in the
+## floating origin's group and anchoring the ground and rocks round you, on the
+## world's layers and look, bumping the hull, the ground, rocks, items and
+## creatures, with `ship_hull` as the ship you left.
+func _go_out(outside: Node3D, pose: Transform3D, start_velocity: Vector3, ship_hull: RigidBody3D) -> void:
+	if mode == Mode.PLATING:
+		_interior_environment = camera.environment
 	_move_to(outside)
 	add_to_group(Universe.EXTERIOR_SPACE)
 	add_to_group(AsteroidStream.SPACE_ANCHOR)
 	set_meta(AsteroidStream.ANCHOR_RADIUS, 1.0)
 	global_transform = pose
-	mode = Mode.SUIT
 	hull = ship_hull
+	thrusting = false
 	_apply_height(STAND_HEIGHT)
-	motion_mode = CharacterBody3D.MOTION_MODE_FLOATING
 	collision_mask = SUIT_MASK
 	velocity = start_velocity
 	external_accel = Vector3.ZERO
 	camera.environment = null
 	if interactor != null:
 		interactor.set_mask(Interactor.SUIT_MASK)
-	grasp.suspended = true
 	# What you hold comes out with you, drawn for outside.
 	if grasp.item != null:
 		grasp.item.set_space(true)
 	_set_render_layer(1, 1 | ExteriorBuilder.OWN_HULL_LAYER)
 	_righting_t = RIGHTING_TIME
 	camera.quaternion = Quaternion.IDENTITY
-	mode_changed.emit(mode)
 
 ## Comes back aboard at `pose` (upright) in interior space, head pitched
 ## `pitch`, moving at `start_velocity`, the view starting `righting` away from
 ## upright (Threshold.upright) and -- given `eye_from`, where your eye was in
-## the world -- from exactly there, easing back to your head.
+## the world -- from exactly there, easing back to your head. Whatever FIELD
+## changed goes back: where your hands drop things, up, and the lamp, off.
 func enter_plating(interior: Node3D, pose: Transform3D, pitch: float, start_velocity: Vector3,
 		righting: Quaternion, eye_from := Vector3.INF) -> void:
 	_let_go_tool()
+	if mode == Mode.FIELD:
+		grasp.world_root = _aboard_root
+	_aboard_root = null
 	_camera_home = camera.position
 	_move_to(interior)
 	remove_from_group(Universe.EXTERIOR_SPACE)
@@ -515,6 +643,10 @@ func enter_plating(interior: Node3D, pose: Transform3D, pitch: float, start_velo
 	hull = null
 	thrusting = false
 	motion_mode = CharacterBody3D.MOTION_MODE_GROUNDED
+	up = Vector3.UP
+	up_direction = Vector3.UP
+	_jump_wanted = false
+	set_lamp(false)
 	collision_mask = COLLISION_MASK
 	velocity = start_velocity
 	_yaw = rotation.y
@@ -596,8 +728,14 @@ func suit_step(delta: float, input: Vector3) -> void:
 	_tether(delta)
 
 ## An EVA tool in hand goes home: the suit ran dry, or you are coming aboard.
+## On a world your hands work, so it is simply let go: home to its reel, or,
+## with nowhere to go, a stray, as on a spacewalk.
 func _let_go_tool() -> void:
-	if grasp != null and grasp.item != null and grasp.item.definition.eva_tool:
+	if grasp == null or grasp.item == null or not grasp.item.definition.eva_tool:
+		return
+	if mode == Mode.FIELD:
+		grasp.drop()
+	else:
 		grasp.let_go_outside()
 
 ## The held tool's tether (the hose's line): outward velocity removed at its
@@ -638,6 +776,80 @@ func _suit_physics(delta: float) -> void:
 	var before := velocity
 	move_and_slide()
 	_bump_in_space(before)
+
+## On foot on a world (Planetfall §11.1, §11.2): walking as aboard -- crouch,
+## sprint, footfalls -- but along the ground under the world's up, in its
+## pull, with a jump. The suit's thrusters never run (desert world spec §5.5).
+func _field_physics(delta: float) -> void:
+	var g := _stand_on_world()
+	var crouching := Input.is_action_pressed(&"crouch")
+	_apply_height(CROUCH_HEIGHT if crouching else STAND_HEIGHT)
+	var speed := CROUCH_SPEED if crouching else (
+		SPRINT_SPEED if Input.is_action_pressed(&"sprint") else WALK_SPEED
+	)
+	var input_2d := Input.get_vector(&"move_left", &"move_right", &"move_forward", &"move_back")
+	var wish := (global_basis * Vector3(input_2d.x, 0.0, input_2d.y)).normalized()
+	_field_move(g, wish, speed, delta)
+	var along_ground := velocity - up * velocity.dot(up)
+	_footfalls(speed == SPRINT_SPEED and along_ground.length() > WALK_SPEED * 0.5, delta)
+
+## The world's pull where you are, having turned up away from its centre and
+## stood your body on it, with floor detection following (Planetfall §11.1).
+## With no pull to read -- no gravity given, or none here -- up stays.
+func _stand_on_world() -> Vector3:
+	var g := gravity.at(global_position) if gravity != null else Vector3.ZERO
+	if g.length_squared() > MIN_PULL_SQUARED:
+		up = -g.normalized()
+	global_basis = field_basis(global_basis, up)
+	up_direction = up
+	return g
+
+## One move on the ground in pull `g`: toward `wish` (world, unit or zero) at
+## `speed`, a jump if Space asked for one and you stand on something, the held
+## tool's tether, and the slide, nudging loose things.
+func _field_move(g: Vector3, wish: Vector3, speed: float, delta: float) -> void:
+	velocity = field_velocity(velocity, up, wish, speed, ACCEL, g, delta)
+	if _jump_wanted and is_on_floor():
+		velocity += up * JUMP_SPEED
+	_jump_wanted = false
+	_tether(delta)
+	var pushing := velocity
+	move_and_slide()
+	_push_loose_things(pushing, delta)
+
+## `b` stood on `new_up`, keeping its heading (Planetfall §11.1): its forward
+## laid onto the new ground, so a walk round the curve holds its line and the
+## view never twists. For a tilt along forward this is exactly the shortest arc
+## from b.y to new_up; across it, it differs from the shortest arc by a twist
+## of the order of the tilt squared -- nothing, at a tick's tilt -- and is the
+## turn that keeps forward's heading on the ground. Forward standing along
+## new_up has no heading to keep: then it is the shortest arc.
+static func field_basis(b: Basis, new_up: Vector3) -> Basis:
+	var y := new_up.normalized()
+	var old_y := b.y.normalized()
+	if old_y.is_equal_approx(y):
+		return b
+	var forward := -b.z
+	var on_ground := forward - y * forward.dot(y)
+	if on_ground.length_squared() > 1e-8:
+		var z := -on_ground.normalized()
+		return Basis(y.cross(z), y, z)
+	var axis := old_y.cross(y)
+	if axis.length_squared() < 1e-12:
+		axis = b.x
+	axis = axis.normalized()
+	return (Basis(axis, old_y.signed_angle_to(y, axis)) * b).orthonormalized()
+
+## Velocity `v` after one step of `delta` on a world: the pull `g` added, then
+## the part along the ground (across `up`) eased toward `wish`, laid on the
+## ground, times `speed`, by at most `accel` × `delta`. The part along `up` --
+## a fall, a jump -- is the pull's alone.
+static func field_velocity(v: Vector3, up_dir: Vector3, wish: Vector3, speed: float, accel: float, g: Vector3,
+		delta: float) -> Vector3:
+	var pulled := v + g * delta
+	var along_up := up_dir * pulled.dot(up_dir)
+	var target := (wish - up_dir * wish.dot(up_dir)) * speed
+	return along_up + (pulled - along_up).move_toward(target, accel * delta)
 
 ## Two bodies in space (asteroids spec §7.6): bumping a rock shares momentum
 ## along the contact, with a little bounce. A 1 m rock drifts off slowly; a
@@ -740,8 +952,10 @@ func _push_loose_things(pushing: Vector3, delta: float) -> void:
 		var body := hit.get_collider() as RigidBody3D
 		if body == null or body.freeze:
 			continue
+		# Along the floor: across up_direction, which is +Y aboard and the
+		# world's up on a world.
 		var into := -hit.get_normal()
-		into.y = 0.0
+		into -= up_direction * into.dot(up_direction)
 		if into.length_squared() < 0.0001:
 			continue
 		into = into.normalized()

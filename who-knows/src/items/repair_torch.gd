@@ -183,7 +183,7 @@ func busy() -> String:
 func _show_at(point: Vector3, normal: Vector3, holder: CollisionObject3D) -> void:
 	if _light == null:
 		return
-	var outside := holder is Avatar and (holder as Avatar).mode == Avatar.Mode.SUIT
+	var outside := holder is Avatar and (holder as Avatar).is_outside()
 	var layer := 1 if outside else InteriorKit.LAYER
 	_light.light_cull_mask = (1 | ExteriorBuilder.OWN_HULL_LAYER) if outside else InteriorKit.LAYER
 	_sparks.layers = layer

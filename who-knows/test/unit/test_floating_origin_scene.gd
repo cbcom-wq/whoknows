@@ -174,6 +174,32 @@ func test_everything_outside_is_covered_on_a_spacewalk():
 	_out(Vector3(0, 0, 12))
 	assert_eq(_uncovered(), [])
 
+## On foot on a world (desert world spec §5.5) the origin follows you, as on
+## a spacewalk: you, your lamp and your hands are covered, and so is what you
+## put down -- a stray.
+func test_on_foot_on_a_world_the_focus_is_you_and_everything_outside_is_covered():
+	_avatar.enter_field(_outside, Transform3D(Basis.IDENTITY, Vector3(0, 0, 12)), Vector3.ZERO, _ship.exterior)
+	assert_eq(_universe.focus, _avatar)
+	assert_true(_avatar.is_in_group(Universe.EXTERIOR_SPACE))
+	_avatar._unhandled_input(_lamp_switch())
+	assert_true(_avatar.lamp.visible)
+	var crate := Item.new()
+	crate.setup(_ship.item_catalog.get_def(&"crate"))
+	crate.set_space(true)
+	_outside.add_child(crate)
+	crate.global_position = _avatar.global_position + Vector3(0, 1, -1)
+	assert_true(_avatar.grasp.take(crate))
+	_avatar.grasp.drop()
+	assert_eq(_uncovered(), [])
+	_back_in()
+	assert_eq(_universe.focus, _ship.exterior)
+
+static func _lamp_switch() -> InputEventAction:
+	var ev := InputEventAction.new()
+	ev.action = &"lights_flood"
+	ev.pressed = true
+	return ev
+
 func _salvage() -> SalvageField:
 	return _outside.get_node_or_null("SalvageField") as SalvageField
 

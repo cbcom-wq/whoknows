@@ -186,6 +186,39 @@ func test_a_spacewalk_round_trips():
 	assert_true(avatar_b.beacon_source.is_valid(), "the way home is marked")
 	_drop(b)
 
+## On foot on a world (desert world spec §5.5): saved as FIELD, it loads as
+## FIELD -- through enter_field, outside, hands working, the world's gravity
+## given -- never as a spacewalk.
+func test_a_walk_on_a_world_round_trips():
+	var a := _scene()
+	var ship: Ship = a.get_node("Ship")
+	var avatar: Avatar = a.get_node("Ship/Interior/Avatar")
+	var airlock: Airlock = ship.airlocks.values()[0]
+	airlock.from_dict({"pressure": 0.0, "open": "outer"})
+	var at := airlock.beacon() + ship.exterior.global_basis.z * 6.0
+	avatar.enter_field(a.get_node("Outside"), Transform3D(Basis(Vector3.UP, 0.4), at), Vector3(0.5, 0, 0), ship.exterior)
+	avatar.beacon_source = airlock.beacon
+	avatar.home_source = airlock.home
+	var you: UniversePoint = a.get_node("Universe").to_universe(avatar.global_position)
+	assert_true(a.save_now())
+	_drop(a)
+
+	var b := _scene()
+	var outside: Node3D = b.get_node("Outside")
+	var avatar_b: Avatar = outside.find_child("Avatar", false, false)
+	assert_not_null(avatar_b, "outside, not aboard")
+	assert_eq(avatar_b.mode, Avatar.Mode.FIELD)
+	assert_eq(avatar_b.motion_mode, CharacterBody3D.MOTION_MODE_GROUNDED)
+	assert_false(avatar_b.grasp.suspended)
+	assert_eq(avatar_b.grasp.world_root, outside, "what you drop lands outside, though the ship was boarded after")
+	assert_same(avatar_b.gravity, b.world_gravity, "gravity given")
+	assert_same(b.get_node("Universe").focus, avatar_b, "the universe follows you outside")
+	assert_true(b.get_node("Universe").to_universe(avatar_b.global_position).is_equal_approx(you), "you are where you were")
+	assert_true(avatar_b.global_basis.is_equal_approx(Basis(Vector3.UP, 0.4)))
+	assert_almost_eq(avatar_b.velocity, Vector3(0.5, 0, 0), Vector3.ONE * 1e-4)
+	assert_true(avatar_b.beacon_source.is_valid(), "the way home is marked")
+	_drop(b)
+
 func test_a_far_stray_round_trips_and_a_near_one_comes_back_in_the_world():
 	var a := _scene()
 	var universe: Universe = a.get_node("Universe")

@@ -1,11 +1,12 @@
 class_name SuitTie
 extends Node
 
-## Which ship or base your suit belongs to on a spacewalk (many ships spec
-## §4.3; habitat modules spec §5.5): the nearest, once it is SWITCH_MARGIN
-## nearer than yours and within REACH, so floating between two homes never
-## flicks the HUD back and forth. Your relative speed, the home marker and the
-## flight scene's `home` follow it.
+## Which ship or base your suit belongs to outside -- on a spacewalk or on
+## foot on a world (many ships spec §4.3; habitat modules spec §5.5; desert
+## world spec §5.5): the nearest, once it is SWITCH_MARGIN nearer than yours
+## and within REACH, so moving between two homes never flicks the HUD back and
+## forth. Your relative speed, the home marker and the flight scene's `home`
+## follow it.
 
 signal tied(home: GridHome)
 
@@ -32,7 +33,7 @@ func _physics_process(delta: float) -> void:
 
 ## Ties the suit to a nearer ship or base if there is one, now.
 func check() -> void:
-	if avatar == null or fleet == null or avatar.mode != Avatar.Mode.SUIT:
+	if avatar == null or fleet == null or not avatar.is_outside():
 		return
 	# A ship still arriving out of warp is no ship to belong to yet, nor a base
 	# still unfolding a base to belong to.

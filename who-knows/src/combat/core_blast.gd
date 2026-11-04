@@ -179,7 +179,7 @@ func _boom() -> void:
 
 ## One sphere query: each hull is hit once at its nearest cell, each NPC and
 ## each loose item outside once, by damage_at their distance; then you, out in
-## your suit.
+## your suit -- on a spacewalk or on foot on a world.
 func _reach(source: Node) -> void:
 	var reach := RADIUS * blast_scale
 	var at := global_position
@@ -205,7 +205,7 @@ func _reach(source: Node) -> void:
 			Hit.deliver(collider, _hit(e[2], e[0], e[1], source))
 	for node in get_tree().get_nodes_in_group(Avatar.GROUP):
 		var you := node as Avatar
-		if you != null and you.mode == Avatar.Mode.SUIT and you.global_position.distance_to(at) < reach:
+		if you != null and you.is_outside() and you.global_position.distance_to(at) < reach:
 			you.receive_hit(_hit(you.global_position, you.global_position.distance_to(at), -1, source))
 
 ## Where the blast meets `collider`'s shape `shape_index`, from `at`:

@@ -25,7 +25,9 @@ signal taken(item: Item, from: Transform3D)
 ## EVA cargo, or an EVA tool with nowhere to go (its reel is gone), let go on a
 ## spacewalk (habitat modules spec §4.1): already in the space you are in. The
 ## holder makes it a stray. An EVA tool that winds home to its reel is not
-## reported: it is no stray.
+## reported: it is no stray. On foot on a world hands are not suspended, so
+## anything dropped or thrown there -- an item in space (Item.in_space) let
+## loose -- is reported the same way (desert world spec §5.5).
 signal let_go(item: Item)
 
 enum Mode { EMPTY, CARRYING, WIELDING }
@@ -239,6 +241,7 @@ func throw(amount: float) -> void:
 	thrown.linear_velocity = direction * throw_speed(thrown.mass, amount) + _body.velocity
 	thrown.watch_first_impact(throw_speed(thrown.mass, amount))
 	changed.emit()
+	_report_if_outside(thrown)
 
 ## Lets go, or stows the item if you are aiming at a fitting stow point.
 func drop() -> void:
@@ -251,6 +254,14 @@ func drop() -> void:
 		_end_grace(dropped)
 		point.secure(dropped)
 	changed.emit()
+	_report_if_outside(dropped)
+
+## A thing let loose in space by working hands -- on foot on a world -- is
+## outside now: reported as let_go, for the holder to make it a stray. Aboard
+## nothing is in space; homed to its reel or stowed, it is not loose.
+func _report_if_outside(it: Item) -> void:
+	if is_instance_valid(it) and it.in_space and it.state == Item.State.LOOSE:
+		let_go.emit(it)
 
 ## The free stow point a drop would put the held item in: the fitting one
 ## nearest where you are looking, within STOW_RANGE of it. Null if none.

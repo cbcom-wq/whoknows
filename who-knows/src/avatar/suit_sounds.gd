@@ -1,14 +1,16 @@
 class_name SuitSounds
 extends Node
 
-## What you hear inside your helmet on a spacewalk (docs/superpowers/specs/
-## 2026-09-24-airlock-design.md §6): your own slow breathing, the soft puff of
-## your thrusters while they fire, and a chime the moment your ship starts
-## moving or turning hard enough to leave you. On the Suit bus, which no
-## pressure touches: space itself is silent.
+## What you hear inside your helmet outside -- on a spacewalk, or on foot on a
+## world (docs/superpowers/specs/2026-09-24-airlock-design.md §6; desert world
+## spec §5.5): your own slow breathing, the soft puff of your thrusters while
+## they fire, and a chime the moment your ship starts moving or turning hard
+## enough to leave you. On the Suit bus, which no pressure touches: space
+## itself is silent.
 ##
 ## The same chime warns as the suit's cell falls below 25 and again below 10
-## (quantum energy spec §9), once each time it crosses.
+## (quantum energy spec §9), once each time it crosses -- on a spacewalk only:
+## on a world the thrusters are off and the cell runs nothing out.
 ##
 ## The hose adds two more (quantum energy spec §13): a draw loop while the
 ## nozzle you hold is pulling, and a gulp when it swallows something (the
@@ -49,9 +51,10 @@ func _physics_process(_delta: float) -> void:
 func tick() -> void:
 	if _avatar == null:
 		return
-	var out := _avatar.mode == Avatar.Mode.SUIT
+	var out := _avatar.is_outside()
+	var floating := _avatar.mode == Avatar.Mode.SUIT
 	_loop(_breath, out, &"breath")
-	_loop(_thruster, out and _avatar.thrusting, &"thruster_puff")
+	_loop(_thruster, floating and _avatar.thrusting, &"thruster_puff")
 	var drawing := out and _avatar.grasp.holding and _avatar.grasp.item != null \
 		and _avatar.grasp.item.use_node is HoseNozzle
 	_loop(_hose, drawing, &"hose_draw")
@@ -63,7 +66,7 @@ func tick() -> void:
 	if alarm and not _alarm:
 		_play_chime()
 	_alarm = alarm
-	var level: StringName = _avatar.suit_cell.level() if out else &"ok"
+	var level: StringName = _avatar.suit_cell.level() if floating else &"ok"
 	if CHIME_LEVELS.has(level) and _LEVEL_RANK[level] > _LEVEL_RANK[_level]:
 		_play_chime()
 	_level = level

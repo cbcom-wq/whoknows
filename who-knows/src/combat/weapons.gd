@@ -57,7 +57,7 @@ static func usable(node: Node) -> bool:
 		return false
 	if node is Npc and (node as Npc).is_dead():
 		return false
-	if node is Avatar and (node as Avatar).mode != Avatar.Mode.SUIT:
+	if node is Avatar and not (node as Avatar).is_outside():
 		return false
 	if node is Item and (node as Item).state != Item.State.LOOSE:
 		return false
