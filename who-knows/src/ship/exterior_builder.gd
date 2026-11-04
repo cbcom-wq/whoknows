@@ -16,6 +16,13 @@ extends Node3D
 ## without it the windshield would render the inside of the ship's own
 ## blocks instead of the space beyond them.
 const OWN_HULL_LAYER := 4
+## Render layer 5, "own_hull_seen_inside": the part of your own hull every
+## window shows too (2026-11-03: from the Warden's bridge its heavy turret
+## floated on nothing). The skin's pieces that wrap the cabin -- in, or facing
+## into, a cell the interior shows as room or glass (HullLayout.cabin) -- stay
+## off it, as do the windows, the lenses and the alcoves: from inside they
+## would stand between the eye and the glass.
+const SEEN_INSIDE_LAYER := 16
 
 @export var body_path: NodePath
 

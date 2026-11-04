@@ -288,6 +288,16 @@ func test_the_canopy_view_can_include_the_own_hull():
 	assert_ne(cam.cull_mask & ExteriorBuilder.OWN_HULL_LAYER, 0)
 	assert_ne(cam.cull_mask & 1, 0, "and still the world")
 
+## Your hull beyond the cabin shows through every window, airlock or not (the
+## owner, 2026-11-03: the Warden's heavy turret floated on nothing).
+func test_the_canopy_view_shows_the_hull_beyond_the_cabin():
+	var portal: CanopyPortal = _root.get_node("Ship/CanopyPortal")
+	var cam: Camera3D = _root.get_node("Ship/Canopy/CanopyCam")
+	var viewer: Camera3D = _root.get_node("Ship/Interior/Avatar/Head/Camera3D")
+	portal.include_hull = false
+	portal.sync(viewer)
+	assert_ne(cam.cull_mask & ExteriorBuilder.SEEN_INSIDE_LAYER, 0)
+
 
 ## Flight controls spec §3, §7: the pilot's controls, read back at runtime.
 func test_pilot_controls_survived_the_parse():

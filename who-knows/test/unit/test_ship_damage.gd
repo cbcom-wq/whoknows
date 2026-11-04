@@ -217,14 +217,15 @@ func _all_near(colours: PackedColorArray, want: Color) -> bool:
 func test_every_tinted_skin_vertex_belongs_to_one_cell():
 	var eb := _ship.exterior_builder
 	var owners := {}   # ArrayMesh -> PackedInt32Array, how many cells claim each vertex
-	for kit in ["Hull", "Windows"]:
+	for kit in ["Hull", "Cabin", "Windows"]:
 		for batch in HullDressing.TINTED:
 			var mi := eb.get_node_or_null("Skin/%s/%s" % [kit, InteriorKit.BATCH_NAMES[batch]]) as MeshInstance3D
 			if mi != null:
 				var counts := PackedInt32Array()
 				counts.resize((mi.mesh as ArrayMesh).surface_get_array_len(0))
 				owners[mi.mesh] = counts
-	assert_eq(owners.size(), 5, "the plating and trim, and the windows' plating, trim and glass")
+	assert_eq(owners.size(), 7,
+		"the plating and trim seen from inside and wrapping the cabin, and the windows' plating, trim and glass")
 	for cell: Vector3i in _ship.grid.coords():
 		for span: Array in eb.skin_spans(cell):
 			var counts: PackedInt32Array = owners[span[0]]

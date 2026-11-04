@@ -211,6 +211,9 @@ Do these in order. Each one names the check that proves it.
      build, the QE refill button under it once it is lifted, and whether the button fills the
      store (`NOT FOUND`, `NOT FULL`). It writes `probe_toilet_shut.png` and
      `probe_toilet_open.png`;
+   - **your own hull through your windows:** the `seen` line counts the skin seen from inside and
+     flags any of it `IN THE CABIN` (a cabin cell, or the block over one), where it would stand
+     between the eye and the glass;
    - the droid's dock and its jobs, flagging any `UNREACHABLE`;
    - **the turrets:** a `turret` line each (`turret  Turret_0_2_0 turret_light at (0, 2, 0), sky
      100%`), or `turret  none`. Read the sky: under 25% is `TURRET_BLIND`, and the Warden's
@@ -228,7 +231,9 @@ Do these in order. Each one names the check that proves it.
 10. **Render and show the owner:** eye-height (1.6 m) views of the bridge, the seated view, the
    corridor, each room and the exterior, plus an outside view with each RCS axis firing (every
    block's puffs should show). Cycle the airlock both ways, look out of the windows, and hold
-   ≥120 fps at 1280×720. **The hull views** (the probe writes them): two quarters (bow port,
+   ≥120 fps at 1280×720. **Look out of every seat's glass at your own ship:** the hull beyond the
+   cabin shows (the bow under a turret, the flanks past a band), and nothing of it blocks the
+   glass. **The hull views** (the probe writes them): two quarters (bow port,
    stern starboard), the profile, above and below, fill-lit to judge the shape and **dark with the floods, the forward
    lights and both on** to judge the lights; and the ship **by a big rock's night side**, nose on
    with the seat's view and belly down over it. The worst view is seated by the rock with both
@@ -416,6 +421,8 @@ thrust.
 | A `static var` in `flight_test.gd` | Godot 4.5.1 crashed at exit (0xC0000005 after the leak report) on every `fleet_play.gd`, though the run was ALL OK | A tree meta (`back_to_save`). Watch the exit code |
 | Reading fps on a busy machine | The 2026-11-02 probe read a second ship 300 m off at 104 (Lamplighter) and 109 (Warden), taken for a regression. It was the machine: browsers, then a Vite dev server on 2 cores. A fixed `sin()` loop timed beside the game slowed with the frame rate (2.05 ms at 118 fps, 2.47 at 90), bodies and pairs held, and `main` dipped the same way | Before a fps reading, check total CPU (`typeperf "\Processor(_Total)\% Processor Time"`) is a few percent. A one-ship reading under the ship's usual figure means the run is void. Only then compare branches, interleaved |
 | A knock on the avatar's head | Seated, `CameraDirector` hangs the camera from the seat's eye, so a head shake never reaches the view | The knock is on the camera (`Avatar.knock`, rotation.z and h/v offset); the gun camera has its own (`WeaponsJob.knock`) |
+| A turret drawn on layer 1 while its own hull was hidden from inside | From the Warden's bridge the owner saw the heavy turret float on nothing (2026-11-03): every window left `OWN_HULL_LAYER` out, but turrets are on layer 1 | The skin beyond the cabin is on `ExteriorBuilder.SEEN_INSIDE_LAYER` too, which every window shows; only what wraps the cabin (`HullLayout.wraps_cabin`), the windows, lenses and alcoves stay own-only. Anything new outside the hull belongs on one side or the other: in front of the glass, own-only |
+| Taking the cabin's cells as the room in hull space | Drawing the hull through the Warden's glass showed the backs of its brow and roof fairings across the top: a 2.6 m storey reaches 0.6 m into the 2 m cell above, so the top of every window looks out through the block over it | `HullLayout.cabin` holds the block over each cabin cell too. Render a seated view through the glass, not only the `seen` line |
 | Projecting a world point to the screen from the helm | The eye camera is in the interior, 5 km down, so the point lands nowhere near the ship you see | Go through `aboard.canopy_camera`, and draw cockpit marks on `aboard.canopy_overlay`, not on a CanvasLayer |
 
 ## Not built yet (plan for it; don't assume it works)

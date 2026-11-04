@@ -398,7 +398,7 @@ pieces, all under `src/ship/` unless stated:
   `{"meshes": Array[Mesh], "lenses": {group: MeshInstance3D}, "window_glow": ShaderMaterial,
   "spans": {coord: [[ArrayMesh, from, to], ...]}, "surfaces": {ArrayMesh: arrays}}`. The meshes
   are the plating and trim (for the miniature). `spans` are each cell's runs of vertices in the
-  `TINTED` batches (`HULL`, `SOLID`, `GLASS` of `Skin/Hull` and `Windows`), noted with
+  `TINTED` batches (`HULL`, `SOLID`, `GLASS` of `Skin/Hull`, `Skin/Cabin` and `Windows`), noted with
   `InteriorKit.vertex_count(batch)` around each piece; `surfaces` are those meshes' arrays, kept
   by `InteriorKit.keep_arrays`. **Every piece belongs to one cell:** plates, chamfers and corners
   their record's `coord`, facets, nozzles and windows theirs, a pod shell its `cell`, a light
@@ -407,6 +407,21 @@ pieces, all under `src/ship/` unless stated:
   (`Skin/Hull/DressingHull`, `DressingSolid`; `Windows`; `Lens_flood`, `Lens_forward`) so its
   merged meshes keep their names. All on `ExteriorBuilder.OWN_HULL_LAYER` (4), light mask
   `1 | 4`.
+- **Your own hull through your windows** (2026-11-03): the skin is two kits. `Skin/Hull` is on
+  `OWN_HULL_LAYER | ExteriorBuilder.SEEN_INSIDE_LAYER` (16, render layer 5,
+  "own_hull_seen_inside"), which `CanopyPortal` always adds to the canopy camera's mask, so every
+  window shows your ship beyond the cabin (the Warden's bow under its heavy turret). `Skin/Cabin`,
+  `Windows`, the lenses and the alcoves are on `OWN_HULL_LAYER` alone, shown only from an open
+  airlock (`include_hull`). `HullLayout.cabin` is every walkable cell, the canopy cell each canopy
+  face looks through and each pod's cell, **and the block over each of them** (a 2.6 m storey
+  reaches 0.6 m into the 2 m cell above in hull space). `HullLayout.wraps_cabin(coord,
+  faces_of(record))` puts a piece in `Cabin` when its cell is in `cabin` or it faces into one
+  (a plate's or nozzle's normal, a chamfer's two, a corner's three, a shaped block's side face;
+  a slope's own face lies in its cell). `HullDressing._skin_for` is the one place that chooses.
+  `GridHome._apply_own` keeps the layers a piece was made on in meta `OWN_ONLY` and puts them
+  back when the ship is yours again (layer 1 when it is not). Cost, alternated in one run on a
+  busy machine (2026-11-03): the Warden seated at the helm 136.5 fps without it, 129.5 with it
+  (~0.4 ms, about what the chase view pays for the same hull); the starter 148.7 against 147.7.
 - **`ExteriorBuilder` accessors:** `layout()` (the `HullLayout`), `hull_meshes()`, `lenses()`,
   `window_glow()`, `light_mounts()`, `bounds()`, `alcoves()`, `collider_coords()`. Colliders are
   a box per cube cell, and one `ConvexPolygonShape3D` per `HullShapes.collider_parts` piece for
