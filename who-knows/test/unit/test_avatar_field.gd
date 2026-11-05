@@ -426,6 +426,30 @@ func test_a_thing_thrown_on_foot_leaves_the_hands_layer():
 	assert_eq(crate.state, Item.State.LOOSE, "thrown")
 	_assert_on_the_world_layer(crate)
 
+## Task 15 N3: every visual part of a thing goes with it, not only its look --
+## a flare's flame and its light, which Item.set_space never rebuilds. Taken
+## outside they go onto the hands' layer; dropped, none is left there.
+func test_a_flare_taken_and_dropped_outside_leaves_nothing_on_the_hands_layer():
+	_lone()
+	_field()
+	var flare := Item.new()
+	flare.setup(ItemCatalog.load_from_dir().get_def(&"flare"))
+	_world.add_child(flare)
+	flare.global_position = _avatar.global_position + Vector3(0, 1.0, -1.0)
+	flare.set_space(true)
+	flare.set_loose()
+	assert_true(_avatar.grasp.take(flare), "hands work on the ground")
+	var parts := flare.find_children("*", "VisualInstance3D", true, false)
+	assert_gt(parts.filter(func(n: Node) -> bool: return n is Light3D).size(), 0, "it has its light")
+	for node in parts:
+		assert_eq((node as VisualInstance3D).layers, Avatar.HANDS_LAYER, "in hand, %s on the hands' layer" % node.name)
+	_avatar.grasp.drop()
+	assert_eq(flare.state, Item.State.LOOSE, "let go")
+	for node in flare.find_children("*", "VisualInstance3D", true, false):
+		var layers := (node as VisualInstance3D).layers
+		assert_eq(layers & Avatar.HANDS_LAYER, 0, "dropped, %s is off the hands' layer" % node.name)
+		assert_ne(layers & Item.SPACE_LAYER, 0, "dropped, %s is on the world's layer" % node.name)
+
 func _crate_in_hand_on_foot() -> Item:
 	_lone()
 	_field()

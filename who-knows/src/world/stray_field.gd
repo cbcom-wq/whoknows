@@ -121,7 +121,7 @@ func pull(delta: float) -> void:
 			continue
 		var up := gravity.up_at(p)
 		var altitude := gravity.altitude_at(p)
-		if not up.is_zero_approx() and altitude < 0.0:
+		if not up.is_zero_approx() and altitude < -WorldSurface.FLOOR_SLACK:
 			_onto_ground(item, up, altitude)
 			_calm.erase(id)
 			continue

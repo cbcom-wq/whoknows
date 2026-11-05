@@ -214,6 +214,47 @@ func test_a_landed_ship_given_a_level_or_downward_hold_stays_landed():
 	m._physics_process(1.0 / 60.0)
 	assert_eq(m.state, LandingMonitor.State.LANDED, "no hold")
 
+## Task 15 N1, in the flight scene: the starter landed on a world and handed a
+## 1 m/s climb with the stick centred (as its pilot flies it) rises off the
+## ground within 3 s. The flight computer's hold stands down on the ground only
+## for what leaves it landed (LandingMonitor.translating), so it climbs with
+## the hold behind it, not against its own weight.
+func test_a_landed_starter_given_a_1_m_s_climb_rises_off_within_3_s():
+	var root: Node = load("res://scenes/flight_test.tscn").instantiate()
+	add_child_autofree(root)
+	await wait_physics_frames(3)
+	root.reload = func() -> void: pass
+	var ship: Ship = root.get_node("Ship")
+	var universe: Universe = root.get_node("Universe")
+	var system: SystemRecipe = root.system
+	var planet: SystemBody = system.planets()[0]
+	for p in system.planets():
+		if p.radius > planet.radius:
+			planet = p
+	root.hop_index = system.bodies.find(planet) - 1
+	assert_true(root.hop(1))
+	await wait_physics_frames(2)
+	var surface: WorldSurface = (root.star_system.proxy(planet.id) as BodyProxy).surface()
+	var centre := universe.to_engine(planet.point)
+	var up := (ship.exterior.global_position - centre).normalized()
+	var along := up.cross(Vector3.UP).normalized()
+	ship.exterior.global_transform = Transform3D(Basis(along, up, along.cross(up).normalized()),
+		centre + up * (planet.radius + surface.terrain.height_at(up) + ship.stance_depth() + 0.02))
+	ship.exterior.linear_velocity = Vector3.ZERO
+	ship.exterior.angular_velocity = Vector3.ZERO
+	ship.flight_computer.assist_enabled = true
+	ship.landing.restore_landed()
+	await wait_physics_frames(10)
+	assert_true(ship.landing.is_landed(), "landed")
+	var fc := ship.flight_computer
+	var start := fc.keel_altitude()
+	fc.hold_velocity(up * 1.0)
+	var rose: bool = await wait_until(func() -> bool: return fc.keel_altitude() > start + 0.5, 3.0)
+	var rise := fc.keel_altitude() - start
+	fc.release_velocity()
+	assert_true(rose, "risen %.2f m off the ground in 3 s (state %s)" % [rise, LandingMonitor.State.keys()[ship.landing.state]])
+	assert_false(ship.landing.is_landed(), "lifted off")
+
 func test_the_status_strings():
 	var m := LandingMonitor.new()
 	autofree(m)

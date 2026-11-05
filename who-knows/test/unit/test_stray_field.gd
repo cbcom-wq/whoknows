@@ -141,6 +141,26 @@ func test_a_stray_below_the_ground_is_lifted_onto_it():
 	assert_almost_eq(_gap(item), 0.0, 0.001, "lying on the ground")
 	assert_eq(item.linear_velocity, Vector3.ZERO)
 
+## Task 15 N2: on a crest the ground's collider is a chord under the analytic
+## ground (WorldSurface.FLOOR_SLACK covers it), so a thin stray lying on it has
+## its middle a few centimetres under altitude 0. It is lying on the ground,
+## not under it: it rests and freezes there, not lifted 8 cm proud of it.
+func test_a_thin_stray_on_a_crest_rests_on_the_collider_not_over_it():
+	_slab(BodyProxy.LAYER, -0.08)
+	await wait_physics_frames(1)
+	var item := Item.new()
+	item.setup(_catalog.get_def(&"scrap_plate"))
+	item.set_space(true)
+	item.set_loose()
+	add_child(item)
+	item.global_position = Vector3(0, -0.08 + item.definition.size.y * 0.5 + 0.005, 0)
+	_field.adopt(item)
+	assert_lt(_gap(item), 0.0, "its underside under the analytic ground, on the collider")
+	await _settle(StrayField.REST_TIME + 1.5)
+	assert_true(item.freeze, "frozen, lying on the ground")
+	assert_almost_eq(_gap(item), -0.08, 0.02, "on the collider (%.3f m), not lifted onto the analytic ground" % _gap(item))
+	assert_almost_eq(StrayField.ON_GROUND, 0.25, 0.001)
+
 ## Final review T9a: a stray saved mid-fall loads where it was, falls, and
 ## comes to rest on the ground -- never frozen in mid-air. No ground collider
 ## here, as on a load far from every anchor: it ends on the analytic ground.

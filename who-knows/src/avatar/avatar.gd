@@ -300,10 +300,15 @@ func _on_item_taken(item: Item, _from: Transform3D) -> void:
 
 ## Let go of outside in any way (dropped, thrown, stowed, home to its reel), a
 ## thing leaves your hands' layer for the world's: Item.set_space rebuilds its
-## look there, so the head lamp's beam lights it where it lies.
+## look there, so the head lamp's beam lights it where it lies. Every visual
+## part still on HANDS_LAYER (a flare's flame and glow, which set_space does
+## not rebuild) goes to the world's layer too (Task 15, N3).
 func _on_item_released(item: Item) -> void:
 	if is_outside() and is_instance_valid(item):
 		item.set_space(true)
+		for node in item.find_children("*", "VisualInstance3D", true, false):
+			if (node as VisualInstance3D).layers == HANDS_LAYER:
+				(node as VisualInstance3D).layers = Item.SPACE_LAYER
 
 func _on_swallowed(label: String, value: int) -> void:
 	toast.emit("+%d QE · %s" % [value, label])
