@@ -382,7 +382,12 @@ func _watch_legs(legs: LandingLegs, seen: Dictionary) -> void:
 	if not bool(seen["halfway"]) and legs.progress() >= 0.5:
 		seen["halfway"] = true
 		legs.set_process(false)
-		await _hull_shot("legs_halfway", _starter, Vector3(13.0, -3.0, -11.0), Vector3(0.0, -2.5, 0.0))
+		# From the sun's side, 35 deg round from it, level with the hull's
+		# middle and looking down past the belly, so the legs stand against
+		# the sand, not the sky.
+		var sunward := _sunward(_starter).rotated(Vector3.UP, deg_to_rad(35.0))
+		await _hull_shot("legs_halfway", _starter, sunward * 15.0,
+			Vector3(0.0, -_starter.stance_depth(), 0.0))
 		print("        ★ its legs %.0f%% of the way out at %.0f m, folding out about the hinge, then the knee" % [
 			legs.progress() * 100.0, alt])
 		legs.set_process(true)
@@ -418,16 +423,31 @@ func _stands_on_its_legs(ship: Ship) -> void:
 		", ".join(feet), keel, rad_to_deg(ship.landing.tilt())])
 	print("        the belly turret's look reaches %.2f m over the ground (negative: into it)" % dome)
 	await _ground_shot("legs_landed", ship, Vector3(17.0, 0.0, 18.0), EYE, Vector3(0.0, -1.5, 0.0))
-	print("        ★ the landed starter on its legs from %.0f m at eye height" % _flat(_cam.global_position - hull.origin).length())
+	var up := _up(hull.origin)
+	var off := _cam.global_position - hull.origin
+	print("        ★ the landed starter on its legs from %.0f m at eye height" % (off - up * off.dot(up)).length())
 	var plan_legs := legs.legs
 	var fore_starboard: Dictionary = plan_legs[0]
 	for leg in plan_legs:
 		if int(leg["side"]) > 0 and int(leg["end"]) < 0:
 			fore_starboard = leg
+	# Inboard of the forward starboard foot and ahead of it, 0.55 m up,
+	# looking aft under the starboard half of the belly: the near foot left
+	# of the middle (starboard is on the left looking aft), the aft one beyond
+	# it, the keel strip 0.4 m off the sand on the right, and the light past
+	# the stern. The aim is a little outboard, so the key card does not
+	# cover the near foot.
 	var f: Vector3 = fore_starboard["foot"]
-	await _ground_shot("legs_under_the_belly", ship, f + Vector3(1.6, 0.0, -1.4), 0.55,
-		Vector3(-f.x * 0.6, -ship.stance_depth() + 1.0, -f.z))
-	print("        ★ low under the belly, from beside the forward starboard foot")
+	await _ground_shot("legs_under_the_belly", ship, f + Vector3(-1.5, 0.0, -2.7), 0.55,
+		Vector3(f.x + 1.5, -ship.stance_depth() + 1.4, f.z + 10.0))
+	print("        ★ low under the belly, from beside the forward starboard foot, looking aft")
+
+## The way to the sun, level, in `ship`'s hull axes (a unit vector, y 0).
+func _sunward(ship: Ship) -> Vector3:
+	var sun := _scene.get_node("DirectionalLight3D") as DirectionalLight3D
+	var d := ship.exterior.global_basis.inverse() * sun.global_basis.z
+	d.y = 0.0
+	return d.normalized() if d.length() > 0.01 else Vector3.RIGHT
 
 ## A camera outside at `offset` in `ship`'s hull axes from its hull, looking at
 ## `target` in them, for one render.
