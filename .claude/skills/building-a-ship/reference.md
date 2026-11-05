@@ -1043,10 +1043,11 @@ its outer hatch when the plan wants one and nothing is in its way. A blueprint p
 
 | What | Value | Where |
 |---|---|---|
-| Wants one | a horizontal outer hatch whose sill is over `Airlock.HATCH_STEP` (0.45 m) above the keel's plane; at or under it, a step; facing up or down, none: not boardable | `LandingRamp.need` |
-| The way up | `STEP`; `RAMP` when one is wanted and nothing is in its way; else `AirlockAlcove.NONE`, and the airlock refuses the step out on a world (`No ramp · 4 m drop`). Kept on the alcove as `way_up` with its `hatch_plan`. Starter and Lamplighter `RAMP`, Warden `NONE` | static `AirlockAlcove.way_up_for(plan)` |
-| The sill | `floor_y(at) - storey_offset(at.y) + Ship.keel_depth_of(grid)`: 2.05 m on the starter and the Lamplighter, 4.05 m on the Warden | `ramp_plan` |
-| Length | sill / sin 30°: 4.10 m for 2.05 m | `length_for`, `SLOPE` |
+| Wants one | a horizontal outer hatch whose sill is over `Airlock.HATCH_STEP` (0.45 m) above the stance plane (the ground the ship stands on: its legs' feet, `Ship.stance_depth`); at or under it, a step; facing up or down, none: not boardable | `LandingRamp.need` |
+| The way up | `STEP`; `RAMP` when one is wanted and nothing is in its way; else `AirlockAlcove.NONE`, and the airlock refuses the step out on a world (`No ramp · 4 m drop`). Kept on the alcove as `way_up` with its `hatch_plan`. Every library ship `RAMP` (the Warden since its forward retros moved, 4f27cde) | static `AirlockAlcove.way_up_for(plan)` |
+| The sill | `floor_y(at) - storey_offset(at.y) + stance`, the stance `Ship.stance_depth_of(grid)` by default (the keel plus `LandingLegs.CLEARANCE` 0.4 when legs fit) or the builder's, passed in: 2.45 m on the starter and the Lamplighter, 4.45 m on the Warden (2.05 and 4.05 over the keel) | `ramp_plan(layout, at, stance := -1.0)` |
+| Length | sill / sin 30°: 4.90 m for 2.45 m, 8.90 m for 4.45 m | `length_for`, `SLOPE` |
+| Path | every cell the sample points fall in, block or none, the airlock's own aside: the landing legs keep out of them and the cells beside them | `ramp_plan`'s `path` |
 | Angle | asin((sill + drop) / length), from a ray (`BodyProxy.LAYER`) to the ground under the tip, then a second ray where that puts the tip; clamped 15°–38°, under the avatar's 45° `floor_max_angle` less 5°. With no ground found it is 30° and retried every 0.5 s while down; after an instant deploy, every physics tick for the first `SETTLE_EAGER` 1 s, since a loaded game's ground colliders come a tick or two later | `angle_for`, `settle`, `LEAST`, `MOST`, `SETTLE_EVERY`, `SETTLE_EAGER` |
 | In the way | the cells `sample_points` (across the width, top and underside, from 0.25 m out) fall in that hold a block, the airlock's own cell aside: no ramp is built | `ramp_plan`'s `through` |
 | Frame | on the hatch's plane at the sill, mid-doorway, +z out, +y up | `AirlockAlcove.hinge_frame` |
@@ -1063,15 +1064,53 @@ snaps you to the floor within reach (`Avatar._stepping_out`). It is under the ex
 floating origin carries it.
 
 - **Probe lines:** `ship_probe.gd` and `ship_check.gd` print one per airlock: `ramp    airlock
-  (0, 0, 3): ramp: 2.05 m, 4.10 m at 30°` (the starter), `step (sill … m over the keel)`, or
-  `… — NOT BOARDABLE ON A WORLD` with the blocks in the way. The probe adds `<-- NOT BUILT` if
-  the alcove disagrees with the plan (`way_up_for(plan) == LandingRamp.RAMP`).
+  (0, 0, 3): ramp: 2.45 m, 4.90 m at 30°` (the starter; the Warden's `4.45 m, 8.90 m`), `step
+  (sill … m over the ground it stands on)`, or `… — NOT BOARDABLE ON A WORLD` with the blocks in
+  the way. The probe adds `<-- NOT BUILT` if the alcove disagrees with the plan
+  (`way_up_for(plan) == LandingRamp.RAMP`).
 - **Proof:** `test_landing_ramp.gd` (the geometry; down about 2 s after LANDED with its top at
-  the sill and its tip on the ground; a liftoff stows it; from its foot you walk up and in; out of
-  the hatch you walk down it on your feet; a save
+  the sill and its tip on the ground; a liftoff stows it; from its foot you walk up and in within
+  12 s; out of the hatch you walk down it on your feet; a save
   loaded landed, gravity late and a rebuild all have it down at once);
   `test_floating_origin_scene.gd`'s ramp case; `test/probes/landing_play.gd` steps 3, 5, 7 and 8,
   windowed, with renders halfway, down from 25 m, and up the ramp from its foot.
+
+## Landing legs (desert world phase 0, Task 15; `src/ship/landing_legs.gd`)
+
+`Ship.set_grid` sets `ExteriorBuilder.leg_plan` to `LandingLegs.plan` of the launch layout; every
+rebuild builds a `LandingLegs` (one node, all four legs) for each planned mount the hull still has,
+so a mount lost to damage takes its leg. A blueprint places nothing; a base's builder has no plan
+and stands on its keel.
+
+| What | Value | Where |
+|---|---|---|
+| Where | one per quadrant (fore/aft × port/starboard of the footprint's middle; a cell on a middle line is none), the best by how far out toward its corner it is (the nearer edge first, then the sum, then the shorter leg); a mirrored pair when every cell has a twin across the middle, else each quadrant on its own | `plan(layout) -> Array[Dictionary]` `{cell, foot, length, side, end}` |
+| A mount | a whole, open bottom face (`HullShapes.covers(…, DOWN)`), above the keel's plane, not an airlock or a turret; its column (mount down to the foot's cell) through no block, no ramp `path` cell or a cell beside one (±x, ±z), and no cell at, beside (±1 on any axis) or under an engine (`thruster`) or an `rcs` pushing up (exhaust down) | `_mount`, `keep_clear`, `ramp_paths`, `column` |
+| Length | the mount's bottom face to the stance plane, at most `MOST_LENGTH` 4.0 m; 2.40 m on every library leg | `length` |
+| Stance | the keel plus `CLEARANCE` 0.4 m: 3.40 m under the origin on the starter and the Lamplighter, 5.40 m on the Warden. `Ship.stance_depth()` (the builder's, from its standing legs) feeds `FlightComputer.keel_depth`, so `keel_altitude()` is the feet's; `Ship.stance_depth_of(layout)` is the pure one `ramp_plan` defaults to | `Ship.stance_depth`, `ExteriorBuilder.stance_depth` |
+| Library picks | starter (±2, 0, ±2), feet ±4.0 m across and ±3.81 m along, mirrored; Lamplighter fore (±4, 0, −5) (its retro RCS), aft (±1, 0, 1), feet ±2 m across: its ramp's path at x −6 m and the downward RCS at (±2, 0, 3) keep the aft pair inboard; Warden fore (±1, −1, −7), aft (±3, −1, 3) | `ship_check`'s `legs` line |
+| When | `wanted(was_down, on_world, landed, keel_altitude)`: landed, down; off a world, up; under `DOWN_BELOW` 40 m, down; over `UP_ABOVE` 60 m, up; between, as they were. A hostile's never come down. `Ship._legs_wanted` keeps the hysteresis across rebuilds | `Ship._sync_legs` (every physics tick, on a landing change, after every rebuild) |
+| At once | a restored landing (a save, a ship woken) and a hull rebuild: no travel | `_sync_legs(instant)`, `LandingMonitor.restored` |
+| Travel | `TRAVEL` 1.5 s: to `FOLD_TIME` 0.8 s the upper leg folds out about its hinge to `SPLAY` 70° with the lower folded along it, then the knee opens until the lower points straight down; the ramp's `hatch_motor` at −7 dB, pitch 0.8, at the start | `pose(length, t)`, `SOUND_DB`, `SOUND_PITCH` |
+| Frame | origin mid the mount's bottom face, +y up, +z along the hull toward the leg's end (the bow for a fore leg): a leg folds out toward its end | `frame(cell, end)` |
+| Shape | a hinge housing 0.66 × 0.2 × 0.42 m and barrel r 0.09 (TRIM); the upper leg two arms 0.14 × 0.25 m at x ±0.21 (PLATE) with the lower folding between them; a knee knuckle r 0.14 in `PANEL_LINE` (the one accent, as the ramp's treads); a 0.25 m square lower strut (PLATE); a level pad 0.6 × 0.08 × 0.6 m with a 0.36 m boss (TRIM). Upper = lower + 0.15: 1.20 and 1.05 m for a 2.4 m leg. Stowed it lies within 0.345 m of the bottom face. `HullMaterials.trim()`, `OWN_HULL_LAYER`, shadows on; four meshes a leg | `_draw_*`, `parts_for`, `hinge_local`, `foot_local` |
+| Colliders | three boxes a leg on the hull body (layer 1): the pad 0.6 × 0.3 × 0.6 m up from the foot, the strut, the upper leg; meta `cell` the mount (a hit lands on it). On only once fully down, off the moment they start up. The hull touches down on them, and `LandingMonitor` reads the contact through them | `colliders`, `_make_colliders` |
+| Asking | `is_down()`, `is_stowed()`, `progress()`, `feet()` (each pad's underside, in the world), `legs`, `colliders`, `state` | `LandingLegs` |
+
+They are under the hull's `ExteriorBuilder`, so the floating origin carries them with the hull.
+
+- **Probe lines:** `ship_check.gd` prints `legs    4: fore port (-2, 0, -2) 2.40 m, fore starboard
+  (2, 0, -2) 2.40 m, aft port (-2, 0, 2) 2.40 m, aft starboard (2, 0, 2) 2.40 m; feet 3.40 m under
+  the origin (keel 3.00 + 0.40)` (the starter; `LandingLegs.plan_words`), with `<-- ONLY n FIT`
+  under four. `ship_probe.gd` adds `, stance 3.40 m` and `<-- NOT BUILT AS PLANNED` if the hull's
+  legs are not the plan's, or not stowed with their colliders off in space.
+- **Test placement:** put a ship on the ground by `stance_depth()`, not `keel_depth()`, and wait
+  for `legs().is_down()` before it descends, or it lands on its keel with the legs still folding.
+- **Proof:** `test_landing_legs.gd` (the plan on all three ships, the stance, `wanted`, the
+  pose; in the flight scene: down under 40 m with colliders on, landed with the hull's lowest
+  collider 0.39 m clear and level within 1°, up over 60 m, never on a hostile, a save loaded
+  landed with them down on the first frame, every foot on the ground across a floating-origin
+  shift); `landing_play.gd` steps 1, 3 and 8, with four ★ renders.
 
 ## The hose (`docs/superpowers/specs/2026-09-24-quantum-energy-design.md` §11, *As built* §11.5)
 

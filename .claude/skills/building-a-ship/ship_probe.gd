@@ -27,8 +27,10 @@ extends SceneTree
 # a face line (the face a pilot shows, and how many turrets bear on it),
 # a hose line per airlock (its alcove's reel, and the nozzle stocked on it),
 # a lift line (vertical thrust over mass, and its margin against a 7 m/s2 world),
-# and a ramp line per airlock (its landing ramp: a step, the ramp's sill,
-# length and angle, or NOT BOARDABLE ON A WORLD).
+# a ramp line per airlock (its landing ramp: a step, the ramp's sill over the
+# plane its legs stand on, length and angle, or NOT BOARDABLE ON A WORLD),
+# and a legs line (LandingLegs.plan's: how many fit, 4 wanted, each mount and
+# length; NOT BUILT if the hull's legs are not the plan's).
 # Then a two-ship pass (docs/superpowers/specs/2026-10-02-many-ships-design.md
 # §8.2): fps in the worst view with a second ship 300 m off,
 # probe_fleet_from_starter{,_dark}.png, F8 to its helm, probe_fleet_from_second
@@ -578,6 +580,15 @@ func _run(scene: Node) -> void:
 		var built := is_instance_valid(lock.alcove) and lock.alcove.ramp != null
 		print("ramp    airlock %s: %s%s" % [coord, AirlockAlcove.ramp_words(plan),
 			"" if built == wanted else ("  <-- NOT BUILT" if wanted else "  <-- BUILT IN THE WAY")])
+	# Landing legs (desert world phase 0, Task 15): the plan's four, built on the
+	# hull, stowed in space with their colliders off; the ramps above are
+	# measured to their feet (Ship.stance_depth).
+	var leg_plan := LandingLegs.plan(ship.grid)
+	var built_legs := ship.exterior_builder.legs()
+	var legs_ok := built_legs != null and built_legs.legs.size() == leg_plan.size() and built_legs.is_stowed() \
+		and built_legs.colliders.all(func(c: CollisionShape3D) -> bool: return c.disabled)
+	print("legs    %s, stance %.2f m%s" % [LandingLegs.plan_words(ship.grid, leg_plan), ship.stance_depth(),
+		"" if legs_ok or leg_plan.is_empty() else "  <-- NOT BUILT AS PLANNED"])
 	# The skin (ship exterior spec §3): every interior window must have one outside
 	# and none may be UNMATCHED; the lights are the generator's, 5 floods and 2
 	# forward on the starter.

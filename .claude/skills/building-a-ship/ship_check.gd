@@ -9,8 +9,10 @@ extends SceneTree
 # each rule broken, with its cell, then the notes, then a lift line (vertical
 # thrust over mass, against a 7 m/s2 world), then a ramp line per airlock
 # (its landing ramp, or NOT BOARDABLE ON A WORLD: AirlockAlcove.way_up_for says
-# NONE, and that airlock refuses the step out on a world); exits 0 when no rule is
-# broken, and 1 when one is or the file will not load.
+# NONE, and that airlock refuses the step out on a world), measured over the
+# plane its landing legs stand on, then a legs line (how many fit -- 4 wanted,
+# ONLY n FIT under that -- each mount and length, and the feet's plane); exits 0
+# when no rule is broken, and 1 when one is or the file will not load.
 
 func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
@@ -50,4 +52,8 @@ func _initialize() -> void:
 			var words := "no outer hatch (it cannot cycle)" if AirlockSite.hatch_normal(grid, c) == Vector3i.ZERO \
 				else AirlockAlcove.ramp_words(AirlockAlcove.ramp_plan(grid, c))
 			print("ramp    airlock %s: %s" % [c, words])
+	# Landing legs (desert world phase 0, Task 15): four, one per quadrant, clear
+	# of every ramp's path and every engine and downward thruster; their feet set
+	# the plane the ramps above are measured to. Not a rule: printed.
+	print("legs    %s" % LandingLegs.plan_words(grid, LandingLegs.plan(grid)))
 	quit(0 if found["rules"].is_empty() else 1)

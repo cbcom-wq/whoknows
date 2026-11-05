@@ -50,13 +50,23 @@ Do these in order. Each one names the check that proves it.
      walkable deck straight through on the opposite side, not a room. Its hull alcove gets the
      hose's reel and nozzle by itself (`AirlockAlcove.reel`): there is nothing to place.
    - **boardable on a world:** every horizontal outer hatch over 0.45 m (`Airlock.HATCH_STEP`)
-     above the keel has a ramp; none faces up or down. The ramp builds itself
+     above the ground it stands on (its legs' feet, 0.4 m under the keel: `Ship.stance_depth`)
+     has a ramp; none faces up or down. The ramp builds itself
      (`AirlockAlcove.ramp_plan`, `LandingRamp`): straight out of the hatch at 30°, `sill / sin 30°`
      long, so **keep the cells it comes down through empty**, below the outside cell too. The
      probe's and `ship_check`'s `ramp` line per airlock says `step`, `ramp: <sill> m, <length> m
      at <angle>°`, or `NOT BOARDABLE ON A WORLD` with the blocks in the way. A hatch with no way
      up (`AirlockAlcove.way_up_for(plan) == AirlockAlcove.NONE`) refuses the step out on a world
      (`No ramp · 4 m drop`): the ship can still land, but nobody leaves it there.
+   - **four landing legs** place clear of ramps and thrusters; `ship_check` prints `legs 4`.
+     They place themselves (`LandingLegs.plan`, desert world Task 15): one per quadrant, as far
+     out toward each corner as a mount allows, mirrored when the hull is. A mount is a cell with
+     a whole, open bottom face above the keel's plane (off the keel strip), not an airlock or a
+     turret, whose leg (at most 4 m) hangs through no block, no ramp's path or a cell beside it,
+     and nowhere under or beside an engine or an RCS block whose exhaust faces down. So **leave
+     such cells under the hull's outer edge**, fore and aft, port and starboard. Read the line:
+     `legs    4: fore port (…) 2.40 m, …; feet … m under the origin`; `ONLY n FIT` means the ship
+     stands crooked or on its keel.
    - room blocks (`bunk_room`, `galley`...) each touching walkable space for their doorway.
    - **the maintenance droid's needs** (NPC foundation spec §14), on any ship with 12 or more
      walkable cells: a `closet` for its dock (otherwise it docks in the walkable cell farthest
@@ -433,7 +443,7 @@ thrust.
 | A knock on the avatar's head | Seated, `CameraDirector` hangs the camera from the seat's eye, so a head shake never reaches the view | The knock is on the camera (`Avatar.knock`, rotation.z and h/v offset); the gun camera has its own (`WeaponsJob.knock`) |
 | Projecting a world point to the screen from the helm | The eye camera is in the interior, 5 km down, so the point lands nowhere near the ship you see | Go through `aboard.canopy_camera`, and draw cockpit marks on `aboard.canopy_overlay`, not on a CanvasLayer |
 | A hatch 2.05 m over the ground, tested by putting you in it | Landed on a world, the starter's sill is 2.05 m up (the keel row under the cabin) and a jump peaks at 0.89 m: nobody could get back in. The airlock world tests stood the avatar in the room, and `landing_play` put it in the doorway by hand when the walk-in failed, so the tests passed with no way in | Every horizontal outer hatch over `HATCH_STEP` gets a `LandingRamp` (desert world Task 14). Prove boarding from the ground on your feet, W held (`test_from_the_ramp_s_foot_you_walk_up_and_in`, `landing_play` step 7), never by placing the avatar; a fallback that carries a probe on must count as a failure |
-| A block under the outside cell | The Warden's sill is 4.05 m up and its ramp would come down through its own RCS block at (-4, -1, 2), so it has none: the Warden cannot be boarded on a world. As first built the hatch still let you out, a 4 m drop with no way back (final review I4) | `ramp_plan` names the blocks in the way and the alcove builds no ramp; `way_up_for` reads it as `NONE` and `Airlock.world_refusal` says `No ramp · 4 m drop` (`test_a_landed_warden_refuses_the_step_out_onto_a_drop`). Keep the ramp's path clear when you draw a ship; a library ship changes through the ship designer, never in passing |
+| A block under the outside cell | The Warden's sill was 4.05 m up and its ramp would have come down through its own RCS block at (-4, -1, 2), so it had none and could not be boarded on a world. As first built the hatch still let you out, a 4 m drop with no way back (final review I4). The ship designer moved the pods' forward retros two cells forward (4f27cde), and it has its ramp now | `ramp_plan` names the blocks in the way and the alcove builds no ramp; `way_up_for` reads it as `NONE` and `Airlock.world_refusal` says `No ramp · 4 m drop` (`test_a_landed_warden_with_its_ramp_s_path_blocked_refuses_the_step_out_onto_a_drop` puts a hull block back in its path). Keep the ramp's path clear when you draw a ship; a library ship changes through the ship designer, never in passing |
 | Stepping out of a hatch onto a slope | Crossing the threshold left the avatar with no floor contact, so it never snapped: out of the hatch at 4 m/s under 5.3 m/s² its arc stayed over the 30° ramp all the way and it landed at the foot, 0.5 m over the slab at worst (`landing_play` step 5). Snapping in `enter_field` itself, outside the physics step, broke `test_avatar_field`'s jump | `Avatar._stepping_out`: the first FIELD tick snaps to the floor within reach (`apply_floor_snap`) inside the step. `test_out_of_the_hatch_you_walk_down_the_ramp_on_your_feet` counts the ticks off your feet over the ramp |
 | Deciding a landed look once, on LANDED | A save restores LANDED before `_wire_ship` gives the ship its gravity, so `on_world()` was false that moment and the ramp would have stayed up on a loaded landed ship | `Ship._sync_ramps` runs every physics tick while landed, and `LandingMonitor.restored` makes it instant: `test_loaded_before_its_gravity_the_ramp_is_down_the_first_tick_it_has_it` |
 | Counting the vertical thrust one way | Counting the starter's lift one way gives 4.7 m/s². `thrust_budget[&"vertical"]` sums every vertical thruster in both directions (`reference.md`, *One quirk*), and the flight computer spends that sum as one central force | The starter's lift is **9.5 m/s²**, and that is what the gravity hold spends. Do not halve it. Read the `lift` line; `CANNOT_LIFT` needs `LIFT_MARGIN` (1.3) over a 7 m/s² world |
@@ -441,10 +451,12 @@ thrust.
 | Crash damage on touchdown | A 6 m/s touchdown on terrain dealt 665 hp, so landing hurt the hull and broke the "hard landing is a toast and a thud" rule | Terrain crashes from `Ship.TERRAIN_CRASH_FROM` (10 m/s); everything else from `CRASH_FROM` (2). The playtest probe checks block damage is 0.0 before and after touchdown |
 | A hatch-clear capsule that touches the keel's plane | The capsule's bottom sat 7.5 cm over the hull's ground, so a bump or the slope read "Hatch blocked" on a clear landing | The capsule's bottom is `Airlock.HATCH_STEP` (0.45 m) over the outer hatch floor, centre at floor + 1.35 m: ground a walker can step over does not block |
 | A save that thaws a landed ship | A landed ship asleep or saved loaded hovering | `hull.landed` is saved and carried through `Fleet`'s sleep and wake (`restore_landed`) |
-| Hands on their own layer, lit only by the lamp's fill | Outside, your hands and what they hold are on `Avatar.HANDS_LAYER` (8), which the head lamp leaves out so it does not blow them out. The sun's cull mask was 1\|4 and the floods' and alcove lights' `LIGHT_MASK` 1\|4, so in daylight the hands and a held crate were black against a sunlit world (final review I1); a thing taken outside stayed on layer 1 until the next mode change (M6) | Every light outside except the head lamp includes `HANDS_LAYER`: the sun (`flight_test.gd` sets `light_cull_mask \|= Avatar.HANDS_LAYER` in code, not the `.tscn`), `ShipLights.LIGHT_MASK`, `AirlockAlcove.LIGHT_MASK`; `_on_item_taken` puts a thing on the hands layer when you are outside. `test_the_sun_and_the_ships_lights_light_your_hands_and_the_lamp_does_not`; render the hands in daylight and under the lamp |
+| Hands on their own layer, lit only by the lamp's fill | Outside, your hands and what they hold are on `Avatar.HANDS_LAYER` (8), which the head lamp leaves out so it does not blow them out. The sun's cull mask was 1\|4 and the floods' and alcove lights' `LIGHT_MASK` 1\|4, so in daylight the hands and a held crate were black against a sunlit world (final review I1); a thing taken outside stayed on layer 1 until the next mode change (M6) | Every light outside except the head lamp includes `HANDS_LAYER`: the sun (`flight_test.gd` sets `light_cull_mask \|= Avatar.HANDS_LAYER` in code, not the `.tscn`), `ShipLights.LIGHT_MASK`, `AirlockAlcove.LIGHT_MASK`; `_on_item_taken` puts a thing on the hands layer when you are outside, and `_on_item_released` moves every visual part of it still on that layer back to `Item.SPACE_LAYER` (a dropped flare's light and glow, which `set_space` does not rebuild, stayed on 8: Task 15 N3, `test_a_flare_taken_and_dropped_outside_leaves_nothing_on_the_hands_layer`). `test_the_sun_and_the_ships_lights_light_your_hands_and_the_lamp_does_not`; render the hands in daylight and under the lamp |
 | A breach on a world, flying | `_on_blocks_lost` asked only `on_world()`, so a hole where you stood while flying over a world put you on foot (FIELD) in mid-air (final review I2) | On foot only when on a world **and** landed; otherwise the suit (`test_a_hole_where_you_stand_flying_over_a_world_is_a_spacewalk`) |
-| Freezing strays on any rest | A stray that came to rest on a landed hull or the ramp froze there, and hung in the air after liftoff; one saved on the ground loaded frozen wherever the ledger put it, and a stray below the ground stayed there (final review I3) | `StrayField` freezes only on terrain: a ray down under the stray must hit `BodyProxy.LAYER` first, within its half-height + `REST_REACH` 0.3 m. Below the ground it is put on it first; loaded, it freezes only within `ON_GROUND` 0.25 m of the ground, else it loads live and falls |
-| A climb that never lifts off | A pilot's velocity hold upward left a landed ship landed: only the stick's translation counted as translating (final review M1) | `LandingMonitor.translating` also counts a hold climbing over `HOLD_LIFTS` 0.5 m/s along up (`test_a_landed_ship_given_an_upward_hold_lifts_off`) |
+| Freezing strays on any rest | A stray that came to rest on a landed hull or the ramp froze there, and hung in the air after liftoff; one saved on the ground loaded frozen wherever the ledger put it, and a stray below the ground stayed there (final review I3) | `StrayField` freezes only on terrain: a ray down under the stray must hit `BodyProxy.LAYER` first, within its half-height + `REST_REACH` 0.3 m. Below the ground by more than `WorldSurface.FLOOR_SLACK` it is put on it first (the analytic ground and the collider part by up to that on a crest, so a thin plate resting on the collider was lifted off it: Task 15 N2, `test_a_thin_stray_on_a_crest_rests_on_the_collider_not_over_it`); loaded, it freezes only within `ON_GROUND` 0.25 m of the ground, else it loads live and falls |
+| A climb that never lifts off | A pilot's velocity hold upward left a landed ship landed: only the stick's translation counted as translating (final review M1). With that fixed the monitor let go, but `FlightComputer._resting_on_ground` still asked only the stick, so the gravity hold stayed off and the ship sat TOUCHING, 0.02 m down, for good (Task 15 N1) | `LandingMonitor.translating` also counts a hold climbing over `HOLD_LIFTS` 0.5 m/s along up, and it is the one home of "asked to move": `_resting_on_ground` calls it too (`test_a_landed_ship_given_an_upward_hold_lifts_off`, `test_a_landed_starter_given_a_1_m_s_climb_rises_off_within_3_s`) |
+| Landing on the keel strip | The starter landed on its keel strip and read as floating: its lowest cells are one 2 m row under the cabin, so from the ground the 10 m wide hull hung over the sand on nothing, with daylight under both flanks and the stern | Four `LandingLegs`, one per quadrant, stand the ship 0.4 m (`CLEARANCE`) under its keel's plane; the flight computer, the ramps and the touchdown all measure from that stance plane (`Ship.stance_depth`). Read the `legs` line of `ship_check` and render the landed ship from 25 m at eye height |
+| A belly turret under the stance plane | The starter's ventral turret is a cell on the keel row and its dome stands 0.755 m out of its face, so on 0.4 m legs its look sinks into flat sand (its meshes' lowest corner is 0.48 m under the feet, `landing_play` step 3). Its collider is the cell's and clears the ground by 0.39 m, so nothing hits; it only looks buried | Not fixed: `CLEARANCE` is the brief's 0.4 m, and clearing the dome by 0.3 m needs about 1.1 m. Owner's call: longer legs, or no turret on the keel row. `test_landing_legs` prints the turret look's lowest point |
 
 ## Not built yet (plan for it; don't assume it works)
 
@@ -456,17 +468,16 @@ thrust.
 - **Damage beyond the components** (the engines, core, computer, cockpit and each turret). RCS, cells, rooms and the airlock never break; a
   section's health changes only looks and pieces. No per-section effect on flight, no repairing
   a section from inside, no droid repairing the ship.
-- **Landing gear.** Ships feel a world's pull, hover, level and land (`LandingMonitor`), you step
-  out and walk, and a high hatch gets a landing ramp (desert world phase 0). The hull rests on its
-  keel: there are no legs or skids, and a hard landing is a warning and a thud with no damage yet.
-  Do not give a ship legs or skids that assume they hold it up.
-- **The Warden is not boardable on a world** (a known gap, desert world Ruling 14). Its outer
-  hatch is 4.05 m over the keel, so its ramp is 8.1 m long and would come down through its own
-  RCS block at (-4, -1, 2); no ramp is built, and `ship_check` prints `NOT BOARDABLE ON A WORLD`.
-  You can land it and step out, but not walk back in. The fix is a reshape through the
-  `ship-designer` agent (move that block or the airlock), after the desert-world branch merges.
-  Boardability is a printed line, not a `ShipRules` rule yet: a rule would fail the Warden in
-  `test_ship_catalog` until then.
+- **Landing gear that gives.** Ships feel a world's pull, hover, level and land (`LandingMonitor`)
+  on four fixed landing legs (desert world Task 15), you step out and walk, and a high hatch gets a
+  landing ramp. The legs do not give or level: all four are one length, so the ship tilts with the
+  ground, and a hard landing is a warning and a thud with no damage yet. A ship that touches down
+  before its legs are fully down (faster than about 10 m/s from 40 m) lands on its keel and its
+  legs finish into the ground under it.
+- **Boardability is not a rule.** Every library ship is boardable on a world now (the Warden
+  since its forward retros moved, 4f27cde), and four legs fit on each, but both are printed lines
+  (`ramp`, `legs`), not `ShipRules` rules: nothing fails a ship that cannot be boarded or stands on
+  its keel.
 
 - **Multi-storey interiors.** A `ladder` passes the validator, but every walkable cell still gets
   a solid floor and ceiling, so you can't climb. **Multi-level ships** can be written and checked
