@@ -111,6 +111,9 @@ var npc_bus: StimulusBus
 var sensors: ShipSensors
 ## Touchdown, settling and standing frozen on a world (desert-world spec §5.3).
 var landing: LandingMonitor
+## Whether the landing legs are wanted down (_sync_legs): kept here, not on the
+## legs, so a rebuild between DOWN_BELOW and UP_ABOVE keeps them as they were.
+var _legs_wanted := false
 var npcs: Node3D
 var crew_site: ShipSite
 var _crew: Array = []
@@ -248,6 +251,7 @@ func _update_hum() -> void:
 
 func _physics_process(delta: float) -> void:
 	_last_hull_velocity = exterior.linear_velocity
+	_sync_legs()
 	if landing != null and landing.is_landed():
 		_sync_ramps()
 	since_struck += delta
@@ -604,7 +608,28 @@ func on_world() -> bool:
 	return gravity != null and gravity.on_world_at(exterior.global_position)
 
 func _on_landing_changed(_state: LandingMonitor.State) -> void:
+	_sync_legs()
 	_sync_ramps()
+
+## Puts the landing legs down near a world's ground and up away from it (desert
+## world phase 0, Task 15; LandingLegs.wanted): at once when `instant` (a hull
+## rebuild, which builds them stowed) or when the landing was restored (a save
+## loaded, a ship woken), else folding. A hostile's never come down. Called
+## every physics tick, as the landing monitor changes state, and after every
+## rebuild.
+func _sync_legs(instant := false) -> void:
+	var legs := exterior_builder.legs() if exterior_builder != null else null
+	if legs == null or landing == null:
+		return
+	if side == Sides.HOSTILE:
+		_legs_wanted = false
+	elif landing.is_landed():
+		_legs_wanted = true
+	else:
+		var world := on_world()
+		_legs_wanted = LandingLegs.wanted(_legs_wanted, world, false,
+			flight_computer.keel_altitude() if world else INF)
+	legs.set_down(_legs_wanted, instant or landing.restored)
 
 ## Puts each airlock's landing ramp down while the hull is landed on a world,
 ## and up otherwise (desert world phase 0, Task 14): at once when `instant` (a
@@ -674,6 +699,9 @@ func set_grid(new_grid: ShipGrid, stock := true) -> void:
 	grid.cell_changed.connect(_on_cell_changed)
 	grid.block_staged.connect(_on_block_staged)
 	exterior_builder.bind(grid, catalog)
+	exterior_builder.leg_plan = LandingLegs.plan(layout)
+	if exterior_builder.leg_plan.size() < 4:
+		print("%s: %d landing legs fit (LandingLegs.plan)" % [name, exterior_builder.leg_plan.size()])
 	interior_builder.bind(grid, catalog)
 	_rebuild_everything()
 
@@ -714,8 +742,9 @@ func _rebuild_everything(hull := true) -> void:
 	interior_builder.geometry_body().set_meta(&"receive_hit", _on_interior_hit)
 	interior_builder.geometry_body().set_meta(&"ship", self)
 	_bind_airlocks()
-	# Snapped down only when the hull (and so its alcoves and ramps) was rebuilt:
-	# an interior restyle leaves a ramp mid-travel to finish its swing.
+	# Snapped down only when the hull (and so its alcoves, ramps and legs) was
+	# rebuilt: an interior restyle leaves them mid-travel to finish.
+	_sync_legs(hull)
 	_sync_ramps(hull)
 	_reseat(stowed)
 	if not _stocked:
@@ -1125,8 +1154,7 @@ func restore_aboard(d: Dictionary) -> void:
 func keel_depth() -> float:
 	return keel_depth_of(grid)
 
-## keel_depth for any grid: what an airlock's landing ramp is measured from
-## (AirlockAlcove.ramp_plan).
+## keel_depth for any grid.
 static func keel_depth_of(layout: ShipGrid) -> float:
 	var lowest := 0.0
 	var any := false
@@ -1137,8 +1165,24 @@ static func keel_depth_of(layout: ShipGrid) -> float:
 			any = true
 	return -lowest if any else 0.0
 
+## Metres from the hull's origin down to the plane it stands on, landed (desert
+## world phase 0, Task 15): its landing legs' feet, LandingLegs.CLEARANCE under
+## the keel's plane, or the keel's plane itself with no legs. Everything that
+## measures from the ground measures from here: the flight computer's keel
+## altitude and levelling, and each airlock's landing ramp and step.
+func stance_depth() -> float:
+	if exterior_builder != null and exterior_builder.layout() != null:
+		return exterior_builder.stance_depth()
+	return stance_depth_of(grid) if grid != null else 0.0
+
+## stance_depth for any grid, as built new: what an airlock's landing ramp is
+## measured from (AirlockAlcove.ramp_plan). Pure.
+static func stance_depth_of(layout: ShipGrid) -> float:
+	var keel := keel_depth_of(layout)
+	return keel + LandingLegs.CLEARANCE if not LandingLegs.plan(layout).is_empty() else keel
+
 func _apply_stats() -> void:
-	flight_computer.keel_depth = keel_depth()
+	flight_computer.keel_depth = stance_depth()
 	exterior.mass = maxf(stats.total_mass_kg, 1.0)
 	exterior.center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
 	exterior.center_of_mass = stats.center_of_mass

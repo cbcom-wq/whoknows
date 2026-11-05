@@ -61,11 +61,12 @@ func test_the_way_up_to_a_hatch():
 	assert_eq(AirlockAlcove.way_up_for(_plan(LandingRamp.RAMP, blocked)), AirlockAlcove.NONE, "through the hull")
 	assert_eq(AirlockAlcove.way_up_for(_plan(LandingRamp.UP_OR_DOWN)), AirlockAlcove.NONE, "a hatch in a floor")
 
-## Every library ship, built: the alcove keeps its plan and way up, builds a
-## ramp exactly for RAMP, and the Warden's (through its own hull) is NONE.
+## Every library ship, built: the alcove keeps its plan and way up, and builds a
+## ramp exactly for RAMP. The Warden's came down through its own hull until its
+## forward retros moved (4f27cde): a ramp now, as every library ship has.
 func test_every_library_ship_s_alcove_knows_its_way_up():
 	var catalog := BlockCatalog.load_from_dir("res://data/blocks")
-	var expected := {&"starter": LandingRamp.RAMP, &"lamplighter": LandingRamp.RAMP, &"warden": AirlockAlcove.NONE}
+	var expected := {&"starter": LandingRamp.RAMP, &"lamplighter": LandingRamp.RAMP, &"warden": LandingRamp.RAMP}
 	for id: StringName in expected:
 		var grid: ShipGrid = ShipLibrary.read("res://data/ships/%s.json" % id)["grid"]
 		for c: Vector3i in grid.coords():
@@ -140,12 +141,16 @@ func _lock_over_a_keel(keel: int) -> ShipGrid:
 		_block(grid, Vector3i(0, -1 - k, -1), &"hull")
 	return grid
 
-func test_the_starter_s_hatch_gets_a_4_1_m_ramp():
+## Over its keel the starter's sill is 2.05 m up; its landing legs (Task 15)
+## stand it 0.4 m higher, so its ramp is 2.45 m of sill and 4.9 m long.
+func test_the_starter_s_hatch_gets_a_4_9_m_ramp():
 	var grid: ShipGrid = ShipLibrary.read("res://data/ships/starter.json")["grid"]
+	var over_keel := AirlockAlcove.ramp_plan(grid, Vector3i(0, 0, 3), Ship.keel_depth_of(grid))
+	assert_almost_eq(over_keel["sill"], STARTER_SILL, 0.001, "storey 0 over a keel row: 2.05 m")
 	var plan := AirlockAlcove.ramp_plan(grid, Vector3i(0, 0, 3))
 	assert_eq(plan["need"], LandingRamp.RAMP)
-	assert_almost_eq(plan["sill"], STARTER_SILL, 0.001, "storey 0 over a keel row: 2.05 m")
-	assert_almost_eq(plan["length"], 4.1, 0.01)
+	assert_almost_eq(plan["sill"], STARTER_SILL + LandingLegs.CLEARANCE, 0.001, "over the legs' stance: 2.45 m")
+	assert_almost_eq(plan["length"], 4.9, 0.01)
 	assert_almost_eq(plan["angle"], deg_to_rad(30.0), EPS)
 	assert_eq(plan["through"], [], "nothing in its way")
 
@@ -154,10 +159,16 @@ func test_a_hatch_level_with_the_keel_is_a_step():
 	assert_eq(plan["need"], LandingRamp.STEP)
 	assert_almost_eq(plan["sill"], 0.05, 0.001)
 
+## Measured over the keel's plane, a keel row puts the hatch 2.05 m up; this
+## little grid has room for landing legs on its storey-0 cells (Task 15), and on
+## them it stands 0.4 m higher still.
 func test_a_keel_row_under_the_ship_makes_the_hatch_need_one():
-	var plan := AirlockAlcove.ramp_plan(_lock_over_a_keel(1), Vector3i.ZERO)
+	var grid := _lock_over_a_keel(1)
+	var plan := AirlockAlcove.ramp_plan(grid, Vector3i.ZERO, Ship.keel_depth_of(grid))
 	assert_eq(plan["need"], LandingRamp.RAMP)
 	assert_almost_eq(plan["sill"], 2.05, 0.001)
+	assert_false(LandingLegs.plan(grid).is_empty())
+	assert_almost_eq(AirlockAlcove.ramp_plan(grid, Vector3i.ZERO)["sill"], 2.05 + LandingLegs.CLEARANCE, 0.001)
 
 func test_a_block_in_the_ramp_s_way_is_named():
 	var grid := _lock_over_a_keel(1)
@@ -228,11 +239,14 @@ func _over_flat_ground(clearance: float) -> void:
 	var ground := planet.radius + surface.terrain.height_at(_up)
 	var along := _up.cross(Vector3.UP).normalized()
 	var basis := Basis(along, _up, along.cross(_up).normalized())
-	_ship.exterior.global_transform = Transform3D(basis, centre + _up * (ground + _ship.keel_depth() + clearance))
+	_ship.exterior.global_transform = Transform3D(basis, centre + _up * (ground + _ship.stance_depth() + clearance))
 	_ship.exterior.linear_velocity = Vector3.ZERO
 	_ship.exterior.angular_velocity = Vector3.ZERO
 	_ship.flight_computer.assist_enabled = true
 	await wait_physics_frames(30)
+	# Under 40 m its landing legs fold out (Task 15): it sets down on them.
+	var legs := _ship.exterior_builder.legs()
+	assert_true(await wait_until(func() -> bool: return legs.is_down(), 2.0), "its legs are down")
 
 func _push(y: float) -> void:
 	_ship.flight_computer.set_pilot_input(Vector3(0.0, y, 0.0), Vector3.ZERO, false)
@@ -322,11 +336,12 @@ func test_from_the_ramp_s_foot_you_walk_up_and_in():
 	var aboard: bool = await wait_until(func() -> bool:
 		if avatar.mode == Avatar.Mode.FIELD:
 			climbed[0] = maxf(climbed[0], (avatar.global_position - start).dot(_up))
-		return avatar.mode == Avatar.Mode.PLATING and avatar.get_parent() == _ship.interior, 10.0)
+		return avatar.mode == Avatar.Mode.PLATING and avatar.get_parent() == _ship.interior, 12.0)
 	Input.action_release(&"move_forward")
-	assert_true(aboard, "up the ramp and in through the outer hatch within 10 s (mode %s, outer %.2f)" % [
+	assert_true(aboard, "up the ramp and in through the outer hatch within 12 s (mode %s, outer %.2f)" % [
 		Avatar.Mode.keys()[avatar.mode], lock.cycle.outer_open])
-	assert_gt(climbed[0], LandingRamp.length_for(2.05) * sin(LandingRamp.LEAST) + 0.5,
+	assert_almost_eq(ramp.length, LandingRamp.length_for(2.45), 0.01, "the ramp over the legs: 4.9 m")
+	assert_gt(climbed[0], ramp.length * sin(LandingRamp.LEAST) + 0.5,
 		"on your feet up the ramp: %.2f m up from its foot" % climbed[0])
 
 ## Out of the hatch with W held, you walk down the ramp on your feet -- not

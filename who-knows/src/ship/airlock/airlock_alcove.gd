@@ -68,31 +68,38 @@ var colliders: Array[CollisionShape3D] = []
 var _body: CollisionObject3D
 
 ## Builds the alcove for the airlock at `at` under `parent`, which must share
-## `body`'s frame, with its colliders on `body`.
+## `body`'s frame, with its colliders on `body`. Its ramp, if it has one,
+## reaches a stance plane `stance` metres under the hull's origin (ramp_plan;
+## negative: Ship.stance_depth_of the grid).
 static func build(parent: Node3D, body: CollisionObject3D, grid: ShipGrid, catalog: BlockCatalog,
-		at: Vector3i) -> AirlockAlcove:
+		at: Vector3i, stance := -1.0) -> AirlockAlcove:
 	var alcove := AirlockAlcove.new()
 	alcove.coord = at
 	alcove.name = "Alcove_%d_%d_%d" % [at.x, at.y, at.z]
 	alcove.hatch_normal = AirlockSite.hatch_normal(grid, at)
 	alcove.door_normal = AirlockSite.door_normal(grid, catalog, at)
 	parent.add_child(alcove)
-	alcove._build(body, grid)
+	alcove._build(body, grid, stance)
 	return alcove
 
 ## The landing ramp the outer hatch of the airlock at `at` needs (desert world
 ## phase 0, Task 14): {need: LandingRamp.RAMP, STEP or UP_OR_DOWN; sill: its
-## height in metres over the keel's plane (the bottom of the grid's lowest
-## cell, as Ship.keel_depth_of measures it); length and angle: the ramp's, at
+## height in metres over the stance plane -- where the ship's landing legs put
+## the ground, `stance` metres under the hull's origin (Task 15; negative, the
+## default: Ship.stance_depth_of the layout); length and angle: the ramp's, at
 ## the design slope; through: every block the ramp would pass through, coming
-## down at that slope}. A ramp is built only when it is needed and nothing is
-## in its way. Pure: the probe and ship_check print it.
-static func ramp_plan(layout: ShipGrid, at: Vector3i) -> Dictionary:
+## down at that slope; path: every cell it passes through, block or none (the
+## landing legs keep out of them)}. A ramp is built only when it is needed and
+## nothing is in its way. Pure: the probe and ship_check print it.
+static func ramp_plan(layout: ShipGrid, at: Vector3i, stance := -1.0) -> Dictionary:
+	if stance < 0.0:
+		stance = Ship.stance_depth_of(layout)
 	var normal := AirlockSite.hatch_normal(layout, at)
-	var sill := InteriorBuilder.floor_y(at) - InteriorBuilder.storey_offset(at.y) + Ship.keel_depth_of(layout)
+	var sill := InteriorBuilder.floor_y(at) - InteriorBuilder.storey_offset(at.y) + stance
 	var through: Array[Vector3i] = []
+	var path: Array[Vector3i] = []
 	var plan := {"need": LandingRamp.need(Vector3(normal), sill), "sill": sill, "length": 0.0,
-		"angle": LandingRamp.SLOPE, "through": through}
+		"angle": LandingRamp.SLOPE, "through": through, "path": path}
 	if normal == Vector3i.ZERO or plan["need"] != LandingRamp.RAMP:
 		return plan
 	var length := LandingRamp.length_for(sill)
@@ -100,7 +107,11 @@ static func ramp_plan(layout: ShipGrid, at: Vector3i) -> Dictionary:
 	var hinge := hinge_frame(at, normal)
 	for p in LandingRamp.sample_points(length, LandingRamp.SLOPE):
 		var cell := Vector3i(((hinge * p) / ShipGrid.CELL_SIZE).round())
-		if cell != at and layout.has_block(cell) and not through.has(cell):
+		if cell == at:
+			continue
+		if not path.has(cell):
+			path.append(cell)
+		if layout.has_block(cell) and not through.has(cell):
 			through.append(cell)
 	return plan
 
@@ -136,7 +147,7 @@ static func way_up_for(p: Dictionary) -> StringName:
 static func ramp_words(plan: Dictionary) -> String:
 	match plan["need"]:
 		LandingRamp.STEP:
-			return "step (sill %.2f m over the keel)" % plan["sill"]
+			return "step (sill %.2f m over the ground it stands on)" % plan["sill"]
 		LandingRamp.UP_OR_DOWN:
 			return "faces up/down — NOT BOARDABLE ON A WORLD"
 	var words := "ramp: %.2f m, %.2f m at %d°" % [plan["sill"], plan["length"], roundi(rad_to_deg(plan["angle"]))]
@@ -150,7 +161,7 @@ func wall(normal: Vector3i) -> Transform3D:
 	f.origin.y -= InteriorBuilder.storey_offset(coord.y)
 	return f
 
-func _build(body: CollisionObject3D, grid: ShipGrid) -> void:
+func _build(body: CollisionObject3D, grid: ShipGrid, stance := -1.0) -> void:
 	_body = body
 	var n := Vector3(hatch_normal)
 	var centre := ShipGrid.cell_center(coord)
@@ -188,7 +199,7 @@ func _build(body: CollisionObject3D, grid: ShipGrid) -> void:
 	hull_panel.transform = face * InteriorKit.at(Vector3(0.84, 1.2, PLATE_OUT))
 	add_child(hull_panel)
 	_build_reel(kit, face)
-	hatch_plan = ramp_plan(grid, coord)
+	hatch_plan = ramp_plan(grid, coord, stance)
 	way_up = way_up_for(hatch_plan)
 	if way_up == LandingRamp.RAMP:
 		ramp = LandingRamp.build(self, body, hinge_frame(coord, hatch_normal), hatch_plan["sill"])

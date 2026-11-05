@@ -4,9 +4,14 @@ extends Node3D
 ## The landing ramp (desert world phase 0, Task 14; the owner's decision,
 ## 2026-11-04): a chunky boarding ramp that comes down under an airlock's
 ## outer hatch when the ship lands on a world, and folds away when it lifts
-## off. A landed starter's sill stands 2.05 m over the ground and a jump peaks
+## off. A landed starter's sill stands 2.45 m over the ground and a jump peaks
 ## at 0.89 m, so without it you could step out of a ship and never walk back in
 ## (CLAUDE.md: every ship is usable).
+##
+## Every height here is measured from the stance plane: the ground a landed
+## ship stands on, its landing legs' feet (Task 15; Ship.stance_depth), 0.4 m
+## under its keel's plane. On its legs the starter's sill is 2.45 m up and its
+## ramp 4.9 m long. A ship with no legs stands on its keel's plane.
 ##
 ## AirlockAlcove builds one under each outer hatch that needs one and has room
 ## for it (need(), AirlockAlcove.ramp_plan and way_up_for: the one home of
@@ -78,7 +83,7 @@ const SLIDE_TIME := 0.5
 const SWING_TIME := 1.1
 const TRAVEL := SLIDE_TIME + SWING_TIME
 ## The ground under the tip is looked for from this far over the sill down to
-## this far under the keel's plane; found nowhere, it rests at SLOPE and looks
+## this far under the stance plane; found nowhere, it rests at SLOPE and looks
 ## again every SETTLE_EVERY seconds while down (a save loads before its ground
 ## streams in).
 const PROBE_ABOVE := 0.5
@@ -95,7 +100,7 @@ const SETTLE_EAGER := 1.0
 const SOUND := &"hatch_motor"
 
 var state := State.STOWED
-## How far the sill stands over the keel's plane, and the ramp's length from
+## How far the sill stands over the stance plane, and the ramp's length from
 ## the hinge to its tip along the top surface.
 var sill_height := 0.0
 var length := 0.0
@@ -117,13 +122,13 @@ var _settle_in := 0.0
 ## Seconds left of looking every tick (SETTLE_EAGER).
 var _eager := 0.0
 
-## The ramp's length for a sill `sill_height` metres over the keel's plane:
+## The ramp's length for a sill `sill_height` metres over the stance plane:
 ## its tip on the plane at the design slope.
 static func length_for(sill_height_m: float) -> float:
 	return sill_height_m / sin(SLOPE)
 
 ## The angle (radians, below level) that rests a ramp `ramp_length` long,
-## hinged `sill_height_m` over the keel's plane, on ground `ground_drop` metres
+## hinged `sill_height_m` over the stance plane, on ground `ground_drop` metres
 ## below that plane under its tip (negative: above it), clamped to LEAST..MOST.
 ## Pure.
 static func angle_for(sill_height_m: float, ramp_length: float, ground_drop: float) -> float:
@@ -131,7 +136,7 @@ static func angle_for(sill_height_m: float, ramp_length: float, ground_drop: flo
 	return clampf(asin(fall), LEAST, MOST)
 
 ## What an outer hatch facing `normal` (in the hull's frame) with its sill
-## `sill_height_m` over the keel's plane needs. Pure.
+## `sill_height_m` over the stance plane needs. Pure.
 static func need(normal: Vector3, sill_height_m: float) -> StringName:
 	if absf(normal.normalized().y) > 0.01:
 		return UP_OR_DOWN
@@ -154,7 +159,7 @@ static func sample_points(ramp_length: float, down_angle: float) -> PackedVector
 	return out
 
 ## Builds a stowed ramp under `parent` (which shares `body`'s frame) at
-## `hinge`, for a sill `sill_height_m` over the keel's plane, with its collider
+## `hinge`, for a sill `sill_height_m` over the stance plane, with its collider
 ## on `body`, disabled.
 static func build(parent: Node3D, body: CollisionObject3D, hinge: Transform3D, sill_height_m: float) -> LandingRamp:
 	var ramp := LandingRamp.new()

@@ -143,10 +143,16 @@ func test_a_step_you_can_climb_does_not_block():
 
 ## Final review I4 (Ruling 15): an outer hatch with neither a step nor a ramp
 ## refuses the step out on a world -- out there you could never climb back in.
-## The Warden's sill is 4.05 m over its keel and its ramp would come down
-## through its own hull, so it has none.
-func test_a_landed_warden_refuses_the_step_out_onto_a_drop():
+## Every library ship has its ramp now (the Warden since its forward retros
+## moved, 4f27cde), so a hull block goes back where the Warden's RCS block was,
+## in its ramp's path: its sill 4.45 m over the ground its legs stand on, and
+## no ramp through the hull.
+func test_a_landed_warden_with_its_ramp_s_path_blocked_refuses_the_step_out_onto_a_drop():
 	_build("warden")
+	var block := BlockInstance.new()
+	block.block_id = &"hull"
+	_ship.grid.set_block(Vector3i(-4, -1, 2), block)
+	_step(DT)
 	_ship.landing.restore_landed()
 	_step(DT)
 	assert_null(_airlock.alcove.ramp, "no ramp is built through the hull")

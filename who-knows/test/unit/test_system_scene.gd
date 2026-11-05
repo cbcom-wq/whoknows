@@ -162,12 +162,15 @@ func _hover_over_flat_ground(clearance: float) -> Vector3:
 	var ground := planet.radius + surface.terrain.height_at(out)
 	var along := out.cross(Vector3.UP).normalized()
 	var basis := Basis(along, out, along.cross(out).normalized())
-	_ship.exterior.global_transform = Transform3D(basis, centre + out * (ground + _ship.keel_depth() + clearance))
+	_ship.exterior.global_transform = Transform3D(basis, centre + out * (ground + _ship.stance_depth() + clearance))
 	_ship.exterior.linear_velocity = Vector3.ZERO
 	_ship.exterior.angular_velocity = Vector3.ZERO
 	_ship.flight_computer.assist_enabled = true
 	_root.reload = func() -> void: pass
 	await wait_physics_frames(30)
+	# Under 40 m its landing legs fold out (Task 15): it sets down on them.
+	var legs := _ship.exterior_builder.legs()
+	await wait_until(func() -> bool: return legs.is_down(), 2.0)
 	return out
 
 func _push(y: float) -> void:
