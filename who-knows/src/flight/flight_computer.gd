@@ -321,6 +321,9 @@ func _physics_process(delta: float) -> void:
 		# The pull itself (spec §5.2; Planetfall §8.2): an acceleration, so a
 		# force of g x mass, at the hull's centre, in the world frame.
 		_hull.apply_central_force(gravity.at(_hull.global_position) * _hull.mass)
+		# Air drags on it (spec §6.5), by the air at the hull itself.
+		_hull.apply_central_force(
+				gravity.drag_at(_hull.global_position, _hull.linear_velocity) * _hull.mass)
 	_apply_translation(delta)
 	_apply_rotation(delta)
 

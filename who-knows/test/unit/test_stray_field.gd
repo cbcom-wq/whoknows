@@ -9,6 +9,9 @@ extends GutTest
 class FakeGravity extends WorldGravity:
 	var g := Vector3(0, -5.0, 0)
 	var world := true
+	var air := 0.0
+	func air_at(_p: Vector3) -> float:
+		return air
 	func at(_p: Vector3) -> Vector3:
 		return g
 	func on_world_at(_p: Vector3) -> bool:
@@ -222,3 +225,12 @@ func test_a_frozen_stray_can_be_taken_and_let_go():
 	for i in 60:
 		_field.pull(1.0 / 60.0)
 	assert_false(item.freeze)
+
+func test_a_stray_in_air_slows():
+	_gravity.g = Vector3.ZERO
+	_gravity.air = 1.0
+	var item := _stray(Vector3(0, 100, 0), Vector3(50, 0, 0))
+	for i in 30:
+		_field.pull(1.0 / 60.0)
+		await wait_physics_frames(1)
+	assert_lt(item.linear_velocity.length(), 50.0 - 0.5)

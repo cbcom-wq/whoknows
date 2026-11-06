@@ -84,3 +84,19 @@ func air_at(p: Vector3) -> float:
 func surface_gravity_at(p: Vector3) -> float:
 	var b := _world_at(system, universe.to_universe(p))
 	return b.recipe.surface_gravity if b != null else 0.0
+
+## Air drag's constant (desert-world spec §6.5): an acceleration of
+## DRAG_K x air x |v| x v against the velocity. The spec's two targets pull
+## apart: 120 to 20 m/s in 30 s in thick air wants 1/720, and that caps the
+## starter's unboosted top speed near thick ground at about 101 m/s
+## (sqrt(14.2 x 720)); higher up the cap fades with the air. This is the
+## number to tune.
+const DRAG_K := 1.0 / 720.0
+
+## m/s², against `v`, in air of thickness `air` (0 to 1).
+static func drag(air: float, v: Vector3) -> Vector3:
+	return -DRAG_K * air * v.length() * v
+
+## The drag on a body at engine position `p` moving at `v`.
+func drag_at(p: Vector3, v: Vector3) -> Vector3:
+	return drag(air_at(p), v)

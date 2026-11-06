@@ -10,6 +10,9 @@ const MASS := 105_700.0
 class FakeGravity extends WorldGravity:
 	var g := Vector3.ZERO
 	var alt := INF
+	var air := 0.0
+	func air_at(_p: Vector3) -> float:
+		return air
 	func at(_p: Vector3) -> Vector3:
 		return g
 	func up_at(_p: Vector3) -> Vector3:
@@ -284,3 +287,40 @@ func test_off_the_ground_the_hold_still_holds():
 	_fc.gravity = _fake_gravity(Vector3(0, -7.0, 0))
 	_fc._apply_translation(1.0 / 60.0)
 	assert_almost_eq(_fc.commanded_force_local.y, 7.0 * MASS, 1.0)
+
+func test_drag_slows_a_coasting_hull():
+	_fc.assist_enabled = false
+	var f := _fake_gravity(Vector3.ZERO)
+	f.air = 1.0
+	_fc.gravity = f
+	_hull.linear_velocity = Vector3(100, 0, 0)
+	await wait_physics_frames(60)
+	assert_almost_eq(_hull.linear_velocity.length(), 87.8, 1.0)   # 1/v = 1/100 + t/720
+
+## Air at a point, not at the ship's whereabouts: _fc.whereabouts stays null.
+class PatchyAir extends FakeGravity:
+	func air_at(p: Vector3) -> float:
+		return 1.0 if p.x > 1000.0 else 0.0
+
+func test_drag_is_the_hulls_own_air():
+	_fc.assist_enabled = false
+	_fc.gravity = PatchyAir.new()
+	_hull.global_position = Vector3(5000, 0, 0)
+	_hull.linear_velocity = Vector3(100, 0, 0)
+	await wait_physics_frames(30)
+	assert_lt(_hull.linear_velocity.length(), 99.0)
+	_hull.global_position = Vector3.ZERO
+	_hull.linear_velocity = Vector3(100, 0, 0)
+	await wait_physics_frames(1)
+	assert_almost_eq(_hull.linear_velocity.length(), 100.0, 1e-3)
+
+func test_no_drag_at_warp():
+	var w := TravellingWarp.new()
+	add_child_autofree(w)
+	_fc.warp = w
+	var f := _fake_gravity(Vector3.ZERO)
+	f.air = 1.0
+	_fc.gravity = f
+	_hull.linear_velocity = Vector3(100, 0, 0)
+	await wait_physics_frames(2)
+	assert_almost_eq(_hull.linear_velocity.length(), 100.0, 1e-3)

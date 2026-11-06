@@ -876,6 +876,8 @@ func _field_move(g: Vector3, wish: Vector3, speed: float, delta: float) -> void:
 		_stepping_out = false
 		apply_floor_snap()
 	velocity = field_velocity(velocity, up, wish, speed, ACCEL, g, delta)
+	if gravity != null:
+		velocity += gravity.drag_at(global_position, velocity) * delta
 	if _jump_wanted and is_on_floor():
 		velocity += up * JUMP_SPEED
 	_jump_wanted = false

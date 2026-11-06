@@ -9,6 +9,9 @@ const DT := 1.0 / 60.0
 
 ## A pull of the test's choosing, counting how often anything asks.
 class FakeGravity extends WorldGravity:
+	var air := 0.0
+	func air_at(_p: Vector3) -> float:
+		return air
 	var pull := Vector3.ZERO
 	var on := true
 	var asked := 0
@@ -27,6 +30,8 @@ class FakeGravity extends WorldGravity:
 ## The ship's side of a world (test_airlock_world.gd's): on one, and holding
 ## itself up for free, so the hull never moves.
 class OnWorld extends WorldGravity:
+	func air_at(_p: Vector3) -> float:
+		return 0.0
 	func on_world_at(_p: Vector3) -> bool:
 		return true
 	func at(_p: Vector3) -> Vector3:

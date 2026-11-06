@@ -90,3 +90,21 @@ func test_air_at_is_the_recipes_at_the_altitude():
 	assert_gt(w.air_at(p), 0.0)
 	assert_eq(w.air_at(Vector3.UP * (b.well_radius + 10.0)), 0.0)
 	b.recipe.atmosphere = was   # the system is shared by the file's other tests
+
+func _coast(air: float, from: float, to: float) -> float:
+	var v := Vector3(from, 0, 0)
+	var t := 0.0
+	while v.length() >= to and t < 600.0:
+		v += WorldGravity.drag(air, v) / 60.0
+		t += 1.0 / 60.0
+	return t
+
+func test_thick_air_coasts_120_to_20_in_about_30_s():
+	assert_between(_coast(1.0, 120.0, 20.0), 27.0, 33.0)
+
+func test_thin_air_takes_about_three_times_as_long():
+	var thin: float = WorldRecipe.AIR_GROUND[WorldRecipe.Atmosphere.THIN]
+	assert_between(_coast(thin, 120.0, 20.0) / _coast(1.0, 120.0, 20.0), 2.5, 3.5)
+
+func test_no_air_no_drag():
+	assert_eq(WorldGravity.drag(0.0, Vector3(300, 0, 0)), Vector3.ZERO)

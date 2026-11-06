@@ -126,6 +126,7 @@ func pull(delta: float) -> void:
 			_calm.erase(id)
 			continue
 		item.apply_central_force(gravity.at(p) * item.mass)
+		item.apply_central_force(gravity.drag_at(p, item.linear_velocity) * item.mass)
 		if item.linear_velocity.length() < REST_SPEED:
 			_calm[id] = float(_calm.get(id, 0.0)) + delta
 			if _calm[id] >= REST_TIME and _on_the_ground(item, up):
