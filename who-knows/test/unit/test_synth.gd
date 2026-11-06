@@ -15,6 +15,7 @@ const LENGTHS := {
 	&"hose_draw": 1.0, &"hose_gulp": 0.25,
 	&"phaser_thrum": 0.2, &"phaser_heavy": 0.7, &"phaser_whine": 3.0, &"phaser_crack": 0.25,
 	&"core_boom": 2.8,
+	&"wind": 8.0, &"wind_hull": 8.0,
 }
 
 func test_every_sound_builds_at_its_length():

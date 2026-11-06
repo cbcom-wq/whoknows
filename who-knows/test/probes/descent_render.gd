@@ -29,6 +29,14 @@ extends "res://test/probes/landing_play.gd"
 #            toward it (stage4_sun) and straight at it (stage4_halo), 60 deg up
 #            (stage4_up) and back at the ship (stage4_ship); the air on the
 #            ground checked, and the frame rate standing there;
+#   wind     (Task 8, spec 6.4) six 6 s recordings of the Master bus, WAVs in the
+#            output folder (wind_<name>.wav), each one's peak printed: seated
+#            diving at 300 m/s through 0.6 x the air top (wind_stage2_seated),
+#            seated at 120 m/s at 300 m (wind_low_flight), seated landed
+#            (wind_landed_seated), on foot (wind_on_foot), on foot 15 m from a
+#            second starter hovering, its thrusters driven by hand
+#            (rcs_outside), and on a spacewalk over the air: no wind, only the
+#            suit's breath (wind_ring_silent);
 #   dive     seated, from the air top to 300 m at the speed limit, the sky
 #            recoloured all the way: the frame rate over each 5 s of it, the
 #            slowest checked; then the same dive squeezed into 5 s (about 8x
@@ -134,6 +142,7 @@ func _run() -> void:
 	await _stage3()
 	await _hover_puffs()
 	await _stage4()
+	await _wind_clips()
 	await _dive()
 	await _entry()
 	await _night()
@@ -459,6 +468,121 @@ func _stage4() -> void:
 	_avatar.set_head_pitch(0.0)
 	await _seconds(0.5)
 	await _reading("standing on foot %.1f m off the hatch, facing the ship" % _flat(_avatar.global_position - lock.beacon()).length())
+
+## Task 8: the wind, recorded for the ear. A clip is CLIP_SECONDS of what the
+## Master bus plays; its peak is printed, and a peak of 1.0 (clipping) fails.
+const CLIP_SECONDS := 6.0
+const WIND_DIVE_SPEED := 300.0
+const WIND_LOW_SPEED := 120.0
+var _recorder: AudioEffectRecord
+
+func _wind_clips() -> void:
+	print("wind    six clips of %.0f s" % CLIP_SECONDS)
+	_recorder = AudioEffectRecord.new()
+	AudioServer.add_bus_effect(AudioServer.get_bus_index(&"Master"), _recorder)
+	var wind := _scene.get("wind_sound") as WindSound
+	# On foot where stage 4 left us.
+	if _avatar.mode == Avatar.Mode.FIELD:
+		_face(-_flat(_sun_dir()))
+		await _seconds(1.0)
+		await _clip("wind_on_foot", func() -> bool: return wind.helmet_playing() and not wind.hull_playing(), true)
+		await _clip_second_ship()
+	else:
+		print("        (not on foot: wind_on_foot and rcs_outside skipped)")
+	# Seated on the ground.
+	await _aboard()
+	await _seconds(1.0)
+	await _clip("wind_landed_seated", func() -> bool: return wind.hull_playing() and not wind.helmet_playing(), true)
+	# Seated at 120 m/s along the ground at LOW, then diving at 300 m/s.
+	await _clip_flying("wind_low_flight", LOW, _sun_flat, WIND_LOW_SPEED, wind)
+	var top := _planet.recipe.air_top()
+	await _clip_flying("wind_stage2_seated", top * 0.6, -_spot, WIND_DIVE_SPEED, wind)
+	# A spacewalk over the air: silence.
+	await _clip_ring(top * 1.5, wind)
+	AudioServer.remove_bus_effect(AudioServer.get_bus_index(&"Master"), AudioServer.get_bus_effect_count(
+		AudioServer.get_bus_index(&"Master")) - 1)
+
+## Records CLIP_SECONDS and saves wind_<name> ("rcs_outside" keeps its name)
+## to the output folder; prints the peak. `heard` says the right player is on
+## when the clip ends; `expect_sound` says silence is a defect.
+func _clip(clip_name: String, heard: Callable, expect_sound: bool) -> void:
+	_recorder.set_recording_active(true)
+	await _seconds(CLIP_SECONDS)
+	var right: bool = heard.call()
+	_recorder.set_recording_active(false)
+	var rec := _recorder.get_recording()
+	var file := "%s/%s.wav" % [_out, clip_name]
+	var peak := 0.0
+	if rec != null:
+		rec.save_to_wav(file)
+		var d := rec.data
+		for i in d.size() / 2:
+			peak = maxf(peak, absf(float(d.decode_s16(i * 2))) / 32768.0)
+	var w := _stars.whereabouts
+	print("clip    %s: %s, peak %.3f (%.1f dBFS), air %.2f, the right wind %s" % [clip_name, file, peak,
+		linear_to_db(maxf(peak, 1e-6)), w.air(), right])
+	_check(right, "%s the right wind is playing" % clip_name)
+	_check(peak < 0.999, "%s never clips (peak %.3f)" % [clip_name, peak])
+	if expect_sound:
+		_check(peak > 0.003, "%s is not silent (peak %.3f)" % [clip_name, peak])
+	else:
+		# Not silence: a spacewalk has the suit's own breath. The wind is what
+		# must be off, and that is `heard` above.
+		print("        %s: peak %.3f is the suit's breath and hum; the wind players are off" % [clip_name, peak])
+
+## Seated, the hull held at `speed` along `way` from `height` over the ground
+## for the clip.
+func _clip_flying(clip_name: String, height: float, way: Vector3, speed: float, wind: WindSound) -> void:
+	await _hold_at(_spot, height, _sun_flat)
+	var hull := _starter.exterior
+	hull.freeze = false
+	var fly := func() -> void:
+		hull.linear_velocity = way.normalized() * speed
+	physics_frame.connect(fly)
+	await _seconds(1.0)
+	var h0 := _alt(_starter)
+	await _clip(clip_name, func() -> bool: return wind.hull_playing() and not wind.helmet_playing(), true)
+	physics_frame.disconnect(fly)
+	print("        %s: %.0f m/s from %.0f m, %.0f m at the end, air %.3f" % [clip_name, hull.linear_velocity.length(), h0,
+		_alt(_starter), _stars.whereabouts.air()])
+	hull.linear_velocity = Vector3.ZERO
+
+## On foot, 15 m from a second starter hovering and nudged sideways: its
+## thrusters, driven by hand (nothing flies it), heard through the air.
+func _clip_second_ship() -> void:
+	var library: ShipLibrary = _scene.get("library")
+	var grid := library.grid(ShipLibrary.STARTER)
+	var side := _flat(_avatar.global_transform.basis.x).normalized()
+	var dir := _up(_avatar.global_position + side * 15.0)
+	var second := _fleet.spawn(grid, Transform3D(Basis.IDENTITY, _centre() + dir * (_ground_r(dir) + 600.0)),
+		true, "", ShipBlueprint.from_grid(grid, library.name_of(ShipLibrary.STARTER)))
+	if second == null:
+		_check(false, "rcs_outside a second starter spawns")
+		return
+	_place(second, dir, 4.0, side)
+	second.exterior.freeze = true
+	var show := second.rcs_show
+	var amounts := PackedFloat32Array()
+	amounts.resize(show.players.size())
+	var t := [0.0]
+	var drive := func() -> void:
+		t[0] += 1.0 / Engine.physics_ticks_per_second
+		amounts.fill(0.9 if fmod(t[0], 0.3) < 0.15 else 0.0)
+		show._sound(amounts)
+	physics_frame.connect(drive)
+	await _seconds(0.5)
+	_check(true, "rcs_outside %d thrusters driven, 15 m off, air %.2f" % [amounts.size(), _stars.whereabouts.air()])
+	await _clip("rcs_outside", func() -> bool: return true, true)
+	physics_frame.disconnect(drive)
+	_fleet.remove(second, true)
+
+## A spacewalk `height` over the ground, past the air: no wind at all.
+func _clip_ring(height: float, wind: WindSound) -> void:
+	await _hold_at(_spot, height, _sun_flat)
+	var at := Transform3D(Basis.IDENTITY, _starter.exterior.global_position + _spot * 30.0)
+	_avatar.enter_suit(_scene.get_node("Outside"), at, Vector3.ZERO, _starter.exterior)
+	await _seconds(1.5)
+	await _clip("wind_ring_silent", func() -> bool: return not wind.hull_playing() and not wind.helmet_playing(), false)
 
 ## Seated, a dive from the air top to LOW over the ground as the flight
 ## computer lets you fly one, at the altitude's speed limit all the way, the

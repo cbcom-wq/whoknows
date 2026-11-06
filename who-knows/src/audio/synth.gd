@@ -26,10 +26,12 @@ const NAMES: Array[StringName] = [
 	&"hose_draw", &"hose_gulp",
 	&"phaser_thrum", &"phaser_heavy", &"phaser_whine", &"phaser_crack",
 	&"core_boom",
+	&"wind", &"wind_hull",
 ]
 ## Sounds that play as seamless loops.
 const LOOPED: Array[StringName] = [&"ship_hum", &"breath", &"thruster_puff", &"core_hum", &"charge", &"droid_whir",
-	&"holo_hum", &"warp_travel", &"drill_hum", &"hose_draw"]
+	&"holo_hum", &"warp_travel", &"drill_hum", &"hose_draw",
+	&"wind", &"wind_hull"]
 
 static var _cache: Dictionary = {}
 static var _mutex := Mutex.new()
@@ -90,6 +92,10 @@ static func build(sound_name: StringName) -> AudioStreamWAV:
 			x = _ship_hum()
 		&"breath":
 			x = _breath()
+		&"wind":
+			x = _wind()
+		&"wind_hull":
+			x = _wind_hull()
 		&"thruster_puff":
 			x = _thruster()
 		&"rcs_puff":
@@ -281,6 +287,40 @@ static func _ship_hum() -> PackedFloat32Array:
 		var t := float(i) / MIX_RATE
 		x[i] = sin(TAU * 60.0 * t) * 0.3 + sin(TAU * 120.0 * t) * 0.15 + air[i] * 1.2
 	return _gain(_loopable(x, n), 0.3)
+
+## Wind through the helmet (desert world spec §6.4; style guide §2.9): white
+## noise through a low-pass whose cutoff swings 350-1400 Hz on one 8 s sine,
+## so it breathes and always ends where it began.
+static func _wind() -> PackedFloat32Array:
+	return _gain(_swung_noise(31, 350.0, 120.0), 0.5)
+
+## The same wind heard through the hull: lower, 80-260 Hz, under a 38 Hz
+## sine (304 whole cycles in 8 s, so it loops).
+static func _wind_hull() -> PackedFloat32Array:
+	var n := _len(8.0)
+	var x := _swung_noise(32, 80.0, 0.0, 260.0 / 80.0)
+	for i in n:
+		x[i] += sin(TAU * 38.0 * float(i) / MIX_RATE) * 0.08
+	return _gain(x, 0.5)
+
+## 8 s of noise through a one-pole low-pass at `low` * 4^(0.5 + 0.5 sin(TAU t/8))
+## Hz (`ratio` replaces 4), high-passed at `high` if above 0, made loopable.
+static func _swung_noise(seed_value: int, low: float, high: float, ratio := 4.0) -> PackedFloat32Array:
+	var n := _len(8.0)
+	var total := n + n / 10
+	var src := _noise(total, seed_value)
+	var y := PackedFloat32Array()
+	y.resize(total)
+	var last := 0.0
+	for i in total:
+		var t := float(i) / MIX_RATE
+		var cutoff := low * pow(ratio, 0.5 + 0.5 * sin(TAU * t / 8.0))
+		var a := exp(-TAU * cutoff / MIX_RATE)
+		last = (1.0 - a) * src[i] + a * last
+		y[i] = last
+	if high > 0.0:
+		y = _highpass(y, high)
+	return _loopable(y, n)
 
 ## Slow suit breathing: in, a pause, out, a pause.
 static func _breath() -> PackedFloat32Array:

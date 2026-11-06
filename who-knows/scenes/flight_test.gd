@@ -59,6 +59,7 @@ var system: SystemRecipe
 var star_system: StarSystem
 ## The outside's sky, haze and light by the air (desert-world spec §6.2-§6.3).
 var air_mood: AirMood
+var wind_sound: WindSound
 ## What pulls where, one for every ship (desert-world spec §5.1); built in _wire_star_system (which _wire_universe calls).
 var world_gravity: WorldGravity
 ## Every salvage cloud, under Outside (quantum energy spec §10.2).
@@ -873,6 +874,9 @@ func _wire_air() -> void:
 	add_child(air_mood)
 	air_mood.setup($WorldEnvironment.environment, $DirectionalLight3D, star_system.whereabouts, system,
 		star_system.halo)
+	wind_sound = WindSound.new()
+	wind_sound.name = "WindSound"
+	add_child(wind_sound)
 
 ## Salvage (quantum energy spec §10.2, §14): the field under Outside, at the
 ## identity, with the same world seed as the rocks; and the near cloud out of
@@ -1612,10 +1616,25 @@ func _physics_process(delta: float) -> void:
 		star_system.streak = aboard.warp.streak()
 	since_fired_on = minf(since_fired_on + delta, aboard.since_hostile_fire)
 	play_time += delta
+	_tick_wind(delta)
 	if not save_enabled:
 		return
 	if save_gate.tick(delta):
 		save_now()
+
+## Wind (desert world spec §6.4): through the hull at the ship's speed when you
+## are in it, in the helmet at your own on foot on a world.
+func _tick_wind(delta: float) -> void:
+	if wind_sound == null or aboard == null or _avatar == null:
+		return
+	var in_ship := _avatar.get_parent() == aboard.interior
+	var which := WindSound.ear(_avatar.mode, in_ship)
+	var speed := 0.0
+	if which == WindSound.Ear.HULL:
+		speed = aboard.exterior.linear_velocity.length()
+	elif which == WindSound.Ear.HELMET:
+		speed = _avatar.velocity.length()
+	wind_sound.tick(star_system.whereabouts.air(), speed, which, delta)
 
 ## Writes the game, now, whatever the gate says: the gate decides when. True
 ## if it was written.
