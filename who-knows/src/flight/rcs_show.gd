@@ -26,6 +26,19 @@ const LIFETIME := 0.5
 const EXHAUST_SPEED := 6.0
 const LOUD_DB := -8.0
 const SOFT_DB := -26.0
+## In a world's well a hovering ship's gravity hold is steady, and puffing it
+## drew a constant white blob in phase 0 and held up the floating origin's
+## shift (its world-space puffs never die). So the hold is not puffed: puffs
+## show only what the pilot and the assist change. `HOLD_SHOW` is the share of
+## the hold still shown (0 = none); the probe sets `hold_show` to compare.
+const HOLD_SHOW := 0.0
+## In air you on foot outside hear a ship's thrusters from where they are
+## (desert-world spec §6.4), on the Suit bus: the SHIP bus is the hull's own
+## quiet, which the air outside is not. `OUTSIDE_DB` is the owner's to tune by ear.
+const HEARD_OUTSIDE := true
+const OUTSIDE_DB := -6.0
+## Below this much air outside is silent.
+const AIR_AUDIBLE := 0.01
 ## The world's render layer: the canopy camera leaves the own-hull layer out,
 ## and the puffs are what you should see through it.
 const LAYER := 1
@@ -38,6 +51,9 @@ var blocks: Array = []
 var firing := PackedFloat32Array()
 var emitters: Array[GPUParticles3D] = []
 var players: Array[AudioStreamPlayer3D] = []
+## One per block at its nozzle on the hull's outside, heard in air.
+var outside_players: Array[AudioStreamPlayer3D] = []
+var hold_show := HOLD_SHOW
 
 var _flight: FlightComputer
 var _interior: Node3D
@@ -59,8 +75,11 @@ func rebuild(grid: ShipGrid, catalog: BlockCatalog, center_of_mass: Vector3) -> 
 		e.free()
 	for p in players:
 		p.free()
+	for p in outside_players:
+		p.free()
 	emitters.clear()
 	players.clear()
+	outside_players.clear()
 	blocks = gather(grid, catalog, center_of_mass)
 	# A player on a bus that does not exist yet falls back to Master for good.
 	AudioBuses.ensure()
@@ -70,6 +89,8 @@ func rebuild(grid: ShipGrid, catalog: BlockCatalog, center_of_mass: Vector3) -> 
 		emitters.append(_emitter(b, mesh, process))
 		if _interior != null:
 			players.append(_player(b))
+		if HEARD_OUTSIDE:
+			outside_players.append(_outside_player(b))
 	firing.resize(blocks.size())
 	firing.fill(0.0)
 	_armed.resize(blocks.size())
@@ -136,10 +157,23 @@ static func puff_step(fire: float, armed: bool, since_last: float) -> Array:
 func _physics_process(_delta: float) -> void:
 	if _flight == null or blocks.is_empty():
 		return
-	firing = firing_for(blocks, _flight.commanded_torque_local, _flight.commanded_force_local,
+	firing = firing_for(blocks, _flight.commanded_torque_local,
+		shown_force(_flight.commanded_force_local, _flight.hold_force_local, hold_show),
 		_flight.torque_budget, _flight.thrust_budget)
 	apply(firing)
 	_sound(firing)
+
+## The push to show: the command less the steady gravity hold, keeping `share`
+## of the hold. Pure.
+static func shown_force(commanded: Vector3, hold: Vector3, share: float) -> Vector3:
+	return commanded - hold * (1.0 - share)
+
+## How loud a puff of `amount` is heard from outside, in `air` (0..1); -INF in
+## next to no air (spec §6.4). Pure.
+static func outside_db(amount: float, air: float) -> float:
+	if air <= AIR_AUDIBLE:
+		return -INF
+	return lerpf(SOFT_DB, LOUD_DB, amount) + linear_to_db(air) + OUTSIDE_DB
 
 ## Puffs each block's emitter at its firing amount.
 func apply(amounts: PackedFloat32Array) -> void:
@@ -150,6 +184,10 @@ func apply(amounts: PackedFloat32Array) -> void:
 func _sound(amounts: PackedFloat32Array) -> void:
 	var now := Time.get_ticks_msec() / 1000.0
 	var aboard := _aboard()
+	var air := 0.0
+	if _flight != null and _flight.gravity != null:
+		air = _flight.gravity.air_at(global_position)
+	var outside := HEARD_OUTSIDE and not aboard and air > AIR_AUDIBLE
 	for i in players.size():
 		var step := puff_step(amounts[i], _armed[i] == 1, now - _last_puff[i])
 		_armed[i] = 1 if step[1] else 0
@@ -157,7 +195,14 @@ func _sound(amounts: PackedFloat32Array) -> void:
 			continue
 		_last_puff[i] = now
 		var s := Synth.sound(&"rcs_puff")
-		if not aboard or s == null:
+		if s == null:
+			continue
+		if outside and i < outside_players.size():
+			outside_players[i].stream = s
+			outside_players[i].volume_db = outside_db(amounts[i], air)
+			outside_players[i].play()
+			continue
+		if not aboard:
 			continue
 		players[i].stream = s
 		players[i].volume_db = lerpf(SOFT_DB, LOUD_DB, amounts[i])
@@ -199,6 +244,14 @@ func _player(b: Dictionary) -> AudioStreamPlayer3D:
 	var coord: Vector3i = b["coord"]
 	p.position = ShipGrid.cell_center(coord) + Vector3(0.0, InteriorBuilder.storey_offset(coord.y), 0.0)
 	_interior.add_child(p)
+	return p
+
+func _outside_player(b: Dictionary) -> AudioStreamPlayer3D:
+	var p := AudioStreamPlayer3D.new()
+	p.name = "RcsOutside%d" % outside_players.size()
+	p.bus = AudioBuses.SUIT
+	p.position = b["nozzle"]
+	add_child(p)
 	return p
 
 ## Puffs blow out of the nozzle, slow in a metre or two, grow and fade. They

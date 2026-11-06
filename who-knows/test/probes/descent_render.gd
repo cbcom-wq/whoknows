@@ -132,6 +132,7 @@ func _run() -> void:
 	await _stage1()
 	await _stage2()
 	await _stage3()
+	await _hover_puffs()
 	await _stage4()
 	await _dive()
 	await _entry()
@@ -383,6 +384,48 @@ func _stage3() -> void:
 	_starter.exterior.freeze = false
 	await _seconds(2.0)
 	await _reading("seated at the starter's helm hovering %.0f m over the ground, away from the sun" % _alt(_starter))
+
+## Task 7: the starter hovering HOVER_HEIGHT m over the ground, unfrozen, from
+## the chase camera. The steady gravity hold is not puffed (hold_show 0), or
+## 25% of it is (hover_puffs_25); with a sideways nudge only the pilot's push
+## puffs (hover_nudge). Prints how many emitters show each time.
+const HOVER_HEIGHT := 30.0
+func _hover_puffs() -> void:
+	print("hover   the steady hold is not puffed")
+	await _aboard()
+	await _hold_at(_spot, HOVER_HEIGHT, _across)
+	_starter.exterior.freeze = false
+	var show := _starter.rcs_show
+	var fc := _starter.flight_computer
+	var spots := {"hover_puffs_0": 0.0, "hover_puffs_25": 0.25}
+	for k: String in spots:
+		show.hold_show = spots[k]
+		await _seconds(2.0)
+		await _outside_shot(k, _starter, Vector3(9.0, -2.0, 12.0))
+		var lit := _lit_count(show)
+		print("        %s: hold_show %.2f, hold %.0f N up, %d of %d emitters showing, air %.3f, %.1f m over the ground" % [
+			k, show.hold_show, fc.hold_force_local.y, lit, show.emitters.size(), _stars.whereabouts.air(), _alt(_starter)])
+		if k == "hover_puffs_0":
+			_check(fc.hold_force_local.y > 0.0, "hover hovering has a gravity hold (%.0f N)" % fc.hold_force_local.y)
+			_check(lit == 0, "hover with hold_show 0 nothing puffs while the starter hovers (%d showing)" % lit)
+		elif lit == 0:
+			print("        (a quarter of the hold is under the show threshold on this ship)")
+	show.hold_show = RcsShow.HOLD_SHOW
+	Input.action_press(&"move_right")
+	await _seconds(1.0)
+	await _outside_shot("hover_nudge", _starter, Vector3(9.0, -2.0, 12.0))
+	var nudged := _lit_count(show)
+	print("        hover_nudge: %d of %d emitters showing for a sideways nudge" % [nudged, show.emitters.size()])
+	Input.action_release(&"move_right")
+	_check(nudged > 0, "hover a sideways nudge puffs the thruster that pushes it (%d showing)" % nudged)
+	await _seconds(0.5)
+
+func _lit_count(show: RcsShow) -> int:
+	var n := 0
+	for e in show.emitters:
+		if e.emitting:
+			n += 1
+	return n
 
 ## Stage 4: on the ground. Seated, at a porthole, in the open airlock, and on
 ## foot.

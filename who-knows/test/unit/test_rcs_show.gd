@@ -157,7 +157,7 @@ func test_a_rebuild_replaces_rather_than_adds():
 	var show: RcsShow = built[0]
 	show.rebuild(_grid, _cat, _stats.center_of_mass)
 	assert_eq(show.emitters.size(), 8)
-	assert_eq(show.get_child_count(), 8)
+	assert_eq(show.get_child_count(), 16, "eight emitters and eight outside players")
 	assert_eq((built[1] as Node).get_child_count(), 8)
 
 func test_the_flight_scene_shows_the_shuttles_rcs():
@@ -166,3 +166,30 @@ func test_the_flight_scene_shows_the_shuttles_rcs():
 	var show: RcsShow = root.get_node_or_null("Ship/Exterior/RcsShow")
 	assert_not_null(show, "on the hull, so the floating origin carries it")
 	assert_eq(show.emitters.size(), 8)
+
+func test_a_steady_hold_shows_nothing():
+	assert_eq(RcsShow.shown_force(Vector3(0, 7e5, 0), Vector3(0, 7e5, 0), 0.0), Vector3.ZERO)
+
+func test_the_pilot_on_top_of_the_hold_shows():
+	assert_eq(RcsShow.shown_force(Vector3(0, 9e5, 1e5), Vector3(0, 7e5, 0), 0.0), Vector3(0, 2e5, 1e5))
+
+func test_hold_show_keeps_a_share():
+	assert_almost_eq(RcsShow.shown_force(Vector3(0, 8e5, 0), Vector3(0, 8e5, 0), 0.25), Vector3(0, 2e5, 0), Vector3.ONE)
+
+func test_outside_only_in_air():
+	assert_eq(RcsShow.outside_db(1.0, 0.0), -INF)
+	assert_almost_eq(RcsShow.outside_db(1.0, 1.0), RcsShow.LOUD_DB + RcsShow.OUTSIDE_DB, 1e-4)
+
+func test_the_starter_hovering_puffs_nothing():   # phase 0's white blob, on the starter's own blocks
+	var hold := Vector3(0, 105_700.0 * 3.7, 0)   # a hover's hold on a 3.7 m/s2 world
+	for a in _fire(Vector3.ZERO, RcsShow.shown_force(hold, hold, RcsShow.HOLD_SHOW)):
+		assert_lt(a, RcsShow.SHOW_AT)
+
+func test_each_block_is_also_heard_outside_at_its_nozzle_on_the_suit_bus():
+	var show: RcsShow = _built()[0]
+	assert_eq(show.outside_players.size(), 8)
+	for i in show.blocks.size():
+		var p := show.outside_players[i]
+		assert_same(p.get_parent(), show)
+		assert_eq(p.bus, AudioBuses.SUIT)
+		assert_almost_eq(p.position, show.blocks[i]["nozzle"], Vector3.ONE * 0.001)

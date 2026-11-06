@@ -72,6 +72,9 @@ var locked_speed := 0.0
 ## This tick's push, after boost and assist, in the hull's own axes, newtons.
 ## RcsShow reads it to show which thrusters are doing it.
 var commanded_force_local := Vector3.ZERO
+## This tick's gravity hold alone, in hull axes (within the budget, as it sits
+## in commanded_force_local); zero without one. RcsShow leaves it unpuffed.
+var hold_force_local := Vector3.ZERO
 ## Heading hold (spec §5.2): the world direction the nose is swung onto and
 ## held on. A direction, not a position, so the floating origin never moves it.
 var heading_hold := false
@@ -333,6 +336,7 @@ func _physics_process(delta: float) -> void:
 		boosting = false
 		boost_refused = false
 		commanded_force_local = Vector3.ZERO
+		hold_force_local = Vector3.ZERO
 		commanded_torque_local = Vector3.ZERO
 		return
 	if _hull.freeze:
@@ -340,6 +344,7 @@ func _physics_process(delta: float) -> void:
 		boosting = false
 		boost_refused = false
 		commanded_force_local = Vector3.ZERO
+		hold_force_local = Vector3.ZERO
 		commanded_torque_local = Vector3.ZERO
 		return
 	if gravity != null:
@@ -394,6 +399,7 @@ func _apply_translation(delta: float) -> void:
 	# thrusters fire past their budget against a hold plus drift.
 	var total := hold + pilot_force
 	var plain := within_budget(total, thrust_budget)
+	hold_force_local = within_budget(hold, thrust_budget) if not hold.is_zero_approx() else Vector3.ZERO
 	if boosting:
 		var boosted := within_budget(total, thrust_budget, BOOST_MULTIPLIER)
 		commanded_force_local = Vector3(
