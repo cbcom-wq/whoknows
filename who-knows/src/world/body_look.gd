@@ -76,6 +76,8 @@ static func material(star: bool) -> StandardMaterial3D:
 		m.roughness = 1.0
 		if star:
 			m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			# Haze never dims the star: it is the light itself.
+			m.disable_fog = true
 		_materials[star] = m
 	return _materials[star]
 

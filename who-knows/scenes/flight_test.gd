@@ -57,6 +57,8 @@ var keep_saving := false
 ## world seed, and the node that draws its star, planets and moons.
 var system: SystemRecipe
 var star_system: StarSystem
+## The outside's sky, haze and light by the air (desert-world spec §6.2-§6.3).
+var air_mood: AirMood
 ## What pulls where, one for every ship (desert-world spec §5.1); built in _wire_star_system (which _wire_universe calls).
 var world_gravity: WorldGravity
 ## Every salvage cloud, under Outside (quantum energy spec §10.2).
@@ -155,9 +157,9 @@ const INTERIOR_ENVIRONMENT: Environment = preload("res://data/environments/ship_
 ## sun's side of a rock reads as it did and its night side waits for your
 ## lights, and a gentle bloom on lenses, windows and strips. Tuned at the
 ## renders.
-const OUTSIDE_AMBIENT_ENERGY := 0.4
+const OUTSIDE_AMBIENT_ENERGY := AirMood.SPACE_AMBIENT_ENERGY
 const OUTSIDE_GLOW_INTENSITY := 0.6
-const OUTSIDE_GLOW_BLOOM := 0.05
+const OUTSIDE_GLOW_BLOOM := AirMood.SPACE_BLOOM
 ## Screen, not the engine's default soft light: soft light on a near-black
 ## night draws no visible halo round a lens, however strong the light is.
 const OUTSIDE_GLOW_BLEND := Environment.GLOW_BLEND_MODE_SCREEN
@@ -214,6 +216,7 @@ func _ready() -> void:
 	board(aboard, true)
 	if _loaded_home != null:
 		board_base(_loaded_home, true)
+	air_mood.snap()
 
 ## The ship library (ship library spec §3.2). A file that would not load is an
 ## error in the output, and left out.
@@ -860,6 +863,14 @@ func _wire_star_system() -> void:
 	# loaded there has stepped you out already (_restore_places, before this):
 	# the first tick finds it set.
 	_avatar.gravity = world_gravity
+	_wire_air()
+
+## The sky, haze and light follow the air (desert-world spec §6.2-§6.3).
+func _wire_air() -> void:
+	air_mood = AirMood.new()
+	air_mood.name = "AirMood"
+	add_child(air_mood)
+	air_mood.setup($WorldEnvironment.environment, $DirectionalLight3D, star_system.whereabouts, system)
 
 ## Salvage (quantum energy spec §10.2, §14): the field under Outside, at the
 ## identity, with the same world seed as the rocks; and the near cloud out of
@@ -1497,6 +1508,7 @@ func hop(step: int) -> bool:
 	star_system.place_all()
 	star_system.whereabouts.look()
 	_stream.update(0.0, true)
+	air_mood.snap()
 	return true
 
 func _process(_delta: float) -> void:

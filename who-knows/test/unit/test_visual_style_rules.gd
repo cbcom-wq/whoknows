@@ -12,6 +12,7 @@ const SHADER_DIR := "res://data/materials/interior/"
 ## InteriorKit is exempt -- it packs data (screen modes, glow energy) into
 ## vertex colours rather than choosing colours.
 const PAINTING_FILES := [
+	"res://src/world/air_mood.gd",
 	"res://src/ui/computer_overlay.gd",
 	"res://src/habitat/link_panel.gd",
 	"res://src/ship/interior/interior_props.gd",
