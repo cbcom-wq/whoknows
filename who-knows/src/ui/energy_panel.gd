@@ -11,6 +11,10 @@ extends HudElement
 ## with *SUIT LOW*, below 10 with *SUIT CRITICAL*, and dry with *SUIT DRY ·
 ## RETURNING* while the emergency cell brings you home.
 ##
+## On foot on a world nothing draws on the suit (desert world spec §5.5), so it
+## shows no charge: only a tool's text in hand, on the status line, and nothing
+## at all with none (an empty `energy_label`).
+##
 ## Children are built in code rather than authored in the scene, exactly
 ## like VelocityPanel and AttitudePanel -- see CLAUDE.md on the text-scene
 ## parser defect.
@@ -80,6 +84,18 @@ func render(telemetry: VehicleTelemetry) -> void:
 		visible = false
 		return
 	visible = true
+
+	# No store to show -- on foot on a world, a tool's text alone (Avatar's
+	# telemetry in FIELD): the status line, with no numeral and no bar.
+	var store := telemetry.energy_label != &""
+	energy_label.visible = store
+	bar_track.visible = store
+	bar_fill.visible = store
+	if not store:
+		notch.visible = false
+		status_label.add_theme_color_override("font_color", HudPalette.READOUT)
+		status_label.text = telemetry.tool_text
+		return
 
 	var suit := telemetry.energy_label == &"SUIT"
 	if suit:

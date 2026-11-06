@@ -59,8 +59,12 @@ const JUMP_SPEED := 3.1
 const LAMP_RANGE := 25.0
 const LAMP_ANGLE := 35.0
 const LAMP_ENERGY := 3.0
-## The render layer (bit 4, unnamed in the project) your hands are on outside:
-## the camera sees it and the sun lights it, but the lamp's cull mask omits it.
+## The render layer (bit 4, unnamed in the project) your hands, and what they
+## hold, are on outside: the camera sees it, and the sun (flight_test.gd), the
+## ship's floods (ShipLights.LIGHT_MASK) and the airlock's lights
+## (AirlockAlcove.LIGHT_MASK) light it -- every light outside must, or your
+## hands are black in daylight (final review I1). Only the lamp's cull mask
+## omits it, so the lamp never blows them out; its HandsFill lights them.
 const HANDS_LAYER := 8
 ## The lamp's dimmer light for the hands, which only they see.
 const HANDS_FILL_ENERGY := 0.5
@@ -221,6 +225,7 @@ func _ready() -> void:
 	grasp.bind(self, head, hands.wield_socket, hands.carry_socket)
 	grasp.let_go.connect(func(item: Item) -> void: let_fall.emit(item, true))
 	grasp.taken.connect(_on_item_taken)
+	grasp.released.connect(_on_item_released)
 	hands.bind(grasp, self)
 	var sounds := SuitSounds.new()
 	sounds.name = "SuitSounds"
@@ -283,11 +288,27 @@ func take_item(item: Item) -> void:
 func can_take_item(item: Item) -> bool:
 	return grasp.can_take(item)
 
-## An item with a `swallowed` signal (the hose's nozzle) tells the toast.
+## An item with a `swallowed` signal (the hose's nozzle) tells the toast. One
+## taken while you are outside goes onto your hands' layer, as one carried out
+## does (_go_out), so the lamp never blows it out (final review M6).
 func _on_item_taken(item: Item, _from: Transform3D) -> void:
+	if is_outside():
+		_set_hands_layer(HANDS_LAYER)
 	var use := item.use_node
 	if use != null and use.has_signal(&"swallowed") and not use.is_connected(&"swallowed", _on_swallowed):
 		use.connect(&"swallowed", _on_swallowed)
+
+## Let go of outside in any way (dropped, thrown, stowed, home to its reel), a
+## thing leaves your hands' layer for the world's: Item.set_space rebuilds its
+## look there, so the head lamp's beam lights it where it lies. Every visual
+## part still on HANDS_LAYER (a flare's flame and glow, which set_space does
+## not rebuild) goes to the world's layer too (Task 15, N3).
+func _on_item_released(item: Item) -> void:
+	if is_outside() and is_instance_valid(item):
+		item.set_space(true)
+		for node in item.find_children("*", "VisualInstance3D", true, false):
+			if (node as VisualInstance3D).layers == HANDS_LAYER:
+				(node as VisualInstance3D).layers = Item.SPACE_LAYER
 
 func _on_swallowed(label: String, value: int) -> void:
 	toast.emit("+%d QE · %s" % [value, label])
@@ -648,8 +669,9 @@ func _go_out(outside: Node3D, pose: Transform3D, start_velocity: Vector3, ship_h
 	if grasp.item != null:
 		grasp.item.set_space(true)
 	_set_render_layer(1, 1 | ExteriorBuilder.OWN_HULL_LAYER)
-	# Your hands sit a hand's breadth from the lamp: off its mask, they take the
-	# sun and the ship's lights but are never blown out by the lamp.
+	# Your hands sit a hand's breadth from the lamp: on HANDS_LAYER, off its mask,
+	# they take the sun, the floods and the airlock's lights (all of whose masks
+	# include that layer) but are never blown out by the lamp.
 	_set_hands_layer(HANDS_LAYER)
 	(lamp.get_node("HandsFill") as Light3D).light_cull_mask = HANDS_LAYER
 	_righting_t = RIGHTING_TIME
@@ -724,10 +746,17 @@ func build_telemetry() -> VehicleTelemetry:
 	t.energy_line = 0
 	t.energy_label = &"SUIT"
 	# The dry-suit trip home is a spacewalk's: on foot the thrusters are off and
-	# nothing returns you, so FIELD shows the charge alone.
+	# nothing returns you.
 	t.energy_state = suit_cell.level() if mode != Mode.FIELD else &"ok"
 	if grasp != null and grasp.item != null and grasp.item.use_node != null:
 		t.tool_text = grasp.item.use_node.tool_text()
+	if mode == Mode.FIELD:
+		# On foot nothing draws on the suit's cell or needs it, so its charge is
+		# not shown -- "SUIT 0%" on a world only alarms (final review, T13/T14).
+		# The panel stays for a tool's text in hand, with no store beside it; the
+		# charge is back on the next spacewalk.
+		t.energy_label = &""
+		t.has_energy = t.tool_text != ""
 	return t
 
 ## Eases the view upright after floating in (enter_plating).

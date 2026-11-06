@@ -13,8 +13,9 @@ signal changed
 const FLOOD := &"flood"
 const FORWARD := &"forward"
 const GROUPS: Array[StringName] = [FLOOD, FORWARD]
-## The world and the ship's own hull; never the interior (layer 2).
-const LIGHT_MASK := 1 | ExteriorBuilder.OWN_HULL_LAYER
+## The world, the ship's own hull and your hands outside (Avatar.HANDS_LAYER,
+## which only the head lamp leaves out); never the interior (layer 2).
+const LIGHT_MASK := 1 | ExteriorBuilder.OWN_HULL_LAYER | Avatar.HANDS_LAYER
 ## Beams are on the world's layer, so the canopy shows your forward beams.
 const BEAM_LAYER := 1
 ## Each group: its cone (full angle, degrees), reach (m), energy at full

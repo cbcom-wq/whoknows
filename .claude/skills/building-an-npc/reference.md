@@ -402,9 +402,14 @@ fauna there; what follows is what it must respect.
   ask it** for its pull and its up: the avatar, loose items and strays already do. Gravity on
   them applies only below the world's air top (`on_world_at`); ships feel the whole well, out to 2
   radii. The star does not pull.
-- **Strays freeze at rest** (`StrayField`, `src/world/stray_field.gd`): on a world, one slower than
-  `REST_SPEED` 0.1 m/s for `REST_TIME` 0.5 s goes `FREEZE_MODE_STATIC` and feels no pull; one loaded
-  from the ledger at a point on a world loads frozen; taking one in hand thaws it (Ruling 12).
+- **Strays freeze at rest, on terrain only** (`StrayField`, `src/world/stray_field.gd`): on a
+  world, one slower than `REST_SPEED` 0.1 m/s for `REST_TIME` 0.5 s goes `FREEZE_MODE_STATIC` and
+  feels no pull, **only if** a ray down from it (half its height along up plus `REST_REACH` 0.3 m,
+  mask `UNDER_MASK`) hits the ground (`BodyProxy.LAYER`) first. One resting on a landed hull, a
+  ramp or another stray stays live, so it falls when the ship lifts off. One below the ground is
+  put on it before it freezes (`_onto_ground`). One loaded from the ledger freezes only within
+  `ON_GROUND` 0.25 m of the ground (put on it); higher, it loads live and falls. Taking one in hand
+  thaws it (Ruling 12).
   World ground is solid only near a `SPACE_ANCHOR`, while strays stay live within 3 km
   (`SalvageField.LOAD_WITHIN`), so a stray left awake where the ground has no collider falls
   through the world. **A new thing that rests on a world needs the same.**

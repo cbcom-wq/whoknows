@@ -22,15 +22,28 @@ var catalog: ItemCatalog
 var ledger := StrayLedger.new()
 
 ## What pulls (desert world spec §5.5), set by the flight scene; null where
-## nothing does. On a world a live stray falls, and once it comes to rest it
-## is frozen where it lies: world ground has colliders only near ships and
-## you, and strays stay live up to 3 km off, so one left awake would fall
-## through.
+## nothing does. On a world a live stray falls, and once it comes to rest on
+## the ground it is frozen where it lies: world ground has colliders only near
+## ships and you, and strays stay live up to 3 km off, so one left awake would
+## fall through. Only on the ground: one resting on a landed hull or its ramp
+## stays live, so it falls when the ship lifts off -- the hull is an anchor, so
+## the ground under it stays solid meanwhile (final review I3). One found under
+## the ground -- fallen where it had no collider -- is put on it and frozen
+## (M5).
 var gravity: WorldGravity
 
 ## A stray slower than this, for REST_TIME, is at rest.
 const REST_SPEED := 0.1
 const REST_TIME := 0.5
+## How far under a resting stray's underside a ray looks for what holds it up,
+## m, and what it can lie on: hulls and ramps (1), the ground, items and rocks.
+## It is frozen only if the first thing there is the ground.
+const REST_REACH := 0.3
+const UNDER_MASK := 1 | BodyProxy.LAYER | Item.LAYER | AsteroidBody.LAYER
+## A stray loaded on a world with its underside no more than this over the
+## ground, m, is lying on it: put on it and frozen. Higher, it loads live and
+## falls to whatever is under it.
+const ON_GROUND := 0.25
 
 var _live := {}   # int id -> Item
 var _hooks := {}  # int id -> the Callable its item's `consumed` calls
@@ -91,8 +104,9 @@ func _physics_process(delta: float) -> void:
 	tick(delta)
 
 ## Pulls each live, loose stray that is on a world, and freezes those that
-## have come to rest. A frozen stray feels nothing; one in hand or let go of
-## is no longer ours (let_go forgets it).
+## have come to rest on the ground; one under the ground is put on it and
+## frozen. A frozen stray feels nothing; one in hand or let go of is no longer
+## ours (let_go forgets it).
 func pull(delta: float) -> void:
 	if gravity == null:
 		return
@@ -105,14 +119,47 @@ func pull(delta: float) -> void:
 		if not gravity.on_world_at(p):
 			_calm.erase(id)
 			continue
+		var up := gravity.up_at(p)
+		var altitude := gravity.altitude_at(p)
+		if not up.is_zero_approx() and altitude < -WorldSurface.FLOOR_SLACK:
+			_onto_ground(item, up, altitude)
+			_calm.erase(id)
+			continue
 		item.apply_central_force(gravity.at(p) * item.mass)
 		if item.linear_velocity.length() < REST_SPEED:
 			_calm[id] = float(_calm.get(id, 0.0)) + delta
-			if _calm[id] >= REST_TIME:
+			if _calm[id] >= REST_TIME and _on_the_ground(item, up):
 				_freeze(item)
 				_calm.erase(id)
 		else:
 			_calm[id] = 0.0
+
+## Whether what holds `item` up, under it along -`up`, is the ground: a ray
+## from its middle to REST_REACH under its underside, whose first hit is on
+## the terrain layer. A hull, a ramp or another stray first: no.
+static func _on_the_ground(item: Item, up: Vector3) -> bool:
+	if up.is_zero_approx() or not item.is_inside_tree():
+		return false
+	var p := item.global_position
+	var reach := extent_along(item, up) + REST_REACH
+	var query := PhysicsRayQueryParameters3D.create(p, p - up * reach, UNDER_MASK, [item.get_rid()])
+	var hit := item.get_world_3d().direct_space_state.intersect_ray(query)
+	if hit.is_empty():
+		return false
+	var body := hit["collider"] as CollisionObject3D
+	return body != null and (body.collision_layer & BodyProxy.LAYER) != 0
+
+## How far `item`'s box reaches from its middle along `up` (a unit vector), m.
+static func extent_along(item: Item, up: Vector3) -> float:
+	var b := item.global_basis.orthonormalized()
+	var h := item.definition.size * 0.5
+	return absf(b.x.dot(up)) * h.x + absf(b.y.dot(up)) * h.y + absf(b.z.dot(up)) * h.z
+
+## Puts `item`, its middle `altitude` over the ground along `up`, lying on the
+## ground (WorldGravity.altitude_at's), frozen.
+static func _onto_ground(item: Item, up: Vector3, altitude: float) -> void:
+	item.global_position += up * (extent_along(item, up) - altitude)
+	_freeze(item)
 
 static func _freeze(item: Item) -> void:
 	item.linear_velocity = Vector3.ZERO
@@ -176,9 +223,22 @@ func _load(id: int) -> void:
 	item.angular_velocity = e["w"]
 	add_child(item, true)
 	item.add_to_group(Universe.EXTERIOR_SPACE)
-	if gravity != null and gravity.on_world_at(item.position):
-		_freeze(item)
+	_settle_loaded(item)
 	_track(id, item)
+
+## A stray loaded on a world (final review I3, T9a): lying on the ground, or
+## under it, it is put on it and frozen; higher -- saved mid-fall, or resting
+## on a hull or ramp -- it loads live and falls to whatever is under it now, as
+## pull() lets it, and is frozen only once it rests on the ground.
+func _settle_loaded(item: Item) -> void:
+	if gravity == null or not gravity.on_world_at(item.global_position):
+		return
+	var up := gravity.up_at(item.global_position)
+	if up.is_zero_approx():
+		return
+	var altitude := gravity.altitude_at(item.global_position)
+	if altitude <= extent_along(item, up) + ON_GROUND:
+		_onto_ground(item, up, altitude)
 
 ## Frees a live stray, out of the group first. Its entry stays unless the
 ## ledger has already forgotten it.

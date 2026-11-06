@@ -43,6 +43,14 @@ var _surfaces: Dictionary = {}
 ## once at the end of the frame, however many stages changed in it.
 var _stale: Dictionary = {}
 var _alcoves: Dictionary = {}   # Vector3i -> AirlockAlcove
+## Where the ship's landing legs go (LandingLegs.plan of its launch layout; desert
+## world phase 0, Task 15), set by Ship. Empty -- a base, or anything else built
+## from a grid -- builds none, and it stands on its keel.
+var leg_plan: Array[Dictionary] = []
+var _legs: LandingLegs
+## How far under the hull's origin the ground is once landed: the legs' stance
+## plane, or the keel's with no legs (stance_depth()).
+var _stance := 0.0
 
 func bind(grid: ShipGrid, catalog: BlockCatalog) -> void:
 	_grid = grid
@@ -54,8 +62,32 @@ func rebuild() -> void:
 		return
 	var walkable := DeckGraph.build(_grid, _catalog).walkable_coords()
 	_layout = HullLayout.plan(_grid, _catalog, InteriorLayout.plan(_grid, _catalog, walkable))
+	var standing := _standing_legs()
+	_stance = Ship.keel_depth_of(_grid)
+	for leg in standing:
+		_stance = maxf(_stance, -(leg["foot"] as Vector3).y)
 	_build_colliders()
 	_build_skin()
+	if not standing.is_empty():
+		_legs = LandingLegs.build(self, _body(), standing)
+
+## The ship's landing legs, or null with none.
+func legs() -> LandingLegs:
+	return _legs if is_instance_valid(_legs) else null
+
+## Metres from the hull's origin down to the plane it stands on, landed: its
+## legs' feet, or its keel's with no legs (Ship.stance_depth).
+func stance_depth() -> float:
+	return _stance
+
+## The planned legs whose mount the hull still has: a mount lost to damage takes
+## its leg on the rebuild.
+func _standing_legs() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for leg in leg_plan:
+		if _grid.has_block(leg["cell"]):
+			out.append(leg)
+	return out
 
 ## What the skin was made from, for the lights, the probe and tests.
 func layout() -> HullLayout:
@@ -217,6 +249,14 @@ func _clear() -> void:
 		remove_child(alcove)
 		alcove.free()
 	_alcoves.clear()
+	if is_instance_valid(_legs):
+		for collider in _legs.colliders:
+			if is_instance_valid(collider):
+				collider.get_parent().remove_child(collider)
+				collider.free()
+		remove_child(_legs)
+		_legs.free()
+	_legs = null
 
 func _is_alcove(coord: Vector3i) -> bool:
 	return AirlockSite.hatch_normal(_grid, coord) != Vector3i.ZERO
@@ -230,7 +270,7 @@ func _build_colliders() -> void:
 		if _is_alcove(coord):
 			# Hollow, not gone: the alcove's floor, walls and hatches are this
 			# cell's collision now.
-			_alcoves[coord] = AirlockAlcove.build(self, body, _grid, _catalog, coord)
+			_alcoves[coord] = AirlockAlcove.build(self, body, _grid, _catalog, coord, _stance)
 			for collider in _alcoves[coord].colliders:
 				collider.set_meta(&"cell", coord)
 			_collider_coords.append(coord)

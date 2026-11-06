@@ -108,8 +108,11 @@ var whereabouts: Whereabouts = null
 ## script, so every ship feels a world's pull and holds against it.
 var gravity: WorldGravity = null
 
-## Metres from the hull's origin down to the bottom of its lowest cell; the
-## ship sets it from its grid (desert-world spec §5.2).
+## Metres from the hull's origin down to the plane it stands on, landed: its
+## landing legs' feet, 0.4 m under the bottom of its lowest cell, or that
+## bottom with no legs (Ship.stance_depth; desert-world spec §5.2, phase 0
+## Task 15). The ship sets it from its grid; keel_altitude and the levelling
+## measure from it.
 var keel_depth := 0.0
 
 ## True while the hull is landed, or touching and in contact with terrain this
@@ -120,10 +123,16 @@ var keel_depth := 0.0
 ## LandingMonitor every tick; false while flying, so always false in deep space.
 var on_ground := false
 
-## On the ground with the stick's translation centred: the hold and the
-## levelling stand down. Any translation input ends it.
+## On the ground and not asked to move: the hold and the levelling stand
+## down. LandingMonitor.translating is the one home of "asked to move" (the
+## stick's translation, or a velocity hold climbing over HOLD_LIFTS), so an AI
+## pilot's climbing hold gets its gravity hold back on the ground and rises
+## off (Task 15, N1).
 func _resting_on_ground() -> bool:
-	return on_ground and _translate_input.is_zero_approx()
+	if not on_ground:
+		return false
+	var up := gravity.up_at(_hull.global_position) if gravity != null else Vector3.ZERO
+	return not LandingMonitor.translating(self, up)
 
 ## What the landing monitor says of the ground, for the telemetry; null in
 ## deep space and in tests that never set it.
@@ -389,7 +398,8 @@ static func within_budget(force: Vector3, budget: Dictionary, scale := 1.0) -> V
 		clampf(force.z, -forward, reverse),
 	)
 
-## Height of the keel over the ground under the hull; INF outside a well.
+## Height of the plane its feet stand on (keel_depth) over the ground under
+## the hull: 0 landed on flat ground; INF outside a well.
 func keel_altitude() -> float:
 	if gravity == null:
 		return INF

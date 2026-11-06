@@ -173,6 +173,88 @@ func test_touching_with_no_contact_this_tick_is_not_on_ground():
 	assert_eq(m.state, LandingMonitor.State.TOUCHING, "still in the grace")
 	assert_false(fc.on_ground, "the hold is back at once")
 
+## Final review M1: your ship handed to its pilot (P) flies on a velocity hold
+## with the stick centred. A hold with an upward part -- over 0.5 m/s along up
+## (LandingMonitor.HOLD_LIFTS) -- lifts a landed ship off, as the stick would;
+## one along the ground, down, or barely up leaves it landed.
+func _landed_rig() -> Array:
+	var hull := RigidBody3D.new()
+	add_child_autofree(hull)
+	var fc := FlightComputer.new()
+	fc.hull_path = NodePath("../" + hull.name)
+	hull.get_parent().add_child(fc)
+	autofree(fc)
+	fc.gravity = Pull.new()
+	var m := StubContact.new()
+	m.hull = hull
+	m.flight = fc
+	add_child_autofree(m)
+	m.restore_landed()
+	return [hull, fc, m]
+
+func test_a_landed_ship_given_an_upward_hold_lifts_off():
+	var r := _landed_rig()
+	var fc: FlightComputer = r[1]
+	var m: LandingMonitor = r[2]
+	assert_true(fc.assist_enabled, "a hold needs the assist")
+	fc.hold_velocity(Vector3(3.0, 2.0, 0.0))
+	m._physics_process(1.0 / 60.0)
+	assert_eq(m.state, LandingMonitor.State.FLYING, "the pilot's climb lifts it off")
+	assert_false((r[0] as RigidBody3D).freeze, "thawed")
+
+func test_a_landed_ship_given_a_level_or_downward_hold_stays_landed():
+	var r := _landed_rig()
+	var fc: FlightComputer = r[1]
+	var m: LandingMonitor = r[2]
+	for v: Vector3 in [Vector3(5.0, 0.0, 0.0), Vector3(0.0, -2.0, 0.0), Vector3(0.0, 0.2, 0.0)]:
+		fc.hold_velocity(v)
+		m._physics_process(1.0 / 60.0)
+		assert_eq(m.state, LandingMonitor.State.LANDED, "held at %s" % v)
+	fc.release_velocity()
+	m._physics_process(1.0 / 60.0)
+	assert_eq(m.state, LandingMonitor.State.LANDED, "no hold")
+
+## Task 15 N1, in the flight scene: the starter landed on a world and handed a
+## 1 m/s climb with the stick centred (as its pilot flies it) rises off the
+## ground within 3 s. The flight computer's hold stands down on the ground only
+## for what leaves it landed (LandingMonitor.translating), so it climbs with
+## the hold behind it, not against its own weight.
+func test_a_landed_starter_given_a_1_m_s_climb_rises_off_within_3_s():
+	var root: Node = load("res://scenes/flight_test.tscn").instantiate()
+	add_child_autofree(root)
+	await wait_physics_frames(3)
+	root.reload = func() -> void: pass
+	var ship: Ship = root.get_node("Ship")
+	var universe: Universe = root.get_node("Universe")
+	var system: SystemRecipe = root.system
+	var planet: SystemBody = system.planets()[0]
+	for p in system.planets():
+		if p.radius > planet.radius:
+			planet = p
+	root.hop_index = system.bodies.find(planet) - 1
+	assert_true(root.hop(1))
+	await wait_physics_frames(2)
+	var surface: WorldSurface = (root.star_system.proxy(planet.id) as BodyProxy).surface()
+	var centre := universe.to_engine(planet.point)
+	var up := (ship.exterior.global_position - centre).normalized()
+	var along := up.cross(Vector3.UP).normalized()
+	ship.exterior.global_transform = Transform3D(Basis(along, up, along.cross(up).normalized()),
+		centre + up * (planet.radius + surface.terrain.height_at(up) + ship.stance_depth() + 0.02))
+	ship.exterior.linear_velocity = Vector3.ZERO
+	ship.exterior.angular_velocity = Vector3.ZERO
+	ship.flight_computer.assist_enabled = true
+	ship.landing.restore_landed()
+	await wait_physics_frames(10)
+	assert_true(ship.landing.is_landed(), "landed")
+	var fc := ship.flight_computer
+	var start := fc.keel_altitude()
+	fc.hold_velocity(up * 1.0)
+	var rose: bool = await wait_until(func() -> bool: return fc.keel_altitude() > start + 0.5, 3.0)
+	var rise := fc.keel_altitude() - start
+	fc.release_velocity()
+	assert_true(rose, "risen %.2f m off the ground in 3 s (state %s)" % [rise, LandingMonitor.State.keys()[ship.landing.state]])
+	assert_false(ship.landing.is_landed(), "lifted off")
+
 func test_the_status_strings():
 	var m := LandingMonitor.new()
 	autofree(m)

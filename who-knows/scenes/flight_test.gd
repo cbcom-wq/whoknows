@@ -734,9 +734,11 @@ func _on_felt_hit(strength: float, from: Vector3, ship: Ship) -> void:
 		_avatar.knock(strength, from)
 
 ## A hole where you stand puts you outside, moving as you were (health and
-## damage spec §7.4): only a hole in the ship you stand in. On a landed ship
-## that is on your feet on the world (desert world spec §5.5), as its airlock
-## would put you; anywhere else, a spacewalk.
+## damage spec §7.4): only a hole in the ship you stand in. On a ship landed on
+## a world that is on your feet on the world (desert world spec §5.5), as its
+## airlock would put you; anywhere else -- flying low over a world included --
+## a spacewalk, so you can fly back in: on foot you would fall to the ground
+## with your ship hovering on above you and no ramp down (final review I2).
 func _on_blocks_lost(_coords: Array[Vector3i], ship: Ship) -> void:
 	if _avatar.mode != Avatar.Mode.PLATING or _avatar.get_parent() != ship.interior:
 		return
@@ -748,7 +750,7 @@ func _on_blocks_lost(_coords: Array[Vector3i], ship: Ship) -> void:
 		_avatar.global_transform, InteriorBuilder.storey_offset(cell.y))
 	var v := Threshold.carry_velocity_out(ship.exterior.linear_velocity, ship.exterior.global_basis,
 		_avatar.velocity)
-	if ship.on_world():
+	if ship.on_world() and ship.landing.is_landed():
 		_avatar.enter_field(ship.outside, world, v, ship.exterior)
 	else:
 		_avatar.enter_suit(ship.outside, world, v, ship.exterior)
@@ -831,6 +833,10 @@ func _wire_universe(saved: Dictionary) -> void:
 	_avatar.camera.far = BodyProxy.VIEW_FAR
 	# The sun's shadows stopped at 100 m, so nothing on a big rock cast one.
 	$DirectionalLight3D.directional_shadow_max_distance = AsteroidStream.SHADOW_REACH
+	# Outside, your hands and what they hold are on their own layer, which the
+	# head lamp leaves out (Avatar.HANDS_LAYER): the sun lights it, or they are
+	# black against a sunlit world (final review I1). Set here, not in the .tscn.
+	$DirectionalLight3D.light_cull_mask |= Avatar.HANDS_LAYER
 	_avatar.mode_changed.connect(
 		func(_mode: Avatar.Mode) -> void:
 			_universe.set_focus(_avatar if _avatar.is_outside() else home.exterior)

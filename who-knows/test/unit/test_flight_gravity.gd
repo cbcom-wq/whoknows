@@ -263,6 +263,22 @@ func test_any_translation_input_restores_the_levelling():
 	_fc._apply_rotation(1.0 / 60.0)
 	assert_ne(_fc.commanded_torque_local.x, 0.0)
 
+## Task 15 N1: the hold stands down on the ground for exactly what the landing
+## monitor lifts a landed ship off on (LandingMonitor.translating): the stick,
+## or a velocity hold climbing over HOLD_LIFTS. So your ship handed to its pilot
+## climbs off the ground with the hold behind it, not against its own weight.
+func test_a_climbing_velocity_hold_restores_the_hold_on_the_ground():
+	_fc.thrust_budget = BUDGET
+	_fc.gravity = _fake_gravity(Vector3(0, -7.0, 0))
+	_fc.on_ground = true
+	_fc.hold_velocity(Vector3(0, 1.0, 0))
+	assert_false(_fc._resting_on_ground(), "a 1 m/s climb is not resting")
+	_fc._apply_translation(1.0 / 60.0)
+	assert_gte(_fc.commanded_force_local.y, 7.0 * MASS - 1.0, "the hold is back")
+	for v: Vector3 in [Vector3(0, 0.2, 0), Vector3(5, 0, 0), Vector3(0, -2, 0)]:
+		_fc.hold_velocity(v)
+		assert_true(_fc._resting_on_ground(), "a hold of %s leaves it resting, as it leaves it landed" % v)
+
 func test_off_the_ground_the_hold_still_holds():
 	_fc.thrust_budget = BUDGET
 	_fc.gravity = _fake_gravity(Vector3(0, -7.0, 0))

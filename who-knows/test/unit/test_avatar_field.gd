@@ -321,6 +321,30 @@ func test_on_foot_with_a_dry_suit_the_hud_does_not_say_returning():
 	assert_false(status.contains("RETURNING"), status)
 	assert_false(status.contains("SUIT DRY"), status)
 
+## Final review (T13/T14): on foot nothing draws on the suit's cell and nothing
+## needs it, so the HUD does not show its charge -- "SUIT 0%" on a world only
+## alarms. With nothing in hand there is no energy readout at all.
+func test_on_foot_the_hud_does_not_show_the_suits_charge():
+	_lone()
+	_ground()
+	_field(Vector3(0, 0.02, 0))
+	_avatar.suit_cell.charge = 0.0
+	var t := _avatar.build_telemetry()
+	assert_false(t.has_energy, "no suit readout on foot")
+	var panel := EnergyPanel.new()
+	add_child_autofree(panel)
+	panel.render(t)
+	assert_false(panel.visible, "the energy panel is hidden")
+
+## ...and on a spacewalk it is shown, as ever.
+func test_on_a_spacewalk_the_hud_shows_the_suits_charge():
+	_lone()
+	_avatar.enter_suit(_world, Transform3D.IDENTITY, Vector3.ZERO, null)
+	_avatar.suit_cell.charge = SuitCell.CAPACITY * 0.5
+	var t := _avatar.build_telemetry()
+	assert_true(t.has_energy)
+	assert_eq(t.energy_label, &"SUIT")
+
 ## ...and the spacewalk's wording is pinned.
 func test_on_a_spacewalk_with_a_dry_suit_the_hud_says_dry_and_returning():
 	_lone()
@@ -367,6 +391,85 @@ func test_the_lamp_spares_your_hands_and_a_dimmer_fill_lights_them():
 		seen += 1
 		assert_eq((node as MeshInstance3D).layers, Avatar.HANDS_LAYER)
 	assert_gt(seen, 0, "the hands have meshes")
+
+## Final review M6: a thing taken into your hands while you are already outside
+## goes onto the hands' layer too, as one carried out does -- or the lamp,
+## which leaves that layer out, would blow it out white in your hands.
+func test_a_thing_taken_outside_goes_onto_the_hands_layer():
+	_lone()
+	_field()
+	var crate := Item.new()
+	crate.setup(ItemCatalog.load_from_dir().get_def(&"crate"))
+	_world.add_child(crate)
+	crate.global_position = _avatar.global_position + Vector3(0, 1.0, -1.0)
+	crate.set_space(true)
+	crate.set_loose()
+	assert_true(_avatar.grasp.take(crate), "hands work on the ground")
+	var seen := 0
+	for node in crate.find_children("*", "MeshInstance3D", true, false):
+		seen += 1
+		assert_eq((node as MeshInstance3D).layers, Avatar.HANDS_LAYER, str(node.name))
+	assert_gt(seen, 0, "the crate has meshes")
+
+## The other way (after the final review): a thing let go of on foot leaves
+## the hands' layer for the world's, or the head lamp's beam, which leaves that
+## layer out, would never light it where it lies at night.
+func test_a_thing_dropped_on_foot_leaves_the_hands_layer():
+	var crate := _crate_in_hand_on_foot()
+	_avatar.grasp.drop()
+	assert_eq(crate.state, Item.State.LOOSE, "let go")
+	_assert_on_the_world_layer(crate)
+
+func test_a_thing_thrown_on_foot_leaves_the_hands_layer():
+	var crate := _crate_in_hand_on_foot()
+	_avatar.grasp.throw(0.5)
+	assert_eq(crate.state, Item.State.LOOSE, "thrown")
+	_assert_on_the_world_layer(crate)
+
+## Task 15 N3: every visual part of a thing goes with it, not only its look --
+## a flare's flame and its light, which Item.set_space never rebuilds. Taken
+## outside they go onto the hands' layer; dropped, none is left there.
+func test_a_flare_taken_and_dropped_outside_leaves_nothing_on_the_hands_layer():
+	_lone()
+	_field()
+	var flare := Item.new()
+	flare.setup(ItemCatalog.load_from_dir().get_def(&"flare"))
+	_world.add_child(flare)
+	flare.global_position = _avatar.global_position + Vector3(0, 1.0, -1.0)
+	flare.set_space(true)
+	flare.set_loose()
+	assert_true(_avatar.grasp.take(flare), "hands work on the ground")
+	var parts := flare.find_children("*", "VisualInstance3D", true, false)
+	assert_gt(parts.filter(func(n: Node) -> bool: return n is Light3D).size(), 0, "it has its light")
+	for node in parts:
+		assert_eq((node as VisualInstance3D).layers, Avatar.HANDS_LAYER, "in hand, %s on the hands' layer" % node.name)
+	_avatar.grasp.drop()
+	assert_eq(flare.state, Item.State.LOOSE, "let go")
+	for node in flare.find_children("*", "VisualInstance3D", true, false):
+		var layers := (node as VisualInstance3D).layers
+		assert_eq(layers & Avatar.HANDS_LAYER, 0, "dropped, %s is off the hands' layer" % node.name)
+		assert_ne(layers & Item.SPACE_LAYER, 0, "dropped, %s is on the world's layer" % node.name)
+
+func _crate_in_hand_on_foot() -> Item:
+	_lone()
+	_field()
+	var crate := Item.new()
+	crate.setup(ItemCatalog.load_from_dir().get_def(&"crate"))
+	_world.add_child(crate)
+	crate.global_position = _avatar.global_position + Vector3(0, 1.0, -1.0)
+	crate.set_space(true)
+	crate.set_loose()
+	assert_true(_avatar.grasp.take(crate), "hands work on the ground")
+	return crate
+
+func _assert_on_the_world_layer(item: Item) -> void:
+	var seen := 0
+	for node in item.find_children("*", "MeshInstance3D", true, false):
+		seen += 1
+		var layers := (node as MeshInstance3D).layers
+		assert_eq(layers & Avatar.HANDS_LAYER, 0, "%s is off the hands' layer" % node.name)
+		assert_ne(layers & Item.SPACE_LAYER, 0, "%s is on the world's layer" % node.name)
+	assert_gt(seen, 0, "the crate has meshes")
 
 func test_l_does_nothing_aboard():
 	_lone()
@@ -542,6 +645,43 @@ func test_a_hole_where_you_stand_in_open_space_is_a_spacewalk():
 	_stand_in_a_hole()
 	assert_eq(_avatar.mode, Avatar.Mode.SUIT)
 	assert_eq(_avatar.get_parent(), _ship.outside)
+
+## Final review I2: flying low over a world -- in its well, under the air top,
+## but not landed -- a hole is a spacewalk too. On foot you would drop to the
+## ground with no thrusters while your ship hovered on above you, with no ramp
+## down: stranded. In the suit you fly back to the airlock.
+func test_a_hole_where_you_stand_flying_over_a_world_is_a_spacewalk():
+	_flight(false)
+	_ship.flight_computer.gravity = OnWorld.new()
+	assert_true(_ship.on_world(), "under the air top")
+	assert_false(_ship.landing.is_landed(), "and flying")
+	_stand_in_a_hole()
+	assert_eq(_avatar.mode, Avatar.Mode.SUIT, "a spacewalk, not on foot in mid-air")
+	assert_eq(_avatar.get_parent(), _ship.outside)
+	assert_true(_avatar.grasp.suspended)
+
+## Final review (T8): blacking out is the way home for a player stranded on
+## foot. The rescue puts you aboard, and what you let go of lands aboard again:
+## the root FIELD kept for enter_plating is back.
+func test_blacking_out_on_foot_wakes_you_aboard():
+	_scene(true)
+	_cross_out()
+	assert_eq(_avatar.mode, Avatar.Mode.FIELD)
+	_avatar.health.take(Avatar.MAX_HEALTH * 2.0)
+	assert_not_null(_avatar.downed, "blacked out")
+	var downed := _avatar.downed
+	downed.tick(Downed.FADE + 0.01)
+	assert_eq(downed.step, Downed.Step.BLACK)
+	assert_eq(_avatar.mode, Avatar.Mode.FIELD, "you lie where you fell meanwhile")
+	downed.tick(Downed.BLACK + 0.01)
+	assert_eq(downed.step, Downed.Step.WAKING)
+	assert_eq(_avatar.mode, Avatar.Mode.PLATING, "rescued aboard")
+	assert_eq(_avatar.get_parent(), _ship.interior)
+	assert_eq(_avatar.grasp.world_root, _ship.items, "what you drop lands aboard again")
+	assert_false(_avatar.is_in_group(Universe.EXTERIOR_SPACE))
+	assert_eq(_avatar.health.current, Avatar.WAKE_HEALTH)
+	downed.tick(Downed.WAKE + 0.01)
+	assert_null(_avatar.downed, "awake")
 
 ## Stands you, aboard, in a cell the ship has no block in -- two past its
 ## furthest -- and tells the scene blocks were lost.

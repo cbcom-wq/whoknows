@@ -11,7 +11,11 @@ extends SceneTree
 #   2. tilted 15 deg at 130 m with the stick centred, it levels; and so does
 #      the heaviest library ship, without overshooting;
 #   3. it comes down at 2 m/s and lands, with no hard landing and no damage;
-#      its landing ramp comes down under the outer hatch (Task 14), rendered
+#      its landing legs (Task 15) stay up at 100 m (rendered from the chase
+#      view), fold out under 40 m (rendered halfway) and are down before
+#      touchdown, so it lands on its feet with its keel clear of the ground
+#      (rendered from 25 m at eye height, and low under the belly); its
+#      landing ramp comes down under the outer hatch (Task 14), rendered
 #      halfway and down; the frame rate seated at its helm on the ground;
 #   5. out of its airlock on foot (the hatch clear of the real ground) and
 #      down the ramp on your feet, the frame rate standing beside it, 20 m
@@ -21,7 +25,7 @@ extends SceneTree
 #      rate there, the view up it), up the ramp on your feet, its hull panel
 #      within reach, and in through its outer hatch -- never put there by hand;
 #   8. from its helm, up off the ground to a hover at 300 m, the ramp
-#      stowing at once;
+#      stowing at once and the legs folding up past 60 m;
 #   9. the first starter on low power: F8 to its helm, and up again;
 #  10. the planet's ring, if it has one; above the air top a spacewalk does
 #      not fall; and the head lamp at night, at eye height.
@@ -41,7 +45,7 @@ const TIME_LIMIT := 600.0
 const HOVER := 300.0
 const LEVEL_AT := 130.0
 const TILT := 15.0
-## The descent runs at 10 m/s down to here (keel over the ground), then at SINK.
+## The descent runs at 10 m/s down to here (feet over the ground), then at SINK.
 const SLOW_FROM := 30.0
 const SINK := 2.0
 const BESIDE := 6.0
@@ -188,6 +192,9 @@ func _hovers() -> void:
 	_check(on > 0, "1 hovering, the hold shows: %d of %d RCS emitters puffing (most %.2f), commanded %.0f of %.0f kN up; %s" % [
 		on, rcs.emitters.size(), most, fc.commanded_force_local.y / 1000.0, fc.thrust_budget[&"vertical"] / 1000.0, core])
 	await _outside_shot("hover", _starter, Vector3(20.0, 2.0, -6.0))
+	var legs := _starter.exterior_builder.legs()
+	_check(legs != null and legs.legs.size() == 4 and legs.is_stowed() and _legs_off(legs),
+		"1 at %.0f m its four landing legs are folded up, their colliders off" % _alt(_starter))
 
 ## Step 4, run from step 1's hover: the room panel refuses.
 func _refuses_while_flying() -> void:
@@ -268,10 +275,14 @@ func _lands() -> void:
 	landing.hard_landing.connect(func(speed: float) -> void: hard.append(speed))
 	var damage := _block_damage(_starter)
 	var hull := _starter.hull_whole()
+	# The landing legs on the way down (Task 15): {up_at_100, began, down, halfway}.
+	var legs := _starter.exterior_builder.legs()
+	var seen := {"up_at_100": false, "shot_100": false, "began": -1.0, "down": -1.0, "halfway": false}
 	var end := Time.get_ticks_msec() + 30000
 	while _alt(_starter) > SLOW_FROM and Time.get_ticks_msec() < end:
 		_hold_sink(_starter, 10.0)
 		await physics_frame
+		await _watch_legs(legs, seen)
 	var sinks: Array[float] = []
 	var touch := 0.0
 	end = Time.get_ticks_msec() + 40000
@@ -281,8 +292,13 @@ func _lands() -> void:
 		if _alt(_starter) < 10.0:
 			sinks.append(touch)
 		await physics_frame
+		await _watch_legs(legs, seen)
 	_stick_y(0.0)
 	var touched := Time.get_ticks_msec()
+	_check(bool(seen["up_at_100"]), "3 at 100 m on the way down its legs are still folded up (rendered from the chase view)")
+	_check(float(seen["began"]) > 36.0 and float(seen["began"]) <= LandingLegs.DOWN_BELOW and float(seen["down"]) > 0.0,
+		"3 its legs began to fold out at %.1f m (under %.0f) and were down, colliders on, at %.1f m: before touchdown" % [
+		float(seen["began"]), LandingLegs.DOWN_BELOW, float(seen["down"])])
 	var landed := await _until(func() -> bool: return landing.is_landed(), 10.0)
 	var landed_at := Time.get_ticks_msec()
 	var took := (landed_at - touched) / 1000.0
@@ -299,8 +315,9 @@ func _lands() -> void:
 	var damage_after := _block_damage(_starter)
 	_check(damage_after == damage, "3 the blocks' damage %.1f hp before touchdown and %.1f after; HULL %.0f%% and %.0f%%" % [
 		damage, damage_after, hull * 100.0, _starter.hull_whole() * 100.0])
-	print("        keel %.2f m over the ground; the outer hatch floor %.2f m over the ground under it" % [
+	print("        its feet %.2f m over the ground; the outer hatch floor %.2f m over the ground under it" % [
 		_alt(_starter), _hatch_floor_height(lock)])
+	await _stands_on_its_legs(_starter)
 	await _outside_shot("landed", _starter, Vector3(16.0, 3.0, 18.0))
 	await _seconds(1.0)
 	await _shot("seated_on_the_ground")
@@ -335,11 +352,118 @@ func _ramp_comes_down(lock: Airlock, landed_at: int) -> void:
 	var angle := rad_to_deg(ramp.angle)
 	_check(down and ramp.visible and not ramp.collider.disabled and gap < 0.05 and absf(tip) < 0.15
 		and angle >= 15.0 - 0.01 and angle <= 38.0 + 0.01,
-		"3 its landing ramp is down %.2f s after LANDED (the travel is %.1f s; held %.2f s for the render): sill %.2f m over the keel, %.2f m long at %.1f deg (15..38), its top edge %.3f m from the sill (under 0.05), its tip %.2f m over the ground (within 0.15), collider on" % [
+		"3 its landing ramp is down %.2f s after LANDED (the travel is %.1f s; held %.2f s for the render): sill %.2f m over its feet, %.2f m long at %.1f deg (15..38), its top edge %.3f m from the sill (under 0.05), its tip %.2f m over the ground (within 0.15), collider on" % [
 		took, LandingRamp.TRAVEL, frozen / 1000.0, ramp.sill_height, ramp.length, angle, gap, tip])
 	await _ramp_shot("ramp_down", ramp, Vector3(-12.0, 0.0, 22.0), Vector3(0.0, -0.6, 0.5))
 	print("        the landed starter and its ramp from %.0f m at eye height" % (
 		_flat(_cam.global_position - ramp.global_position).length()))
+
+## Every leg collider off.
+static func _legs_off(legs: LandingLegs) -> bool:
+	return legs.colliders.all(func(c: CollisionShape3D) -> bool: return c.disabled)
+
+static func _legs_on(legs: LandingLegs) -> bool:
+	return legs.colliders.all(func(c: CollisionShape3D) -> bool: return not c.disabled)
+
+## Step 3 (Task 15), one tick of the descent: up at 100 m (rendered from the
+## chase view), the altitude they began to fold out at and were down at, and
+## halfway out (rendered, the legs held there for it).
+func _watch_legs(legs: LandingLegs, seen: Dictionary) -> void:
+	var alt := _alt(_starter)
+	if not bool(seen["shot_100"]) and alt < 100.0:
+		seen["shot_100"] = true
+		seen["up_at_100"] = legs.is_stowed() and _legs_off(legs)
+		_director.cycle_view()
+		await _shot("legs_up_in_flight")
+		print("        ★ the starter at %.0f m from the chase view, its legs folded up" % alt)
+		_director.cycle_view()
+	if float(seen["began"]) < 0.0 and not legs.is_stowed():
+		seen["began"] = alt
+	if not bool(seen["halfway"]) and legs.progress() >= 0.5:
+		seen["halfway"] = true
+		legs.set_process(false)
+		# From the sun's side, 35 deg round from it, level with the hull's
+		# middle and looking down past the belly, so the legs stand against
+		# the sand, not the sky.
+		var sunward := _sunward(_starter).rotated(Vector3.UP, deg_to_rad(35.0))
+		await _hull_shot("legs_halfway", _starter, sunward * 15.0,
+			Vector3(0.0, -_starter.stance_depth(), 0.0))
+		print("        ★ its legs %.0f%% of the way out at %.0f m, folding out about the hinge, then the knee" % [
+			legs.progress() * 100.0, alt])
+		legs.set_process(true)
+	if float(seen["down"]) < 0.0 and legs.is_down() and _legs_on(legs):
+		seen["down"] = alt
+
+## Step 3 (Task 15), landed: on its four feet, every foot on the ground, its
+## keel strip clear of it, level; rendered from 25 m at eye height and low
+## under the belly beside a foot.
+func _stands_on_its_legs(ship: Ship) -> void:
+	var legs := ship.exterior_builder.legs()
+	var feet: Array[String] = []
+	var on := true
+	for foot in legs.feet():
+		var h := _gravity.altitude_at(foot)
+		feet.append("%.3f" % h)
+		on = on and absf(h) < 0.1
+	var hull := ship.exterior.global_transform
+	var keel := INF
+	for c: Vector3i in ship.grid.coords():
+		if c.y == -1:
+			for x: float in [-1.0, 1.0]:
+				for z: float in [-1.0, 1.0]:
+					keel = minf(keel, _gravity.altitude_at(hull * (ShipGrid.cell_center(c) + Vector3(x, -1.0, z))))
+	var dome := INF
+	for t in ship.turrets:
+		for mi: MeshInstance3D in t.find_children("*", "MeshInstance3D", true, false):
+			var box := mi.get_aabb()
+			for i in 8:
+				dome = minf(dome, _gravity.altitude_at(mi.global_transform * (box.position + box.size * Vector3(i & 1, (i >> 1) & 1, (i >> 2) & 1))))
+	_check(legs.is_down() and _legs_on(legs) and on and keel >= 0.3,
+		"3 it stands on its four legs: feet %s m over the ground (each within 0.1), its keel strip's lowest corner %.2f m over it (at least 0.3), tilt %.2f deg" % [
+		", ".join(feet), keel, rad_to_deg(ship.landing.tilt())])
+	print("        the belly turret's look reaches %.2f m over the ground (negative: into it)" % dome)
+	await _ground_shot("legs_landed", ship, Vector3(17.0, 0.0, 18.0), EYE, Vector3(0.0, -1.5, 0.0))
+	var up := _up(hull.origin)
+	var off := _cam.global_position - hull.origin
+	print("        ★ the landed starter on its legs from %.0f m at eye height" % (off - up * off.dot(up)).length())
+	var plan_legs := legs.legs
+	var fore_starboard: Dictionary = plan_legs[0]
+	for leg in plan_legs:
+		if int(leg["side"]) > 0 and int(leg["end"]) < 0:
+			fore_starboard = leg
+	# Inboard of the forward starboard foot and ahead of it, 0.55 m up,
+	# looking aft under the starboard half of the belly: the near foot left
+	# of the middle (starboard is on the left looking aft), the aft one beyond
+	# it, the keel strip 0.4 m off the sand on the right, and the light past
+	# the stern. The aim is a little outboard, so the key card does not
+	# cover the near foot.
+	var f: Vector3 = fore_starboard["foot"]
+	await _ground_shot("legs_under_the_belly", ship, f + Vector3(-1.5, 0.0, -2.7), 0.55,
+		Vector3(f.x + 1.5, -ship.stance_depth() + 1.4, f.z + 10.0))
+	print("        ★ low under the belly, from beside the forward starboard foot, looking aft")
+
+## The way to the sun, level, in `ship`'s hull axes (a unit vector, y 0).
+func _sunward(ship: Ship) -> Vector3:
+	var sun := _scene.get_node("DirectionalLight3D") as DirectionalLight3D
+	var d := ship.exterior.global_basis.inverse() * sun.global_basis.z
+	d.y = 0.0
+	return d.normalized() if d.length() > 0.01 else Vector3.RIGHT
+
+## A camera outside at `offset` in `ship`'s hull axes from its hull, looking at
+## `target` in them, for one render.
+func _hull_shot(shot_name: String, ship: Ship, offset: Vector3, target: Vector3) -> void:
+	var hull := ship.exterior.global_transform
+	var at := hull * offset
+	await _camera_shot(shot_name, Transform3D(Basis.looking_at(hull * target - at, _up(at)), at))
+
+## A camera `height` m over the real ground at `flat` in `ship`'s hull axes
+## (its y ignored), looking at `target` in them, for one render.
+func _ground_shot(shot_name: String, ship: Ship, flat: Vector3, height: float, target: Vector3) -> void:
+	var hull := ship.exterior.global_transform
+	var at := hull * Vector3(flat.x, -ship.stance_depth(), flat.z)
+	var up := _up(at)
+	at += up * (height - _gravity.altitude_at(at))
+	await _camera_shot(shot_name, Transform3D(Basis.looking_at(hull * target - at, up), at))
 
 ## Step 5, and the controller's check 4: out on foot with something in hand,
 ## the frame rate beside the ship, 20 m off, and a jump.
@@ -434,6 +558,8 @@ func _second_ship() -> Ship:
 		ship.flight_computer.assist_enabled = true
 		_place(ship, dir, 2.0, -hull.basis.z)
 		await _seconds(0.5)
+		# Under 40 m its legs fold out: it sets down on them.
+		await _until(func() -> bool: return ship.exterior_builder.legs().is_down(), 2.5)
 		ship.flight_computer.set_pilot_input(Vector3(0.0, -0.15, 0.0), Vector3.ZERO, false)
 		await _until(func() -> bool: return ship.landing.state != LandingMonitor.State.FLYING, 6.0)
 		ship.flight_computer.set_pilot_input(Vector3.ZERO, Vector3.ZERO, false)
@@ -451,8 +577,8 @@ func _second_ship() -> Ship:
 	var lock: Airlock = second.airlocks.values()[0]
 	print("        %s landed %.1f m from the starter, tilt %.1f deg; its hatch floor %.2f m over the ground under it" % [
 		second.name, apart, rad_to_deg(second.landing.tilt()), _hatch_floor_height(lock)])
-	# Its outer hatch is 2.05 m over the ground, over twice a jump: the landing
-	# ramp (Task 14) is the only way up, walked on your feet.
+	# Its outer hatch is 2.45 m over the ground on its legs, over twice a jump:
+	# the landing ramp (Task 14) is the only way up, walked on your feet.
 	var ramp := lock.alcove.ramp
 	if ramp == null:
 		_check(false, "7 %s's outer hatch has no landing ramp: there is no way up to it" % second.name)
@@ -551,9 +677,14 @@ func _lifts_off(ship: Ship) -> void:
 	await _sit(ship)
 	_check(_director.seat_ship() == ship, "8 at %s's helm" % ship.name)
 	var ramp := (ship.airlocks.values()[0] as Airlock).alcove.ramp
-	# ms it left LANDED, ms it was hidden, its collider off the tick after.
-	var seen := [-1, -1, false]
+	var legs := ship.exterior_builder.legs()
+	# ms it left LANDED, ms it was hidden, its collider off the tick after; the
+	# altitude its legs began to fold up at, and their colliders off then.
+	var seen := [-1, -1, false, -1.0, false]
 	var watch := func() -> void:
+		if float(seen[3]) < 0.0 and legs != null and not legs.is_down():
+			seen[3] = _alt(ship)
+			seen[4] = _legs_off(legs)
 		if ramp == null:
 			return
 		if int(seen[0]) < 0 and not ship.landing.is_landed():
@@ -565,6 +696,10 @@ func _lifts_off(ship: Ship) -> void:
 	var r := await _climb(ship, func() -> float: return _alt(ship), HOVER, 45.0)
 	physics_frame.disconnect(watch)
 	_say_climb("8", ship, r)
+	_check(float(seen[3]) >= LandingLegs.UP_ABOVE and float(seen[3]) < LandingLegs.UP_ABOVE + 8.0 and bool(seen[4])
+		and legs.is_stowed(),
+		"8 its legs began to fold up at %.1f m (past %.0f), their colliders off then; folded up at the hover" % [
+		float(seen[3]), LandingLegs.UP_ABOVE])
 	var hid := (int(seen[1]) - int(seen[0])) / 1000.0
 	_check(ramp != null and bool(seen[2]) and int(seen[1]) >= 0 and hid <= 2.0 and ramp.is_stowed()
 		and ramp.collider.disabled,
@@ -976,12 +1111,13 @@ static func _level(up: Vector3, forward: Vector3) -> Basis:
 	var f := (forward - y * forward.dot(y)).normalized()
 	return Basis(y.cross(-f).normalized(), y, -f)
 
-## `ship`'s hull over `dir`, its keel `height` m over the ground, turned by
-## `tilt` from level, at rest; the origin, the worlds and the sun follow.
+## `ship`'s hull over `dir`, the plane its legs stand on `height` m over the
+## ground, turned by `tilt` from level, at rest; the origin, the worlds and the
+## sun follow.
 func _place(ship: Ship, dir: Vector3, height: float, forward: Vector3, tilt := Basis.IDENTITY) -> void:
 	var up := dir.normalized()
 	ship.exterior.global_transform = Transform3D(tilt * _level(up, forward),
-		_centre() + up * (_ground_r(up) + ship.keel_depth() + height))
+		_centre() + up * (_ground_r(up) + ship.stance_depth() + height))
 	ship.exterior.linear_velocity = Vector3.ZERO
 	ship.exterior.angular_velocity = Vector3.ZERO
 	_moved()

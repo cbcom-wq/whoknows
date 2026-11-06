@@ -468,8 +468,9 @@ func _hold_station() -> void:
 	_boost = false
 	_jink_left = 0.0
 	intent = &"holding_station"
-	_held = Vector3.ZERO
-	flight.hold_velocity(_floored(_held))
+	# Floored once, here: the raw-stick path (_fly) steers on _held too.
+	_held = _floored(Vector3.ZERO)
+	flight.hold_velocity(_held)
 	_desired = ship.exterior.global_basis.orthonormalized()
 
 ## Holds `wanted`, steered round rocks and other ships, under `limit` (the
@@ -504,8 +505,10 @@ func _hold(wanted: Vector3, limit := -1.0) -> void:
 		if not shy.is_zero_approx() and on_ahead > 0.0:
 			wanted -= ahead * on_ahead * clampf(shy.length() / speed, 0.0, 1.0)
 	wanted += swerve + shy
-	_held = wanted.limit_length(limit if limit >= 0.0 else flight.current_limit)
-	flight.hold_velocity(_floored(_held))
+	# Floored once, here, so the raw-stick path (_fly, the assist refused) keeps
+	# a hostile above the air too (final review M2).
+	_held = _floored(wanted.limit_length(limit if limit >= 0.0 else flight.current_limit))
+	flight.hold_velocity(_held)
 
 ## Every other awake ship in contact, as steer_ships sees them.
 func _others(from: Vector3) -> Array:

@@ -4,12 +4,18 @@ extends Node3D
 ## The landing ramp (desert world phase 0, Task 14; the owner's decision,
 ## 2026-11-04): a chunky boarding ramp that comes down under an airlock's
 ## outer hatch when the ship lands on a world, and folds away when it lifts
-## off. A landed starter's sill stands 2.05 m over the ground and a jump peaks
+## off. A landed starter's sill stands 2.45 m over the ground and a jump peaks
 ## at 0.89 m, so without it you could step out of a ship and never walk back in
 ## (CLAUDE.md: every ship is usable).
 ##
-## AirlockAlcove builds one under each outer hatch that needs one (need(),
-## AirlockAlcove.ramp_plan); Ship puts it down and up with its LandingMonitor
+## Every height here is measured from the stance plane: the ground a landed
+## ship stands on, its landing legs' feet (Task 15; Ship.stance_depth), 0.4 m
+## under its keel's plane. On its legs the starter's sill is 2.45 m up and its
+## ramp 4.9 m long. A ship with no legs stands on its keel's plane.
+##
+## AirlockAlcove builds one under each outer hatch that needs one and has room
+## for it (need(), AirlockAlcove.ramp_plan and way_up_for: the one home of
+## that condition); Ship puts it down and up with its LandingMonitor
 ## (Ship._sync_ramps). It builds from a hinge frame and the sill's height
 ## alone, never the grid: the frame's origin is on the outer hatch's plane at
 ## the sill, in the middle of the doorway, with +z out into the world, +y the
@@ -77,18 +83,24 @@ const SLIDE_TIME := 0.5
 const SWING_TIME := 1.1
 const TRAVEL := SLIDE_TIME + SWING_TIME
 ## The ground under the tip is looked for from this far over the sill down to
-## this far under the keel's plane; found nowhere, it rests at SLOPE and looks
+## this far under the stance plane; found nowhere, it rests at SLOPE and looks
 ## again every SETTLE_EVERY seconds while down (a save loads before its ground
 ## streams in).
 const PROBE_ABOVE := 0.5
 const PROBE_BELOW := 3.0
 const SETTLE_EVERY := 0.5
+## After coming down at once (a save loaded landed, a hull rebuilt), it looks
+## every physics tick for this long, s, before falling back to SETTLE_EVERY: a
+## loaded ship ticks before the world's ground has its collider, and a ramp at
+## the wrong angle for half a second could nudge you, saved standing on it
+## (final review M4).
+const SETTLE_EAGER := 1.0
 ## The hatch's own motor (Synth's hatch_motor), heard as the ramp moves, as the
 ## airlock's players are.
 const SOUND := &"hatch_motor"
 
 var state := State.STOWED
-## How far the sill stands over the keel's plane, and the ramp's length from
+## How far the sill stands over the stance plane, and the ramp's length from
 ## the hinge to its tip along the top surface.
 var sill_height := 0.0
 var length := 0.0
@@ -107,14 +119,16 @@ var _motor: AudioStreamPlayer3D
 ## True while down with no ground found under the tip.
 var _unsettled := false
 var _settle_in := 0.0
+## Seconds left of looking every tick (SETTLE_EAGER).
+var _eager := 0.0
 
-## The ramp's length for a sill `sill_height` metres over the keel's plane:
+## The ramp's length for a sill `sill_height` metres over the stance plane:
 ## its tip on the plane at the design slope.
 static func length_for(sill_height_m: float) -> float:
 	return sill_height_m / sin(SLOPE)
 
 ## The angle (radians, below level) that rests a ramp `ramp_length` long,
-## hinged `sill_height_m` over the keel's plane, on ground `ground_drop` metres
+## hinged `sill_height_m` over the stance plane, on ground `ground_drop` metres
 ## below that plane under its tip (negative: above it), clamped to LEAST..MOST.
 ## Pure.
 static func angle_for(sill_height_m: float, ramp_length: float, ground_drop: float) -> float:
@@ -122,14 +136,11 @@ static func angle_for(sill_height_m: float, ramp_length: float, ground_drop: flo
 	return clampf(asin(fall), LEAST, MOST)
 
 ## What an outer hatch facing `normal` (in the hull's frame) with its sill
-## `sill_height_m` over the keel's plane needs. Pure.
+## `sill_height_m` over the stance plane needs. Pure.
 static func need(normal: Vector3, sill_height_m: float) -> StringName:
 	if absf(normal.normalized().y) > 0.01:
 		return UP_OR_DOWN
 	return RAMP if sill_height_m > Airlock.HATCH_STEP else STEP
-
-static func wants_ramp(normal: Vector3, sill_height_m: float) -> bool:
-	return need(normal, sill_height_m) == RAMP
 
 ## Points through the slab, down at `down_angle`, for a ramp `ramp_length`
 ## long, in the hinge frame: along its top surface and its underside, at both
@@ -148,7 +159,7 @@ static func sample_points(ramp_length: float, down_angle: float) -> PackedVector
 	return out
 
 ## Builds a stowed ramp under `parent` (which shares `body`'s frame) at
-## `hinge`, for a sill `sill_height_m` over the keel's plane, with its collider
+## `hinge`, for a sill `sill_height_m` over the stance plane, with its collider
 ## on `body`, disabled.
 static func build(parent: Node3D, body: CollisionObject3D, hinge: Transform3D, sill_height_m: float) -> LandingRamp:
 	var ramp := LandingRamp.new()
@@ -271,6 +282,7 @@ func deploy(instant := false) -> void:
 		_settle_in = SETTLE_EVERY
 	collider.disabled = true
 	if instant:
+		_eager = SETTLE_EAGER if _unsettled else 0.0
 		_finish_down()
 		return
 	if state == State.STOWED:
@@ -323,13 +335,27 @@ func _process(delta: float) -> void:
 			else:
 				_apply()
 		State.DOWN:
-			if _unsettled:
+			if _unsettled and _eager <= 0.0:
 				_settle_in -= delta
 				if _settle_in <= 0.0:
 					_settle_in = SETTLE_EVERY
 					if settle():
 						_unsettled = false
 						_apply()
+
+## Just after an instant deploy, the ground is looked for every physics tick,
+## where its collider appears (SETTLE_EAGER).
+func _physics_process(delta: float) -> void:
+	if _eager <= 0.0:
+		return
+	_eager -= delta
+	if state != State.DOWN or not _unsettled:
+		_eager = 0.0
+		return
+	if settle():
+		_unsettled = false
+		_eager = 0.0
+		_apply()
 
 ## Rests the tip on the ground (Task 14 ruling 3): a ray down the hull's up,
 ## from where the tip will be, to the terrain (BodyProxy.LAYER) sets the angle

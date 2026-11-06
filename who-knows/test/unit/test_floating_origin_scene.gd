@@ -315,6 +315,30 @@ func test_the_sun_throws_shadows_far_enough_to_shape_a_big_rock():
 	var sun: DirectionalLight3D = _root.get_node("DirectionalLight3D")
 	assert_gte(sun.directional_shadow_max_distance, AsteroidStream.SHADOW_REACH)
 
+## Final review I1: outside, your hands and what they hold are on their own
+## layer (Avatar.HANDS_LAYER), which the head lamp leaves out so it never blows
+## them out white. The sun, the ship's floods and the airlock's lights must all
+## light it, or your gloves are black against a sunlit world. Read back from
+## the real scene: the sun's mask is set in code, not in the .tscn.
+func test_the_sun_and_the_ships_lights_light_your_hands_and_the_lamp_does_not():
+	var sun: DirectionalLight3D = _root.get_node("DirectionalLight3D")
+	assert_ne(sun.light_cull_mask & Avatar.HANDS_LAYER, 0, "the sun lights your hands")
+	assert_ne(sun.light_cull_mask & 1, 0, "and the world, still")
+	assert_ne(sun.light_cull_mask & ExteriorBuilder.OWN_HULL_LAYER, 0, "and your hull")
+	assert_eq(sun.light_cull_mask & InteriorKit.LAYER, 0, "never the interior")
+	_out(_ship.exterior.global_position + Vector3(0, 0, 30))
+	assert_eq(_avatar.lamp.light_cull_mask & Avatar.HANDS_LAYER, 0, "the lamp leaves your hands out")
+	var floods := _ship.lights.spots(&"flood")
+	assert_gt(floods.size(), 0, "the starter has floods")
+	for spot in floods:
+		assert_ne(spot.light_cull_mask & Avatar.HANDS_LAYER, 0, "%s lights your hands" % spot.name)
+	var lights := 0
+	for airlock: Airlock in _ship.airlocks.values():
+		for light: Light3D in airlock.alcove.find_children("*", "Light3D", true, false):
+			lights += 1
+			assert_ne(light.light_cull_mask & Avatar.HANDS_LAYER, 0, "the airlock's %s lights your hands" % light.name)
+	assert_gt(lights, 0, "the alcove has a light")
+
 func test_everything_outside_is_covered_beside_a_world():
 	var system: SystemRecipe = _root.system
 	var planet := system.planets()[0]
