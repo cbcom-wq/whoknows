@@ -76,3 +76,17 @@ func test_body_at_is_null_in_the_stars_well():
 	var w := WorldGravity.new()
 	w.setup(sys, universe, null)
 	assert_null(w.body_at(Vector3.UP * star.radius * 1.1))
+
+func test_air_at_is_the_recipes_at_the_altitude():
+	var was := b.recipe.atmosphere
+	b.recipe.atmosphere = WorldRecipe.Atmosphere.THICK
+	var universe := Universe.new()
+	add_child_autofree(universe)
+	universe.origin = b.point
+	var w := WorldGravity.new()
+	w.setup(sys, universe, null)
+	var p := Vector3.UP * (b.radius + 1500.0)
+	assert_almost_eq(w.air_at(p), b.recipe.air_at(w.altitude_at(p)), 1e-6)
+	assert_gt(w.air_at(p), 0.0)
+	assert_eq(w.air_at(Vector3.UP * (b.well_radius + 10.0)), 0.0)
+	b.recipe.atmosphere = was   # the system is shared by the file's other tests

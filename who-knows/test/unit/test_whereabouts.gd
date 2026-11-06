@@ -123,3 +123,85 @@ func test_the_start_is_inside_its_cluster_s_limit():
 	var s := SystemRecipe.from_seed(1337)
 	var ids := Whereabouts.limits_at(s, s.entry()).map(func(q: Whereabouts.Place) -> StringName: return q.id)
 	assert_true(ids.has(&"limit_belt_0.c1"), "a new game begins by a major body")
+
+# --- the air (the desert world spec §6.1) -------------------------------------
+
+func _far() -> UniversePoint:
+	return UniversePoint.at(0, SystemRecipe.PLANE_Y + int(_system.star.neighbourhood) + 100000, 0)
+
+## A whereabouts reading `_system`, its focus at `focus` and the origin on `b`.
+func _air_rig(b: SystemBody) -> Array:
+	var universe := Universe.new()
+	add_child_autofree(universe)
+	var focus := Node3D.new()
+	add_child_autofree(focus)
+	universe.set_focus(focus)
+	universe.origin = b.point
+	var w := Whereabouts.new()
+	add_child_autofree(w)
+	w.setup(_system, universe)
+	return [w, focus]
+
+func test_the_air_up_and_sun_up_over_a_world():
+	var b := _system.planets()[0]
+	var was := b.recipe.atmosphere
+	b.recipe.atmosphere = WorldRecipe.Atmosphere.THICK
+	var rig := _air_rig(b)
+	var w: Whereabouts = rig[0]
+	var focus: Node3D = rig[1]
+	var dir := Vector3(0.3, 0.8, 0.5).normalized()
+	var r := b.radius + w.terrain_of(b).height_at(dir) + 1000.0
+	focus.global_position = dir * r
+	w.look()
+	assert_almost_eq(w.air(), b.recipe.air_at(w.altitude()), 1e-6)
+	assert_gt(w.air(), 0.0)
+	assert_almost_eq(w.up(), dir, Vector3.ONE * 1e-5)
+	# The sun overhead, and underfoot, standing on the ground.
+	var to_star := _system.star.point.minus(b.point).normalized()
+	focus.global_position = to_star * (b.radius + w.terrain_of(b).height_at(to_star))
+	w.look()
+	assert_gt(w.sun_up(), 0.99)
+	focus.global_position = -to_star * (b.radius + w.terrain_of(b).height_at(-to_star))
+	w.look()
+	assert_lt(w.sun_up(), -0.99)
+	b.recipe.atmosphere = was
+
+func test_outside_every_well_there_is_no_air_and_the_sun_is_up():
+	var rig := _air_rig(_system.planets()[0])
+	var w: Whereabouts = rig[0]
+	var focus: Node3D = rig[1]
+	w.universe.origin = _far()
+	focus.global_position = Vector3.ZERO
+	w.look()
+	assert_null(w.well())
+	assert_eq(w.air(), 0.0)
+	assert_eq(w.up(), Vector3.ZERO)
+	assert_eq(w.sun_up(), 1.0)
+
+func test_the_dust_goes_as_the_air_thickens():
+	var b := _system.planets()[0]
+	var was := b.recipe.atmosphere
+	b.recipe.atmosphere = WorldRecipe.Atmosphere.THICK
+	var rig := _air_rig(b)
+	var w: Whereabouts = rig[0]
+	var focus: Node3D = rig[1]
+	var dir := Vector3(0.3, 0.8, 0.5).normalized()
+	var ground := b.radius + w.terrain_of(b).height_at(dir)
+	var h := b.recipe.air_top() * (1.0 - sqrt(0.1))   # where the air is 0.1
+	focus.global_position = dir * (ground + h)
+	w.look()
+	assert_almost_eq(w.air(), 0.1, 1e-4)
+	var thin_dust := w.dust()
+	b.recipe.atmosphere = WorldRecipe.Atmosphere.NONE
+	w.look()
+	assert_gt(w.dust(), 0.0)
+	assert_almost_eq(thin_dust, w.dust() * 0.5, 1e-4)
+	b.recipe.atmosphere = WorldRecipe.Atmosphere.THICK
+	focus.global_position = dir * (ground + 300.0)
+	w.look()
+	assert_eq(w.dust(), 0.0)
+	w.universe.origin = _far()
+	focus.global_position = Vector3.ZERO
+	w.look()
+	assert_eq(w.dust(), Whereabouts.DUST_OPEN)
+	b.recipe.atmosphere = was

@@ -85,3 +85,22 @@ func test_gravity_change_moves_nothing_else():
 		assert_eq([r.name, r.archetype, r.palette, r.atmosphere], [row[1], row[3], row[5], row[6]])
 		assert_almost_eq(r.radius_m, row[2], 0.01)
 		assert_almost_eq(r.relief_m, row[4], 0.01)
+
+func test_air_is_nothing_at_the_top_and_whole_on_thick_ground():
+	var r := WorldRecipe.from_seed(1)
+	r.radius_m = 20000.0
+	r.atmosphere = WorldRecipe.Atmosphere.THICK   # air top 4000 m
+	assert_eq(r.air_at(4000.0), 0.0)
+	assert_eq(r.air_at(9000.0), 0.0)
+	assert_almost_eq(r.air_at(0.0), 1.0, 1e-6)
+	assert_almost_eq(r.air_at(-50.0), 1.0, 1e-6)
+	assert_almost_eq(r.air_at(2000.0), 0.25, 1e-6)   # rises faster near the ground
+
+func test_thin_air_and_none():
+	var r := WorldRecipe.from_seed(1)
+	r.radius_m = 20000.0
+	r.atmosphere = WorldRecipe.Atmosphere.THIN
+	assert_almost_eq(r.air_at(0.0), 0.35, 1e-6)
+	r.atmosphere = WorldRecipe.Atmosphere.NONE
+	assert_eq(r.air_at(0.0), 0.0)
+	assert_eq(r.air_at(100.0), 0.0)

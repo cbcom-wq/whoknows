@@ -68,5 +68,17 @@ static func from_seed(p_seed: int, p_kind := Kind.PLANET) -> WorldRecipe:
 func air_top() -> float:
 	return radius_m * AIR_TOP[atmosphere]
 
+## How much air a world holds at its ground, by Atmosphere: none, thin, thick
+## (the desert world spec §6.1, call 1).
+const AIR_GROUND: Array[float] = [0.0, 0.35, 1.0]
+
+## How thick the air is `altitude` metres over the ground, 0 to 1. This is the
+## one place air is worked out (spec §6.1, call 1): the ground's value falls
+## to nothing at air_top() as the square of the way up, so it thins faster
+## near the ground. Thin air tops out at 0.35, not 1.
+func air_at(altitude: float) -> float:
+	var s := clampf(1.0 - altitude / air_top(), 0.0, 1.0)
+	return AIR_GROUND[atmosphere] * s * s
+
 func well_radius() -> float:
 	return radius_m * WELL_RADII

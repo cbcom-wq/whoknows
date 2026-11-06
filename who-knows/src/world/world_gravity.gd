@@ -76,6 +76,11 @@ func altitude_at(p: Vector3) -> float:
 	var t := whereabouts.terrain_of(b) if whereabouts != null else null
 	return t.altitude_of(local) if t != null else local.length() - b.radius
 
+## How thick the air is at `p`, 0 to 1; 0 outside a world's well (spec §6.1).
+func air_at(p: Vector3) -> float:
+	var b := body_at(p)
+	return b.recipe.air_at(altitude_at(p)) if b != null else 0.0
+
 func surface_gravity_at(p: Vector3) -> float:
 	var b := _world_at(system, universe.to_universe(p))
 	return b.recipe.surface_gravity if b != null else 0.0

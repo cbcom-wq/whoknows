@@ -51,6 +51,8 @@ const RING_NEAR := 500.0
 const DUST_OPEN := 0.25
 const DUST_NEAR := 0.5
 const DUST_THICK := 1.0
+## The air thickness (air()) at which the dust is gone (spec §6.1).
+const DUST_GONE_AT := 0.2
 
 var recipe: SystemRecipe
 var universe: Universe
@@ -108,7 +110,32 @@ func dust() -> float:
 				out = maxf(out, DUST_THICK)
 			Kind.NEAR:
 				out = maxf(out, DUST_NEAR)
-	return out
+	return out * clampf(1.0 - air() / DUST_GONE_AT, 0.0, 1.0)
+
+## How thick the air is here, 0 to 1; 0 outside a world's well (spec §6.1).
+## This is the one place the air at the focus is worked out.
+func air() -> float:
+	var b := well()
+	if b == null or b.recipe == null:
+		return 0.0
+	return b.recipe.air_at(altitude())
+
+## Away from the centre of the world whose well holds the focus; zero outside
+## one (spec §6.1).
+func up() -> Vector3:
+	var b := well()
+	if b == null or b.recipe == null:
+		return Vector3.ZERO
+	return _focus_point().minus(b.point).normalized()
+
+## The sine of the sun's height over your horizon, -1 to 1; 1.0 outside a
+## world's well (spec §6.1).
+func sun_up() -> float:
+	var b := well()
+	if b == null or b.recipe == null:
+		return 1.0
+	var focus := _focus_point()
+	return up().dot(recipe.star.point.minus(focus).normalized())
 
 ## The body whose well the focus is in, or null. Wells never overlap.
 func well() -> SystemBody:
