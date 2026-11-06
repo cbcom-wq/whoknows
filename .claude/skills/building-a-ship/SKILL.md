@@ -50,7 +50,8 @@ Do these in order. Each one names the check that proves it.
      walkable deck straight through on the opposite side, not a room. Its hull alcove gets the
      hose's reel and nozzle by itself (`AirlockAlcove.reel`): there is nothing to place.
    - **boardable on a world:** every horizontal outer hatch over 0.45 m (`Airlock.HATCH_STEP`)
-     above the ground it stands on (its legs' feet, 0.4 m under the keel: `Ship.stance_depth`)
+     above the ground it stands on (its legs' feet, at least 0.4 m under the keel and 0.1 m under
+     its lowest hanging look: `Ship.stance_depth`)
      has a ramp; none faces up or down. The ramp builds itself
      (`AirlockAlcove.ramp_plan`, `LandingRamp`): straight out of the hatch at 30°, `sill / sin 30°`
      long, so **keep the cells it comes down through empty**, below the outside cell too. The
@@ -65,8 +66,14 @@ Do these in order. Each one names the check that proves it.
      turret, whose leg (at most 4 m) hangs through no block, no ramp's path or a cell beside it,
      and nowhere under or beside an engine or an RCS block whose exhaust faces down. So **leave
      such cells under the hull's outer edge**, fore and aft, port and starboard. Read the line:
-     `legs    4: fore port (…) 2.40 m, …; feet … m under the origin`; `ONLY n FIT` means the ship
-     stands crooked or on its keel.
+     `legs    4: fore port (…) 2.98 m, …; feet … m under the origin (keel … + …)`; `ONLY n FIT`
+     means the ship stands crooked or on its keel.
+   - **its lowest hanging look clears the sand by 0.1 m** (the owner's rule, 2026-11-05): the legs
+     lengthen by themselves until it does (`LandingLegs.stance_for`, `HANG_CLEAR`), so a belly
+     turret or a flood's housing costs ramp length, never placement. The `legs` line says why it
+     stands where it does (`: its lowest look 0.88 under the keel, cleared by 0.10`), and the
+     probe's `hang` line must not say `TOUCHES THE GROUND`. A deeper stance lengthens every ramp:
+     read the `ramp` line again after adding anything under the belly.
    - room blocks (`bunk_room`, `galley`...) each touching walkable space for their doorway.
    - **the maintenance droid's needs** (NPC foundation spec §14), on any ship with 12 or more
      walkable cells: a `closet` for its dock (otherwise it docks in the walkable cell farthest
@@ -456,7 +463,10 @@ thrust.
 | Freezing strays on any rest | A stray that came to rest on a landed hull or the ramp froze there, and hung in the air after liftoff; one saved on the ground loaded frozen wherever the ledger put it, and a stray below the ground stayed there (final review I3) | `StrayField` freezes only on terrain: a ray down under the stray must hit `BodyProxy.LAYER` first, within its half-height + `REST_REACH` 0.3 m. Below the ground by more than `WorldSurface.FLOOR_SLACK` it is put on it first (the analytic ground and the collider part by up to that on a crest, so a thin plate resting on the collider was lifted off it: Task 15 N2, `test_a_thin_stray_on_a_crest_rests_on_the_collider_not_over_it`); loaded, it freezes only within `ON_GROUND` 0.25 m of the ground, else it loads live and falls |
 | A climb that never lifts off | A pilot's velocity hold upward left a landed ship landed: only the stick's translation counted as translating (final review M1). With that fixed the monitor let go, but `FlightComputer._resting_on_ground` still asked only the stick, so the gravity hold stayed off and the ship sat TOUCHING, 0.02 m down, for good (Task 15 N1) | `LandingMonitor.translating` also counts a hold climbing over `HOLD_LIFTS` 0.5 m/s along up, and it is the one home of "asked to move": `_resting_on_ground` calls it too (`test_a_landed_ship_given_an_upward_hold_lifts_off`, `test_a_landed_starter_given_a_1_m_s_climb_rises_off_within_3_s`) |
 | Landing on the keel strip | The starter landed on its keel strip and read as floating: its lowest cells are one 2 m row under the cabin, so from the ground the 10 m wide hull hung over the sand on nothing, with daylight under both flanks and the stern | Four `LandingLegs`, one per quadrant, stand the ship 0.4 m (`CLEARANCE`) under its keel's plane; the flight computer, the ramps and the touchdown all measure from that stance plane (`Ship.stance_depth`). Read the `legs` line of `ship_check` and render the landed ship from 25 m at eye height |
-| A belly turret under the stance plane | The starter's ventral turret is a cell on the keel row and its dome stands 0.755 m out of its face, so on 0.4 m legs its look sinks into flat sand (its meshes' lowest corner is 0.48 m under the feet, `landing_play` step 3). Its collider is the cell's and clears the ground by 0.39 m, so nothing hits; it only looks buried | Not fixed: `CLEARANCE` is the brief's 0.4 m, and clearing the dome by 0.3 m needs about 1.1 m. Owner's call: longer legs, or no turret on the keel row. `test_landing_legs` prints the turret look's lowest point |
+| A belly turret under the stance plane | The starter's ventral turret is a cell on the keel row; parked, its barrels reach 0.88 m out of its face (the dome 0.755), so on 0.4 m legs its look sank 0.48 m into flat sand. The flood housings on the belly band hang 0.4 m under the keel's plane too, so they only touched it. The colliders cleared the ground by 0.39 m, so nothing hit; it only looked buried (Task 15 review) | The owner's rule (2026-11-05): the stance is `max(keel + CLEARANCE, -lowest look + HANG_CLEAR)`, the lowest look worked out from the blueprint (`ExteriorBuilder.lowest_look`: the hull dressing drawn off the tree, and each turret parked) and measured from the skin it drew on a rebuild. The starter and the Warden stand 0.98 m under their keels and their ramps grow by 1.2 m. `test_landed_every_look_but_its_legs_and_ramp_stands_clear_of_the_ground`; `landing_play` step 3. A turret aimed by hand straight down reaches 1.6 m and can still touch the sand |
+| A "not given" value a real stance can take | `AirlockAlcove.ramp_plan(…, stance := -1.0)` took a negative stance as "not given" and asked `Ship.stance_depth_of`, which plans the legs, which ask `ramp_plan` for the ramps' paths: a grid wholly above y = 0 stands on a plane above its origin, a negative stance, and recursed until the stack ran out (Task 15 review I1) | `NAN` is "not given" (`is_nan`), and `LandingLegs.plan` always passes its own stance. `test_a_grid_wholly_above_y_0_with_an_airlock_plans_legs_and_a_ramp_without_recursion` |
+| Legs placed before the ship knew where it was | `_rebuild_everything` synced the legs before the stats set the flight computer's stance, and a save or spawn places the hull and wires its gravity after `set_grid`: a ship loaded hovering 20 m up built them stowed, then folded them out in front of you (Task 15 review M3) | `_sync_legs` runs after `_apply_stats`, and leaves a new grid's legs as built until the first tick with gravity or a restored landing, which places them at once (`_legs_placed`). `test_a_ship_loaded_hovering_under_40_m_has_its_legs_down_on_the_first_frame` |
+| Keying gear to the side a hull was built on | Legs never came down on a hostile hull, so a hostile you boarded and flew to a world landed on its keel (Task 15 review M4; every ship is usable) | Keyed to who flies it now: up only while a hostile pilot is on (`Ship._flown_by_a_hostile`). `test_a_hostile_hull_its_pilot_does_not_fly_puts_them_down` |
 
 ## Not built yet (plan for it; don't assume it works)
 
@@ -472,8 +482,10 @@ thrust.
   on four fixed landing legs (desert world Task 15), you step out and walk, and a high hatch gets a
   landing ramp. The legs do not give or level: all four are one length, so the ship tilts with the
   ground, and a hard landing is a warning and a thud with no damage yet. A ship that touches down
-  before its legs are fully down (faster than about 10 m/s from 40 m) lands on its keel and its
-  legs finish into the ground under it.
+  before its legs are fully down (coming down faster than about 27 m/s from 40 m: they take 1.5 s)
+  lands on its keel and its legs finish into the ground under it. A ship that loses all four
+  mounts while landed stays frozen where it stood, its keel the stance's height off the sand,
+  until it lifts off.
 - **Boardability is not a rule.** Every library ship is boardable on a world now (the Warden
   since its forward retros moved, 4f27cde), and four legs fit on each, but both are printed lines
   (`ramp`, `legs`), not `ShipRules` rules: nothing fails a ship that cannot be boarded or stands on
