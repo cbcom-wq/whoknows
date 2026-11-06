@@ -784,7 +784,13 @@ func _wire_hands() -> void:
 	_director.view_changed.connect(_on_view_changed)
 	_on_view_changed(_director.view, false)
 
+## The help card shows the keys of where you are: seated, on foot, or in the suit.
+func _refresh_controls_card() -> void:
+	var card: ControlsCard = $HudRoot/Screen/ControlsCard
+	card.show_card(ControlsCard.card_for(_director.is_seated, _avatar.mode))
+
 func _on_view_changed(view: CameraDirector.View, moving: bool) -> void:
+	_refresh_controls_card()
 	var first_person := view == CameraDirector.View.FOOT_FIRST
 	_avatar.grasp.first_person = first_person
 	_avatar.hands.shown = first_person and not moving
@@ -1974,6 +1980,7 @@ func _on_piloting_changed(piloting: bool) -> void:
 	_hud.set_active_vehicle(ship.pilot if piloting and ship != null else null)
 
 func _on_avatar_mode_changed(_mode: Avatar.Mode) -> void:
+	_refresh_controls_card()
 	if _avatar.is_outside():
 		_hud.set_active_vehicle(_avatar)
 	elif not _director.is_seated:
