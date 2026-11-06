@@ -145,8 +145,8 @@ func test_a_step_you_can_climb_does_not_block():
 ## refuses the step out on a world -- out there you could never climb back in.
 ## Every library ship has its ramp now (the Warden since its forward retros
 ## moved, 4f27cde), so a hull block goes back where the Warden's RCS block was,
-## in its ramp's path: its sill 4.45 m over the ground its legs stand on, and
-## no ramp through the hull.
+## in its ramp's path: its sill 5 m over the ground its legs stand on (its
+## belly turrets' domes clear by 0.1 m), and no ramp through the hull.
 func test_a_landed_warden_with_its_ramp_s_path_blocked_refuses_the_step_out_onto_a_drop():
 	_build("warden")
 	var block := BlockInstance.new()
@@ -156,9 +156,9 @@ func test_a_landed_warden_with_its_ramp_s_path_blocked_refuses_the_step_out_onto
 	_ship.landing.restore_landed()
 	_step(DT)
 	assert_null(_airlock.alcove.ramp, "no ramp is built through the hull")
-	assert_eq(_airlock.world_refusal(), "No ramp · 4 m drop")
-	assert_eq(_airlock.prompt(&"room"), "No ramp · 4 m drop")
-	assert_eq(_airlock.room.room_panel.readout_text(), "PRESSURE 101 kPa\nNO RAMP · 4 M DROP")
+	assert_eq(_airlock.world_refusal(), "No ramp · 5 m drop")
+	assert_eq(_airlock.prompt(&"room"), "No ramp · 5 m drop")
+	assert_eq(_airlock.room.room_panel.readout_text(), "PRESSURE 101 kPa\nNO RAMP · 5 M DROP")
 	_airlock.room.room_panel.interact(null)
 	_step(5.0)
 	assert_eq(_airlock.cycle.stage, AirlockCycle.Stage.IDLE)

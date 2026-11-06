@@ -5,10 +5,12 @@ extends Node3D
 ## 2026-11-04). A ship that landed on its keel strip read as hovering: four
 ## chunky legs, two forward and two aft, set wide under the hull's outer edge,
 ## fold out about DOWN_BELOW metres over a world's ground and tuck back up past
-## UP_ABOVE. In space they stay up, and there is no key. Their feet stand
-## CLEARANCE under the keel's plane, so the keel strip and a belly turret are
-## clear of the sand; all four are fixed in length, so the ship tilts with the
-## ground.
+## UP_ABOVE. In space they stay up, and there is no key. Their feet stand at
+## least CLEARANCE under the keel's plane, and further when anything hangs
+## lower: the owner's rule (2026-11-05) is that a ship's lowest hanging look --
+## a belly turret's dome, a flood's housing -- clears the sand by HANG_CLEAR,
+## so a hanging part costs ramp length, not placement (stance_for). All four
+## are fixed in length, so the ship tilts with the ground.
 ##
 ## Where they go is worked out from each ship's own grid (plan(), pure): never
 ## in or beside a landing ramp's path, never under or beside an engine or a
@@ -26,8 +28,9 @@ extends Node3D
 ## knee knuckle, and a broad foot pad that stays level. Struts in hull plate,
 ## housing and pad in the hull's trim, the knee in the panel line's grey (the
 ## one accent, as the ramp's treads are). Flat colour on the hull's trim
-## material; no new shader. Stowed, a leg lies folded flat within 0.35 m of its
-## mount's bottom face: visible, tucked.
+## material; no new shader. Chunky landing gear, not stilts (the owner,
+## 2026-11-05): 0.38 m struts, a 0.8 m foot. Stowed, a leg lies folded flat
+## within 0.5 m of its mount's bottom face: visible, tucked.
 ##
 ## Each leg has its own frame (frame()): its origin in the middle of the
 ## mount's bottom face, +y the hull's up, +z along the hull toward the leg's
@@ -45,34 +48,37 @@ const TRAVEL := 1.5
 const FOLD_TIME := 0.8
 ## No leg is longer than this, from its mount's bottom face to its foot.
 const MOST_LENGTH := 4.0
-## How far the feet stand under the keel's plane.
+## The feet stand at least this far under the keel's plane...
 const CLEARANCE := 0.4
+## ...and far enough that the lowest hanging look clears the ground by this
+## (the owner, 2026-11-05; stance_for).
+const HANG_CLEAR := 0.1
 
 ## How far the upper leg folds out, below the hull's level, once down.
 const SPLAY := deg_to_rad(70.0)
 ## The hinge's axis, this far under the mount's bottom face.
-const HINGE_Y := -0.14
+const HINGE_Y := -0.2
 ## The hinge housing: a block under the mount, round the hinge's barrel.
-const HOUSING := Vector3(0.66, 0.2, 0.42)
-const BARREL_RADIUS := 0.09
+const HOUSING := Vector3(0.92, 0.26, 0.56)
+const BARREL_RADIUS := 0.12
 ## The lower leg: one strut this square.
-const STRUT := 0.25
+const STRUT := 0.38
 ## The upper leg: two arms, each this wide and this tall, either side of the
 ## lower leg (their middles ARM_X off the leg's middle).
-const ARM_WIDTH := 0.14
-const ARM_HEIGHT := 0.25
-const ARM_X := 0.21
+const ARM_WIDTH := 0.18
+const ARM_HEIGHT := 0.38
+const ARM_X := STRUT * 0.5 + 0.02 + ARM_WIDTH * 0.5
 ## The knee knuckle, across both arms.
-const KNEE_RADIUS := 0.14
+const KNEE_RADIUS := 0.22
 ## The upper leg is this much longer than the lower.
 const KNEE_EXTRA := 0.15
 ## The foot pad: broad and level.
-const PAD := Vector3(0.6, 0.08, 0.6)
+const PAD := Vector3(0.8, 0.1, 0.8)
 ## The boss on the pad's top, round the strut's foot.
-const BOSS := Vector3(0.36, 0.07, 0.36)
+const BOSS := Vector3(0.52, 0.09, 0.52)
 ## Its collider is this tall, from the foot up.
 const PAD_COLLIDER := 0.3
-const BEVEL := 0.04
+const BEVEL := 0.05
 ## The ramp's motor (LandingRamp.SOUND), quieter and lower.
 const SOUND_DB := -7.0
 const SOUND_PITCH := 0.8
@@ -97,19 +103,26 @@ var _motor: AudioStreamPlayer3D
 ## of the footprint's middle), each as far out toward its corner as a mount
 ## allows, mirrored port and starboard when the hull is. Each entry is {cell:
 ## the mount, foot: the middle of the foot pad's underside in the hull's frame,
-## on the stance plane; length: from the mount's bottom face to the foot; side:
-## +1 starboard, -1 port; end: +1 aft, -1 forward}. A mount is a cell with its
-## bottom face open and whole, above the keel's plane (off the keel strip), not
-## an airlock or a turret, whose leg is no longer than MOST_LENGTH and hangs
-## through no block, no ramp's path or the cells beside it, and nowhere under
-## or beside an engine or a downward thruster (keep_clear). With fewer mounts
-## than quadrants it plans what fits. Pure.
-static func plan(layout: ShipGrid) -> Array[Dictionary]:
+## on the stance plane (stance_for); length: from the mount's bottom face to
+## the foot; side: +1 starboard, -1 port; end: +1 aft, -1 forward}. A mount is
+## a cell with its bottom face open and whole, above the keel's plane (off the
+## keel strip), not an airlock or a turret, whose leg is no longer than
+## MOST_LENGTH and hangs through no block, no ramp's path or the cells beside
+## it, and nowhere under or beside an engine or a downward thruster
+## (keep_clear). With fewer mounts than quadrants it plans what fits.
+##
+## `lowest` is the lowest point of the hull's own look in its frame: NAN, the
+## default, works it out from `layout` (ExteriorBuilder.lowest_look, which
+## draws it off the tree: about 60-190 ms); the ship's rebuild passes what it
+## drew. `catalog` null loads the blocks'. Pure.
+static func plan(layout: ShipGrid, lowest := NAN, catalog: BlockCatalog = null) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	if layout == null or layout.size() == 0:
 		return out
+	if is_nan(lowest):
+		lowest = ExteriorBuilder.lowest_look(layout, catalog)
 	var keel := Ship.keel_depth_of(layout)
-	var stance := keel + CLEARANCE
+	var stance := stance_for(keel, lowest)
 	var box := _footprint(layout)
 	var mid := box.get_center()
 	var half := box.size * 0.5
@@ -136,6 +149,14 @@ static func plan(layout: ShipGrid) -> Array[Dictionary]:
 			entry.erase("score")
 			out.append(entry)
 	return out
+
+## How far under the hull's origin the feet stand, for a keel `keel` metres
+## under it and a look whose lowest point is `lowest` (y, in the hull's frame;
+## INF: none): CLEARANCE under the keel's plane at least, and HANG_CLEAR under
+## the lowest look -- a belly turret's dome, a flood's housing -- so nothing
+## that hangs touches the sand (the owner, 2026-11-05). Pure.
+static func stance_for(keel: float, lowest: float) -> float:
+	return maxf(keel + CLEARANCE, -lowest + HANG_CLEAR)
 
 ## Engines, and RCS blocks whose exhaust faces down: no leg hangs under or
 ## beside one. Pure.
@@ -258,9 +279,10 @@ static func _best_pair(mounts: Dictionary, end: int, mid: Vector2) -> Array[Dict
 			best = [twin, leg]
 	return best
 
-## `c` mirrored port to starboard across the footprint's middle.
+## `c` mirrored port to starboard across the footprint's middle, `mid` in
+## metres: cell x and its twin's add up to twice the middle, in cells.
 static func _mirror(c: Vector3i, mid: Vector2) -> Vector3i:
-	return Vector3i(roundi(mid.x) - c.x, c.y, c.z)
+	return Vector3i(roundi(2.0 * mid.x / ShipGrid.CELL_SIZE) - c.x, c.y, c.z)
 
 ## Whether every cell has a twin across the middle.
 static func _mirrored(layout: ShipGrid, mid: Vector2) -> bool:
@@ -270,7 +292,9 @@ static func _mirrored(layout: ShipGrid, mid: Vector2) -> bool:
 	return true
 
 ## Words for `layout`'s plan, `plan_legs`: ship_check's and the probe's legs
-## line. It begins with how many legs fit, and ends ONLY n FIT under four.
+## line. It begins with how many legs fit, says what set the stance -- the
+## keel's 0.4 m, or the lowest hanging look cleared by 0.1 -- and ends ONLY n
+## FIT under four.
 static func plan_words(layout: ShipGrid, plan_legs: Array[Dictionary]) -> String:
 	var parts: Array[String] = []
 	for leg in plan_legs:
@@ -279,8 +303,12 @@ static func plan_words(layout: ShipGrid, plan_legs: Array[Dictionary]) -> String
 	var keel := Ship.keel_depth_of(layout)
 	if plan_legs.is_empty():
 		return "0: none fit, it stands on its keel %.2f m under the origin  <-- ONLY 0 FIT" % keel
-	var words := "%d: %s; feet %.2f m under the origin (keel %.2f + %.2f)" % [plan_legs.size(),
-		", ".join(parts), keel + CLEARANCE, keel, CLEARANCE]
+	var stance := -(plan_legs[0]["foot"] as Vector3).y
+	var under := stance - keel
+	var why := "keel %.2f + %.2f" % [keel, under]
+	if under > CLEARANCE + 0.001:
+		why += ": its lowest look %.2f under the keel, cleared by %.2f" % [under - HANG_CLEAR, HANG_CLEAR]
+	var words := "%d: %s; feet %.2f m under the origin (%s)" % [plan_legs.size(), ", ".join(parts), stance, why]
 	if plan_legs.size() < 4:
 		words += "  <-- ONLY %d FIT" % plan_legs.size()
 	return words

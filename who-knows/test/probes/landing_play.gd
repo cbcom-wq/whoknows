@@ -13,8 +13,10 @@ extends SceneTree
 #   3. it comes down at 2 m/s and lands, with no hard landing and no damage;
 #      its landing legs (Task 15) stay up at 100 m (rendered from the chase
 #      view), fold out under 40 m (rendered halfway) and are down before
-#      touchdown, so it lands on its feet with its keel clear of the ground
-#      (rendered from 25 m at eye height, and low under the belly); its
+#      touchdown, so it lands on its feet with its keel and every look but
+#      its legs and ramp clear of the ground -- the belly turret's dome by
+#      0.1 m (rendered from 25 m at eye height, and low under the belly by a
+#      lamp of the probe's own); its
 #      landing ramp comes down under the outer hatch (Task 14), rendered
 #      halfway and down; the frame rate seated at its helm on the ground;
 #   5. out of its airlock on foot (the hatch clear of the real ground) and
@@ -395,8 +397,8 @@ func _watch_legs(legs: LandingLegs, seen: Dictionary) -> void:
 		seen["down"] = alt
 
 ## Step 3 (Task 15), landed: on its four feet, every foot on the ground, its
-## keel strip clear of it, level; rendered from 25 m at eye height and low
-## under the belly beside a foot.
+## keel strip and every look but its legs and ramp clear of it, level;
+## rendered from 25 m at eye height and low under the belly from abeam.
 func _stands_on_its_legs(ship: Ship) -> void:
 	var legs := ship.exterior_builder.legs()
 	var feet: Array[String] = []
@@ -412,35 +414,118 @@ func _stands_on_its_legs(ship: Ship) -> void:
 			for x: float in [-1.0, 1.0]:
 				for z: float in [-1.0, 1.0]:
 					keel = minf(keel, _gravity.altitude_at(hull * (ShipGrid.cell_center(c) + Vector3(x, -1.0, z))))
-	var dome := INF
-	for t in ship.turrets:
-		for mi: MeshInstance3D in t.find_children("*", "MeshInstance3D", true, false):
-			var box := mi.get_aabb()
-			for i in 8:
-				dome = minf(dome, _gravity.altitude_at(mi.global_transform * (box.position + box.size * Vector3(i & 1, (i >> 1) & 1, (i >> 2) & 1))))
-	_check(legs.is_down() and _legs_on(legs) and on and keel >= 0.3,
-		"3 it stands on its four legs: feet %s m over the ground (each within 0.1), its keel strip's lowest corner %.2f m over it (at least 0.3), tilt %.2f deg" % [
-		", ".join(feet), keel, rad_to_deg(ship.landing.tilt())])
-	print("        the belly turret's look reaches %.2f m over the ground (negative: into it)" % dome)
+	# The owner's rule (2026-11-05): every look but the legs and the ramp --
+	# the belly turret parked, the floods' housings -- stands clear of the sand
+	# (the stance gives the lowest LandingLegs.HANG_CLEAR).
+	var skip: Array[Node] = [legs]
+	for lock: Airlock in ship.airlocks.values():
+		if lock.alcove != null and lock.alcove.ramp != null:
+			skip.append(lock.alcove.ramp)
+	var rig := ship.exterior.get_node_or_null("Lights")
+	if rig != null:
+		skip.append(rig)
+	var look := INF
+	var what := ""
+	for node in ship.exterior.find_children("*", "GeometryInstance3D", true, false):
+		var gi := node as GeometryInstance3D
+		if not gi.is_visible_in_tree() or gi is GPUParticles3D or gi is CPUParticles3D \
+				or skip.any(func(s: Node) -> bool: return s == gi or s.is_ancestor_of(gi)):
+			continue
+		var box := gi.get_aabb()
+		for i in 8:
+			var h := _gravity.altitude_at(gi.global_transform * (box.position + box.size * Vector3(i & 1, (i >> 1) & 1, (i >> 2) & 1)))
+			if h < look:
+				look = h
+				what = String(gi.get_parent().name)
+	_check(legs.is_down() and _legs_on(legs) and on and keel >= LandingLegs.CLEARANCE - 0.1 and look >= 0.05,
+		"3 it stands on its four legs: feet %s m over the ground (each within 0.1), its keel strip's lowest corner %.2f m over it (at least %.1f), its lowest look (%s's) %.2f m (at least 0.05), tilt %.2f deg" % [
+		", ".join(feet), keel, LandingLegs.CLEARANCE - 0.1, what, look, rad_to_deg(ship.landing.tilt())])
 	await _ground_shot("legs_landed", ship, Vector3(17.0, 0.0, 18.0), EYE, Vector3(0.0, -1.5, 0.0))
 	var up := _up(hull.origin)
 	var off := _cam.global_position - hull.origin
 	print("        ★ the landed starter on its legs from %.0f m at eye height" % (off - up * off.dot(up)).length())
-	var plan_legs := legs.legs
-	var fore_starboard: Dictionary = plan_legs[0]
-	for leg in plan_legs:
-		if int(leg["side"]) > 0 and int(leg["end"]) < 0:
-			fore_starboard = leg
-	# Inboard of the forward starboard foot and ahead of it, 0.55 m up,
-	# looking aft under the starboard half of the belly: the near foot left
-	# of the middle (starboard is on the left looking aft), the aft one beyond
-	# it, the keel strip 0.4 m off the sand on the right, and the light past
-	# the stern. The aim is a little outboard, so the key card does not
-	# cover the near foot.
-	var f: Vector3 = fore_starboard["foot"]
-	await _ground_shot("legs_under_the_belly", ship, f + Vector3(-1.5, 0.0, -2.7), 0.55,
-		Vector3(f.x + 1.5, -ship.stance_depth() + 1.4, f.z + 10.0))
-	print("        ★ low under the belly, from beside the forward starboard foot, looking aft")
+	# Under the belly (fix round 1): low, from abeam on the side away from the
+	# ramp, 2.5 m out from the hull's edge, looking in at its lowest turret,
+	# with all four legs in view and the far ones standing beyond it. The
+	# camera's line keeps clear of every foot and the ramp, so nothing near
+	# stands in front of the turret. The sun stands near the zenith at the
+	# play's spot, so everything under the hull is in its shadow, and the
+	# black sky gives no fill: the silhouette the review could not read. So
+	# the shot is lit, as a photographer would, by a lamp of the probe's own,
+	# freed after the shot and never the game's: at the camera, 0.1 m off the
+	# sand, so it lights what stands up (legs, feet, turret) and only grazes
+	# the sand, which the sun lights already. From that low the turret's gap
+	# is seen against the horizon. The controls card is put away for it, as
+	# H does.
+	var sun_light := _scene.get_node("DirectionalLight3D") as DirectionalLight3D
+	var sunward := _sunward(ship)
+	print("        the sun stands %.0f deg over the horizon, %.0f deg round from the bow to starboard" % [
+		rad_to_deg(asin(clampf(sun_light.global_basis.z.dot(up), -1.0, 1.0))), rad_to_deg(atan2(sunward.x, -sunward.z))])
+	var inv := hull.affine_inverse()
+	var aim := Vector3.ZERO
+	var lowest := INF
+	for t in ship.turrets:
+		var p := inv * t.global_position
+		if p.y < lowest:
+			lowest = p.y
+			aim = Vector3(p.x, 0.0, p.z)
+	var keep_off: Array[Vector3] = []
+	for foot in legs.feet():
+		keep_off.append(inv * foot)
+	var ramp_side := 0.0
+	for lock: Airlock in ship.airlocks.values():
+		var ramp := lock.alcove.ramp if is_instance_valid(lock.alcove) else null
+		if ramp != null:
+			ramp_side += (inv * ramp.tip()).x - aim.x
+			for k in 6:
+				keep_off.append(inv * ramp.top_edge().lerp(ramp.tip(), k / 5.0))
+	# A ramp that runs along the hull (the starter's, out of its stern) is on
+	# neither side: starboard then.
+	var way := _clear_way(ship, aim, Vector3(-1.0 if ramp_side > 1.0 else 1.0, 0.0, 0.0), keep_off)
+	var from := aim + way * (_reach(ship, aim, way) + 2.5)
+	var card: ControlsCard = _scene.get_node("HudRoot/Screen/ControlsCard")
+	var shown := card.shown
+	card.shown = false
+	card.visible = false
+	var lamp := OmniLight3D.new()
+	lamp.name = "ProbeLamp"
+	lamp.light_color = Color(1.0, 0.92, 0.8)
+	lamp.light_energy = 3.0
+	lamp.omni_range = 30.0
+	lamp.omni_attenuation = 0.5
+	_scene.add_child(lamp)
+	lamp.add_to_group(Universe.EXTERIOR_SPACE)
+	lamp.global_position = _over_ground(ship, from, 0.1)
+	await _ground_shot("legs_under_the_belly", ship, from, 0.1, aim + Vector3(0.0, -ship.stance_depth() + 0.7, 0.0))
+	lamp.free()
+	card.shown = shown
+	card.visible = shown
+	print("        ★ low under the belly from abeam to %s, at the belly turret, lit by the probe's lamp at the camera" % [
+		"starboard" if way.x > 0.0 else "port"])
+
+## The first way out from `aim` (level, in `ship`'s hull axes), turning from
+## `toward` by 20 deg steps either side, whose line from `aim` out past the
+## hull passes no point of `keep_off` within 1.5 m; `toward` if none does.
+func _clear_way(ship: Ship, aim: Vector3, toward: Vector3, keep_off: Array[Vector3]) -> Vector3:
+	for turn: float in [0.0, 20.0, -20.0, 40.0, -40.0, 60.0, -60.0, 80.0, -80.0]:
+		var d := toward.rotated(Vector3.UP, deg_to_rad(turn))
+		var reach := _reach(ship, aim, d) + 1.5
+		var clear := true
+		for p in keep_off:
+			var flat := Vector3(p.x - aim.x, 0.0, p.z - aim.z)
+			var t := clampf(flat.dot(d), 0.0, reach)
+			clear = clear and flat.distance_to(d * t) >= 1.5
+		if clear:
+			return d
+	return toward
+
+## How far out from `aim` along level `d` the hull's cells reach, in metres.
+static func _reach(ship: Ship, aim: Vector3, d: Vector3) -> float:
+	var most := 0.0
+	for c: Vector3i in ship.grid.coords():
+		var p := ShipGrid.cell_center(c) - aim
+		most = maxf(most, Vector3(p.x, 0.0, p.z).dot(d) + ShipGrid.CELL_SIZE * 0.5)
+	return most
 
 ## The way to the sun, level, in `ship`'s hull axes (a unit vector, y 0).
 func _sunward(ship: Ship) -> Vector3:
@@ -459,11 +544,14 @@ func _hull_shot(shot_name: String, ship: Ship, offset: Vector3, target: Vector3)
 ## A camera `height` m over the real ground at `flat` in `ship`'s hull axes
 ## (its y ignored), looking at `target` in them, for one render.
 func _ground_shot(shot_name: String, ship: Ship, flat: Vector3, height: float, target: Vector3) -> void:
-	var hull := ship.exterior.global_transform
-	var at := hull * Vector3(flat.x, -ship.stance_depth(), flat.z)
-	var up := _up(at)
-	at += up * (height - _gravity.altitude_at(at))
-	await _camera_shot(shot_name, Transform3D(Basis.looking_at(hull * target - at, up), at))
+	var at := _over_ground(ship, flat, height)
+	await _camera_shot(shot_name, Transform3D(Basis.looking_at(ship.exterior.global_transform * target - at, _up(at)), at))
+
+## The point `height` m over the real ground at `flat` in `ship`'s hull axes
+## (its y ignored), in the world.
+func _over_ground(ship: Ship, flat: Vector3, height: float) -> Vector3:
+	var at := ship.exterior.global_transform * Vector3(flat.x, -ship.stance_depth(), flat.z)
+	return at + _up(at) * (height - _gravity.altitude_at(at))
 
 ## Step 5, and the controller's check 4: out on foot with something in hand,
 ## the frame rate beside the ship, 20 m off, and a jump.
@@ -577,7 +665,7 @@ func _second_ship() -> Ship:
 	var lock: Airlock = second.airlocks.values()[0]
 	print("        %s landed %.1f m from the starter, tilt %.1f deg; its hatch floor %.2f m over the ground under it" % [
 		second.name, apart, rad_to_deg(second.landing.tilt()), _hatch_floor_height(lock)])
-	# Its outer hatch is 2.45 m over the ground on its legs, over twice a jump:
+	# Its outer hatch is about 3 m over the ground on its legs, past a jump:
 	# the landing ramp (Task 14) is the only way up, walked on your feet.
 	var ramp := lock.alcove.ramp
 	if ramp == null:
