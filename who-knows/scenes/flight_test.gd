@@ -865,12 +865,14 @@ func _wire_star_system() -> void:
 	_avatar.gravity = world_gravity
 	_wire_air()
 
-## The sky, haze and light follow the air (desert-world spec §6.2-§6.3).
+## The sky, haze and light follow the air (desert-world spec §6.2-§6.3), and
+## the star's halo with them.
 func _wire_air() -> void:
 	air_mood = AirMood.new()
 	air_mood.name = "AirMood"
 	add_child(air_mood)
-	air_mood.setup($WorldEnvironment.environment, $DirectionalLight3D, star_system.whereabouts, system)
+	air_mood.setup($WorldEnvironment.environment, $DirectionalLight3D, star_system.whereabouts, system,
+		star_system.halo)
 
 ## Salvage (quantum energy spec §10.2, §14): the field under Outside, at the
 ## identity, with the same world seed as the rocks; and the near cloud out of

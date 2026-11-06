@@ -3,8 +3,9 @@ extends Node3D
 
 ## The star system as you see it (the system skeleton spec §3, §7): the only
 ## node that knows the system. It builds a BodyProxy per star, planet and
-## moon, a BeltLook per belt, the space dust and Whereabouts, places every one
-## each physics tick for where the focus is, and aims the sun from the star.
+## moon, the star's StarHalo, a BeltLook per belt, the space dust and
+## Whereabouts, places every one each physics tick for where the focus is, and
+## aims the sun from the star.
 ##
 ## The floating origin (CLAUDE.md): this node and its `Bodies` holder sit at
 ## the identity and never move; each proxy is a member of
@@ -18,6 +19,9 @@ var proxies: Array[BodyProxy] = []
 var belts: Array[BeltLook] = []
 var dust: SpaceDust
 var whereabouts: Whereabouts
+## The star's glow seen through air, on the star's proxy (StarHalo); AirMood
+## sets how strong it is.
+var halo: StarHalo
 ## The warp's streak for the dust (the warp spec §5.2), set every tick by
 ## whoever drives the warp; zero when there is none.
 var streak := Vector3.ZERO
@@ -38,6 +42,9 @@ func setup(p_recipe: SystemRecipe, p_universe: Universe, p_sun: DirectionalLight
 		_bodies.add_child(p)
 		proxies.append(p)
 		_by_id[b.id] = p
+	halo = StarHalo.new()
+	halo.setup(SpacePalette.STARS[recipe.star.star_palette])
+	proxy(recipe.star.id).add_child(halo)
 	for k in recipe.belts.size():
 		var look := BeltLook.new()
 		look.name = "Belt%d" % k
@@ -68,6 +75,7 @@ func place_all() -> void:
 	var focus := universe.to_universe(universe.focus.global_position)
 	for p in proxies:
 		p.place(universe, focus)
+	halo.place(proxy(recipe.star.id).global_position, universe.focus.global_position)
 	for b in belts:
 		b.place(universe, focus)
 	dust.density = 1.0 if not streak.is_zero_approx() else whereabouts.dust()

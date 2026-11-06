@@ -131,22 +131,16 @@ func _run() -> void:
 	print("play    %s" % ("ALL OK" if _fails == 0 else "%d FAILED" % _fails))
 	quit(0 if _fails == 0 else 1)
 
-## The largest planet with air, 3 km off it by the debug hop, its ground drawn.
+## The planet `_pick_planet` chooses, 3 km off it by the debug hop, its ground
+## drawn.
 func _to_the_planet() -> bool:
 	var system: SystemRecipe = _scene.get("system")
-	var largest: SystemBody = null
-	var with_air: SystemBody = null
-	for p in system.planets():
-		if largest == null or p.radius > largest.radius:
-			largest = p
-		if p.recipe.atmosphere != WorldRecipe.Atmosphere.NONE and (with_air == null or p.radius > with_air.radius):
-			with_air = p
-	_planet = with_air if with_air != null else largest
+	_planet = _pick_planet(system)
 	var r := _planet.recipe
 	print("planet  %s (%s): radius %.1f km, %.2f m/s2, air %s to %.1f km over the radius, ring %s" % [_planet.name,
 		_planet.id, _planet.radius / 1000.0, r.surface_gravity, WorldRecipe.Atmosphere.keys()[r.atmosphere],
 		r.air_top() / 1000.0, "none" if _planet.ring == null else "%.0f-%.0f km" % [_planet.ring.inner / 1000.0, _planet.ring.outer / 1000.0]])
-	if with_air == null:
+	if r.atmosphere == WorldRecipe.Atmosphere.NONE:
 		print("        no planet in the system has air: the largest instead")
 	_scene.set("hop_index", system.bodies.find(_planet) - 1)
 	var hopped: bool = _scene.call("hop", 1)
@@ -155,6 +149,17 @@ func _to_the_planet() -> bool:
 	_surface = proxy.surface() if proxy != null else null
 	_check(hopped and _surface != null, "0 the hop puts the starter 3 km off %s, its ground drawn" % _planet.name)
 	return _surface != null
+
+## The system's largest planet with air, or its largest if none has any.
+func _pick_planet(system: SystemRecipe) -> SystemBody:
+	var largest: SystemBody = null
+	var with_air: SystemBody = null
+	for p in system.planets():
+		if largest == null or p.radius > largest.radius:
+			largest = p
+		if p.recipe.atmosphere != WorldRecipe.Atmosphere.NONE and (with_air == null or p.radius > with_air.radius):
+			with_air = p
+	return with_air if with_air != null else largest
 
 ## Step 1, and the controller's check 1: a hover, and how it looks.
 func _hovers() -> void:

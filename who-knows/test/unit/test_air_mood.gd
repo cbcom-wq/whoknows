@@ -134,3 +134,16 @@ func test_setup_snaps_at_once():
 	assert_true(env.fog_enabled, "no physics frame has run yet")
 	assert_almost_eq(Basis.from_euler(env.sky_rotation) * Vector3.UP, Vector3.RIGHT, Vector3.ONE * 1e-4)
 	assert_true(mood.last_mood.fog)
+	assert_eq(sun.sky_mode, DirectionalLight3D.SKY_MODE_LIGHT_ONLY,
+		"the sky's own sun would sit off the star once the sky turns: StarHalo glows instead")
+
+func test_the_halo_glows_by_the_air_and_not_in_space():
+	var r := _rig()
+	var halo := StarHalo.new()
+	autofree(halo)
+	halo.setup(S)
+	AirMood.apply(AirMood.mood(1.0, 1.0, P, S), r[0], r[1], r[2], halo)
+	assert_almost_eq(halo.strength(), 1.0, 1e-6, "thick air by day: full")
+	AirMood.apply(AirMood.mood(0.0, 1.0, P, S), r[0], r[1], r[2], halo)
+	assert_eq(halo.strength(), 0.0, "no air: today's space, no halo")
+	assert_false(halo.visible)

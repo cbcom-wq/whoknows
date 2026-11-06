@@ -9,6 +9,12 @@ extends Node
 ## feed). That may change freely now: the interior camera carries its own
 ## environment (ship_interior.tres), so the cabin's look is untouched. Every
 ## colour comes from SpacePalette; this file names none.
+##
+## The sun's glow is the StarHalo's, on the star itself: the engine hands the
+## sky shader the light's way unturned by sky_rotation, so the sky's own sun
+## glow sat as far off the star as the sky was turned. The light is taken out
+## of the sky (SKY_MODE_LIGHT_ONLY); halo_deg still goes to the sky material,
+## where it no longer shows.
 
 ## No air: the values flight_test.gd always gave the outside.
 const SPACE_AMBIENT_ENERGY := 0.4
@@ -51,17 +57,21 @@ var last_mood: Dictionary = {}
 var _env: Environment
 var _sky: ProceduralSkyMaterial
 var _sun: DirectionalLight3D
+var _halo: StarHalo
 var _where: Whereabouts
 var _system: SystemRecipe
 var _since := 0.0
 var _turned_up := Vector3.ZERO
 
-func setup(env: Environment, sun: DirectionalLight3D, whereabouts: Whereabouts, system: SystemRecipe) -> void:
+func setup(env: Environment, sun: DirectionalLight3D, whereabouts: Whereabouts, system: SystemRecipe,
+		halo: StarHalo = null) -> void:
 	_env = env
 	_sky = env.sky.sky_material as ProceduralSkyMaterial
 	_sun = sun
+	_halo = halo
 	_where = whereabouts
 	_system = system
+	sun.sky_mode = DirectionalLight3D.SKY_MODE_LIGHT_ONLY
 	env.sky.process_mode = Sky.PROCESS_MODE_INCREMENTAL
 	env.fog_mode = Environment.FOG_MODE_EXPONENTIAL
 	env.fog_sky_affect = 0.0
@@ -72,7 +82,7 @@ func snap() -> void:
 	if _env == null:
 		return
 	last_mood = _now()
-	apply(last_mood, _env, _sky, _sun)
+	apply(last_mood, _env, _sky, _sun, _halo)
 	_turn_sky()
 	_since = 0.0
 
@@ -86,7 +96,7 @@ func _physics_process(delta: float) -> void:
 	var m := _now()
 	if differs(m, last_mood, APPLY_STEP):
 		last_mood = m
-		apply(m, _env, _sky, _sun)
+		apply(m, _env, _sky, _sun, _halo)
 	var up := _where.up()
 	if up.is_zero_approx() != _turned_up.is_zero_approx() \
 			or (not up.is_zero_approx() and up.angle_to(_turned_up) > TURN_STEP):
@@ -168,8 +178,12 @@ static func differs(a: Dictionary, b: Dictionary, step: float) -> bool:
 				return true
 	return false
 
-## Writes every part of `m` where it lives.
-static func apply(m: Dictionary, env: Environment, sky: ProceduralSkyMaterial, sun: DirectionalLight3D) -> void:
+## Writes every part of `m` where it lives; the star's `halo`, if given, glows
+## halo_deg / HALO_DEG strong, and not at all with no air (today's space).
+static func apply(m: Dictionary, env: Environment, sky: ProceduralSkyMaterial, sun: DirectionalLight3D,
+		halo: StarHalo = null) -> void:
+	if halo != null:
+		halo.set_strength(float(m[&"halo_deg"]) / HALO_DEG if m[&"fog"] else 0.0)
 	sky.sky_top_color = m[&"sky_top"]
 	sky.sky_horizon_color = m[&"sky_horizon"]
 	sky.ground_horizon_color = m[&"ground_horizon"]
