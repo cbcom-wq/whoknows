@@ -122,6 +122,10 @@ func place(eye_local: Vector3, sun_dir: Vector3, air_here: float) -> void:
 	mesh = _ring(axis, d, sun_dir, s)
 	visible = true
 
+## How strong it was drawn at the last place(); 0 while hidden.
+func drawn_strength() -> float:
+	return _strength if visible else 0.0
+
 func _sun_unchanged(sun_dir: Vector3) -> bool:
 	return sun_dir.angle_to(_sun) <= deg_to_rad(REDRAW_TURN_DEG)
 

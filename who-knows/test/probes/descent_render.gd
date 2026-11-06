@@ -280,6 +280,8 @@ func _limb() -> void:
 		await _hold_at(_spot, r * float(k) - r, _sun_flat, down)
 		await _shot("stage1_%s_seated" % k)
 		_limb_line("stage1_%s_seated" % k)
+		if k == "3":
+			_check((_stars.proxy(_planet.id).get_node("LimbGlow") as LimbGlow).visible, "stage1 at 3 R off the glow is shown")
 		await _outside_shot("stage1_%s_chase" % k, _starter, Vector3(0.0, 8.0, 30.0))
 	var night := -_to_star()
 	var night_forward := _tangents(night)[0]
@@ -287,23 +289,57 @@ func _limb() -> void:
 		Basis(_level(night, night_forward).x.normalized(), deg_to_rad(-90.0)))
 	await _shot("stage1_night")
 	_limb_line("stage1_night")
-	var crossing: Array[float] = []
+	# The ring as drawn, read back from the mesh the scene holds, in each shot of
+	# the crossing: [the outer edge's angle in rad, its strength].
+	var crossing: Array[Vector2] = []
+	var predicted: Array[float] = []
 	for step in [TOP_STEP, -TOP_STEP]:
 		# Pitched down by the limb's dip, the limb itself is at the middle.
 		var dip := acos(r / (r + top + step))
 		await _hold_at(_spot, top + step, _across, Basis(_level(_spot, _across).x.normalized(), -dip))
 		var shot_name := "stage1_top_above" if step > 0.0 else "stage1_top_below"
 		await _shot(shot_name)
-		crossing.append(_limb_line(shot_name))
-	# The limb itself moves as the eye does (0.5 deg over these 400 m), so what
-	# must not jump is the band beyond it.
-	var jump := rad_to_deg(absf(crossing[0] - crossing[1]))
-	_check(jump < 0.05, "stage1 across the air top the glow's band beyond the limb differs by %.3f deg between %.0f m over and %.0f m under it (under 0.05)" % [
-		jump, TOP_STEP, TOP_STEP])
+		_limb_line(shot_name)
+		var proxy := _stars.proxy(_planet.id)
+		var eye := _starter.canopy_camera.global_position
+		var d := (proxy.global_position - eye).length()
+		var glow := proxy.get_node("LimbGlow") as LimbGlow
+		crossing.append(Vector2(_drawn_outer_edge(glow, proxy, eye), glow.drawn_strength()))
+		predicted.append(LimbGlow.angles(r, top, d).y)
+		print("        %s: the drawn outer edge %.3f deg from the middle, the smooth prediction %.3f, strength %.3f" % [
+			shot_name, rad_to_deg(crossing[-1].x), rad_to_deg(predicted[-1]), crossing[-1].y])
+	var worst := 0.0
+	for i in 2:
+		worst = maxf(worst, absf(crossing[i].x - predicted[i]))
+	var weak := crossing[0].y - crossing[1].y
+	_check(rad_to_deg(worst) < 0.05 and absf(weak) < 0.02 and crossing[0].y > 0.0 and crossing[1].y > 0.0,
+		"stage1 across the air top the drawn mesh's outer edge is within %.3f deg of LimbGlow.angles at each shot's own distance (under 0.05), and both show, their strengths differing by %.3f (under 0.02)" % [
+		rad_to_deg(worst), absf(weak)])
+	await _limb_hidden_low(r)
 
-## What the glow is doing now, printed; the width in rad of its band beyond the
-## limb.
-func _limb_line(shot_name: String) -> float:
+## The widest angle from the eye-to-centre line of any vertex of `glow`'s
+## drawn mesh, in engine space, in rad.
+func _drawn_outer_edge(glow: LimbGlow, proxy: BodyProxy, eye: Vector3) -> float:
+	var verts: PackedVector3Array = glow.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	var to_centre := proxy.global_position - eye
+	var widest := 0.0
+	for v in verts:
+		widest = maxf(widest, (proxy.global_transform * v - eye).angle_to(to_centre))
+	return widest
+
+## Hovering LOW over the ground, in thick air, the glow is hidden (the sky's
+## own horizon takes over); the scene's own ticks have drawn it.
+func _limb_hidden_low(r: float) -> void:
+	await _hold_at(_spot, LOW, _sun_flat)
+	var proxy := _stars.proxy(_planet.id)
+	var glow := proxy.get_node("LimbGlow") as LimbGlow
+	var air := _stars.whereabouts.air()
+	_check(not glow.visible and LimbGlow.strength(r, proxy.distance, air) == 0.0,
+		"stage1 hovering %.0f m over the ground, air %.3f, the limb dipping %.1f deg: the glow is hidden (%s)" % [
+		LOW, air, rad_to_deg(acos(r / proxy.distance)), "showing" if glow.visible else "hidden"])
+
+## What the glow is doing now, printed.
+func _limb_line(shot_name: String) -> void:
 	var proxy := _stars.proxy(_planet.id)
 	var glow := proxy.get_node("LimbGlow") as LimbGlow
 	var d := proxy.distance
@@ -312,7 +348,6 @@ func _limb_line(shot_name: String) -> float:
 		shot_name, d / _planet.radius, "showing" if glow.visible else "hidden", rad_to_deg(a.x), rad_to_deg(a.y),
 		rad_to_deg(asin(minf(_planet.radius / d, 1.0))), LimbGlow.strength(_planet.radius, d, _stars.whereabouts.air()),
 		_stars.whereabouts.air()])
-	return a.y - asin(minf(_planet.radius / d, 1.0))
 
 ## Stage 2: into the air, at 0.95, 0.6 and 0.3 x the air top.
 func _stage2() -> void:
