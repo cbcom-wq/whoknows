@@ -49,7 +49,20 @@ this is the land it lives in).
 >   starter's hatch is **2.05 m** over the ground (the keel row under the cabin), a jump peaks at
 >   0.89 m, and nobody could get back in. The owner chose a ramp (2026-11-04). Every horizontal
 >   outer hatch over 0.45 m above the keel gets one: 30°, `sill / sin 30°` long, 4.10 m on the
->   starter. It lowers when the ship lands on a world and stows as it lifts off.
+>   starter before the legs below. It lowers when the ship lands on a world and stows as it lifts
+>   off.
+> - **Landing legs (the owner, 2026-11-04).** A landed ship rested on its keel strip and read as
+>   hovering. Four legs, one per quadrant, fold out under 40 m over the ground and up over 60 m.
+>   The owner added on 2026-11-05 that they lengthen until the lowest hanging part of the hull (a
+>   belly turret, a flood's housing) clears the sand by 0.1 m. The stance, and so every sill, is
+>   measured from their feet: ramps are now **6.07 m** on the starter (sill 3.03 m), **4.90 m** on
+>   the Lamplighter (2.45 m) and **10.07 m** on the Warden (5.03 m); legs are 2.98, 2.40 and 2.98 m.
+> - **The Warden was reshaped (merge 4f27cde).** The `ship-designer` moved the pods' forward
+>   retros two cells forward, out of its ramp's path. It can be boarded now.
+> - **A hatch with no way up says so.** For any unboardable hatch the step out reads "No ramp · N m
+>   drop" (N the drop) and does not let you out.
+> - **Boardable and four legs are `ShipRules` rules (Task 16):** `NOT_BOARDABLE` and `FEW_LEGS`.
+>   A library ship breaking either fails `test_ship_catalog`, and `ship_check` exits 1.
 > - **The head lamp spares your hands.** The hands are on `Avatar.HANDS_LAYER`, so the lamp does
 >   not wash them white. And the HUD on foot says `SUIT n%`, not the spacewalk's "returning".
 >
@@ -58,11 +71,13 @@ this is the land it lives in).
 > at the foot of the ramp looking up it. The Warden (265 t, the heaviest) levels from 15° to
 > **0.03°** with no overshoot, and touchdown damage is **0**.
 >
-> **Known gap: the Warden cannot be boarded on a world (Ruling 14).** Its hatch is 4.05 m over the
-> keel; its 8.1 m ramp would come down through its RCS block at (-4, -1, 2), so none is built.
-> You can land it and step out, not walk back in. The fix is a reshape through the `ship-designer`
-> agent after this branch merges. Boardability is a printed line (`ship_check`, `ship_probe`), not
-> a `ShipRules` rule yet.
+> **Measured after the legs** (Task 15 fix round 1, same machine and size): **198 fps** standing
+> beside the landed starter, **157** at the ramp foot, **144** at the helm.
+>
+> **Ruling 14 is superseded.** The Warden was once a known gap: its hatch was 4.05 m over the keel
+> and its 8.1 m ramp would have come down through its RCS block at (-4, -1, 2), so none was built.
+> The reshape above fixed it, and boardability is now a rule, so no library or future ship can
+> be unboardable without the catalog test saying so.
 >
 > **Open for phase 1:** the sky is black; the hover puff reads as a white blob; the help card
 > shows the pilot's keys while you are on foot; and step 10 of the probe (a spacewalk in a ring)

@@ -757,6 +757,8 @@ itself on a bare `flight_test.gd`.
 | `NO_PIECES` | a hull section has no plating or fairing outside the shell to lose |
 | `TURRET_BURIED` | a turret's mount face does not open onto an empty cell |
 | `TWO_WEAPONS_STATIONS` | more than one `weapons_station` |
+| `NOT_BOARDABLE` | an airlock's outer hatch has no way up on a world: `AirlockAlcove.way_up_for(ramp_plan(...))` is `NONE`, because it faces up or down or its ramp's path runs through a block (`ShipRules.boarding_finding`; the text is `ramp_words`'). Cell: the airlock |
+| `FEW_LEGS` | `LandingLegs.plan` places fewer than `ShipRules.LEGS_WANTED` (4) legs. No cell |
 
 Notes, never failing: `RCS_BLOCKED` (per block; the starter has 6), `FEEL`, `SIZE`, `TURRETS` (the count and each turret's sky clear, `3 turrets, sky clear: (0, 2, 0) 100%, ...`) and `TURRET_BLIND` (a turret whose `SkyMap` is under `WeaponValues.BLIND_BELOW` 25% clear: mount it where it can see; it warns, it never fails).
 
@@ -1207,12 +1209,12 @@ sight's size equal to the viewport's), `test_weapons_scene.gd`, `test_weapons_st
     turret  Turret_0_2_0 turret_light at (0, 2, 0), sky 100%
 
 The coverage is `turret.sky.coverage()`. On 2026-10-16 every turret on the three library ships
-read **92 to 100%**:
+read **91 to 100%**:
 
 | Ship | Turrets (cell, kind, sky) |
 |---|---|
 | starter | (0, 2, 0) light 100%; (0, −1, 0) light 100% |
-| warden | (0, 0, −9) **heavy** 96%; (0, −2, −6) light 100%; (0, 1, −4) light 98%; (−3, 0, 1) light 92%; (0, −2, 1) light 100%; (3, 0, 1) light 92%; (0, 2, 2) light 100% |
+| warden | (0, 0, −9) **heavy** 96%; (0, −2, −6) light 100%; (0, 1, −4) light 98%; (−3, 0, 1) light 91%; (0, −2, 1) light 100%; (3, 0, 1) light 91%; (0, 2, 2) light 100% |
 | lamplighter | (0, 2, 0) light 100% |
 
 **`test/probes/combat_probe.gd`** (windowed; see *Commands*) is the proof for anything that changes

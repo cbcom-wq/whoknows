@@ -103,7 +103,7 @@ turns slowly unless it has rcs at **both ends**.
 - A turret takes the place of a fairing half or a hull plate on the outer skin, on a face that
   opens onto space, never an extra cell. Its token carries the face.
 - It must see its sky: the centre line of the spine or the keel reads 100%, a flank plate between
-  slopes about 92%, and under 25% is `TURRET_BLIND`. The check's `TURRETS` note prints each.
+  slopes about 91%, and under 25% is `TURRET_BLIND`. The check's `TURRETS` note prints each.
 - A warship's pair on top and a pair underneath, spread along the hull, cover the whole sphere from
   both ends; a flank pair at the midship fills in the beams. The Warden's six lights and one heavy
   are the example (`data/ships/warden.md`, *Weapons*).
@@ -269,7 +269,8 @@ z -1  H    Qk12 D    D    Qm   Qk8  H
   landing ramp by itself, but only if its path is clear of the ship's own blocks: the ramp is
   `sill / sin 30°` long, so a hatch 4 m up needs 8 m of empty cells below and outside it.
   `ship_check` prints a `ramp` line per airlock, and **it must not say `NOT BOARDABLE ON A
-  WORLD`**. Keep the cells under the outer hatch empty, and put the airlock low, near the keel.
+  WORLD`: `NOT_BOARDABLE` is a rule now and fails `ship_check`** (so does `FEW_LEGS`, fewer than
+  four legs). Keep the cells under the outer hatch empty, and put the airlock low, near the keel.
 - **Landing legs:** leave room for four legs under the hull's outer edge, clear of ramps and
   downward thrusters. Each wants a cell with a whole, open bottom face one row above the keel row
   (a leg is at most 4 m), fore and aft, port and starboard, not an airlock or a turret, with no
@@ -359,6 +360,6 @@ z 2   Fh2
 | Putting the guns on last | A turret takes a cell of the skin, so a late one moves the mass, the power margin and the pitch balance together; see *Budgets* for how thin the Warden's margin is | Place the turrets in the shape pass (§4 step 5), then re-read power and balance |
 | Counting turrets, not the ones that bear | The starter has two turrets and fights with one: dorsal and ventral share only the rim of their skies, and on that rim neither can engage. `best_face` said 2 of 2 and the pilot could fire none | Read the probe's `face` line, the flown count; §2b says how to raise it |
 | A heavy on a ship meant to brawl | Reach over the foe's by 100 m forces stand-off, so the Warden, 3.2 times a starter's firepower and 2.4 its hull, stood at 960 m for 12 minutes and never decided a fight | Light turrets only on a brawler, or accept what §2b says about stand-off |
-| An outer hatch high on a big hull, with an RCS block under it | The Warden's hatch was 4.05 m over its keel, so its ramp was 8.1 m long and came down through its own RCS block at (-4, -1, 2). No ramp was built, and the Warden could not be boarded on a world: `ship_check` said `NOT BOARDABLE ON A WORLD`. The ship-designer moved the pods' forward retros two cells forward (4f27cde); on its legs, which stand its belly turrets 0.1 m off the sand, the ramp is now about 10.1 m | Read the `ramp` line on every airlock before you finish. It is a printed line, not a rule yet, so nothing fails a ship that can't be boarded |
+| An outer hatch high on a big hull, with an RCS block under it | The Warden's hatch was 4.05 m over its keel, so its ramp was 8.1 m long and came down through its own RCS block at (-4, -1, 2). No ramp was built, and the Warden could not be boarded on a world: `ship_check` said `NOT BOARDABLE ON A WORLD`. The reshape fixed it: the retros moved two cells forward, out of the ramp's path (4f27cde), and on its legs, which stand its belly turrets 0.1 m off the sand, the ramp is now about 10.1 m | Keep the ramp's path clear. `NOT_BOARDABLE` is a rule now, so `ship_check` fails a ship that can't be boarded; still read the `ramp` line on every airlock |
 | Judging shape from `ship_check` alone | A first draft broke no rule and looked like a shuttle on a pole | Probe inside the design loop; the `.md` last |
 | The arrival render to judge looks | At 200–400 m the new ship is a few pixels | It proves the arrival; judge the ship from the probe's hull views |

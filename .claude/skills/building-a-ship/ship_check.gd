@@ -48,7 +48,7 @@ func _initialize() -> void:
 		lift, lift / pull, pull, ShipRules.LIFT_MARGIN])
 	# Boardable on a world (desert world phase 0, Task 14): the landing ramp each
 	# airlock's outer hatch needs, or why it has none, measured to where its legs
-	# stand. Not a rule: printed.
+	# stand. The NOT_BOARDABLE rule fails one with no way up; this prints the numbers.
 	var stance := Ship.stance_depth_of(grid, catalog)
 	for c: Vector3i in grid.coords():
 		if grid.get_block(c).block_id == AirlockSite.AIRLOCK_ID:
@@ -59,6 +59,6 @@ func _initialize() -> void:
 	# of every ramp's path and every engine and downward thruster; their feet set
 	# the plane the ramps above are measured to, deep enough that the lowest
 	# hanging look (a belly turret parked, a flood's housing) clears the ground
-	# by LandingLegs.HANG_CLEAR (the owner, 2026-11-05). Not a rule: printed.
+	# by LandingLegs.HANG_CLEAR (the owner, 2026-11-05). FEW_LEGS fails fewer than four; this prints them.
 	print("legs    %s" % LandingLegs.plan_words(grid, LandingLegs.plan(grid, NAN, catalog)))
 	quit(0 if found["rules"].is_empty() else 1)

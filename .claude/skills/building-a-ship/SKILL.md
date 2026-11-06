@@ -58,7 +58,9 @@ Do these in order. Each one names the check that proves it.
      probe's and `ship_check`'s `ramp` line per airlock says `step`, `ramp: <sill> m, <length> m
      at <angle>°`, or `NOT BOARDABLE ON A WORLD` with the blocks in the way. A hatch with no way
      up (`AirlockAlcove.way_up_for(plan) == AirlockAlcove.NONE`) refuses the step out on a world
-     (`No ramp · 4 m drop`): the ship can still land, but nobody leaves it there.
+     (`No ramp · 4 m drop`): the ship can still land, but nobody leaves it there. **`NOT_BOARDABLE`
+     and `FEW_LEGS` are rules now:** `ship_check` exits 1 on either, and `test_ship_catalog` fails
+     the ship. Ramps run from about 4.9 m (Lamplighter) to 10.1 m (Warden): read your own `ramp` line.
    - **four landing legs** place clear of ramps and thrusters; `ship_check` prints `legs 4`.
      They place themselves (`LandingLegs.plan`, desert world Task 15): one per quadrant, as far
      out toward each corner as a mount allows, mirrored when the hull is. A mount is a cell with
@@ -245,7 +247,7 @@ Do these in order. Each one names the check that proves it.
    - the droid's dock and its jobs, flagging any `UNREACHABLE`;
    - **the turrets:** a `turret` line each (`turret  Turret_0_2_0 turret_light at (0, 2, 0), sky
      100%`), or `turret  none`. Read the sky: under 25% is `TURRET_BLIND`, and the Warden's
-     flank pair at 92% is the lowest on a library ship;
+     flank pair at 91% is the lowest on a library ship;
    - **the face:** `face    best (0.0, 0.0, -1.0), 2 of 2 bear; flown (0.0, -0.71, -0.71), 1 bear`:
      `Broadside.best_face`, then `ShipPilot.sure_face`, the one a pilot flies. The second count
      is what a ship fights with. The three library ships' are in `reference.md`;
@@ -486,10 +488,11 @@ thrust.
   lands on its keel and its legs finish into the ground under it. A ship that loses all four
   mounts while landed stays frozen where it stood, its keel the stance's height off the sand,
   until it lifts off.
-- **Boardability is not a rule.** Every library ship is boardable on a world now (the Warden
-  since its forward retros moved, 4f27cde), and four legs fit on each, but both are printed lines
-  (`ramp`, `legs`), not `ShipRules` rules: nothing fails a ship that cannot be boarded or stands on
-  its keel.
+- **Boardability is a rule now** (Task 16). Every library ship is boardable on a world (the Warden
+  since its forward retros moved, 4f27cde) and stands on four legs, and `ShipRules` fails a ship
+  that does not: `NOT_BOARDABLE` and `FEW_LEGS`. The `ramp` and `legs` lines still print the
+  numbers. The rules plan the legs, which draws the hull (60-190 ms): they run in `ship_check`,
+  the probe and the catalog test, never at spawn.
 
 - **Multi-storey interiors.** A `ladder` passes the validator, but every walkable cell still gets
   a solid floor and ceiling, so you can't climb. **Multi-level ships** can be written and checked
