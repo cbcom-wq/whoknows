@@ -11,8 +11,11 @@ class FakeGravity extends WorldGravity:
 	var g := Vector3.ZERO
 	var alt := INF
 	var air := 0.0
+	var body: SystemBody = null
 	func air_at(_p: Vector3) -> float:
 		return air
+	func body_at(_p: Vector3) -> SystemBody:
+		return body
 	func at(_p: Vector3) -> Vector3:
 		return g
 	func up_at(_p: Vector3) -> Vector3:
@@ -324,3 +327,43 @@ func test_no_drag_at_warp():
 	_hull.linear_velocity = Vector3(100, 0, 0)
 	await wait_physics_frames(2)
 	assert_almost_eq(_hull.linear_velocity.length(), 100.0, 1e-3)
+
+func test_no_heat_below_eighty_percent_or_without_air():
+	assert_eq(FlightComputer.heat(0.79 * 200.0, 200.0, 1.0), 0.0)
+	assert_eq(FlightComputer.heat(250.0, 200.0, 0.04), 0.0)
+
+func test_heat_rises_to_the_limit():
+	assert_almost_eq(FlightComputer.heat(180.0, 200.0, 1.0), 0.5, 1e-6)
+	assert_almost_eq(FlightComputer.heat(200.0, 200.0, 0.5), 1.0, 1e-6)
+	assert_almost_eq(FlightComputer.heat(400.0, 200.0, 1.0), 1.0, 1e-6)
+
+func _heat_gravity() -> FakeGravity:
+	var f := FakeGravity.new()
+	f.air = 1.0
+	f.alt = 500.0
+	var b := SystemBody.new()
+	b.radius = 30000.0
+	b.well_radius = 60000.0
+	f.body = b
+	return f
+
+func test_heat_is_the_hulls_own_place():
+	_fc.gravity = _heat_gravity()
+	var limit := FlightComputer.speed_limit(500.0, 30000.0)
+	_hull.linear_velocity = Vector3(limit, 0, 0)
+	assert_almost_eq(_fc.entry_heat(), 1.0, 1e-4)
+	_hull.linear_velocity = Vector3(limit * 0.5, 0, 0)
+	assert_eq(_fc.entry_heat(), 0.0)
+
+func test_a_frozen_or_arriving_hull_never_glows():
+	_fc.gravity = _heat_gravity()
+	var limit := FlightComputer.speed_limit(500.0, 30000.0)
+	_hull.linear_velocity = Vector3(limit, 0, 0)
+	assert_gt(_fc.entry_heat(), 0.9)
+	_hull.freeze = true
+	assert_eq(_fc.entry_heat(), 0.0)
+	_hull.freeze = false
+	var w := TravellingWarp.new()
+	add_child_autofree(w)
+	_fc.warp = w
+	assert_eq(_fc.entry_heat(), 0.0)

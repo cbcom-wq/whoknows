@@ -34,6 +34,11 @@ extends "res://test/probes/landing_play.gd"
 #            slowest checked; then the same dive squeezed into 5 s (about 8x
 #            the limit), with the mood at work and held still, printed: what
 #            streaming the ground that fast costs;
+#   entry    seated, the starter flown unfrozen at the speed limit, nose 45 deg
+#            down, from the air top to half of it (Task 6, spec 6.5): the heat
+#            each second, the glow from the chase camera (entry_chase) and
+#            seated (entry_seated) at full heat, the frame rate seated there;
+#            then a gentle 30 m/s descent, the heat 0 and the glow hidden;
 #   night    landed on the night side, on foot, to the horizon (night_ground);
 #            seated 1000 m over the terminator, toward the sun (night_terminator);
 #   thin     on the largest planet with thin air, if there is one: stage 3 at
@@ -129,6 +134,7 @@ func _run() -> void:
 	await _stage3()
 	await _stage4()
 	await _dive()
+	await _entry()
 	await _night()
 	await _thin_air()
 	_sheet()
@@ -504,6 +510,93 @@ func _squeezed_dive(from_h: float, how: String) -> float:
 	print(line)
 	_readings.append(line)
 	return fps
+
+## The nose's way in the entry flights: 45 deg down toward the sun.
+func _entry_nose() -> Vector3:
+	return (-_spot * 0.7071 + _sun_flat * 0.7071).normalized()
+
+## A dive flown by velocity: the hull unfrozen, its nose along `_entry_nose`,
+## and each physics tick set `speed()` m/s along it and lowered by that
+## speed's share. Returns [height, mover] as `_diving` does.
+func _flying(from_h: float, speed: Callable) -> Array:
+	var seen := await _diving(from_h, func(h: float) -> float:
+		return h - float(speed.call()) * 0.7071 / Engine.physics_ticks_per_second)
+	var nose := _entry_nose()
+	var fly := func() -> void:
+		var hull := _starter.exterior
+		hull.freeze = false
+		hull.global_transform = Transform3D(Basis.looking_at(nose, _spot), hull.global_position)
+		hull.linear_velocity = nose * float(speed.call())
+	physics_frame.connect(fly)
+	seen.append(fly)
+	return seen
+
+func _stop_flying(seen: Array) -> void:
+	physics_frame.disconnect(seen[4])
+	_stop_diving(seen)
+	seen.resize(3)
+	_starter.exterior.linear_velocity = Vector3.ZERO
+
+## Spec 6.5: a fast entry glows and shakes, a slow one does not.
+func _entry() -> void:
+	await _aboard()
+	var fc := _starter.flight_computer
+	var glow := _starter.entry_glow
+	var top := _planet.recipe.air_top()
+	var buffets: Array = [0, 0.0]
+	var on_buffet := func(strength: float, _from: Vector3) -> void:
+		buffets[0] += 1
+		buffets[1] = maxf(float(buffets[1]), strength)
+	glow.buffet.connect(on_buffet)
+	var seen := await _flying(top, func() -> float: return fc.speed_limit_now())
+	var full := false
+	var lowest_h := top
+	var shot_chase := false
+	var shot_seated := false
+	var seconds := 0
+	while float(seen[2]) > top * 0.5 and seconds < 120:
+		await _seconds(1.0)
+		seconds += 1
+		var heat := fc.entry_heat()
+		var cap := glow.get_node("Cap") as MeshInstance3D
+		var line := "heat    %d s: %.0f m, air %.3f, %.0f m/s of %.0f, heat %.2f, cap %s" % [
+			seconds, float(seen[2]), _stars.whereabouts.air(), _starter.exterior.linear_velocity.length(),
+			fc.speed_limit_now(), heat, "shown" if cap.visible else "hidden"]
+		print(line)
+		_check(cap.visible == (heat > EntryGlow.SHOW_ABOVE), "the glow shows exactly while the heat is up (%s)" % line)
+		if heat > 0.95 and not shot_chase:
+			full = true
+			shot_chase = true
+			await _outside_shot("entry_chase", _starter, Vector3(0.0, 8.0, 30.0))
+			print("        the cap's pole points along the velocity: %.3f" % (
+				(cap.global_basis * Vector3.FORWARD).normalized().dot(_starter.exterior.linear_velocity.normalized())))
+		elif heat > 0.95 and not shot_seated:
+			shot_seated = true
+			await _aboard()
+			await _shot("entry_seated")
+			var fps := await _fps(FPS_SECONDS)
+			var fps_line := "fps     %.0f seated at full heat (heat %.2f) %s" % [fps, fc.entry_heat(), _ms()]
+			print(fps_line)
+			_readings.append(fps_line)
+			_check(fps >= FPS_FLOOR, "fps %.0f seated at full heat (at least %.0f)" % [fps, FPS_FLOOR])
+		lowest_h = float(seen[2])
+	_stop_flying(seen)
+	_check(full, "the dive reaches full heat in air (lowest %.0f m)" % lowest_h)
+	_check(int(buffets[0]) > 0, "it buffeted (%d times)" % int(buffets[0]))
+	_check(float(buffets[1]) <= EntryGlow.buffet_most() + 1e-6, "no buffet was harder than a light hit (%.3f of %.3f)" % [
+		float(buffets[1]), EntryGlow.buffet_most()])
+	print("buffet  %d buffets, hardest %.3f, a light hit %.3f" % [int(buffets[0]), float(buffets[1]), EntryGlow.buffet_most()])
+	# A gentle descent: 30 m/s, in the thick of it.
+	seen = await _flying(top * 0.5, func() -> float: return 30.0)
+	var worst := 0.0
+	for i in 5:
+		await _seconds(1.0)
+		worst = maxf(worst, fc.entry_heat())
+		print("heat    gentle %d s: %.0f m, air %.3f, heat %.2f, cap %s" % [i + 1, float(seen[2]),
+			_stars.whereabouts.air(), fc.entry_heat(), "shown" if glow.get_node("Cap").visible else "hidden"])
+	_check(worst == 0.0 and not glow.get_node("Cap").visible, "a gentle 30 m/s descent in air: the heat stays 0 and the glow hidden")
+	_stop_flying(seen)
+	glow.buffet.disconnect(on_buffet)
 
 ## The night side: on foot by the landed starter, and seated over the
 ## terminator.

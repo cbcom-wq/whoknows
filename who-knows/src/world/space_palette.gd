@@ -15,6 +15,11 @@ const AMBIENT := Color("0b0d12")
 ## against the dark. Tuned at the renders.
 const WARP := Color("fff3e0")
 
+## The glow at a fast entry's bow (desert-world spec 6.5): warm amber at
+## the first heat, warm white at full. Tuned at the renders.
+const ENTRY_LOW := Color("ff9a4a")
+const ENTRY_HIGH := Color("fff3e0")
+
 ## A turret's phaser bolt and its trail (ship weapons spec §6.2): a hot
 ## amber-gold, warm like every light in the game, never the rejected blue.
 const PHASER := Color("ffbf4d")

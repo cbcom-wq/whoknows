@@ -70,6 +70,7 @@ var stats: ShipStats
 ## The RCS thrusters you see and hear (flight controls spec §6). On the hull,
 ## so the floating origin carries it.
 var rcs_show: RcsShow
+var entry_glow: EntryGlow
 ## The work lights (ship exterior spec §6, §7). On the hull, so the floating
 ## origin carries them; kept across rebuilds, like Airlocks.
 var lights: ShipLights
@@ -174,6 +175,11 @@ func _ready() -> void:
 	rcs_show.name = "RcsShow"
 	exterior.add_child(rcs_show)
 	rcs_show.setup(flight_computer, interior, self)
+	entry_glow = EntryGlow.new()
+	entry_glow.name = "EntryGlow"
+	exterior.add_child(entry_glow)
+	entry_glow.setup(flight_computer, exterior)
+	entry_glow.buffet.connect(func(s: float, from: Vector3): felt_hit.emit(s, from))
 	quantum = QuantumPlant.new()
 	quantum.name = "Quantum"
 	quantum.flight_computer = flight_computer
@@ -765,6 +771,8 @@ func _rebuild_everything(hull := true) -> void:
 	_apply_cockpit()
 	if rcs_show != null:
 		rcs_show.rebuild(grid, catalog, stats.center_of_mass)
+	if entry_glow != null:
+		entry_glow.fit(grid_box())
 	stats_changed.emit(stats)
 	if damage_show != null:
 		if damage != null:
@@ -1153,6 +1161,20 @@ func restore_aboard(d: Dictionary) -> void:
 ## so the grid's origin is the hull's origin.
 func keel_depth() -> float:
 	return keel_depth_of(grid)
+
+## The occupied cells' box in the hull's frame. Reads cells, never meshes, so
+## light beams, turrets' reach and landing legs never count.
+func grid_box() -> AABB:
+	var box := AABB()
+	if grid == null:
+		return box
+	var half := Vector3.ONE * ShipGrid.CELL_SIZE / 2.0
+	var any := false
+	for c: Vector3i in grid.coords():
+		var cell := AABB(ShipGrid.cell_center(c) - half, half * 2.0)
+		box = cell if not any else box.merge(cell)
+		any = true
+	return box
 
 ## keel_depth for any grid.
 static func keel_depth_of(layout: ShipGrid) -> float:

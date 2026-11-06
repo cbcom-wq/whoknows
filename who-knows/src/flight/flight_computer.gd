@@ -235,6 +235,31 @@ static func speed_limit(altitude: float, well_top: float) -> float:
 	var fade := clampf((well_top - a) / (LIMIT_EASE * well_top), 0.0, 1.0)
 	return lerpf(CRUISE_LIMIT_MPS, climb, fade)
 
+## Entry heat (desert-world spec 6.5): speed from HEAT_FROM of the limit up
+## to it, in air thicker than HEAT_AIR (full at HEAT_AIR_FULL). 0..1. It only
+## draws a glow and a light buffet; it never hurts the hull.
+const HEAT_FROM := 0.8
+const HEAT_AIR := 0.05
+const HEAT_AIR_FULL := 0.15
+
+static func heat(speed: float, limit: float, air: float) -> float:
+	var fast := clampf((speed / limit - HEAT_FROM) / (1.0 - HEAT_FROM), 0.0, 1.0)
+	return fast * clampf((air - HEAT_AIR) / (HEAT_AIR_FULL - HEAT_AIR), 0.0, 1.0)
+
+## This hull's heat now, by its own place and its own limit (never
+## current_limit, which is the focus's). 0 with no gravity, frozen, or in warp.
+func entry_heat() -> float:
+	if gravity == null or _hull == null or _hull.freeze:
+		return 0.0
+	if (warp != null and warp.travelling()) or WarpArrival.of(_hull) != null:
+		return 0.0
+	var p := _hull.global_position
+	var b := gravity.body_at(p)
+	if b == null:
+		return 0.0
+	var limit := speed_limit(gravity.altitude_at(p), b.well_radius - b.radius)
+	return heat(_hull.linear_velocity.length(), limit, gravity.air_at(p))
+
 ## The limit where the focus is now.
 func speed_limit_now() -> float:
 	if whereabouts == null:
