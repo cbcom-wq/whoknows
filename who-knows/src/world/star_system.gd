@@ -75,6 +75,9 @@ func place_all() -> void:
 	var focus := universe.to_universe(universe.focus.global_position)
 	for p in proxies:
 		p.place(universe, focus)
+		var b := p.body
+		p.place_air(focus.minus(b.point), recipe.star.point.minus(b.point).normalized(),
+			whereabouts.air() if whereabouts.well() == b else 0.0)
 	halo.place(proxy(recipe.star.id).global_position, universe.focus.global_position)
 	for b in belts:
 		b.place(universe, focus)

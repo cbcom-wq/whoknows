@@ -148,3 +148,64 @@ func test_the_surface_starts_within_ten_radii_and_300_km():
 	var b := _planet()
 	var p := _proxy(b)
 	assert_eq(p.surface_at(), minf(b.radius * BodyProxy.SURFACE_RADII, BodyProxy.SURFACE_MOST))
+
+func _limb_glows(p: BodyProxy) -> int:
+	var n := 0
+	for c in p.get_children():
+		if c is LimbGlow:
+			n += 1
+	return n
+
+func test_a_world_with_air_has_one_limb_glow_and_one_without_has_none():
+	var b := _planet()
+	var was := b.recipe.atmosphere
+	b.recipe.atmosphere = WorldRecipe.Atmosphere.THICK
+	assert_eq(_limb_glows(_proxy(b)), 1)
+	b.recipe.atmosphere = WorldRecipe.Atmosphere.NONE
+	assert_eq(_limb_glows(_proxy(b)), 0)
+	b.recipe.atmosphere = was
+	assert_eq(_limb_glows(_proxy(_system.star)), 0, "the star has no recipe")
+
+func test_place_air_reaches_the_glow():
+	var b := _planet()
+	var was := b.recipe.atmosphere
+	b.recipe.atmosphere = WorldRecipe.Atmosphere.THICK
+	var p := _proxy(b)
+	p.place_air(Vector3(0, 0, b.radius * 10.0), Vector3.UP, 0.0)
+	var glow: LimbGlow
+	for c in p.get_children():
+		if c is LimbGlow:
+			glow = c
+	assert_true(glow.visible)
+	p.place_air(Vector3(0, 0, b.radius * 10.0), Vector3.UP, 1.0)
+	assert_false(glow.visible)
+	b.recipe.atmosphere = was
+
+func test_the_limb_glow_keeps_its_angles_when_the_proxy_is_scaled_down():
+	var b := _planet()
+	var was := b.recipe.atmosphere
+	b.recipe.atmosphere = WorldRecipe.Atmosphere.THICK
+	var p := _proxy(b)
+	var focus := b.point.plus(Vector3(-900000, 2500, 400000))
+	_universe.origin = focus
+	p.place(_universe, focus)
+	assert_lt(p.global_basis.x.length(), 0.5, "scaled down: it is beyond PROXY_AT")
+	var eye := _universe.to_engine(focus)
+	var off := focus.minus(b.point)
+	p.place_air(off, Vector3.UP, 0.0)
+	var glow: LimbGlow
+	for c in p.get_children():
+		if c is LimbGlow:
+			glow = c
+	var want := LimbGlow.angles(b.radius, b.recipe.air_top(), off.length())
+	var verts: PackedVector3Array = glow.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	var to_centre := p.global_position - eye
+	var lo := INF
+	var hi := 0.0
+	for v in verts:
+		var a := (p.global_transform * v - eye).angle_to(to_centre)
+		lo = minf(lo, a)
+		hi = maxf(hi, a)
+	assert_almost_eq(lo, want.x, 1e-3)
+	assert_almost_eq(hi, want.y, 1e-3)
+	b.recipe.atmosphere = was

@@ -12,7 +12,12 @@ extends "res://test/probes/landing_play.gd"
 #            at 15 deg (stage1_star_close), and that with the star's mesh hidden
 #            (stage1_star_bare: its disc hides the sky's glow); today's sky
 #            checked: unturned, the light in it, its own 1 deg sun glow on the
-#            star, no StarHalo;
+#            star, no StarHalo; then the glow round the world's edge (LimbGlow)
+#            from 3 and 1.5 radii off its centre on the day side, seated and
+#            from the chase camera (stage1_<k>_seated, _chase), 2 radii off on
+#            the night side, backlit (stage1_night), and across the air top,
+#            200 m over it and 200 m under it, at the limb (stage1_top_above,
+#            stage1_top_below), which must not jump;
 #   stage 2  hovering at 0.95, 0.6 and 0.3 x the air top: seated, to the
 #            horizon (stage2_<k>_horizon) and pitched 30 deg down (_down);
 #   stage 3  at 1000 m and 300 m: seated, toward the sun (stage3_<h>_sun) and
@@ -56,6 +61,12 @@ const SUN_DEG := 30.0
 ## the close shot of the star's own sun glow there, its field of view in deg.
 const STAGE1 := 1.2
 const STAR_CLOSE_FOV := 15.0
+## The glow round the edge: how far off the centre, in radii, the day side shots
+## are taken; the night side's; and how far over and under the air top the
+## crossing pair is, m.
+const LIMB_RADII := ["3", "1.5"]
+const LIMB_NIGHT_RADII := 2.0
+const TOP_STEP := 200.0
 ## Stage 2's heights, each [its name, its share of the air top].
 const STAGE2 := [["0.95", 0.95], ["0.6", 0.6], ["0.3", 0.3]]
 const STAGE2_PITCH := 30.0
@@ -76,8 +87,8 @@ const DIVE_SECONDS := 5.0
 ## The contact sheet: each render at this size, day over night.
 const TILE := Vector2i(320, 180)
 const SHEET := [
-	["stage2_0.6_horizon", "stage3_1000_sun", "stage4_away", "stage4_up"],
-	["night_ground", "stage4_seated", "stage4_porthole", "thin_stage4_away"],
+	["stage1_1.5_seated", "stage2_0.6_horizon", "stage3_1000_sun", "stage4_away", "stage4_up"],
+	["stage1_night", "night_ground", "stage4_seated", "stage4_porthole", "thin_stage4_away"],
 ]
 
 ## The largest planet with thin air, for the second pass; null if none.
@@ -254,6 +265,54 @@ func _stage1() -> void:
 		"on" if env.fog_enabled else "off", turned,
 		"in the sky" if sun.sky_mode == DirectionalLight3D.SKY_MODE_LIGHT_AND_SKY else "out of the sky",
 		_sky().sun_angle_max, off, "showing" if _stars.halo.is_visible_in_tree() else "hidden"])
+	await _limb()
+
+## The glow round the world's edge from outside (spec §6.2 stage 1, §6.3): on
+## the day side from LIMB_RADII radii off the centre, looking at the world,
+## seated and from the chase camera; on the night side, backlit; and across the
+## air top, TOP_STEP m either side, looking at the limb: the two must not jump.
+func _limb() -> void:
+	var r := _planet.radius
+	var top := _planet.recipe.air_top()
+	var down := Basis(_level(_spot, _sun_flat).x.normalized(), deg_to_rad(-90.0))
+	print("stage 1 the limb glow: radius %.0f km, the air top %.0f km over it" % [r / 1000.0, top / 1000.0])
+	for k in LIMB_RADII:
+		await _hold_at(_spot, r * float(k) - r, _sun_flat, down)
+		await _shot("stage1_%s_seated" % k)
+		_limb_line("stage1_%s_seated" % k)
+		await _outside_shot("stage1_%s_chase" % k, _starter, Vector3(0.0, 8.0, 30.0))
+	var night := -_to_star()
+	var night_forward := _tangents(night)[0]
+	await _hold_at(night, r * LIMB_NIGHT_RADII - r, night_forward,
+		Basis(_level(night, night_forward).x.normalized(), deg_to_rad(-90.0)))
+	await _shot("stage1_night")
+	_limb_line("stage1_night")
+	var crossing: Array[float] = []
+	for step in [TOP_STEP, -TOP_STEP]:
+		# Pitched down by the limb's dip, the limb itself is at the middle.
+		var dip := acos(r / (r + top + step))
+		await _hold_at(_spot, top + step, _across, Basis(_level(_spot, _across).x.normalized(), -dip))
+		var shot_name := "stage1_top_above" if step > 0.0 else "stage1_top_below"
+		await _shot(shot_name)
+		crossing.append(_limb_line(shot_name))
+	# The limb itself moves as the eye does (0.5 deg over these 400 m), so what
+	# must not jump is the band beyond it.
+	var jump := rad_to_deg(absf(crossing[0] - crossing[1]))
+	_check(jump < 0.05, "stage1 across the air top the glow's band beyond the limb differs by %.3f deg between %.0f m over and %.0f m under it (under 0.05)" % [
+		jump, TOP_STEP, TOP_STEP])
+
+## What the glow is doing now, printed; the width in rad of its band beyond the
+## limb.
+func _limb_line(shot_name: String) -> float:
+	var proxy := _stars.proxy(_planet.id)
+	var glow := proxy.get_node("LimbGlow") as LimbGlow
+	var d := proxy.distance
+	var a := LimbGlow.angles(_planet.radius, _planet.recipe.air_top(), d)
+	print("limb    %s: %.2f radii off, %s, the ring %.2f to %.2f deg from the middle (the limb %.2f), strength %.2f, air %.3f" % [
+		shot_name, d / _planet.radius, "showing" if glow.visible else "hidden", rad_to_deg(a.x), rad_to_deg(a.y),
+		rad_to_deg(asin(minf(_planet.radius / d, 1.0))), LimbGlow.strength(_planet.radius, d, _stars.whereabouts.air()),
+		_stars.whereabouts.air()])
+	return a.y - asin(minf(_planet.radius / d, 1.0))
 
 ## Stage 2: into the air, at 0.95, 0.6 and 0.3 x the air top.
 func _stage2() -> void:
@@ -715,7 +774,7 @@ static func _on_screen(cam: Camera3D, d: Vector3) -> String:
 
 ## descent_sheet.png: the SHEET renders at TILE size, day over night.
 func _sheet() -> void:
-	var sheet := Image.create_empty(TILE.x * 4, TILE.y * 2, false, Image.FORMAT_RGBA8)
+	var sheet := Image.create_empty(TILE.x * (SHEET[0] as Array).size(), TILE.y * 2, false, Image.FORMAT_RGBA8)
 	sheet.fill(Color(0.1, 0.1, 0.1))
 	for row in SHEET.size():
 		for col in (SHEET[row] as Array).size():

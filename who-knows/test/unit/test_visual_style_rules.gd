@@ -14,6 +14,7 @@ const SHADER_DIR := "res://data/materials/interior/"
 const PAINTING_FILES := [
 	"res://src/world/air_mood.gd",
 	"res://src/world/star_halo.gd",
+	"res://src/world/limb_glow.gd",
 	"res://src/ui/computer_overlay.gd",
 	"res://src/habitat/link_panel.gd",
 	"res://src/ship/interior/interior_props.gd",

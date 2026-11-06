@@ -52,6 +52,7 @@ var frozen := false
 var _universe: Universe
 var _surface: WorldSurface
 var _far: MeshInstance3D
+var _glow: LimbGlow
 
 func setup(p_body: SystemBody) -> void:
 	body = p_body
@@ -65,6 +66,10 @@ func setup(p_body: SystemBody) -> void:
 		var ring := RingLook.new()
 		ring.setup(body)
 		add_child(ring)
+	if body.recipe != null and body.recipe.atmosphere != WorldRecipe.Atmosphere.NONE:
+		_glow = LimbGlow.new()
+		_glow.setup(body)
+		add_child(_glow)
 
 ## Where the proxy goes and how big it is drawn, for a body at `point` seen
 ## from `focus`: [engine position, scale].
@@ -96,6 +101,13 @@ func place(universe: Universe, focus: UniversePoint) -> void:
 	var height := distance - body.radius
 	_far.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if height < SHADOW_WITHIN \
 		else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+## Draws the glow round its edge for the eye at `eye_local` from its centre
+## (true metres), the sun toward `sun_dir` and `air_here` where the eye is;
+## nothing for a body with no air.
+func place_air(eye_local: Vector3, sun_dir: Vector3, air_here: float) -> void:
+	if _glow != null:
+		_glow.place(eye_local, sun_dir, air_here)
 
 ## Where the surface takes over, metres from the centre.
 func surface_at() -> float:
