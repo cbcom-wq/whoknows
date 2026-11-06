@@ -10,11 +10,14 @@ extends Node
 ## environment (ship_interior.tres), so the cabin's look is untouched. Every
 ## colour comes from SpacePalette; this file names none.
 ##
-## The sun's glow is the StarHalo's, on the star itself: the engine hands the
-## sky shader the light's way unturned by sky_rotation, so the sky's own sun
-## glow sat as far off the star as the sky was turned. The light is taken out
-## of the sky (SKY_MODE_LIGHT_ONLY); halo_deg still goes to the sky material,
-## where it no longer shows.
+## With no air (the mood's fog off) the sky is today's: unturned, the light in
+## it (SKY_MODE_LIGHT_AND_SKY), so its own SPACE_HALO_DEG sun glow sits on the
+## star, and StarHalo hidden. In air the sky turns onto the local up; the
+## engine hands the sky shader the light's way unturned by sky_rotation, so the
+## sky's own glow would sit as far off the star as the sky turned. There the
+## light is taken out of the sky (SKY_MODE_LIGHT_ONLY) and StarHalo glows on the
+## star instead. The turn and the mode change together, and only when the fog
+## flips or the up has turned, so the sky is not baked again each tick.
 
 ## No air: the values flight_test.gd always gave the outside.
 const SPACE_AMBIENT_ENERGY := 0.4
@@ -61,7 +64,10 @@ var _halo: StarHalo
 var _where: Whereabouts
 var _system: SystemRecipe
 var _since := 0.0
+## The up the sky is turned onto (zero: unturned), and whether it was turned
+## for air.
 var _turned_up := Vector3.ZERO
+var _sky_in_air := false
 
 func setup(env: Environment, sun: DirectionalLight3D, whereabouts: Whereabouts, system: SystemRecipe,
 		halo: StarHalo = null) -> void:
@@ -71,7 +77,6 @@ func setup(env: Environment, sun: DirectionalLight3D, whereabouts: Whereabouts, 
 	_halo = halo
 	_where = whereabouts
 	_system = system
-	sun.sky_mode = DirectionalLight3D.SKY_MODE_LIGHT_ONLY
 	env.sky.process_mode = Sky.PROCESS_MODE_INCREMENTAL
 	env.fog_mode = Environment.FOG_MODE_EXPONENTIAL
 	env.fog_sky_affect = 0.0
@@ -97,8 +102,9 @@ func _physics_process(delta: float) -> void:
 	if differs(m, last_mood, APPLY_STEP):
 		last_mood = m
 		apply(m, _env, _sky, _sun, _halo)
-	var up := _where.up()
-	if up.is_zero_approx() != _turned_up.is_zero_approx() \
+	var in_air := _in_air()
+	var up := _where.up() if in_air else Vector3.ZERO
+	if in_air != _sky_in_air or up.is_zero_approx() != _turned_up.is_zero_approx() \
 			or (not up.is_zero_approx() and up.angle_to(_turned_up) > TURN_STEP):
 		_turn_sky()
 
@@ -111,9 +117,19 @@ func _now() -> Dictionary:
 	var star: Dictionary = SpacePalette.STARS[maxi(star_index, 0)]
 	return mood(_where.air(), _where.sun_up(), palette, star)
 
+## Whether the mood last applied has air (its haze on).
+func _in_air() -> bool:
+	return bool(last_mood.get(&"fog", false))
+
+## The sky as the air has it: in air, turned onto the local up with the light
+## out of it; with none, today's, unturned with the light in it.
 func _turn_sky() -> void:
-	_turned_up = _where.up()
+	_sky_in_air = _in_air()
+	_turned_up = _where.up() if _sky_in_air else Vector3.ZERO
 	_env.sky_rotation = sky_basis(_turned_up).get_euler()
+	var mode := DirectionalLight3D.SKY_MODE_LIGHT_ONLY if _sky_in_air else DirectionalLight3D.SKY_MODE_LIGHT_AND_SKY
+	if _sun.sky_mode != mode:
+		_sun.sky_mode = mode
 
 ## Everything the outside shows for `air` and `sun_up` (spec §6.2), worked out
 ## from the world's `palette` and the `star`'s.

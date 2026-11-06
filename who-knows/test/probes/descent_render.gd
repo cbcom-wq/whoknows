@@ -7,6 +7,12 @@ extends "res://test/probes/landing_play.gd"
 # largest with air), on its day side with the sun 30 deg up, as the oasis will
 # have it. Seated is at the starter's helm, looking out of its canopy.
 #
+#   stage 1  hovering at 1.2 x the air top, over the air: seated, toward the
+#            sun (stage1_sun), and straight at the star, wide (stage1_star) and
+#            at 15 deg (stage1_star_close), and that with the star's mesh hidden
+#            (stage1_star_bare: its disc hides the sky's glow); today's sky
+#            checked: unturned, the light in it, its own 1 deg sun glow on the
+#            star, no StarHalo;
 #   stage 2  hovering at 0.95, 0.6 and 0.3 x the air top: seated, to the
 #            horizon (stage2_<k>_horizon) and pitched 30 deg down (_down);
 #   stage 3  at 1000 m and 300 m: seated, toward the sun (stage3_<h>_sun) and
@@ -33,8 +39,9 @@ extends "res://test/probes/landing_play.gd"
 # eight of them side by side. The renders on the sun's side also print where
 # the sky's own sun glow would sit against the star, and where the StarHalo
 # sits: the sky's glow sat 31 deg off the star once the sky turned (the engine
-# leaves the light's way unturned), so the light is out of the sky and the
-# StarHalo glows on the star instead. The controls card is hidden (H), as a
+# leaves the light's way unturned), so in air the light is out of the sky and
+# the StarHalo glows on the star instead; over the air the sky is today's,
+# unturned, with its own glow. The controls card is hidden (H), as a
 # player would. Run it WITHOUT --headless:
 #
 #   godot --path who-knows --resolution 1280x720 \
@@ -45,6 +52,10 @@ extends "res://test/probes/landing_play.gd"
 
 ## The sun's height over the horizon by day, as the oasis will have it.
 const SUN_DEG := 30.0
+## Stage 1's height, a share of the air top: over the air, as on approach; and
+## the close shot of the star's own sun glow there, its field of view in deg.
+const STAGE1 := 1.2
+const STAR_CLOSE_FOV := 15.0
 ## Stage 2's heights, each [its name, its share of the air top].
 const STAGE2 := [["0.95", 0.95], ["0.6", 0.6], ["0.3", 0.3]]
 const STAGE2_PITCH := 30.0
@@ -102,6 +113,7 @@ func _run() -> void:
 	_day_side()
 	await _sit(_starter)
 	await _hide_the_card()
+	await _stage1()
 	await _stage2()
 	await _stage3()
 	await _stage4()
@@ -192,6 +204,56 @@ func _to_star() -> Vector3:
 	return star.point.minus(_planet.point).normalized()
 
 # --- the stages ------------------------------------------------------------------
+
+## Stage 1: the approach, over the air. Seated toward the sun's way, then
+## straight at the star from there, wide and close: no air is today's sky,
+## unturned, the light in it and its own sun glow round the star; checked.
+func _stage1() -> void:
+	var h := _planet.recipe.air_top() * STAGE1
+	print("stage 1 the approach: %.0f m over the ground, %.1f x the air top" % [h, STAGE1])
+	await _hold_at(_spot, h, _sun_flat)
+	await _shot("stage1_sun")
+	var cam := _starter.canopy_camera
+	_halo_line("stage1_sun", cam)
+	var star := _stars.proxy((_scene.get("system") as SystemRecipe).star.id)
+	var at := cam.global_position
+	var pose := Transform3D(Basis.looking_at(star.global_position - at, _spot), at)
+	# From the helm's eye, with the outside alone in view: your own hull is
+	# round that eye, and a window leaves it out.
+	if _cam == null:
+		_cam = Camera3D.new()
+		_cam.name = "ProbeCamera"
+		_cam.far = BodyProxy.VIEW_FAR
+		_scene.add_child(_cam)
+		_cam.add_to_group(Universe.EXTERIOR_SPACE)
+	_cam.cull_mask = 1
+	await _camera_shot("stage1_star", pose)
+	var fov := _cam.fov
+	_cam.fov = STAR_CLOSE_FOV
+	await _camera_shot("stage1_star_close", pose)
+	# The star's own disc is far wider than the sky's glow, so the glow is
+	# behind it: one shot with the star's mesh hidden shows where the sky draws
+	# its sun.
+	var disc := star.get_node("Far") as MeshInstance3D
+	print("        the star's disc %.1f deg from its middle to its rim, the sky's sun glow %.1f" % [
+		rad_to_deg(asin(minf(star.body.radius / star.distance, 1.0))), _sky().sun_angle_max])
+	disc.visible = false
+	await _camera_shot("stage1_star_bare", pose)
+	disc.visible = true
+	_cam.fov = fov
+	_cam.cull_mask = 1 | ExteriorBuilder.OWN_HULL_LAYER
+	var env := _env()
+	var sun := _scene.get_node("DirectionalLight3D") as DirectionalLight3D
+	var glow := Basis.from_euler(env.sky_rotation) * _sun_dir()
+	var off := rad_to_deg(glow.angle_to(star.global_position - at))
+	var turned := rad_to_deg(Basis.from_euler(env.sky_rotation).get_rotation_quaternion().get_angle())
+	_check(not env.fog_enabled and env.sky_rotation.is_zero_approx() and turned < 0.01
+		and sun.sky_mode == DirectionalLight3D.SKY_MODE_LIGHT_AND_SKY and off < 0.1
+		and is_equal_approx(_sky().sun_angle_max, AirMood.SPACE_HALO_DEG) and not _stars.halo.is_visible_in_tree(),
+		"stage1 over the air, today's sky: fog %s, the sky turned %.2f deg (0), the light %s, its own %.1f deg sun glow %.3f deg off the star (under 0.1), the StarHalo %s" % [
+		"on" if env.fog_enabled else "off", turned,
+		"in the sky" if sun.sky_mode == DirectionalLight3D.SKY_MODE_LIGHT_AND_SKY else "out of the sky",
+		_sky().sun_angle_max, off, "showing" if _stars.halo.is_visible_in_tree() else "hidden"])
 
 ## Stage 2: into the air, at 0.95, 0.6 and 0.3 x the air top.
 func _stage2() -> void:

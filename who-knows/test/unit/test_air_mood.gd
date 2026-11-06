@@ -4,12 +4,13 @@ extends GutTest
 var P: Dictionary = SpacePalette.WORLDS[6]
 var S: Dictionary = SpacePalette.STARS[0]
 
-## A Whereabouts standing in a world's well, in thick air, the sun overhead
-## and "up" along +X.
+## A Whereabouts standing in a world's well, in thick air (or `air_now`), the
+## sun overhead and "up" along +X.
 const FAKE_WHERE := """extends Whereabouts
 var body: SystemBody
+var air_now := 1.0
 func air() -> float:
-	return 1.0
+	return air_now
 func sun_up() -> float:
 	return 1.0
 func up() -> Vector3:
@@ -119,23 +120,55 @@ func test_apply_writes_what_reads_back():
 	assert_eq(env.ambient_light_color, m.ambient_colour)
 	assert_eq(sun.light_color, m.sun_colour)
 
-func test_setup_snaps_at_once():
+## An AirMood set up in a world's well (up +X) with `air`; [mood, env, sun,
+## the fake whereabouts].
+func _mood_at(air: float) -> Array:
 	var r := _rig()
 	var env: Environment = r[0]
 	var sun: DirectionalLight3D = r[2]
-	var system := SystemRecipe.from_seed(1)
 	var body := SystemBody.new()
 	body.recipe = WorldRecipe.new()
 	body.recipe.palette = 6
 	var where := _fake_where(body)
+	where.set(&"air_now", air)
 	var mood := AirMood.new()
 	add_child_autofree(mood)
-	mood.setup(env, sun, where, system)
-	assert_true(env.fog_enabled, "no physics frame has run yet")
-	assert_almost_eq(Basis.from_euler(env.sky_rotation) * Vector3.UP, Vector3.RIGHT, Vector3.ONE * 1e-4)
-	assert_true(mood.last_mood.fog)
+	mood.setup(env, sun, where, SystemRecipe.from_seed(1))
+	return [mood, env, sun, where]
+
+func _assert_todays_sky(env: Environment, sun: DirectionalLight3D, why: String) -> void:
+	assert_eq(env.sky_rotation, Vector3.ZERO, why + ": the sky unturned")
+	assert_eq(sun.sky_mode, DirectionalLight3D.SKY_MODE_LIGHT_AND_SKY,
+		why + ": the light in the sky, its own sun glow on the star")
+
+func _assert_turned_for_air(env: Environment, sun: DirectionalLight3D, why: String) -> void:
+	assert_almost_eq(Basis.from_euler(env.sky_rotation) * Vector3.UP, Vector3.RIGHT, Vector3.ONE * 1e-4,
+		why + ": the sky turned onto the local up")
 	assert_eq(sun.sky_mode, DirectionalLight3D.SKY_MODE_LIGHT_ONLY,
-		"the sky's own sun would sit off the star once the sky turns: StarHalo glows instead")
+		why + ": the sky's own sun would sit off the star once the sky turns: StarHalo glows instead")
+
+func test_setup_snaps_at_once():
+	var m := _mood_at(1.0)
+	var env: Environment = m[1]
+	assert_true(env.fog_enabled, "no physics frame has run yet")
+	assert_true((m[0] as AirMood).last_mood.fog)
+	_assert_turned_for_air(env, m[2], "in air")
+
+func test_no_air_keeps_todays_sky_on_a_bare_world():
+	var m := _mood_at(0.0)
+	assert_false((m[1] as Environment).fog_enabled)
+	_assert_todays_sky(m[1], m[2], "no air, though in a well with an up")
+
+func test_the_sky_turns_and_its_light_leaves_together_as_the_air_comes_and_goes():
+	var m := _mood_at(0.0)
+	var mood: AirMood = m[0]
+	var where: Whereabouts = m[3]
+	where.set(&"air_now", 0.5)
+	mood._physics_process(AirMood.APPLY_EVERY * 2.0)
+	_assert_turned_for_air(m[1], m[2], "into the air")
+	where.set(&"air_now", 0.0)
+	mood._physics_process(AirMood.APPLY_EVERY * 2.0)
+	_assert_todays_sky(m[1], m[2], "out of it again")
 
 func test_the_halo_glows_by_the_air_and_not_in_space():
 	var r := _rig()
