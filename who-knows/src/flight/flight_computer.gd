@@ -252,8 +252,12 @@ static func heat(speed: float, limit: float, air: float) -> float:
 
 ## This hull's heat now, by its own place and its own limit (never
 ## current_limit, which is the focus's). 0 with no gravity, frozen, or in warp.
+## The limit is never under cruise, so a hull slower than HEAT_FROM of cruise
+## has none: it answers before asking the world (every ship, every tick).
 func entry_heat() -> float:
 	if gravity == null or _hull == null or _hull.freeze:
+		return 0.0
+	if _hull.linear_velocity.length() < HEAT_FROM * CRUISE_LIMIT_MPS:
 		return 0.0
 	if (warp != null and warp.travelling()) or WarpArrival.of(_hull) != null:
 		return 0.0
@@ -400,7 +404,7 @@ func _apply_translation(delta: float) -> void:
 	# thrusters fire past their budget against a hold plus drift.
 	var total := hold + pilot_force
 	var plain := within_budget(total, thrust_budget)
-	hold_force_local = within_budget(hold, thrust_budget) if not hold.is_zero_approx() else Vector3.ZERO
+	hold_force_local = hold
 	if boosting:
 		var boosted := within_budget(total, thrust_budget, BOOST_MULTIPLIER)
 		commanded_force_local = Vector3(

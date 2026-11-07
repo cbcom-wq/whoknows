@@ -355,6 +355,51 @@ func test_heat_is_the_hulls_own_place():
 	_hull.linear_velocity = Vector3(limit * 0.5, 0, 0)
 	assert_eq(_fc.entry_heat(), 0.0)
 
+## A gravity that counts what entry_heat asks of it.
+class CountingGravity extends FakeGravity:
+	var asked := 0
+	func body_at(p: Vector3) -> SystemBody:
+		asked += 1
+		return super(p)
+	func air_at(p: Vector3) -> float:
+		asked += 1
+		return super(p)
+	func altitude_at(p: Vector3) -> float:
+		asked += 1
+		return super(p)
+
+## Review #20: the limit is never under cruise, so a hull slower than HEAT_FROM
+## of cruise has no heat, and entry_heat answers before it asks the world
+## anything (it runs every tick for every ship).
+func test_a_slow_hull_has_no_heat_without_asking_the_world():
+	var f := CountingGravity.new()
+	f.air = 1.0
+	f.alt = 500.0
+	f.body = _heat_gravity().body
+	_fc.gravity = f
+	_hull.linear_velocity = Vector3(FlightComputer.HEAT_FROM * FlightComputer.CRUISE_LIMIT_MPS - 0.5, 0, 0)
+	assert_eq(_fc.entry_heat(), 0.0)
+	assert_eq(f.asked, 0, "nothing asked of the world")
+	_hull.linear_velocity = Vector3(FlightComputer.speed_limit(500.0, 30000.0), 0, 0)
+	assert_almost_eq(_fc.entry_heat(), 1.0, 1e-4, "fast, it still heats")
+
+## The hold alone, as RcsShow leaves it unpuffed: the gravity hold within the
+## budget, whatever the pilot adds; none with the assist off.
+func test_the_hold_alone_is_kept_for_the_rcs_show():
+	_fc.thrust_budget = BUDGET
+	_fc.gravity = _fake_gravity(Vector3(0, -7.0, 0))
+	_fc.assist_enabled = true
+	_fc.set_pilot_input(Vector3(0.5, 0.0, -1.0), Vector3.ZERO, false)
+	_fc._apply_translation(1.0 / 60.0)
+	assert_almost_eq(_fc.hold_force_local, FlightComputer.gravity_hold(Vector3(0, -7.0, 0), MASS, BUDGET),
+		Vector3.ONE * 0.01)
+	_fc.gravity = _fake_gravity(Vector3(0, -20.0, 0))
+	_fc._apply_translation(1.0 / 60.0)
+	assert_eq(_fc.hold_force_local.y, 1e6, "clamped to the vertical budget")
+	_fc.assist_enabled = false
+	_fc._apply_translation(1.0 / 60.0)
+	assert_eq(_fc.hold_force_local, Vector3.ZERO, "no hold with the assist off")
+
 func test_a_frozen_or_arriving_hull_never_glows():
 	_fc.gravity = _heat_gravity()
 	var limit := FlightComputer.speed_limit(500.0, 30000.0)
