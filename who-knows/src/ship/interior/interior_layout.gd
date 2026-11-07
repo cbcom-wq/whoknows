@@ -17,7 +17,9 @@ extends RefCounted
 ## a partition, with a record on each side and one owner. Each room gets
 ## exactly one doorway (kind DOORWAY on both records), and each room cell
 ## picks one FEATURE wall for its main furniture and at most one SECONDARY
-## wall beside it for a smaller piece; the rest keep their trim (PANEL).
+## wall beside it for a smaller piece; the rest keep their trim (PANEL). The
+## doorway's own cell never puts a deep feature beside the doorway
+## (_furnish_cell), so it may have a secondary and no feature.
 ##
 ## The airlock (docs/superpowers/specs/2026-09-24-airlock-design.md §3.1): an
 ## airlock cell with one face onto open space (AirlockSite) is a room of its
@@ -344,7 +346,7 @@ func _resolve_rooms() -> void:
 			continue   # an airlock takes no furniture
 		_rooms.append({"zone": zone, "coords": cells, "doorway": doorway})
 		for cell in cells:
-			_furnish_cell(cell, index)
+			_furnish_cell(cell, index, doorway)
 
 ## The connected cells of one room: horizontal neighbours with the same zone.
 func _flood_room(start: Vector3i, zone: StringName, seen: Dictionary) -> Array[Vector3i]:
@@ -419,7 +421,16 @@ static func _ranks_before(a: Array, b: Array) -> bool:
 ## the feature, and records the feature's normal so the dressing can push it
 ## to the far end, clear of the feature's corner. Any other wall keeps its
 ## trim (PANEL).
-func _furnish_cell(cell: Vector3i, index: Dictionary) -> void:
+##
+## In the doorway's own cell the walls at right angles to the doorway meet
+## its jambs, and a main piece deeper than a jamb stands in the opening there
+## (InteriorProps.feature_reaches_doorway): the Warden's bunk left 0.55 m of
+## its 1 m doorway and the owner was stuck (2026-11-07). So such a room never
+## puts its feature on those walls. A cell left with no other wall gets the
+## smaller piece on one of them instead, pushed to the end away from the
+## doorway (its `feature_normal` is the doorway's normal). Shallow features
+## (shelves, the weapon rack) stay where they were.
+func _furnish_cell(cell: Vector3i, index: Dictionary, doorway: Dictionary) -> void:
 	var walls: Array[Dictionary] = []
 	for normal in _HORIZONTAL:
 		var key := _key(cell, normal)
@@ -427,16 +438,26 @@ func _furnish_cell(cell: Vector3i, index: Dictionary) -> void:
 			walls.append(_faces[index[key]])
 	if walls.is_empty():
 		return
+	var door := Vector3i.ZERO
+	if not doorway.is_empty() and doorway["coord"] == cell \
+			and InteriorProps.feature_reaches_doorway(_zones[cell]):
+		door = doorway["normal"]
 	var feature: Dictionary = {}
 	var best_rank := 3
 	for face in walls:
 		var n: Vector3i = face["normal"]
+		if door != Vector3i.ZERO and n.x * door.x + n.z * door.z == 0:
+			continue   # beside the doorway
 		var rank := 2
 		if n.x != 0:
 			rank = 1 if face["partition"] else 0
 		if rank < best_rank:
 			best_rank = rank
 			feature = face
+	if feature.is_empty():
+		walls[0]["variant"] = WallVariant.SECONDARY
+		walls[0]["feature_normal"] = door
+		return
 	feature["variant"] = WallVariant.FEATURE
 	feature["porthole"] = feature["skin_flank"]
 	var feature_normal: Vector3i = feature["normal"]

@@ -656,6 +656,13 @@ func _run(scene: Node) -> void:
 			await _hull_shots(ship, "lit_%s" % lit[0], false)
 		_lights(ship, false, false)
 		await _star_shots(scene, ship)
+	# Every room's doorway leaves a body-wide way through it (2026-11-07: the
+	# Warden's bunk stood in its bunk room's doorway and the owner was stuck).
+	var shut_doors := ship.interior_builder.blocked_doorways()
+	var doors := ship.interior_builder.layout().rooms().size()
+	print("doors   %d rooms, every doorway %.1f m clear%s" % [doors, InteriorBuilder.DOORWAY_CLEAR_WIDTH,
+		"" if shut_doors.is_empty() else "  <-- BLOCKED %s" % [shut_doors.map(func(b): return "%s %s by %s" % [
+			b["coord"], b["normal"], b["by"].get_parent().name])]])
 	# The maintenance droid (NPC foundation spec §14): its dock, and every job it
 	# must be able to reach on foot from there.
 	var crew := ship.crew_site

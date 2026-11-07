@@ -162,6 +162,46 @@ func test_every_doorway_gets_one_sliding_door():
 	assert_eq(_doors().size(), _builder.layout().rooms().size())
 	assert_eq(_doors().size(), 3)
 
+## The Warden's bunk room (2026-11-07): a room whose doorway's cell has only
+## walls at right angles to the doorway. Its bunk stood on one of them, its
+## end 0.45 m into the opening, and left 0.55 m for a 0.7 m body: the owner
+## was stuck. Every room, two cells across (x 0..1) and one or two deep, with
+## the doorway onto deck at x = 2.
+func test_no_room_s_furniture_stands_in_its_doorway():
+	_register_rooms()
+	for id in InteriorLayout.ROOM_IDS:
+		for depth in [1, 2]:
+			_grid = ShipGrid.new()
+			_builder.bind(_grid, _cat)
+			for z in depth:
+				_put(Vector3i(0, 0, z), id)
+				_put(Vector3i(1, 0, z), id)
+				_put(Vector3i(2, 0, z), &"deck")
+			_builder.rebuild()
+			var room: Dictionary = _builder.layout().rooms()[0]
+			assert_eq(room["doorway"].get("normal"), Vector3i(1, 0, 0), "%s x%d opens onto the deck" % [id, depth])
+			var blocked := _builder.blocked_doorways().map(func(b): return b["by"].get_parent().name)
+			assert_eq(blocked, [], "%s two by %d: a body-wide way through its doorway" % [id, depth])
+
+## blocked_doorways sees what stands in a doorway, so the test above and the
+## catalog's cannot pass on an empty check.
+func test_a_box_in_a_doorway_is_found():
+	_register_rooms()
+	_put(Vector3i(0, 0, 0), &"deck")
+	_put(Vector3i(-1, 0, 0), &"closet")
+	_builder.rebuild()
+	assert_eq(_builder.blocked_doorways(), [] as Array[Dictionary])
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(0.3, 0.3, 0.3)
+	var box := CollisionShape3D.new()
+	box.shape = shape
+	box.position = Vector3(-ShipGrid.CELL_SIZE * 0.5, InteriorBuilder.floor_y(Vector3i.ZERO) + 1.0, 0.0)
+	_builder.geometry_body().add_child(box)
+	var blocked := _builder.blocked_doorways()
+	assert_eq(blocked.size(), 1)
+	if blocked.size() == 1:
+		assert_eq(blocked[0]["by"], box)
+
 func test_room_furniture_is_solid_where_it_should_be():
 	_register_rooms()
 	_put(Vector3i(0, 0, 0), &"deck")

@@ -187,6 +187,17 @@ touches no nodes.
   - other deck is **common**;
   - bridge and common are one open space;
   - room blocks are walled off, each with **one doorway** (`rooms()`: zone, coords, doorway);
+  - **a doorway is 1.0 m wide** (`InteriorProps.DOOR_WIDTH`, jambs of 0.5 m each side in a 2 m
+    cell) **and must leave 0.8 m clear** (`InteriorBuilder.DOORWAY_CLEAR_WIDTH`; the avatar's
+    capsule is 0.35 m radius) for 0.6 m into each room (`DOORWAY_CLEAR_DEPTH`), 0.3 to 1.9 m over
+    the deck. `blocked_doorways()` returns `{coord, normal, by}` per collider that narrows one
+    below that (area triggers and the airlock's inner hatch are left out). The widest gap counts,
+    not a centred one: the starter's and Lamplighter's galley fridges leave 0.85 m;
+  - each room's main piece stands out `InteriorProps.FEATURE_DEPTH` from its wall: bunks 0.9,
+    galley counter 0.64, washstand 0.6, closet shelves 0.4, weapon rack 0.35. Over the 0.5 m
+    jamb (`feature_reaches_doorway`) it never goes on a wall beside its doorway in the doorway's
+    cell; such a cell with no other wall gets its secondary piece, `feature_normal` the
+    doorway's, so the dressing pushes it away from the door;
   - a working airlock is a room of its own.
 - **The pod:** a `pilot_seat` facing a canopy face makes that face a **pod** (`pods()`). The pod
   is a 2 m mouth, 2.4 m wide inside and 1.9 m deep, so it fits inside the canopy cell ahead. The

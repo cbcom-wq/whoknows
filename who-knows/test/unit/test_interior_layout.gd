@@ -324,6 +324,41 @@ func test_the_secondary_wall_is_beside_the_feature_and_knows_where_it_is():
 	assert_eq(secondaries[0]["feature_normal"], Vector3i(1, 0, 0),
 		"the dressing pushes the secondary piece away from the feature wall")
 
+## The Warden's bunk room (2026-11-07): a 2 x 2 room whose doorway's cell has
+## only walls at right angles to the doorway. Its bunk stood on one, in the
+## opening. That cell gets the smaller piece, pushed away from the doorway.
+func test_no_feature_stands_beside_its_room_s_doorway():
+	for z in [0, 1]:
+		_put(Vector3i(0, 0, z), &"bunk_room")
+		_put(Vector3i(1, 0, z), &"bunk_room")
+		_put(Vector3i(2, 0, z), &"deck")
+	var layout := _plan()
+	var doorway: Dictionary = layout.rooms()[0]["doorway"]
+	assert_eq(doorway, {"coord": Vector3i(1, 0, 0), "normal": Vector3i(1, 0, 0)})
+	var walls := _walls_of(layout, Vector3i(1, 0, 0)).filter(
+		func(f): return f["kind"] == InteriorLayout.Kind.WALL)
+	assert_eq(walls.size(), 1, "the door cell's one wall, at right angles to the doorway")
+	if walls.size() == 1:
+		assert_eq(walls[0]["variant"], InteriorLayout.WallVariant.SECONDARY)
+		assert_eq(walls[0]["feature_normal"], Vector3i(1, 0, 0), "pushed away from the doorway")
+	for coord in [Vector3i(0, 0, 0), Vector3i(0, 0, 1), Vector3i(1, 0, 1)]:
+		assert_eq(_walls_of(layout, coord).filter(
+			func(f): return f["variant"] == InteriorLayout.WallVariant.FEATURE).size(), 1,
+			"%s, off the doorway, keeps its bunk" % coord)
+
+## A door cell with a wall facing the doorway puts a deep feature there, not
+## on a side wall: a one-cell galley opening fore has its counter aft. A
+## shallow one (the closet's shelves) keeps the flank it always had.
+func test_a_door_cell_s_deep_feature_faces_the_doorway():
+	for room in [[&"galley", Vector3i(0, 0, 1)], [&"closet", Vector3i(1, 0, 0)]]:
+		_grid = ShipGrid.new()
+		_put(Vector3i(0, 0, 0), &"deck")
+		_put(Vector3i(0, 0, 1), room[0])
+		var layout := _plan()
+		assert_eq(layout.rooms()[0]["doorway"], {"coord": Vector3i(0, 0, 1), "normal": Vector3i(0, 0, -1)})
+		assert_eq(_face(layout, Vector3i(0, 0, 1), room[1])["variant"], InteriorLayout.WallVariant.FEATURE,
+			"%s's feature on %s" % room)
+
 func test_partitions_are_never_portholes_or_hatches():
 	_put(Vector3i(0, 0, 0), &"airlock")
 	_put(Vector3i(1, 0, 0), &"galley")

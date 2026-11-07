@@ -233,6 +233,75 @@ func canopy_face_count() -> int:
 func doorway_count() -> int:
 	return _doorway_count
 
+## How wide a way every doorway must leave straight through it: the avatar's
+## capsule (0.7 m) and 5 cm either side. The Warden's bunk room left 0.55 m,
+## its bunk's end standing in the opening, and the owner was stuck.
+const DOORWAY_CLEAR_WIDTH := 0.8
+## How far into each room, from the doorway's plane, that way must be clear.
+const DOORWAY_CLEAR_DEPTH := 0.6
+## The way's floor and top over the deck: over a threshold strip, under the
+## lintel (InteriorProps.DOOR_HEIGHT).
+const DOORWAY_CLEAR_FROM := 0.3
+const DOORWAY_CLEAR_TO := 1.9
+
+## Every doorway that leaves no way through it DOORWAY_CLEAR_WIDTH wide, as
+## the last rebuild built it: a record {coord, normal, by} per collider that
+## narrows it. A way is straight through the opening, DOORWAY_CLEAR_DEPTH into
+## each room; it need not be centred (the starter's galley fridge takes
+## 0.15 m off one side and leaves 0.85). Empty on a ship you can walk round.
+## An airlock's inner hatch is left out: its leaves are meant to shut it.
+## Works from the colliders' shapes, so it needs no physics frame, but the
+## builder must be in the tree. A turned collider counts by its bounding box,
+## which errs toward blocked.
+func blocked_doorways() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if _layout == null or not is_instance_valid(_physics_body) or not is_inside_tree():
+		return out
+	var shapes: Array[Dictionary] = []
+	var to_builder := global_transform.affine_inverse()
+	for node in _physics_body.find_children("*", "CollisionShape3D", true, false):
+		var c := node as CollisionShape3D
+		if c.shape == null or c.disabled or c.get_parent() is Area3D:
+			continue   # a door's trigger is not in anyone's way
+		shapes.append({"node": c, "box": to_builder * c.global_transform * c.shape.get_debug_mesh().get_aabb()})
+	for face in _layout.faces():
+		if face["kind"] != InteriorLayout.Kind.DOORWAY or not face["owner"] or face["hatch"]:
+			continue
+		var coord: Vector3i = face["coord"]
+		var normal: Vector3i = face["normal"]
+		var centre := interior_center(coord)
+		var along := Vector3(absi(normal.z), 0, absi(normal.x))
+		var across := Vector3(absi(normal.x), 0, absi(normal.z))
+		var half := InteriorProps.DOOR_WIDTH * 0.5
+		var size := along * InteriorProps.DOOR_WIDTH + across * DOORWAY_CLEAR_DEPTH * 2.0 \
+			+ Vector3.UP * (DOORWAY_CLEAR_TO - DOORWAY_CLEAR_FROM)
+		var at := Vector3(centre.x, floor_y(coord) + DOORWAY_CLEAR_FROM, centre.z) \
+			+ Vector3(normal) * ShipGrid.CELL_SIZE * 0.5
+		var opening := AABB(at - Vector3(size.x, 0, size.z) * 0.5, size)
+		# What stands in the opening, as spans across it from -half to half.
+		var mid := at.dot(along)
+		var spans: Array[Vector2] = []
+		var by: Array[CollisionShape3D] = []
+		for s in shapes:
+			var box: AABB = s["box"]
+			if opening.intersects(box):
+				var lo := box.position.dot(along) - mid
+				spans.append(Vector2(maxf(lo, -half), minf(lo + box.size.dot(along), half)))
+				by.append(s["node"])
+		if spans.is_empty():
+			continue
+		spans.sort_custom(func(a: Vector2, b: Vector2) -> bool: return a.x < b.x)
+		var widest := 0.0
+		var free_from := -half
+		for span in spans:
+			widest = maxf(widest, span.x - free_from)
+			free_from = maxf(free_from, span.y)
+		widest = maxf(widest, half - free_from)
+		if widest < DOORWAY_CLEAR_WIDTH:
+			for node in by:
+				out.append({"coord": coord, "normal": normal, "by": node})
+	return out
+
 func fixture_count() -> int:
 	return _fixtures.size()
 

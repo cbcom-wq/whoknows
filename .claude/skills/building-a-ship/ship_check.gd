@@ -11,8 +11,10 @@ extends SceneTree
 # (its landing ramp, or NOT BOARDABLE ON A WORLD: AirlockAlcove.way_up_for says
 # NONE, and that airlock refuses the step out on a world), measured over the
 # plane its landing legs stand on, then a legs line (how many fit -- 4 wanted,
-# ONLY n FIT under that -- each mount and length, and the feet's plane); exits 0
-# when no rule is broken, and 1 when one is or the file will not load.
+# ONLY n FIT under that -- each mount and length, and the feet's plane), then a
+# doors line (every room's doorway a body-wide way through, or BLOCKED); exits 0
+# when no rule is broken and no doorway blocked, and 1 when one is or the file
+# will not load.
 
 func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
@@ -61,4 +63,20 @@ func _initialize() -> void:
 	# hanging look (a belly turret parked, a flood's housing) clears the ground
 	# by LandingLegs.HANG_CLEAR (the owner, 2026-11-05). FEW_LEGS fails fewer than four; this prints them.
 	print("legs    %s" % LandingLegs.plan_words(grid, LandingLegs.plan(grid, NAN, catalog)))
-	quit(0 if found["rules"].is_empty() else 1)
+	_doors.call_deferred(grid, catalog, found["rules"].is_empty())
+
+## Every room's doorway leaves a body-wide way through it
+## (InteriorBuilder.blocked_doorways; the Warden's bunk room did not, 2026-11-07).
+## The interior must be in the tree to be measured, so this runs a frame on.
+## A blocked doorway fails the check like a broken rule.
+func _doors(grid: ShipGrid, catalog: BlockCatalog, rules_ok: bool) -> void:
+	var builder := InteriorBuilder.new()
+	root.add_child(builder)
+	builder.bind(grid, catalog)
+	builder.rebuild()
+	var blocked := builder.blocked_doorways()
+	print("doors   %d rooms, every doorway %.1f m clear%s" % [builder.layout().rooms().size(),
+		InteriorBuilder.DOORWAY_CLEAR_WIDTH, "" if blocked.is_empty() else "  <-- BLOCKED %s" % [
+			blocked.map(func(b): return "%s %s by %s" % [b["coord"], b["normal"], b["by"].get_parent().name])]])
+	builder.free()
+	quit(0 if rules_ok and blocked.is_empty() else 1)

@@ -77,6 +77,12 @@ Do these in order. Each one names the check that proves it.
      probe's `hang` line must not say `TOUCHES THE GROUND`. A deeper stance lengthens every ramp:
      read the `ramp` line again after adding anything under the belly.
    - room blocks (`bunk_room`, `galley`...) each touching walkable space for their doorway.
+     **Every doorway leaves a 0.8 m way straight through it** (`InteriorBuilder.blocked_doorways`,
+     `DOORWAY_CLEAR_WIDTH`: the 0.7 m body and 5 cm a side). The layout keeps a room's deep main
+     piece (bunks, galley counter, washstand: `InteriorProps.FEATURE_DEPTH` over the 0.5 m jamb)
+     off the walls beside its doorway, so this holds by itself; a new room piece or a deeper one
+     must keep it. `ship_check` and the probe print `doors`, flagged `BLOCKED` (and `ship_check`
+     exits 1); `test_ship_catalog` fails the ship.
    - **the maintenance droid's needs** (NPC foundation spec §14), on any ship with 12 or more
      walkable cells: a `closet` for its dock (otherwise it docks in the walkable cell farthest
      from the helm), and every porthole, console, locker and fixture it tends reachable on foot
@@ -259,6 +265,7 @@ Do these in order. Each one names the check that proves it.
    - **your own hull through your windows:** the `seen` line counts the skin seen from inside and
      flags any of it `IN THE CABIN` (a cabin cell, or the block over one), where it would stand
      between the eye and the glass;
+   - `doors`: every room's doorway 0.8 m clear, or `BLOCKED` with the cell and what stands in it;
    - the droid's dock and its jobs, flagging any `UNREACHABLE`;
    - **the turrets:** a `turret` line each (`turret  Turret_0_2_0 turret_light at (0, 2, 0), sky
      100%`), or `turret  none`. Read the sky: under 25% is `TURRET_BLIND`, and the Warden's
@@ -491,6 +498,7 @@ thrust.
 | The steady hold puffed as thrust | In a gravity well the assist's hover hold is a large constant RCS force. Shown as puffs, it drew a white blob under every hovering ship, and its world-space puffs never died | Show only the change: `FlightComputer.hold_force_local` is taken off the shown push, keeping `RcsShow.HOLD_SHOW` (0) of it (`RcsShow.shown_force`). The pilot's and the assist's changes still puff. Render a hovering ship from below. With no hold puffs nothing holds the floating origin back (`HOLDS_SHIFT`), so it re-centres at 2 km during a hover too: a test that keeps an engine-space `Vector3` (a world's centre) across one goes stale. `test_landing_legs` did, by 3.2 km, after the merge (2026-11-06). Work it out from the `UniversePoint` at each use (`_universe.to_engine(planet.point)`) |
 | A climb or stop predictor that ignores the air | Near thick ground drag bleeds speed, so a predictor without it undershoots, worst on low power (brake halved): `landing_play` step 9 settled 280.7 m for 300 | Count the drag: `landing_play`'s climb uses `ln(1 + k·v²/b) / (2k)` with `k` = `DRAG_K` × air. Any test that flies a long path in air needs it, or a start lower down (`test_system_scene`'s 30° glide starts at 120 m, not 300) |
 | `Avatar.enter_suit` while the director still has you seated | A probe that did it left the HUD on the suit's readout for every later stage | Stand up through the director first (`stand_now()`), then step out |
+| A room's main piece on a wall beside its doorway | The Warden's 2 × 2 bunk room opens from a cell whose only wall meets the doorway at a right angle. Its bunk (0.9 m deep) stood there, its end 0.45 m into the 1 m opening: 0.55 m left for a 0.7 m body, and the owner got stuck and had to reset (2026-11-07). The galley's counter left 0.81 m. No test walked through a doorway; the ship probe only walked away from the seat | `InteriorLayout._furnish_cell` keeps a feature deeper than the jamb (`InteriorProps.feature_reaches_doorway`) off the walls beside its doorway; a cell left with no other wall gets the smaller piece, pushed away from the door. `blocked_doorways` measures the way through on every library ship (`test_ship_catalog`), and `test_no_room_s_furniture_stands_in_its_doorway` builds every room two by one and two by two |
 
 ## Not built yet (plan for it; don't assume it works)
 
