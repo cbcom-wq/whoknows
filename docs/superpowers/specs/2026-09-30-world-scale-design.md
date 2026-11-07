@@ -392,7 +392,8 @@ the floor, against §5.6.
 - a belt from the neighbouring planet;
 - the map's SYSTEM and 500 km ranges.
 
-The style guide gains a *Worlds up close* rule only once a terrain pass settles them (§13.7).
+The style guide gains a *Worlds up close* rule for the ground (cover and terrain) only once a
+terrain pass settles it (§13.7); the air part is done, below.
 
 > **Done for the air, 2026-11-05** (desert world phase 1): `docs/design/visual-style.md` §3.9
 > *Worlds up close* now holds the sky and haze by air, the rim, the dust going, the entry glow and

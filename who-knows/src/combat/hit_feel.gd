@@ -35,7 +35,7 @@ const CHIP_FROM := 100.0
 var roll := 0.0
 var shift := Vector2.ZERO
 
-## 0.1..1 for a hit of `damage` hp: a light bolt 0.125, a heavy one 1.0, and
+## 0.1..1 for a hit of `damage` hp: a light bolt 55/120 (about 0.458), a heavy one 1.0, and
 ## a crash on the same scale.
 static func strength(damage: float) -> float:
 	return clampf(damage / WeaponValues.spec(WeaponValues.HEAVY)["damage"], 0.1, 1.0)

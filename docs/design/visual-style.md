@@ -203,7 +203,7 @@ Sound follows the look: **soft and warm, never harsh.**
   - **Suit**, for what you hear inside your helmet.
 - **Air carries sound.** In the airlock the Ship bus closes down with the pressure, to 300 Hz and
   −18 dB at vacuum.
-- **Space is silent; a world with air carries sound.** Where `Whereabouts.air()` is above zero,
+- **A world with air carries sound.** Where `Whereabouts.air()` is above zero,
   and only there, `WindSound` plays wind: two `Synth` loops, `wind` in the helmet (Suit bus, its
   pitch following the gusts) and `wind_hull` aboard (Ship bus, with a low rumble), each level
   following the air, the gusts and your speed. One of the two plays, by where your ears are
@@ -493,7 +493,10 @@ made.
 ### 3.9 Worlds up close
 
 Phase 1 of the desert world, "air" (`docs/superpowers/specs/2026-11-03-desert-world-design.md`
-§6, as built). Approved by the owner from renders. Ground cover, the desert, palms and brick come
+§6, as built). Built from renders shown to the owner, who has **not yet ruled** on the sky
+pairs, the halo's size, the rim, the entry glow, `HOLD_SHOW`, `HEARD_OUTSIDE` / `OUTSIDE_DB` or the
+wind levels (the desert-world spec's status note lists them): these are the first values, open to
+change. Ground cover, the desert, palms and brick come
 with phases 2 and 3, and will join this section.
 
 - **No exterior shader: engine materials only.** `Environment`, `ProceduralSkyMaterial`,
@@ -518,7 +521,7 @@ with phases 2 and 3, and will join this section.
 - **The dust goes.** `Whereabouts.dust()` fades `SpaceDust` out as the air thickens, gone at
   `Whereabouts.DUST_GONE_AT` (0.2): air does not show specks.
 - **The entry glow.** A fast hull in air glows at the bow (`EntryGlow`, a child of the hull): a
-  dome of added light, sized from `Ship.grid_box()` so it fits any ship, climbing from
+  bow cap of added light, sized from `Ship.grid_box()` so it fits any ship, climbing from
   `SpacePalette.ENTRY_LOW` to `ENTRY_HIGH` with the heat. It shakes the cabin, never harder than a
   light bolt's hit. There is **no heat damage**.
 - **The steady hold is not puffed.** In a well the assist's hover hold is a big constant push, and
