@@ -5,8 +5,8 @@ extends SceneTree
 # the flight scene by the system's largest planet with air (the largest planet
 # if none has any):
 #
-#   1. the starter 300 m over flat ground, assist on, hovers; seen from
-#      outside, its RCS puffs with the hold;
+#   1. the starter 300 m over flat ground, assist on, hovers, in air with
+#      fog on; seen from outside, its RCS does not puff the steady hold;
 #   4. its airlock will not let you out while it flies: NOT LANDED;
 #   2. tilted 15 deg at 130 m with the stick centred, it levels; and so does
 #      the heaviest library ship, without overshooting;
@@ -27,14 +27,18 @@ extends SceneTree
 #   8. from its helm, up off the ground to a hover at 300 m, the ramp
 #      stowing at once and the legs folding up past 60 m;
 #   9. the first starter on low power: F8 to its helm, and up again;
-#  10. the planet's ring, if it has one; above the air top a spacewalk does
-#      not fall; and the head lamp at night, at eye height.
+#  10. the planet's ring: with `ring` after the directory, a seed whose ringed
+#      planet's ring begins inside its well is played on (step 0 and this step
+#      only): the starter put by hand mid-annulus, a spacewalk there does not
+#      fall and what you let go of does not drift; without it, above the air
+#      top a spacewalk does not fall; and the head lamp at night, at eye
+#      height.
 #
 # Every step prints what it measured and the key moments are rendered. Run it
 # WITHOUT --headless:
 #
 #   godot --path who-knows --resolution 1280x720 \
-#     --script res://test/probes/landing_play.gd -- <abs out dir>
+#     --script res://test/probes/landing_play.gd -- <abs out dir> [ring]
 #
 # Saving is turned off before the scene enters the tree, so the owner's game
 # is never touched. The pilot's stick and your feet go through the input
@@ -55,6 +59,10 @@ const SIDE := 30.0
 const FLAT_REACH := 50.0
 ## Eye height over the ground for the renders on foot, m.
 const EYE := 1.6
+## The ring run's seeds, and how far past the air top it settles if the middle
+## of the ring would be over the world, m.
+const RING_SEEDS := 2000
+const RING_CLEAR := 100.0
 
 var _out := ""
 var _fails := 0
@@ -76,15 +84,28 @@ var _forward := Vector3.FORWARD
 var _cam: Camera3D
 var _gpu_ms := 0.0
 var _cpu_ms := 0.0
+## `ring` on the command line: the ring run, and the seed it plays on.
+var _ring_run := false
+var _ring_seed := 0
 
 func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
 	_out = args[0] if not args.is_empty() else "user://landing_play"
 	DirAccess.make_dir_recursive_absolute(_out)
+	_ring_run = args.size() > 1 and args[1] == "ring"
+	if _ring_run:
+		_ring_seed = _find_ring_seed()
+		if _ring_seed == 0:
+			print("FAILED 10 no ringed planet in seeds 1-%d" % RING_SEEDS)
+			quit(1)
+			return
 	# The frame rate is measured as combat_probe does: uncapped.
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	_scene = load("res://scenes/flight_test.tscn").instantiate()
 	_scene.save_enabled = false
+	if _ring_run:
+		# The scene reads a seed only from a save: set it before it is ready.
+		(_scene.get_node("AsteroidStream") as AsteroidStream).seed = _ring_seed
 	root.add_child(_scene)
 	# A script error mid-run stops _run without quitting: never hang.
 	create_timer(TIME_LIMIT).timeout.connect(func() -> void:
@@ -111,6 +132,12 @@ func _run() -> void:
 	if not await _to_the_planet():
 		print("play    no planet to play on")
 		quit(1)
+		return
+	if _ring_run:
+		await _ring()
+		_let_go()
+		print("play    %s" % ("ALL OK" if _fails == 0 else "%d FAILED" % _fails))
+		quit(0 if _fails == 0 else 1)
 		return
 	await _hovers()
 	await _refuses_while_flying()
@@ -150,8 +177,26 @@ func _to_the_planet() -> bool:
 	_check(hopped and _surface != null, "0 the hop puts the starter 3 km off %s, its ground drawn" % _planet.name)
 	return _surface != null
 
-## The system's largest planet with air, or its largest if none has any.
+## The first seed in 1..RING_SEEDS with a ringed planet whose ring begins
+## inside its well; 0 if none.
+func _find_ring_seed() -> int:
+	for s in range(1, RING_SEEDS + 1):
+		if _ringed(SystemRecipe.from_seed(s)) != null:
+			return s
+	return 0
+
+## The first planet whose ring begins inside its gravity well, or null.
+static func _ringed(system: SystemRecipe) -> SystemBody:
+	for p in system.planets():
+		if p.ring != null and p.ring.inner < p.recipe.well_radius():
+			return p
+	return null
+
+## The system's largest planet with air, or its largest if none has any (the
+## ring run's: the ringed one).
 func _pick_planet(system: SystemRecipe) -> SystemBody:
+	if _ring_run:
+		return _ringed(system)
 	var largest: SystemBody = null
 	var with_air: SystemBody = null
 	for p in system.planets():
@@ -194,8 +239,17 @@ func _hovers() -> void:
 	var cores := _starter.quantum.cores
 	var core := "no core" if cores.is_empty() else "the core's rings turn at %.2f rev/s (%s)" % [
 		cores[0].ring_rate(), cores[0].state]
-	_check(on > 0, "1 hovering, the hold shows: %d of %d RCS emitters puffing (most %.2f), commanded %.0f of %.0f kN up; %s" % [
+	# In a well the steady hold is not puffed (RcsShow.HOLD_SHOW, 0740abd): a
+	# hover shows none, though the assist commands the whole hold.
+	_check(on == 0 and fc.commanded_force_local.y > 0.0, "1 hovering, the steady hold is not puffed: %d of %d RCS emitters puffing (most %.2f), commanded %.0f of %.0f kN up; %s" % [
 		on, rcs.emitters.size(), most, fc.commanded_force_local.y / 1000.0, fc.thrust_budget[&"vertical"] / 1000.0, core])
+	var air := _stars.whereabouts.air()
+	if _planet.recipe.atmosphere != WorldRecipe.Atmosphere.NONE:
+		_check(air > 0.0 and _env().fog_enabled,
+			"1 at %.0f m on a world with air: air() %.3f (over 0), fog %s (on), density %s" % [
+			_alt(_starter), air, "on" if _env().fog_enabled else "off", _env().fog_density])
+	else:
+		print("        at %.0f m: air() %.3f; %s has none, so no fog is asked of it" % [_alt(_starter), air, _planet.name])
 	await _outside_shot("hover", _starter, Vector3(20.0, 2.0, -6.0))
 	var legs := _starter.exterior_builder.legs()
 	_check(legs != null and legs.legs.size() == 4 and legs.is_stowed() and _legs_off(legs),
@@ -512,6 +566,12 @@ func _out_on_foot() -> void:
 	_face(lock.beacon() - _avatar.global_position)
 	await _seconds(1.0)
 	var eye := (_avatar.camera.global_position - _avatar.global_position).dot(_avatar.up)
+	if _planet.recipe.atmosphere != WorldRecipe.Atmosphere.NONE:
+		var sky_top := _sky().sky_top_color
+		_check(is_zero_approx(_stars.dust.density) and not sky_top.is_equal_approx(SpacePalette.SPACE_SKY_TOP),
+			"5 on foot on the ground: air() %.3f, the dust's density %.3f (0), fog %s, the sky's top #%s (not space's #%s)" % [
+			_stars.whereabouts.air(), _stars.dust.density, "on" if _env().fog_enabled else "off",
+			sky_top.to_html(false), SpacePalette.SPACE_SKY_TOP.to_html(false)])
 	await _shot("standing_beside")
 	print("fps     %.0f standing beside the landed starter, %.0f m off its hatch, facing it, eye %.2f m %s" % [
 		await _fps(3.0), _flat(_avatar.global_position - lock.beacon()).length(), eye, _ms()])
@@ -732,13 +792,95 @@ func _low_power_lift_off() -> void:
 	_check(low[0], "9 low power the whole climb (store %d QE)" % store.amount)
 	store.credit(store.capacity, &"probe")
 
-## Step 10: the ring, if the planet has one.
+## Step 10: the planet's ring. Without `ring` there is none to go to (the
+## default seed has no ringed planet whose ring is in its well); with it, the
+## starter is put mid-annulus and you walk out into the ring.
 func _ring() -> void:
-	if _planet.ring == null:
-		print("SKIPPED 10 %s has no ring (no planet in this system has one): no spacewalk in a ring" % _planet.name)
+	if not _ring_run:
+		print("SKIPPED 10 %s has no ring in its well on this seed: run with `ring` after the directory for the spacewalk in one" % _planet.name)
 		return
-	print("SKIPPED 10 %s has a ring, %.0f-%.0f km from its centre; this probe does not fly into it yet" % [
-		_planet.name, _planet.ring.inner / 1000.0, _planet.ring.outer / 1000.0])
+	var ring := _planet.ring
+	var well := _planet.recipe.well_radius()
+	var air_top := _planet.recipe.air_top()
+	var normal := ring.normal
+	var dir := normal.cross(Vector3.RIGHT)
+	if dir.length() < 0.01:
+		dir = normal.cross(Vector3.UP)
+	dir = dir.normalized()
+	var mid := (ring.inner + minf(ring.outer, well)) * 0.5
+	var floor_r := _planet.radius + air_top + RING_CLEAR
+	var moved := ""
+	if mid < floor_r:
+		moved = "; the middle is inside the air top + %.0f m, so moved out to %.0f m from the centre" % [RING_CLEAR, floor_r]
+		mid = floor_r
+	print("ring    seed %d, %s (%s): ring %.0f-%.0f km from its centre, well %.0f km, radius %.1f km, air top %.1f km; the starter %.0f km out in the ring's plane%s" % [
+		_ring_seed, _planet.name, _planet.id, ring.inner / 1000.0, ring.outer / 1000.0, well / 1000.0, _planet.radius / 1000.0,
+		air_top / 1000.0, mid / 1000.0, moved])
+	_spot = dir
+	_forward = _tangents(dir)[0]
+	_starter.exterior.global_transform = Transform3D(_level(dir, _forward), _centre() + dir * mid)
+	_starter.exterior.linear_velocity = Vector3.ZERO
+	_starter.exterior.angular_velocity = Vector3.ZERO
+	_moved()
+	_starter.flight_computer.assist_enabled = true
+	await _seconds(3.0)
+	var w := _stars.whereabouts
+	var env := _env()
+	_check(not _starter.on_world() and is_zero_approx(w.air()) and not env.fog_enabled and _stars.dust.density > 0.0,
+		"10 hovering in the ring, assist on: on a world %s (no), air() %.3f (0), fog %s (off), the dust's density %.3f (over 0)" % [
+		_starter.on_world(), w.air(), "on" if env.fog_enabled else "off", _stars.dust.density])
+	# Out of the seat as the game does it, then through the real airlock.
+	if _director.is_seated:
+		_director.stand_now()
+		await _frames(3)
+	_avatar.suit_cell.charge = SuitCell.CAPACITY
+	var crate := Item.new()
+	crate.setup(_starter.item_catalog.get_def(&"crate"))
+	_starter.items.add_child(crate)
+	crate.global_position = _avatar.global_position + _avatar.global_basis * Vector3(0.0, 1.0, -0.6)
+	crate.set_loose()
+	var carrying := _avatar.grasp.take(crate)
+	var lock: Airlock = _starter.airlocks.values()[0]
+	await _into_the_room(_starter, lock)
+	if not await _cycle_out("10", _starter, lock, Avatar.Mode.SUIT):
+		return
+	_check(carrying and _avatar.grasp.item == crate and crate.in_space, "10 the crate in hand came out with you")
+	# The suit's assist stops you against the hull, then lets go.
+	await _seconds(2.0)
+	_avatar.suit_assist = false
+	var from_centre := (_avatar.global_position - _centre()).length()
+	var hull_from := (_starter.exterior.global_position - _centre()).length()
+	await _seconds(10.0)
+	var fell := from_centre - (_avatar.global_position - _centre()).length()
+	var hull_fell := hull_from - (_starter.exterior.global_position - _centre()).length()
+	_check(_avatar.mode == Avatar.Mode.SUIT and absf(fell) < 0.5,
+		"10 on a spacewalk in the ring, assist off: in 10 s you fell %.2f m, the hull %.2f m (under 0.5); air() %.3f, fog %s, dust %.3f" % [
+		fell, hull_fell, w.air(), "on" if env.fog_enabled else "off", _stars.dust.density])
+	# Let go of the crate: it stays where it is.
+	_avatar.grasp.drop()
+	await _frames(2)
+	var item_from := (crate.global_position - _centre()).length()
+	await _seconds(5.0)
+	var drift := (crate.global_position - _centre()).length() - item_from
+	_check(_avatar.grasp.item == null, "10 the crate let go: nothing in hand")
+	_check(absf(drift) < 0.5, "10 the crate let go in the ring: its distance from the planet's centre changed %.2f m in 5 s (under 0.5)" % drift)
+	# From outside, 25 m out from the hull away from the planet and 4 m off the
+	# ring's plane, looking in at the hull with the world behind it.
+	var hull := _starter.exterior.global_transform
+	var eye := hull.origin + dir * 25.0 + normal * 4.0
+	await _camera_shot("ring_spacewalk", Transform3D(Basis.looking_at(hull.origin - eye, normal), eye))
+	# Back in, as fleet_play glides in, and to the helm.
+	lock.alcove.hull_panel.interact(_avatar)
+	await _until(func() -> bool: return lock.cycle.outer_open >= 1.0, 12.0)
+	hull = _starter.exterior.global_transform
+	var inward := (hull.basis * lock.alcove.outer_frame.basis * Vector3(0, 0, 1)).normalized()
+	_avatar.global_position = hull * (lock.alcove.outer_frame * Vector3(0, 0.3, -1.5))
+	_avatar.velocity = inward * 1.2 + _starter.exterior.linear_velocity
+	var inside := await _until(func() -> bool: return _avatar.mode == Avatar.Mode.PLATING, 6.0)
+	lock.room.room_panel.interact(_avatar)
+	var cycled := await _until(func() -> bool: return lock.cycle.inner_open >= 1.0, 12.0)
+	_check(inside and cycled, "10 back in through the starter's airlock")
+	await _sit(_starter)
 
 ## Review Focus 1 without a ring: up through the air top, out of the airlock
 ## onto a spacewalk, and no fall.
@@ -1054,6 +1196,12 @@ func _fps(seconds: float) -> float:
 	_gpu_ms = gpu / maxf(frames, 1.0)
 	_cpu_ms = cpu / maxf(frames, 1.0)
 	return frames / seconds
+
+func _env() -> Environment:
+	return (_scene.get_node("WorldEnvironment") as WorldEnvironment).environment
+
+func _sky() -> ProceduralSkyMaterial:
+	return _env().sky.sky_material as ProceduralSkyMaterial
 
 func _ms() -> String:
 	return "(render gpu %.1f ms, cpu %.1f ms)" % [_gpu_ms, _cpu_ms]
