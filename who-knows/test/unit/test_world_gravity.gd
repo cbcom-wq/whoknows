@@ -108,3 +108,11 @@ func test_thin_air_takes_about_three_times_as_long():
 
 func test_no_air_no_drag():
 	assert_eq(WorldGravity.drag(0.0, Vector3(300, 0, 0)), Vector3.ZERO)
+
+## A gravity not set up yet (or a test's stand-in) knows no world: no body, no
+## air and no drag, rather than a crash in whatever asks every frame.
+func test_a_gravity_with_no_universe_knows_no_world_and_no_air():
+	var g := WorldGravity.new()
+	assert_null(g.body_at(Vector3(1, 2, 3)))
+	assert_eq(g.air_at(Vector3(1, 2, 3)), 0.0)
+	assert_eq(g.drag_at(Vector3(1, 2, 3), Vector3(100, 0, 0)), Vector3.ZERO)

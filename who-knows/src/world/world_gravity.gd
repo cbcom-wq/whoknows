@@ -47,8 +47,12 @@ static func _world_at(sys: SystemRecipe, u: UniversePoint) -> SystemBody:
 			return b
 	return null
 
-## The world whose well holds engine point `p`; null outside every well.
+## The world whose well holds engine point `p`; null outside every well, and
+## null before setup() (no system or universe yet), so the air and drag that
+## ask it every frame read none instead of crashing.
 func body_at(p: Vector3) -> SystemBody:
+	if system == null or universe == null:
+		return null
 	return _world_at(system, universe.to_universe(p))
 
 func at(p: Vector3) -> Vector3:
