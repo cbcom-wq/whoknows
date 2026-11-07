@@ -269,7 +269,11 @@ var _root: Node
 var _ship: Ship
 var _universe: Universe
 var _up := Vector3.UP
-var _centre := Vector3.ZERO
+## The world the starter is put on. Its centre is worked out from its universe
+## point at each use (_centre), never kept as an engine Vector3: with the steady
+## hold unpuffed (RcsShow.HOLD_SHOW) nothing holds the floating origin back, so
+## it re-centres as soon as a placing takes the hull 2 km off it (CLAUDE.md).
+var _planet: SystemBody
 var _ground := 0.0
 var _basis := Basis.IDENTITY
 
@@ -297,8 +301,8 @@ func _find_flat() -> void:
 	await wait_physics_frames(2)
 	var surface: WorldSurface = (_root.star_system.proxy(planet.id) as BodyProxy).surface()
 	assert_not_null(surface, "3 km off: its ground is drawn")
-	_centre = _universe.to_engine(planet.point)
-	var out := (_ship.exterior.global_position - _centre).normalized()
+	_planet = planet
+	var out := (_ship.exterior.global_position - _centre()).normalized()
 	var best := out
 	var flattest := INF
 	var tries: Array[Vector3] = [out]
@@ -318,13 +322,19 @@ func _find_flat() -> void:
 	var along := _up.cross(Vector3.UP).normalized()
 	_basis = Basis(along, _up, along.cross(_up).normalized())
 
+## The world's centre in the engine now, after however many shifts.
+func _centre() -> Vector3:
+	return _universe.to_engine(_planet.point)
+
 ## The starter upright, still, its stance plane `height` m over the flat ground,
 ## the assist on.
 func _place(height: float) -> void:
-	_ship.exterior.global_transform = Transform3D(_basis, _centre + _up * (_ground + _ship.stance_depth() + height))
+	_ship.exterior.global_transform = Transform3D(_basis, _centre() + _up * (_ground + _ship.stance_depth() + height))
 	_ship.exterior.linear_velocity = Vector3.ZERO
 	_ship.exterior.angular_velocity = Vector3.ZERO
 	_ship.flight_computer.assist_enabled = true
+	assert_almost_eq(_ship.flight_computer.keel_altitude(), height, 0.05,
+		"placed %.0f m over the ground, after %d shifts of the origin" % [height, _universe.shifts])
 
 func _push(y: float) -> void:
 	_ship.flight_computer.set_pilot_input(Vector3(0.0, y, 0.0), Vector3.ZERO, false)
@@ -531,7 +541,7 @@ func test_a_hostile_hull_its_pilot_does_not_fly_puts_them_down():
 func test_a_ship_loaded_hovering_under_40_m_has_its_legs_down_on_the_first_frame():
 	await _scene()
 	await _find_flat()
-	var place := Transform3D(_basis, _centre + _up * (_ground + _ship.stance_depth() + 20.0))
+	var place := Transform3D(_basis, _centre() + _up * (_ground + _ship.stance_depth() + 20.0))
 	var other: Ship = _root.fleet.spawn(_root._starter_grid(), place)
 	var legs := other.exterior_builder.legs()
 	assert_true(legs.is_stowed(), "built stowed")
@@ -613,3 +623,43 @@ func test_a_shift_while_landed_keeps_every_foot_on_the_ground():
 		var after := _over_ground(feet[i])
 		assert_lt(absf(after), 0.05, "foot %d on the ground after the shift (%.3f m; %.3f before)" % [i, after, before[i]])
 		assert_lt(absf(after - before[i]), 0.05, "foot %d where it was" % i)
+
+## How many times the world's analytic floor has lifted something out of it.
+func _lifts() -> int:
+	return ((_root.star_system.proxy(_planet.id) as BodyProxy).surface() as WorldSurface).floor_fired
+
+## With the steady hold unpuffed (RcsShow.HOLD_SHOW = 0) nothing holds the
+## origin back while a ship hovers low, so it may re-centre with the legs
+## mid-fold: the hull holds its height, they come down, nothing is lifted out.
+func test_a_shift_while_hovering_at_30_m_with_the_legs_folding_out():
+	await _scene()
+	await _find_flat()
+	_place(30.0)
+	await wait_physics_frames(2)
+	assert_eq(_legs().state, LandingLegs.State.DEPLOYING, "folding out")
+	var lifts := _lifts()
+	_universe.shift(Vector3(2000.0, 0.0, -1000.0))
+	await wait_physics_frames(3)
+	assert_almost_eq(_ship.flight_computer.keel_altitude(), 30.0, 0.5, "it holds its height through the shift")
+	assert_true(await wait_until(func() -> bool: return _legs().is_down(), 2.0), "down within 2 s")
+	assert_true(_all_on(), "colliders on once down")
+	assert_lt(_ship.landing.tilt(), deg_to_rad(1.0), "level")
+	assert_eq(_lifts(), lifts, "nothing lifted out of the ground")
+
+## ...or as it touches down: it lands all the same, level, on its four feet.
+func test_a_shift_while_touching_down_lands_it_on_its_feet():
+	await _scene()
+	await _find_flat()
+	_place(3.0)
+	assert_true(await wait_until(func() -> bool: return _legs().is_down(), 2.5), "legs down before touchdown")
+	_push(-0.1)
+	assert_true(await wait_until(func() -> bool: return _ship.landing.state == LandingMonitor.State.TOUCHING, 10.0),
+		"touching")
+	_push(0.0)
+	var lifts := _lifts()
+	_universe.shift(Vector3(0.0, -2000.0, 1000.0))
+	assert_true(await wait_until(func() -> bool: return _ship.landing.is_landed(), 4.0), "landed after the shift")
+	for foot in _legs().feet():
+		assert_lt(absf(_over_ground(foot)), 0.06, "a foot on the ground (%.3f m)" % _over_ground(foot))
+	assert_lt(_ship.landing.tilt(), deg_to_rad(1.0), "level: %.2f deg" % rad_to_deg(_ship.landing.tilt()))
+	assert_eq(_lifts(), lifts, "nothing lifted out of the ground")
