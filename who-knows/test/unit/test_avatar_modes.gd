@@ -47,7 +47,7 @@ func test_the_suit_takes_you_outside():
 	assert_true(_avatar.camera.current, "still your view")
 	assert_true(_avatar.grasp.suspended, "hands idle, but still holding")
 	for layer in _layers_of_hands():
-		assert_eq(layer, 1, "lit by the sun, not the cabin")
+		assert_eq(layer, Avatar.HANDS_LAYER, "the hands' layer: lit by the sun and the ship's lights, not the cabin or the lamp")
 
 func test_coming_back_puts_everything_back():
 	var mood := _avatar.camera.environment
