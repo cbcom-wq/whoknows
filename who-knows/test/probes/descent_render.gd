@@ -225,6 +225,22 @@ func _hide_the_card() -> void:
 			card.visible = false
 	print("        the controls card hidden (%s)" % how)
 
+## The help card shown for one render, as a player who has pressed H back on
+## would see it, and hidden again after. `want` is the face it must wear.
+func _card_shot(shot_name: String, want: ControlsCard.Card) -> void:
+	var cards: Array[ControlsCard] = []
+	for n in _scene.find_children("*", "Control", true, false):
+		if n is ControlsCard:
+			cards.append(n as ControlsCard)
+	for card in cards:
+		card.shown = true
+		card.visible = true
+		_check(card.card == want, "%s the card wears face %d (want %d)" % [shot_name, card.card, want])
+	await _shot(shot_name)
+	for card in cards:
+		card.shown = false
+		card.visible = false
+
 ## From `_planet`'s centre toward the star.
 func _to_star() -> Vector3:
 	var star: SystemBody = (_scene.get("system") as SystemRecipe).star
@@ -452,6 +468,7 @@ func _stage4() -> void:
 	if not await _out_through(lock, "stage4_hatch", "stage4"):
 		return
 	await _on_foot("stage4", true)
+	await _card_shot("card_on_foot", ControlsCard.Card.ON_FOOT)
 	var env := _env()
 	var sky := _sky()
 	_ground_fog = env.fog_density
@@ -585,6 +602,7 @@ func _clip_ring(height: float, wind: WindSound) -> void:
 	var at := Transform3D(Basis.IDENTITY, _starter.exterior.global_position + _spot * 30.0)
 	_avatar.enter_suit(_scene.get_node("Outside"), at, Vector3.ZERO, _starter.exterior)
 	await _seconds(1.5)
+	await _card_shot("card_spacewalk", ControlsCard.Card.SPACEWALK)
 	await _clip("wind_ring_silent", func() -> bool: return not wind.hull_playing() and not wind.helmet_playing(), false)
 
 ## Seated, a dive from the air top to LOW over the ground as the flight
