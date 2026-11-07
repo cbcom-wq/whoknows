@@ -522,11 +522,13 @@ func _wind_clips() -> void:
 
 ## Records CLIP_SECONDS and saves wind_<name> ("rcs_outside" keeps its name)
 ## to the output folder; prints the peak. `heard` says the right player is on
-## when the clip ends; `expect_sound` says silence is a defect.
-func _clip(clip_name: String, heard: Callable, expect_sound: bool) -> void:
+## when the clip ends (a null Callable: no player to check); `expect_sound`
+## says silence is a defect. `mix`, when given, says what the peak is made of,
+## for a clip whose peak alone cannot tell its sounds apart.
+func _clip(clip_name: String, heard: Callable, expect_sound: bool, mix := "") -> void:
 	_recorder.set_recording_active(true)
 	await _seconds(CLIP_SECONDS)
-	var right: bool = heard.call()
+	var right: bool = heard.call() if heard.is_valid() else true
 	_recorder.set_recording_active(false)
 	var rec := _recorder.get_recording()
 	var file := "%s/%s.wav" % [_out, clip_name]
@@ -538,10 +540,13 @@ func _clip(clip_name: String, heard: Callable, expect_sound: bool) -> void:
 			peak = maxf(peak, absf(float(d.decode_s16(i * 2))) / 32768.0)
 	var w := _stars.whereabouts
 	print("clip    %s: %s, peak %.3f (%.1f dBFS), air %.2f, the right wind %s" % [clip_name, file, peak,
-		linear_to_db(maxf(peak, 1e-6)), w.air(), right])
-	_check(right, "%s the right wind is playing" % clip_name)
+		linear_to_db(maxf(peak, 1e-6)), w.air(), right if heard.is_valid() else "(not checked)"])
+	if heard.is_valid():
+		_check(right, "%s the right wind is playing" % clip_name)
 	_check(peak < 0.999, "%s never clips (peak %.3f)" % [clip_name, peak])
-	if expect_sound:
+	if expect_sound and mix != "":
+		_check(peak > 0.003, "%s is not silent: peak %.3f with %s" % [clip_name, peak, mix])
+	elif expect_sound:
 		_check(peak > 0.003, "%s is not silent (peak %.3f)" % [clip_name, peak])
 	else:
 		# Not silence: a spacewalk has the suit's own breath. The wind is what
@@ -589,8 +594,10 @@ func _clip_second_ship() -> void:
 		show._sound(amounts)
 	physics_frame.connect(drive)
 	await _seconds(0.5)
-	_check(true, "rcs_outside %d thrusters driven, 15 m off, air %.2f" % [amounts.size(), _stars.whereabouts.air()])
-	await _clip("rcs_outside", func() -> bool: return true, true)
+	print("        rcs_outside: %d thrusters driven, 15 m off, air %.2f" % [amounts.size(), _stars.whereabouts.air()])
+	# The wind on foot is in this clip too, so its peak passes on the wind
+	# alone: it proves nothing about the thrusters. The owner listens.
+	await _clip("rcs_outside", Callable(), true, "wind and thrusters together (the wind alone passes it; the owner listens for the thrusters)")
 	physics_frame.disconnect(drive)
 	_fleet.remove(second, true)
 

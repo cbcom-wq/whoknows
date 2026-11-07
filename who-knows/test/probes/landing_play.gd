@@ -961,9 +961,16 @@ func _ring() -> void:
 	await _seconds(10.0)
 	var fell := from_centre - (_avatar.global_position - _centre()).length()
 	var hull_fell := hull_from - (_starter.exterior.global_position - _centre()).length()
+	# SUIT feels no pull by design, so your fall holds by construction: it
+	# guards against a pull being added to the suit, nothing more. The ship
+	# does feel the well's pull here (WorldGravity), so the hull's is a real
+	# check: the hold keeps it up with nobody at the helm.
 	_check(_avatar.mode == Avatar.Mode.SUIT and absf(fell) < 0.5,
-		"10 on a spacewalk in the ring, assist off: in 10 s you fell %.2f m, the hull %.2f m (under 0.5); air() %.3f, fog %s, dust %.3f" % [
-		fell, hull_fell, w.air(), "on" if env.fog_enabled else "off", _stars.dust.density])
+		"10 on a spacewalk in the ring, assist off: in 10 s you fell %.2f m (no pull in SUIT, a regression guard: under 0.5); air() %.3f, fog %s, dust %.3f" % [
+		fell, w.air(), "on" if env.fog_enabled else "off", _stars.dust.density])
+	_check(absf(hull_fell) < 0.5,
+		"10 the hull in the ring with nobody at the helm, pulled %.2f m/s2: in 10 s it fell %.2f m (the hold keeps it: under 0.5)" % [
+		_gravity.at(_starter.exterior.global_position).length(), hull_fell])
 	# Let go of the crate: it stays where it is.
 	_avatar.grasp.drop()
 	await _frames(2)
@@ -971,7 +978,7 @@ func _ring() -> void:
 	await _seconds(5.0)
 	var drift := (crate.global_position - _centre()).length() - item_from
 	_check(_avatar.grasp.item == null, "10 the crate let go: nothing in hand")
-	_check(absf(drift) < 0.5, "10 the crate let go in the ring: its distance from the planet's centre changed %.2f m in 5 s (under 0.5)" % drift)
+	_check(absf(drift) < 0.5, "10 the crate let go in the ring: its distance from the planet's centre changed %.2f m in 5 s (no pull on a loose item in space, a regression guard: under 0.5)" % drift)
 	# From outside, 25 m out from the hull and 4 m off the ring's plane, looking
 	# along the ring with the sun behind or beside, and a little toward the
 	# planet so its limb is in frame: the lit rocks of the ring are in view.
@@ -1028,9 +1035,14 @@ func _above_the_air() -> void:
 	await _seconds(10.0)
 	var fell := from_centre - (_avatar.global_position - _centre()).length()
 	var hull_fell := hull_from - (_starter.exterior.global_position - _centre()).length()
+	# As in the ring: your fall is a regression guard (SUIT feels no pull by
+	# design); the hull's is real, since the ship feels the well's pull here.
 	_check(_avatar.mode == Avatar.Mode.SUIT and absf(fell) < 0.5,
-		"10b on a spacewalk %.0f m over the air top, assist off: in 10 s you fell %.2f m, the hull %.2f m (no fall: under 0.5)" % [
-		from_centre - _planet.radius - air, fell, hull_fell])
+		"10b on a spacewalk %.0f m over the air top, assist off: in 10 s you fell %.2f m (no pull in SUIT, a regression guard: under 0.5)" % [
+		from_centre - _planet.radius - air, fell])
+	_check(absf(hull_fell) < 0.5,
+		"10b the hull %.0f m over the air top with nobody at the helm, pulled %.2f m/s2: in 10 s it fell %.2f m (the hold keeps it: under 0.5)" % [
+		hull_from - _planet.radius - air, _gravity.at(_starter.exterior.global_position).length(), hull_fell])
 	_avatar.set_head_pitch(deg_to_rad(-35.0))
 	await _shot("spacewalk_over_the_air")
 	# Back in, as fleet_play glides in, and to the helm.
