@@ -118,7 +118,7 @@ this is the land it lives in).
 >   white blob. The pilot's and the assist's changes still puff.
 > - **Thrusters are heard outside in air** (`RcsShow.HEARD_OUTSIDE`, `OUTSIDE_DB`) on the Suit
 >   bus. Seated in the chase view you hear them on the Suit bus too; §6.4 said the Ship bus.
->   (**Changed call**, open for the owner.)
+>   (**Changed call**, approved by the owner with the rest of phase 1, 2026-11-07.)
 > - **Wind:** `WindSound` with `Ear` NONE / HULL / HELMET; loops `wind` (Suit bus) and `wind_hull`
 >   (Ship bus, with a 38 Hz rumble); silent where the air is 0 or there is no ear.
 > - **Drag:** `WorldGravity.drag(air, v) = -DRAG_K × air × |v| × v`, `DRAG_K` 1/720, on hulls, the
@@ -138,10 +138,12 @@ this is the land it lives in).
 > heat, at the floor**. The same dive squeezed into 5 s at 2.1 km/s read 67 (not gated; phase 0's
 > ground streaming).
 >
-> **Open for phase 2 and the owner:**
-> - owner calls from the renders, not yet answered: the sky pairs per palette, the halo's size, the
->   rim's strength and width (`RIM_ALPHA` 0.8, band 6°), the entry glow's look, `HOLD_SHOW`,
->   `HEARD_OUTSIDE` / `OUTSIDE_DB`, the chase-view bus in air, and the wind levels;
+> **The owner approved phase 1 as it stands on 2026-11-07** ("phase 1 looks good"): the sky pairs
+> per palette, the halo's size, the rim (`RIM_ALPHA` 0.8, band 6°), the entry glow, `HOLD_SHOW` 0,
+> `HEARD_OUTSIDE` / `OUTSIDE_DB`, the chase view on the Suit bus in air and the wind levels keep
+> their values, and the style guide's §3.8 exception and §3.9 are rules.
+>
+> **Open for phase 2:**
 > - a descent faster than the speed limit reads 67–72 fps: phase 0's ground streaming;
 > - seated at full heat sits at the floor (120–126 fps), so no more may be drawn there.
 

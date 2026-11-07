@@ -493,10 +493,10 @@ made.
 ### 3.9 Worlds up close
 
 Phase 1 of the desert world, "air" (`docs/superpowers/specs/2026-11-03-desert-world-design.md`
-§6, as built). Built from renders shown to the owner, who has **not yet ruled** on the sky
-pairs, the halo's size, the rim, the entry glow, `HOLD_SHOW`, `HEARD_OUTSIDE` / `OUTSIDE_DB` or the
-wind levels (the desert-world spec's status note lists them): these are the first values, open to
-change. Ground cover, the desert, palms and brick come
+§6, as built). Built from renders shown to the owner, who **approved phase 1 as it stands on
+2026-11-07** ("phase 1 looks good"): the sky pairs, the halo's size, the rim, the entry glow,
+`HOLD_SHOW` 0, `HEARD_OUTSIDE` / `OUTSIDE_DB` and the wind levels keep their values, and this
+section and §3.8's exception are rules. Ground cover, the desert, palms and brick come
 with phases 2 and 3, and will join this section.
 
 - **No exterior shader: engine materials only.** `Environment`, `ProceduralSkyMaterial`,
