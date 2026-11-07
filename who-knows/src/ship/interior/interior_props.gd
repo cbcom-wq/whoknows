@@ -43,6 +43,19 @@ const PORTHOLE_OPENING := 0.27
 ## A doorway's clear width. Each sliding leaf is half of it, and slides into
 ## a jamb of (BAY - DOOR_WIDTH) / 2 = 0.5 m, so an open door hides entirely.
 const DOOR_WIDTH := 1.0
+## How far each room's main piece stands out from its wall (its deepest
+## collider): the bunks, the galley counter, the washstand's toilet, the
+## closet's shelves, the weapon rack. A piece deeper than a doorway's jamb
+## stands in the opening when its wall meets the doorway's
+## (InteriorLayout._furnish_cell keeps it off such a wall).
+const FEATURE_DEPTH := {
+	&"bunk_room": 0.9, &"galley": 0.64, &"bathroom": 0.6, &"closet": SHELF_DEPTH, &"weapon_room": 0.35,
+}
+
+## Whether a room's main piece would stand in a doorway beside it. A room
+## not in FEATURE_DEPTH counts as one that would.
+static func feature_reaches_doorway(zone: StringName) -> bool:
+	return FEATURE_DEPTH.get(zone, BAY) > (BAY - DOOR_WIDTH) * 0.5
 ## A doorway's clear height: door height, not ceiling height, with a lintel
 ## above -- and well over the 1.8 m avatar.
 const DOOR_HEIGHT := 2.1

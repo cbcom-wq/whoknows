@@ -44,6 +44,19 @@ func test_every_ship_has_its_note():
 	for id in _library.ids():
 		assert_true(FileAccess.file_exists("%s/%s.md" % [ShipLibrary.DIR, id]), "data/ships/%s.md explains it" % id)
 
+## Every doorway leaves a body-wide way straight through it
+## (InteriorBuilder.blocked_doorways): the Warden's bunk room did not, and
+## the owner was stuck (2026-11-07).
+func test_every_ship_s_doorways_can_be_walked_through():
+	for id in _library.ids():
+		var builder := InteriorBuilder.new()
+		add_child_autofree(builder)
+		builder.bind(_library.grid(id), _cat)
+		builder.rebuild()
+		var blocked := builder.blocked_doorways().map(func(b): return "%s %s by %s" % [
+			b["coord"], b["normal"], b["by"].get_parent().name])
+		assert_eq(blocked, [], "%s: every doorway can be walked through" % id)
+
 func test_every_ship_is_usable():
 	for id in _library.ids():
 		await ShipUse.use(self, _library.grid(id), _library.name_of(id), PATH, String(id))
