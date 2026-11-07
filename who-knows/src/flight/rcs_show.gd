@@ -181,13 +181,12 @@ func apply(amounts: PackedFloat32Array) -> void:
 		emitters[i].amount_ratio = clampf(amounts[i], 0.0, 1.0)
 		emitters[i].emitting = amounts[i] >= SHOW_AT
 
+## Every ship's show ticks, frozen or asleep included, so the air outside is
+## asked for only on a tick a puff sounds out there, and once.
 func _sound(amounts: PackedFloat32Array) -> void:
 	var now := Time.get_ticks_msec() / 1000.0
 	var aboard := _aboard()
-	var air := 0.0
-	if _flight != null and _flight.gravity != null:
-		air = _flight.gravity.air_at(global_position)
-	var outside := HEARD_OUTSIDE and not aboard and air > AIR_AUDIBLE
+	var air := -1.0
 	for i in players.size():
 		var step := puff_step(amounts[i], _armed[i] == 1, now - _last_puff[i])
 		_armed[i] = 1 if step[1] else 0
@@ -197,16 +196,25 @@ func _sound(amounts: PackedFloat32Array) -> void:
 		var s := Synth.sound(&"rcs_puff")
 		if s == null:
 			continue
-		if outside and i < outside_players.size():
-			outside_players[i].stream = s
-			outside_players[i].volume_db = outside_db(amounts[i], air)
-			outside_players[i].play()
-			continue
+		if HEARD_OUTSIDE and not aboard and i < outside_players.size():
+			if air < 0.0:
+				air = _air_outside()
+			if air > AIR_AUDIBLE:
+				outside_players[i].stream = s
+				outside_players[i].volume_db = outside_db(amounts[i], air)
+				outside_players[i].play()
+				continue
 		if not aboard:
 			continue
 		players[i].stream = s
 		players[i].volume_db = lerpf(SOFT_DB, LOUD_DB, amounts[i])
 		players[i].play()
+
+## The air at the hull, 0 to 1; 0 with no world's gravity.
+func _air_outside() -> float:
+	if _flight == null or _flight.gravity == null:
+		return 0.0
+	return _flight.gravity.air_at(global_position)
 
 ## True while the camera you see through is aboard. Space is silent: the chase
 ## view hears nothing, like the ship's hum (spec §6.3).

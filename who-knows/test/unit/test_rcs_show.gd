@@ -185,6 +185,34 @@ func test_the_starter_hovering_puffs_nothing():   # phase 0's white blob, on the
 	for a in _fire(Vector3.ZERO, RcsShow.shown_force(hold, hold, RcsShow.HOLD_SHOW)):
 		assert_lt(a, RcsShow.SHOW_AT)
 
+## A gravity that counts how often the air is asked for.
+class AirCounter extends WorldGravity:
+	var asked := 0
+	func air_at(_p: Vector3) -> float:
+		asked += 1
+		return 1.0
+
+## Review M4: every ship's show ticks, frozen or asleep included, so the air
+## is asked for only on a tick a puff is heard: never while nothing puffs, and
+## once however many blocks puff.
+func test_the_air_is_asked_for_only_when_a_puff_sounds():
+	var show: RcsShow = _built()[0]
+	var fc := FlightComputer.new()
+	autofree(fc)
+	var air := AirCounter.new()
+	fc.gravity = air
+	show.setup(fc, show._interior)
+	var quiet := PackedFloat32Array()
+	quiet.resize(show.blocks.size())
+	for i in 5:
+		show._sound(quiet)
+	assert_eq(air.asked, 0, "nothing puffs: the air is not asked for")
+	var loud := quiet.duplicate()
+	loud[0] = 1.0
+	loud[1] = 1.0
+	show._sound(loud)
+	assert_eq(air.asked, 1, "two puff: asked once")
+
 func test_each_block_is_also_heard_outside_at_its_nozzle_on_the_suit_bus():
 	var show: RcsShow = _built()[0]
 	assert_eq(show.outside_players.size(), 8)
