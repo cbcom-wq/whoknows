@@ -142,15 +142,19 @@ func _lock_over_a_keel(keel: int) -> ShipGrid:
 	return grid
 
 ## Over its keel the starter's sill is 2.05 m up; its landing legs (Task 15)
-## stand it 0.4 m higher, so its ramp is 2.45 m of sill and 4.9 m long.
-func test_the_starter_s_hatch_gets_a_4_9_m_ramp():
+## stand it higher, until its belly turret's dome clears the sand by 0.1 m
+## (the owner, 2026-11-05), so its ramp is about 6 m long.
+func test_the_starter_s_hatch_gets_a_ramp_about_6_m_long():
 	var grid: ShipGrid = ShipLibrary.read("res://data/ships/starter.json")["grid"]
 	var over_keel := AirlockAlcove.ramp_plan(grid, Vector3i(0, 0, 3), Ship.keel_depth_of(grid))
 	assert_almost_eq(over_keel["sill"], STARTER_SILL, 0.001, "storey 0 over a keel row: 2.05 m")
 	var plan := AirlockAlcove.ramp_plan(grid, Vector3i(0, 0, 3))
 	assert_eq(plan["need"], LandingRamp.RAMP)
-	assert_almost_eq(plan["sill"], STARTER_SILL + LandingLegs.CLEARANCE, 0.001, "over the legs' stance: 2.45 m")
-	assert_almost_eq(plan["length"], 4.9, 0.01)
+	var stood := Ship.stance_depth_of(grid) - Ship.keel_depth_of(grid)
+	assert_gt(stood, LandingLegs.CLEARANCE + 0.5, "its belly turret stands it well over 0.4 m")
+	assert_almost_eq(plan["sill"], STARTER_SILL + stood, 0.001, "over the legs' stance")
+	assert_almost_eq(plan["length"], LandingRamp.length_for(STARTER_SILL + stood), 0.01)
+	assert_between(float(plan["length"]), 5.8, 6.3, "about 6 m")
 	assert_almost_eq(plan["angle"], deg_to_rad(30.0), EPS)
 	assert_eq(plan["through"], [], "nothing in its way")
 
@@ -161,14 +165,16 @@ func test_a_hatch_level_with_the_keel_is_a_step():
 
 ## Measured over the keel's plane, a keel row puts the hatch 2.05 m up; this
 ## little grid has room for landing legs on its storey-0 cells (Task 15), and on
-## them it stands 0.4 m higher still.
+## them it stands at least 0.4 m higher still.
 func test_a_keel_row_under_the_ship_makes_the_hatch_need_one():
 	var grid := _lock_over_a_keel(1)
 	var plan := AirlockAlcove.ramp_plan(grid, Vector3i.ZERO, Ship.keel_depth_of(grid))
 	assert_eq(plan["need"], LandingRamp.RAMP)
 	assert_almost_eq(plan["sill"], 2.05, 0.001)
 	assert_false(LandingLegs.plan(grid).is_empty())
-	assert_almost_eq(AirlockAlcove.ramp_plan(grid, Vector3i.ZERO)["sill"], 2.05 + LandingLegs.CLEARANCE, 0.001)
+	var stood := Ship.stance_depth_of(grid) - Ship.keel_depth_of(grid)
+	assert_gte(stood, LandingLegs.CLEARANCE - 0.001)
+	assert_almost_eq(AirlockAlcove.ramp_plan(grid, Vector3i.ZERO)["sill"], 2.05 + stood, 0.001)
 
 func test_a_block_in_the_ramp_s_way_is_named():
 	var grid := _lock_over_a_keel(1)
@@ -340,7 +346,8 @@ func test_from_the_ramp_s_foot_you_walk_up_and_in():
 	Input.action_release(&"move_forward")
 	assert_true(aboard, "up the ramp and in through the outer hatch within 12 s (mode %s, outer %.2f)" % [
 		Avatar.Mode.keys()[avatar.mode], lock.cycle.outer_open])
-	assert_almost_eq(ramp.length, LandingRamp.length_for(2.45), 0.01, "the ramp over the legs: 4.9 m")
+	assert_almost_eq(ramp.length, LandingRamp.length_for(ramp.sill_height), 0.01, "the ramp over the legs")
+	assert_between(ramp.length, 5.8, 6.3, "about 6 m")
 	assert_gt(climbed[0], ramp.length * sin(LandingRamp.LEAST) + 0.5,
 		"on your feet up the ramp: %.2f m up from its foot" % climbed[0])
 

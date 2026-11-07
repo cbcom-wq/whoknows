@@ -18,13 +18,17 @@ func test_starter_keel_is_its_lowest_cell_bottom():
 	# custom centre of mass moves no origin), so the grid's origin is the hull's origin.
 	assert_almost_eq(_starter.keel_depth(), 3.0, 0.01)
 
-## ...and how deep the plane it stands on is: its landing legs' feet, 0.4 m
-## under the keel (Task 15). The flight computer measures altitude from there.
+## ...and how deep the plane it stands on is: its landing legs' feet, under
+## the keel far enough that its belly turret's dome clears the ground by 0.1 m
+## (Task 15; the owner, 2026-11-05). The flight computer measures altitude from
+## there.
 func test_the_flight_computer_is_told_where_it_stands():
-	assert_almost_eq(_starter.stance_depth(), 3.4, 0.01)
+	assert_almost_eq(_starter.stance_depth(), Ship.stance_depth_of(_starter.grid), 0.01)
+	assert_gt(_starter.stance_depth(), 3.9, "under its belly turret's dome")
 	assert_almost_eq(_starter.flight_computer.keel_depth, _starter.stance_depth(), 0.001)
 
 func test_a_rebuild_keeps_it_told():
+	var stance := _starter.stance_depth()
 	_starter.flight_computer.keel_depth = 0.0
 	_starter._rebuild_everything()
-	assert_almost_eq(_starter.flight_computer.keel_depth, 3.4, 0.01)
+	assert_almost_eq(_starter.flight_computer.keel_depth, stance, 0.01)

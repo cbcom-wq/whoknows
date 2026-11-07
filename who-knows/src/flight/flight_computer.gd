@@ -112,7 +112,8 @@ var whereabouts: Whereabouts = null
 var gravity: WorldGravity = null
 
 ## Metres from the hull's origin down to the plane it stands on, landed: its
-## landing legs' feet, 0.4 m under the bottom of its lowest cell, or that
+## landing legs' feet, at least 0.4 m under the bottom of its lowest cell and
+## 0.1 m under its lowest hanging look (LandingLegs.stance_for), or that
 ## bottom with no legs (Ship.stance_depth; desert-world spec §5.2, phase 0
 ## Task 15). The ship sets it from its grid; keel_altitude and the levelling
 ## measure from it.

@@ -9,8 +9,16 @@ extends GutTest
 const EPS := 0.001
 const SHIPS: Array[StringName] = [&"starter", &"lamplighter", &"warden"]
 
+var _blocks: BlockCatalog
+
 func _grid(id: StringName) -> ShipGrid:
 	return ShipLibrary.read("res://data/ships/%s.json" % id)["grid"]
+
+## The blocks, loaded once for the pure tests (the plan reads the looks).
+func _catalog() -> BlockCatalog:
+	if _blocks == null:
+		_blocks = BlockCatalog.load_from_dir()
+	return _blocks
 
 ## The middle of a grid's footprint, x and z, in metres.
 static func _middle(grid: ShipGrid) -> Vector2:
@@ -83,8 +91,8 @@ func test_every_library_ship_plans_four_legs_one_per_quadrant():
 func test_every_foot_is_on_the_stance_plane_under_its_mount():
 	for id in SHIPS:
 		var grid := _grid(id)
-		var stance := Ship.keel_depth_of(grid) + LandingLegs.CLEARANCE
-		for leg in LandingLegs.plan(grid):
+		var stance := Ship.stance_depth_of(grid, _catalog())
+		for leg in LandingLegs.plan(grid, NAN, _catalog()):
 			var cell: Vector3i = leg["cell"]
 			var foot: Vector3 = leg["foot"]
 			var bottom := ShipGrid.cell_center(cell).y - ShipGrid.CELL_SIZE * 0.5
@@ -135,26 +143,75 @@ func test_a_one_cell_grid_plans_fewer_than_four_legs():
 	assert_eq(LandingLegs.plan(ShipGrid.new()).size(), 0, "no cells")
 	assert_almost_eq(Ship.stance_depth_of(grid), Ship.keel_depth_of(grid), EPS, "no legs: it stands on its keel")
 
-# --- the stance, pure -------------------------------------------------------------
+# --- the stance, pure: the lowest hanging look clears the sand by 0.1 m ------------
+# (the owner, 2026-11-05: legs lengthen, so a hanging part costs ramp length)
 
-func test_the_starter_stands_0_4_m_under_its_keel_and_its_ramp_grows_to_4_9_m():
-	var grid := _grid(&"starter")
-	assert_almost_eq(Ship.stance_depth_of(grid), Ship.keel_depth_of(grid) + 0.4, EPS)
+func test_the_stance_clears_the_lowest_look_by_0_1_m_and_the_keel_by_0_4_m_at_least():
+	assert_almost_eq(LandingLegs.HANG_CLEAR, 0.1, EPS)
 	assert_almost_eq(LandingLegs.CLEARANCE, 0.4, EPS)
-	var plan := AirlockAlcove.ramp_plan(grid, Vector3i(0, 0, 3))
-	assert_almost_eq(float(plan["sill"]), 2.45, 0.001, "the sill over the stance plane")
-	assert_almost_eq(float(plan["length"]), LandingRamp.length_for(2.45), 0.01)
-	assert_almost_eq(float(plan["length"]), 4.9, 0.01)
-	assert_eq(plan["through"], [], "nothing in its way")
+	assert_almost_eq(LandingLegs.stance_for(3.0, -3.883), 3.983, EPS, "a dome 0.883 m under a 3 m keel")
+	assert_almost_eq(LandingLegs.stance_for(3.0, -3.2), 3.4, EPS, "a look 0.2 m under the keel: 0.4 still")
+	assert_almost_eq(LandingLegs.stance_for(3.0, -2.4), 3.4, EPS, "nothing under the keel")
+	assert_almost_eq(LandingLegs.stance_for(3.0, INF), 3.4, EPS, "no look at all")
 
-func test_the_warden_s_ramp_is_4_45_m_of_sill_and_8_9_m_long():
+func test_every_ship_stands_its_lowest_hanging_look_0_1_m_over_the_ground():
+	for id in SHIPS:
+		var grid := _grid(id)
+		var keel := Ship.keel_depth_of(grid)
+		var lowest := ExteriorBuilder.lowest_look(grid, _catalog())
+		var stance := Ship.stance_depth_of(grid, _catalog())
+		assert_almost_eq(stance, maxf(keel + LandingLegs.CLEARANCE, -lowest + LandingLegs.HANG_CLEAR), EPS, String(id))
+		gut.p("%s: lowest look %.3f m under its keel's plane, stance %.3f m under it" % [id, -lowest - keel,
+			stance - keel])
+	# The starter's and the Warden's belly turrets hang lowest, parked; the
+	# Lamplighter has nothing under its keel's plane.
+	for id: StringName in [&"starter", &"warden"]:
+		var grid := _grid(id)
+		assert_gt(Ship.stance_depth_of(grid, _catalog()) - Ship.keel_depth_of(grid), 0.9, "%s: its belly turret" % id)
+	var lamp := _grid(&"lamplighter")
+	assert_almost_eq(Ship.stance_depth_of(lamp, _catalog()) - Ship.keel_depth_of(lamp), LandingLegs.CLEARANCE, EPS,
+		"the Lamplighter: 0.4 m")
+
+func test_the_starter_s_ramp_grows_to_about_6_m():
+	var grid := _grid(&"starter")
+	var plan := AirlockAlcove.ramp_plan(grid, Vector3i(0, 0, 3))
+	var sill := 2.05 + Ship.stance_depth_of(grid, _catalog()) - Ship.keel_depth_of(grid)
+	assert_almost_eq(float(plan["sill"]), sill, 0.001, "the sill over the stance plane")
+	assert_almost_eq(float(plan["length"]), LandingRamp.length_for(sill), 0.01)
+	assert_between(float(plan["length"]), 5.8, 6.3, "about 6 m")
+	assert_eq(plan["through"], [], "nothing in its way")
+	gut.p("the starter's ramp: %s" % AirlockAlcove.ramp_words(plan))
+
+func test_the_warden_s_ramp_grows_to_about_10_m():
 	var grid := _grid(&"warden")
 	for c: Vector3i in grid.coords():
 		if grid.get_block(c).block_id == AirlockSite.AIRLOCK_ID:
 			var plan := AirlockAlcove.ramp_plan(grid, c)
-			assert_almost_eq(float(plan["sill"]), 4.45, 0.001)
-			assert_almost_eq(float(plan["length"]), 8.9, 0.01)
+			var sill := 4.05 + Ship.stance_depth_of(grid, _catalog()) - Ship.keel_depth_of(grid)
+			assert_almost_eq(float(plan["sill"]), sill, 0.001)
+			assert_between(float(plan["length"]), 9.6, 10.4, "about 10 m")
 			assert_eq(AirlockAlcove.way_up_for(plan), LandingRamp.RAMP, "boardable: %s" % AirlockAlcove.ramp_words(plan))
+			gut.p("the Warden's ramp: %s" % AirlockAlcove.ramp_words(plan))
+
+## Review I1: a grid lying wholly above y = 0 has its keel's plane over the
+## origin, so its stance is negative; "not given" was a negative stance, and
+## the plan and the ramp asked each other for one for ever.
+func test_a_grid_wholly_above_y_0_with_an_airlock_plans_legs_and_a_ramp_without_recursion():
+	var grid := _grid(&"starter")
+	var high := ShipGrid.new()
+	for c: Vector3i in grid.coords():
+		high.set_block(c + Vector3i(0, 3, 0), grid.get_block(c))
+	assert_almost_eq(Ship.keel_depth_of(high), -3.0, EPS, "its keel's plane 3 m over the origin")
+	var low_legs := LandingLegs.plan(grid, NAN, _catalog())
+	var legs := LandingLegs.plan(high, NAN, _catalog())
+	assert_eq(legs.size(), 4, "four legs")
+	for i in mini(legs.size(), low_legs.size()):
+		assert_almost_eq(legs[i]["foot"] as Vector3, (low_legs[i]["foot"] as Vector3) + Vector3(0.0, 6.0, 0.0),
+			Vector3.ONE * EPS, "leg %d: where the starter's is, 6 m up" % i)
+	var plan := AirlockAlcove.ramp_plan(high, Vector3i(0, 3, 3))
+	assert_eq(plan["need"], LandingRamp.RAMP)
+	assert_almost_eq(float(plan["sill"]), float(AirlockAlcove.ramp_plan(grid, Vector3i(0, 0, 3))["sill"]), 0.001,
+		"the starter's sill")
 
 # --- when, pure ---------------------------------------------------------------------
 
@@ -174,10 +231,19 @@ func test_landed_they_stay_down_and_off_a_world_they_are_up():
 
 # --- the shape, pure ------------------------------------------------------------------
 
-func test_stowed_a_leg_folds_flat_within_0_35_m_of_its_cell():
+## Chunky gear (the owner, 2026-11-05: 0.38 m struts, a 0.8 m foot) folds a
+## little deeper than the brief's 0.35 m.
+func test_stowed_a_leg_folds_flat_within_0_5_m_of_its_cell():
 	for length: float in [2.4, 3.0, LandingLegs.MOST_LENGTH]:
 		var stowed := LandingLegs.pose(length, 0.0)
-		assert_gte(float(stowed["lowest"]), -0.35, "a %.1f m leg stowed reaches %.3f m under its cell" % [length, stowed["lowest"]])
+		assert_gte(float(stowed["lowest"]), -0.5, "a %.1f m leg stowed reaches %.3f m under its cell" % [length, stowed["lowest"]])
+
+func test_the_gear_is_chunky():
+	assert_gte(LandingLegs.STRUT, 0.35, "struts about 0.4 m")
+	assert_gte(LandingLegs.ARM_HEIGHT, 0.35)
+	assert_gte(LandingLegs.PAD.x, 0.75, "a foot about 0.8 m")
+	assert_gte(LandingLegs.PAD.z, 0.75)
+	assert_gt(LandingLegs.KNEE_RADIUS, LandingLegs.ARM_HEIGHT * 0.5, "the knuckle stands proud of the arms")
 
 func test_down_its_foot_is_on_the_stance_plane_where_the_plan_says():
 	for length: float in [2.4, 3.0, LandingLegs.MOST_LENGTH]:
@@ -185,7 +251,7 @@ func test_down_its_foot_is_on_the_stance_plane_where_the_plan_says():
 		assert_almost_eq(float(down["lowest"]), -length, EPS, "a %.1f m leg's foot" % length)
 		assert_almost_eq((down["foot"] as Vector3).y, -length, EPS)
 		assert_almost_eq(down["foot"], LandingLegs.foot_local(length), Vector3.ONE * EPS)
-	for leg in LandingLegs.plan(_grid(&"starter")):
+	for leg in LandingLegs.plan(_grid(&"starter"), NAN, _catalog()):
 		var frame := LandingLegs.frame(leg["cell"], leg["end"])
 		assert_almost_eq(frame * LandingLegs.foot_local(leg["length"]), leg["foot"] as Vector3, Vector3.ONE * EPS)
 
@@ -332,7 +398,66 @@ func test_descending_under_40_m_they_come_down_with_their_colliders_on():
 	assert_true(await wait_until(func() -> bool: return _legs().is_down(), 2.0), "down within 2 s")
 	assert_true(_all_on(), "colliders on once down")
 
-func test_landed_on_its_legs_its_keel_and_belly_turret_stand_clear_of_the_ground():
+## Every look of the starter's outside you can see but its legs, its ramps
+## (which rest on the ground) and its lights' rig (a lamp's bounds are its
+## reach, a beam is light): its skin, its turrets, its alcoves.
+func _looks() -> Array[GeometryInstance3D]:
+	var skip: Array[Node] = [_legs()]
+	for airlock: Airlock in _ship.airlocks.values():
+		if airlock.alcove != null and airlock.alcove.ramp != null:
+			skip.append(airlock.alcove.ramp)
+	var rig := _ship.exterior.get_node_or_null("Lights")
+	if rig != null:
+		skip.append(rig)
+	var out: Array[GeometryInstance3D] = []
+	for node in _ship.exterior.find_children("*", "GeometryInstance3D", true, false):
+		var gi := node as GeometryInstance3D
+		if not gi.is_visible_in_tree() or gi is GPUParticles3D or gi is CPUParticles3D:
+			continue
+		if skip.any(func(s: Node) -> bool: return s == gi or s.is_ancestor_of(gi)):
+			continue
+		out.append(gi)
+	return out
+
+## The corners of `gi`'s bounds, in the world.
+static func _corners(gi: GeometryInstance3D) -> Array[Vector3]:
+	var box := gi.get_aabb()
+	var out: Array[Vector3] = []
+	for i in 8:
+		out.append(gi.global_transform * (box.position + box.size * Vector3(i & 1, (i >> 1) & 1, (i >> 2) & 1)))
+	return out
+
+## The owner's rule (2026-11-05), and review M1: what the eye sees, not the
+## colliders -- the lowest point of every look but the legs and the ramp is at
+## least 0.05 m over the ground (the stance gives it 0.1).
+func test_landed_every_look_but_its_legs_and_ramp_stands_clear_of_the_ground():
+	await _scene()
+	assert_true(await _land(), "landed")
+	var lowest := INF
+	var what := ""
+	for gi in _looks():
+		for p in _corners(gi):
+			var gap := _over_ground(p)
+			if gap < lowest:
+				lowest = gap
+				what = str(_ship.exterior.get_path_to(gi))
+	assert_gte(lowest, 0.05, "the lowest look, %s, is %.3f m over the ground" % [what, lowest])
+	gut.p("landed: the lowest look, %s, %.3f m over the ground" % [what, lowest])
+
+## The stance is worked out from a look drawn off the tree
+## (ExteriorBuilder.lowest_look); the ship's own rebuild measures what it drew.
+## Both are what the built starter shows.
+func test_the_lowest_look_worked_out_is_the_one_the_built_starter_shows():
+	await _scene()
+	var hull := _ship.exterior.global_transform.affine_inverse()
+	var built := INF
+	for gi in _looks():
+		for p in _corners(gi):
+			built = minf(built, (hull * p).y)
+	assert_almost_eq(ExteriorBuilder.lowest_look(_ship.grid, _ship.catalog), built, 0.005, "worked out")
+	assert_almost_eq(_ship.stance_depth(), LandingLegs.stance_for(_ship.keel_depth(), built), 0.005, "stood on")
+
+func test_landed_on_its_legs_its_colliders_stand_clear_and_it_is_level():
 	await _scene()
 	assert_true(await _land(), "landed")
 	var legs := _legs()
@@ -357,17 +482,8 @@ func test_landed_on_its_legs_its_keel_and_belly_turret_stand_clear_of_the_ground
 	assert_gte(lowest, 0.3, "the hull's lowest collider point, in %s, is %.2f m over the ground" % [cell, lowest])
 	assert_eq(cell.y, -1, "and it is on the keel strip (the belly turret's row)")
 	assert_lt(_ship.landing.tilt(), deg_to_rad(1.0), "level on flat ground: %.2f deg" % rad_to_deg(_ship.landing.tilt()))
-	# What the eye sees under the belly turret's block: its dome hangs below
-	# the cell's face (TurretLook), lower than any collider.
-	var dome := INF
-	for t in _ship.turrets:
-		for mi: MeshInstance3D in t.find_children("*", "MeshInstance3D", true, false):
-			var box := mi.get_aabb()
-			for i in 8:
-				var corner := box.position + box.size * Vector3(i & 1, (i >> 1) & 1, (i >> 2) & 1)
-				dome = minf(dome, _over_ground(mi.global_transform * corner))
-	gut.p("landed: lowest collider %.3f m over the ground in %s; turret looks' lowest %.3f m; tilt %.2f deg" % [
-		lowest, cell, dome, rad_to_deg(_ship.landing.tilt())])
+	gut.p("landed: lowest collider %.3f m over the ground in %s; tilt %.2f deg" % [lowest, cell,
+		rad_to_deg(_ship.landing.tilt())])
 
 func test_climbing_over_60_m_folds_them_up_and_their_colliders_off():
 	await _scene()
@@ -383,14 +499,88 @@ func test_climbing_over_60_m_folds_them_up_and_their_colliders_off():
 	assert_true(_all_off(), "colliders off the moment they start up")
 	assert_true(await wait_until(func() -> bool: return _legs().is_stowed(), 2.0), "up within 2 s")
 
-func test_a_hostile_never_puts_them_down():
+## A hostile flown by its pilot never puts them down (it stays 2000 m up
+## anyway)...
+func test_a_hostile_its_pilot_flies_never_puts_them_down():
 	await _scene()
 	await _find_flat()
 	_ship.side = Sides.HOSTILE
+	_ship.ship_pilot.set_physics_process(false)
+	_ship.ship_pilot.on = true
 	_place(10.0)
 	await wait_physics_frames(100)
-	assert_true(_legs().is_stowed(), "a hostile flies low with its legs up")
+	assert_true(_legs().is_stowed(), "a hostile's pilot flies low with its legs up")
+	_ship.ship_pilot.on = false
 	_ship.side = Sides.CREW
+
+## ...but review M4: a hostile hull with nobody hostile at its stick -- boarded
+## and flown to a world by you (every ship is usable) -- stands on them.
+func test_a_hostile_hull_its_pilot_does_not_fly_puts_them_down():
+	await _scene()
+	await _find_flat()
+	_ship.side = Sides.HOSTILE
+	assert_false(_ship.ship_pilot.on)
+	_place(10.0)
+	assert_true(await wait_until(func() -> bool: return _legs().is_down(), 3.0), "down near the ground")
+	_ship.side = Sides.CREW
+
+## Review M3: a save puts the hull back after set_grid builds it, and the scene
+## wires its gravity after that, so the legs cannot know where they are when
+## they are built. A ship loaded hovering 20 m up has them down on its first
+## frame, at once: never folding out in front of you.
+func test_a_ship_loaded_hovering_under_40_m_has_its_legs_down_on_the_first_frame():
+	await _scene()
+	await _find_flat()
+	var place := Transform3D(_basis, _centre + _up * (_ground + _ship.stance_depth() + 20.0))
+	var other: Ship = _root.fleet.spawn(_root._starter_grid(), place)
+	var legs := other.exterior_builder.legs()
+	assert_true(legs.is_stowed(), "built stowed")
+	var states: Array = []
+	for i in 4:
+		await wait_physics_frames(1)
+		states.append(LandingLegs.State.keys()[legs.state])
+	# The first tick it runs -- the wait may hand back before or after it.
+	assert_eq(states[1], "DOWN", "down on its first frame: %s" % [states])
+	assert_false(states.has("DEPLOYING"), "never folding out: %s" % [states])
+	assert_almost_eq(legs.progress(), 1.0, EPS)
+	assert_true(legs.colliders.all(func(c: CollisionShape3D) -> bool: return not c.disabled), "colliders on")
+
+## Untested before: a ship asleep on the ground (a save loads one built with
+## its legs stowed) wakes standing on them, colliders on, never folding out.
+func test_a_ship_woken_landed_has_its_legs_down_with_their_colliders_on():
+	await _scene()
+	assert_true(await _land(), "landed")
+	_root.fleet.sleep(_ship)
+	_legs().set_down(false, true)
+	assert_true(_legs().is_stowed(), "stowed while asleep, as a loaded one is built")
+	_root.fleet.wake(_ship)
+	await wait_physics_frames(1)
+	assert_true(_legs().is_down(), "down on waking")
+	assert_almost_eq(_legs().progress(), 1.0, EPS, "at once")
+	assert_true(_all_on(), "colliders on")
+
+## Review M5: a mount lost to damage takes its leg on the rebuild; the other
+## three stand, the ship stands as tall, and nothing of the lost leg is left.
+func test_a_lost_mount_takes_its_leg_and_the_other_three_stand():
+	await _scene()
+	var before := _legs()
+	var lost: Vector3i = before.legs[0]["cell"]
+	var stance := _ship.stance_depth()
+	var shapes := _ship.exterior.get_children().filter(func(n: Node) -> bool: return n is CollisionShape3D)
+	var its_own := shapes.filter(func(n: Node) -> bool:
+		return n.get_meta(&"cell", Vector3i(99, 99, 99)) == lost and not before.colliders.has(n))
+	_ship.grid.clear_block(lost)
+	await wait_physics_frames(1)
+	var legs := _legs()
+	assert_eq(legs.legs.size(), 3, "three legs")
+	assert_false(legs.legs.any(func(l: Dictionary) -> bool: return l["cell"] == lost), "none on the lost cell")
+	assert_eq(legs.colliders.size(), 9, "three boxes each")
+	assert_false(is_instance_valid(before), "the old legs are freed")
+	var after := _ship.exterior.get_children().filter(func(n: Node) -> bool: return n is CollisionShape3D)
+	assert_eq(after.size(), shapes.size() - its_own.size() - 3, "the lost cell's and its leg's colliders gone, no other")
+	assert_eq(_ship.exterior_builder.get_children().filter(func(n: Node) -> bool: return n is LandingLegs).size(), 1,
+		"one LandingLegs")
+	assert_almost_eq(_ship.stance_depth(), stance, EPS, "it stands as tall")
 
 func test_a_save_loaded_landed_has_its_legs_down_on_the_first_frame():
 	await _scene()

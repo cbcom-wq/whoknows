@@ -70,9 +70,9 @@ var _body: CollisionObject3D
 ## Builds the alcove for the airlock at `at` under `parent`, which must share
 ## `body`'s frame, with its colliders on `body`. Its ramp, if it has one,
 ## reaches a stance plane `stance` metres under the hull's origin (ramp_plan;
-## negative: Ship.stance_depth_of the grid).
+## NAN, not given: Ship.stance_depth_of the grid).
 static func build(parent: Node3D, body: CollisionObject3D, grid: ShipGrid, catalog: BlockCatalog,
-		at: Vector3i, stance := -1.0) -> AirlockAlcove:
+		at: Vector3i, stance := NAN) -> AirlockAlcove:
 	var alcove := AirlockAlcove.new()
 	alcove.coord = at
 	alcove.name = "Alcove_%d_%d_%d" % [at.x, at.y, at.z]
@@ -85,14 +85,16 @@ static func build(parent: Node3D, body: CollisionObject3D, grid: ShipGrid, catal
 ## The landing ramp the outer hatch of the airlock at `at` needs (desert world
 ## phase 0, Task 14): {need: LandingRamp.RAMP, STEP or UP_OR_DOWN; sill: its
 ## height in metres over the stance plane -- where the ship's landing legs put
-## the ground, `stance` metres under the hull's origin (Task 15; negative, the
-## default: Ship.stance_depth_of the layout); length and angle: the ramp's, at
+## the ground, `stance` metres under the hull's origin (Task 15; NAN, the
+## default, is not given: Ship.stance_depth_of the layout. Any number is a
+## stance, a negative one too -- a grid wholly above its origin stands on a
+## plane over it, review I1); length and angle: the ramp's, at
 ## the design slope; through: every block the ramp would pass through, coming
 ## down at that slope; path: every cell it passes through, block or none (the
 ## landing legs keep out of them)}. A ramp is built only when it is needed and
 ## nothing is in its way. Pure: the probe and ship_check print it.
-static func ramp_plan(layout: ShipGrid, at: Vector3i, stance := -1.0) -> Dictionary:
-	if stance < 0.0:
+static func ramp_plan(layout: ShipGrid, at: Vector3i, stance := NAN) -> Dictionary:
+	if is_nan(stance):
 		stance = Ship.stance_depth_of(layout)
 	var normal := AirlockSite.hatch_normal(layout, at)
 	var sill := InteriorBuilder.floor_y(at) - InteriorBuilder.storey_offset(at.y) + stance
@@ -161,7 +163,7 @@ func wall(normal: Vector3i) -> Transform3D:
 	f.origin.y -= InteriorBuilder.storey_offset(coord.y)
 	return f
 
-func _build(body: CollisionObject3D, grid: ShipGrid, stance := -1.0) -> void:
+func _build(body: CollisionObject3D, grid: ShipGrid, stance := NAN) -> void:
 	_body = body
 	var n := Vector3(hatch_normal)
 	var centre := ShipGrid.cell_center(coord)

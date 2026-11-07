@@ -40,20 +40,25 @@ func _initialize() -> void:
 		print("note    %s %s" % [n["code"], n["text"]])
 	# Lift off a world (desert world phase 0): vertical thrust over mass, against
 	# the heaviest planet's pull. The CANNOT_LIFT rule fails it; this shows by how much.
-	var stats := ShipStats.compute(grid, BlockCatalog.load_from_dir("res://data/blocks"))
+	var catalog := BlockCatalog.load_from_dir("res://data/blocks")
+	var stats := ShipStats.compute(grid, catalog)
 	var pull: float = WorldRecipe.GRAVITY[WorldRecipe.Kind.PLANET].y
 	var lift: float = stats.thrust_budget[&"vertical"] / maxf(stats.total_mass_kg, 1.0)
 	print("lift    %.1f m/s2 up, %.2f× a %.0f m/s2 world's pull (needs ×%.1f)" % [
 		lift, lift / pull, pull, ShipRules.LIFT_MARGIN])
 	# Boardable on a world (desert world phase 0, Task 14): the landing ramp each
-	# airlock's outer hatch needs, or why it has none. Not a rule: printed.
+	# airlock's outer hatch needs, or why it has none, measured to where its legs
+	# stand. The NOT_BOARDABLE rule fails one with no way up; this prints the numbers.
+	var stance := Ship.stance_depth_of(grid, catalog)
 	for c: Vector3i in grid.coords():
 		if grid.get_block(c).block_id == AirlockSite.AIRLOCK_ID:
 			var words := "no outer hatch (it cannot cycle)" if AirlockSite.hatch_normal(grid, c) == Vector3i.ZERO \
-				else AirlockAlcove.ramp_words(AirlockAlcove.ramp_plan(grid, c))
+				else AirlockAlcove.ramp_words(AirlockAlcove.ramp_plan(grid, c, stance))
 			print("ramp    airlock %s: %s" % [c, words])
 	# Landing legs (desert world phase 0, Task 15): four, one per quadrant, clear
 	# of every ramp's path and every engine and downward thruster; their feet set
-	# the plane the ramps above are measured to. Not a rule: printed.
-	print("legs    %s" % LandingLegs.plan_words(grid, LandingLegs.plan(grid)))
+	# the plane the ramps above are measured to, deep enough that the lowest
+	# hanging look (a belly turret parked, a flood's housing) clears the ground
+	# by LandingLegs.HANG_CLEAR (the owner, 2026-11-05). FEW_LEGS fails fewer than four; this prints them.
+	print("legs    %s" % LandingLegs.plan_words(grid, LandingLegs.plan(grid, NAN, catalog)))
 	quit(0 if found["rules"].is_empty() else 1)

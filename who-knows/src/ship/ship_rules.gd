@@ -25,6 +25,10 @@ const LIFT_MARGIN := 1.3
 ## first limit was 600, "and see how that goes"; at 600 the worst view fell to
 ## 116 fps, under the 120 floor, so the owner lowered it to 400 (2026-10-09).
 const MOST_BLOCKS := 400
+## Landing legs a ship must stand on: LandingLegs.plan places one per quadrant
+## (desert world spec, phase 0 Task 15), and a ship that fits fewer would rest
+## on its keel and tip.
+const LEGS_WANTED := 4
 ## The validator's issues that name a cell.
 const _CELL_ISSUES: Array[StringName] = [&"ALL_CONNECTED", &"MOUNTS_REACHABLE", &"AIRLOCK_HATCH"]
 const _AXES: Array[String] = ["pitch", "yaw", "roll"]
@@ -60,6 +64,7 @@ static func check(grid: ShipGrid, catalog: BlockCatalog) -> Dictionary:
 			% [w["coord"], w["normal"]], w["coord"]))
 	_check_pieces(grid, catalog, rules)
 	_check_turrets(grid, rules, notes)
+	_check_landing(grid, catalog, rules)
 	_note(grid, catalog, stats, notes)
 	return {"rules": rules, "notes": notes}
 
@@ -251,6 +256,37 @@ static func _check_turrets(grid: ShipGrid, rules: Array, notes: Array) -> void:
 				% [inst.block_id, coord, roundi(cover * 100.0)], coord))
 	if not seen.is_empty():
 		notes.append(item(&"TURRETS", "%d turrets, sky clear: %s" % [seen.size(), ", ".join(seen)]))
+
+## Standing on a world (desert world spec, phase 0 Tasks 14-16): the ship fits
+## its four landing legs, and every airlock's outer hatch can be reached on
+## foot from the ground they stand it on. Both ask the planners the game builds
+## from (LandingLegs.plan, AirlockAlcove.ramp_plan and way_up_for), so the rule
+## and the ship never disagree. The legs are planned once, and the stance read
+## off their feet as Ship.stance_depth_of does: the plan draws the hull off the
+## tree (60-190 ms), so this runs in the tools and tests, never at spawn.
+static func _check_landing(grid: ShipGrid, catalog: BlockCatalog, rules: Array) -> void:
+	var legs := LandingLegs.plan(grid, NAN, catalog)
+	if legs.size() < LEGS_WANTED:
+		rules.append(item(&"FEW_LEGS", "%d of %d landing legs fit: it would rest on its keel and tip (keep the cells under its corners free of engines, turrets, airlocks and ramps)"
+			% [legs.size(), LEGS_WANTED]))
+	var stance := -(legs[0]["foot"] as Vector3).y if not legs.is_empty() else Ship.keel_depth_of(grid)
+	var coords: Array = grid.coords()
+	coords.sort()
+	for coord: Vector3i in coords:
+		if grid.get_block(coord).block_id != AirlockSite.AIRLOCK_ID or AirlockSite.hatch_normal(grid, coord) == Vector3i.ZERO:
+			continue
+		var found: Variant = boarding_finding(coord, AirlockAlcove.ramp_plan(grid, coord, stance))
+		if found != null:
+			rules.append(found)
+
+## The NOT_BOARDABLE finding for the airlock at `at` whose ramp_plan is `plan`,
+## or null when AirlockAlcove.way_up_for says a step or a ramp gets you up.
+## The words are ramp_words', the probe's and ship_check's.
+static func boarding_finding(at: Vector3i, plan: Dictionary) -> Variant:
+	if AirlockAlcove.way_up_for(plan) != AirlockAlcove.NONE:
+		return null
+	return item(&"NOT_BOARDABLE", "the outer hatch of the airlock at %s can't be reached on foot on a world: %s"
+		% [at, AirlockAlcove.ramp_words(plan)], at)
 
 ## Worth knowing, never failing: rcs whose puffs are hidden, how it flies, and
 ## its size.

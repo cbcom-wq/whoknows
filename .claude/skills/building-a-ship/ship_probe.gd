@@ -587,20 +587,27 @@ func _run(scene: Node) -> void:
 	# hatch refuses the step out on a world ("No ramp · 4 m drop").
 	for coord: Vector3i in ship.airlocks:
 		var lock: Airlock = ship.airlocks[coord]
-		var plan := AirlockAlcove.ramp_plan(ship.grid, coord)
+		var plan := AirlockAlcove.ramp_plan(ship.grid, coord, ship.stance_depth())
 		var wanted: bool = AirlockAlcove.way_up_for(plan) == LandingRamp.RAMP
 		var built := is_instance_valid(lock.alcove) and lock.alcove.ramp != null
 		print("ramp    airlock %s: %s%s" % [coord, AirlockAlcove.ramp_words(plan),
 			"" if built == wanted else ("  <-- NOT BUILT" if wanted else "  <-- BUILT IN THE WAY")])
 	# Landing legs (desert world phase 0, Task 15): the plan's four, built on the
 	# hull, stowed in space with their colliders off; the ramps above are
-	# measured to their feet (Ship.stance_depth).
-	var leg_plan := LandingLegs.plan(ship.grid)
+	# measured to their feet (Ship.stance_depth). The owner's rule (2026-11-05):
+	# the feet stand far enough under the keel that its lowest hanging look --
+	# a belly turret parked, a flood's housing -- clears the ground by
+	# LandingLegs.HANG_CLEAR, so a hanging part costs ramp, never placement.
+	var leg_plan := ship.exterior_builder.leg_plan
 	var built_legs := ship.exterior_builder.legs()
 	var legs_ok := built_legs != null and built_legs.legs.size() == leg_plan.size() and built_legs.is_stowed() \
 		and built_legs.colliders.all(func(c: CollisionShape3D) -> bool: return c.disabled)
 	print("legs    %s, stance %.2f m%s" % [LandingLegs.plan_words(ship.grid, leg_plan), ship.stance_depth(),
 		"" if legs_ok or leg_plan.is_empty() else "  <-- NOT BUILT AS PLANNED"])
+	if not leg_plan.is_empty():
+		var hang := ship.stance_depth() + ExteriorBuilder.lowest_look(ship.grid, ship.catalog)
+		print("hang    its lowest look stands %.2f m over the ground, landed (wants %.2f)%s" % [hang,
+			LandingLegs.HANG_CLEAR, "" if hang >= LandingLegs.HANG_CLEAR - 0.005 else "  <-- TOUCHES THE GROUND"])
 	# The skin (ship exterior spec §3): every interior window must have one outside
 	# and none may be UNMATCHED; the lights are the generator's, 5 floods and 2
 	# forward on the starter.
@@ -610,6 +617,22 @@ func _run(scene: Node) -> void:
 	print("windows %d outside for %d inside%s" % [hull.windows.size(), hull.wanted,
 		"" if hull.unmatched.is_empty() else "  <-- UNMATCHED %s" % [hull.unmatched]])
 	print("lights  %d floods, %d forward" % [ship.lights.spots(&"flood").size(), ship.lights.spots(&"forward").size()])
+	# Your own hull through your windows (2026-11-03): the skin beyond the cabin
+	# is seen from inside, and none of it may lie in a cabin cell
+	# (HullLayout.cabin), where it would stand between the eye and the glass.
+	var seen_skin := ship.exterior_builder.skin().get_node("Hull")
+	var in_cabin := {}
+	var seen_vertices := 0
+	for mi: MeshInstance3D in seen_skin.find_children("*", "MeshInstance3D", true, false):
+		for si in mi.mesh.get_surface_count():
+			for v: Vector3 in mi.mesh.surface_get_arrays(si)[Mesh.ARRAY_VERTEX]:
+				seen_vertices += 1
+				var c := Vector3i((v / ShipGrid.CELL_SIZE).round())
+				var off := (v - ShipGrid.cell_center(c)).abs()
+				if hull.cabin.has(c) and maxf(off.x, maxf(off.y, off.z)) < ShipGrid.CELL_SIZE * 0.5 - 0.01:
+					in_cabin[c] = true
+	print("seen    %d skin vertices seen through the windows; %d cabin cells (and the blocks over them) left clear%s" % [
+		seen_vertices, hull.cabin.size(), "" if in_cabin.is_empty() else "  <-- IN THE CABIN %s" % [in_cabin.keys()]])
 	# The damage tint (health and damage spec §9): every tinted skin vertex is
 	# one cell's, so a hurt block never leaves a piece of itself clean.
 	var owned := {}   # ArrayMesh -> vertices claimed

@@ -168,17 +168,19 @@ func set_own(on: bool) -> void:
 	own = on
 	_apply_own()
 
-## Every piece the builders made for the own layer alone goes on the layer
-## `own` says; pieces on both layers stay on both. After every rebuild too: the
-## builders always make the own layer.
+## Every piece the builders made for the own layers alone (the own hull's, and
+## the part of it seen from inside, ExteriorBuilder.SEEN_INSIDE_LAYER) goes back
+## to those layers when `own`, and to layer 1 when not; pieces also on layer 1
+## stay as they are. After every rebuild too: the builders always make the own
+## layers. OWN_ONLY holds the layers a piece was made on.
 func _apply_own() -> void:
 	interior.visible = own
 	for node in exterior.find_children("*", "GeometryInstance3D", true, false):
 		var g := node as GeometryInstance3D
-		if g.layers == ExteriorBuilder.OWN_HULL_LAYER:
-			g.set_meta(OWN_ONLY, true)
+		if not g.has_meta(OWN_ONLY) and g.layers & ExteriorBuilder.OWN_HULL_LAYER and not g.layers & 1:
+			g.set_meta(OWN_ONLY, g.layers)
 		if g.has_meta(OWN_ONLY):
-			g.layers = ExteriorBuilder.OWN_HULL_LAYER if own else 1
+			g.layers = int(g.get_meta(OWN_ONLY)) if own else 1
 
 ## Where you wake after blacking out (health and damage spec §7.2), best
 ## first, in the world: the bunk room's cells, then the rest by how near they

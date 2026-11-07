@@ -50,14 +50,17 @@ Do these in order. Each one names the check that proves it.
      walkable deck straight through on the opposite side, not a room. Its hull alcove gets the
      hose's reel and nozzle by itself (`AirlockAlcove.reel`): there is nothing to place.
    - **boardable on a world:** every horizontal outer hatch over 0.45 m (`Airlock.HATCH_STEP`)
-     above the ground it stands on (its legs' feet, 0.4 m under the keel: `Ship.stance_depth`)
+     above the ground it stands on (its legs' feet, at least 0.4 m under the keel and 0.1 m under
+     its lowest hanging look: `Ship.stance_depth`)
      has a ramp; none faces up or down. The ramp builds itself
      (`AirlockAlcove.ramp_plan`, `LandingRamp`): straight out of the hatch at 30°, `sill / sin 30°`
      long, so **keep the cells it comes down through empty**, below the outside cell too. The
      probe's and `ship_check`'s `ramp` line per airlock says `step`, `ramp: <sill> m, <length> m
      at <angle>°`, or `NOT BOARDABLE ON A WORLD` with the blocks in the way. A hatch with no way
      up (`AirlockAlcove.way_up_for(plan) == AirlockAlcove.NONE`) refuses the step out on a world
-     (`No ramp · 4 m drop`): the ship can still land, but nobody leaves it there.
+     (`No ramp · 4 m drop`): the ship can still land, but nobody leaves it there. **`NOT_BOARDABLE`
+     and `FEW_LEGS` are rules now:** `ship_check` exits 1 on either, and `test_ship_catalog` fails
+     the ship. Ramps run from about 4.9 m (Lamplighter) to 10.1 m (Warden): read your own `ramp` line.
    - **four landing legs** place clear of ramps and thrusters; `ship_check` prints `legs 4`.
      They place themselves (`LandingLegs.plan`, desert world Task 15): one per quadrant, as far
      out toward each corner as a mount allows, mirrored when the hull is. A mount is a cell with
@@ -65,8 +68,14 @@ Do these in order. Each one names the check that proves it.
      turret, whose leg (at most 4 m) hangs through no block, no ramp's path or a cell beside it,
      and nowhere under or beside an engine or an RCS block whose exhaust faces down. So **leave
      such cells under the hull's outer edge**, fore and aft, port and starboard. Read the line:
-     `legs    4: fore port (…) 2.40 m, …; feet … m under the origin`; `ONLY n FIT` means the ship
-     stands crooked or on its keel.
+     `legs    4: fore port (…) 2.98 m, …; feet … m under the origin (keel … + …)`; `ONLY n FIT`
+     means the ship stands crooked or on its keel.
+   - **its lowest hanging look clears the sand by 0.1 m** (the owner's rule, 2026-11-05): the legs
+     lengthen by themselves until it does (`LandingLegs.stance_for`, `HANG_CLEAR`), so a belly
+     turret or a flood's housing costs ramp length, never placement. The `legs` line says why it
+     stands where it does (`: its lowest look 0.88 under the keel, cleared by 0.10`), and the
+     probe's `hang` line must not say `TOUCHES THE GROUND`. A deeper stance lengthens every ramp:
+     read the `ramp` line again after adding anything under the belly.
    - room blocks (`bunk_room`, `galley`...) each touching walkable space for their doorway.
    - **the maintenance droid's needs** (NPC foundation spec §14), on any ship with 12 or more
      walkable cells: a `closet` for its dock (otherwise it docks in the walkable cell farthest
@@ -247,10 +256,13 @@ Do these in order. Each one names the check that proves it.
      build, the QE refill button under it once it is lifted, and whether the button fills the
      store (`NOT FOUND`, `NOT FULL`). It writes `probe_toilet_shut.png` and
      `probe_toilet_open.png`;
+   - **your own hull through your windows:** the `seen` line counts the skin seen from inside and
+     flags any of it `IN THE CABIN` (a cabin cell, or the block over one), where it would stand
+     between the eye and the glass;
    - the droid's dock and its jobs, flagging any `UNREACHABLE`;
    - **the turrets:** a `turret` line each (`turret  Turret_0_2_0 turret_light at (0, 2, 0), sky
      100%`), or `turret  none`. Read the sky: under 25% is `TURRET_BLIND`, and the Warden's
-     flank pair at 92% is the lowest on a library ship;
+     flank pair at 91% is the lowest on a library ship;
    - **the face:** `face    best (0.0, 0.0, -1.0), 2 of 2 bear; flown (0.0, -0.71, -0.71), 1 bear`:
      `Broadside.best_face`, then `ShipPilot.sure_face`, the one a pilot flies. The second count
      is what a ship fights with. The three library ships' are in `reference.md`;
@@ -264,7 +276,9 @@ Do these in order. Each one names the check that proves it.
 10. **Render and show the owner:** eye-height (1.6 m) views of the bridge, the seated view, the
    corridor, each room and the exterior, plus an outside view with each RCS axis firing (every
    block's puffs should show). Cycle the airlock both ways, look out of the windows, and hold
-   ≥120 fps at 1280×720. **The hull views** (the probe writes them): two quarters (bow port,
+   ≥120 fps at 1280×720. **Look out of every seat's glass at your own ship:** the hull beyond the
+   cabin shows (the bow under a turret, the flanks past a band), and nothing of it blocks the
+   glass. **The hull views** (the probe writes them): two quarters (bow port,
    stern starboard), the profile, above and below, fill-lit to judge the shape and **dark with the floods, the forward
    lights and both on** to judge the lights; and the ship **by a big rock's night side**, nose on
    with the seat's view and belly down over it. The worst view is seated by the rock with both
@@ -429,7 +443,7 @@ thrust.
 | A windowed probe counting rendered frames as game time | `hose_render.gd` held the trigger for 120 frames to draw a chunk in: with vsync off the window renders about 280 fps against 60 physics ticks, so that was 0.4 s and the chunk never arrived (and a lambda's assignment to a captured local is lost, it captures by value) | Drive physics-time things from `physics_frame`, wait on a condition with a limit in seconds, and pass results out through a member |
 | Adding a turret's own mass to the old total | A turret replaces a cell, so the Warden's four dorsal and ventral lights came out 0.5 t over their fairing halves, its heavy 1.7 t over its half, and its two flank lights 0.2 t *under* the hull plates they replaced. The starter's pitch imbalance *fell* from 4.91% to 4.77%, because the ventral turret's mass sits below the thrust line and more than answers the dorsal one's above it | Read the figures from `ship_check` after the swap. Put a turret on the side the balance needs |
 | Arming a ship that has no power to spare | The Warden is at 97.9 of 108.0 MW (10.3% spare, about 0.3 MW above the `POWER_MARGIN` rule): the six lights draw 0.1 MW each, the heavy 0.3, and the station what the crew station did | A turret's draw is small on purpose (every shot is paid in QE, 1 a light bolt, 15 a heavy). Count it before you add one; a second `quantum_core` if the margin goes |
-| Guessing a turret's orientation | Each face is reached by four orientations, and the rolls of one face are not the next face's: a guess puts a turret on the wrong side, or buries it | Call `SkyMap.normal_of(o)` and read the `TURRETS` note; `reference.md` has the table the ships use. The Warden's flank pair sees 92%: the armour plate and slopes either side stand proud of it |
+| Guessing a turret's orientation | Each face is reached by four orientations, and the rolls of one face are not the next face's: a guess puts a turret on the wrong side, or buries it | Call `SkyMap.normal_of(o)` and read the `TURRETS` note; `reference.md` has the table the ships use. The Warden's flank pair sees 91%: the armour plate and slopes either side stand proud of it |
 | `set_anchors_preset(PRESET_FULL_RECT)` for a full-screen `Control` | It sets the anchors only and leaves a zero-size control. `GunSight` drew its cross and status line at the screen's corner; its barrel and lead marks were right, because they come from `unproject_position` in screen pixels | `set_anchors_and_offsets_preset`, and a test that the control's size equals the viewport's (`test_weapons_job.gd`). Render the sight; its test passed with the cross in the corner |
 | Measuring bolts with a rock dead ahead | The world's rocks are fixed and one in the line takes every bolt: the first combat runs read 0% from 1000 m out, and the heavy missed all five at 2 km | `combat_probe.gd` turns the Warden to the first heading with no rock within 3.5 km (five rays each, 12 headings; it picks 30°) before it counts |
 | One target dead ahead in a combat run | The dorsal and ventral turrets have nothing in their half-sky and read `NO ARC`: 0 shots, so the fps of "every gun firing" was a baseline | The probe lists two starters, one up and starboard and one down and port, so every turret has one. `NO ARC` means the turret engages nothing; a turret on a hostile is `FIRING` or `TRACKING` |
@@ -453,6 +467,8 @@ thrust.
 | A `static var` in `flight_test.gd` | Godot 4.5.1 crashed at exit (0xC0000005 after the leak report) on every `fleet_play.gd`, though the run was ALL OK | A tree meta (`back_to_save`). Watch the exit code |
 | Reading fps on a busy machine | The 2026-11-02 probe read a second ship 300 m off at 104 (Lamplighter) and 109 (Warden), taken for a regression. It was the machine: browsers, then a Vite dev server on 2 cores. A fixed `sin()` loop timed beside the game slowed with the frame rate (2.05 ms at 118 fps, 2.47 at 90), bodies and pairs held, and `main` dipped the same way | Before a fps reading, check total CPU (`typeperf "\Processor(_Total)\% Processor Time"`) is a few percent. A one-ship reading under the ship's usual figure means the run is void. Only then compare branches, interleaved |
 | A knock on the avatar's head | Seated, `CameraDirector` hangs the camera from the seat's eye, so a head shake never reaches the view | The knock is on the camera (`Avatar.knock`, rotation.z and h/v offset); the gun camera has its own (`WeaponsJob.knock`) |
+| A turret drawn on layer 1 while its own hull was hidden from inside | From the Warden's bridge the owner saw the heavy turret float on nothing (2026-11-03): every window left `OWN_HULL_LAYER` out, but turrets are on layer 1 | The skin beyond the cabin is on `ExteriorBuilder.SEEN_INSIDE_LAYER` too, which every window shows; only what wraps the cabin (`HullLayout.wraps_cabin`), the windows, lenses and alcoves stay own-only. Anything new outside the hull belongs on one side or the other: in front of the glass, own-only |
+| Taking the cabin's cells as the room in hull space | Drawing the hull through the Warden's glass showed the backs of its brow and roof fairings across the top: a 2.6 m storey reaches 0.6 m into the 2 m cell above, so the top of every window looks out through the block over it | `HullLayout.cabin` holds the block over each cabin cell too. Render a seated view through the glass, not only the `seen` line |
 | Projecting a world point to the screen from the helm | The eye camera is in the interior, 5 km down, so the point lands nowhere near the ship you see | Go through `aboard.canopy_camera`, and draw cockpit marks on `aboard.canopy_overlay`, not on a CanvasLayer |
 | A hatch 2.05 m over the ground, tested by putting you in it | Landed on a world, the starter's sill is 2.05 m up (the keel row under the cabin) and a jump peaks at 0.89 m: nobody could get back in. The airlock world tests stood the avatar in the room, and `landing_play` put it in the doorway by hand when the walk-in failed, so the tests passed with no way in | Every horizontal outer hatch over `HATCH_STEP` gets a `LandingRamp` (desert world Task 14). Prove boarding from the ground on your feet, W held (`test_from_the_ramp_s_foot_you_walk_up_and_in`, `landing_play` step 7), never by placing the avatar; a fallback that carries a probe on must count as a failure |
 | A block under the outside cell | The Warden's sill was 4.05 m up and its ramp would have come down through its own RCS block at (-4, -1, 2), so it had none and could not be boarded on a world. As first built the hatch still let you out, a 4 m drop with no way back (final review I4). The ship designer moved the pods' forward retros two cells forward (4f27cde), and it has its ramp now | `ramp_plan` names the blocks in the way and the alcove builds no ramp; `way_up_for` reads it as `NONE` and `Airlock.world_refusal` says `No ramp · 4 m drop` (`test_a_landed_warden_with_its_ramp_s_path_blocked_refuses_the_step_out_onto_a_drop` puts a hull block back in its path). Keep the ramp's path clear when you draw a ship; a library ship changes through the ship designer, never in passing |
@@ -468,7 +484,10 @@ thrust.
 | Freezing strays on any rest | A stray that came to rest on a landed hull or the ramp froze there, and hung in the air after liftoff; one saved on the ground loaded frozen wherever the ledger put it, and a stray below the ground stayed there (final review I3) | `StrayField` freezes only on terrain: a ray down under the stray must hit `BodyProxy.LAYER` first, within its half-height + `REST_REACH` 0.3 m. Below the ground by more than `WorldSurface.FLOOR_SLACK` it is put on it first (the analytic ground and the collider part by up to that on a crest, so a thin plate resting on the collider was lifted off it: Task 15 N2, `test_a_thin_stray_on_a_crest_rests_on_the_collider_not_over_it`); loaded, it freezes only within `ON_GROUND` 0.25 m of the ground, else it loads live and falls |
 | A climb that never lifts off | A pilot's velocity hold upward left a landed ship landed: only the stick's translation counted as translating (final review M1). With that fixed the monitor let go, but `FlightComputer._resting_on_ground` still asked only the stick, so the gravity hold stayed off and the ship sat TOUCHING, 0.02 m down, for good (Task 15 N1) | `LandingMonitor.translating` also counts a hold climbing over `HOLD_LIFTS` 0.5 m/s along up, and it is the one home of "asked to move": `_resting_on_ground` calls it too (`test_a_landed_ship_given_an_upward_hold_lifts_off`, `test_a_landed_starter_given_a_1_m_s_climb_rises_off_within_3_s`) |
 | Landing on the keel strip | The starter landed on its keel strip and read as floating: its lowest cells are one 2 m row under the cabin, so from the ground the 10 m wide hull hung over the sand on nothing, with daylight under both flanks and the stern | Four `LandingLegs`, one per quadrant, stand the ship 0.4 m (`CLEARANCE`) under its keel's plane; the flight computer, the ramps and the touchdown all measure from that stance plane (`Ship.stance_depth`). Read the `legs` line of `ship_check` and render the landed ship from 25 m at eye height |
-| A belly turret under the stance plane | The starter's ventral turret is a cell on the keel row and its dome stands 0.755 m out of its face, so on 0.4 m legs its look sinks into flat sand (its meshes' lowest corner is 0.48 m under the feet, `landing_play` step 3). Its collider is the cell's and clears the ground by 0.39 m, so nothing hits; it only looks buried | Not fixed: `CLEARANCE` is the brief's 0.4 m, and clearing the dome by 0.3 m needs about 1.1 m. Owner's call: longer legs, or no turret on the keel row. `test_landing_legs` prints the turret look's lowest point |
+| A belly turret under the stance plane | The starter's ventral turret is a cell on the keel row; parked, its barrels reach 0.88 m out of its face (the dome 0.755), so on 0.4 m legs its look sank 0.48 m into flat sand. The flood housings on the belly band hang 0.4 m under the keel's plane too, so they only touched it. The colliders cleared the ground by 0.39 m, so nothing hit; it only looked buried (Task 15 review) | The owner's rule (2026-11-05): the stance is `max(keel + CLEARANCE, -lowest look + HANG_CLEAR)`, the lowest look worked out from the blueprint (`ExteriorBuilder.lowest_look`: the hull dressing drawn off the tree, and each turret parked) and measured from the skin it drew on a rebuild. The starter and the Warden stand 0.98 m under their keels and their ramps grow by 1.2 m. `test_landed_every_look_but_its_legs_and_ramp_stands_clear_of_the_ground`; `landing_play` step 3. A turret aimed by hand straight down reaches 1.6 m and can still touch the sand |
+| A "not given" value a real stance can take | `AirlockAlcove.ramp_plan(…, stance := -1.0)` took a negative stance as "not given" and asked `Ship.stance_depth_of`, which plans the legs, which ask `ramp_plan` for the ramps' paths: a grid wholly above y = 0 stands on a plane above its origin, a negative stance, and recursed until the stack ran out (Task 15 review I1) | `NAN` is "not given" (`is_nan`), and `LandingLegs.plan` always passes its own stance. `test_a_grid_wholly_above_y_0_with_an_airlock_plans_legs_and_a_ramp_without_recursion` |
+| Legs placed before the ship knew where it was | `_rebuild_everything` synced the legs before the stats set the flight computer's stance, and a save or spawn places the hull and wires its gravity after `set_grid`: a ship loaded hovering 20 m up built them stowed, then folded them out in front of you (Task 15 review M3) | `_sync_legs` runs after `_apply_stats`, and leaves a new grid's legs as built until the first tick with gravity or a restored landing, which places them at once (`_legs_placed`). `test_a_ship_loaded_hovering_under_40_m_has_its_legs_down_on_the_first_frame` |
+| Keying gear to the side a hull was built on | Legs never came down on a hostile hull, so a hostile you boarded and flew to a world landed on its keel (Task 15 review M4; every ship is usable) | Keyed to who flies it now: up only while a hostile pilot is on (`Ship._flown_by_a_hostile`). `test_a_hostile_hull_its_pilot_does_not_fly_puts_them_down` |
 | The steady hold puffed as thrust | In a gravity well the assist's hover hold is a large constant RCS force. Shown as puffs, it drew a white blob under every hovering ship, and its world-space puffs never died | Show only the change: `FlightComputer.hold_force_local` is taken off the shown push, keeping `RcsShow.HOLD_SHOW` (0) of it (`RcsShow.shown_force`). The pilot's and the assist's changes still puff. Render a hovering ship from below |
 | A climb or stop predictor that ignores the air | Near thick ground drag bleeds speed, so a predictor without it undershoots, worst on low power (brake halved): `landing_play` step 9 settled 280.7 m for 300 | Count the drag: `landing_play`'s climb uses `ln(1 + k·v²/b) / (2k)` with `k` = `DRAG_K` × air. Any test that flies a long path in air needs it, or a start lower down (`test_system_scene`'s 30° glide starts at 120 m, not 300) |
 | `Avatar.enter_suit` while the director still has you seated | A probe that did it left the HUD on the suit's readout for every later stage | Stand up through the director first (`stand_now()`), then step out |
@@ -487,12 +506,15 @@ thrust.
   on four fixed landing legs (desert world Task 15), you step out and walk, and a high hatch gets a
   landing ramp. The legs do not give or level: all four are one length, so the ship tilts with the
   ground, and a hard landing is a warning and a thud with no damage yet. A ship that touches down
-  before its legs are fully down (faster than about 10 m/s from 40 m) lands on its keel and its
-  legs finish into the ground under it.
-- **Boardability is not a rule.** Every library ship is boardable on a world now (the Warden
-  since its forward retros moved, 4f27cde), and four legs fit on each, but both are printed lines
-  (`ramp`, `legs`), not `ShipRules` rules: nothing fails a ship that cannot be boarded or stands on
-  its keel.
+  before its legs are fully down (coming down faster than about 27 m/s from 40 m: they take 1.5 s)
+  lands on its keel and its legs finish into the ground under it. A ship that loses all four
+  mounts while landed stays frozen where it stood, its keel the stance's height off the sand,
+  until it lifts off.
+- **Boardability is a rule now** (Task 16). Every library ship is boardable on a world (the Warden
+  since its forward retros moved, 4f27cde) and stands on four legs, and `ShipRules` fails a ship
+  that does not: `NOT_BOARDABLE` and `FEW_LEGS`. The `ramp` and `legs` lines still print the
+  numbers. The rules plan the legs, which draws the hull (60-190 ms): they run in `ship_check`,
+  the probe and the catalog test, never at spawn.
 
 - **Multi-storey interiors.** A `ladder` passes the validator, but every walkable cell still gets
   a solid floor and ceiling, so you can't climb. **Multi-level ships** can be written and checked

@@ -9,6 +9,10 @@ extends RefCounted
 ## Each kit gets a child node of `root`, so their merged meshes keep their
 ## batch names: Skin/Hull/DressingHull is the plating, and so on.
 ##
+## The skin is two kits (2026-11-03): Hull, seen through your own windows too
+## (ExteriorBuilder.SEEN_INSIDE_LAYER), and Cabin, the pieces that wrap the
+## cabin (HullLayout.wraps_cabin), on the own layer alone, as the windows are.
+##
 ## Every piece belongs to one cell, and the dressing notes which vertices of
 ## which mesh each cell's pieces are, so ExteriorBuilder can tint one cell for
 ## its damage without dressing anything again (health and damage spec §9).
@@ -25,11 +29,15 @@ const TINTED: Array[InteriorKit.Batch] = [InteriorKit.Batch.HULL, InteriorKit.Ba
 ## (Vector3i -> [[ArrayMesh, first vertex, end vertex], ...]), and those
 ## meshes' `surfaces` (ArrayMesh -> its surface arrays), to recolour them.
 static func build(layout: HullLayout, root: Node3D) -> Dictionary:
-	var skin := _kit(root, "Hull")
-	skin.materials = {InteriorKit.Batch.HULL: HullMaterials.livery(), InteriorKit.Batch.SOLID: HullMaterials.trim()}
-	skin.keep_arrays = true
+	var seen := _kit(root, "Hull")
+	seen.layer = ExteriorBuilder.OWN_HULL_LAYER | ExteriorBuilder.SEEN_INSIDE_LAYER
+	var wrap := _kit(root, "Cabin")
+	for k: InteriorKit in [seen, wrap]:
+		k.materials = {InteriorKit.Batch.HULL: HullMaterials.livery(), InteriorKit.Batch.SOLID: HullMaterials.trim()}
+		k.keep_arrays = true
 	var marks := {}   # Vector3i -> [[kit, batch, from, to], ...]
 	for p in layout.plates:
+		var skin := _skin_for(layout, p, seen, wrap)
 		var lo: Vector2 = p["lo"]
 		var hi: Vector2 = p["hi"]
 		var mid := (lo + hi) * 0.5
@@ -38,6 +46,7 @@ static func build(layout: HullLayout, root: Node3D) -> Dictionary:
 			hi - lo)
 		_mark(marks, skin, p["coord"], at)
 	for e in layout.edges:
+		var skin := _skin_for(layout, e, seen, wrap)
 		var f := HullLayout.edge_frame(e)
 		var span := HullLayout.edge_span(e)
 		var ends: Array = e["ends"]
@@ -47,15 +56,18 @@ static func build(layout: HullLayout, root: Node3D) -> Dictionary:
 			HullProps.running_strip(skin, f, span.x, span.y)
 		_mark(marks, skin, e["coord"], at)
 	for c in layout.corners:
+		var skin := _skin_for(layout, c, seen, wrap)
 		var at := _counts(skin)
 		HullProps.corner_facet(skin, HullLayout.corner_frame(c))
 		_mark(marks, skin, c["coord"], at)
 	for fc in layout.facets:
+		var skin := _skin_for(layout, fc, seen, wrap)
 		var face := HullLayout.facet_face(fc)
 		var at := _counts(skin)
 		HullProps.facet(skin, HullLayout.cell_frame(fc["coord"], fc["orientation"]), face["points"], face["normal"])
 		_mark(marks, skin, fc["coord"], at)
 	for n in layout.nozzles:
+		var skin := _skin_for(layout, n, seen, wrap)
 		var f := HullLayout.face_frame(n["coord"], n["normal"])
 		var at := _counts(skin)
 		if n["kind"] == &"thruster":
@@ -75,6 +87,7 @@ static func build(layout: HullLayout, root: Node3D) -> Dictionary:
 		var aim: Vector3 = m["aim"]
 		var up := Vector3.FORWARD if absf(aim.dot(Vector3.UP)) > 0.9 else Vector3.UP
 		var f := Transform3D(Basis.looking_at(-aim, up), m["position"])
+		var skin := _skin_for(layout, m, seen, wrap)
 		var at := _counts(skin)
 		if group == HullLayout.FLOOD:
 			HullProps.flood_fixture(skin, lens_kits[group], f)
@@ -83,12 +96,13 @@ static func build(layout: HullLayout, root: Node3D) -> Dictionary:
 		_mark(marks, skin, m["coord"], at)
 	var meshes: Array[Mesh] = []
 	var committed := {}   # kit -> {Batch: MeshInstance3D}
-	committed[skin] = _by_batch(skin.commit())
-	for mi: MeshInstance3D in committed[skin].values():
-		if mi.name == InteriorKit.BATCH_NAMES[InteriorKit.Batch.HULL] \
-				or mi.name == InteriorKit.BATCH_NAMES[InteriorKit.Batch.SOLID]:
-			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-			meshes.append(mi.mesh)
+	for skin: InteriorKit in [seen, wrap]:
+		committed[skin] = _by_batch(skin.commit())
+		for mi: MeshInstance3D in committed[skin].values():
+			if mi.name == InteriorKit.BATCH_NAMES[InteriorKit.Batch.HULL] \
+					or mi.name == InteriorKit.BATCH_NAMES[InteriorKit.Batch.SOLID]:
+				mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+				meshes.append(mi.mesh)
 	var lenses := {}
 	for group: StringName in lens_kits:
 		var lens: MeshInstance3D = lens_kits[group].commit()[0]
@@ -125,12 +139,17 @@ static func build(layout: HullLayout, root: Node3D) -> Dictionary:
 			runs.append([committed[run[0]][run[1]].mesh, run[2], run[3]])
 		spans[coord] = runs
 	var surfaces := {}
-	for kit: InteriorKit in [skin, glazing]:
+	for kit: InteriorKit in [seen, wrap, glazing]:
 		for batch in TINTED:
 			if committed[kit].has(batch):
 				surfaces[committed[kit][batch].mesh] = kit.arrays[batch]
 	return {"meshes": meshes, "lenses": lenses, "window_glow": window_glow, "spans": spans,
 		"surfaces": surfaces}
+
+## The skin kit a record's piece goes in: `wrap` if it wraps the cabin, so
+## your own windows leave it out; `seen` otherwise.
+static func _skin_for(layout: HullLayout, record: Dictionary, seen: InteriorKit, wrap: InteriorKit) -> InteriorKit:
+	return wrap if layout.wraps_cabin(record["coord"], layout.faces_of(record)) else seen
 
 ## How many vertices each TINTED batch of `kit` holds now.
 static func _counts(kit: InteriorKit) -> PackedInt32Array:

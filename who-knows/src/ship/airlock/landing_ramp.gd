@@ -4,14 +4,15 @@ extends Node3D
 ## The landing ramp (desert world phase 0, Task 14; the owner's decision,
 ## 2026-11-04): a chunky boarding ramp that comes down under an airlock's
 ## outer hatch when the ship lands on a world, and folds away when it lifts
-## off. A landed starter's sill stands 2.45 m over the ground and a jump peaks
+## off. A landed starter's sill stands 3.03 m over the ground and a jump peaks
 ## at 0.89 m, so without it you could step out of a ship and never walk back in
 ## (CLAUDE.md: every ship is usable).
 ##
 ## Every height here is measured from the stance plane: the ground a landed
-## ship stands on, its landing legs' feet (Task 15; Ship.stance_depth), 0.4 m
-## under its keel's plane. On its legs the starter's sill is 2.45 m up and its
-## ramp 4.9 m long. A ship with no legs stands on its keel's plane.
+## ship stands on, its landing legs' feet (Task 15; Ship.stance_depth), at
+## least 0.4 m under its keel's plane and 0.1 m under its lowest hanging look
+## (LandingLegs.stance_for). On its legs the starter's sill is 3.03 m up and
+## its ramp 6.07 m long. A ship with no legs stands on its keel's plane.
 ##
 ## AirlockAlcove builds one under each outer hatch that needs one and has room
 ## for it (need(), AirlockAlcove.ramp_plan and way_up_for: the one home of
