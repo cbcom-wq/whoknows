@@ -66,6 +66,18 @@ const EYE := 1.6
 const RING_SEEDS := 2000
 const RING_CLEAR := 100.0
 
+## The probe runs in a window, and seated the mouse is the pilot's stick, which
+## stays where it is left (PilotStick): one nudge of a real mouse latched it
+## and tumbled the starter through descent_render's hover and landing
+## (2026-11-06). Nothing the probe does needs the mouse -- it flies through the
+## input actions and keys -- so every mouse event is taken here, first, before
+## the game hears it. (An action bound to a mouse button and polled still sees
+## a real click: the input singleton updates before any node.)
+class MouseShield extends Node:
+	func _input(event: InputEvent) -> void:
+		if event is InputEventMouse:
+			get_viewport().set_input_as_handled()
+
 var _out := ""
 var _fails := 0
 var _scene: Node
@@ -109,6 +121,11 @@ func _initialize() -> void:
 		# The scene reads a seed only from a save: set it before it is ready.
 		(_scene.get_node("AsteroidStream") as AsteroidStream).seed = _ring_seed
 	root.add_child(_scene)
+	# After the scene, so its _input comes first: a hand on the mouse never
+	# reaches the game (MouseShield).
+	var shield := MouseShield.new()
+	shield.name = "ProbeMouseShield"
+	root.add_child(shield)
 	# A script error mid-run stops _run without quitting: never hang.
 	create_timer(TIME_LIMIT).timeout.connect(func() -> void:
 		_let_go()
@@ -291,6 +308,7 @@ func _levels() -> void:
 	_check(level_at >= 0.0 and level_at <= 5.0 and absf(series[series.size() - 1]) < 2.0,
 		"2 tilted %.0f deg at %.0f m, stick centred: under 2 deg after %.1f s (within 5); every 0.5 s %s; lowest %.2f deg" % [
 		TILT, LEVEL_AT, level_at, _degrees(series), lowest])
+	_check_stick(_starter, "2")
 
 ## The controller's check 2: levelling settles on the heaviest library ship.
 func _big_ship_levels() -> void:
@@ -371,6 +389,7 @@ func _lands() -> void:
 		"3 down at %.2f m/s over the last 10 m (%.2f at touchdown): LANDED %.1f s after touchdown (within 10), tilt %.1f deg, frozen %s" % [
 		mean, touch, took, rad_to_deg(landing.tilt()), _starter.exterior.freeze])
 	_check(hard.is_empty(), "3 no hard landing (%s)" % ("none said" if hard.is_empty() else "said at %s m/s" % str(hard)))
+	_check_stick(_starter, "3")
 	var lock: Airlock = _starter.airlocks.values()[0]
 	await _ramp_comes_down(lock, landed_at)
 	await _frames(5)
@@ -1244,6 +1263,13 @@ func _stick_y(s: float) -> void:
 func _let_go() -> void:
 	for action: StringName in [&"move_forward", &"sprint", &"crouch"]:
 		Input.action_release(action)
+
+## Hands off, the pilot's stick is centred: nothing deflected it (MouseShield),
+## so a tilt or a tumble at this step is the flight's own.
+func _check_stick(ship: Ship, step: String) -> void:
+	var stick := ship.pilot.stick
+	_check(stick.is_centred(), "%s the pilot's stick is centred, no mouse reaching the probe (offset %.3f, %.3f)" % [
+		step, stick.offset.x, stick.offset.y])
 
 ## You to `ship`'s helm: stood on its deck by the helm, then into the seat.
 func _sit(ship: Ship) -> void:

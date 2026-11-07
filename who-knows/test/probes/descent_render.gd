@@ -433,6 +433,7 @@ func _hover_puffs() -> void:
 		if k == "hover_puffs_0":
 			_check(fc.hold_force_local.y > 0.0, "hover hovering has a gravity hold (%.0f N)" % fc.hold_force_local.y)
 			_check(lit == 0, "hover with hold_show 0 nothing puffs while the starter hovers (%d showing)" % lit)
+			_check_stick(_starter, "hover")
 		elif lit == 0:
 			print("        (a quarter of the hold is under the show threshold on this ship)")
 	show.hold_show = RcsShow.HOLD_SHOW
@@ -881,6 +882,7 @@ func _land(near: Vector3, forward: Vector3, step: String) -> bool:
 	_check(landed, "%s the starter landed on %s, the sun %.0f deg up, tilt %.1f deg; within %.0f m the ground rises or falls %.2f m" % [
 		step, _planet.name, 90.0 - rad_to_deg(at.angle_to(_to_star())), rad_to_deg(_starter.landing.tilt()),
 		FLAT_REACH, _spread(at, FLAT_REACH)])
+	_check_stick(_starter, step)
 	return landed
 
 ## Back aboard from outside, as a rescue brings you in, and to the helm.
