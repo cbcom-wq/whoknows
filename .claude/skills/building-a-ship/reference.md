@@ -1067,13 +1067,15 @@ in about 8 s with no overshoot; touchdown deals 0.0 hp.
 | Entry glow | a bow cap of added light, its pole along the velocity, sized from `Ship.grid_box()` (the occupied cells' box in the hull's frame, never meshes), `SpacePalette.ENTRY_LOW` to `ENTRY_HIGH`; its buffet no stronger than a light bolt's felt hit (`HitFeel.strength(WeaponValues.spec(WeaponValues.LIGHT)["damage"])` ≈ 0.458) | `EntryGlow`, `Ship.entry_glow`, `Ship.grid_box()` |
 | The hold not puffed | shown push = commanded − hold × (1 − share); `HOLD_SHOW` 0 | `FlightComputer.hold_force_local`, `RcsShow.HOLD_SHOW`, static `RcsShow.shown_force` |
 | Thrusters heard outside | in air, Suit-bus players at the nozzles when the camera is not under the interior; level follows the air, `OUTSIDE_DB` -6 | `RcsShow.HEARD_OUTSIDE`, `OUTSIDE_DB` |
-| Wind aboard | `wind_hull` on the **Ship** bus, with a 38 Hz rumble; on foot or in a suit, `wind` on the Suit bus. Level = air × (0.3 × gust + speed / 150); silent at air 0 or with no ear | `WindSound` (`Ear` NONE / HULL / HELMET), `Synth` |
+| Wind aboard | `wind_hull` on the **Ship** bus, with a 38 Hz rumble; on foot on a world (`FIELD`), `wind` on the Suit bus; none on a spacewalk (`SUIT` has no ear). Level = air × (0.3 × gust + speed / 150); silent at air 0 or with no ear | `WindSound` (`Ear` NONE / HULL / HELMET), `Synth` |
 | Sky, haze, sun | `AirMood` writes the outside's `WorldEnvironment`; with no air it is phase 0's exactly. In air the sky turns to the world's up and the sun is `SKY_MODE_LIGHT_ONLY`, with `StarHalo` | `AirMood`, `StarHalo` |
 | The rim | a glow round a world with air seen from outside; a child of its `BodyProxy` | `LimbGlow`, `RIM_ALPHA` 0.8, `BAND_INSIDE_DEG` 6 |
 
 Measured (windowed, GTX 960, 1280 × 720): seated on the ground 134 fps, hovering at 300 m 139,
 a dive at the speed limit 129, **seated at full entry heat 120 (at the floor)**. The help card
-(`ControlsCard`) has three faces (seated, on foot, spacewalk). Proof: `test_air_mood.gd`,
+(`ControlsCard`) has three faces (seated, on foot, spacewalk); the seated face is for the seat
+that flies only (`CameraDirector.piloting()`): a bridge station or the captain's chair shows the
+on-foot face (`test_bridge_seats.gd`). Proof: `test_air_mood.gd`,
 `test_limb_glow.gd`, `test_entry_glow.gd`, `test_wind_sound.gd`, and the windowed probes
 `test/probes/descent_render.gd` (the whole descent) and `landing_play.gd -- <out> ring`.
 

@@ -91,9 +91,13 @@ this is the land it lives in).
 >   only. A `Base` with a high hatch would build one that stays stowed, so give it its own call.
 > - **Items taken by hand from another shift field stay in `EXTERIOR_SPACE` while held.** Placed
 >   oasis items must handle that.
-> - **Hover puffs and the floating origin:** a hovering ship's RCS puffs are in `HOLDS_SHIFT`, and
->   in a well the hold puffs all the time, so a re-centre may always wait for the forced one at
->   4 km. Read from the code, not measured.
+> - **Hover puffs and the floating origin:** a hovering ship's RCS puffs are in `HOLDS_SHIFT`.
+>   In phase 0 the hold puffed all the time in a well, so a re-centre could always wait for the
+>   forced one at 4 km. **Stale since phase 1:** the steady hold is not puffed (`HOLD_SHOW` 0), so
+>   a hands-off hover holds nothing back and the origin re-centres at 2 km, as anywhere. Shown in
+>   the merge (2026-11-06): `test_landing_legs` kept the world's centre as an engine `Vector3`
+>   across a hover and went 3.2 km stale. `test_landing_legs` now covers a shift at 30 m with the
+>   legs folding out and one while touching down.
 
 > **Status, 2026-11-05: phase 1 (air) is built** (branch `desert-air`, to merge after the owner's
 > look). The style guide (§2.6, §2.9, §3.8, new §3.9, §5) and the skills record it. Phases 2 and 3
@@ -103,7 +107,9 @@ this is the land it lives in).
 > - **No air, no change (Ruling 11).** With no air the outside sky is unturned and the sun is
 >   `SKY_MODE_LIGHT_AND_SKY`, exactly as phase 0, so the sky's own 1° glow shows. With air the sky
 >   turns to the world's up (`AirMood._turn_sky`), the sun is `SKY_MODE_LIGHT_ONLY`, and `StarHalo`
->   carries its glow.
+>   carries its glow. One known difference: `AirMood.setup` always sets the sky's `process_mode`
+>   to `INCREMENTAL` and the fog's `fog_sky_affect` to 0, with air or without, so with no air
+>   those two are not phase 0's values (the controller's ruling, 2026-11-06: kept as they are).
 > - **No exterior shader.** `Environment`, `ProceduralSkyMaterial`, `StandardMaterial3D` and
 >   particles only (`LimbGlow`, `EntryGlow`, `StarHalo`).
 > - **The entry shake is bound by a light bolt's hit (Ruling 4):** `HitFeel.strength(...)` ≈ 0.458,

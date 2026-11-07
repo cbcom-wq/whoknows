@@ -508,7 +508,7 @@ func _run(scene: Node) -> void:
 	# Air drag (desert world phase 1): near the ground of a thick world a hull's
 	# top speed is where the forward push meets DRAG_K x air x v^2, never past
 	# the cruise ceiling. Boost multiplies the push by BOOST_MULTIPLIER.
-	var thick: float = WorldRecipe.AIR_GROUND[2]
+	var thick: float = WorldRecipe.AIR_GROUND[WorldRecipe.Atmosphere.THICK]
 	var fwd: float = s.thrust_budget[&"forward"] / kg
 	var top := sqrt(fwd / (WorldGravity.DRAG_K * thick))
 	var top_boost := sqrt(fwd * FlightComputer.BOOST_MULTIPLIER / (WorldGravity.DRAG_K * thick))
