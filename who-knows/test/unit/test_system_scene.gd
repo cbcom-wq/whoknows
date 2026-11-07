@@ -75,8 +75,11 @@ func test_the_hull_bumps_off_a_world():
 ## spec §8.2): about 124 m/s is 2 m a physics tick into a trimesh, with the
 ## streaming and the under-anchor build racing it. It must never end below the
 ## ground, and the analytic floor, the safety net, must never be what stops it.
-## `steep` is the glide's pitch below the horizon, degrees.
-func _dive_into_the_ground(steep: float) -> void:
+## `steep` is the glide's pitch below the horizon, degrees; `start_height` is
+## how far over the ground it starts: the air's drag (WorldGravity.DRAG_K) bleeds
+## speed over a long path, so a shallow glide starts low to still meet the
+## ground fast.
+func _dive_into_the_ground(steep: float, start_height := 300.0) -> void:
 	var system: SystemRecipe = _root.system
 	var planet: SystemBody = system.planets()[0]
 	for p in system.planets():
@@ -90,7 +93,7 @@ func _dive_into_the_ground(steep: float) -> void:
 	var centre := _universe.to_engine(planet.point)
 	var out := (_ship.exterior.global_position - centre).normalized()
 	var ground := planet.radius + surface.terrain.height_at(out)
-	_ship.exterior.global_position = centre + out * (ground + 300.0)
+	_ship.exterior.global_position = centre + out * (ground + start_height)
 	_ship.exterior.linear_velocity = Vector3.ZERO
 	await wait_physics_frames(60)
 	# Re-aim from where the hull is now: it has not moved, but be exact.
@@ -118,7 +121,7 @@ func _dive_into_the_ground(steep: float) -> void:
 	assert_eq(surface.floor_fired, 0, "the ground held it, not the safety net")
 
 func test_the_hull_glides_into_a_world_at_the_limit_and_stays_above_it():
-	await _dive_into_the_ground(30.0)
+	await _dive_into_the_ground(30.0, 120.0)
 
 func test_the_hull_dives_straight_into_a_world_at_the_limit_and_stays_above_it():
 	await _dive_into_the_ground(90.0)
