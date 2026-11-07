@@ -239,9 +239,10 @@ func _hovers() -> void:
 	var cores := _starter.quantum.cores
 	var core := "no core" if cores.is_empty() else "the core's rings turn at %.2f rev/s (%s)" % [
 		cores[0].ring_rate(), cores[0].state]
-	# In a well the steady hold is not puffed (RcsShow.HOLD_SHOW, 0740abd): a
-	# hover shows none, though the assist commands the whole hold.
-	_check(on == 0 and fc.commanded_force_local.y > 0.0, "1 hovering, the steady hold is not puffed: %d of %d RCS emitters puffing (most %.2f), commanded %.0f of %.0f kN up; %s" % [
+	# In a well the steady hold is not puffed (RcsShow.HOLD_SHOW, 0740abd); the
+	# pilot's and the assist's changes are. Hands off the stick, only the hold
+	# is commanded, so nothing puffs.
+	_check(on == 0 and fc.commanded_force_local.y > 0.0, "1 hovering hands off, only the assist's steady hold commanded: it is not puffed, %d of %d RCS emitters puffing (most %.2f), commanded %.0f of %.0f kN up; %s" % [
 		on, rcs.emitters.size(), most, fc.commanded_force_local.y / 1000.0, fc.thrust_budget[&"vertical"] / 1000.0, core])
 	var air := _stars.whereabouts.air()
 	if _planet.recipe.atmosphere != WorldRecipe.Atmosphere.NONE:
@@ -864,11 +865,18 @@ func _ring() -> void:
 	var drift := (crate.global_position - _centre()).length() - item_from
 	_check(_avatar.grasp.item == null, "10 the crate let go: nothing in hand")
 	_check(absf(drift) < 0.5, "10 the crate let go in the ring: its distance from the planet's centre changed %.2f m in 5 s (under 0.5)" % drift)
-	# From outside, 25 m out from the hull away from the planet and 4 m off the
-	# ring's plane, looking in at the hull with the world behind it.
+	# From outside, 25 m out from the hull and 4 m off the ring's plane, looking
+	# along the ring with the sun behind or beside, and a little toward the
+	# planet so its limb is in frame: the lit rocks of the ring are in view.
 	var hull := _starter.exterior.global_transform
+	var to_sun := (_scene.get_node("DirectionalLight3D") as DirectionalLight3D).global_basis.z.normalized()
+	var along := normal.cross(dir).normalized()
+	if along.dot(to_sun) > 0.0:
+		along = -along
 	var eye := hull.origin + dir * 25.0 + normal * 4.0
-	await _camera_shot("ring_spacewalk", Transform3D(Basis.looking_at(hull.origin - eye, normal), eye))
+	var gaze := (along - dir * 0.35).normalized()
+	print("        ring shot: looking along the ring, %.0f deg from the sun's way (over 90 is sun behind or beside)" % rad_to_deg(gaze.angle_to(to_sun)))
+	await _camera_shot("ring_spacewalk", Transform3D(Basis.looking_at(gaze, normal), eye))
 	# Back in, as fleet_play glides in, and to the helm.
 	lock.alcove.hull_panel.interact(_avatar)
 	await _until(func() -> bool: return lock.cycle.outer_open >= 1.0, 12.0)
@@ -1073,6 +1081,7 @@ func _climb(ship: Ship, height_of: Callable, height: float, limit: float) -> Dic
 	var t0 := Time.get_ticks_msec()
 	var left := -1.0
 	var reached := false
+	var release := {}
 	_stick_y(1.0)
 	while Time.get_ticks_msec() - t0 < limit * 1000.0:
 		await physics_frame
@@ -1081,8 +1090,12 @@ func _climb(ship: Ship, height_of: Callable, height: float, limit: float) -> Dic
 		var v := ship.exterior.linear_velocity.dot(_up(ship.exterior.global_position))
 		var low := ship.quantum.store != null and ship.quantum.store.is_low_power()
 		var brake: float = fc.thrust_budget[&"vertical"] * (QuantumValues.LOW_POWER_AUTHORITY if low else 1.0) / ship.exterior.mass
-		if float(height_of.call()) + v * absf(v) / (2.0 * brake * 0.95) >= height:
+		var k := WorldGravity.DRAG_K * _gravity.air_at(ship.exterior.global_position)
+		if float(height_of.call()) + _stop_distance(v, brake * 0.95, k) >= height:
 			reached = true
+			var at := float(height_of.call())
+			release = {"v": v, "brake": brake, "k": k, "drag": k * v * v, "at": at,
+				"plain": at + _stop_distance(v, brake * 0.95, 0.0), "predicted": at + _stop_distance(v, brake * 0.95, k)}
 			break
 	var stick := (Time.get_ticks_msec() - t0) / 1000.0
 	_stick_y(0.0)
@@ -1095,10 +1108,25 @@ func _climb(ship: Ship, height_of: Callable, height: float, limit: float) -> Dic
 	var settled := float(height_of.call())
 	await _seconds(3.0)
 	return {"was_landed": was_landed, "left": left, "stick": stick, "braking": braking,
-		"height": settled, "drift": float(height_of.call()) - settled, "reached": reached}
+		"height": settled, "drift": float(height_of.call()) - settled, "reached": reached, "release": release}
+
+## How far a climb at `v` up goes before it stops under a constant brake `b`
+## and the air's drag `k v^2`: ln(1 + k v^2 / b) / (2 k). The plain v^2 / (2 b)
+## where there is no air (k about 0) or you are not climbing.
+static func _stop_distance(v: float, b: float, k: float) -> float:
+	if v <= 0.0:
+		return 0.0
+	if k < 1e-9:
+		return v * v / (2.0 * b)
+	return log(1.0 + k * v * v / b) / (2.0 * k)
 
 func _say_climb(step: String, ship: Ship, r: Dictionary) -> void:
 	var low := " on low power" if ship.quantum.store.is_low_power() else ""
+	var rel: Dictionary = r["release"]
+	if not rel.is_empty():
+		print("        %s stick released at %.1f m climbing %.1f m/s: brake %.2f m/s2, drag %.2f m/s2 (k %.5f); stops at %.1f m by v2/2b alone, %.1f m with the drag; settled %.1f m" % [
+			step, float(rel["at"]), float(rel["v"]), float(rel["brake"]), float(rel["drag"]), float(rel["k"]),
+			float(rel["plain"]), float(rel["predicted"]), float(r["height"])])
 	_check(bool(r["was_landed"]) and float(r["left"]) >= 0.0 and float(r["left"]) < 1.0,
 		"%s translate up%s: %s leaves LANDED after %.2f s, thawed" % [step, low, ship.name, float(r["left"])])
 	_check(bool(r["reached"]) and absf(float(r["height"]) - HOVER) < 15.0 and absf(float(r["drift"])) < 2.0,
