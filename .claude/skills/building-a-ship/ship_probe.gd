@@ -25,7 +25,12 @@ extends SceneTree
 # It prints the rules line (ShipRules: every rule broken, or 0) and the notes,
 # a turret line per turret (name, kind, cell, sky coverage; or "turret  none"),
 # a face line (the face a pilot shows, and how many turrets bear on it),
-# and a hose line per airlock (its alcove's reel, and the nozzle stocked on it).
+# a hose line per airlock (its alcove's reel, and the nozzle stocked on it),
+# a lift line (vertical thrust over mass, and its margin against a 7 m/s2 world),
+# a ramp line per airlock (its landing ramp: a step, the ramp's sill over the
+# plane its legs stand on, length and angle, or NOT BOARDABLE ON A WORLD),
+# and a legs line (LandingLegs.plan's: how many fit, 4 wanted, each mount and
+# length; NOT BUILT if the hull's legs are not the plan's).
 # Then a two-ship pass (docs/superpowers/specs/2026-10-02-many-ships-design.md
 # §8.2): fps in the worst view with a second ship 300 m off,
 # probe_fleet_from_starter{,_dark}.png, F8 to its helm, probe_fleet_from_second
@@ -491,6 +496,13 @@ func _run(scene: Node) -> void:
 	print("feel    m/s2 side %.1f vert %.1f brake %.1f fwd %.1f; 100 m/s sideways gone in %.0f s" % [
 		side, s.thrust_budget[&"vertical"] / kg, s.thrust_budget[&"reverse"] / kg,
 		s.thrust_budget[&"forward"] / kg, 100.0 / maxf(side, 0.001)])
+	# Lift off a world (desert world phase 0): vertical thrust over mass, against
+	# the heaviest planet's pull. ShipRules.LIFT_MARGIN times that pull is the least.
+	var pull: float = WorldRecipe.GRAVITY[WorldRecipe.Kind.PLANET].y
+	var lift: float = s.thrust_budget[&"vertical"] / kg
+	print("lift    %.1f m/s2 up, %.2f× a %.0f m/s2 world's pull (needs ×%.1f)%s" % [
+		lift, lift / pull, pull, ShipRules.LIFT_MARGIN,
+		"" if lift / pull >= ShipRules.LIFT_MARGIN else "  <-- CANNOT LIFT"])
 	# An rcs block whose exhaust face touches another block puffs inside it.
 	var blocked := []
 	var rcs := RcsShow.gather(ship.grid, ship.catalog, s.center_of_mass)
@@ -556,6 +568,34 @@ func _run(scene: Node) -> void:
 		var reel: HoseReel = lock.alcove.reel if is_instance_valid(lock.alcove) else null
 		print("hose    airlock %s: reel %s, nozzle %s" % [coord, "yes" if reel != null else "NONE  <-- NO REEL",
 			"yes" if reel != null and reel.item != null else "NONE  <-- NO NOZZLE"])
+	# Boardable on a world (desert world phase 0, Task 14): every horizontal
+	# outer hatch over Airlock.HATCH_STEP above the keel has a landing ramp, and
+	# none faces up or down; the alcove built what the plan says. The way up is
+	# AirlockAlcove.way_up_for's, as the alcove and the airlock read it: a NONE
+	# hatch refuses the step out on a world ("No ramp · 4 m drop").
+	for coord: Vector3i in ship.airlocks:
+		var lock: Airlock = ship.airlocks[coord]
+		var plan := AirlockAlcove.ramp_plan(ship.grid, coord, ship.stance_depth())
+		var wanted: bool = AirlockAlcove.way_up_for(plan) == LandingRamp.RAMP
+		var built := is_instance_valid(lock.alcove) and lock.alcove.ramp != null
+		print("ramp    airlock %s: %s%s" % [coord, AirlockAlcove.ramp_words(plan),
+			"" if built == wanted else ("  <-- NOT BUILT" if wanted else "  <-- BUILT IN THE WAY")])
+	# Landing legs (desert world phase 0, Task 15): the plan's four, built on the
+	# hull, stowed in space with their colliders off; the ramps above are
+	# measured to their feet (Ship.stance_depth). The owner's rule (2026-11-05):
+	# the feet stand far enough under the keel that its lowest hanging look --
+	# a belly turret parked, a flood's housing -- clears the ground by
+	# LandingLegs.HANG_CLEAR, so a hanging part costs ramp, never placement.
+	var leg_plan := ship.exterior_builder.leg_plan
+	var built_legs := ship.exterior_builder.legs()
+	var legs_ok := built_legs != null and built_legs.legs.size() == leg_plan.size() and built_legs.is_stowed() \
+		and built_legs.colliders.all(func(c: CollisionShape3D) -> bool: return c.disabled)
+	print("legs    %s, stance %.2f m%s" % [LandingLegs.plan_words(ship.grid, leg_plan), ship.stance_depth(),
+		"" if legs_ok or leg_plan.is_empty() else "  <-- NOT BUILT AS PLANNED"])
+	if not leg_plan.is_empty():
+		var hang := ship.stance_depth() + ExteriorBuilder.lowest_look(ship.grid, ship.catalog)
+		print("hang    its lowest look stands %.2f m over the ground, landed (wants %.2f)%s" % [hang,
+			LandingLegs.HANG_CLEAR, "" if hang >= LandingLegs.HANG_CLEAR - 0.005 else "  <-- TOUCHES THE GROUND"])
 	# The skin (ship exterior spec §3): every interior window must have one outside
 	# and none may be UNMATCHED; the lights are the generator's, 5 floods and 2
 	# forward on the starter.

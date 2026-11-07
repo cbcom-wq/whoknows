@@ -1,5 +1,7 @@
 extends GutTest
 
+const LiftRule := preload("res://test/unit/helpers/lift_rule.gd")
+
 ## ShipRules (docs/superpowers/specs/2026-10-02-ship-library-design.md §4):
 ## the starter breaks none, and each rule is broken by a copy of the starter
 ## broken just that way (spec §11 says how each was chosen). Notes never count.
@@ -153,7 +155,7 @@ func _set_block(grid: ShipGrid, c: Vector3i, id: StringName, o := 0) -> void:
 	grid.set_block(c, inst)
 
 func test_the_bridge_fixture_breaks_no_rule():
-	assert_eq(_codes_of(_bridge()), [])
+	assert_eq(LiftRule.without(ShipRules.check(_bridge(), _cat)["rules"]), [], "the bridge fixture is a rooms test, not a ship to fly")
 
 func test_no_glass_ahead_of_the_helm_breaks_no_helm():
 	var g := _bridge()
@@ -227,3 +229,76 @@ func test_two_weapons_stations_break_the_rule():
 			grid.get_block(c).block_id = WeaponValues.STATION
 	var found := ShipRules.check(grid, BlockCatalog.load_from_dir("res://data/blocks"))
 	assert_true(_found_codes(found["rules"]).has(&"TWO_WEAPONS_STATIONS"))
+
+func test_cannot_lift_when_vertical_under_margin():
+	var s := ShipStats.new()
+	s.total_mass_kg = 100_000.0
+	s.thrust_budget = {&"forward": 1e6, &"reverse": 1e6, &"lateral": 1e6, &"vertical": 900_000.0}
+	var rules: Array = []
+	ShipRules._check_flight(s, rules)
+	assert_has(_codes(rules), &"CANNOT_LIFT")
+	s.thrust_budget[&"vertical"] = 100_000.0 * WorldRecipe.GRAVITY[WorldRecipe.Kind.PLANET].y * ShipRules.LIFT_MARGIN + 1.0
+	rules.clear()
+	ShipRules._check_flight(s, rules)
+	assert_does_not_have(_codes(rules), &"CANNOT_LIFT")
+
+
+# --- standing on a world (desert world phase 0, Task 16) ---------------------------
+
+func _block_at(grid: ShipGrid, at: Vector3i, id: StringName) -> void:
+	var inst := BlockInstance.new()
+	inst.block_id = id
+	grid.set_block(at, inst)
+
+## An airlock opening aft off a deck, walled either side, with one keel block
+## under the deck (test_landing_ramp's grid): a ramp is wanted at its hatch.
+func _lock_grid() -> ShipGrid:
+	var grid := ShipGrid.new()
+	_block_at(grid, Vector3i(0, 0, 0), &"airlock")
+	_block_at(grid, Vector3i(0, 0, -1), &"deck")
+	_block_at(grid, Vector3i(1, 0, 0), &"hull")
+	_block_at(grid, Vector3i(-1, 0, 0), &"hull")
+	_block_at(grid, Vector3i(0, -1, -1), &"hull")
+	return grid
+
+func test_a_ramp_through_a_block_breaks_the_rule():
+	var grid := _lock_grid()
+	_block_at(grid, Vector3i(0, -1, 1), &"hull")   # under the cell outside the hatch
+	var found: Array = ShipRules.check(grid, _cat)["rules"].filter(
+		func(r: Dictionary) -> bool: return r["code"] == &"NOT_BOARDABLE")
+	assert_eq(found.size(), 1, "one airlock, one finding")
+	assert_eq(found[0]["cell"], Vector3i.ZERO)
+	assert_string_contains(found[0]["text"], "(0, 0, 0)")
+	assert_string_contains(found[0]["text"], "through the hull at [(0, -1, 1)]")
+
+func test_a_hatch_facing_up_breaks_the_rule():
+	# No grid faces a hatch up (hatch_normal is horizontal), so the plan is made by hand.
+	var plan := {"need": LandingRamp.UP_OR_DOWN, "sill": 3.0, "length": 0.0,
+		"angle": LandingRamp.SLOPE, "through": [] as Array[Vector3i], "path": [] as Array[Vector3i]}
+	var finding: Variant = ShipRules.boarding_finding(Vector3i(2, 1, 0), plan)
+	assert_not_null(finding)
+	assert_eq(finding["code"], &"NOT_BOARDABLE")
+	assert_eq(finding["cell"], Vector3i(2, 1, 0))
+	assert_string_contains(finding["text"], "faces up/down")
+
+func test_a_step_or_a_clear_ramp_is_boardable():
+	for need: StringName in [LandingRamp.STEP, LandingRamp.RAMP]:
+		var plan := {"need": need, "sill": 1.0, "length": 2.0, "angle": LandingRamp.SLOPE,
+			"through": [] as Array[Vector3i], "path": [] as Array[Vector3i]}
+		assert_null(ShipRules.boarding_finding(Vector3i.ZERO, plan), String(need))
+
+func test_a_ship_with_fewer_than_four_legs_breaks_the_rule():
+	var grid := ShipGrid.new()
+	_block_at(grid, Vector3i.ZERO, &"hull")
+	var found: Array = ShipRules.check(grid, _cat)["rules"].filter(
+		func(r: Dictionary) -> bool: return r["code"] == &"FEW_LEGS")
+	assert_eq(found.size(), 1)
+	assert_eq(found[0]["cell"], null)
+	assert_string_contains(found[0]["text"], "%d of %d" % [LandingLegs.plan(grid, NAN, _cat).size(), ShipRules.LEGS_WANTED])
+
+func test_the_library_ships_stand_on_four_legs_and_board_clear():
+	for id: StringName in [&"starter", &"lamplighter", &"warden"]:
+		var grid: ShipGrid = ShipLibrary.read("res://data/ships/%s.json" % id)["grid"]
+		var codes := _codes(ShipRules.check(grid, _cat)["rules"])
+		assert_does_not_have(codes, &"NOT_BOARDABLE", String(id))
+		assert_does_not_have(codes, &"FEW_LEGS", String(id))

@@ -4,6 +4,8 @@ extends HudElement
 ## The hull, seated (docs/superpowers/specs/
 ## 2026-09-29-health-and-damage-design.md §4.4, §11): *HULL 87%*, and beneath
 ## it *CRIPPLED · NO THRUST* in the warning colour while the ship is crippled.
+## Otherwise the ground status: *LANDED* in the readout colour, and *UNEVEN
+## GROUND · TILT 31°* or *TOO HEAVY FOR THIS WORLD* in the warning colour.
 ## Built in code, like the band's other panels (CLAUDE.md on the text-scene
 ## parser); the flight scene adds it to the band's row.
 
@@ -33,4 +35,9 @@ func render(telemetry: VehicleTelemetry) -> void:
 	hull_label.text = "HULL %d%%" % floori(clampf(telemetry.hull, 0.0, 1.0) * 100.0)
 	var crippled := telemetry.crippled_reason != ""
 	hull_label.add_theme_color_override("font_color", HudPalette.WARNING if crippled else HudPalette.READOUT)
-	status_label.text = "CRIPPLED · %s" % telemetry.crippled_reason.to_upper() if crippled else ""
+	if crippled:
+		status_label.text = "CRIPPLED · %s" % telemetry.crippled_reason.to_upper()
+	else:
+		status_label.text = telemetry.ground_status
+	status_label.add_theme_color_override("font_color",
+		HudPalette.READOUT if telemetry.ground_status == "LANDED" and not crippled else HudPalette.WARNING)

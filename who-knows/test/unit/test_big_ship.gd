@@ -1,5 +1,7 @@
 extends GutTest
 
+const LiftRule := preload("res://test/unit/helpers/lift_rule.gd")
+
 ## The 400-block fixture (docs/superpowers/specs/2026-10-09-ship-designer-design.md
 ## §7.4, §9): the biggest a ship may be passes the rules and is usable, and
 ## stays within what was measured on 2026-10-09 (the rules 0.3 s, a spawn
@@ -45,7 +47,7 @@ func test_it_breaks_no_rule_in_time():
 	var t := Time.get_ticks_msec()
 	var found := ShipRules.check(_grid(), _cat)
 	var ms := Time.get_ticks_msec() - t
-	assert_eq(found["rules"], [])
+	assert_eq(LiftRule.without(found["rules"]), [])
 	assert_lt(ms, RULES_MS, "the rules took %d ms" % ms)
 
 func test_one_more_block_is_too_big():

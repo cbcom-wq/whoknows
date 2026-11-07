@@ -218,7 +218,8 @@ func sleep(ship: Ship) -> void:
 		return
 	var hull := ship.exterior
 	_hold(ship, {"at": universe.to_universe(hull.global_position), "turn": hull.global_basis,
-		"v": hull.linear_velocity, "w": hull.angular_velocity})
+		"v": hull.linear_velocity, "w": hull.angular_velocity,
+		"landed": ship.landing != null and ship.landing.is_landed()})
 
 ## Asleep at `held`: out of the shift and of the worlds' ground, its puffs
 ## stopped so it never holds the shift, out of physics, its droid and sounds
@@ -248,8 +249,12 @@ func wake(ship: Ship) -> void:
 	ship.remove_from_group(ASLEEP)
 	ship.process_mode = Node.PROCESS_MODE_INHERIT
 	ship.visible = true
-	hull.linear_velocity = held["v"]
-	hull.angular_velocity = held["w"]
+	if held.get("landed", false):
+		# Asleep on the ground is landed: frozen, at rest (desert world spec §5.3).
+		ship.landing.restore_landed()
+	else:
+		hull.linear_velocity = held["v"]
+		hull.angular_velocity = held["w"]
 	hull.add_to_group(Universe.EXTERIOR_SPACE)
 	hull.add_to_group(AsteroidStream.SPACE_ANCHOR)
 	woke.emit(ship)
@@ -265,7 +270,8 @@ func capture(universe_now: Universe) -> Array:
 		if _asleep.has(ship):
 			var held: Dictionary = _asleep[ship]
 			part["hull"] = {"at": SaveCodec.upoint(held["at"]), "turn": SaveCodec.basis(held["turn"]),
-				"v": SaveCodec.vec3(held["v"]), "w": SaveCodec.vec3(held["w"])}
+				"v": SaveCodec.vec3(held["v"]), "w": SaveCodec.vec3(held["w"]),
+				"landed": bool(held.get("landed", false))}
 		if _destroyed.has(ship):
 			part["destroyed"] = true
 		out.append(part)
@@ -286,7 +292,8 @@ func restore_hull(ship: Ship, part: Dictionary) -> void:
 	var gone := bool(part.get("destroyed", false))
 	if gone or at.minus(universe.origin).length() > SLEEP_AT:
 		_hold(ship, {"at": at, "turn": SaveCodec.to_basis(hull.get("turn")),
-			"v": SaveCodec.to_vec3(hull.get("v")), "w": SaveCodec.to_vec3(hull.get("w"))})
+			"v": SaveCodec.to_vec3(hull.get("v")), "w": SaveCodec.to_vec3(hull.get("w")),
+			"landed": bool(hull.get("landed", false))})
 		if gone:
 			_hold_destroyed(ship)
 	else:

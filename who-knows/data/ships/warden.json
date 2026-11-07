@@ -4,7 +4,7 @@
 	"description": "A long armoured patrol frigate: a sensor-tipped bow, a command bridge behind a band of glass, a wide engine block.",
 	"format": 1,
 	"cells": [
-		[-4, -1, 2, "rcs", 4],
+		[-4, -1, 0, "rcs", 4],
 		[-4, -1, 3, "rcs", 12],
 		[-4, -1, 4, "rcs", 16],
 		[-4, -1, 5, "thruster", 0],
@@ -308,7 +308,7 @@
 		[3, 1, 2, "fairing_slope", 12],
 		[3, 1, 3, "fairing_slope", 12],
 		[3, 1, 4, "fairing_slope", 12],
-		[4, -1, 2, "rcs", 4],
+		[4, -1, 0, "rcs", 4],
 		[4, -1, 3, "rcs", 8],
 		[4, -1, 4, "rcs", 16],
 		[4, -1, 5, "thruster", 0],

@@ -1,5 +1,7 @@
 extends GutTest
 
+const LiftRule := preload("res://test/unit/helpers/lift_rule.gd")
+
 ## The bridge fixture (docs/superpowers/specs/2026-10-09-ship-bridge-design.md
 ## §7): no rule broken, usable as every ship is, and every seat sat in and
 ## stood up from, with somewhere to walk.
@@ -17,7 +19,7 @@ func after_each():
 
 func test_it_breaks_no_rule():
 	var found := ShipRules.check(ShipLibrary.read(BRIDGE)["grid"], BlockCatalog.load_from_dir("res://data/blocks"))
-	assert_eq(found["rules"], [])
+	assert_eq(LiftRule.without(found["rules"]), [])
 
 func test_it_is_usable():
 	await ShipUse.use(self, ShipLibrary.read(BRIDGE)["grid"], "Bridge test ship", SAVE, "bridge")

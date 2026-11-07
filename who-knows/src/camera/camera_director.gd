@@ -88,9 +88,9 @@ func camera() -> Camera3D:
 
 ## Steps you up to a computer (computer mode spec §3.1): your body stays where
 ## it stood, the camera glides to the station's eye, the mouse is free. Not
-## seated, suited or blacked out.
+## seated, outside or blacked out.
 func use_station(station: ComputerStation) -> void:
-	if station == null or is_seated or is_at_station or _tween != null or _avatar.mode == Avatar.Mode.SUIT \
+	if station == null or is_seated or is_at_station or _tween != null or _avatar.is_outside() \
 			or _avatar.downed != null:
 		return
 	_station = station
@@ -151,7 +151,7 @@ func _process(_delta: float) -> void:
 		_interior_cam.global_transform = _station.eye_transform()
 
 func sit(seat: Seat) -> void:
-	if is_seated or is_at_station or _tween != null or _avatar.mode == Avatar.Mode.SUIT:
+	if is_seated or is_at_station or _tween != null or _avatar.is_outside():
 		return
 	_seat = seat
 	is_seated = true
@@ -166,7 +166,7 @@ func sit(seat: Seat) -> void:
 ## Seats you at once, with no camera move (saving spec §6.3): a loaded game
 ## that was saved at the helm.
 func sit_now(seat: Seat) -> void:
-	if is_seated or is_at_station or _tween != null or _avatar.mode == Avatar.Mode.SUIT:
+	if is_seated or is_at_station or _tween != null or _avatar.is_outside():
 		return
 	_seat = seat
 	is_seated = true

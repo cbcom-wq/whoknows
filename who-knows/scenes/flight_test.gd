@@ -27,11 +27,11 @@ signal lost(text: String)
 @onready var _stream: AsteroidStream = $AsteroidStream
 
 ## Every ship in the world (many ships spec §5), and the one you are in, or
-## the one your suit belongs to on a spacewalk (§3.4).
+## the one your suit belongs to outside (§3.4).
 var fleet: Fleet
 var aboard: Ship
 ## Where you are (habitat modules spec §5.5): the ship you are aboard or the
-## base you are in, or the one your suit belongs to on a spacewalk. A ship
+## base you are in, or the one your suit belongs to outside. A ship
 ## here is always `aboard`.
 var home: GridHome
 ## The base a loaded game had you in (habitat modules spec §11.2): woken in
@@ -57,6 +57,8 @@ var keep_saving := false
 ## world seed, and the node that draws its star, planets and moons.
 var system: SystemRecipe
 var star_system: StarSystem
+## What pulls where, one for every ship (desert-world spec §5.1); built in _wire_star_system (which _wire_universe calls).
+var world_gravity: WorldGravity
 ## Every salvage cloud, under Outside (quantum energy spec §10.2).
 var salvage: SalvageField
 ## Every stray item adrift outside (saving spec §7), under Outside.
@@ -185,8 +187,9 @@ func _ready() -> void:
 	_make_bases()
 	_make_suit_tie()
 	_place_avatar_on_deck()
-	# A target to hostiles on a spacewalk (hostile ships spec §4.2); Weapons
-	# keeps you out while aboard, and TargetContacts never lists the kind.
+	# A target to hostiles outside, on a spacewalk or on foot on a world
+	# (hostile ships spec §4.2); Weapons keeps you out while aboard, and
+	# TargetContacts never lists the kind.
 	Weapons.join(_avatar, Weapons.YOU)
 	_set_interior_mood()
 	_set_outside_mood()
@@ -300,6 +303,7 @@ func _wire_ship(ship: Ship) -> void:
 	# The speed limit climbs with altitude in a world's well (the world scale
 	# spec §6).
 	ship.flight_computer.whereabouts = star_system.whereabouts
+	ship.flight_computer.gravity = world_gravity
 	# Its warp (the warp spec §5): J at its helm engages it.
 	ship.warp.bind(system, _universe, star_system.whereabouts, ship.sensors, _stream.recipe,
 		warp_busy_for.bind(ship))
@@ -310,6 +314,14 @@ func _wire_ship(ship: Ship) -> void:
 	ship.airlock_crossed.connect(_on_airlock_crossed.bind(ship))
 	# At 0% HULL it goes, and everyone aboard (hostile ships spec §8.2).
 	ship.destroyed.connect(_on_ship_destroyed)
+	# A hard landing is a warning and a thud, no damage yet (desert-world spec
+	# §5.2): the thud is the one the hull already has, heard only aboard.
+	ship.landing.hard_landing.connect(_on_hard_landing.bind(ship))
+
+func _on_hard_landing(speed: float, ship: Ship) -> void:
+	ship.hull_struck(speed)
+	if ship == aboard and warp_panel != null:
+		warp_panel.toast("HARD LANDING · %.1f M/S" % speed)
 
 ## A ship at 0% HULL (hostile ships spec §8.2): its core goes up and it
 ## breaks apart, everyone aboard it dies, in the ledger so they never wake,
@@ -493,19 +505,19 @@ func board(ship: Ship, force := false) -> void:
 	_rebind_markers(ship)
 	if warp_panel != null:
 		warp_panel.drive = ship.warp
-	_avatar.grasp.world_root = ship.items
+	_avatar.set_aboard_root(ship.items)
 	if exterior_npcs != null:
 		exterior_npcs.cameras = [ship.chase_camera, ship.canopy_camera, _avatar.camera]
 	for s in fleet.ships():
 		s.sensors.process_mode = Node.PROCESS_MODE_INHERIT if s == ship else Node.PROCESS_MODE_DISABLED
-	_universe.set_focus(_avatar if _avatar.mode == Avatar.Mode.SUIT else ship.exterior)
+	_universe.set_focus(_avatar if _avatar.is_outside() else ship.exterior)
 	aboard_changed.emit(ship)
 	home_changed.emit(ship)
 
 ## Puts you in `base` (habitat modules spec §5.5): its interior shown and its
 ## hull your own, no ship's; what you put down stays in it; the origin follows
-## it, or you on a spacewalk; and your ship may sleep. Your ship stays
-## `aboard`: its helm, warp and sensors are still the ones you use.
+## it, or you outside; and your ship may sleep. Your ship stays `aboard`: its
+## helm, warp and sensors are still the ones you use.
 func board_base(base: Base, force := false) -> void:
 	if base == null or (base == home and not force):
 		return
@@ -515,9 +527,9 @@ func board_base(base: Base, force := false) -> void:
 			s.set_own(false)
 	for b in bases.awake():
 		b.set_own(b == base)
-	_avatar.grasp.world_root = base.items
+	_avatar.set_aboard_root(base.items)
 	_avatar.external_accel = Vector3.ZERO
-	_universe.set_focus(_avatar if _avatar.mode == Avatar.Mode.SUIT else base.exterior)
+	_universe.set_focus(_avatar if _avatar.is_outside() else base.exterior)
 	home_changed.emit(base)
 
 ## The cockpit's own markers, in `ship`'s canopy view: the HUD feeds them while
@@ -568,15 +580,15 @@ func board_nearest() -> bool:
 	board_at_helm(target)
 	return true
 
-## Why F8 must wait, or "": on a spacewalk, in a base, at a computer, mid-sit,
-## during a warp, or while an airlock of the ship you are aboard cycles; or
-## why it may not board `target`: a hostile (hostile ships spec §4.3; boarding
-## a live enemy is the disable project's).
+## Why F8 must wait, or "": outside (on a spacewalk or on a world), in a base,
+## at a computer, mid-sit, during a warp, or while an airlock of the ship you
+## are aboard cycles; or why it may not board `target`: a hostile (hostile
+## ships spec §4.3; boarding a live enemy is the disable project's).
 func _board_refusal(target: Ship = null) -> String:
 	if target != null and target.side == Sides.HOSTILE:
 		return "HOSTILE SHIP"
-	if _avatar.mode == Avatar.Mode.SUIT:
-		return "NOT ON A SPACEWALK"
+	if _avatar.is_outside():
+		return "NOT ON A SPACEWALK" if _avatar.mode == Avatar.Mode.SUIT else "NOT ON FOOT"
 	if home != aboard:
 		return "IN A BASE"
 	if _director.is_at_station:
@@ -683,6 +695,9 @@ func _wire_hurt() -> void:
 		if not _can_wake() or home.quantum.store == null:
 			return 0
 		return home.quantum.store.drain(n, &"rescue")
+	# Also every grasp.let_go, which the avatar passes on as let_fall(item,
+	# true): EVA cargo let go on a spacewalk, and anything dropped or thrown on
+	# foot on a world (desert world spec §5.5) -- already in space, so a stray.
 	_avatar.let_fall.connect(func(item: Item, outside: bool) -> void:
 		if outside and strays != null:
 			strays.adopt(item))
@@ -698,7 +713,7 @@ func _rescue(avatar: Avatar) -> void:
 	for pose in home.wake_spots():
 		if not avatar.can_stand_at(pose) and avatar.mode == Avatar.Mode.PLATING:
 			continue
-		if avatar.mode == Avatar.Mode.SUIT:
+		if avatar.is_outside():
 			avatar.enter_plating(home.interior, pose, 0.0, Vector3.ZERO, Quaternion.IDENTITY)
 		else:
 			avatar.place(pose)
@@ -719,7 +734,11 @@ func _on_felt_hit(strength: float, from: Vector3, ship: Ship) -> void:
 		_avatar.knock(strength, from)
 
 ## A hole where you stand puts you outside, moving as you were (health and
-## damage spec §7.4): only a hole in the ship you stand in.
+## damage spec §7.4): only a hole in the ship you stand in. On a ship landed on
+## a world that is on your feet on the world (desert world spec §5.5), as its
+## airlock would put you; anywhere else -- flying low over a world included --
+## a spacewalk, so you can fly back in: on foot you would fall to the ground
+## with your ship hovering on above you and no ramp down (final review I2).
 func _on_blocks_lost(_coords: Array[Vector3i], ship: Ship) -> void:
 	if _avatar.mode != Avatar.Mode.PLATING or _avatar.get_parent() != ship.interior:
 		return
@@ -731,7 +750,10 @@ func _on_blocks_lost(_coords: Array[Vector3i], ship: Ship) -> void:
 		_avatar.global_transform, InteriorBuilder.storey_offset(cell.y))
 	var v := Threshold.carry_velocity_out(ship.exterior.linear_velocity, ship.exterior.global_basis,
 		_avatar.velocity)
-	_avatar.enter_suit(ship.outside, world, v, ship.exterior)
+	if ship.on_world() and ship.landing.is_landed():
+		_avatar.enter_field(ship.outside, world, v, ship.exterior)
+	else:
+		_avatar.enter_suit(ship.outside, world, v, ship.exterior)
 	for airlock: Airlock in ship.airlocks.values():
 		_avatar.beacon_source = airlock.beacon
 		_avatar.home_source = airlock.home
@@ -740,9 +762,14 @@ func _on_blocks_lost(_coords: Array[Vector3i], ship: Ship) -> void:
 ## Hands and items (docs/superpowers/specs/2026-09-23-hands-and-items-design.md
 ## §7, §8, §10): what you let go of lands aboard this ship, and the reticle
 ## follows the view. Wired here so src/avatar and src/ui never learn about
-## CameraDirector or Ship.
+## CameraDirector or Ship. A stray taken into your hands -- on foot on a world
+## (desert world spec §5.5) -- is a stray no more: it rides your hands, which
+## the origin already moves.
 func _wire_hands() -> void:
-	_avatar.grasp.world_root = aboard.items
+	_avatar.set_aboard_root(aboard.items)
+	_avatar.grasp.taken.connect(func(item: Item, _from: Transform3D) -> void:
+		if strays != null:
+			strays.let_go(item))
 	_reticle = Reticle.new()
 	_reticle.name = "Reticle"
 	$Prompt.add_child(_reticle)
@@ -760,8 +787,8 @@ func _on_view_changed(view: CameraDirector.View, moving: bool) -> void:
 	_reticle.visible = first_person and not moving
 
 ## The floating origin (asteroids spec §4) follows whoever is outside: the
-## hull, or you on a spacewalk. Wired here so neither Ship nor Avatar needs to
-## know about Universe. F3 shows where you are in the universe.
+## hull, or you when you are out there. Wired here so neither Ship nor Avatar
+## needs to know about Universe. F3 shows where you are in the universe.
 ##
 ## A resumed game puts the origin where you were, then the hull and you back
 ## where the save had you, before the rocks load (saving spec §6.1). A save
@@ -806,9 +833,13 @@ func _wire_universe(saved: Dictionary) -> void:
 	_avatar.camera.far = BodyProxy.VIEW_FAR
 	# The sun's shadows stopped at 100 m, so nothing on a big rock cast one.
 	$DirectionalLight3D.directional_shadow_max_distance = AsteroidStream.SHADOW_REACH
+	# Outside, your hands and what they hold are on their own layer, which the
+	# head lamp leaves out (Avatar.HANDS_LAYER): the sun lights it, or they are
+	# black against a sunlit world (final review I1). Set here, not in the .tscn.
+	$DirectionalLight3D.light_cull_mask |= Avatar.HANDS_LAYER
 	_avatar.mode_changed.connect(
-		func(mode: Avatar.Mode) -> void:
-			_universe.set_focus(_avatar if mode == Avatar.Mode.SUIT else home.exterior)
+		func(_mode: Avatar.Mode) -> void:
+			_universe.set_focus(_avatar if _avatar.is_outside() else home.exterior)
 	)
 	_universe_readout = Label.new()
 	_universe_readout.name = "UniverseReadout"
@@ -823,6 +854,12 @@ func _wire_star_system() -> void:
 	star_system.name = "StarSystem"
 	add_child(star_system)
 	star_system.setup(system, _universe, $DirectionalLight3D)
+	world_gravity = WorldGravity.new()
+	world_gravity.setup(system, _universe, star_system.whereabouts)
+	# You feel it only on foot on a world (desert world spec §5.5). A game
+	# loaded there has stepped you out already (_restore_places, before this):
+	# the first tick finds it set.
+	_avatar.gravity = world_gravity
 
 ## Salvage (quantum energy spec §10.2, §14): the field under Outside, at the
 ## identity, with the same world seed as the rocks; and the near cloud out of
@@ -848,6 +885,7 @@ func _wire_strays(saved: Dictionary) -> void:
 	strays.name = "StrayField"
 	$Outside.add_child(strays)
 	strays.setup(_universe, _starter.item_catalog)
+	strays.gravity = world_gravity
 	if not saved.is_empty():
 		strays.from_dict(saved)
 
@@ -967,14 +1005,14 @@ func _wire_course_chime() -> void:
 	add_child(course_chime)
 
 ## A soft chime when the course of the ship you are aboard clears by arriving
-## (bridge computer spec §9): through the suit on a spacewalk, else the ship.
+## (bridge computer spec §9): through the suit outside, else the ship.
 func _on_course_arrived(_id: StringName, ship: Ship) -> void:
 	if ship != aboard:
 		return
 	var s := Synth.sound(&"course_arrived")
 	if s == null:
 		return
-	course_chime.bus = AudioBuses.SUIT if _avatar.mode == Avatar.Mode.SUIT else AudioBuses.SHIP
+	course_chime.bus = AudioBuses.SUIT if _avatar.is_outside() else AudioBuses.SHIP
 	course_chime.stream = s
 	course_chime.play()
 
@@ -1026,11 +1064,11 @@ func _on_limit_left(place: Whereabouts.Place) -> void:
 func warp_busy() -> StringName:
 	return warp_busy_for(aboard)
 
-## Why `ship`'s warp must wait for the crew: &"crew" on a spacewalk,
+## Why `ship`'s warp must wait for the crew: &"crew" while you are outside,
 ## &"airlock" while one of its airlocks cycles or stands open to space, else
 ## &"".
 func warp_busy_for(ship: Ship) -> StringName:
-	if _avatar.mode == Avatar.Mode.SUIT:
+	if _avatar.is_outside():
 		return &"crew"
 	for airlock: Airlock in ship.airlocks.values():
 		if airlock.busy() != "" or airlock.cycle.open_side() == AirlockCycle.Door.OUTER:
@@ -1347,14 +1385,14 @@ func remove_nearest_spawned() -> String:
 	return "REMOVED " + what
 
 ## Where you look from: the hull you are in, a ship's or a base's, or your
-## view on a spacewalk. Never `aboard`'s in a base: your ship may be asleep
-## there, its engine place stale (habitat modules spec §9.3).
+## view outside. Never `aboard`'s in a base: your ship may be asleep there, its
+## engine place stale (habitat modules spec §9.3).
 func _spawn_view() -> Transform3D:
-	return _avatar.camera.global_transform if _avatar.mode == Avatar.Mode.SUIT else home.exterior.global_transform
+	return _avatar.camera.global_transform if _avatar.is_outside() else home.exterior.global_transform
 
 ## How you move: a base stands still.
 func _spawn_velocity() -> Vector3:
-	if _avatar.mode == Avatar.Mode.SUIT:
+	if _avatar.is_outside():
 		return _avatar.velocity
 	return Vector3.ZERO if home is Base else home.exterior.linear_velocity
 
@@ -1431,15 +1469,15 @@ static func hop_off(b: SystemBody) -> float:
 ## off the surface of the next body in the system's order (star, then each
 ## planet and its moons), or the previous for `step` -1, on its sunward side
 ## and facing it. A system is 15,000 km across; this is the debug way round
-## it. Refused on a spacewalk, in a base (it would move your parked ship and
-## strand you), while an airlock cycles, and while a warp spools or travels.
-## True if it hopped.
+## it. Refused outside, in a base (it would move your parked ship and strand
+## you), while an airlock cycles, and while a warp spools or travels. True if
+## it hopped.
 func hop(step: int) -> bool:
 	if home != aboard:
 		return false
 	if aboard.warp.is_spinning():
 		return false
-	if _avatar.mode == Avatar.Mode.SUIT:
+	if _avatar.is_outside():
 		return false
 	for airlock: Airlock in aboard.airlocks.values():
 		if airlock.busy() != "":
@@ -1549,9 +1587,9 @@ func _under_attack() -> String:
 				return UNDER_ATTACK
 	return ""
 
-## Where you are outside: you on a spacewalk, else the hull you are in.
+## Where you are outside: you when you are out there, else the hull you are in.
 func _you_at() -> Vector3:
-	if _avatar.mode == Avatar.Mode.SUIT or not is_instance_valid(home):
+	if _avatar.is_outside() or not is_instance_valid(home):
 		return _avatar.global_position
 	return home.exterior.global_position
 
@@ -1615,8 +1653,9 @@ func _capture_npcs() -> Dictionary:
 				npc_ledger.set_health(npc.record.id, npc.health.current, npc.health.max)
 	return npc_ledger.to_dict()
 
-## You: walking, seated or on a spacewalk, where, which way, your suit and
-## what is in your hand (§6.3).
+## You: walking, seated, on a spacewalk or on foot on a world, where, which
+## way, your suit and what is in your hand (§6.3). Outside, both are kept the
+## same way, by the mode's name: "suit" or "field".
 func _capture_you() -> Dictionary:
 	var d := {
 		"suit": _avatar.suit_cell.to_dict(),
@@ -1624,8 +1663,8 @@ func _capture_you() -> Dictionary:
 		"pitch": _avatar.head_pitch(),
 		"health": _avatar.health.to_dict(),
 	}
-	if _avatar.mode == Avatar.Mode.SUIT:
-		d["mode"] = "suit"
+	if _avatar.is_outside():
+		d["mode"] = "field" if _avatar.mode == Avatar.Mode.FIELD else "suit"
 		d["at"] = SaveCodec.upoint(_universe.to_universe(_avatar.global_position))
 		d["turn"] = SaveCodec.basis(_avatar.global_basis)
 		d["v"] = SaveCodec.vec3(_avatar.velocity)
@@ -1654,12 +1693,13 @@ func _restore_places(saved: Dictionary) -> void:
 	if first.is_empty():
 		first = _part_named(saved, Fleet.STARTER)
 	var focus := SaveCodec.to_upoint(first.get("hull", {}).get("at"))
-	if String(you.get("mode", "")) == "suit":
+	var outside := _saved_outside(you)
+	if outside:
 		focus = SaveCodec.to_upoint(you.get("at"))
 	# In a base, the origin goes to it: your ship may be far off, asleep.
 	var in_base := String(saved.get("home", {}).get("base", ""))
 	var site := bases.site_named(StringName(in_base)) if in_base != "" else null
-	if site != null and String(you.get("mode", "")) != "suit":
+	if site != null and not outside:
 		focus = site.at
 	_universe.origin = UniversePoint.at(
 		roundi(focus.x / Universe.STEP) * int(Universe.STEP),
@@ -1723,15 +1763,21 @@ static func _part_named(saved: Dictionary, ship_name: String) -> Dictionary:
 			return part
 	return {}
 
+## Whether the saved you `d` was outside: on a spacewalk or on a world.
+static func _saved_outside(d: Dictionary) -> bool:
+	var mode := String(d.get("mode", ""))
+	return mode == "suit" or mode == "field"
+
 ## You as the save had you (§6.3). With `outside_too` false -- the world
-## started over -- a spacewalk comes back aboard, standing.
+## started over -- a spacewalk or a walk on a world comes back aboard,
+## standing.
 func _restore_you(d: Dictionary, outside_too: bool) -> void:
 	var where: GridHome = _loaded_home if _loaded_home != null else aboard
 	_avatar.suit_cell.from_dict(d.get("suit", {}))
 	_avatar.suit_assist = bool(d.get("suit_assist", true))
 	_avatar.health.from_dict(d.get("health", {}))
 	var mode := String(d.get("mode", "walking"))
-	if mode != "suit":
+	if not _saved_outside(d):
 		# Into the ship you were aboard or the base you were in (many ships
 		# spec §6.3; habitat modules spec §11.2), where you stood, or
 		# somewhere to stand in it if that is no place to stand any more.
@@ -1756,9 +1802,13 @@ func _restore_you(d: Dictionary, outside_too: bool) -> void:
 		if d.has("seat"):
 			seat = aboard.seat_at(SaveCodec.to_cell(String(d["seat"])))
 		_director.sit_now(seat if seat != null else aboard.seat)
-	elif mode == "suit" and outside_too:
+	elif _saved_outside(d) and outside_too:
 		_restore_spacewalk(d)
 
+## You back outside where the save had you: on a spacewalk, or on your feet on
+## a world (desert world spec §5.5) -- each the way its airlock puts you
+## there. The world's gravity is handed over just after (_wire_star_system),
+## before the first tick.
 func _restore_spacewalk(d: Dictionary) -> void:
 	var where: GridHome = _loaded_home if _loaded_home != null else aboard
 	var airlock: Airlock = where.airlocks.get(SaveCodec.to_cell(String(d.get("airlock", ""))))
@@ -1768,7 +1818,10 @@ func _restore_spacewalk(d: Dictionary) -> void:
 				airlock = a
 				break
 	var pose := Transform3D(SaveCodec.to_basis(d.get("turn")), _universe.to_engine(SaveCodec.to_upoint(d.get("at"))))
-	_avatar.enter_suit(where.outside, pose, SaveCodec.to_vec3(d.get("v")), where.exterior)
+	if String(d.get("mode", "")) == "field":
+		_avatar.enter_field(where.outside, pose, SaveCodec.to_vec3(d.get("v")), where.exterior)
+	else:
+		_avatar.enter_suit(where.outside, pose, SaveCodec.to_vec3(d.get("v")), where.exterior)
 	_avatar.set_head_pitch(float(d.get("pitch", 0.0)))
 	if airlock != null:
 		_avatar.beacon_source = airlock.beacon
@@ -1887,8 +1940,8 @@ func _on_piloting_changed(piloting: bool) -> void:
 	var ship := _director.seat_ship()
 	_hud.set_active_vehicle(ship.pilot if piloting and ship != null else null)
 
-func _on_avatar_mode_changed(mode: Avatar.Mode) -> void:
-	if mode == Avatar.Mode.SUIT:
+func _on_avatar_mode_changed(_mode: Avatar.Mode) -> void:
+	if _avatar.is_outside():
 		_hud.set_active_vehicle(_avatar)
 	elif not _director.is_seated:
 		_hud.set_active_vehicle(null)

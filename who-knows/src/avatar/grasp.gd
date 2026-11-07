@@ -25,8 +25,14 @@ signal taken(item: Item, from: Transform3D)
 ## EVA cargo, or an EVA tool with nowhere to go (its reel is gone), let go on a
 ## spacewalk (habitat modules spec §4.1): already in the space you are in. The
 ## holder makes it a stray. An EVA tool that winds home to its reel is not
-## reported: it is no stray.
+## reported: it is no stray. On foot on a world hands are not suspended, so
+## anything dropped or thrown there -- an item in space (Item.in_space) let
+## loose -- is reported the same way (desert world spec §5.5).
 signal let_go(item: Item)
+## Out of the hands, whichever way: dropped, thrown, stowed, let fall, let go
+## on a spacewalk, or wound home to its reel. The holder puts it back on the
+## world's layers if it moved it off them (Avatar.HANDS_LAYER).
+signal released(item: Item)
 
 enum Mode { EMPTY, CARRYING, WIELDING }
 
@@ -48,8 +54,12 @@ const WALL_MARGIN := 0.15
 ## head-local, until Hands provides sockets.
 const DEFAULT_WIELD_SOCKET := Vector3(0.17, -0.2, -0.42)
 const DEFAULT_CARRY_SOCKET := Vector3(0.0, -0.34, -0.4)
-## interior_geometry | items.
+## interior_geometry | items: what the hands' ray (where a drop lands, what a
+## stow aims at) stops at aboard.
 const RAY_MASK := 2 | 32
+## Outside (desert world spec §5.5): hulls, the ground, rocks, exterior props
+## and items, so a thing let go against any of them lands on your side of it.
+const OUTSIDE_RAY_MASK := 1 | BodyProxy.LAYER | AsteroidBody.LAYER | 16 | 32
 const STOW_PROMPT := "[G] Stow"
 
 var mode: Mode = Mode.EMPTY
@@ -72,6 +82,9 @@ var wield_socket: Node3D
 var carry_socket: Node3D
 ## Where released items go.
 var world_root: Node3D
+## What the hands' ray stops at: RAY_MASK aboard, OUTSIDE_RAY_MASK outside. The
+## holder switches it on the way out and back in.
+var ray_mask := RAY_MASK
 
 var _body: CharacterBody3D
 var _head: Node3D
@@ -239,6 +252,7 @@ func throw(amount: float) -> void:
 	thrown.linear_velocity = direction * throw_speed(thrown.mass, amount) + _body.velocity
 	thrown.watch_first_impact(throw_speed(thrown.mass, amount))
 	changed.emit()
+	_report_if_outside(thrown)
 
 ## Lets go, or stows the item if you are aiming at a fitting stow point.
 func drop() -> void:
@@ -251,6 +265,14 @@ func drop() -> void:
 		_end_grace(dropped)
 		point.secure(dropped)
 	changed.emit()
+	_report_if_outside(dropped)
+
+## A thing let loose in space by working hands -- on foot on a world -- is
+## outside now: reported as let_go, for the holder to make it a stray. Aboard
+## nothing is in space; homed to its reel or stowed, it is not loose.
+func _report_if_outside(it: Item) -> void:
+	if is_instance_valid(it) and it.in_space and it.state == Item.State.LOOSE:
+		let_go.emit(it)
 
 ## The free stow point a drop would put the held item in: the fitting one
 ## nearest where you are looking, within STOW_RANGE of it. Null if none.
@@ -338,6 +360,7 @@ func _release() -> void:
 	charge = -1.0
 	if it.definition.eva_tool and it.use_node != null and it.use_node.go_home(it):
 		_ignore(it, false)
+		released.emit(it)
 		return
 	var size := it.definition.size
 	var at := _clear_point(it.global_position, maxf(size.x, maxf(size.y, size.z)) * 0.5)
@@ -347,6 +370,7 @@ func _release() -> void:
 	it.linear_velocity = _body.velocity
 	it.angular_velocity = Vector3.ZERO
 	_releasing.append([it, RELEASE_GRACE])
+	released.emit(it)
 
 ## The point on the way from the eye to `to` that a ray proves is clear, far
 ## enough short of any wall for something `half_size` across.
@@ -361,7 +385,7 @@ func _ray(from: Vector3, to: Vector3) -> Dictionary:
 	var exclude: Array[RID] = [_body.get_rid()]
 	if item != null:
 		exclude.append(item.get_rid())
-	var query := PhysicsRayQueryParameters3D.create(from, to, RAY_MASK, exclude)
+	var query := PhysicsRayQueryParameters3D.create(from, to, ray_mask, exclude)
 	return _body.get_world_3d().direct_space_state.intersect_ray(query)
 
 func _tick_grace(delta: float) -> void:

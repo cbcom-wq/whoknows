@@ -23,22 +23,26 @@ bridge with a wide looping view and a pilot seat kind of set back with other con
 included." The starter's pod is gone; the silhouette, size and feel are kept as close as the bridge
 allowed (296 blocks and 260.4 t before; the figures below).
 
+**Revised 2026-11-04** so it can be boarded on foot when it lands on a world: the two engine pods'
+forward retros moved two cells forward, out of the landing ramp's path (*Boardable on a world*,
+below). Nothing else changed.
+
 ## The decks
 
-`to-plan warden` prints them (bow up, port on the left):
+`to-plan warden` prints them (bow up, port on the left; turrets included, as of 2026-11-04):
 
 ```
 deck y=2    x: -1 .. 1
 z 0  Fk Fk Fk
 z 1  Fh Fh Fh
-z 2  Fh Fh Fh
+z 2  Fh Tl Fh
 z 3  Fh Fh Fh
 z 4  Fh Fh Fh
 
 deck y=1    x: -3 .. 3
 z -6  .    Fs   Fs   Fs   Fs   Fs   .
 z -5  Fs8  Fh   Fh   Fh   Fh   Fh   Fs12
-z -4  Fs8  Fh   Fh   Fh   Fh   Fh   Fs12
+z -4  Fs8  Fh   Fh   Tl   Fh   Fh   Fs12
 z -3  Fs8  Fh   Fh   Fh   Fh   Fh   Fs12
 z -2  Fs8  Fh   Fh   Fh   Fh   Fh   Fs12
 z -1  Fs8  Fh   Fl   Fl   Fl   Fh   Fs12
@@ -52,17 +56,17 @@ z 5   .    .    T    T    T    .    .
 deck y=0    x: -4 .. 4
 z -11  .    .    .    .    Rv   .    .    .    .
 z -10  .    .    .    .    .    .    .    .    .
-z -9   .    .    .    .    Fh   .    .    .    .
+z -9   .    .    .    .    Th   .    .    .    .
 z -8   .    .    .    .    Fh   .    .    .    .
 z -7   .    .    .    .    Fk4  .    .    .    .
 z -6   .    Rb   C    C    C    C    C    Rb   .
 z -5   .    C8   Cs   D    Hm   D    Cs   C12  .
 z -4   .    C8   D    D    D    D    D    C12  .
-z -3   .    C8   Cp12 D    Cc   D    Cs   C12  .
+z -3   .    C8   Cp12 D    Cc   D    Ws   C12  .
 z -2   .    Ar   Qk12 D    D    D    Qk8  Ar   .
 z -1   .    Ar   Bk   Bk   D    Wr   Wr   Ar   .
 z 0    .    Ar   Bk   Bk   D    Wr   Wr   Ar   .
-z 1    .    H    Gy   Gy   D    Ba   Cl   H    .
+z 1    .    Tl3  Gy   Gy   D    Ba   Cl   Tl1  .
 z 2    .    A    D    D    D    D    D    H    .
 z 3    Rv   H    D    D    D    D    D    H    Rv
 z 4    R>   H    D    D    Qk   Qm   D    H    R<
@@ -81,9 +85,9 @@ z -4   .    Rb   Fs10 H    G    H    Fs14 Rb   .
 z -3   .    Fh2  Fs10 H    H    H    Fs14 Fh2  .
 z -2   .    Fh2  Fs10 H    H    H    Fs14 Fh2  .
 z -1   .    Fh2  Fs10 H    H    H    Fs14 Fh2  .
-z 0    .    Fh2  Fs10 H    H    H    Fs14 Fh2  .
+z 0    Rb   Fh2  Fs10 H    H    H    Fs14 Fh2  Rb
 z 1    .    Fh2  Fs10 H    G    H    Fs14 Fh2  .
-z 2    Rb   Fh2  Fs10 H    H    H    Fs14 Fh2  Rb
+z 2    .    Fh2  Fs10 H    H    H    Fs14 Fh2  .
 z 3    R>   H    H    Qc   H    Qc   H    H    R<
 z 4    R^   H    H    H    H    H    H    H    R^
 z 5    T    H    T    T    T    T    T    H    T
@@ -94,14 +98,14 @@ z -10  Fh2
 z -9   Fh2
 z -8   Fh2
 z -7   Fh2
-z -6   Fh2
+z -6   Tl2
 z -5   Fh2
 z -4   Fh2
 z -3   Fh2
 z -2   Fh2
 z -1   Fh2
 z 0    Fh2
-z 1    Fh2
+z 1    Tl2
 z 2    Fh2
 z 3    Fh2
 z 4    Fh2
@@ -118,7 +122,7 @@ command bridge in place of the pod, the silhouette, size and feel kept. The figu
 |---|---|---|
 | A command bridge | the helm forward at the glass, crew stations either side, the captain's chair on its dais behind, a band of glass across the bow and down the sides | helm at (0, 0, −5); stations at (±2, 0, −5), the weapons station at (2, 0, −3); captain's chair at (0, 0, −3); 5 panes across the bow and 3 down each flank; every seat sat in and stood up from |
 | Keep the size | the first Warden's 296 blocks, 260.4 t, 36 × 18 × 10 m | 311 blocks, 265.3 t, 36 × 18 × 10 m (one row longer inside, no longer outside) |
-| Keep the feel | turns 1.08 / 0.61 / 1.39, forward 21.9 | turns **1.09 / 0.57 / 1.40** rad/s² (pitch / yaw / roll); forward **21.5** m/s² |
+| Keep the feel | turns 1.08 / 0.61 / 1.39, forward 21.9 | turns **1.09 / 0.58 / 1.40** rad/s² (pitch / yaw / roll; 1.089 / 0.575 / 1.396 exactly, the same before and after the 2026-11-04 move: yaw went from 0.5747 to 0.5754, so it now rounds up); forward **21.5** m/s² |
 | Pretty fast | forward well above the starter's 14.2: 18–22 m/s² | 21.5 m/s² (19 thrusters, 5,700 kN) |
 | Not as nimble as a fighter, never sluggish | every turn at or under the starter's 1.48 / 0.71 / 1.84, none under 0.5 | 1.09 / 0.57 / 1.40 |
 | Steady on a patrol line | side ≥ 5 m/s² (the starter's 4.7 slides) | side **7.5**, vertical 13.2; 100 m/s sideways gone in 13 s |
@@ -128,7 +132,9 @@ command bridge in place of the pod, the silhouette, size and feel kept. The figu
 | Balanced under burn | under 5% of authority | pitch 0.22%, yaw 0.03%, roll 0% |
 | Military | armour, an armoury, a crew berth | 6 armour blocks on the cabin's flanks, a four-cell weapon room, a four-cell bunk room |
 | Usable | helm with a view, airlock, walkable cabin, the droid's needs | one airlock, 51 walkable cells on one storey, closet dock, 31 jobs all reachable; 20 windows outside for 20 inside |
-| Frames | every probe `fps` ≥ 120 | worst **121** seated by a rock with both light groups and a second ship 300 m off (123 without it), on a quiet machine, 2026-11-03 |
+| Boardable on a world (2026-11-04) | a plain `ramp` line on every outer airlock, nothing in its way | `ramp: 4.05 m, 8.10 m at 30°` (it said `through the hull at [(-4, -1, 2)] — NOT BOARDABLE ON A WORLD`) |
+| Lifts off a 7 m/s² world | `lift` at least 1.3 × | **13.2** m/s², **1.88 ×** (unchanged) |
+| Frames | every probe `fps` ≥ 120 | worst **121** seated by a rock with both light groups and a second ship 300 m off (123 without it), on a quiet machine, 2026-11-03. After the 2026-11-04 move, with another designer's probe running beside it: **121** by a rock and **119** with a second ship in the cleanest run; four interleaved pairs, original against revised, read 119.3 / 116.0 by a rock and 113.8 / 113.5 with a second ship on average (the original alone ranged 104–121 in them), so no change the noise can show |
 
 **Turns.** Yaw is 0.04 under the first Warden's: the bridge row moved mass 2 m forward and yaw
 inertia grows with it. Pitch is 0.01 over: the bow's vertical rcs had to be rearranged (below), and
@@ -171,7 +177,9 @@ the nearest arrangement with every exhaust open came out a little stronger, not 
   outer room cell has a porthole. The rear rows (z 2..4) are open deck, a cross-passage to the
   airlock and the engine room.
 - **The airlock** is in the port wall at z = 2, its hatch facing port onto space, the passage
-  through its inner hatch. The stern is all engines, so it could not be aft.
+  through its inner hatch. The stern is all engines, so it could not be aft. Landed on a world, its
+  sill is 4.05 m over the keel's plane, so a landing ramp 8.10 m long folds down out of it at 30°;
+  the cells it comes down through, (−4..−7, −1..−2, 2), are kept empty (*Boardable on a world*).
 - **Armour** (`armour`, 900 hp, 3 t) is the cabin's outer walls beside the berth, the armoury and
   the bridge's back corners (z −2..0): six blocks, two fewer than before, since the bridge's flanks
   are glass now. It looks exactly like hull outside; the portholes still cut through it.
@@ -197,10 +205,52 @@ the nearest arrangement with every exhaust open came out a little stronger, not 
   tip cube; at 22 m from the centre of mass they give a 36 m hull its pitch.
 - **Retros:** one at each front corner of the glass (y = 0, z = −6), beside the band's corner
   posts, firing forward past the bridge's flanks; a pair below the side glass (y = −1, z = −4);
-  and one at the front of each engine pod (z = 2). The old pair at y = 0, z = −4 is side glass now.
+  and one under each flank at midship (x = ±4, y = −1, z = 0), a blister below the flank turret's
+  corner that answers the bow pair under the side glass. Until 2026-11-04 that pair was the front of
+  each engine pod (z = 2), where the port one stood in the landing ramp's path. The old pair at
+  y = 0, z = −4 is side glass now.
 - **The engine block.** 9 thrusters across y = 0, 7 across y = −1 (x −2..2 and the pods' ±4) and 3
   on the tower's stern (y = 1): 19 bells. A full burn pitches the ship with 49,529 N·m, 0.22% of
   its authority.
+
+## Boardable on a world (revised 2026-11-04)
+
+Landed on a world, a hull rests on its keel, and a landing ramp folds down at 30° under every
+horizontal outer hatch more than 0.45 m over the keel's plane, `sill / sin 30°` long (`LandingRamp`,
+built by `AirlockAlcove` only if nothing is in its way). The Warden's sill is 4.05 m up, so its ramp
+is 8.10 m long and reaches 7.0 m out from the port flank, and it came down through the port engine
+pod's forward retro. No ramp was built: you could land the Warden and step out, but never walk back
+in. `ship_check`'s ramp line:
+
+- before: `ramp    airlock (-3, 0, 2): ramp: 4.05 m, 8.10 m at 30° through the hull at [(-4, -1, 2)] — NOT BOARDABLE ON A WORLD`
+- after: `ramp    airlock (-3, 0, 2): ramp: 4.05 m, 8.10 m at 30°`
+
+**What moved:** the engine pods' forward retros, (±4, −1, 2) to (±4, −1, 0), two cells forward
+along the flanks. That is two rows of the file. The blocks, count (311), mass (265.3 t), power,
+brake (5.7 m/s², still six retros) and lift (13.2 m/s², 1.88 ×) are as they were. A retro pushes
+along the hull, so it is never steering authority, and the turns are 1.089 / 0.575 / 1.396 rad/s²
+before and after; the pitch imbalance under burn is still 49,529 N·m (0.22%). The centre of mass
+moved 3 cm forward. Each engine pod is now a plain box, no longer a step deeper at its bottom front.
+The starboard retro moved too, with nothing in its way, to keep the flanks mirrored.
+
+**The options weighed** (four `ship_check` rounds; renders of each from eye height on the ground):
+
+| Round | Change | Ramp | Cost |
+|---|---|---|---|
+| 1 | port retro one cell forward, (−4, −1, 1) | clear | right under the port flank turret, whose sky fell from 92% to 84%; a lump crowding the ramp's top |
+| 2 | port retro two cells forward, (−4, −1, 0) | clear | sky 91%; it reads as a blister like the bow pair under the side glass |
+| 3 | round 2, and the keel row (y = −2) taken off: the ventral turrets up into the belly at (0, −1, −6) and (0, −1, 0), the sensor head's up-pusher into the tip cube (0, −1, −11) | **2.05 m, 4.10 m** | 295 blocks, 258.4 t, turns 1.17 / 0.60 / 1.43, lift 1.93 ×, no rule broken; but the keel and its hanging turrets, the ship's lower line from every low angle (where a landed ship is seen from), are gone, and the belly reads flat |
+| 4 (built) | round 2, mirrored on starboard | clear | both flank turrets 91% |
+
+- **Moving the airlock** costs more: z = 2 is the only flank cell with open deck inside and an
+  empty cell outside, and at z = 3 or 4 the pods' rcs stand outside the hatch and under it.
+- **Lowering the airlock's deck** cannot be done alone: the walkable storey is y = 0 (ladders don't
+  climb yet: `CUT_OFF`). The sill is 4.05 m only because the keel row sets the keel's plane
+  (`Ship.keel_depth_of` counts every cell's bottom, the half-height keel fairings too), so round 3
+  is the one way to a shorter ramp. It is kept aside, not built, to keep the silhouette. If landing
+  legs come (about 0.4 m), this ramp grows to about 8.9 m and its path stays clear: nothing stands
+  outboard of the port flank at z = 2 at any height.
+- **Dropping a retro** would put the brake at 4.7 m/s² (one) or 3.8 (both), under the target of 5.
 
 ## Weapons (ship weapons spec §13)
 
@@ -214,14 +264,15 @@ turrets, none `TURRET_BLIND` and none `TURRET_BURIED`: no cell had to be moved.
 | light, dorsal | (0, 1, −4) | up (0), on the bow ridge over the bridge | 98% |
 | light, ventral | (0, −2, −6) | down (2), under the sensor head | 100% |
 | light, ventral | (0, −2, 1) | down (2), on the keel | 100% |
-| light, starboard | (3, 0, 1) | out to +x (1), a plate of the flank | 92% |
-| light, port | (−3, 0, 1) | out to −x (3), a plate of the flank | 92% |
+| light, starboard | (3, 0, 1) | out to +x (1), a plate of the flank | 91% (92% before 2026-11-04) |
+| light, port | (−3, 0, 1) | out to −x (3), a plate of the flank | 91% (92% before 2026-11-04) |
 | **heavy**, forward | (0, 0, −9) | up (0), on the tip of the sensor head | 96% |
 
 - **Why there:** a pair on top and a pair underneath, spread along the hull, so that between them
   the whole sphere is covered from both ends of the ship; the flank pair at the midship fill in
-  the beams. Their 92% is the armour plate and the fairing slopes either side of each, standing
-  a little proud of the flank. The heavy turret is on the nose, where its field forward is
+  the beams. Their 91% is the armour plate and the fairing slopes either side of each, standing
+  a little proud of the flank, and the retro blister below and ahead of each (since 2026-11-04;
+  one cell further aft, right under the turret, it took 84%). The heavy turret is on the nose, where its field forward is
   widest, the point of a frigate.
 - **The station** is the former third crew station at (2, 0, −3), in the captain's row beside the
   chair: sitting there is the board, and, with a heavy turret aboard, the heavy turret's gun
@@ -240,15 +291,20 @@ turrets, none `TURRET_BLIND` and none `TURRET_BURIED`: no cell had to be moved.
 
 311 blocks (6 armour, 19 thrusters, 28 rcs, 3 quantum cores, 4 cells, 11 canopies, 122 fairings,
 6 light turrets and a heavy one; the helm, a captain's chair, 2 crew stations and a weapons
-station, the computer), 265,300 kg, centre of mass (−0.001, −0.412, 0.253). Thrust forward /
-reverse / lateral / vertical 5,700 / 1,500 / 2,000 / 3,500 kN; authority (22,689,972,
-14,000,000, 7,294,007) N·m against an imbalance under burn of (49,529, 4,295, 0). 108.0 MW made,
-97.9 drawn; 1,600 QE. Sections (hp / pieces): bow 1,280 / 11 a side, midship 5,430–5,490 / 18,
-stern 7,820–7,860 / 22–24; engines 2,850, quantum cores 750, computer 300, cockpit (the helm and
-the 11 canopies) 720, light turrets 200 each, the heavy one 400; not crippled. Skin 219 plates,
-186 chamfers, 76 corners, 521 facets, 47 nozzles; 20 windows outside for 20 inside; 7 floods and
-one forward light (on the sensor head). Seats: 5 (the helm, 2 crew stations, the weapons
-station, the captain's chair), each sat in and stood up from. Probe fps (GTX 960, 1280 × 720):
-275 standing, 136 seated, 132 with both light groups, 122 by a rock, 203 and 223 in the chase
-views, 122 with a second ship 300 m off; re-measured on a quiet machine on 2026-11-03, 123 by a
-rock and 121–122 with a second ship. No validator issues; no rule broken.
+station, the computer), 265,300 kg, centre of mass (−0.001, −0.412, 0.223) (0.253 before the
+2026-11-04 move). Thrust forward / reverse / lateral / vertical 5,700 / 1,500 / 2,000 / 3,500 kN;
+inertia (20,806,150, 24,331,246, 5,225,356) kg·m²; authority (22,667,358, 14,000,000, 7,294,007)
+N·m against an imbalance under burn of (49,529, 4,295, 0). 108.0 MW made, 97.9 drawn; 1,600 QE.
+Sections (hp / pieces): bow 1,280 / 11 a side, midship 5,430–5,490 / 18, stern 7,820–7,860 /
+21–23 (22–24 before the move); engines 2,850, quantum cores 750, computer 300, cockpit (the helm
+and the 11 canopies) 720, light turrets 200 each, the heavy one 400; not crippled. Skin 223
+plates, 198 chamfers, 86 corners, 521 facets, 47 nozzles (219, 186, 76 before: the blisters show
+more faces than the pods' fronts did); 20 windows outside for 20 inside; 7 floods and one forward
+light (on the sensor head). Landing ramp: 4.05 m sill, 8.10 m at 30°, nothing in its way.
+Seats: 5 (the helm, 2 crew stations, the weapons station, the captain's chair), each sat in and
+stood up from. Probe fps (GTX 960, 1280 × 720): 275 standing, 136 seated, 132 with both light
+groups, 122 by a rock, 203 and 223 in the chase views, 122 with a second ship 300 m off;
+re-measured on a quiet machine on 2026-11-03, 123 by a rock and 121–122 with a second ship.
+Revised, 2026-11-04, beside another probe: 260 standing, 134 seated, 125 with both light groups,
+121 by a rock, 178 and 203 in the chase views, 119 with a second ship 300 m off. No validator
+issues; no rule broken.

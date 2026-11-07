@@ -53,3 +53,35 @@ func test_worlds_are_tens_of_kilometres_with_real_mountains():
 		var r := WorldRecipe.from_seed(s * 131 + 7)
 		assert_between(r.relief_m, minf(r.radius_m * 0.01, 1200.0) - 0.001, 1200.0)
 	assert_eq(WorldRecipe.GENERATOR_VERSION, 2)
+
+func test_planets_pull_at_most_seven():
+	assert_eq(WorldRecipe.GRAVITY[WorldRecipe.Kind.PLANET], Vector2(2.0, 7.0))
+	for s in 200:
+		var r := WorldRecipe.from_seed(s)
+		assert_between(r.surface_gravity, 2.0, 7.0)
+
+func test_air_top_by_atmosphere():
+	var r := WorldRecipe.from_seed(1)
+	r.radius_m = 20000.0
+	r.atmosphere = WorldRecipe.Atmosphere.NONE
+	assert_almost_eq(r.air_top(), 3000.0, 0.01)
+	r.atmosphere = WorldRecipe.Atmosphere.THIN
+	assert_almost_eq(r.air_top(), 2400.0, 0.01)
+	r.atmosphere = WorldRecipe.Atmosphere.THICK
+	assert_almost_eq(r.air_top(), 4000.0, 0.01)
+
+## Pinned from main at b280fa5 before the gravity change: name, radius,
+## archetype, relief, palette and atmosphere of four seeds.
+const PINNED := [
+	[1, "HESTES-34", 46226.47, 2, 870.54, 0, 1],
+	[7, "IMAL-87", 38359.94, 1, 409.88, 5, 2],
+	[1337, "LIIM-30", 37603.02, 2, 478.26, 5, 1],
+	[90210, "MAZE-54", 51302.18, 1, 933.63, 3, 2],
+]
+
+func test_gravity_change_moves_nothing_else():
+	for row in PINNED:
+		var r := WorldRecipe.from_seed(row[0])
+		assert_eq([r.name, r.archetype, r.palette, r.atmosphere], [row[1], row[3], row[5], row[6]])
+		assert_almost_eq(r.radius_m, row[2], 0.01)
+		assert_almost_eq(r.relief_m, row[4], 0.01)

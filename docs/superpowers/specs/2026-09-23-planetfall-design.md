@@ -26,6 +26,19 @@ Slice 6; piloting HUD spec §4.3, §5, §6, §10; starter shuttle art direction 
 > boulders are still this spec's. What stays here: gravity, the assisted descent, landing,
 > the airlock step-out, walking, boulders, sites and the atmosphere.
 
+> **Built 2026-11-04 by the desert world's phase 0**
+> (`2026-11-03-desert-world-design.md` §5, branch `desert-world`): §7.1 (gravity), §8 (flight in
+> a well: the hold, levelling, no falling through), §9 (landing), the refusals of §10 (a hatch
+> that will not open onto an uneven, unlanded or blocked spot) and §11 (on foot) are built, with
+> the changes the design's status note lists. The ones that matter here: the planets' gravity is
+> 2–7 m/s², not 2–8; gravity on the avatar, loose items and strays applies only below a world's
+> air top, while ships feel the whole well; a hard landing (over 4 m/s) is a toast and a thud
+> with no damage; and a landed ship lowers a **landing ramp** at its high hatch, which §10 did
+> not have. The airlock's refusal order is **warping, then the world (not landed or uneven
+> ground, hatch blocked), then charge**, and on a world the suit asks for no charge. **§7.3
+> (air that is only for looks) is replaced** by the desert world's phase 1. **§12 and §13 (sites,
+> signals, the discovery log and the surface readout) are still open.**
+
 ---
 
 ## 1. Why this document exists

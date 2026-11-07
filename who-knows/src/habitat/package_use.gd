@@ -130,6 +130,8 @@ func _ship_gap(p: Vector3) -> float:
 			best = minf(best, SuitTie.gap(ship, p))
 	return best
 
+## Outside the ship: on a spacewalk, or on foot on a world -- where only a rock
+## (SURFACE_LAYER) takes a package, so on the ground it plants nothing yet.
 static func _outside(holder: Node) -> bool:
 	var avatar := holder as Avatar
-	return avatar == null or avatar.mode == Avatar.Mode.SUIT
+	return avatar == null or avatar.is_outside()

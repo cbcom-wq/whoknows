@@ -102,3 +102,28 @@ func test_the_suits_tool_shows_beside_its_warning():
 	assert_eq(_panel.status_label.text, "HOSE 12 M")
 	_panel.render(_suit(20, &"low", "HOSE 12 M"))
 	assert_eq(_panel.status_label.text, "SUIT LOW · HOSE 12 M")
+
+# --- on foot on a world: no store, a tool's text alone (final review) ----------
+
+func test_with_no_store_only_the_tools_text_shows():
+	var t := _suit(0, &"ok", "HOSE 3 M")
+	t.energy_label = &""
+	_panel.render(t)
+	assert_true(_panel.visible)
+	assert_false(_panel.energy_label.visible, "no SUIT numeral")
+	assert_false(_panel.bar_track.visible, "no bar")
+	assert_false(_panel.bar_fill.visible)
+	assert_false(_panel.notch.visible)
+	assert_eq(_panel.status_label.text, "HOSE 3 M")
+	assert_eq(_panel.status_label.get_theme_color("font_color"), HudPalette.READOUT)
+
+## ...and the next spacewalk's suit readout has its numeral and bar back.
+func test_the_store_comes_back_after_none():
+	var t := _suit(0, &"ok", "HOSE 3 M")
+	t.energy_label = &""
+	_panel.render(t)
+	_panel.render(_suit(64, &"ok"))
+	assert_true(_panel.energy_label.visible)
+	assert_true(_panel.bar_track.visible)
+	assert_true(_panel.bar_fill.visible)
+	assert_eq(_panel.energy_label.text, "SUIT 64%")

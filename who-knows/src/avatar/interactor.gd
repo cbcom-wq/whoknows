@@ -19,10 +19,13 @@ signal prompt_changed(text: String)
 ## interior_geometry | items (project.godot 3d_physics layers 2 and 6).
 ## RayCast3D defaults to mask 1 (exterior_hull) and would find nothing here.
 const MASK := 2 | 32
-## On a spacewalk: exterior_props (layer 5), where the hull panel is, and
-## items (layer 6), where the hose's nozzle waits on its reel. Anything else
-## outside shows no prompt: Grasp refuses to take it.
-const SUIT_MASK := 16 | 32
+## Outside -- on a spacewalk or on foot on a world: exterior_props (layer 5),
+## where the hull panel is, and items (layer 6), where the hose's nozzle waits
+## on its reel, with hulls (layer 1), the ground (BodyProxy.LAYER) and rocks
+## (AsteroidBody.LAYER) in the way, as walls are aboard (desert world spec
+## §5.5): the ray stops at one, which shows no prompt, and nothing behind it is
+## offered. Grasp refuses to take anything else outside.
+const SUIT_MASK := 1 | BodyProxy.LAYER | 16 | 32 | AsteroidBody.LAYER
 ## How far from the line of sight an item can be and still be offered.
 const ASSIST_ANGLE := deg_to_rad(8.0)
 

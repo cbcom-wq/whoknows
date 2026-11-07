@@ -26,6 +26,11 @@ var world_velocity: Vector3 = Vector3.ZERO
 var local_velocity: Vector3 = Vector3.ZERO
 ## Rotation about the hull's own axes as (pitch, yaw, roll), radians/sec.
 var local_angular_velocity: Vector3 = Vector3.ZERO
+## Vertical thrust over weight in a world's well; INF elsewhere (desert-world spec §5.2).
+var lift_margin: float = INF
+## The landing monitor's word for the ground: LANDED, UNEVEN GROUND · TILT 31°,
+## TOO HEAVY FOR THIS WORLD, or "" (desert-world spec §5.3).
+var ground_status: String = ""
 var assist_enabled: bool = false
 var boost_active: bool = false
 var hull_origin: Vector3 = Vector3.ZERO

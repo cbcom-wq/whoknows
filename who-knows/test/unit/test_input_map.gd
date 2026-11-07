@@ -15,6 +15,7 @@ const REQUIRED_ACTIONS := [
 	&"point_mode", &"set_heading", &"speed_lock", &"orbit_camera", &"toggle_controls",
 	&"lights_flood", &"lights_forward",
 	&"weapons_mark", &"weapons_clear", &"weapons_orders",
+	&"jump",
 ]
 
 func test_every_gameplay_action_is_registered():
@@ -97,3 +98,11 @@ func test_the_lights_are_on_l_and_k():
 	var fwd: InputEventKey = InputMap.action_get_events(&"lights_forward")[0]
 	assert_eq(flood.physical_keycode, KEY_L)
 	assert_eq(fwd.physical_keycode, KEY_K)
+
+## Planetfall §11.2: jump is on Space, the key boost has; boost is read only
+## seated and jump only on foot on a world.
+func test_jump_shares_space_with_boost():
+	var jump: InputEventKey = InputMap.action_get_events(&"jump")[0]
+	var boost: InputEventKey = InputMap.action_get_events(&"boost")[0]
+	assert_eq(jump.physical_keycode, KEY_SPACE)
+	assert_eq(boost.physical_keycode, KEY_SPACE)

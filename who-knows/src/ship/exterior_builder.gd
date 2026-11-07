@@ -50,6 +50,25 @@ var _surfaces: Dictionary = {}
 ## once at the end of the frame, however many stages changed in it.
 var _stale: Dictionary = {}
 var _alcoves: Dictionary = {}   # Vector3i -> AirlockAlcove
+## The layout the ship launched with (desert world phase 0, Task 15), set by
+## Ship.set_grid: the next rebuild plans its landing legs from it (leg_plan),
+## with the lowest look that rebuild draws, so the hull is drawn once. Null --
+## a base, or anything else built from a grid -- plans none, and it stands on
+## its keel.
+var leg_layout: ShipGrid = null:
+	set(value):
+		leg_layout = value
+		leg_plan = []
+		_plan_due = value != null
+## Where the landing legs go: LandingLegs.plan of leg_layout, made once, on the
+## first rebuild after it was set; a rebuild after damage builds what is left
+## of it.
+var leg_plan: Array[Dictionary] = []
+var _plan_due := false
+var _legs: LandingLegs
+## How far under the hull's origin the ground is once landed: the legs' stance
+## plane, or the keel's with no legs (stance_depth()).
+var _stance := 0.0
 
 func bind(grid: ShipGrid, catalog: BlockCatalog) -> void:
 	_grid = grid
@@ -61,8 +80,96 @@ func rebuild() -> void:
 		return
 	var walkable := DeckGraph.build(_grid, _catalog).walkable_coords()
 	_layout = HullLayout.plan(_grid, _catalog, InteriorLayout.plan(_grid, _catalog, walkable))
-	_build_colliders()
+	# The skin first: the legs' stance clears its lowest look (and the
+	# turrets', parked), and the alcoves' ramps reach that stance.
 	_build_skin()
+	if _plan_due:
+		_plan_due = false
+		leg_plan = LandingLegs.plan(leg_layout, minf(lowest_under(_skin), turrets_lowest(leg_layout)), _catalog)
+	var standing := _standing_legs()
+	_stance = Ship.keel_depth_of(_grid)
+	for leg in standing:
+		_stance = maxf(_stance, -(leg["foot"] as Vector3).y)
+	_build_colliders()
+	if not standing.is_empty():
+		_legs = LandingLegs.build(self, _body(), standing)
+
+## The lowest point of `layout`'s own outside look, in the hull's frame (y up,
+## the grid's origin): its skin as HullDressing draws it -- the floods'
+## housings, the nozzles, the plates -- and each turret parked, as
+## turrets_lowest; never a landing leg or ramp, which stand on the ground, nor
+## a light's rig. What the legs' stance clears (LandingLegs.stance_for; the
+## owner, 2026-11-05). Drawn off the tree and freed: about 60 ms for the
+## starter and 150 for the Warden, headless on the dev Xeon, so the ship's own
+## rebuild measures the skin it drew instead. INF for an empty grid; `catalog`
+## null loads the blocks'.
+static func lowest_look(layout: ShipGrid, catalog: BlockCatalog = null) -> float:
+	if layout == null or layout.size() == 0:
+		return INF
+	if catalog == null:
+		catalog = BlockCatalog.load_from_dir()
+	var walkable := DeckGraph.build(layout, catalog).walkable_coords()
+	var hull := HullLayout.plan(layout, catalog, InteriorLayout.plan(layout, catalog, walkable))
+	var holder := Node3D.new()
+	HullDressing.build(hull, holder)
+	var lowest := minf(lowest_under(holder), turrets_lowest(layout))
+	holder.free()
+	return lowest
+
+## The lowest corner of the bounds of every mesh under `root`, in `root`'s
+## frame: what the eye can see of it at its lowest (a mesh's bounds, as the
+## renderer's; a curved part's corner stands a little proud of it). On the
+## tree or off it. INF with none.
+static func lowest_under(root: Node3D) -> float:
+	var lowest := INF
+	for node in root.find_children("*", "MeshInstance3D", true, false):
+		var mi := node as MeshInstance3D
+		if mi.mesh == null:
+			continue
+		var xf := Transform3D.IDENTITY
+		var at: Node = mi
+		while at != root and at is Node3D:
+			xf = (at as Node3D).transform * xf
+			at = at.get_parent()
+		var box := mi.get_aabb()
+		for i in 8:
+			lowest = minf(lowest, (xf * (box.position + box.size * Vector3(i & 1, (i >> 1) & 1, (i >> 2) & 1))).y)
+	return lowest
+
+## The lowest point of `layout`'s turrets' looks in the hull's frame, each
+## built off the tree as Ship._place_turrets builds it -- parked, as a turret
+## with no target rests (WeaponValues.PARK_ELEVATION, ahead) -- and freed. A
+## turret aimed by hand can reach further: a ventral's barrels straight down
+## stand 1.6 m out of its face. INF with none.
+static func turrets_lowest(layout: ShipGrid) -> float:
+	var holder := Node3D.new()
+	for c: Vector3i in layout.coords():
+		var inst := layout.get_block(c)
+		if WeaponValues.is_turret(inst.block_id):
+			var t := Turret.new()
+			t.setup(inst.block_id, c, SkyMap.normal_of(inst.orientation), null)
+			holder.add_child(t)
+	var lowest := lowest_under(holder)
+	holder.free()
+	return lowest
+
+## The ship's landing legs, or null with none.
+func legs() -> LandingLegs:
+	return _legs if is_instance_valid(_legs) else null
+
+## Metres from the hull's origin down to the plane it stands on, landed: its
+## legs' feet, or its keel's with no legs (Ship.stance_depth).
+func stance_depth() -> float:
+	return _stance
+
+## The planned legs whose mount the hull still has: a mount lost to damage takes
+## its leg on the rebuild.
+func _standing_legs() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for leg in leg_plan:
+		if _grid.has_block(leg["cell"]):
+			out.append(leg)
+	return out
 
 ## What the skin was made from, for the lights, the probe and tests.
 func layout() -> HullLayout:
@@ -224,6 +331,14 @@ func _clear() -> void:
 		remove_child(alcove)
 		alcove.free()
 	_alcoves.clear()
+	if is_instance_valid(_legs):
+		for collider in _legs.colliders:
+			if is_instance_valid(collider):
+				collider.get_parent().remove_child(collider)
+				collider.free()
+		remove_child(_legs)
+		_legs.free()
+	_legs = null
 
 func _is_alcove(coord: Vector3i) -> bool:
 	return AirlockSite.hatch_normal(_grid, coord) != Vector3i.ZERO
@@ -237,7 +352,7 @@ func _build_colliders() -> void:
 		if _is_alcove(coord):
 			# Hollow, not gone: the alcove's floor, walls and hatches are this
 			# cell's collision now.
-			_alcoves[coord] = AirlockAlcove.build(self, body, _grid, _catalog, coord)
+			_alcoves[coord] = AirlockAlcove.build(self, body, _grid, _catalog, coord, _stance)
 			for collider in _alcoves[coord].colliders:
 				collider.set_meta(&"cell", coord)
 			_collider_coords.append(coord)

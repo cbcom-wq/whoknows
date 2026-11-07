@@ -32,3 +32,24 @@ func test_no_hull_no_panel():
 	assert_false(_panel.visible)
 	_panel.render(null)
 	assert_false(_panel.visible)
+
+func test_the_ground_status_shows_when_not_crippled():
+	var t := _t(1.0)
+	t.ground_status = "LANDED"
+	_panel.render(t)
+	assert_eq(_panel.status_label.text, "LANDED")
+
+func test_crippled_outranks_the_ground_status():
+	var t := _t(0.4, "no thrust")
+	t.ground_status = "LANDED"
+	_panel.render(t)
+	assert_eq(_panel.status_label.text, "CRIPPLED · NO THRUST")
+
+func test_landed_is_readout_and_uneven_ground_is_warning():
+	var t := _t(1.0)
+	t.ground_status = "LANDED"
+	_panel.render(t)
+	assert_eq(_panel.status_label.get_theme_color("font_color"), HudPalette.READOUT)
+	t.ground_status = "UNEVEN GROUND · TILT 31°"
+	_panel.render(t)
+	assert_eq(_panel.status_label.get_theme_color("font_color"), HudPalette.WARNING)

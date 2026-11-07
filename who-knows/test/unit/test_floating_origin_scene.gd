@@ -170,9 +170,68 @@ func test_with_a_ship_asleep_everything_outside_is_covered():
 	assert_true(_root.fleet.sleeping(far))
 	assert_eq(_uncovered(), [])
 
+## Landed on a world, gravity that says so and no more (test_airlock_world).
+class OnWorld extends WorldGravity:
+	func on_world_at(_p: Vector3) -> bool:
+		return true
+	func at(_p: Vector3) -> Vector3:
+		return Vector3.ZERO
+	func up_at(_p: Vector3) -> Vector3:
+		return Vector3.UP
+	func altitude_at(_p: Vector3) -> float:
+		return INF
+
+## Desert world phase 0, Task 14: a landing ramp down is part of the hull --
+## its slab, rails and collider are under the exterior -- so it is covered and
+## a shift carries it with the hull.
+func test_a_landing_ramp_down_is_covered_and_moves_with_the_hull():
+	_ship.flight_computer.gravity = OnWorld.new()
+	_ship.landing.restore_landed()
+	var ramps: Array[LandingRamp] = []
+	for lock: Airlock in _ship.airlocks.values():
+		if lock.alcove.ramp != null:
+			ramps.append(lock.alcove.ramp)
+	assert_gt(ramps.size(), 0, "the starter has a ramp")
+	var ramp := ramps[0]
+	assert_true(ramp.is_down(), "restored landed, the ramp is down at once")
+	assert_true(_ship.exterior.is_ancestor_of(ramp))
+	assert_true(_ship.exterior.is_ancestor_of(ramp.collider))
+	assert_eq(_uncovered(), [])
+	var offset := ramp.global_position - _ship.exterior.global_position
+	_ship.exterior.global_position = Vector3(2500, 0, -40)
+	assert_true(_universe.check())
+	assert_almost_eq(ramp.global_position - _ship.exterior.global_position, offset, Vector3.ONE * 0.0001,
+		"a shift carries the ramp with the hull")
+
 func test_everything_outside_is_covered_on_a_spacewalk():
 	_out(Vector3(0, 0, 12))
 	assert_eq(_uncovered(), [])
+
+## On foot on a world (desert world spec §5.5) the origin follows you, as on
+## a spacewalk: you, your lamp and your hands are covered, and so is what you
+## put down -- a stray.
+func test_on_foot_on_a_world_the_focus_is_you_and_everything_outside_is_covered():
+	_avatar.enter_field(_outside, Transform3D(Basis.IDENTITY, Vector3(0, 0, 12)), Vector3.ZERO, _ship.exterior)
+	assert_eq(_universe.focus, _avatar)
+	assert_true(_avatar.is_in_group(Universe.EXTERIOR_SPACE))
+	_avatar._unhandled_input(_lamp_switch())
+	assert_true(_avatar.lamp.visible)
+	var crate := Item.new()
+	crate.setup(_ship.item_catalog.get_def(&"crate"))
+	crate.set_space(true)
+	_outside.add_child(crate)
+	crate.global_position = _avatar.global_position + Vector3(0, 1, -1)
+	assert_true(_avatar.grasp.take(crate))
+	_avatar.grasp.drop()
+	assert_eq(_uncovered(), [])
+	_back_in()
+	assert_eq(_universe.focus, _ship.exterior)
+
+static func _lamp_switch() -> InputEventAction:
+	var ev := InputEventAction.new()
+	ev.action = &"lights_flood"
+	ev.pressed = true
+	return ev
 
 func _salvage() -> SalvageField:
 	return _outside.get_node_or_null("SalvageField") as SalvageField
@@ -255,6 +314,30 @@ func test_the_cameras_outside_see_as_far_as_rocks_are_drawn():
 func test_the_sun_throws_shadows_far_enough_to_shape_a_big_rock():
 	var sun: DirectionalLight3D = _root.get_node("DirectionalLight3D")
 	assert_gte(sun.directional_shadow_max_distance, AsteroidStream.SHADOW_REACH)
+
+## Final review I1: outside, your hands and what they hold are on their own
+## layer (Avatar.HANDS_LAYER), which the head lamp leaves out so it never blows
+## them out white. The sun, the ship's floods and the airlock's lights must all
+## light it, or your gloves are black against a sunlit world. Read back from
+## the real scene: the sun's mask is set in code, not in the .tscn.
+func test_the_sun_and_the_ships_lights_light_your_hands_and_the_lamp_does_not():
+	var sun: DirectionalLight3D = _root.get_node("DirectionalLight3D")
+	assert_ne(sun.light_cull_mask & Avatar.HANDS_LAYER, 0, "the sun lights your hands")
+	assert_ne(sun.light_cull_mask & 1, 0, "and the world, still")
+	assert_ne(sun.light_cull_mask & ExteriorBuilder.OWN_HULL_LAYER, 0, "and your hull")
+	assert_eq(sun.light_cull_mask & InteriorKit.LAYER, 0, "never the interior")
+	_out(_ship.exterior.global_position + Vector3(0, 0, 30))
+	assert_eq(_avatar.lamp.light_cull_mask & Avatar.HANDS_LAYER, 0, "the lamp leaves your hands out")
+	var floods := _ship.lights.spots(&"flood")
+	assert_gt(floods.size(), 0, "the starter has floods")
+	for spot in floods:
+		assert_ne(spot.light_cull_mask & Avatar.HANDS_LAYER, 0, "%s lights your hands" % spot.name)
+	var lights := 0
+	for airlock: Airlock in _ship.airlocks.values():
+		for light: Light3D in airlock.alcove.find_children("*", "Light3D", true, false):
+			lights += 1
+			assert_ne(light.light_cull_mask & Avatar.HANDS_LAYER, 0, "the airlock's %s lights your hands" % light.name)
+	assert_gt(lights, 0, "the alcove has a light")
 
 func test_everything_outside_is_covered_beside_a_world():
 	var system: SystemRecipe = _root.system

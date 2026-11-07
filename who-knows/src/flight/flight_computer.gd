@@ -103,6 +103,47 @@ var fire_control: FireControl = null
 ## Where you are, for the limit; null means the cruise ceiling everywhere, as
 ## in every test that never sets it.
 var whereabouts: Whereabouts = null
+## What pulls here (desert-world spec §5.2), set by the flight scene; null means
+## deep space, as in every test that never sets it. Every ship flies through this
+## script, so every ship feels a world's pull and holds against it.
+var gravity: WorldGravity = null
+
+## Metres from the hull's origin down to the plane it stands on, landed: its
+## landing legs' feet, at least 0.4 m under the bottom of its lowest cell and
+## 0.1 m under its lowest hanging look (LandingLegs.stance_for), or that
+## bottom with no legs (Ship.stance_depth; desert-world spec §5.2, phase 0
+## Task 15). The ship sets it from its grid; keel_altitude and the levelling
+## measure from it.
+var keel_depth := 0.0
+
+## True while the hull is landed, or touching and in contact with terrain this
+## tick (not through the grace after contact is lost). With the
+## stick's translation centred, the gravity hold and the levelling then stand
+## down, so the ship's weight reaches the ground and it can settle; any
+## translation input restores both at once (desert-world spec §5.3). Set by
+## LandingMonitor every tick; false while flying, so always false in deep space.
+var on_ground := false
+
+## On the ground and not asked to move: the hold and the levelling stand
+## down. LandingMonitor.translating is the one home of "asked to move" (the
+## stick's translation, or a velocity hold climbing over HOLD_LIFTS), so an AI
+## pilot's climbing hold gets its gravity hold back on the ground and rises
+## off (Task 15, N1).
+func _resting_on_ground() -> bool:
+	if not on_ground:
+		return false
+	var up := gravity.up_at(_hull.global_position) if gravity != null else Vector3.ZERO
+	return not LandingMonitor.translating(self, up)
+
+## What the landing monitor says of the ground, for the telemetry; null in
+## deep space and in tests that never set it.
+var landing: LandingMonitor = null
+
+## Levelling begins this high above the keel, fully on by LEVEL_FULL, turning
+## the hull toward up at LEVEL_GAIN per second per radian of error.
+const LEVEL_FROM := 150.0
+const LEVEL_FULL := 100.0
+const LEVEL_GAIN := 1.5
 ## This tick's limit with the assist on, m/s.
 var current_limit := CRUISE_LIMIT_MPS
 ## True while boost is actually applying this tick: held, with translation
@@ -270,6 +311,17 @@ func _physics_process(delta: float) -> void:
 		commanded_force_local = Vector3.ZERO
 		commanded_torque_local = Vector3.ZERO
 		return
+	if _hull.freeze:
+		# A frozen hull (parked, asleep) feels nothing and commands nothing.
+		boosting = false
+		boost_refused = false
+		commanded_force_local = Vector3.ZERO
+		commanded_torque_local = Vector3.ZERO
+		return
+	if gravity != null:
+		# The pull itself (spec §5.2; Planetfall §8.2): an acceleration, so a
+		# force of g x mass, at the hull's centre, in the world frame.
+		_hull.apply_central_force(gravity.at(_hull.global_position) * _hull.mass)
 	_apply_translation(delta)
 	_apply_rotation(delta)
 
@@ -297,13 +349,100 @@ func _apply_translation(delta: float) -> void:
 	boost_refused = wants_boost and not full_power
 	if boosting and quantum != null:
 		quantum.spend_continuous(QuantumValues.BOOST_COST * delta, &"boost")
-	commanded_force_local = translation_force(local_velocity, _translate_input, _hull.mass,
+	var pilot_force := translation_force(local_velocity, _translate_input, _hull.mass,
 		_authority_budget(thrust_budget), boosting, assist_enabled, speed_locked, locked_speed,
 		held)
+	# The gravity hold (spec §5.2): with the assist on, the engines first cancel
+	# the pull, from the *unscaled* budget -- low power halves only the pilot's
+	# command and drift correction, never the hold (Planetfall §8.2).
+	var hold := Vector3.ZERO
+	if assist_enabled and gravity != null and not _resting_on_ground():
+		var g_local := basis.inverse() * gravity.at(_hull.global_position)
+		if not g_local.is_zero_approx():
+			hold = gravity_hold(g_local, _hull.mass, thrust_budget)
+	# Boost raises the ceiling only on the axes it boosts (plan constraint: that
+	# direction's cap rises 2.5x, and the sum never exceeds the budget): an axis
+	# with pilot input, or every axis under a velocity hold, which
+	# translation_force boosts too. A forward boost must not let the vertical
+	# thrusters fire past their budget against a hold plus drift.
+	var total := hold + pilot_force
+	var plain := within_budget(total, thrust_budget)
+	if boosting:
+		var boosted := within_budget(total, thrust_budget, BOOST_MULTIPLIER)
+		commanded_force_local = Vector3(
+			boosted.x if held != null or not is_zero_approx(_translate_input.x) else plain.x,
+			boosted.y if held != null or not is_zero_approx(_translate_input.y) else plain.y,
+			boosted.z if held != null or not is_zero_approx(_translate_input.z) else plain.z)
+	else:
+		commanded_force_local = plain
 	_hull.apply_central_force(basis * commanded_force_local)
 
 	if assist_enabled and _hull.linear_velocity.length() > current_limit:
 		_hull.linear_velocity = _hull.linear_velocity.normalized() * current_limit
+
+## The force, in hull axes, that cancels a pull of `g_local` (m/s², hull axes)
+## on `mass`, clamped to what the engines have: lateral and vertical either way,
+## and fore (-z) and aft (+z) by their own budgets (spec §5.2). Pure.
+static func gravity_hold(g_local: Vector3, mass: float, budget: Dictionary) -> Vector3:
+	return within_budget(-g_local * mass, budget)
+
+## `force` (hull axes) clamped to the budget times `scale`: the one ceiling the
+## sum of hold and pilot command never exceeds. Pure.
+static func within_budget(force: Vector3, budget: Dictionary, scale := 1.0) -> Vector3:
+	var lateral: float = budget[&"lateral"] * scale
+	var vertical: float = budget[&"vertical"] * scale
+	var forward: float = budget[&"forward"] * scale
+	var reverse: float = budget[&"reverse"] * scale
+	return Vector3(
+		clampf(force.x, -lateral, lateral),
+		clampf(force.y, -vertical, vertical),
+		clampf(force.z, -forward, reverse),
+	)
+
+## Height of the plane its feet stand on (keel_depth) over the ground under
+## the hull: 0 landed on flat ground; INF outside a well.
+func keel_altitude() -> float:
+	if gravity == null:
+		return INF
+	return gravity.altitude_at(_hull.global_position) - keel_depth
+
+## Pitch and roll rates (rad/s, hull axes) that swing the hull's up onto `up`
+## (desert-world spec §5.2): LEVEL_GAIN times the angle between them, clamped
+## to ASSIST_TURN_RATE and faded in from 0 at LEVEL_FROM to full at LEVEL_FULL.
+## An axis the pilot is deflecting (`input` non-zero) is left alone; yaw never
+## levels. Pure.
+static func level_rates(hull_basis: Basis, up: Vector3, altitude: float, input: Vector3) -> Vector3:
+	var fade := clampf((LEVEL_FROM - altitude) / (LEVEL_FROM - LEVEL_FULL), 0.0, 1.0)
+	if fade <= 0.0 or up.is_zero_approx():
+		return Vector3.ZERO
+	var up_local := (hull_basis.inverse() * up).normalized()
+	var angle := Vector3.UP.angle_to(up_local)
+	var axis := Vector3.UP.cross(up_local)
+	if axis.length() < 0.0001:
+		# Level, or exactly inverted: upside down there is no axis, so roll.
+		if angle < PI / 2.0:
+			return Vector3.ZERO
+		axis = Vector3.BACK
+	axis = axis.normalized()
+	var rate := minf(LEVEL_GAIN * angle, ASSIST_TURN_RATE) * fade
+	return Vector3(
+		0.0 if not is_zero_approx(input.x) else axis.x * rate,
+		0.0,
+		0.0 if not is_zero_approx(input.z) else axis.z * rate)
+
+## How many times over the engines can lift the hull against the pull here:
+## vertical thrust over weight; INF outside a world's well (spec §5.2).
+func lift_margin() -> float:
+	if gravity == null:
+		return INF
+	var g := gravity.surface_gravity_at(_hull.global_position)
+	if g <= 0.0:
+		return INF
+	return float(thrust_budget[&"vertical"]) / (_hull.mass * g)
+
+## The pilot's latched translation input, each axis in -1..1 (hull axes).
+func translation_input() -> Vector3:
+	return _translate_input
 
 ## The share of the RCS's rated force or torque the core still delivers
 ## right now: half in low power, all of it otherwise (spec §8.3). A null
@@ -386,6 +525,13 @@ func _apply_rotation(_delta: float) -> void:
 		# target rate, just more slowly.
 		var rate := heading_rate(basis.inverse() * heading, torque_budget * _authority(), inertia)
 		rotate = Vector3(rate.x / ASSIST_TURN_RATE, rate.y / ASSIST_TURN_RATE, _rotate_input.z)
+	var height := keel_altitude() if assist_enabled else INF
+	if height < LEVEL_FROM and not _resting_on_ground():
+		# Near the ground the assist levels pitch and roll to the local up. The
+		# heading hold owns pitch, so it levels roll only; the stick wins its axes.
+		var stick := Vector3(1.0 if heading_hold else _rotate_input.x, 0.0, _rotate_input.z)
+		var level := level_rates(basis, gravity.up_at(_hull.global_position), height, stick)
+		rotate += level / ASSIST_TURN_RATE
 	commanded_torque_local = attitude_torque(rotate, local_spin)
 	_hull.apply_torque(basis * commanded_torque_local)
 
@@ -485,6 +631,8 @@ func build_telemetry() -> VehicleTelemetry:
 	else:
 		t.energy_state = &"full"
 	t.boost_refused = boost_refused
+	t.lift_margin = lift_margin()
+	t.ground_status = landing.ground_status() if landing != null else ""
 	if hull_status.is_valid():
 		var status: Array = hull_status.call()
 		t.has_hull = true
