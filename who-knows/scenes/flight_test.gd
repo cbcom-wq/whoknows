@@ -784,10 +784,12 @@ func _wire_hands() -> void:
 	_director.view_changed.connect(_on_view_changed)
 	_on_view_changed(_director.view, false)
 
-## The help card shows the keys of where you are: seated, on foot, or in the suit.
+## The help card shows the keys of where you are: at the helm, on foot, or in
+## the suit. A seat that does not fly (a bridge station, the captain's chair)
+## takes none of the pilot's keys, so it shows the on-foot card.
 func _refresh_controls_card() -> void:
 	var card: ControlsCard = $HudRoot/Screen/ControlsCard
-	card.show_card(ControlsCard.card_for(_director.is_seated, _avatar.mode))
+	card.show_card(ControlsCard.card_for(_director.piloting(), _avatar.mode))
 
 func _on_view_changed(view: CameraDirector.View, moving: bool) -> void:
 	_refresh_controls_card()

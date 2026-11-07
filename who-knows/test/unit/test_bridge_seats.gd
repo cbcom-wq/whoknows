@@ -63,6 +63,20 @@ func test_sitting_at_a_station_is_not_piloting():
 	assert_false(_ship.pilot.seated, "the controls stay with nobody")
 	assert_same(_director.seat(), _ship.seat_at(Vector3i(-2, 0, -4)))
 
+## Review M1: the help card shows the pilot's keys only at the seat that
+## flies; at a station or the captain's chair they do nothing, so it shows
+## the on-foot card (its use and hide rows still hold).
+func test_the_help_card_shows_the_pilot_s_keys_only_at_the_helm():
+	var card: ControlsCard = _root.get_node("HudRoot/Screen/ControlsCard")
+	for cell: Vector3i in [Vector3i(-2, 0, -4), Vector3i(0, 0, -2)]:
+		await _sit(_ship.seat_at(cell))
+		assert_eq(card.card, ControlsCard.Card.ON_FOOT, "at %s, which does not fly" % cell)
+		await _stand()
+	await _sit(_ship.seat)
+	assert_eq(card.card, ControlsCard.Card.SEATED, "at the helm")
+	await _stand()
+	assert_eq(card.card, ControlsCard.Card.ON_FOOT, "stood up")
+
 func test_the_helm_still_pilots():
 	watch_signals(_director)
 	await _sit(_ship.seat)

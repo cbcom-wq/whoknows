@@ -89,10 +89,11 @@ static func rows_for(c: Card) -> Array:
 			return SPACEWALK_ROWS
 	return FOOT_ROWS
 
-## The face for where you are: seated wins; else a spacewalk in the suit; else
-## on foot, aboard or on a world.
-static func card_for(seated: bool, mode: Avatar.Mode) -> Card:
-	if seated:
+## The face for where you are: at the seat that flies wins (`piloting`; a
+## seat that does not fly reads as on foot); else a spacewalk in the suit;
+## else on foot, aboard or on a world.
+static func card_for(piloting: bool, mode: Avatar.Mode) -> Card:
+	if piloting:
 		return Card.SEATED
 	if mode == Avatar.Mode.SUIT:
 		return Card.SPACEWALK
