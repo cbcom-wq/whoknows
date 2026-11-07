@@ -579,6 +579,9 @@ func _clip_second_ship() -> void:
 ## A spacewalk `height` over the ground, past the air: no wind at all.
 func _clip_ring(height: float, wind: WindSound) -> void:
 	await _hold_at(_spot, height, _sun_flat)
+	# Out of the seat first, as a player must be before a spacewalk.
+	_director.stand_now()
+	await _frames(3)
 	var at := Transform3D(Basis.IDENTITY, _starter.exterior.global_position + _spot * 30.0)
 	_avatar.enter_suit(_scene.get_node("Outside"), at, Vector3.ZERO, _starter.exterior)
 	await _seconds(1.5)
