@@ -402,6 +402,11 @@ fauna there; what follows is what it must respect.
   ask it** for its pull and its up: the avatar, loose items and strays already do. Gravity on
   them applies only below the world's air top (`on_world_at`); ships feel the whole well, out to 2
   radii. The star does not pull.
+- **Air exists outside now** (desert world phase 1): `WorldGravity.air_at(p)` (0 to 1) and
+  `drag_at(p, v)` (an acceleration against `v`, `DRAG_K` 1/720) are there for anything outside in
+  air; hulls, the avatar and strays already use them. Nothing lives there yet, so no NPC feels
+  it. A creature that moves outside must read them the same way, and never work air out from
+  altitude itself (`WorldRecipe.air_at` is the one place).
 - **Strays freeze at rest, on terrain only** (`StrayField`, `src/world/stray_field.gd`): on a
   world, one slower than `REST_SPEED` 0.1 m/s for `REST_TIME` 0.5 s goes `FREEZE_MODE_STATIC` and
   feels no pull, **only if** a ray down from it (half its height along up plus `REST_REACH` 0.3 m,

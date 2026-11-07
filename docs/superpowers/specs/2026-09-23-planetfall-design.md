@@ -36,7 +36,10 @@ Slice 6; piloting HUD spec §4.3, §5, §6, §10; starter shuttle art direction 
 > with no damage; and a landed ship lowers a **landing ramp** at its high hatch, which §10 did
 > not have. The airlock's refusal order is **warping, then the world (not landed or uneven
 > ground, hatch blocked), then charge**, and on a world the suit asks for no charge. **§7.3
-> (air that is only for looks) is replaced** by the desert world's phase 1. **§12 and §13 (sites,
+> (air that is only for looks) is replaced** by the desert world's phase 1, built 2026-11-05 as
+> designed there (§6): the air is real (drag, heat, wind), the sky and haze follow it, and a rim
+> glows round a world with air. There is **no `atmosphere.gdshader`**, only engine materials; and
+> the `WorldEnvironment` does change now (`AirMood`), which §7.3 had said it would not. **§12 and §13 (sites,
 > signals, the discovery log and the surface readout) are still open.**
 
 ---

@@ -80,6 +80,53 @@ this is the land it lives in).
 >   in a well the hold puffs all the time, so a re-centre may always wait for the forced one at
 >   4 km. Read from the code, not measured.
 
+> **Status, 2026-11-05: phase 1 (air) is built** (branch `desert-air`, to merge after the owner's
+> look). The style guide (§2.6, §2.9, §3.8, new §3.9, §5) and the skills record it. Phases 2 and 3
+> are not started.
+>
+> **Differences as built:**
+> - **No air, no change (Ruling 11).** With no air the outside sky is unturned and the sun is
+>   `SKY_MODE_LIGHT_AND_SKY`, exactly as phase 0, so the sky's own 1° glow shows. With air the sky
+>   turns to the world's up (`AirMood._turn_sky`), the sun is `SKY_MODE_LIGHT_ONLY`, and `StarHalo`
+>   carries its glow.
+> - **No exterior shader.** `Environment`, `ProceduralSkyMaterial`, `StandardMaterial3D` and
+>   particles only (`LimbGlow`, `EntryGlow`, `StarHalo`).
+> - **The entry shake is bound by a light bolt's hit (Ruling 4):** `HitFeel.strength(...)` ≈ 0.458,
+>   not the plan's 0.125 (a stale number in a doc comment).
+> - **The steady hold is not puffed.** `RcsShow.HOLD_SHOW` = 0: in a well the hover hold puffed a
+>   white blob. The pilot's and the assist's changes still puff.
+> - **Thrusters are heard outside in air** (`RcsShow.HEARD_OUTSIDE`, `OUTSIDE_DB`) on the Suit
+>   bus. Seated in the chase view you hear them on the Suit bus too; §6.4 said the Ship bus.
+>   (**Changed call**, open for the owner.)
+> - **Wind:** `WindSound` with `Ear` NONE / HULL / HELMET; loops `wind` (Suit bus) and `wind_hull`
+>   (Ship bus, with a 38 Hz rumble); silent where the air is 0 or there is no ear.
+> - **Drag:** `WorldGravity.drag(air, v) = -DRAG_K × air × |v| × v`, `DRAG_K` 1/720, on hulls, the
+>   avatar and strays. The starter's top speed near thick ground is about 101 m/s; `ship_probe`
+>   prints a `drag` line.
+> - **Entry heat and glow:** `FlightComputer.entry_heat()` from each hull's own limit, `EntryGlow`
+>   sized from `Ship.grid_box()`, colours `SpacePalette.ENTRY_LOW` / `ENTRY_HIGH`.
+> - **The help card** has three faces (seated, on foot, spacewalk); H works anywhere.
+> - **Probes:** `descent_render.gd` plays the whole descent; `landing_play.gd -- <out> ring` does
+>   phase 0's spacewalk in a ring at last (seed 3), and its climb predictor counts drag.
+> - **`test_system_scene`'s glide into a world starts at 120 m,** not 300, because drag bleeds the
+>   long path under the test's 60 m/s.
+>
+> **Measured** (windowed 1280 × 720, GTX 960; the floor is 120 fps): 134 seated on the ground, 191
+> on foot 6.3 m off the hatch, 143 at the ramp's foot, 139 seated hovering at 300 m, **129** in a
+> dive at the speed limit from the air's top (10.9 km) to 300 m, and **120 seated at full entry
+> heat, at the floor**. The same dive squeezed into 5 s at 2.1 km/s read 67 (not gated; phase 0's
+> ground streaming).
+>
+> **Open for phase 2 and the owner:**
+> - owner calls from the renders, not yet answered: the sky pairs per palette, the halo's size, the
+>   rim's strength and width (`RIM_ALPHA` 0.8, band 6°), the entry glow's look, `HOLD_SHOW`,
+>   `HEARD_OUTSIDE` / `OUTSIDE_DB`, the chase-view bus in air, and the wind levels;
+> - a descent faster than the speed limit reads 67–72 fps: phase 0's ground streaming;
+> - seated at full heat sits at the floor (120–126 fps), so no more may be drawn there;
+> - `test_avatar` and `test_avatar_modes` fail on "lit by the sun, not the cabin" since
+>   desert-world's `00aaff6` (hands on `HANDS_LAYER` outside); they were never updated there and
+>   are desert-world's to fix.
+
 ---
 
 ## 1. Why

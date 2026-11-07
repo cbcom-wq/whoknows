@@ -144,6 +144,14 @@ beam, the same spike, GTX 960): the worst view fell from about 150 to 132–142 
 taste call, so the cones stand and the owner has the renders and the numbers (ship exterior spec
 §6.4).
 
+Worlds with air (desert world phase 1, 2026-11-05, windowed 1280 × 720 on the GTX 960, the
+probes' own runs): the sky, haze, rim, drag, entry glow and wind added no shader and kept the
+budget. Seated on the ground: 134 fps; on foot 6.3 m off the hatch: 191; at the foot of the ramp:
+143; seated hovering at 300 m, away from the sun: 139; seated in a dive at the speed limit from
+the air's top (10.9 km) to 300 m, the slowest 5 s: 129; **seated at full entry heat: 120, at the
+floor**, so leave it no more to draw. The same dive squeezed into 5 s at 2.1 km/s, recorded and
+not gated, read 67, and that is phase 0's ground streaming, not the air.
+
 Measure after any change that adds lights, pieces, windows, particles or post-processing.
 
 ### 2.7 Windows show the real outside
@@ -195,6 +203,13 @@ Sound follows the look: **soft and warm, never harsh.**
   - **Suit**, for what you hear inside your helmet.
 - **Air carries sound.** In the airlock the Ship bus closes down with the pressure, to 300 Hz and
   −18 dB at vacuum.
+- **Space is silent; a world with air carries sound.** Where `Whereabouts.air()` is above zero,
+  and only there, `WindSound` plays wind: two `Synth` loops, `wind` in the helmet (Suit bus, its
+  pitch following the gusts) and `wind_hull` aboard (Ship bus, with a low rumble), each level
+  following the air, the gusts and your speed. One of the two plays, by where your ears are
+  (`WindSound.Ear`: none, hull, helmet), so stepping out hands it over with no gap. A spacewalk
+  over the air has no ear and no wind. Your thrusters are heard outside too in air
+  (`RcsShow.HEARD_OUTSIDE`, on the Suit bus, at `OUTSIDE_DB`), the one thing to tune by ear.
 - **Space is silent:** on a spacewalk you hear only your breathing, your thrusters, the warning
   chime and the tool in your hands: the hose's draw and gulp, on the Suit bus.
 - Interior sounds are positional, heard by the current camera. On a spacewalk that camera is 5 km
@@ -462,7 +477,9 @@ made.
   strong.
 - **Outside is dark, so the lights uncover things.** `SpacePalette.AMBIENT` on the world
   environment, and a gentle bloom (`glow` on, Screen blend) so lenses, windows and strips halo
-  against it. The interior keeps its own environment on its camera (§2.3).
+  against it. The interior keeps its own environment on its camera (§2.3). **A world with air by
+  day is the exception:** there the ambient is the sky's (§3.9), so the hull is lit and the
+  lights only add to it. With no air, nothing changes.
 - **A ship arriving out of warp** (`WarpArrival`, ship library spec §6) is the one effect outside
   that is not a light: a wake 3 m across behind its stern, as long as the way it came in the last
   0.15 s, and a soft shell of light round the hull as it stops, growing from 1.0 to 1.6 of its
@@ -472,6 +489,43 @@ made.
   you: straight at you, the wake hides behind the ship. Tuned at the renders on 2026-10-03 (a
   0.6 m wake was under a pixel from 400 m; at 0.8 it was a hard white bar); the owner approved it "good enough for now" on 2026-10-08, recorded
   in the ship library spec §12.
+
+### 3.9 Worlds up close
+
+Phase 1 of the desert world, "air" (`docs/superpowers/specs/2026-11-03-desert-world-design.md`
+§6, as built). Approved by the owner from renders. Ground cover, the desert, palms and brick come
+with phases 2 and 3, and will join this section.
+
+- **No exterior shader: engine materials only.** `Environment`, `ProceduralSkyMaterial`,
+  `StandardMaterial3D` and particles. The interior's three shaders stay the budget (§2.5); a
+  fourth, of either kind, needs the owner first.
+- **The sky and haze follow how thick the air is.** `AirMood` (`src/world/air_mood.gd`) writes the
+  outside's `WorldEnvironment`. As the air thickens, the horizon takes the world's `sky_low`
+  first, then the top takes `sky_high` (both in `SpacePalette.WORLDS`), haze comes up, the
+  ambient lifts and the bloom drops. By night the sky goes to `NIGHT_SKY`; at dusk the horizon
+  warms to `DUSK` and the sun to `SUN_LOW`. The interior's camera carries its own environment, so
+  the cabin never changes.
+- **The sky is turned to the world's up** (`AirMood._turn_sky`), so the horizon lies flat on the
+  ground wherever you stand. In air the sun is `SKY_MODE_LIGHT_ONLY` and `StarHalo` carries its
+  glow, widened with the air.
+- **No air, no change.** At air 0 every value is today's: the unturned sky, no fog,
+  `SpacePalette.AMBIENT` at 0.4, bloom 0.05, and the sun in `SKY_MODE_LIGHT_AND_SKY` with its own
+  1° glow. A bare rock still feels like a big rock (`test_air_mood.gd` pins it).
+- **The rim.** From outside, a world with air has a glow round its edge, `LimbGlow` (a child of
+  its `BodyProxy`), in the world's sky colours: a ring of three rows of vertices, `RIM_ALPHA` 0.8,
+  a band 6° inside the limb, bright on the sun's side and dim on the night side, fading out near
+  the ground where the sky's own horizon takes over.
+- **The dust goes.** `Whereabouts.dust()` fades `SpaceDust` out as the air thickens, gone at
+  `Whereabouts.DUST_GONE_AT` (0.2): air does not show specks.
+- **The entry glow.** A fast hull in air glows at the bow (`EntryGlow`, a child of the hull): a
+  dome of added light, sized from `Ship.grid_box()` so it fits any ship, climbing from
+  `SpacePalette.ENTRY_LOW` to `ENTRY_HIGH` with the heat. It shakes the cabin, never harder than a
+  light bolt's hit. There is **no heat damage**.
+- **The steady hold is not puffed.** In a well the assist's hover hold is a big constant push, and
+  showing it as puffs drew a white blob under every hovering ship. Thrusters show only what the
+  pilot and the assist change (`RcsShow.HOLD_SHOW` is 0).
+- **The floating origin** (CLAUDE.md) still holds: `LimbGlow` and `EntryGlow` are children of
+  members of `Universe.EXTERIOR_SPACE`; world-space particles join `Universe.HOLDS_SHIFT`.
 
 ## 4. Adding something new
 
@@ -537,7 +591,8 @@ shader.
 
 `test/unit/test_visual_style_rules.gd` fails the build if:
 
-- a colour literal appears in interior, hull, item, hand, airlock, asteroid or NPC-look code other
+- a colour literal appears in interior, hull, item, hand, airlock, asteroid, NPC-look or
+  world-air code (`air_mood.gd`, `star_halo.gd`, `limb_glow.gd` and `entry_glow.gd` are in `PAINTING_FILES`) other
   than the palettes (`InteriorPalette`, `HullPalette` for the hull's outside, `SpacePalette` for
   rocks and skitters; `InteriorKit` is exempt: it packs data into vertex colours). The hull's
   files are `hull_props.gd`, `hull_materials.gd`, `hull_layout.gd` and `hull_dressing.gd`, and

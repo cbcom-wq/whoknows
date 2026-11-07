@@ -152,6 +152,11 @@ Do these in order. Each one names the check that proves it.
      `ship_check` and the probe print it as the `lift` line. Planets pull 2 to 7 m/s², moons 1 to
      4, and the gravity hold spends this same vertical budget (`reference.md` *Gravity and
      landing*);
+   - **near the ground of a thick world its top speed is √(forward accel / `DRAG_K`)**
+     (`WorldGravity.DRAG_K` 1/720, at air 1): the `drag` line of `ship_probe`. The starter's is
+     about 101 m/s unboosted; boosted it would pass the 120 m/s cruise limit, so it caps there.
+     A slow-forward ship has a low ceiling in air (forward 4 gives 54 m/s), which is the air
+     doing its work, not a bug (`reference.md` *Air*);
    - `torque_imbalance` within a few % of `torque_budget` on each axis. Fix it by moving mass or
      thrust, not by weakening the RCS. Fairings above the thrust line count: the reshaped
      starter's spine and fins put pitch at **4.77% of the 5% limit** (4.91% before its two turrets), so leave headroom;
@@ -292,7 +297,7 @@ is the blueprint's budgets, so the grid decides the feel:
 | Travel swinging onto the nose after a turn | `thrust_budget[&"lateral"]` (and `vertical`) / mass | side 4.7 m/s², vertical 9.5: 100 m/s sideways takes about 21 s |
 | Lifting off a world; what the gravity hold has left to climb with | `vertical / mass` against the pull | 9.5 m/s² up against 7: margin 1.35 (`ShipRules.LIFT_MARGIN` 1.3) |
 | Braking; a speed lock slowing down | `reverse` / mass | 4.7 m/s² |
-| Accelerating; a speed lock catching up | `forward` / mass | 14.2 m/s² |
+| Accelerating; a speed lock catching up | `forward` / mass | 14.2 m/s²; in thick air its top speed is √(forward × 720): about 101 m/s |
 | Thrusters the player sees | each `rcs` block's exhaust face open and in view | 6 of 8 blocked (only the pitch-down pair shows); none in the pilot's view |
 | Warp reach on a full store | `(quantum_capacity − WarpPlan.WARP_BASE) × WarpPlan.WARP_M_PER_QE / 1000` km | 14,500 km on 1,200 QE (7,000 km on its starting 600) |
 
@@ -457,6 +462,11 @@ thrust.
 | A climb that never lifts off | A pilot's velocity hold upward left a landed ship landed: only the stick's translation counted as translating (final review M1). With that fixed the monitor let go, but `FlightComputer._resting_on_ground` still asked only the stick, so the gravity hold stayed off and the ship sat TOUCHING, 0.02 m down, for good (Task 15 N1) | `LandingMonitor.translating` also counts a hold climbing over `HOLD_LIFTS` 0.5 m/s along up, and it is the one home of "asked to move": `_resting_on_ground` calls it too (`test_a_landed_ship_given_an_upward_hold_lifts_off`, `test_a_landed_starter_given_a_1_m_s_climb_rises_off_within_3_s`) |
 | Landing on the keel strip | The starter landed on its keel strip and read as floating: its lowest cells are one 2 m row under the cabin, so from the ground the 10 m wide hull hung over the sand on nothing, with daylight under both flanks and the stern | Four `LandingLegs`, one per quadrant, stand the ship 0.4 m (`CLEARANCE`) under its keel's plane; the flight computer, the ramps and the touchdown all measure from that stance plane (`Ship.stance_depth`). Read the `legs` line of `ship_check` and render the landed ship from 25 m at eye height |
 | A belly turret under the stance plane | The starter's ventral turret is a cell on the keel row and its dome stands 0.755 m out of its face, so on 0.4 m legs its look sinks into flat sand (its meshes' lowest corner is 0.48 m under the feet, `landing_play` step 3). Its collider is the cell's and clears the ground by 0.39 m, so nothing hits; it only looks buried | Not fixed: `CLEARANCE` is the brief's 0.4 m, and clearing the dome by 0.3 m needs about 1.1 m. Owner's call: longer legs, or no turret on the keel row. `test_landing_legs` prints the turret look's lowest point |
+| The steady hold puffed as thrust | In a gravity well the assist's hover hold is a large constant RCS force. Shown as puffs, it drew a white blob under every hovering ship, and its world-space puffs never died, which held up the floating origin's shift | Show only the change: `FlightComputer.hold_force_local` is taken off the shown push, keeping `RcsShow.HOLD_SHOW` (0) of it (`RcsShow.shown_force`). The pilot's and the assist's changes still puff. Render a hovering ship from below |
+| A climb or stop predictor that ignores the air | Near thick ground drag bleeds speed, so a predictor without it undershoots, worst on low power (brake halved): `landing_play` step 9 settled 280.7 m for 300 | Count the drag: `landing_play`'s climb uses `ln(1 + k·v²/b) / (2k)` with `k` = `DRAG_K` × air. Any test that flies a long path in air needs it, or a start lower down (`test_system_scene`'s 30° glide starts at 120 m, not 300) |
+| `Avatar.enter_suit` while the director still has you seated | A probe that did it left the HUD on the suit's readout for every later stage | Stand up through the director first (`stand_now()`), then step out |
+| Wind where there is no air | Wind and the entry glow belong to air only | `Whereabouts.air()` is the one reading: 0 in space and on a spacewalk with no ear, so `WindSound` is silent. Never derive air from altitude anywhere else; `WorldRecipe.air_at` is the one place |
+| Colours or shaders for the sky | The outside's sky, rim and entry glow are tempting places for a shader | None: engine materials only (`Environment`, `ProceduralSkyMaterial`, `StandardMaterial3D`, particles), colours from `SpacePalette`, files in `PAINTING_FILES`. A fourth shader needs the owner (visual-style §3.9) |
 
 ## Not built yet (plan for it; don't assume it works)
 

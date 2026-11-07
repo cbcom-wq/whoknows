@@ -394,6 +394,11 @@ the floor, against §5.6.
 
 The style guide gains a *Worlds up close* rule only once a terrain pass settles them (§13.7).
 
+> **Done for the air, 2026-11-05** (desert world phase 1): `docs/design/visual-style.md` §3.9
+> *Worlds up close* now holds the sky and haze by air, the rim, the dust going, the entry glow and
+> the unpuffed hold. **Ground cover, the desert, palms and brick come with phases 2 and 3** and
+> will add to it.
+
 ---
 
 ## 9. Other documents

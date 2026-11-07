@@ -1036,6 +1036,30 @@ Measured by `landing_play` on a GTX 960 at 1280×720: 140 fps seated landed, 187
 the ship, 149 at the foot of the ramp looking up it. The Warden (265 t) levels from 15° to 0.03°
 in about 8 s with no overshoot; touchdown deals 0.0 hp.
 
+## Air (desert world phase 1; `docs/superpowers/specs/2026-11-03-desert-world-design.md` §6)
+
+**One air number.** Only `WorldRecipe.air_at(altitude)` works it out: `AIR_GROUND[atmosphere]`
+(0, 0.35 thin, 1.0 thick) times the square of the way down from `air_top()`. The focus reads it as
+`Whereabouts.air()`; anything on a body reads `WorldGravity.air_at(p)`.
+
+| What | Value | Where |
+|---|---|---|
+| Drag | an acceleration `-DRAG_K × air × speed × v`, `DRAG_K` = 1/720; on hulls, the avatar and strays | `WorldGravity.DRAG_K`, static `drag(air, v)`, `drag_at(p, v)` |
+| A hull's top speed | forward accel = drag: √(forward accel / (`DRAG_K` × air)). The starter's, in thick ground air, is **≈101 m/s** unboosted (√(14.2 × 720)); boosted ×2.5 would be 160, so the 120 m/s cruise limit (`FlightComputer.CRUISE_LIMIT_MPS`) is what holds. Higher up the cap fades with the air | the `drag` line of `ship_probe` |
+| Entry heat | 0..1 from speed over the ship's **own** limit: from `HEAT_FROM` 0.8 of it to the limit, in air above `HEAT_AIR` 0.05 (full at `HEAT_AIR_FULL` 0.15). No damage | `FlightComputer.heat(speed, limit, air)`, `entry_heat()` |
+| Entry glow | a bow cap of added light, its pole along the velocity, sized from `Ship.grid_box()` (the occupied cells' box in the hull's frame, never meshes), `SpacePalette.ENTRY_LOW` to `ENTRY_HIGH`; its buffet no stronger than a light bolt's felt hit (`HitFeel.strength(WeaponValues.spec(WeaponValues.LIGHT)["damage"])` ≈ 0.458) | `EntryGlow`, `Ship.entry_glow`, `Ship.grid_box()` |
+| The hold not puffed | shown push = commanded − hold × (1 − share); `HOLD_SHOW` 0 | `FlightComputer.hold_force_local`, `RcsShow.HOLD_SHOW`, static `RcsShow.shown_force` |
+| Thrusters heard outside | in air, Suit-bus players at the nozzles when the camera is not under the interior; level follows the air, `OUTSIDE_DB` -6 | `RcsShow.HEARD_OUTSIDE`, `OUTSIDE_DB` |
+| Wind aboard | `wind_hull` on the **Ship** bus, with a 38 Hz rumble; on foot or in a suit, `wind` on the Suit bus. Level = air × (0.3 × gust + speed / 150); silent at air 0 or with no ear | `WindSound` (`Ear` NONE / HULL / HELMET), `Synth` |
+| Sky, haze, sun | `AirMood` writes the outside's `WorldEnvironment`; with no air it is phase 0's exactly. In air the sky turns to the world's up and the sun is `SKY_MODE_LIGHT_ONLY`, with `StarHalo` | `AirMood`, `StarHalo` |
+| The rim | a glow round a world with air seen from outside; a child of its `BodyProxy` | `LimbGlow`, `RIM_ALPHA` 0.8, `BAND_INSIDE_DEG` 6 |
+
+Measured (windowed, GTX 960, 1280 × 720): seated on the ground 134 fps, hovering at 300 m 139,
+a dive at the speed limit 129, **seated at full entry heat 120 (at the floor)**. The help card
+(`ControlsCard`) has three faces (seated, on foot, spacewalk). Proof: `test_air_mood.gd`,
+`test_limb_glow.gd`, `test_entry_glow.gd`, `test_wind_sound.gd`, and the windowed probes
+`test/probes/descent_render.gd` (the whole descent) and `landing_play.gd -- <out> ring`.
+
 ## Landing ramps (desert world phase 0, Task 14; `src/ship/airlock/landing_ramp.gd`)
 
 Every airlock's alcove asks `AirlockAlcove.ramp_plan(grid, at)` and builds a `LandingRamp` under

@@ -87,6 +87,10 @@ of warp.**
 A turn rate is `torque / inertia`: inertia grows with the **square** of length, so a long ship
 turns slowly unless it has rcs at **both ends**.
 
+Near thick ground a ship's top speed is √(forward accel × 720): the starter's 14.2 gives about
+101 m/s, a freighter's 5 only 60. Air drags what flies in it, so "fast" in a brief means a high
+forward number (`ship_probe`'s `drag` line prints it).
+
 ## 2. Roles
 
 | Role | Shape | Leans on | Watch for | Weapons |

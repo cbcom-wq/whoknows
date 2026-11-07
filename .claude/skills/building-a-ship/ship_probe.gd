@@ -31,6 +31,8 @@ extends SceneTree
 # plane its legs stand on, length and angle, or NOT BOARDABLE ON A WORLD),
 # and a legs line (LandingLegs.plan's: how many fit, 4 wanted, each mount and
 # length; NOT BUILT if the hull's legs are not the plan's).
+# A drag line follows the lift line: the top speed in thick ground air, unboosted
+# and boosted, and each capped at the cruise limit (sqrt(forward accel / (DRAG_K x air))).
 # Then a two-ship pass (docs/superpowers/specs/2026-10-02-many-ships-design.md
 # §8.2): fps in the worst view with a second ship 300 m off,
 # probe_fleet_from_starter{,_dark}.png, F8 to its helm, probe_fleet_from_second
@@ -503,6 +505,16 @@ func _run(scene: Node) -> void:
 	print("lift    %.1f m/s2 up, %.2f× a %.0f m/s2 world's pull (needs ×%.1f)%s" % [
 		lift, lift / pull, pull, ShipRules.LIFT_MARGIN,
 		"" if lift / pull >= ShipRules.LIFT_MARGIN else "  <-- CANNOT LIFT"])
+	# Air drag (desert world phase 1): near the ground of a thick world a hull's
+	# top speed is where the forward push meets DRAG_K x air x v^2, never past
+	# the cruise ceiling. Boost multiplies the push by BOOST_MULTIPLIER.
+	var thick: float = WorldRecipe.AIR_GROUND[2]
+	var fwd: float = s.thrust_budget[&"forward"] / kg
+	var top := sqrt(fwd / (WorldGravity.DRAG_K * thick))
+	var top_boost := sqrt(fwd * FlightComputer.BOOST_MULTIPLIER / (WorldGravity.DRAG_K * thick))
+	print("drag    top speed in thick ground air %.0f m/s, boosted %.0f m/s; capped at the %.0f m/s cruise limit: %.0f, boosted %.0f" % [
+		top, top_boost, FlightComputer.CRUISE_LIMIT_MPS,
+		minf(top, FlightComputer.CRUISE_LIMIT_MPS), minf(top_boost, FlightComputer.CRUISE_LIMIT_MPS)])
 	# An rcs block whose exhaust face touches another block puffs inside it.
 	var blocked := []
 	var rcs := RcsShow.gather(ship.grid, ship.catalog, s.center_of_mass)
