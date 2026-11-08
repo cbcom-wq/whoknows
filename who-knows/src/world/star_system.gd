@@ -3,9 +3,10 @@ extends Node3D
 
 ## The star system as you see it (the system skeleton spec §3, §7): the only
 ## node that knows the system. It builds a BodyProxy per star, planet and
-## moon, the star's StarHalo, a BeltLook per belt, the space dust, the
-## blowing sand and Whereabouts, places every one each physics tick for where the focus is, and
-## aims the sun from the star.
+## moon, the star's StarHalo, a BeltLook per belt, the space dust and
+## Whereabouts, places every one each physics tick for where the focus is, and
+## aims the sun from the star. It makes the blowing sand too, which places
+## itself.
 ##
 ## The floating origin (CLAUDE.md): this node and its `Bodies` holder sit at
 ## the identity and never move; each proxy is a member of
