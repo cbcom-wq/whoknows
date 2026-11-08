@@ -156,6 +156,12 @@ func test_the_air_up_and_sun_up_over_a_world():
 	assert_almost_eq(w.air(), b.recipe.air_at(w.altitude()), 1e-6)
 	assert_gt(w.air(), 0.0)
 	assert_almost_eq(w.up(), dir, Vector3.ONE * 1e-5)
+	# over() gives all three at once, from the well in hand.
+	var over := w.over(w.well())
+	assert_almost_eq(over.altitude, w.altitude(), 1e-6)
+	assert_almost_eq(over.air, w.air(), 1e-6)
+	assert_almost_eq(over.up, w.up(), Vector3.ONE * 1e-6)
+	assert_null(w.over(_system.star), "the star has no ground")
 	# The sun overhead, and underfoot, standing on the ground.
 	var to_star := _system.star.point.minus(b.point).normalized()
 	focus.global_position = to_star * (b.radius + w.terrain_of(b).height_at(to_star))

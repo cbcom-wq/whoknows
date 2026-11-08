@@ -40,6 +40,13 @@ class Place:
 		id = p_id
 		name = p_name
 
+## The focus over one world's ground, worked out once (over()): what
+## altitude(), air() and up() each give with that world the well.
+class Over:
+	var altitude: float
+	var air: float
+	var up: Vector3
+
 ## How often it looks, seconds.
 const EVERY := 0.1
 ## You leave a place this far beyond its edge.
@@ -113,7 +120,8 @@ func dust() -> float:
 	return out * clampf(1.0 - air() / DUST_GONE_AT, 0.0, 1.0)
 
 ## How thick the air is here, 0 to 1; 0 outside a world's well (spec §6.1).
-## This is the one place the air at the focus is worked out.
+## This, and over() from the same formula, is the one place the air at the
+## focus is worked out.
 func air() -> float:
 	var b := well()
 	if b == null or b.recipe == null:
@@ -147,7 +155,25 @@ func altitude() -> float:
 	var b := well()
 	if b == null:
 		return INF
-	var local := _focus_point().minus(b.point)
+	return _altitude_over(b, _focus_point().minus(b.point))
+
+## The focus's altitude over `body`'s ground, the air there and the up, in one
+## go with the well already in hand (`body`, from well()): for whoever wants
+## all three every tick (BlowingSand), so the well is looked for once. Null
+## with no focus, and for the star.
+func over(body: SystemBody) -> Over:
+	var u := _focus_point()
+	if u == null or body == null or body.recipe == null:
+		return null
+	var local := u.minus(body.point)
+	var out := Over.new()
+	out.altitude = _altitude_over(body, local)
+	out.air = body.recipe.air_at(out.altitude)
+	out.up = local.normalized()
+	return out
+
+## How high `local` (from `b`'s centre) is over `b`'s ground.
+func _altitude_over(b: SystemBody, local: Vector3) -> float:
 	var t := terrain_of(b)
 	return t.altitude_of(local) if t != null else local.length() - b.radius
 

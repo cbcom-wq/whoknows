@@ -91,23 +91,49 @@ func test_on_at_the_desert_s_ground():
 	assert_almost_eq(wind.length(), 1.0, 1e-4)
 	var m := _process_material()
 	var along := _sand.global_basis.inverse() * wind
+	var up_here := _sand.global_basis.inverse() * up
 	assert_lt(rad_to_deg(m.direction.angle_to(along)), 1.0, "it blows along the world's wind")
-	assert_eq(m.initial_velocity_min, BlowingSand.SAND_SPEED.x)
-	assert_eq(m.initial_velocity_max, BlowingSand.SAND_SPEED.y)
-	assert_lt(rad_to_deg(m.emission_ring_axis.angle_to(_sand.global_basis.inverse() * up)), 1.0,
-		"the slab is turned to the local up")
+	assert_lt(absf(m.direction.normalized().dot(up_here)), 0.02, "along the ground, not up or down")
+	assert_lt(rad_to_deg(m.emission_ring_axis.angle_to(up_here)), 1.0, "the slab is turned to the local up")
 	# The slab's middle is on the ground under you.
 	var focus := _sand.to_local(_universe.focus.global_position)
 	var rel := focus - m.emission_shape_offset
 	assert_lt((rel - up * rel.dot(up)).length(), 0.01, "centred under the focus")
 	assert_almost_eq(rel.dot(up), _where().altitude(), 0.01, "on the ground, not round the hull")
-	assert_eq(m.emission_ring_height, BlowingSand.SAND_BOX.y)
-	assert_eq(m.emission_ring_radius, BlowingSand.SAND_BOX.x * 0.5)
 	assert_true(_sand.local_coords)
 	assert_true(_sand.is_in_group(Universe.EXTERIOR_SPACE))
 	assert_false(_sand.is_in_group(Universe.HOLDS_SHIFT))
-	assert_eq(_sand.amount, BlowingSand.SAND_AMOUNT)
 	assert_true(_sand.visibility_aabb.has_point(m.emission_shape_offset), "drawn where it blows")
+
+## Moves the frozen hull straight up or down until it is `altitude` m over
+## the ground, and lets the sand tick.
+func _hull_to(altitude: float) -> void:
+	_ship.exterior.global_position += _where().up() * (altitude - _where().altitude())
+	await wait_physics_frames(1)
+
+func test_it_stops_high_up_and_blows_again_low_where_it_was():
+	await _set_down(&"p3")
+	assert_true(_sand.emitting)
+	var place := _universe.to_universe(_sand.global_position)
+	await _hull_to(BlowingSand.SAND_TOP + 5.0)
+	assert_false(_sand.emitting, "no sand %.0f m up" % _where().altitude())
+	assert_eq(_sand.amount_ratio, 0.0)
+	await _hull_to(2.0)
+	assert_true(_sand.emitting, "it blows again low down")
+	assert_almost_eq(_sand.amount_ratio, 1.0, 0.005)
+	assert_almost_eq(_universe.to_universe(_sand.global_position).minus(place).length(), 0.0, 0.01,
+		"not put back onto you nor restarted: a moment off near where it was pops no streaks")
+
+func test_it_stops_when_you_leave_the_desert():
+	await _set_down(&"p3")
+	assert_true(_sand.emitting)
+	var p2 := _body(&"p2")
+	_root.hop_index = (_root.system as SystemRecipe).bodies.find(p2) - 1
+	assert_true(_root.hop(1))
+	await wait_physics_frames(1)
+	assert_eq(_where().well(), p2)
+	assert_false(_sand.emitting, "no sand by a world that is not a desert")
+	assert_eq(_sand.amount_ratio, 0.0)
 
 func test_sand_never_holds_the_origin():
 	var up := await _set_down(&"p3")

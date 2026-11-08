@@ -24,8 +24,9 @@ extends GPUParticles3D
 ## its live streaks together, and the slab, set relative to the node, is the
 ## same after a shift. It is NOT in Universe.HOLDS_SHIFT: an emitter that never
 ## stops would hold the origin back until the forced shift (the plan's
-## ruling). The node itself is put onto the focus only when the sand starts,
-## or once you are SAND_RECENTRE from it, so the streaks never jump as you go.
+## ruling). The node itself is put onto the focus (and restarted) only the
+## first time the sand blows, or once you are SAND_RECENTRE from it, so the
+## streaks never jump as you go, nor pop when the sand stops for a moment.
 ##
 ## Transparent and close to the camera (style guide §2.6): kept to
 ## SAND_AMOUNT thin quads, faded out within FADE_WHOLE of the eye. Its one
@@ -68,6 +69,9 @@ const LAYER := 1
 var whereabouts: Whereabouts
 var universe: Universe
 
+## Whether the node has been put onto the focus yet.
+var _placed := false
+
 func _init() -> void:
 	name = "BlowingSand"
 	amount = SAND_AMOUNT
@@ -99,12 +103,19 @@ func _physics_process(_delta: float) -> void:
 
 ## Sets how much sand blows, and where and which way, for the focus now.
 func tick() -> void:
-	var terrain := _desert_here()
-	var altitude := INF
+	var terrain: WorldTerrain = null
+	var over: Whereabouts.Over = null
 	var ratio := 0.0
-	if terrain != null:
-		altitude = whereabouts.altitude()
-		ratio = strength(true, whereabouts.air(), altitude)
+	if whereabouts != null and universe != null and is_instance_valid(universe.focus) \
+			and universe.focus.is_inside_tree():
+		# The well once a tick; the altitude, air and up from it.
+		var body := whereabouts.well()
+		if body != null:
+			terrain = whereabouts.terrain_of(body)
+		if terrain != null and terrain.archetype == WorldRecipe.Archetype.DUNES:
+			over = whereabouts.over(body)
+		if over != null:
+			ratio = strength(true, over.air, over.altitude)
 	if ratio <= 0.0:
 		if emitting or amount_ratio != 0.0:
 			amount_ratio = 0.0
@@ -112,25 +123,14 @@ func tick() -> void:
 		return
 	var focus := universe.focus.global_position
 	amount_ratio = ratio
-	if not emitting or focus.distance_to(global_position) > SAND_RECENTRE:
+	# Put onto the focus only the first time, or once far off: a start near
+	# where it was leaves the streaks still alive where they are.
+	if not _placed or focus.distance_to(global_position) > SAND_RECENTRE:
+		_placed = true
 		global_transform = Transform3D(Basis.IDENTITY, focus)
 		restart()
 	emitting = true
-	_lay(focus, whereabouts.up(), altitude, terrain)
-
-## The desert's ground under the focus, or null off a desert (and with no
-## focus, or no well).
-func _desert_here() -> WorldTerrain:
-	if whereabouts == null or universe == null or not is_instance_valid(universe.focus) \
-			or not universe.focus.is_inside_tree():
-		return null
-	var body := whereabouts.well()
-	if body == null:
-		return null
-	var terrain := whereabouts.terrain_of(body)
-	if terrain == null or terrain.archetype != WorldRecipe.Archetype.DUNES:
-		return null
-	return terrain
+	_lay(focus, over.up, over.altitude, terrain)
 
 ## Lays the slab's middle on the ground under `focus` (engine space),
 ## `altitude` over it, turned to `up`, the streaks flying along the wind there.
