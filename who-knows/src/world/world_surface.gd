@@ -76,6 +76,14 @@ var _solid := {}
 var _wanted_solid := {}
 ## anchor instance id -> {local, reach, keys}: what keys_near last said for it.
 var _solid_cache := {}
+## A node centre's direction -> the ground's height there: the selection asks
+## the same few hundred nodes again every RESELECT_AFTER, and the ground never
+## changes. Cleared with the bounds.
+var _heights := {}
+## Whether the leaves or the drawn chunks have changed since _prune last
+## showed and freed them: it is a pure function of the two, so it runs again
+## only then, not every tick.
+var _prune_due := true
 
 ## The leaves to draw for a focus at `local` (from the world's centre), and
 ## which nodes are split: [leaves, split]. `was_split` is the last call's
@@ -162,11 +170,13 @@ func update(focus: UniversePoint) -> void:
 	_local = focus.minus(body.point)
 	if _selected_at == null or focus.minus(_selected_at).length() >= RESELECT_AFTER:
 		_selected_at = focus
-		var sel := select(body.radius, terrain.relief, depth_max, _local, _split, _bounds, terrain.height_at)
+		var sel := select(body.radius, terrain.relief, depth_max, _local, _split, _bounds, _node_height)
 		leaves.assign(sel[0])
 		_split = sel[1]
+		_prune_due = true
 		if _bounds.size() > BOUNDS_KEPT:
 			_bounds = _bounds_of_selection()
+			_heights.clear()
 	_wanted_solid = _solid_wanted()
 	_collect()
 	_request()
@@ -218,6 +228,15 @@ func _exit_tree() -> void:
 	for id: int in _jobs.values():
 		WorkerThreadPool.wait_for_task_completion(id)
 	_jobs.clear()
+
+## The ground's height at a node centre's direction `d`, remembered (see
+## _heights).
+func _node_height(d: Vector3) -> float:
+	var h: Variant = _heights.get(d)
+	if h == null:
+		h = terrain.height_at(d)
+		_heights[d] = h
+	return h
 
 ## Wanted leaves not drawn, not building and not built.
 func _missing() -> Array[Vector4i]:
@@ -312,10 +331,21 @@ func _make_chunk(data: TerrainChunkData) -> void:
 	add_child(m)
 	m.global_position = universe.to_engine(body.point.plus(Vector3(data.centre)))
 	_chunks[data.key] = m
+	_prune_due = true
 
 ## Lets go of every drawn chunk nothing needs, and shows each only while
-## nothing drawn above it is shown.
+## nothing drawn above it is shown (only when the leaves or the chunks have
+## changed: _prune_due); and lets go of every solid chunk nothing needs.
 func _prune() -> void:
+	if _prune_due:
+		_prune_due = false
+		_prune_chunks()
+	for k: Vector4i in _solid.keys():
+		if not _wanted_solid.has(k):
+			(_solid[k] as Node).queue_free()
+			_solid.erase(k)
+
+func _prune_chunks() -> void:
 	var wanted := {}
 	var waiting := {}
 	var covering := {}
@@ -326,6 +356,9 @@ func _prune() -> void:
 			var p := k
 			while p.y > 0:
 				p = CubeSphere.parent(p)
+				if covering.has(p):
+					# And so are all of its own.
+					break
 				covering[p] = true
 	for k: Vector4i in _chunks.keys():
 		if wanted.has(k) or covering.has(k) or _below_any(k, waiting):
@@ -334,10 +367,6 @@ func _prune() -> void:
 		_chunks.erase(k)
 	for k: Vector4i in _chunks:
 		(_chunks[k] as MeshInstance3D).visible = not _below_any(k, _chunks)
-	for k: Vector4i in _solid.keys():
-		if not _wanted_solid.has(k):
-			(_solid[k] as Node).queue_free()
-			_solid.erase(k)
 
 func solid_keys() -> Array[Vector4i]:
 	var out: Array[Vector4i] = []
@@ -427,11 +456,13 @@ static func _speed_of(a: Node3D) -> float:
 		return (a as CharacterBody3D).velocity.length()
 	return 0.0
 
-## True if an ancestor of `key` is in `set`.
+## True if an ancestor of `key` is in `set`. The parent is worked out here
+## rather than by CubeSphere.parent: _prune walks every chunk to the root, and
+## without the call that costs half as much.
 static func _below_any(key: Vector4i, set: Dictionary) -> bool:
 	var p := key
 	while p.y > 0:
-		p = CubeSphere.parent(p)
+		p = Vector4i(p.x, p.y - 1, p.z >> 1, p.w >> 1)
 		if set.has(p):
 			return true
 	return false

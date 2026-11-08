@@ -222,23 +222,24 @@ func test_the_wind_turns_across_the_world():
 	assert_gt(hi - lo, deg_to_rad(20.0), "the ridges turn across the world")
 
 func test_crests_are_as_far_apart_near_the_poles_as_at_the_equator():
-	# 6.4 km along the wind, centred on an open point: twenty waves, give or
-	# take the warp's few, near the axis's equator and near where the dunes
-	# start to fade toward a pole.
+	# Twenty waves along the wind, centred on an open point: twenty crests,
+	# give or take the warp's few, near the axis's equator and near where the
+	# dunes start to fade toward a pole.
 	var t := _desert()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 9
+	var length := WorldTerrain.DUNE_WAVE * 20.0
 	for band in [Vector2(0.0, 0.3), Vector2(0.8, 0.86)]:
 		var d := _open_dune(t, rng)
 		while absf(d.dot(t.wind_axis)) < band.x or absf(d.dot(t.wind_axis)) > band.y:
 			d = _open_dune(t, rng)
 		var w := t.wind_at(d)
-		var heights := _profile(t, _walk(t, d, w, -3200.0), w, 6400.0)
+		var heights := _profile(t, _walk(t, d, w, -length * 0.5), w, length)
 		var crests := 0
 		for i in range(1, heights.size() - 1):
 			if heights[i] > heights[i - 1] and heights[i] >= heights[i + 1]:
 				crests += 1
-		gut.p("|d . axis| %.2f: %d crests in 6.4 km" % [absf(d.dot(t.wind_axis)), crests])
+		gut.p("|d . axis| %.2f: %d crests in %.1f km" % [absf(d.dot(t.wind_axis)), crests, length / 1000.0])
 		assert_between(crests, 15, 25, "crests DUNE_WAVE apart at |d . axis| %.2f" % absf(d.dot(t.wind_axis)))
 
 func test_only_a_desert_has_wind_and_talus():

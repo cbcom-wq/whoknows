@@ -114,10 +114,10 @@ const WORLDS: Array[Dictionary] = [
 		&"dust": Color("90a4b0"), &"accent": Color("d6e7ee"), &"sky": Color("c0dcea"),
 		&"sky_low": Color("c0dcea"), &"sky_high": Color("8fb4d8"),
 		&"boulder": Color("82939e"), &"grass": Color("adb6bb")},
-	{&"name": &"desert", &"ground_low": Color("7a6a4e"), &"ground_high": Color("b09a70"), &"rock": Color("54483a"),
-		&"dust": Color("928060"), &"accent": Color("ffd9a8"), &"sky": Color("e0c898"),
-		&"sky_low": Color("e0c898"), &"sky_high": Color("7d93bd"),
-		&"boulder": Color("827155"), &"grass": Color("a89060"), &"streak": Color("e8d6b0")},
+	{&"name": &"desert", &"ground_low": Color("a14a1c"), &"ground_high": Color("ae6630"), &"rock": Color("6e3519"),
+		&"dust": Color("863c16"), &"accent": Color("ffd9a8"), &"sky": Color("dca47c"),
+		&"sky_low": Color("dca47c"), &"sky_high": Color("7a84a8"),
+		&"boulder": Color("63301a"), &"grass": Color("8f6420"), &"streak": Color("e6be90")},
 ]
 
 ## Space as the outside shows it with no air (desert-world spec §6.2): the

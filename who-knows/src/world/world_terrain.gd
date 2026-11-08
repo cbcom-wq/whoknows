@@ -56,28 +56,39 @@ const PATCH_QUADS := 6.0
 # flat mesas where the continent layer is high; rock towers just below them.
 
 ## Dunes: crests this far apart, this high at most, the lee taking this share
-## of each wave (about 17° at full height; the windward side about 4°).
-const DUNE_WAVE := 320.0
-const DUNE_HEIGHT := 18.0
+## of each wave (about 20° at full height; the windward side about 5°).
+## Retuned at Checkpoint A (2026-11-07): 18 m over 320 m barely read in flat
+## light.
+const DUNE_WAVE := 600.0
+const DUNE_HEIGHT := 40.0
 const DUNE_LEE := 0.18
-## The trough and the crest are rounded over this share of a wave either
-## side, so no triangle is a knife edge.
+## The trough is rounded over this share of a wave either side, and the crest
+## over DUNE_CREST_EASE (about 7 m either side): a crisp ridge, never a knife
+## edge.
 const DUNE_EASE := 0.04
+const DUNE_CREST_EASE := 0.012
 ## Along its crest a dune's height swells from this share to full and back,
-## by a noise this many metres across.
-const DUNE_LOW := 0.35
+## by a noise this many metres across (at Checkpoint A from 0.35: on foot the
+## low dunes, 6 m, did not read as dunes).
+const DUNE_LOW := 0.5
 const DUNE_SWELL := 6000.0
 ## The ridges are level lines of d . wind_axis, shifted by up to this many
-## waves by a noise this many metres across, so they turn across the world.
-const DUNE_WARP := 1.5
+## waves by a noise this many metres across, so they turn across the world
+## (600 m: the turn Task 2's 1.5 waves of 320 m gave, a little more).
+const DUNE_WARP := 1.0
 const DUNE_TURN := 5000.0
 ## Past this |d . wind_axis|, toward the axis's poles where the ridges would
 ## close into rings, the dunes fade into a flat sand sheet, gone halfway to
 ## the pole.
 const DUNE_POLE := 0.9
-## The lowest fifth of a dune (of its height, faded as the dune fades) is
-## dust: the flats between dunes, and the sand sheets.
-const DUNE_DUST := 0.2
+## A dune's lee face, from its crest down to the next trough, is dust where
+## the dune stands at least this share of its height (before its swell): so
+## the colour changes along the ridge and the foot of the slip face, where the
+## ground folds, never across a slope. The sand sheets are ground_low.
+const DUST_STAND := 0.5
+## A desert's shade patches are this many times broader than PATCH_QUADS: on
+## smooth sand, narrower ones broke the ground into blotches.
+const DESERT_PATCH := 2.0
 ## Under the dunes and mesas the continent layer stands at this share of its
 ## height, so the dunes lie on a nearly level floor (a fraction of a degree)
 ## and are not lost on its slopes.
@@ -86,7 +97,7 @@ const DUNE_FLOOR := 0.25
 ## relief) is above MESA_FROM; the dunes fade out over MESA_EDGE below it. A
 ## desert's layer carries MESA_HILLS of the hills, so the mesa line wanders
 ## and breaks up rather than following a contour.
-const MESA_FROM := 0.12
+const MESA_FROM := 0.10
 const MESA_EDGE := 0.05
 const MESA_HILLS := 0.02
 ## One terrace per MESA_STEP of the layer, each MESA_RISE of half the relief
@@ -98,17 +109,21 @@ const MESA_FLAT := 0.98
 ## Towers stand in the band TOWER_BAND below the mesa line: cells TOWER_WAVE
 ## metres apart, one in TOWER_SHARE standing, its flat top TOWER_RADIUS in
 ## radius and its flank spreading to TOWER_FOOT times that. Each rises to the
-## first terrace, shorter toward the band's floor.
+## first terrace, shorter toward the band's floor. Retuned at Checkpoint A: a
+## fifth as many as Task 2's (0.3 of 140 m cells), broad flat-topped buttes
+## with near-sheer walls, whose tops (60-164 m across) stay a few quads across
+## at 1-2 km, not a rash of cones.
 const TOWER_BAND := 0.06
-const TOWER_WAVE := 140.0
-const TOWER_RADIUS := Vector2(8.0, 22.0)
-const TOWER_SHARE := 0.3
-const TOWER_FOOT := 1.4
+const TOWER_WAVE := 440.0
+const TOWER_RADIUS := Vector2(30.0, 82.0)
+const TOWER_SHARE := 0.6
+const TOWER_FOOT := 1.12
 ## How far a tower's centre strays from its cell's, as FastNoiseLite's
 ## cellular jitter: at 0.6 two centres are at least 0.48 of a cell apart, over
 ## twice the widest flank, so no tower's flank meets another cell's; and every
 ## point of a tower (centre within 0.26 of its cell's, flank within 0.22 of
-## that) lies inside its own cell.
+## that: TOWER_RADIUS.y * TOWER_FOOT, 92 m, is 0.22 of a 417 m cell, and a
+## cell is at least 418 m on any world over 6 km) lies inside its own cell.
 const TOWER_JITTER := 0.6
 ## Each cube face's tower cells start this many cells from the last face's,
 ## more than a face is across, so the faces never share a cell.
@@ -288,6 +303,8 @@ func ground_at(dir: Vector3, slope: float) -> StringName:
 func colour_at(dir: Vector3, slope: float, patch_m: float) -> Color:
 	var d := dir.normalized()
 	var base: Color = palette[ground_at(d, slope)]
+	if archetype == WorldRecipe.Archetype.DUNES:
+		patch_m *= DESERT_PATCH
 	var cell := (_shades.get_noise_3dv(d * (radius / maxf(patch_m, 1.0))) + 1.0) * 0.5
 	var k := clampi(floori(cell * SpacePalette.SHADES.size()), 0, SpacePalette.SHADES.size() - 1)
 	return SpacePalette.shade(base, k)
@@ -303,18 +320,52 @@ func _terrace(h: float) -> float:
 ## A desert's height at `d`, from the continents' noise there: dunes on the
 ## continent layer (flattened to DUNE_FLOOR), faded toward the mesas and the
 ## wind axis's poles; terraces above the mesa line; towers in the band below.
+## The dune's stand (_dune_stand), its phase (_phase) and its cross-section
+## are written out here rather than called: this runs per height, on the main
+## thread too, and a GDScript call costs more than a noise lookup.
 func _desert_height(d: Vector3, continent: float) -> float:
 	var half := relief * 0.5
-	# _mesa_continent(d, continent), written out: this runs per height.
+	# _mesa_continent(d, continent), written out.
 	var z := CONTINENT_SHARE * continent
 	if z >= MESA_FROM - TOWER_BAND - MESA_HILLS:
 		z += MESA_HILLS * _hills.get_noise_3dv(d * (radius / HILL_WAVE))
 	var ground := half * DUNE_FLOOR * CONTINENT_SHARE * continent
 	if z < MESA_FROM:
-		var dune := _dune(d, z)
-		if dune > 0.0:
+		# _dune_stand(a, z).
+		var a := d.dot(wind_axis)
+		var stand := 1.0
+		if z > MESA_FROM - MESA_EDGE:
+			stand = 1.0 - smoothstep(MESA_FROM - MESA_EDGE, MESA_FROM, z)
+		var pole := absf(a)
+		if pole > DUNE_POLE:
+			stand *= 1.0 - smoothstep(DUNE_POLE, (1.0 + DUNE_POLE) * 0.5, pole)
+		if stand > 0.0:
+			# The phase, within one wave (_phase).
+			var t := fposmod(-radius * acos(clampf(a, -1.0, 1.0)) / DUNE_WAVE
+				+ DUNE_WARP * _wind.get_noise_3dv(d * (radius / DUNE_TURN)), 1.0)
+			# The cross-section over one wave, t from 0 at a trough: rising
+			# gently over 1 - DUNE_LEE to the crest, falling over DUNE_LEE; the
+			# crest rounded by a parabola tangent to both slopes over
+			# DUNE_CREST_EASE either side, the trough over DUNE_EASE. Never
+			# below 0.
+			var p: float
+			if t < _CREST - DUNE_CREST_EASE:
+				if t >= DUNE_EASE:
+					p = t * _UP
+				else:
+					var e := t + DUNE_EASE
+					p = _DOWN * t + (_UP - _DOWN) * e * e / (4.0 * DUNE_EASE)
+			elif t <= _CREST + DUNE_CREST_EASE:
+				var e := t - _CREST + DUNE_CREST_EASE
+				p = 1.0 + _UP * (t - _CREST) + (_DOWN - _UP) * e * e / (4.0 * DUNE_CREST_EASE)
+			elif t <= 1.0 - DUNE_EASE:
+				p = (1.0 - t) / DUNE_LEE
+			else:
+				var x := t - 1.0
+				var e := x + DUNE_EASE
+				p = _DOWN * x + (_UP - _DOWN) * e * e / (4.0 * DUNE_EASE)
 			var swell := clampf(_swell.get_noise_3dv(d * (radius / DUNE_SWELL)) + 0.5, 0.0, 1.0)
-			ground += DUNE_HEIGHT * dune * (DUNE_LOW + (1.0 - DUNE_LOW) * swell)
+			ground += DUNE_HEIGHT * stand * p * (DUNE_LOW + (1.0 - DUNE_LOW) * swell)
 	else:
 		# Terrace k + 1, rising from terrace k (or from the floor for the first).
 		var t := (z - MESA_FROM) / MESA_STEP
@@ -328,19 +379,16 @@ func _desert_height(d: Vector3, continent: float) -> float:
 			ground = lerpf(ground, top, _tower(d, z))
 	return clampf(ground, -half, half)
 
-## How tall a dune stands at `d`, whose continent layer is `z`, as a share
-## of DUNE_HEIGHT before its swell: its profile (0 at a trough, 1 at a
-## crest), faded toward the mesas and the poles.
-func _dune(d: Vector3, z: float) -> float:
-	var a := d.dot(wind_axis)
+## How much of its height a dune stands at a point whose d . wind_axis is `a`
+## and whose continent layer is `z`: 1 on the open dunes, fading to 0 toward
+## the mesas and the wind axis's poles (_desert_height writes it out).
+static func _dune_stand(a: float, z: float) -> float:
 	var stand := 1.0
 	if z > MESA_FROM - MESA_EDGE:
 		stand = 1.0 - smoothstep(MESA_FROM - MESA_EDGE, MESA_FROM, z)
 	if absf(a) > DUNE_POLE:
 		stand *= 1.0 - smoothstep(DUNE_POLE, (1.0 + DUNE_POLE) * 0.5, absf(a))
-	if stand <= 0.0:
-		return 0.0
-	return stand * _dune_profile(fposmod(_phase(d, a), 1.0))
+	return stand
 
 ## The dune phase (see _phase) at `dir`, which need not be unit length.
 func _phase_of(dir: Vector3) -> float:
@@ -353,25 +401,10 @@ func _phase_of(dir: Vector3) -> float:
 ## d . wind_axis a true DUNE_WAVE apart at every latitude; growing toward the
 ## pole, the way the wind blows; warped by up to DUNE_WARP waves so they turn
 ## across the world. The warp's slope stays well under one wave per DUNE_WAVE,
-## so the ridges never fold back. The dunes' heights and wind_at both use it.
+## so the ridges never fold back. The dunes' heights (written out there),
+## their colours and wind_at all use it.
 func _phase(d: Vector3, a: float) -> float:
-	return -radius * acos(clampf(a, -1.0, 1.0)) / DUNE_WAVE \
-		+ DUNE_WARP * _wind.get_noise_3dv(d * (radius / DUNE_TURN))
-
-## A dune's cross-section over one wave, `t` from 0 at a trough: rising
-## gently over 1 - DUNE_LEE to the crest, falling over DUNE_LEE, both corners
-## rounded by parabolas tangent to the two slopes over DUNE_EASE either side.
-static func _dune_profile(t: float) -> float:
-	if t >= DUNE_EASE and t <= _CREST - DUNE_EASE:
-		return t * _UP
-	if t >= _CREST + DUNE_EASE and t <= 1.0 - DUNE_EASE:
-		return (1.0 - t) / DUNE_LEE
-	if absf(t - _CREST) < DUNE_EASE:
-		var e := t - _CREST + DUNE_EASE
-		return 1.0 + _UP * (t - _CREST) + (_DOWN - _UP) * e * e / (4.0 * DUNE_EASE)
-	var x := t - 1.0 if t > 0.5 else t
-	var e := x + DUNE_EASE
-	return _DOWN * x + (_UP - _DOWN) * e * e / (4.0 * DUNE_EASE)
+	return -radius * acos(clampf(a, -1.0, 1.0)) / DUNE_WAVE 		+ DUNE_WARP * _wind.get_noise_3dv(d * (radius / DUNE_TURN))
 
 ## How much of a tower stands at `d`, whose continent layer is `z`: 1 on its
 ## top, 0 off it. Towers stand in the band below the mesa line and merge into
@@ -412,8 +445,8 @@ func _tower(d: Vector3, z: float) -> float:
 	return stand * smoothstep(floor_z, floor_z + TOWER_BAND * 0.25, z)
 
 ## A desert's colours: mesa tops ground_high, their risers and the towers
-## rock, the dunes' lowest fifth dust, the rest of the dunes ground_low. Steep
-## ground is rock before this is asked.
+## rock, a standing dune's lee face (crest to trough) dust, the rest of the
+## sand ground_low. Steep ground is rock before this is asked.
 func _desert_ground(d: Vector3) -> StringName:
 	var z := _mesa_continent(d, _continents.get_noise_3dv(d * CONTINENT_SCALE))
 	if z >= MESA_FROM:
@@ -421,9 +454,12 @@ func _desert_ground(d: Vector3) -> StringName:
 		if t < TERRACES and fposmod(t, 1.0) < 1.0 - MESA_FLAT:
 			return &"rock"
 		return &"ground_high"
-	if _tower(d, z) > 0.0:
+	if z >= MESA_FROM - TOWER_BAND and _tower(d, z) > 0.0:
 		return &"rock"
-	return &"dust" if _dune(d, z) < DUNE_DUST else &"ground_low"
+	var a := d.dot(wind_axis)
+	if _dune_stand(a, z) >= DUST_STAND and fposmod(_phase(d, a), 1.0) > _CREST:
+		return &"dust"
+	return &"ground_low"
 
 func _simplex(concern: StringName, octaves: int) -> FastNoiseLite:
 	var n := FastNoiseLite.new()
