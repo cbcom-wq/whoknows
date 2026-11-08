@@ -152,6 +152,10 @@ class Pull extends WorldGravity:
 		return Vector3(0, -3.0, 0)
 	func up_at(_p: Vector3) -> Vector3:
 		return Vector3.UP
+	## On the ground: a ship restored landed is where it was saved
+	## (LandingMonitor.RESTORE_SLACK).
+	func altitude_at(_p: Vector3) -> float:
+		return 0.0
 
 func test_touching_with_no_contact_this_tick_is_not_on_ground():
 	var hull := RigidBody3D.new()

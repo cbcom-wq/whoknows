@@ -34,6 +34,18 @@ const LIFT_GRACE := 0.25
 ## your ship handed to its pilot flies on the hold with the stick centred, and
 ## must lift off as the stick would (final review M1).
 const HOLD_LIFTS := 0.5
+## A hull restored landed (a save, a ship woken) whose stance plane is more
+## than RESTORE_SLACK m off the ground under it -- saved on a world whose ground
+## has changed since, as a world that is a desert since phase 2 -- is set down
+## again rather than left frozen in the air or in the ground: lifted to
+## RESTORE_DROP m over the ground if buried, or brought down to it if more than
+## RESTORE_FALL m up, then let fall with its hold off until it touches, and it
+## settles and lands as any landing does (desert world phase 2, Review Focus 4).
+## Between the two it falls where it is: a ship saved standing on a boulder
+## only settles back onto it.
+const RESTORE_SLACK := 0.5
+const RESTORE_DROP := 0.5
+const RESTORE_FALL := 2.0
 
 signal state_changed(state: State)
 signal hard_landing(speed: float)
@@ -53,6 +65,11 @@ var _in_contact := false
 ## The hull's velocity at the previous tick: the contact is reported after the
 ## step that took the speed off, so the closing speed is read from before it.
 var _last_velocity := Vector3.ZERO
+## Restored landed and not yet checked against the ground (RESTORE_SLACK).
+var _check_restore := false
+## Let go by that check: the hold stands down until it lands again, or the
+## pilot moves it.
+var _dropping := false
 
 ## One tick of the table (Planetfall §9). `s` has `state`, `held` (seconds
 ## settled) and `apart` (seconds without contact); `i` has `touching`,
@@ -121,6 +138,8 @@ func ground_status() -> String:
 func restore_landed() -> void:
 	_s = {state = State.LANDED, held = SETTLE_TIME, apart = 0.0}
 	restored = true
+	_check_restore = true
+	_dropping = false
 	_set_state(State.LANDED)
 
 func _physics_process(delta: float) -> void:
@@ -135,6 +154,13 @@ func _physics_process(delta: float) -> void:
 		_in_contact = false
 		_publish()
 		return
+	if _check_restore:
+		_check_restore = false
+		if _set_down_again(up):
+			# Its contacts are from where it was: read them next tick.
+			_last_velocity = Vector3.ZERO
+			_publish()
+			return
 	var velocity := hull.linear_velocity
 	_tilt = (hull.global_transform.basis * Vector3.UP).angle_to(up)
 	_in_contact = _touching_ground()
@@ -149,6 +175,8 @@ func _physics_process(delta: float) -> void:
 	_last_velocity = velocity
 	var result := step(_s, inputs, delta)
 	_s = {state = result.state, held = result.held, apart = result.apart}
+	if _dropping and (result.state == State.LANDED or inputs.translating):
+		_dropping = false
 	_set_state(result.state)
 	_publish()
 	if result.hard > 0.0:
@@ -161,6 +189,20 @@ static func translating(fc: FlightComputer, up: Vector3) -> bool:
 	if not fc.translation_input().is_zero_approx():
 		return true
 	return fc.velocity_hold and fc.held_velocity.dot(up) > HOLD_LIFTS
+
+## A restored landed hull more than RESTORE_SLACK off the ground under it,
+## `up` the local up: put within reach of the ground and let fall (see
+## RESTORE_SLACK); true if it was. One on the ground stays frozen where it is.
+func _set_down_again(up: Vector3) -> bool:
+	var off := flight.keel_altitude()
+	if not is_finite(off) or absf(off) <= RESTORE_SLACK:
+		return false
+	if off < 0.0 or off > RESTORE_FALL:
+		hull.global_position += up * (RESTORE_DROP - off)
+	_s = {state = State.FLYING, held = 0.0, apart = 0.0}
+	_dropping = true
+	_set_state(State.FLYING)
+	return true
 
 ## Whether the hull reports a contact with the ground this tick.
 func _touching_ground() -> bool:
@@ -175,11 +217,13 @@ static func is_ground(body: Object) -> bool:
 	return body is CollisionObject3D and ((body as CollisionObject3D).collision_layer & BodyProxy.LAYER) != 0
 
 ## The one place `on_ground` is set (Ruling 7a): landed, or touching and in
-## contact this tick. Through the grace with no contact the hold and the
-## levelling are back at once.
+## contact this tick, or let fall by a restore's check until it lands.
+## Through the grace with no contact the hold and the levelling are back at
+## once.
 func _publish() -> void:
 	if flight != null:
-		flight.on_ground = state == State.LANDED or (state == State.TOUCHING and _in_contact)
+		flight.on_ground = state == State.LANDED or (state == State.TOUCHING and _in_contact) \
+			or (state != State.LANDED and _dropping)
 
 ## Over MAX_TILT while touching: the ship rests but will not land.
 func _uneven() -> bool:

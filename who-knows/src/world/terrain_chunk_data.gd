@@ -23,7 +23,8 @@ var grid := PackedVector3Array()
 var positions := PackedVector3Array()
 var normals := PackedVector3Array()
 var colours := PackedColorArray()
-## The ground's triangles alone, relative to centre: for collision.
+## For collision: the ground's triangles, relative to centre, and at the
+## world's finest depth its boulders' after them (GroundCover).
 var faces := PackedVector3Array()
 
 static func build(terrain: WorldTerrain, p_key: Vector4i) -> TerrainChunkData:
@@ -32,15 +33,15 @@ static func build(terrain: WorldTerrain, p_key: Vector4i) -> TerrainChunkData:
 	var n := CubeSphere.QUADS
 	var rect := CubeSphere.node_rect(p_key)
 	var step := rect.z / n
-	var mid := CubeSphere.direction(p_key.x, rect.x + rect.z * 0.5, rect.y + rect.z * 0.5)
-	var mid_r := terrain.radius + terrain.height_at(mid)
-	c.centre = Vector3i(roundi(mid.x * mid_r), roundi(mid.y * mid_r), roundi(mid.z * mid_r))
+	c.centre = centre_of(terrain, p_key)
 	var cx := float(c.centre.x)
 	var cy := float(c.centre.y)
 	var cz := float(c.centre.z)
 	var dirs := PackedVector3Array()
 	dirs.resize((n + 1) * (n + 1))
 	c.grid.resize((n + 1) * (n + 1))
+	# corner_dir and ground_point, written out (this runs per grid point): the
+	# same numbers to the bit, which GroundCover relies on.
 	for j in n + 1:
 		for i in n + 1:
 			var d := CubeSphere.direction(p_key.x, rect.x + i * step, rect.y + j * step)
@@ -63,7 +64,30 @@ static func build(terrain: WorldTerrain, p_key: Vector4i) -> TerrainChunkData:
 		c._skirt(terrain, dirs, n * (n + 1) + k, n * (n + 1) + k + 1, drop, patch)       # v = end
 		c._skirt(terrain, dirs, k * (n + 1), (k + 1) * (n + 1), drop, patch)             # u = start
 		c._skirt(terrain, dirs, k * (n + 1) + n, (k + 1) * (n + 1) + n, drop, patch)     # u = end
+	if p_key.y == CubeSphere.depth_for(terrain.radius):
+		# The finest chunks are what is solid: their boulders are too.
+		c.faces.append_array(GroundCover.scatter(terrain, p_key, c.grid).boulder_faces())
 	return c
+
+## The middle of `key`'s ground, body-local, rounded to whole metres: what a
+## chunk's numbers, and its cover's, are relative to.
+static func centre_of(terrain: WorldTerrain, key: Vector4i) -> Vector3i:
+	var rect := CubeSphere.node_rect(key)
+	var mid := CubeSphere.direction(key.x, rect.x + rect.z * 0.5, rect.y + rect.z * 0.5)
+	var mid_r := terrain.radius + terrain.height_at(mid)
+	return Vector3i(roundi(mid.x * mid_r), roundi(mid.y * mid_r), roundi(mid.z * mid_r))
+
+## The unit direction of grid point (i, j) of `key`, each 0 to QUADS.
+static func corner_dir(key: Vector4i, i: int, j: int) -> Vector3:
+	var rect := CubeSphere.node_rect(key)
+	var step := rect.z / CubeSphere.QUADS
+	return CubeSphere.direction(key.x, rect.x + i * step, rect.y + j * step)
+
+## The ground at unit direction `d`, relative to `centre`: a grid point, to
+## the last bit, whoever works it out. Heights and the subtraction in 64-bit.
+static func ground_point(terrain: WorldTerrain, d: Vector3, centre: Vector3i) -> Vector3:
+	var r := terrain.radius + terrain.height_at(d)
+	return Vector3(d.x * r - float(centre.x), d.y * r - float(centre.y), d.z * r - float(centre.z))
 
 ## One ground triangle, wound so Godot draws its outward side.
 func _ground(terrain: WorldTerrain, dirs: PackedVector3Array, ia: int, ib: int, ic: int, patch: float) -> void:

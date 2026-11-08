@@ -146,6 +146,9 @@ func setup(p_body: SystemBody, p_universe: Universe) -> void:
 	name = "Surface_%s" % String(body.id).replace(".", "_")
 	terrain = WorldTerrain.new(body.recipe)
 	depth_max = CubeSphere.depth_for(body.radius)
+	# The finest chunks scatter their boulders (GroundCover) on the jobs: what
+	# they read is built here first, on the main thread.
+	RockMesh.warm()
 
 ## The six coarsest chunks, built now: whole on the first frame.
 func build_roots() -> void:
