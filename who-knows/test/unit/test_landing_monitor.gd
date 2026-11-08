@@ -2,6 +2,8 @@ extends GutTest
 
 ## The landing monitor's transition table (Planetfall §9; desert-world spec §5.3).
 
+const LevelGround := preload("res://test/unit/helpers/level_ground.gd")
+
 func _i(o := {}) -> Dictionary:
 	var d := {touching = true, closing = 1.0, speed = 0.1, spin = 0.0, tilt = 0.0, translating = false}
 	d.merge(o, true)
@@ -240,7 +242,9 @@ func test_a_landed_starter_given_a_1_m_s_climb_rises_off_within_3_s():
 	await wait_physics_frames(2)
 	var surface: WorldSurface = (root.star_system.proxy(planet.id) as BodyProxy).surface()
 	var centre := universe.to_engine(planet.point)
-	var up := (ship.exterior.global_position - centre).normalized()
+	# Level ground near the hop: on a desert, off the dunes.
+	var up := LevelGround.near(surface.terrain, (ship.exterior.global_position - centre).normalized())
+	assert_lt(LevelGround.tilt(surface.terrain, up), LevelGround.LEVEL, "level ground found")
 	var along := up.cross(Vector3.UP).normalized()
 	ship.exterior.global_transform = Transform3D(Basis(along, up, along.cross(up).normalized()),
 		centre + up * (planet.radius + surface.terrain.height_at(up) + ship.stance_depth() + 0.02))
