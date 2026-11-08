@@ -104,6 +104,15 @@ const TOWER_WAVE := 140.0
 const TOWER_RADIUS := Vector2(8.0, 22.0)
 const TOWER_SHARE := 0.3
 const TOWER_FOOT := 1.4
+## How far a tower's centre strays from its cell's, as FastNoiseLite's
+## cellular jitter: at 0.6 two centres are at least 0.48 of a cell apart, over
+## twice the widest flank, so no tower's flank meets another cell's; and every
+## point of a tower (centre within 0.26 of its cell's, flank within 0.22 of
+## that) lies inside its own cell.
+const TOWER_JITTER := 0.6
+## Each cube face's tower cells start this many cells from the last face's,
+## more than a face is across, so the faces never share a cell.
+const TOWER_FACE_CELLS := 1000.0
 ## A dune's crest, and its windward and lee slopes, per unit of wave.
 const _CREST := 1.0 - DUNE_LEE
 const _UP := 1.0 / _CREST
@@ -131,6 +140,10 @@ var _wind: FastNoiseLite
 var _swell: FastNoiseLite
 var _tower_gap: FastNoiseLite
 var _tower_cell: FastNoiseLite
+## Tower cells per radian across a cube face: about TOWER_WAVE metres each,
+## a whole number of them across the face with the face's edges on cell
+## edges.
+var _tower_scale := 0.0
 
 func _init(p_recipe: WorldRecipe) -> void:
 	recipe = p_recipe
@@ -172,6 +185,7 @@ func _init(p_recipe: WorldRecipe) -> void:
 		_swell = _simplex(&"dunes", 1)
 		_tower_gap = _cells(FastNoiseLite.RETURN_DISTANCE)
 		_tower_cell = _cells(FastNoiseLite.RETURN_CELL_VALUE)
+		_tower_scale = (floorf(PI * 0.25 * radius / TOWER_WAVE) + 0.5) / (PI * 0.25)
 
 ## Metres above radius at `dir`, within half the relief either way.
 func height_at(dir: Vector3) -> float:
@@ -217,8 +231,8 @@ func wind_at(dir: Vector3) -> Vector3:
 	var e1 := d.cross(Vector3.UP if absf(d.y) < 0.9 else Vector3.RIGHT).normalized()
 	var e2 := d.cross(e1)
 	var h := 0.5 / radius
-	var g := e1 * (_phase(d + e1 * h) - _phase(d - e1 * h)) \
-		+ e2 * (_phase(d + e2 * h) - _phase(d - e2 * h))
+	var g := e1 * (_phase_of(d + e1 * h) - _phase_of(d - e1 * h)) \
+		+ e2 * (_phase_of(d + e2 * h) - _phase_of(d - e2 * h))
 	if g.length_squared() < 1e-20:
 		return e1
 	return g.normalized()
@@ -291,7 +305,10 @@ func _terrace(h: float) -> float:
 ## wind axis's poles; terraces above the mesa line; towers in the band below.
 func _desert_height(d: Vector3, continent: float) -> float:
 	var half := relief * 0.5
-	var z := _mesa_continent(d, continent)
+	# _mesa_continent(d, continent), written out: this runs per height.
+	var z := CONTINENT_SHARE * continent
+	if z >= MESA_FROM - TOWER_BAND - MESA_HILLS:
+		z += MESA_HILLS * _hills.get_noise_3dv(d * (radius / HILL_WAVE))
 	var ground := half * DUNE_FLOOR * CONTINENT_SHARE * continent
 	if z < MESA_FROM:
 		var dune := _dune(d, z)
@@ -323,19 +340,23 @@ func _dune(d: Vector3, z: float) -> float:
 		stand *= 1.0 - smoothstep(DUNE_POLE, (1.0 + DUNE_POLE) * 0.5, absf(a))
 	if stand <= 0.0:
 		return 0.0
-	# _phase(d), written out: this runs per height.
-	var phase := radius * a / DUNE_WAVE \
-		+ DUNE_WARP * sqrt(maxf(0.0, 1.0 - a * a)) * _wind.get_noise_3dv(d * (radius / DUNE_TURN))
-	return stand * _dune_profile(fposmod(phase, 1.0))
+	return stand * _dune_profile(fposmod(_phase(d, a), 1.0))
 
-## Where `dir` lies in the dune waves, in waves: level lines of
-## d . wind_axis, warped. The warp is scaled by the distance from the axis, so
-## the ridges turn as much at every latitude and never fold back.
-func _phase(dir: Vector3) -> float:
+## The dune phase (see _phase) at `dir`, which need not be unit length.
+func _phase_of(dir: Vector3) -> float:
 	var d := dir.normalized()
-	var a := d.dot(wind_axis)
-	return radius * a / DUNE_WAVE \
-		+ DUNE_WARP * sqrt(maxf(0.0, 1.0 - a * a)) * _wind.get_noise_3dv(d * (radius / DUNE_TURN))
+	return _phase(d, d.dot(wind_axis))
+
+## Where the unit direction `d` (whose d . wind_axis is `a`, which the caller
+## has already) lies in the dune waves, in waves: its distance round the world
+## from the wind axis's pole, in DUNE_WAVEs, so the crests are level lines of
+## d . wind_axis a true DUNE_WAVE apart at every latitude; growing toward the
+## pole, the way the wind blows; warped by up to DUNE_WARP waves so they turn
+## across the world. The warp's slope stays well under one wave per DUNE_WAVE,
+## so the ridges never fold back. The dunes' heights and wind_at both use it.
+func _phase(d: Vector3, a: float) -> float:
+	return -radius * acos(clampf(a, -1.0, 1.0)) / DUNE_WAVE \
+		+ DUNE_WARP * _wind.get_noise_3dv(d * (radius / DUNE_TURN))
 
 ## A dune's cross-section over one wave, `t` from 0 at a trough: rising
 ## gently over 1 - DUNE_LEE to the crest, falling over DUNE_LEE, both corners
@@ -353,10 +374,12 @@ static func _dune_profile(t: float) -> float:
 	return _DOWN * x + (_UP - _DOWN) * e * e / (4.0 * DUNE_EASE)
 
 ## How much of a tower stands at `d`, whose continent layer is `z`: 1 on its
-## top, 0 off it. Towers stand in the band below the mesa line and merge into the
-## first terrace above it. Their cells are laid out flat on each cube face in
-## equal angles, so they keep their size; none stands astride a face's edge.
-## (Worked out here rather than through CubeSphere: this runs per height.)
+## top, 0 off it. Towers stand in the band below the mesa line and merge into
+## the first terrace above it. Their cells are laid out flat on each cube face
+## in equal angles, so they keep their size, and a face is a whole number of
+## cells across: every tower lies inside its own cell (TOWER_JITTER), and so
+## inside its face, and none is cut. (The face is worked out here rather than
+## through CubeSphere: this runs per height.)
 func _tower(d: Vector3, z: float) -> float:
 	var floor_z := MESA_FROM - TOWER_BAND
 	if z < floor_z or z >= MESA_FROM + MESA_STEP:
@@ -378,27 +401,25 @@ func _tower(d: Vector3, z: float) -> float:
 		face = 4.0 if d.z > 0.0 else 5.0
 		x = atan(d.x / a.z)
 		y = atan(d.y / a.z)
-	var edge := PI * 0.25 - TOWER_RADIUS.y * TOWER_FOOT / radius
-	if absf(x) > edge or absf(y) > edge:
-		return 0.0
-	# Each face's cells apart from the others'.
-	var scale := radius / TOWER_WAVE
-	x = x * scale + face * PI * scale
-	y *= scale
+	x = x * _tower_scale + face * TOWER_FACE_CELLS
+	y *= _tower_scale
 	var cell := (_tower_cell.get_noise_2d(x, y) + 1.0) * 0.5
 	if cell >= TOWER_SHARE:
 		return 0.0
 	var r := lerpf(TOWER_RADIUS.x, TOWER_RADIUS.y, cell / TOWER_SHARE)
-	var gap := (_tower_gap.get_noise_2d(x, y) + 1.0) * TOWER_WAVE
+	var gap := (_tower_gap.get_noise_2d(x, y) + 1.0) * radius / _tower_scale
 	var stand := clampf((r * TOWER_FOOT - gap) / (r * (TOWER_FOOT - 1.0)), 0.0, 1.0)
 	return stand * smoothstep(floor_z, floor_z + TOWER_BAND * 0.25, z)
 
-## A desert's colours: mesa tops ground_high, towers rock, the dunes'
-## lowest fifth dust, the rest of the dunes ground_low. Steep ground is rock
-## before this is asked.
+## A desert's colours: mesa tops ground_high, their risers and the towers
+## rock, the dunes' lowest fifth dust, the rest of the dunes ground_low. Steep
+## ground is rock before this is asked.
 func _desert_ground(d: Vector3) -> StringName:
 	var z := _mesa_continent(d, _continents.get_noise_3dv(d * CONTINENT_SCALE))
 	if z >= MESA_FROM:
+		var t := (z - MESA_FROM) / MESA_STEP
+		if t < TERRACES and fposmod(t, 1.0) < 1.0 - MESA_FLAT:
+			return &"rock"
 		return &"ground_high"
 	if _tower(d, z) > 0.0:
 		return &"rock"
@@ -419,6 +440,7 @@ func _cells(returns: FastNoiseLite.CellularReturnType) -> FastNoiseLite:
 	n.noise_type = FastNoiseLite.TYPE_CELLULAR
 	n.cellular_distance_function = FastNoiseLite.DISTANCE_EUCLIDEAN
 	n.cellular_return_type = returns
+	n.cellular_jitter = TOWER_JITTER
 	n.frequency = 1.0
 	n.fractal_type = FastNoiseLite.FRACTAL_NONE
 	return n
