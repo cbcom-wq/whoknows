@@ -15,9 +15,12 @@ extends RefCounted
 ##
 ## The boulders are the asteroids' (style guide §3.5): RockMesh's BOULDER and
 ## SHARD, turned and stretched as a rock's boulders are, each a shade of the
-## palette's `boulder`. On a desert they gather on the talus below the mesas
-## and towers (WorldTerrain.in_talus) and are rare on the dunes. The grass is
-## a shade of the palette's `grass`, on sand (`ground_low` and `dust`) alone.
+## palette's `boulder`. They gather in clusters with bare ground between, the
+## big stones in a cluster's heart and the small round it (Task 7b, the
+## owner's word at Checkpoint B: fewer, in clusters); on a desert most on the
+## talus below the mesas and towers (WorldTerrain.in_talus), in larger,
+## closer clusters, and few on the dunes. The grass is a shade of the
+## palette's `grass`, on sand (`ground_low` and `dust`) alone.
 ##
 ## Pure, for worker threads: call RockMesh.warm() on the main thread first,
 ## and grass_mesh() too before anything draws it.
@@ -27,11 +30,30 @@ extends RefCounted
 const BOULDER_SIZE := Vector2(0.5, 4.0)
 const BOULDER_SUNK := 0.33
 const BOULDER_SLOPE := deg_to_rad(30.0)
-## Boulders per 100 m^2: on any world but a desert; on a desert's dunes and
-## flats; on its talus.
-const BOULDERS_PER_100M2 := 0.8
-const DESERT_BOULDERS := 0.15
-const BOULDER_TALUS := 3.0
+## Boulders gather in clusters with bare ground between (Task 7b, the owner's
+## word at Checkpoint B): a cluster is where a slow noise of the world's own,
+## its blobs about CLUSTER_WAVE m across, is over a threshold -- lower on a
+## desert's talus, so its clusters are larger and closer, a rockfall at the
+## foot of every mesa. `m` rises from 0 at a cluster's rim to 1 at its heart,
+## CLUSTER_SOFT higher on the noise. The noise is the world's, not a chunk's,
+## so a cluster runs across chunk edges and is the same every visit.
+const CLUSTER_WAVE := 55.0
+const CLUSTER_OPEN := 0.28
+const CLUSTER_TALUS := 0.0
+const CLUSTER_SOFT := 0.3
+## Boulders per 100 m^2 at a cluster's heart (m times this): on any world but
+## a desert, whose clusters are the talus's size; on a desert's dunes and
+## flats; on its talus. Over a talus band about a third of Task 7's even
+## scatter; on the dunes and other worlds about half.
+const BOULDERS_PER_100M2 := 1.0
+const DESERT_BOULDERS := 0.8
+const BOULDER_TALUS := 3.6
+## At a cluster's rim a stone is at most the smallest EDGE_SIZE of the size
+## range, skewed small as u^SKEW_RIM; at its heart any size, skewed less, as
+## u^SKEW_HEART: big stones in the hearts, small ones round them.
+const EDGE_SIZE := 0.4
+const SKEW_RIM := 3.0
+const SKEW_HEART := 2.2
 ## Grass, on a desert alone: tufts per 100 m^2 inside a clump (none outside),
 ## on sand no steeper than GRASS_SLOPE; the share of the ground in a clump;
 ## a tuft's height, metres.
@@ -134,12 +156,33 @@ static func _count(rng: RandomNumberGenerator, mean: float) -> int:
 	var whole := floori(mean)
 	return whole + (1 if rng.randf() < mean - whole else 0)
 
-## A desert rolls at the talus's density and keeps each boulder with the
-## chance of its own place's over that, so they gather where the talus is.
+## The world's cluster noise for boulders (see CLUSTER_WAVE): one per
+## scatter, as the grass's clumps.
+static func _cluster_noise(terrain: WorldTerrain) -> FastNoiseLite:
+	var noise := FastNoiseLite.new()
+	noise.seed = WorldSeed.noise_seed(WorldSeed.sub(terrain.recipe.seed, &"boulders"))
+	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	noise.frequency = 1.0
+	noise.fractal_type = FastNoiseLite.FRACTAL_FBM
+	noise.fractal_octaves = 2
+	return noise
+
+## How far into a cluster unit direction `dir` lies: 0 outside or at its rim,
+## 1 at its heart. `talus` picks the talus's lower threshold (any world but a
+## desert's too).
+static func cluster_at(terrain: WorldTerrain, noise: FastNoiseLite, dir: Vector3, talus: bool) -> float:
+	var from := CLUSTER_TALUS if talus else CLUSTER_OPEN
+	var n := noise.get_noise_3dv(dir * (terrain.radius / CLUSTER_WAVE))
+	return smoothstep(from, from + CLUSTER_SOFT, n)
+
+## Each boulder rolled at the densest heart's density is kept with the chance
+## of its own place's over that: its ground's heart density (a desert's talus
+## or dunes, or any other world's) times how far into a cluster it lies.
 func _boulders(terrain: WorldTerrain, ground: _Ground, rng: RandomNumberGenerator, area: float,
 		desert: bool) -> void:
 	var most := BOULDER_TALUS if desert else BOULDERS_PER_100M2
 	var base: Color = terrain.palette[&"boulder"]
+	var noise := _cluster_noise(terrain)
 	for n in _count(rng, area * most / 100.0):
 		# Every roll is made, kept or not, so one stone never moves the next.
 		var u := rng.randf()
@@ -152,12 +195,17 @@ func _boulders(terrain: WorldTerrain, ground: _Ground, rng: RandomNumberGenerato
 		var turn := Basis.from_euler(Vector3(rng.randf_range(-PI, PI), rng.randf_range(-PI, PI), rng.randf_range(-PI, PI)))
 		var shape := RockMesh.Shape.BOULDER if rng.randf() < ROUND_SHARE else RockMesh.Shape.SHARD
 		var shade := rng.randi_range(0, SpacePalette.SHADES.size() - 1)
-		if desert and keep >= (BOULDER_TALUS if terrain.in_talus(ground.direction(u, v)) else DESERT_BOULDERS):
+		var dir := ground.direction(u, v)
+		var talus := desert and terrain.in_talus(dir)
+		var heart := (BOULDER_TALUS if talus else DESERT_BOULDERS) if desert else BOULDERS_PER_100M2
+		var m := cluster_at(terrain, noise, dir, talus or not desert)
+		if keep >= heart * m:
 			continue
 		var at := ground.at(u, v)
 		if at.slope > BOULDER_SLOPE:
 			continue
-		var diameter := lerpf(BOULDER_SIZE.x, BOULDER_SIZE.y, size * size * size)
+		var s := size * lerpf(EDGE_SIZE, 1.0, m)
+		var diameter := lerpf(BOULDER_SIZE.x, BOULDER_SIZE.y, pow(s, lerpf(SKEW_RIM, SKEW_HEART, m)))
 		var basis := turn * Basis.from_scale(stretch * diameter)
 		# Its lowest point BOULDER_SUNK of its diameter under the ground, along
 		# the local up.

@@ -259,7 +259,10 @@ func test_density_on_other_worlds():
 		stones += GroundCover.scatter(_rolling_t, key).boulders.size()
 	var per := stones / (100.0 * _area_100(_rolling_t))
 	gut.p("ROLLING: %.3f boulders per 100 m2 (%d)" % [per, stones])
-	assert_almost_eq(per, GroundCover.BOULDERS_PER_100M2, GroundCover.BOULDERS_PER_100M2 * 0.25)
+	# Task 7b: clustered, about half of Task 7's even 0.8 a 100 m2, and well
+	# under a heart's own density.
+	assert_between(per, 0.25, 0.55)
+	assert_lt(per, GroundCover.BOULDERS_PER_100M2 * 0.6)
 
 func test_colours_come_from_the_palette():
 	var chunks: Array = []
@@ -285,8 +288,17 @@ func test_colours_come_from_the_palette():
 	assert_gt(stones, 0)
 	assert_gt(tufts, 0)
 
+## The first of `n` talus keys from `seed` that has stones (clusters leave
+## bare ground between).
+func _stony_talus_key(n: int, seed: int) -> Vector4i:
+	var keys := _keys(_desert_t, n, seed, _talus)
+	for k in keys:
+		if not GroundCover.scatter(_desert_t, k).boulders.is_empty():
+			return k
+	return keys[0]
+
 func test_finest_chunks_are_solid_round_their_boulders():
-	var key := _keys(_desert_t, 1, 9, _talus)[0]
+	var key := _stony_talus_key(20, 9)
 	var cover := GroundCover.scatter(_desert_t, key)
 	assert_gt(cover.boulders.size(), 0, "a chunk with stones")
 	var c := TerrainChunkData.build(_desert_t, key)
@@ -301,8 +313,9 @@ func test_finest_chunks_are_solid_round_their_boulders():
 
 ## Each boulder face looks out of its boulder, as the physics wants.
 func test_boulder_faces_look_out():
-	var key := _keys(_desert_t, 1, 10, _talus)[0]
+	var key := _stony_talus_key(20, 10)
 	var cover := GroundCover.scatter(_desert_t, key)
+	assert_gt(cover.boulders.size(), 0, "a chunk with stones")
 	var faces := cover.boulder_faces()
 	var per: int = (RockMesh.sphere(0)[1] as PackedInt32Array).size()
 	for i in cover.boulders.size():
@@ -326,3 +339,92 @@ func test_a_tuft_is_six_thin_blades_about_a_metre_tall():
 	assert_between(top, 0.8, 1.2, "about a metre tall")
 	for c in colours:
 		assert_eq(c, SpacePalette.UNTINTED, "white: the instance colour tints it")
+
+## Task 7b: the stones gather in clusters with bare ground between, the same
+## across chunk edges (a world-space mask, not each chunk's own dice). Over a
+## patch of PATCH x PATCH neighbouring finest chunks the stones per chunk are
+## far from even: their variance is well over their mean (a random scatter's
+## is its mean, Task 7's even one's about a twentieth of it), many chunks hold
+## none, and the big stones lie where the most stones are (a cluster's heart),
+## the small ones round it.
+const PATCH := 16
+
+## [count per chunk, mean diameter per chunk] over the PATCH x PATCH chunks
+## round `key` (clamped inside its face), only those whose middle passes
+## `wanted`.
+func _patch(t: WorldTerrain, key: Vector4i, wanted: Callable) -> Array:
+	var cells := 1 << key.y
+	var x0 := clampi(key.z - PATCH / 2, 0, cells - PATCH)
+	var y0 := clampi(key.w - PATCH / 2, 0, cells - PATCH)
+	var counts: Array[int] = []
+	var sizes: Array[float] = []
+	for j in PATCH:
+		for i in PATCH:
+			var k := Vector4i(key.x, key.y, x0 + i, y0 + j)
+			if not wanted.call(_mid(k)):
+				continue
+			var bs := GroundCover.scatter(t, k).boulders
+			counts.append(bs.size())
+			var sum := 0.0
+			for b: Array in bs:
+				sum += float(b[3])
+			sizes.append(sum / bs.size() if bs.size() > 0 else 0.0)
+	return [counts, sizes]
+
+## [mean, variance over mean, share empty] of `counts`.
+static func _spread_of(counts: Array[int]) -> Array:
+	var mean := 0.0
+	for c in counts:
+		mean += c
+	mean /= maxf(counts.size(), 1)
+	var v := 0.0
+	var empty := 0
+	for c in counts:
+		v += (c - mean) * (c - mean)
+		if c == 0:
+			empty += 1
+	v /= maxf(counts.size() - 1, 1)
+	return [mean, v / maxf(mean, 1e-6), float(empty) / maxf(counts.size(), 1)]
+
+## The mean stone size in the busiest quarter of the chunks with stones, and
+## in the quietest quarter: [busy, quiet].
+static func _sizes_by_crowd(counts: Array[int], sizes: Array[float]) -> Array:
+	var order: Array[Vector2] = []
+	for i in counts.size():
+		if counts[i] > 0:
+			order.append(Vector2(counts[i], i))
+	order.sort()
+	var q := maxi(order.size() / 4, 1)
+	var quiet := 0.0
+	var busy := 0.0
+	var nq := 0
+	var nb := 0
+	for i in q:
+		quiet += sizes[int(order[i].y)] * order[i].x
+		nq += int(order[i].x)
+		busy += sizes[int(order[order.size() - 1 - i].y)] * order[order.size() - 1 - i].x
+		nb += int(order[order.size() - 1 - i].x)
+	return [busy / maxf(nb, 1), quiet / maxf(nq, 1)]
+
+func test_boulders_gather_in_clusters():
+	var cases: Array = [
+		["ROLLING", _rolling_t, _keys(_rolling_t, 3, 11, _any), _any],
+		["talus", _desert_t, _keys(_desert_t, 3, 11, _talus), _talus],
+	]
+	for c: Array in cases:
+		var t: WorldTerrain = c[1]
+		var all_counts: Array[int] = []
+		var all_sizes: Array[float] = []
+		for key: Vector4i in c[2]:
+			var p := _patch(t, key, c[3])
+			all_counts.append_array(p[0])
+			all_sizes.append_array(p[1])
+		var s := _spread_of(all_counts)
+		var by := _sizes_by_crowd(all_counts, all_sizes)
+		gut.p("%s: %d chunks, %.2f stones a chunk, variance %.1f x the mean, %.0f%% empty; mean size %.2f m where busiest, %.2f m where quietest" % [
+			c[0], all_counts.size(), s[0], s[1], float(s[2]) * 100.0, by[0], by[1]])
+		assert_gt(all_counts.size(), 100, "%s: enough chunks to judge" % c[0])
+		assert_gt(float(s[0]), 0.3, "%s: stones there at all" % c[0])
+		assert_gt(float(s[1]), 1.5, "%s: gathered, not even (a random scatter's variance is its mean)" % c[0])
+		assert_gt(float(s[2]), 0.25, "%s: bare ground between the clusters" % c[0])
+		assert_gt(float(by[0]), float(by[1]) * 1.2, "%s: the big stones at the clusters' hearts" % c[0])

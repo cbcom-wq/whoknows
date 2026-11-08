@@ -224,6 +224,48 @@ func test_the_bounds_cache_stays_bounded_on_a_long_flight():
 		assert_true(s._bounds.has(k), "%s's bound is kept" % k)
 	s.finish()
 
+## Task 7b: skimming low, chunks are made nearly every tick, and the drawn
+## chunks are sorted out only once in PRUNE_TICKS ticks. A chunk made between
+## waits hidden, so no tick ever shows a chunk over a shown ancestor (two
+## grounds at once), and once the ticks catch up every leaf is drawn once.
+func test_low_and_fast_nothing_overlaps_between_prunes():
+	var s := _surface(30.0)
+	s.finish()
+	var p := _planet()
+	var along := _up.cross(Vector3.RIGHT).normalized()
+	var made_hidden := 0
+	for tick in 60:
+		# 120 m/s at 60 ticks a second, 30 m over the ground.
+		var d := (_up + along * (2.0 * (tick + 1) / p.radius)).normalized()
+		var focus := p.point.plus(d * (p.radius + s.terrain.height_at(d) + 30.0))
+		var before := s._chunks.size()
+		s.update(focus)
+		for id: int in s._jobs.values():
+			WorkerThreadPool.wait_for_task_completion(id)
+		s._jobs.clear()
+		var shown := {}
+		for k in s.visible_chunks():
+			shown[k] = true
+		for k: Vector4i in shown:
+			assert_false(_shown_above(k, shown), "tick %d: %s shows over a shown ancestor" % [tick, k])
+		if s._chunks.size() > before and s._since_prune > 0:
+			made_hidden += 1
+	gut.p("%d ticks made a chunk between prunes" % made_hidden)
+	assert_gt(made_hidden, 0, "some chunk was made between prunes")
+	s.finish()
+	var shown := s.visible_chunks()
+	assert_eq(shown.size(), s.leaves.size())
+	for k in s.leaves:
+		assert_true(shown.has(k), "%s is drawn once it is all caught up" % k)
+
+static func _shown_above(key: Vector4i, shown: Dictionary) -> bool:
+	var k := key
+	while k.y > 0:
+		k = CubeSphere.parent(k)
+		if shown.has(k):
+			return true
+	return false
+
 # --- solid ground (§5.5) --------------------------------------------------------
 
 func _anchor(s: WorldSurface, altitude: float, mask := BodyProxy.LAYER) -> RigidBody3D:
@@ -252,6 +294,45 @@ func test_the_ground_under_you_is_among_the_keys_and_they_are_few():
 	# 380 chunks, 149 here. "A few dozen" (spec §5.5) is the common case, at 64 m.
 	assert_lte(keys.size(), 200)
 	assert_lt(TerrainCollider.keys_near(t, d, local, TerrainCollider.REACH).size(), keys.size())
+
+## Task 7b: the keys are every cell with ground within the reach along the
+## ground, and only those: the window of whole cells round the anchor was up
+## to twice the reach's area, every cell of it a body made and freed in low
+## flight. Some on a cube edge too.
+func test_the_keys_are_the_ground_within_the_reach():
+	var t := WorldTerrain.new(_planet().recipe)
+	var d := CubeSphere.depth_for(t.radius)
+	var edge := CubeSphere.edge_m(t.radius, d)
+	var near_edge := Vector3(1.0, 0.31, 0.999).normalized()
+	for dir: Vector3 in [_up, near_edge]:
+		for reach: float in [TerrainCollider.REACH, TerrainCollider.REACH_MAX]:
+			var local := dir * (t.radius + t.height_at(dir) + 30.0)
+			var keys := TerrainCollider.keys_near(t, d, local, reach)
+			var have := {}
+			for k in keys:
+				have[k] = true
+			assert_eq(have.size(), keys.size(), "no key twice")
+			# Every point within the reach along the ground is in some key.
+			var a := dir.cross(Vector3.UP).normalized()
+			var b := dir.cross(a)
+			var step := edge * 0.25
+			var n := int(reach / step)
+			var missed := 0
+			for j in range(-n, n + 1):
+				for i in range(-n, n + 1):
+					var off := a * (i * step) + b * (j * step)
+					if off.length() > reach:
+						continue
+					if not have.has(CubeSphere.key_for(dir * t.radius + off, d)):
+						missed += 1
+			assert_eq(missed, 0, "%s, %.0f m: every cell with ground within the reach" % [dir, reach])
+			# And none whose nearest ground lies a cell's width past it.
+			var here := dir * t.radius
+			for k in keys:
+				var r := CubeSphere.node_rect(k)
+				var mid := CubeSphere.direction(k.x, r.x + r.z * 0.5, r.y + r.z * 0.5) * t.radius
+				assert_lt(here.distance_to(mid), reach + edge, "%s lies within the reach" % k)
+			gut.p("%.0f m reach: %d keys" % [reach, keys.size()])
 
 func test_an_anchor_near_the_ground_has_solid_ground_round_it():
 	var s := _surface(3000.0)

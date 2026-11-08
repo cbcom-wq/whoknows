@@ -26,10 +26,18 @@ var colours := PackedColorArray()
 ## For collision: the ground's triangles, relative to centre, and at the
 ## world's finest depth its boulders' after them (GroundCover).
 var faces := PackedVector3Array()
+## Built for collision alone: no positions, normals, colours or skirt (Task
+## 7b: a finest chunk only an anchor wants solid skips the colours, about
+## half a build). Its grid and faces are the full build's to the bit.
+var solid_only := false
+## Its faces as a ConcavePolygonShape3D, when the builder made it (WorldSurface
+## does on its worker, off the main thread); else null.
+var shape: ConcavePolygonShape3D
 
-static func build(terrain: WorldTerrain, p_key: Vector4i) -> TerrainChunkData:
+static func build(terrain: WorldTerrain, p_key: Vector4i, p_solid_only := false) -> TerrainChunkData:
 	var c := TerrainChunkData.new()
 	c.key = p_key
+	c.solid_only = p_solid_only
 	var n := CubeSphere.QUADS
 	var rect := CubeSphere.node_rect(p_key)
 	var step := rect.z / n
@@ -59,7 +67,7 @@ static func build(terrain: WorldTerrain, p_key: Vector4i) -> TerrainChunkData:
 			c._ground(terrain, dirs, i00, i10, i11, patch)
 			c._ground(terrain, dirs, i00, i11, i01, patch)
 	var drop := quad * SKIRT_QUADS
-	for k in n:
+	for k in (0 if p_solid_only else n):
 		c._skirt(terrain, dirs, k, k + 1, drop, patch)                                   # v = start
 		c._skirt(terrain, dirs, n * (n + 1) + k, n * (n + 1) + k + 1, drop, patch)       # v = end
 		c._skirt(terrain, dirs, k * (n + 1), (k + 1) * (n + 1), drop, patch)             # u = start
@@ -102,12 +110,14 @@ func _ground(terrain: WorldTerrain, dirs: PackedVector3Array, ia: int, ib: int, 
 		b = c
 		c = swap
 		cross = -cross
+	faces.append_array(PackedVector3Array([a, b, c]))
+	if solid_only:
+		return
 	var normal := -cross.normalized()
 	var colour := terrain.colour_at(out, normal.angle_to(out), patch)
 	positions.append_array(PackedVector3Array([a, b, c]))
 	normals.append_array(PackedVector3Array([normal, normal, normal]))
 	colours.append_array(PackedColorArray([colour, colour, colour]))
-	faces.append_array(PackedVector3Array([a, b, c]))
 
 ## A skirt below the edge from grid point `ip` to `iq`, both ways round so
 ## it hides a crack whichever side it is seen from.

@@ -982,7 +982,7 @@ frozen kinematic with layer and mask 0; `QuantumPlant` runs the cores at `&"warp
 | Easing at the well's edge | back to 120 m/s over the top tenth | `FlightComputer.LIMIT_EASE` |
 | The limit now | what the assist clamps to and the HUD shows | `FlightComputer.current_limit`, `limit_raised` |
 | Where you are | the well and the altitude over its ground | `Whereabouts.well()`, `altitude()` |
-| Solid ground round the hull | 64 m + 1 s × speed, at most 160 m | `TerrainCollider` |
+| Solid ground round the hull | the finest cells with ground within 64 m + 1 s × speed (at most 160 m) along the ground, boulders included; built and shaped on workers | `TerrainCollider.keys_near`, `WorldSurface.shape_of` |
 | The floor | an anchor > 0.5 m under the ground is lifted out; `WorldSurface.floor_fired` counts it | `WorldSurface.FLOOR_SLACK` |
 | Far plane | `BodyProxy.PROXY_AT` + the star's largest radius + 50 km = 700 km | `BodyProxy.VIEW_FAR` |
 | Bodies shrunk onto a shell | beyond 350 km | `BodyProxy.PROXY_AT` |

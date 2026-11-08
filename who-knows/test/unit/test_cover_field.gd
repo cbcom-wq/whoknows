@@ -227,7 +227,8 @@ func test_cover_is_what_scatter_says():
 		var centre := TerrainChunkData.centre_of(t, b)
 		var want: Transform3D = first[0]
 		want.origin += Vector3(TerrainChunkData.centre_of(t, first_key) - centre)
-		var mm := (block.get_node("Boulders%d" % int(first[1])) as MultiMeshInstance3D).multimesh
+		var slot := CoverField.tier_slot(first)
+		var mm := (block.get_node("Boulders%d_%d" % [slot >> 1, slot & 1]) as MultiMeshInstance3D).multimesh
 		var found := false
 		var buf := mm.buffer
 		var want_colour: Color = first[2]
@@ -253,6 +254,7 @@ func test_a_block_is_drawn_as_the_plan_says():
 	var t := _terrain()
 	var here := _up * t.radius
 	var stones: Array[MultiMeshInstance3D] = []
+	var far_seen := {}
 	for b in s.cover.block_keys():
 		var block := s.cover.get_node(_name(b)) as Node3D
 		var bound := CoverField._bound(b, t.radius)
@@ -265,25 +267,30 @@ func test_a_block_is_drawn_as_the_plan_says():
 				continue
 			var m := n as MultiMeshInstance3D
 			assert_not_null(m)
+			# "Boulders<shape>_<tier>" and its shadowless twin "Far<shape>_<tier>".
+			var far := String(n.name).begins_with("Far")
+			var label := String(n.name).trim_prefix("Far" if far else "Boulders")
+			var shape := int(label.get_slice("_", 0))
+			var tier := int(label.get_slice("_", 1))
 			# Its middle may lie half a diagonal past its nearest ground.
 			var near := CoverField.BOULDER_SHADOW_REACH + float(bound[1])
-			if String(n.name).begins_with("Far"):
+			var end := CoverField.tier_reach(tier) + float(bound[1])
+			# The node's own range never fades: the material's dither does.
+			assert_eq(m.visibility_range_fade_mode, GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED)
+			assert_same(m.material_override, CoverField.boulder_material(tier), "%s's tier's look" % n.name)
+			if far:
 				# The same stones past the shadows' reach, without them, to the end.
-				var shape := int(String(n.name).trim_prefix("Far"))
-				var with_shadow := block.get_node("Boulders%d" % shape) as MultiMeshInstance3D
-				assert_eq(m.multimesh, with_shadow.multimesh, "%s draws its shape's own MultiMesh" % n.name)
+				var with_shadow := block.get_node("Boulders" + label) as MultiMeshInstance3D
+				assert_eq(m.multimesh, with_shadow.multimesh, "%s draws its own MultiMesh" % n.name)
 				assert_eq(m.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
 				assert_almost_eq(m.visibility_range_begin, near - CoverField.SHADOW_OVERLAP, 0.01)
-				assert_almost_eq(m.visibility_range_end, CoverField.BOULDER_REACH + float(bound[1]), 0.01)
-				assert_eq(m.visibility_range_end_margin, 40.0)
-				stones.append(m)
+				assert_almost_eq(m.visibility_range_end, end, 0.01)
+				far_seen[tier] = true
 				continue
 			assert_eq(m.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_ON)
-			assert_almost_eq(m.visibility_range_end, near, 0.01)
-			assert_eq(m.visibility_range_fade_mode, GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED)
-			assert_not_null(block.get_node_or_null("Far%s" % String(n.name).trim_prefix("Boulders")),
-				"%s has its shadowless twin" % n.name)
-			var shape := int(String(n.name).trim_prefix("Boulders"))
+			assert_almost_eq(m.visibility_range_end, minf(near, end), 0.01)
+			if end > near:
+				assert_not_null(block.get_node_or_null("Far" + label), "%s has its shadowless twin" % n.name)
 			assert_eq(m.multimesh.mesh, RockMesh.mesh(shape, 1))
 			assert_true(m.multimesh.use_colors, "instance colours")
 			var look := m.material_override as StandardMaterial3D
@@ -301,6 +308,7 @@ func test_a_block_is_drawn_as_the_plan_says():
 			assert_eq(m.visibility_range_end, CoverField.GRASS_REACH)
 			assert_eq(m.visibility_range_end_margin, 15.0)
 			assert_eq((m.material_override as StandardMaterial3D).cull_mode, BaseMaterial3D.CULL_DISABLED)
+	assert_eq(far_seen.size(), 2, "both size tiers drawn past the shadows")
 	for m in stones:
 		assert_eq(m.visibility_range_fade_mode, GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF)
 		assert_true(m.multimesh.use_colors, "instance colours")
@@ -497,3 +505,26 @@ func test_a_tick_is_cheap():
 	assert_lt(idle, 50.0, "nothing to do costs next to nothing")
 	assert_lt(apply, CoverField.APPLY_BUDGET_USEC * 2.0)
 	assert_lt(edge_worst, 1000.0, "a cube edge costs well under a millisecond")
+
+## Task 7b: each size tier fades out by the material's own pixel dither, the
+## small first, ending at its reach: no line where the stones stop, and no
+## new shader (style guide §3.5).
+func test_stones_fade_by_size():
+	assert_lt(CoverField.SMALL_REACH, CoverField.BOULDER_REACH, "the small go first")
+	assert_gt(CoverField.BOULDER_SHADOW_REACH, 0.0)
+	for tier in 2:
+		var look := CoverField.boulder_material(tier)
+		assert_same(CoverField.boulder_material(tier), look, "one look a tier")
+		assert_eq(look.distance_fade_mode, BaseMaterial3D.DISTANCE_FADE_PIXEL_DITHER)
+		assert_eq(look.distance_fade_min_distance, CoverField.tier_reach(tier), "gone at the reach")
+		assert_eq(look.distance_fade_max_distance, CoverField.tier_reach(tier) - CoverField.tier_fade(tier),
+			"whole until its fade begins")
+		assert_gt(CoverField.tier_fade(tier), 0.0)
+		assert_lt(CoverField.tier_fade(tier), CoverField.tier_reach(tier))
+	assert_eq(CoverField.grass_material().distance_fade_mode, BaseMaterial3D.DISTANCE_FADE_DISABLED,
+		"the grass fades by its range, not the dither")
+	# A stone's tier is its size's.
+	assert_eq(CoverField.tier_slot([Transform3D(), RockMesh.Shape.SHARD, Color.WHITE, CoverField.BIG_STONE]),
+		int(RockMesh.Shape.SHARD) * 2 + 1)
+	assert_eq(CoverField.tier_slot([Transform3D(), RockMesh.Shape.BOULDER, Color.WHITE, CoverField.BIG_STONE - 0.01]),
+		int(RockMesh.Shape.BOULDER) * 2)

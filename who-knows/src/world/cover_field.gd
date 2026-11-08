@@ -2,15 +2,20 @@ class_name CoverField
 extends Node3D
 
 ## The ground cover drawn round you (the desert world spec §5.6, §7.2; phase 2
-## plan, Task 5 and call 9): boulders on every world, out to BOULDER_REACH,
-## and on a desert dry grass, out to GRASS_REACH. GroundCover scatters each
-## finest chunk's worth; here they are gathered into blocks BLOCK_UP levels
-## coarser (16 finest chunks, 64-128 m across: 84 m on 1337's p3), so 200 m
-## of boulders is some 45 blocks and two MultiMeshes each (drawn twice: with
-## shadows near, without past BOULDER_SHADOW_REACH), not 300 finest chunks'
-## worth. BOULDER_REACH was 300 m until Task 7's frame rate seated among grass
-## and in low flight over a talus band (2.2 million triangles there, half of
-## them stones, each drawn again into the sun's shadow splits).
+## plan, Task 5 and call 9): boulders on every world, the big ones out to
+## BOULDER_REACH and the small out to SMALL_REACH, and on a desert dry grass,
+## out to GRASS_REACH. GroundCover scatters each finest chunk's worth; here
+## they are gathered into blocks BLOCK_UP levels coarser (16 finest chunks,
+## 64-128 m across: 84 m on 1337's p3), so 240 m of boulders is some 60 blocks
+## and up to four MultiMeshes each, a shape and a size tier apiece (drawn
+## twice: with shadows near, without past BOULDER_SHADOW_REACH), not 400
+## finest chunks' worth. BOULDER_REACH was 300 m until Task 7's frame rate
+## seated among grass and in low flight over a talus band (2.2 million
+## triangles there, half of them stones, each drawn again into the sun's
+## shadow splits), then 200 m; at 200 m the line where the stones stopped
+## showed from 30 m up (Checkpoint B). Task 7b gathered the stones into
+## clusters, a third as many on a talus band, and fades each tier out by the
+## material's own distance dither, pixel by pixel, the small first.
 ##
 ## A block is built on a worker -- its 16 scatters, packed straight into
 ## MultiMesh buffers -- and put in on the main thread nearest first within
@@ -21,10 +26,12 @@ extends Node3D
 ## of BOULDER_REACH): at entry heat or in high flight this costs one distance
 ## a tick.
 ##
-## Visibility ranges are judged from a node's middle, so they fade a whole
-## node at once. A block's boulders reach to BOULDER_REACH plus half its
-## diagonal: every block whose ground lies within BOULDER_REACH is drawn, and
-## none is built that never could be. Grass is drawn a finest chunk at a time
+## Visibility ranges are judged from a node's middle, so they would fade a
+## whole block at once: a block's 84 m square stopping is the line the owner
+## saw. So a block's stones are drawn to their tier's reach plus half its
+## diagonal, with no fade of the node's own: every block whose ground lies
+## within the reach is drawn, none is built that never could be, and the
+## dither has cleared each stone before its block goes. Grass is drawn a finest chunk at a time
 ## (one MultiMesh each, about 21 m across), so it fades out by distance and
 ## not a block at a time; those nodes are made only for blocks within
 ## GRASS_ZONE.
@@ -42,9 +49,17 @@ extends Node3D
 
 ## A block is the key this many levels above the finest.
 const BLOCK_UP := 2
-## How far boulders are drawn, and the margin they fade over past it.
-const BOULDER_REACH := 200.0
-const BOULDER_FADE := 40.0
+## How far boulders are drawn: those BIG_STONE m across or more out to
+## BOULDER_REACH, the rest out to SMALL_REACH. Each tier fades out by its
+## material's distance dither (style guide §3.5, as the asteroids' tiers),
+## per pixel, over the last BOULDER_FADE or SMALL_FADE m of its reach: no
+## line where they stop, and at the end of its fade a tier's biggest stone is
+## a few pixels across.
+const BIG_STONE := 1.4
+const BOULDER_REACH := 240.0
+const BOULDER_FADE := 100.0
+const SMALL_REACH := 140.0
+const SMALL_FADE := 60.0
 ## Boulders cast shadows only in blocks whose ground lies within this: the
 ## sun's shadows reach 2 km (AsteroidStream.SHADOW_REACH), so every stone drawn
 ## was drawn again into each shadow split. Past it a block's stones are a
@@ -123,18 +138,20 @@ var _selected_usec := 0
 ## tick then costs only the distance moved.
 var _settled := true
 
-static var _boulder_look: StandardMaterial3D
+static var _boulder_looks: Array[StandardMaterial3D] = []
 static var _grass_look: StandardMaterial3D
 
-## One block's cover, packed on a worker. Boulders per shape [count,
-## buffer], relative to the block's centre; grass per finest chunk that has
-## any [step from the block's centre, count, buffer], relative to that
-## chunk's centre. `reach` is how far its boulders are drawn.
+## One block's cover, packed on a worker. Boulders per shape and size tier
+## (tier_slot: shape * 2 + tier, tier 1 the big) [count, buffer], relative
+## to the block's centre; grass per finest chunk that has any [step from the
+## block's centre, count, buffer], relative to that chunk's centre. `half` is
+## its middle's farthest corner off: how much farther than its ground the
+## middle may lie.
 class BlockData:
 	extends RefCounted
 	var key: Vector4i
 	var centre: Vector3i
-	var reach := BOULDER_REACH
+	var half := 0.0
 	var boulders := {}
 	var grass: Array = []
 
@@ -437,7 +454,7 @@ static func _build(key: Vector4i, terrain: WorldTerrain) -> BlockData:
 	var data := BlockData.new()
 	data.key = key
 	data.centre = TerrainChunkData.centre_of(terrain, key)
-	data.reach = BOULDER_REACH + float(_bound(key, terrain.radius)[1])
+	data.half = float(_bound(key, terrain.radius)[1])
 	var covers: Array[GroundCover] = []
 	var steps: Array[Vector3] = []
 	var counts := {}
@@ -449,27 +466,40 @@ static func _build(key: Vector4i, terrain: WorldTerrain) -> BlockData:
 		covers.append(cover)
 		steps.append(step)
 		for b: Array in cover.boulders:
-			counts[b[1]] = int(counts.get(b[1], 0)) + 1
+			var slot_of := tier_slot(b)
+			counts[slot_of] = int(counts.get(slot_of, 0)) + 1
 		if not cover.grass.is_empty():
 			var buf := PackedFloat32Array()
 			buf.resize(cover.grass.size() * 16)
 			for i in cover.grass.size():
 				_put(buf, i, cover.grass[i][0], cover.grass[i][1])
 			data.grass.append([step, cover.grass.size(), buf])
-	for shape: int in counts:
+	for which: int in counts:
 		var buf := PackedFloat32Array()
-		buf.resize(int(counts[shape]) * 16)
+		buf.resize(int(counts[which]) * 16)
 		var slot := 0
 		for i in covers.size():
 			for b: Array in covers[i].boulders:
-				if int(b[1]) != shape:
+				if tier_slot(b) != which:
 					continue
 				var place: Transform3D = b[0]
 				place.origin += steps[i]
 				_put(buf, slot, place, b[2])
 				slot += 1
-		data.boulders[shape] = [slot, buf]
+		data.boulders[which] = [slot, buf]
 	return data
+
+## A scattered boulder's MultiMesh in its block: its shape * 2 plus its size
+## tier (1 if BIG_STONE m across or more).
+static func tier_slot(b: Array) -> int:
+	return int(b[1]) * 2 + (1 if float(b[3]) >= BIG_STONE else 0)
+
+## How far a tier's stones are drawn, and the last stretch they fade over.
+static func tier_reach(tier: int) -> float:
+	return BOULDER_REACH if tier == 1 else SMALL_REACH
+
+static func tier_fade(tier: int) -> float:
+	return BOULDER_FADE if tier == 1 else SMALL_FADE
 
 ## One instance into a sized MultiMesh buffer at `slot`, laid out as
 ## AsteroidStream.pack lays it: the transform's rows, then the colour.
@@ -539,24 +569,29 @@ func _grass_step(deadline: float) -> bool:
 func _make_block(data: BlockData) -> void:
 	var block := Node3D.new()
 	block.name = "Cover_%d_%d_%d_%d" % [data.key.x, data.key.y, data.key.z, data.key.w]
-	var near := data.reach - BOULDER_REACH + BOULDER_SHADOW_REACH
-	for shape: int in data.boulders:
-		var entry: Array = data.boulders[shape]
-		var m := _stones("Boulders%d" % shape, RockMesh.mesh(shape, 1), entry[0], entry[1], boulder_material())
+	var near := data.half + BOULDER_SHADOW_REACH
+	for which: int in data.boulders:
+		var entry: Array = data.boulders[which]
+		var shape := which >> 1
+		var tier := which & 1
+		var end := data.half + tier_reach(tier)
+		var label := "%d_%d" % [shape, tier]
+		var m := _stones("Boulders" + label, RockMesh.mesh(shape, 1), entry[0], entry[1], boulder_material(tier))
 		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-		m.visibility_range_end = near
+		m.visibility_range_end = minf(near, end)
 		m.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
 		block.add_child(m)
+		if end <= near:
+			continue
 		var far := MultiMeshInstance3D.new()
-		far.name = "Far%d" % shape
+		far.name = "Far" + label
 		far.multimesh = m.multimesh
 		far.material_override = m.material_override
 		far.layers = m.layers
 		far.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		far.visibility_range_begin = near - SHADOW_OVERLAP
-		far.visibility_range_end = data.reach
-		far.visibility_range_end_margin = BOULDER_FADE
-		far.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+		far.visibility_range_end = end
+		far.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
 		block.add_child(far)
 	block.add_to_group(Universe.EXTERIOR_SPACE)
 	add_child(block)
@@ -598,20 +633,31 @@ static func _stones(label: String, mesh: Mesh, count: int, buffer: PackedFloat32
 	inst.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
 	return inst
 
-## The boulders' look, built as the asteroids' boulders' is: vertex and
-## instance colours as albedo, roughness 1. The visibility range fades them,
-## not the material.
-static func boulder_material() -> StandardMaterial3D:
-	if _boulder_look == null:
-		_boulder_look = StandardMaterial3D.new()
-		_boulder_look.vertex_color_use_as_albedo = true
-		_boulder_look.albedo_color = SpacePalette.UNTINTED
-		_boulder_look.roughness = 1.0
-	return _boulder_look
+## A size tier's boulders' look, built as the asteroids' boulders' is:
+## vertex and instance colours as albedo, roughness 1; and faded out by the
+## built-in pixel dither over the last tier_fade of tier_reach (a fade min
+## past its max fades out with distance, as AsteroidStream's tiers).
+static func boulder_material(tier: int) -> StandardMaterial3D:
+	if _boulder_looks.is_empty():
+		for t in 2:
+			var look := _plain_look()
+			look.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_DITHER
+			look.distance_fade_min_distance = tier_reach(t)
+			look.distance_fade_max_distance = tier_reach(t) - tier_fade(t)
+			_boulder_looks.append(look)
+	return _boulder_looks[tier]
 
-## The grass's: the same, seen from both sides (a blade is one triangle).
+## The grass's: the same with no dither (the visibility range fades it), seen
+## from both sides (a blade is one triangle).
 static func grass_material() -> StandardMaterial3D:
 	if _grass_look == null:
-		_grass_look = boulder_material().duplicate() as StandardMaterial3D
+		_grass_look = _plain_look()
 		_grass_look.cull_mode = BaseMaterial3D.CULL_DISABLED
 	return _grass_look
+
+static func _plain_look() -> StandardMaterial3D:
+	var look := StandardMaterial3D.new()
+	look.vertex_color_use_as_albedo = true
+	look.albedo_color = SpacePalette.UNTINTED
+	look.roughness = 1.0
+	return look
