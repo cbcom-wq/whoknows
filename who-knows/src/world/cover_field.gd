@@ -6,22 +6,33 @@ extends Node3D
 ## and on a desert dry grass, out to GRASS_REACH. GroundCover scatters each
 ## finest chunk's worth; here they are gathered into blocks BLOCK_UP levels
 ## coarser (16 finest chunks, 64-128 m across: 84 m on 1337's p3), so 300 m
-## of boulders is some 65 blocks (about 50 near enough to draw) and two or
-## three MultiMeshes each, not 700 finest chunks' worth.
+## of boulders is some 65 blocks and two MultiMeshes each, not 700 finest
+## chunks' worth.
 ##
 ## A block is built on a worker -- its 16 scatters, packed straight into
 ## MultiMesh buffers -- and put in on the main thread nearest first within
 ## WorldSurface's own budget a tick, at least one a tick, one buffer
 ## assignment a MultiMesh. Blocks the focus has left behind are let go.
-## Nothing at all is wanted higher than BOULDER_REACH over the ground: at
-## entry heat or in high flight this costs one distance a tick.
+## Nothing at all is wanted higher than BOULDER_REACH over the ground, and
+## higher up less of it (the reach along the ground is what the height leaves
+## of BOULDER_REACH): at entry heat or in high flight this costs one distance
+## a tick.
+##
+## Visibility ranges are judged from a node's middle, so they fade a whole
+## node at once. A block's boulders reach to BOULDER_REACH plus half its
+## diagonal: every block whose ground lies within BOULDER_REACH is drawn, and
+## none is built that never could be. Grass is drawn a finest chunk at a time
+## (one MultiMesh each, about 21 m across), so it fades out by distance and
+## not a block at a time; those nodes are made only for blocks within
+## GRASS_ZONE.
 ##
 ## The floating origin (CLAUDE.md): this node never moves and is not a
 ## member; each block is a member of Universe.EXTERIOR_SPACE of its own,
 ## placed from its UniversePoint (the body's point plus the block's centre in
 ## whole metres, as TerrainChunkData's) when made. Every number in a block is
-## relative to that centre: each finest chunk's cover is relative to its own
-## chunk's centre, and moved by the whole-metre step between the two.
+## relative to that centre: each finest chunk's boulders are relative to its
+## own chunk's centre, and moved by the whole-metre step between the two; its
+## grass node sits at that step, its tufts as scattered.
 ##
 ## What the boulders draw is solid already: the finest chunks' collision
 ## holds their hulls (GroundCover.boulder_faces, WorldSurface's solid ground).
@@ -40,16 +51,30 @@ const MAX_JOBS := 4
 ## surface's own.
 const APPLY_BUDGET_USEC := WorldSurface.APPLY_BUDGET_USEC
 ## The blocks are chosen afresh once the focus has moved this far: a quarter
-## of a block, twice the surface's RESELECT_AFTER, as a choice costs about
-## 0.3 ms (some 110 blocks weighed) and low flight has little to spare.
+## of a block, twice the surface's RESELECT_AFTER, as a choice costs a few
+## tenths of a millisecond and low flight has little to spare.
 const RESELECT_AFTER := 20.0
 ## A focus moving at v wants the ground v x LOOKAHEAD ahead too, and first
 ## (as TerrainCollider.reach_for looks ahead); never more than the reach.
 const LOOKAHEAD := TerrainCollider.LOOKAHEAD
-## A block is let go only once its ground is this far past BOULDER_REACH, so
-## one on the edge is not made and freed by turns.
+## A step between choices faster than this, or one under a physics tick, is a
+## jump (boarding, a load, a warp's arrival), not flight: no velocity. Phase
+## 1's fastest dive was 2.1 km/s.
+const FLIGHT_MAX := 3000.0
+## A block is let go only once its ground is this far past BOULDER_REACH (in
+## the slant, as the reach), so one on the edge is not made and freed by
+## turns.
 const KEEP_MARGIN := 40.0
-## Block bounds remembered between selections; past this many, forgotten.
+## A block's grass nodes are made while its ground lies within this of you
+## (along the ground, less what the height takes): the grass's reach and
+## fade, and the most the focus moves before the next choice. They go again
+## past GRASS_ZONE + RESELECT_AFTER.
+const GRASS_ZONE := GRASS_REACH + GRASS_FADE + RESELECT_AFTER
+## A cell more skewed than this (the sine of its corner's angle; 0.866 at a
+## cube's corner) is counted as a square of narrower cells, not a disc.
+const SKEW := 0.97
+## Block bounds remembered between choices; past this many, only the last
+## choice's are kept.
 const MEMO_KEPT := 4096
 
 var body: SystemBody
@@ -59,7 +84,8 @@ var terrain: WorldTerrain
 
 ## The blocks wanted, nearest first (ahead first when moving).
 var _wanted: Array[Vector4i] = []
-## key -> how far its ground lies: every block not yet to be let go.
+## key -> how far its ground lies along the ground: every block not yet to
+## be let go.
 var _kept := {}
 ## key -> Node3D
 var _blocks := {}
@@ -68,26 +94,37 @@ var _jobs := {}
 ## key -> BlockData, written by the jobs under _mutex.
 var _done := {}
 var _mutex := Mutex.new()
-## blocks_near's memo: key -> [middle on the sphere, corner chord], and the
-## blocks round each block near a cube edge.
+## key -> the block's grass, per finest chunk [step, count, buffer], while
+## the block is drawn.
+var _grass := {}
+## key -> its "Grass" node, for the blocks within GRASS_ZONE.
+var _grass_on := {}
+## How far along the ground grass nodes are wanted, and kept: from the last
+## choice.
+var _grass_want := -INF
+var _grass_keep := -INF
+## blocks_near's memo: key -> [middle on the sphere, corner chord].
 var _memo := {}
 var _selected_at: UniversePoint
 var _selected_usec := 0
-## Every wanted block is drawn and nothing is in flight: a tick then costs
-## only the distance moved.
+## Every wanted block is drawn with its grass, and nothing is in flight: a
+## tick then costs only the distance moved.
 var _settled := true
 
 static var _boulder_look: StandardMaterial3D
 static var _grass_look: StandardMaterial3D
 
-## One block's cover, packed on a worker. Per shape [count, buffer]; the
-## grass the same.
+## One block's cover, packed on a worker. Boulders per shape [count,
+## buffer], relative to the block's centre; grass per finest chunk that has
+## any [step from the block's centre, count, buffer], relative to that
+## chunk's centre. `reach` is how far its boulders are drawn.
 class BlockData:
 	extends RefCounted
 	var key: Vector4i
 	var centre: Vector3i
+	var reach := BOULDER_REACH
 	var boulders := {}
-	var grass := [0, PackedFloat32Array()]
+	var grass: Array = []
 
 func setup(p_body: SystemBody, p_universe: Universe, p_terrain: WorldTerrain) -> void:
 	body = p_body
@@ -99,24 +136,31 @@ func setup(p_body: SystemBody, p_universe: Universe, p_terrain: WorldTerrain) ->
 	GroundCover.grass_mesh()
 
 ## The blocks whose ground lies within `reach` of `local` (from the world's
-## centre), measured along the ground, nearest first; none from higher than
-## `reach` over the ground. A focus moving at `velocity` also wants the
-## ground velocity x LOOKAHEAD ahead (at most `reach` ahead), and that first:
-## nearest that point, those behind you after.
-## `memo` optionally keeps each block's bound, and the blocks over a cube
-## edge, between calls. Pure.
+## centre), nearest first: within sqrt(reach^2 - h^2) along the ground, h
+## being the height over the ground, so none from higher than `reach`. A
+## focus moving at `velocity` also wants the ground velocity x LOOKAHEAD
+## ahead (at most `reach` ahead), and that first: nearest that point, those
+## behind you after. `memo` optionally keeps each block's bound between
+## calls. Pure.
 static func blocks_near(terrain: WorldTerrain, local: Vector3, reach: float,
 		velocity := Vector3.ZERO, memo := {}) -> Array[Vector4i]:
 	return _near(terrain, local, reach, velocity, memo, 0.0)[0]
 
-## blocks_near out to `reach` + `keep`: [keys nearest first, key -> how far
-## its ground lies from you or the point ahead].
+## blocks_near out to `reach` + `keep` (in the slant): [keys nearest first,
+## key -> how far its ground lies along the ground, how far along the ground
+## `reach` itself goes (-INF: nowhere), the height over the ground].
 static func _near(terrain: WorldTerrain, local: Vector3, reach: float, velocity: Vector3,
 		memo: Dictionary, keep: float) -> Array:
 	var out: Array[Vector4i] = []
 	var far := {}
-	if local.is_zero_approx() or terrain.altitude_of(local) > reach:
-		return [out, far]
+	if local.is_zero_approx():
+		return [out, far, -INF, INF]
+	var h := maxf(terrain.altitude_of(local), 0.0)
+	var limit := reach + keep
+	if h > limit:
+		return [out, far, -INF, h]
+	var want := sqrt(reach * reach - h * h) if h <= reach else -INF
+	var lateral := sqrt(limit * limit - h * h)
 	var depth := CubeSphere.depth_for(terrain.radius) - BLOCK_UP
 	var edge := CubeSphere.edge_m(terrain.radius, depth)
 	var up := local.normalized()
@@ -128,11 +172,11 @@ static func _near(terrain: WorldTerrain, local: Vector3, reach: float, velocity:
 	# way ahead first.
 	var way := lead.normalized()
 	var behind := lead.length()
-	var limit := reach + keep
 	var found: Array[Vector4i] = []
 	# (order, index into found): a native sort, not a lambda's.
 	var order: Array[Vector2] = []
-	for k in _candidates(mid, depth, edge, limit + behind * 0.5, memo):
+	var candidates := _candidates(mid, depth, edge, lateral + behind * 0.5)
+	for k in candidates:
 		var b: Variant = memo.get(k)
 		if b == null:
 			b = _bound(k, terrain.radius)
@@ -140,67 +184,104 @@ static func _near(terrain: WorldTerrain, local: Vector3, reach: float, velocity:
 		var m: Vector3 = b[0]
 		var to_ahead := ahead.distance_to(m)
 		var d := minf(here.distance_to(m), to_ahead) - float(b[1])
-		if d <= limit:
+		if d <= lateral:
 			far[k] = d
 			order.append(Vector2(to_ahead + (behind if (m - here).dot(way) < 0.0 else 0.0), found.size()))
 			found.append(k)
 	order.sort()
 	for o in order:
-		out.append(found[int(o.y)])
-	return [out, far]
+		var k := found[int(o.y)]
+		if keep > 0.0 or float(far[k]) <= want:
+			out.append(k)
+	if memo.size() > MEMO_KEPT:
+		var kept := {}
+		for k in candidates:
+			kept[k] = memo[k]
+		memo.clear()
+		memo.merge(kept)
+	return [out, far, want, h]
 
-## Every block at `depth` that might lie within `span` of `mid`: a disc of the
-## face's own grid round the one under it (as TerrainCollider.keys_near), and
-## where that crosses a cube edge, the other faces' blocks found by sampling
-## directions a block apart there, each with its neighbours two deep. The
-## crossing is worked out once per block under `mid` and kept in `memo`.
-static func _candidates(mid: Vector3, depth: int, edge: float, span: float, memo := {}) -> Array[Vector4i]:
+## Every block at `depth` that might lie within `span` of `mid` (on the
+## sphere): a disc of the face's own grid round the one under it (as
+## TerrainCollider.keys_near; a square of narrower cells where they are skewed
+## toward a cube's corner), and for each cube edge within `span`, a strip of
+## the next face's grid along it, as long as the disc's chord there and as
+## deep as the disc reaches past the edge. One key_for per edge crossed; no
+## memo, so nothing to miss when the speed (and so the span) changes.
+static func _candidates(mid: Vector3, depth: int, edge: float, span: float) -> Array[Vector4i]:
 	var out: Array[Vector4i] = []
-	var under := CubeSphere.key_for(mid, depth)
+	var fuv := CubeSphere.face_uv(mid)
+	var face := int(fuv.x)
+	var cells := 1 << depth
+	var under := Vector4i(face, depth, clampi(floori((fuv.y + 1.0) * 0.5 * cells), 0, cells - 1),
+		clampi(floori((fuv.z + 1.0) * 0.5 * cells), 0, cells - 1))
 	# Cells are only nearly even: count them by the one under you's narrower
 	# side (a cell by a cube edge is about 0.75 of `edge`).
 	var r := mid.length()
 	var rect := CubeSphere.node_rect(under)
-	var c00 := CubeSphere.direction(under.x, rect.x, rect.y) * r
-	var across := minf(c00.distance_to(CubeSphere.direction(under.x, rect.x + rect.z, rect.y) * r),
-		c00.distance_to(CubeSphere.direction(under.x, rect.x, rect.y + rect.z) * r))
-	var n := ceili(span / minf(across, edge)) + 1
-	var cells := 1 << depth
-	var inside := under.z - n >= 0 and under.w - n >= 0 and under.z + n < cells and under.w + n < cells
-	var window := "%d,%d,%d,%d,%d" % [under.x, under.y, under.z, under.w, n]
-	if not inside and memo.has(window):
-		return memo[window]
-	var seen := {}
+	var c00 := CubeSphere.direction(face, rect.x, rect.y) * r
+	var side_u := CubeSphere.direction(face, rect.x + rect.z, rect.y) * r - c00
+	var side_v := CubeSphere.direction(face, rect.x, rect.y + rect.z) * r - c00
+	var cell := minf(edge, minf(side_u.length(), side_v.length()))
+	var n := ceili(span / cell) + 1
+	if under.z - n >= 0 and under.w - n >= 0 and under.z + n < cells and under.w + n < cells:
+		for dy in range(-n, n + 1):
+			for dx in range(-n, n + 1):
+				if dx * dx + dy * dy <= n * n:
+					out.append(Vector4i(face, depth, under.z + dx, under.w + dy))
+		return out
+	# Toward a cube's corner cells are skewed (60 degrees at the corner), so a
+	# distance spans more of them: there, a square, and a step of the cell's
+	# width across its skew.
+	var skew := side_u.cross(side_v).length() / (side_u.length() * side_v.length())
+	var square := skew < SKEW
+	if square:
+		cell *= minf(skew, 1.0) * 0.95
+		n = ceili(span / cell) + 1
 	for dy in range(-n, n + 1):
 		for dx in range(-n, n + 1):
 			var x := under.z + dx
 			var y := under.w + dy
-			if dx * dx + dy * dy <= n * n and x >= 0 and y >= 0 and x < cells and y < cells:
-				out.append(Vector4i(under.x, depth, x, y))
-	if inside:
-		return out
+			if (square or dx * dx + dy * dy <= n * n) and x >= 0 and y >= 0 and x < cells and y < cells:
+				out.append(Vector4i(face, depth, x, y))
+	var seen := {}
 	for k in out:
 		seen[k] = true
-	var up := mid.normalized()
-	var a := up.cross(Vector3.UP if absf(up.y) < 0.9 else Vector3.RIGHT).normalized()
-	var b := up.cross(a)
-	var m := ceili((span + edge) / edge)
-	for j in range(-m, m + 1):
-		for i in range(-m, m + 1):
-			var off := a * (i * edge) + b * (j * edge)
-			if off.length() > span + edge or CubeSphere.face_of(mid + off) == under.x:
+	# Each edge of this face: x 0 for a u edge, 1 for a v edge; y its end.
+	for e: Vector2i in [Vector2i(0, -1), Vector2i(0, 1), Vector2i(1, -1), Vector2i(1, 1)]:
+		var on_u := e.x == 0
+		var at_edge := Vector2(float(e.y), fuv.z) if on_u else Vector2(fuv.y, float(e.y))
+		var d0 := mid.distance_to(CubeSphere.direction(face, at_edge.x, at_edge.y) * r)
+		if d0 > span:
+			continue
+		# A cell's width past the edge lies on the next face.
+		var out_dir := Vector2(float(e.y), 0.0) if on_u else Vector2(0.0, float(e.y))
+		var past := at_edge + out_dir * rect.z
+		var across := CubeSphere.key_for(CubeSphere.direction(face, past.x, past.y), depth)
+		if across.x == face:
+			continue
+		var along_n := ceili(sqrt(maxf(span * span - d0 * d0, 0.0)) / cell) + 2
+		var deep_n := ceili((span - d0) / cell) + 2
+		# Which side of the next face meets this one: an end of its z or w.
+		for side: Vector2i in [Vector2i(0, 0), Vector2i(0, cells - 1), Vector2i(1, 0), Vector2i(1, cells - 1)]:
+			var index := across.z if side.x == 0 else across.w
+			if absi(index - side.y) > 1:
 				continue
-			var at := CubeSphere.key_for(mid + off, depth)
-			for dy in range(-2, 3):
-				for dx in range(-2, 3):
-					var x := at.z + dx
-					var y := at.w + dy
-					if x >= 0 and y >= 0 and x < cells and y < cells:
-						var k := Vector4i(at.x, depth, x, y)
-						if not seen.has(k):
-							seen[k] = true
-							out.append(k)
-	memo[window] = out
+			var inward := 1 if side.y == 0 else -1
+			var mid_along := across.w if side.x == 0 else across.z
+			for a in range(-along_n, along_n + 1):
+				var along := mid_along + a
+				if along < 0 or along >= cells:
+					continue
+				for dd in deep_n:
+					var into := side.y + inward * dd
+					if into < 0 or into >= cells:
+						break
+					var k := Vector4i(across.x, depth, into, along) if side.x == 0 \
+						else Vector4i(across.x, depth, along, into)
+					if not seen.has(k):
+						seen[k] = true
+						out.append(k)
 	return out
 
 ## A block's [middle on the sphere of `radius`, the farthest corner from it].
@@ -225,7 +306,8 @@ static func finest_of(block: Vector4i) -> Array[Vector4i]:
 
 ## Chooses the blocks for `focus` once it has moved, collects finished jobs,
 ## asks for what is missing nearest first, puts in what fits in the budget
-## and lets go of what nothing needs. Settled, it costs one distance.
+## (blocks, then grass) and lets go of what nothing needs. Settled, it costs
+## one distance.
 func update(focus: UniversePoint) -> void:
 	if _selected_at == null or focus.minus(_selected_at).length() >= RESELECT_AFTER:
 		_select_for(focus)
@@ -234,31 +316,42 @@ func update(focus: UniversePoint) -> void:
 	_collect()
 	var missing := _missing()
 	_request(missing)
-	var all_in := _apply(Time.get_ticks_usec() + APPLY_BUDGET_USEC)
-	_settled = _jobs.is_empty() and missing.is_empty() and all_in
+	var deadline := Time.get_ticks_usec() + APPLY_BUDGET_USEC
+	var blocks_in := _apply(deadline)
+	# With blocks still to put in, the grass gets only its one.
+	var grass_in := _grass_step(deadline if blocks_in else -INF)
+	_settled = _jobs.is_empty() and missing.is_empty() and blocks_in and grass_in
 
 ## Chooses the blocks for `focus`, its velocity worked out from the last
-## choice (BodyProxy passes only the point), and lets go of the blocks far
-## behind.
+## choice (BodyProxy passes only the point; a jump has none), and lets go of
+## the blocks far behind.
 func _select_for(focus: UniversePoint) -> void:
 	var now := Time.get_ticks_usec()
 	var velocity := Vector3.ZERO
-	if _selected_at != null and now > _selected_usec:
-		velocity = focus.minus(_selected_at) / (float(now - _selected_usec) / 1e6)
+	if _selected_at != null:
+		var dt := float(now - _selected_usec) / 1e6
+		var step := focus.minus(_selected_at)
+		if dt >= 1.0 / Engine.physics_ticks_per_second and step.length() <= FLIGHT_MAX * dt:
+			velocity = step / dt
 	_selected_at = focus
 	_selected_usec = now
-	if _memo.size() > MEMO_KEPT:
-		_memo.clear()
 	var near := _near(terrain, focus.minus(body.point), BOULDER_REACH, velocity, _memo, KEEP_MARGIN)
 	_kept = near[1]
+	var want: float = near[2]
+	var h: float = near[3]
 	_wanted.clear()
 	for k: Vector4i in near[0]:
-		if float(_kept[k]) <= BOULDER_REACH:
+		if float(_kept[k]) <= want:
 			_wanted.append(k)
+	_grass_want = sqrt(GRASS_ZONE * GRASS_ZONE - h * h) if h <= GRASS_ZONE else -INF
+	var keep := GRASS_ZONE + RESELECT_AFTER
+	_grass_keep = sqrt(keep * keep - h * h) if h <= keep else -INF
 	for k: Vector4i in _blocks.keys():
 		if not _kept.has(k):
 			(_blocks[k] as Node).queue_free()
 			_blocks.erase(k)
+			_grass.erase(k)
+			_grass_on.erase(k)
 	_settled = false
 
 ## Waits for every job and puts everything in: tests and probes.
@@ -269,6 +362,7 @@ func finish() -> void:
 		wait_for_jobs()
 		_apply(INF)
 	_apply(INF)
+	_grass_step(INF)
 	_settled = true
 
 ## Waits for every job in flight.
@@ -323,33 +417,68 @@ func _job(key: Vector4i, recipe: WorldRecipe) -> void:
 	_done[key] = data
 	_mutex.unlock()
 
-## Block `key`'s cover on `terrain`: its finest keys' scatters, each moved by
-## the whole-metre step from its chunk's centre to the block's, packed per
-## shape as MultiMesh buffers. Pure.
+## Block `key`'s cover on `terrain`: its finest keys' scatters, packed as
+## MultiMesh buffers, each sized once. Boulders per shape, each moved by the
+## whole-metre step from its chunk's centre to the block's; grass per finest
+## chunk, as scattered. Pure.
 static func _build(key: Vector4i, terrain: WorldTerrain) -> BlockData:
 	var data := BlockData.new()
 	data.key = key
 	data.centre = TerrainChunkData.centre_of(terrain, key)
+	data.reach = BOULDER_REACH + float(_bound(key, terrain.radius)[1])
+	var covers: Array[GroundCover] = []
+	var steps: Array[Vector3] = []
+	var counts := {}
 	for k in finest_of(key):
 		var cover := GroundCover.scatter(terrain, k)
 		if cover.boulders.is_empty() and cover.grass.is_empty():
 			continue
 		var step := Vector3(TerrainChunkData.centre_of(terrain, k) - data.centre)
+		covers.append(cover)
+		steps.append(step)
 		for b: Array in cover.boulders:
-			var shape: int = b[1]
-			if not data.boulders.has(shape):
-				data.boulders[shape] = [0, PackedFloat32Array()]
-			var entry: Array = data.boulders[shape]
-			var place: Transform3D = b[0]
-			place.origin += step
-			entry[0] = int(entry[0]) + 1
-			entry[1] = AsteroidStream.pack(entry[1], place, b[2])
-		for g: Array in cover.grass:
-			var place: Transform3D = g[0]
-			place.origin += step
-			data.grass[0] = int(data.grass[0]) + 1
-			data.grass[1] = AsteroidStream.pack(data.grass[1], place, g[1])
+			counts[b[1]] = int(counts.get(b[1], 0)) + 1
+		if not cover.grass.is_empty():
+			var buf := PackedFloat32Array()
+			buf.resize(cover.grass.size() * 16)
+			for i in cover.grass.size():
+				_put(buf, i, cover.grass[i][0], cover.grass[i][1])
+			data.grass.append([step, cover.grass.size(), buf])
+	for shape: int in counts:
+		var buf := PackedFloat32Array()
+		buf.resize(int(counts[shape]) * 16)
+		var slot := 0
+		for i in covers.size():
+			for b: Array in covers[i].boulders:
+				if int(b[1]) != shape:
+					continue
+				var place: Transform3D = b[0]
+				place.origin += steps[i]
+				_put(buf, slot, place, b[2])
+				slot += 1
+		data.boulders[shape] = [slot, buf]
 	return data
+
+## One instance into a sized MultiMesh buffer at `slot`, laid out as
+## AsteroidStream.pack lays it: the transform's rows, then the colour.
+static func _put(buf: PackedFloat32Array, slot: int, t: Transform3D, c: Color) -> void:
+	var i := slot * 16
+	buf[i] = t.basis.x.x
+	buf[i + 1] = t.basis.y.x
+	buf[i + 2] = t.basis.z.x
+	buf[i + 3] = t.origin.x
+	buf[i + 4] = t.basis.x.y
+	buf[i + 5] = t.basis.y.y
+	buf[i + 6] = t.basis.z.y
+	buf[i + 7] = t.origin.y
+	buf[i + 8] = t.basis.x.z
+	buf[i + 9] = t.basis.y.z
+	buf[i + 10] = t.basis.z.z
+	buf[i + 11] = t.origin.z
+	buf[i + 12] = c.r
+	buf[i + 13] = c.g
+	buf[i + 14] = c.b
+	buf[i + 15] = c.a
 
 ## Puts finished blocks in, nearest first, until `deadline`, and at least one
 ## a call so the cover always catches up. Results nothing wants any more go
@@ -377,35 +506,66 @@ func _apply(deadline: float) -> bool:
 		_make_block(data)
 	return true
 
+## Lets go of the grass of blocks past _grass_keep, and makes it for drawn
+## blocks within _grass_want, nearest first, until `deadline` (at least one
+## block's a call). True if none is left to make.
+func _grass_step(deadline: float) -> bool:
+	for k: Vector4i in _grass_on.keys():
+		if float(_kept.get(k, INF)) > _grass_keep:
+			(_grass_on[k] as Node).queue_free()
+			_grass_on.erase(k)
+	var made := 0
+	for k in _wanted:
+		if float(_kept[k]) > _grass_want or _grass_on.has(k) or not _grass.has(k):
+			continue
+		if made > 0 and Time.get_ticks_usec() > deadline:
+			return false
+		made += 1
+		_make_grass(k)
+	return true
+
 func _make_block(data: BlockData) -> void:
 	var block := Node3D.new()
 	block.name = "Cover_%d_%d_%d_%d" % [data.key.x, data.key.y, data.key.z, data.key.w]
 	for shape: int in data.boulders:
 		var entry: Array = data.boulders[shape]
-		var m := _stones("Boulders%d" % shape, RockMesh.mesh(shape, 1), entry, boulder_material())
+		var m := _stones("Boulders%d" % shape, RockMesh.mesh(shape, 1), entry[0], entry[1], boulder_material())
 		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-		m.visibility_range_end = BOULDER_REACH
+		m.visibility_range_end = data.reach
 		m.visibility_range_end_margin = BOULDER_FADE
 		block.add_child(m)
-	if int(data.grass[0]) > 0:
-		var g := _stones("Grass", GroundCover.grass_mesh(), data.grass, grass_material())
-		g.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		g.visibility_range_end = GRASS_REACH
-		g.visibility_range_end_margin = GRASS_FADE
-		block.add_child(g)
 	block.add_to_group(Universe.EXTERIOR_SPACE)
 	add_child(block)
 	block.global_position = universe.to_engine(body.point.plus(Vector3(data.centre)))
 	_blocks[data.key] = block
+	if not data.grass.is_empty():
+		_grass[data.key] = data.grass
+
+## Block `key`'s grass: a node "Grass" holding one MultiMesh per finest chunk
+## with tufts, each at its chunk's centre, so each is judged by its own
+## distance.
+func _make_grass(key: Vector4i) -> void:
+	var holder := Node3D.new()
+	holder.name = "Grass"
+	for entry: Array in _grass[key]:
+		var g := _stones("Tufts", GroundCover.grass_mesh(), entry[1], entry[2], grass_material())
+		g.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		g.visibility_range_end = GRASS_REACH
+		g.visibility_range_end_margin = GRASS_FADE
+		g.position = entry[0]
+		holder.add_child(g, true)
+	(_blocks[key] as Node3D).add_child(holder)
+	_grass_on[key] = holder
 
 ## One MultiMesh from a buffer packed on the worker: one assignment.
-static func _stones(label: String, mesh: Mesh, entry: Array, look: Material) -> MultiMeshInstance3D:
+static func _stones(label: String, mesh: Mesh, count: int, buffer: PackedFloat32Array,
+		look: Material) -> MultiMeshInstance3D:
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_colors = true
 	mm.mesh = mesh
-	mm.instance_count = entry[0]
-	mm.buffer = entry[1]
+	mm.instance_count = count
+	mm.buffer = buffer
 	var inst := MultiMeshInstance3D.new()
 	inst.name = label
 	inst.multimesh = mm

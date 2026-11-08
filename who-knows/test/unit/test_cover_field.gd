@@ -82,8 +82,8 @@ func test_blocks_near_cover_the_reach():
 	var t := _terrain()
 	var depth := CubeSphere.depth_for(t.radius)
 	var edge := CubeSphere.edge_m(t.radius, depth - CoverField.BLOCK_UP)
-	# On a face, and across a cube edge.
-	for up: Vector3 in [_up, CubeSphere.direction(0, 0.995, 0.3)]:
+	# On a face, across a cube edge, and by a cube's corner (three faces).
+	for up: Vector3 in [_up, CubeSphere.direction(0, 0.995, 0.3), CubeSphere.direction(0, 0.996, 0.997)]:
 		var local := up * (t.radius + t.height_at(up) + 2.0)
 		var blocks := CoverField.blocks_near(t, local, CoverField.BOULDER_REACH)
 		assert_gt(blocks.size(), 0)
@@ -128,6 +128,50 @@ func test_nothing_high_up():
 	assert_eq(s.cover.block_count(), 0)
 	assert_eq(s.cover.get_child_count(), 0)
 
+## Higher up, the reach along the ground is what the height leaves of
+## BOULDER_REACH: every block wanted can be seen within it in the slant.
+func test_higher_up_less_is_wanted():
+	var t := _terrain()
+	var low := _up * (t.radius + t.height_at(_up) + 2.0)
+	var high := _up * (t.radius + t.height_at(_up) + 250.0)
+	var at_low := CoverField.blocks_near(t, low, CoverField.BOULDER_REACH)
+	var at_high := CoverField.blocks_near(t, high, CoverField.BOULDER_REACH)
+	assert_gt(at_high.size(), 0)
+	assert_lt(at_high.size(), at_low.size() / 2)
+	var h := t.altitude_of(high)
+	var along := sqrt(CoverField.BOULDER_REACH ** 2 - h * h)
+	var here := _up * t.radius
+	for b in at_high:
+		var bound := CoverField._bound(b, t.radius)
+		var d := here.distance_to(bound[0]) - float(bound[1])
+		assert_lte(d, along + 0.01, "%s lies within %.0f m along the ground" % [b, along])
+	gut.p("%d blocks wanted at 2 m, %d at 250 m" % [at_low.size(), at_high.size()])
+
+## Level flight about BOULDER_REACH up: climbing a little past it wants
+## nothing new but frees nothing either, so coming back down asks for nothing.
+func test_level_flight_near_the_reach_keeps_its_blocks():
+	var s := _surface(270.0)
+	s.cover.finish()
+	var first := s.cover.block_keys()
+	assert_gt(first.size(), 0)
+	s.update(_above(s, 310.0))
+	assert_eq(s.cover._wanted.size(), 0, "nothing wanted over the reach")
+	assert_eq(s.cover.block_keys().size(), first.size(), "and nothing let go")
+	s.update(_above(s, 270.0))
+	assert_eq(s.cover.jobs_in_flight(), 0, "back down, nothing to build again")
+	assert_eq(s.cover.block_keys().size(), first.size())
+
+## Boarding, a load or a warp's arrival moves the focus far in no time: no
+## velocity is read from it, so nothing is biased ahead.
+func test_a_jump_has_no_velocity():
+	var s := _surface(2.0)
+	var along := _up.cross(Vector3.RIGHT).normalized()
+	var there := (_up + along * (1000.0 / _planet().radius)).normalized()
+	var f := _above(s, 2.0, there)
+	s.cover.update(f)
+	var at_rest := CoverField.blocks_near(s.terrain, f.minus(_planet().point), CoverField.BOULDER_REACH)
+	assert_eq(s.cover._wanted, at_rest)
+
 # --- drawing them ---------------------------------------------------------------
 
 func test_cover_is_what_scatter_says():
@@ -136,18 +180,43 @@ func test_cover_is_what_scatter_says():
 	assert_gt(s.cover.block_count(), 10)
 	var t := _terrain()
 	var checked := 0
+	var grass_checked := 0
 	for b in s.cover.block_keys():
 		var block := s.cover.get_node(_name(b)) as Node3D
 		assert_not_null(block, "%s is drawn" % b)
 		var total := 0
 		var first: Array = []
 		var first_key := Vector4i.ZERO
+		var tufts := {}
 		for k in _finest(b):
 			var c := GroundCover.scatter(t, k)
 			total += c.boulders.size()
 			if first.is_empty() and not c.boulders.is_empty():
 				first = c.boulders[0]
 				first_key = k
+			if not c.grass.is_empty():
+				tufts[Vector3(TerrainChunkData.centre_of(t, k) - TerrainChunkData.centre_of(t, b))] = c.grass
+		# Grass, where it is drawn: one MultiMesh a finest chunk, at its
+		# centre, each tuft as scattered.
+		var holder := block.get_node_or_null("Grass")
+		if holder != null:
+			assert_eq(holder.get_child_count(), tufts.size(), "%s: one grass node a finest chunk with tufts" % b)
+			for g: MultiMeshInstance3D in holder.get_children():
+				assert_true(tufts.has(g.position), "%s's grass node sits at a finest chunk's centre" % b)
+				if not tufts.has(g.position):
+					continue
+				var want_grass: Array = tufts[g.position]
+				assert_eq(g.multimesh.instance_count, want_grass.size())
+				var gbuf := g.multimesh.buffer
+				var gt := AsteroidStream.unpack(gbuf, 0)
+				var wt: Transform3D = want_grass[0][0]
+				assert_almost_eq(gt.origin, wt.origin, Vector3.ONE * 0.001)
+				assert_almost_eq(gt.basis.y, wt.basis.y, Vector3.ONE * 0.001)
+				var last := want_grass.size() - 1
+				var wc: Color = want_grass[last][1]
+				assert_true(Color(gbuf[last * 16 + 12], gbuf[last * 16 + 13], gbuf[last * 16 + 14], gbuf[last * 16 + 15]).is_equal_approx(wc),
+					"a tuft's colour is the scatter's")
+				grass_checked += 1
 		var drawn := 0
 		for n in block.get_children():
 			if n.name.begins_with("Boulders"):
@@ -161,47 +230,68 @@ func test_cover_is_what_scatter_says():
 		var mm := (block.get_node("Boulders%d" % int(first[1])) as MultiMeshInstance3D).multimesh
 		var found := false
 		var buf := mm.buffer
+		var want_colour: Color = first[2]
 		for i in mm.instance_count:
 			var got := AsteroidStream.unpack(buf, i)
 			if got.origin.distance_to(want.origin) < 0.001:
 				found = got.basis.x.distance_to(want.basis.x) < 0.001 \
 					and got.basis.y.distance_to(want.basis.y) < 0.001 \
-					and got.basis.z.distance_to(want.basis.z) < 0.001
+					and got.basis.z.distance_to(want.basis.z) < 0.001 \
+					and Color(buf[i * 16 + 12], buf[i * 16 + 13], buf[i * 16 + 14], buf[i * 16 + 15]).is_equal_approx(want_colour)
 				break
 		assert_true(found, "%s's first boulder is where scatter put it, moved by the block's centre" % b)
 		var at := _universe.to_engine(_planet().point.plus(Vector3(centre)))
 		assert_almost_eq(block.global_position, at, Vector3.ONE * 0.001)
 		checked += 1
 	assert_gt(checked, 0, "some block has boulders")
+	assert_gt(grass_checked, 0, "some grass is drawn and checked")
 
 func test_a_block_is_drawn_as_the_plan_says():
 	var s := _surface(2.0)
 	s.cover.finish()
 	var grass := 0
+	var t := _terrain()
+	var here := _up * t.radius
+	var stones: Array[MultiMeshInstance3D] = []
 	for b in s.cover.block_keys():
 		var block := s.cover.get_node(_name(b)) as Node3D
+		var bound := CoverField._bound(b, t.radius)
+		var ground := here.distance_to(bound[0]) - float(bound[1])
+		var holder := block.get_node_or_null("Grass")
+		if ground > CoverField.GRASS_ZONE + CoverField.RESELECT_AFTER:
+			assert_null(holder, "%s, %.0f m off, has no grass nodes" % [b, ground])
 		for n in block.get_children():
+			if n == holder:
+				continue
 			var m := n as MultiMeshInstance3D
 			assert_not_null(m)
-			assert_eq(m.visibility_range_fade_mode, GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF)
-			assert_true(m.multimesh.use_colors, "instance colours")
-			var mat := m.material_override as StandardMaterial3D
-			assert_true(mat.vertex_color_use_as_albedo)
-			assert_eq(mat.roughness, 1.0)
-			if n.name == "Grass":
-				grass += 1
-				assert_eq(m.multimesh.mesh, GroundCover.grass_mesh())
-				assert_eq(m.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
-				assert_eq(m.visibility_range_end, CoverField.GRASS_REACH)
-				assert_eq(m.visibility_range_end_margin, 15.0)
-				assert_eq(mat.cull_mode, BaseMaterial3D.CULL_DISABLED)
-			else:
-				assert_eq(m.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_ON)
-				assert_eq(m.visibility_range_end, CoverField.BOULDER_REACH)
-				assert_eq(m.visibility_range_end_margin, 40.0)
-				var shape := int(String(n.name).trim_prefix("Boulders"))
-				assert_eq(m.multimesh.mesh, RockMesh.mesh(shape, 1))
-	assert_gt(grass, 0, "a desert has grass")
+			stones.append(m)
+			assert_eq(m.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_ON)
+			# Its middle may lie half a diagonal past its nearest ground.
+			assert_almost_eq(m.visibility_range_end, CoverField.BOULDER_REACH + float(bound[1]), 0.01)
+			assert_eq(m.visibility_range_end_margin, 40.0)
+			var shape := int(String(n.name).trim_prefix("Boulders"))
+			assert_eq(m.multimesh.mesh, RockMesh.mesh(shape, 1))
+		if holder == null:
+			continue
+		for n in holder.get_children():
+			var m := n as MultiMeshInstance3D
+			assert_not_null(m)
+			stones.append(m)
+			grass += 1
+			assert_eq(m.multimesh.mesh, GroundCover.grass_mesh())
+			assert_eq(m.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
+			assert_eq(m.visibility_range_end, CoverField.GRASS_REACH)
+			assert_eq(m.visibility_range_end_margin, 15.0)
+			assert_eq((m.material_override as StandardMaterial3D).cull_mode, BaseMaterial3D.CULL_DISABLED)
+	for m in stones:
+		assert_eq(m.visibility_range_fade_mode, GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF)
+		assert_true(m.multimesh.use_colors, "instance colours")
+		var mat := m.material_override as StandardMaterial3D
+		assert_true(mat.vertex_color_use_as_albedo)
+		assert_eq(mat.roughness, 1.0)
+	assert_gt(grass, 16, "a desert has grass, a node a finest chunk")
+	gut.p("%d blocks, %d grass nodes" % [s.cover.block_count(), grass])
 
 func test_far_blocks_go():
 	var s := _surface(2.0)
@@ -225,6 +315,7 @@ func test_blocks_follow_a_shift():
 	assert_false(s.cover.is_in_group(Universe.EXTERIOR_SPACE), "the field never moves")
 	assert_eq(s.cover.global_transform, Transform3D.IDENTITY)
 	var t := _terrain()
+	assert_gt(s.cover.block_count(), 0, "blocks to check")
 	var check := func() -> void:
 		for b in s.cover.block_keys():
 			var block := s.cover.get_node(_name(b)) as Node3D
@@ -237,8 +328,10 @@ func test_blocks_follow_a_shift():
 	check.call()
 	assert_eq(s.cover.global_transform, Transform3D.IDENTITY)
 
-## Task 4 made boulders solid; here the ray proves the drawn one is the solid
-## one, in the field's own frame.
+## A guard, not CoverField's own work (Task 4 made boulders solid): a ray down
+## onto a boulder GroundCover.scatter puts near an anchor meets the surface's
+## collision (WorldSurface's solid finest chunks) on the boulder's top, not
+## the ground under it.
 func test_boulders_are_solid_where_the_ground_is():
 	var s := _surface(2.0)
 	var t := s.terrain
@@ -297,6 +390,24 @@ func test_a_tick_is_cheap():
 	for i in 1000:
 		s.cover.update(focus)
 	var idle := (Time.get_ticks_usec() - t0) / 1000.0
+	# Applying one block: a finished one, made again.
+	var b: Vector4i = s.cover._grass_on.keys()[0]
+	var data: Variant = s.cover._build(b, s.terrain)
+	(s.cover._blocks[b] as Node).free()
+	s.cover._blocks.erase(b)
+	s.cover._grass_on.erase(b)
+	var t2 := Time.get_ticks_usec()
+	s.cover._make_block(data)
+	var apply := float(Time.get_ticks_usec() - t2)
+	# Its grass, a node a finest chunk.
+	var t4 := Time.get_ticks_usec()
+	s.cover._make_grass(b)
+	var grass := float(Time.get_ticks_usec() - t4)
+	var grass_nodes := (s.cover._grass[b] as Array).size()
+	# Building one on a worker's thread, here.
+	var t5 := Time.get_ticks_usec()
+	s.cover._build(b, s.terrain)
+	var build := float(Time.get_ticks_usec() - t5) / 1000.0
 	# A tick that reselects: moved RESELECT_AFTER, at 150 m/s low flight.
 	var along := _up.cross(Vector3.RIGHT).normalized()
 	var worst := 0.0
@@ -310,14 +421,41 @@ func test_a_tick_is_cheap():
 		var us := float(Time.get_ticks_usec() - t1)
 		worst = maxf(worst, us)
 		total += us
-	# Applying one block: a finished one, made again.
-	var b: Vector4i = s.cover.block_keys()[0]
-	var data: Variant = s.cover._build(b, s.terrain)
-	(s.cover._blocks[b] as Node).free()
-	s.cover._blocks.erase(b)
-	var t2 := Time.get_ticks_usec()
-	s.cover._make_block(data)
-	var apply := float(Time.get_ticks_usec() - t2)
+	# Reselecting while flying up to a cube edge and on to it at 150 m/s, 20 m
+	# a choice from about a kilometre off, the memo warm from the way there;
+	# and a first choice by a corner, cold.
+	var t := _terrain()
+	var memo := {}
+	var edge_worst := 0.0
+	var crossed := 0
+	var first_cold := 0.0
+	var u := 0.97
+	var prev := CubeSphere.direction(0, u, 0.3) * t.radius
+	while u < 1.0:
+		var next := u + 0.0001
+		var p := CubeSphere.direction(0, next, 0.3) * t.radius
+		if p.distance_to(prev) < CoverField.RESELECT_AFTER and next < 1.0:
+			u = next
+			continue
+		u = next
+		var dir := p.normalized()
+		var at := dir * (t.radius + t.height_at(dir) + 2.0)
+		var v := (p - prev).normalized() * 150.0
+		prev = p
+		var t6 := Time.get_ticks_usec()
+		CoverField._near(t, at, CoverField.BOULDER_REACH, v, memo, CoverField.KEEP_MARGIN)
+		var us := float(Time.get_ticks_usec() - t6)
+		# The first choice fills the memo: an arrival's cost, not the edge's.
+		if crossed > 0:
+			edge_worst = maxf(edge_worst, us)
+		else:
+			first_cold = us
+		crossed += 1
+	var corner := CubeSphere.direction(0, 0.996, 0.997)
+	var corner_at := corner * (t.radius + t.height_at(corner) + 2.0)
+	var t7 := Time.get_ticks_usec()
+	CoverField._near(t, corner_at, CoverField.BOULDER_REACH, Vector3.ZERO, {}, CoverField.KEEP_MARGIN)
+	var cold := float(Time.get_ticks_usec() - t7)
 	# Streaming: 1 km on, ticks every 2 ms until it has caught up.
 	var far := (_up + along * (1000.0 / _planet().radius)).normalized()
 	var f2 := _above(s, 2.0, far)
@@ -335,7 +473,10 @@ func test_a_tick_is_cheap():
 		busy_worst = maxf(busy_worst, us)
 		ticks += 1
 	assert_true(s.cover._settled, "it catches up")
-	gut.p("cover tick: idle %.1f us; reselect mean %.0f us, worst %.0f us; one block applied in %.0f us; streaming %d blocks: %d ticks, mean %.0f us, worst %.0f us"
-		% [idle, total / 20.0, worst, apply, s.cover.block_count(), ticks, busy / maxf(ticks, 1), busy_worst])
+	gut.p("cover tick: idle %.1f us; reselect in the open mean %.0f us, worst %.0f us; flying to a cube edge (%d choices) worst %.0f us; a first choice, cold, in the open %.0f us, by a corner %.0f us"
+		% [idle, total / 20.0, worst, crossed, edge_worst, first_cold, cold])
+	gut.p("cover tick: one block applied in %.0f us, its grass (%d nodes) in %.0f us; a block built in %.1f ms; streaming %d blocks: %d ticks, mean %.0f us, worst %.0f us"
+		% [apply, grass_nodes, grass, build, s.cover.block_count(), ticks, busy / maxf(ticks, 1), busy_worst])
 	assert_lt(idle, 50.0, "nothing to do costs next to nothing")
 	assert_lt(apply, CoverField.APPLY_BUDGET_USEC * 2.0)
+	assert_lt(edge_worst, 1000.0, "a cube edge costs well under a millisecond")
