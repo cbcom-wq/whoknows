@@ -4,6 +4,8 @@ extends GutTest
 ## it is there from the first frame, the debug hop puts you by any body, the
 ## hull bumps off a world's ground, and the sensors and map know the bodies.
 
+const LevelGround := preload("res://test/unit/helpers/level_ground.gd")
+
 var _root: Node
 var _ship: Ship
 var _universe: Universe
@@ -130,8 +132,11 @@ func test_every_ship_flies_through_the_one_world_gravity():
 	assert_not_null(_root.world_gravity)
 	assert_eq(_ship.flight_computer.gravity, _root.world_gravity)
 
-## The starter put upright a few metres over flat-ish ground of the biggest
-## planet, the assist on, at rest in the hover. Returns the ground's up.
+## The starter put upright `clearance` m over level, boulder-free ground
+## (LevelGround) of the biggest planet, the assist on, at rest in the hover.
+## Returns the ground's up. Level matters: over a slope one side of the hull is
+## nearer the ground than `clearance`, and it meets the ground in the same tick
+## it is pushed, before the monitor has seen it moving.
 func _hover_over_flat_ground(clearance: float) -> Vector3:
 	var system: SystemRecipe = _root.system
 	var planet: SystemBody = system.planets()[0]
@@ -144,24 +149,10 @@ func _hover_over_flat_ground(clearance: float) -> Vector3:
 	var surface: WorldSurface = (_root.star_system.proxy(planet.id) as BodyProxy).surface()
 	assert_not_null(surface, "3 km off: its ground is drawn")
 	var centre := _universe.to_engine(planet.point)
-	var out := (_ship.exterior.global_position - centre).normalized()
-	# The flattest of a ring of spots: the lowest spread of ground heights across
-	# the hull's own length, so the keel meets it level.
-	var best := out
-	var flattest := INF
-	var tries: Array[Vector3] = [out]
-	for k in 12:
-		tries.append((out + Vector3(cos(k * 0.52), 0.0, sin(k * 0.52)) * 0.02 * (1 + k % 3)).normalized())
-	for dir in tries:
-		var spread := 0.0
-		var h0: float = surface.terrain.height_at(dir)
-		for k in 8:
-			var o := Vector3(cos(k * 0.785), 0.0, sin(k * 0.785)) * (40.0 / planet.radius)
-			spread = maxf(spread, absf(surface.terrain.height_at((dir + o).normalized()) - h0))
-		if spread < flattest:
-			flattest = spread
-			best = dir
-	out = best
+	# Level, clear ground near the hop: on a desert, off the dunes and stones.
+	var out := LevelGround.near(surface.terrain, (_ship.exterior.global_position - centre).normalized())
+	assert_lt(LevelGround.tilt(surface.terrain, out), LevelGround.LEVEL, "level ground found")
+	assert_true(LevelGround.clear(surface.terrain, out), "and no boulder on it")
 	var ground := planet.radius + surface.terrain.height_at(out)
 	var along := out.cross(Vector3.UP).normalized()
 	var basis := Basis(along, out, along.cross(out).normalized())
