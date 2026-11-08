@@ -33,11 +33,32 @@ extends "res://test/probes/descent_render.gd"
 #          ridges (foot_crest_ridges), and at the nearest mesa (foot_mesa) and
 #          the nearest tower (foot_tower), each from the nearest ground toward
 #          it with its upper half in sight (you are stood there by hand).
-#   cover  Task 7's (boulders, grass and blowing sand): not written yet.
+#   cover  Task 7's: the boulders, the grass and the blowing sand (spec §7.2,
+#          §7.3). Landed among grass, the nose toward the most of it, seated
+#          (cover_seated, and the frame rate over 10 s); on foot in the
+#          grassiest ground near (across the sun's way from the hull, so the
+#          ship is in neither view), eye 1.6 m over the ground, toward the sun
+#          and away with the sand blowing (cover_sand_sun, cover_sand_away)
+#          and the same with the sand hidden by hand (cover_still_sun,
+#          cover_still), and the frame rate with it and without; on foot at
+#          the nearest mesa's foot among its boulders (cover_talus) and before
+#          the nearest tower (cover_tower); seated, flown COVER_LOW over the
+#          ground (its highest within LOW_WINDOW either way) along a talus
+#          band at 120 m/s and at the speed limit there (at least FAST_LEAST), for COVER_SECONDS
+#          each: the frame rate, and each second the blocks CoverField still
+#          wants ahead and the blocks that appeared within POP_NEAR m ahead
+#          (cover_low, cover_low_fast); then the starter brought down at SINK
+#          m/s onto the densest talus spot within TALUS_REACH m of the nearest
+#          talus: the monitor's word (landed and its tilt, or its refusal),
+#          the damage (none) and any stone inside the hull's colliders, rendered from
+#          25 m at eye height from two sides (cover_starter_boulders_a, _b),
+#          and the frame rate on foot 6 m off it; then the heaviest library
+#          ship (the Warden) the same way (cover_warden_boulders).
 #   all    both.
 #
 # desert_sheet.png puts the on-foot views beside stage 4 of the concept
-# (descent.html's own SVG, rasterised here), over the views from above.
+# (descent.html's own SVG, rasterised here), over the views from above, and
+# under them the cover set's.
 # Every render prints its name, the eye's altitude over the ground, the
 # altitude the air is judged at, the air, and the sky. Run it WITHOUT
 # --headless:
@@ -97,7 +118,61 @@ const DESERT_TILE := Vector2i(400, 225)
 const DESERT_SHEET := [
 	["mockup", "foot_sun", "foot_away", "foot_crest_ridges", "foot_mesa", "foot_tower"],
 	["orbit_3r", "airtop_sun", "seated_2000_sun", "seated_300_away", "low_along_wind", "landed_seated"],
+	["cover_sand_sun", "cover_sand_away", "cover_still", "cover_talus", "cover_tower", "cover_seated"],
+	["cover_low", "cover_low_fast", "cover_starter_boulders_a", "cover_starter_boulders_b", "cover_warden_boulders"],
 ]
+## The cover set. Landing among grass: the spot within COVER_SEARCH m of the
+## landing spot, in steps of COVER_STEP, with the most tufts within
+## GRASS_SEEN m, no stone within HULL_CLEAR m and the ground within LAND_REACH
+## rising or falling at most GRASS_LAND_SPREAD m. On foot: the grassiest
+## ground (tufts within GRASS_NEAR) GRASS_OFF to GRASS_STAND m from it, no
+## stone within STONE_CLEAR m.
+const COVER_SEARCH := 250.0
+const COVER_STEP := 10.0
+const GRASS_SEEN := 25.0
+const HULL_CLEAR := 12.0
+const GRASS_LAND_SPREAD := 1.0
+const GRASS_NEAR := 8.0
+const GRASS_OFF := 18.0
+const GRASS_STAND := 60.0
+const STONE_CLEAR := 1.0
+## Before a mesa or a tower: this far back from its foot toward the spot, in
+## talus (a mesa's, up to TALUS_BACK_MOST); the head pitched up to at most
+## this, deg.
+const FOOT_BACK := 120.0
+const TALUS_BACK_MOST := 300.0
+const FOOT_PITCH_MOST := 8.0
+## The talus: the nearest within TALUS_SEARCH m of the spot (in steps of
+## TALUS_STEP), and the densest spot within TALUS_REACH of that: the most
+## stones reaching within TALUS_NEAR m (the starter's hull reaches 11.4 m from
+## its middle), on ground whose own slope within LAND_REACH is at most
+## TALUS_TILT deg (so a refusal is the stones', not the ground's).
+const TALUS_SEARCH := 2000.0
+const TALUS_STEP := 10.0
+const TALUS_REACH := 300.0
+const TALUS_NEAR := 12.0
+const TALUS_TILT := 8.0
+## Low over the talus: this high over the highest ground within LOW_WINDOW m
+## either way along the route, for this long, at 120 m/s and at the limit.
+const COVER_LOW := 30.0
+const LOW_WINDOW := 50.0
+const COVER_SECONDS := 10.0
+## The fast flight's speed at least, m/s (the brief's "about 150").
+const FAST_LEAST := 150.0
+## A block appearing nearer than this ahead is a pop.
+const POP_NEAR := 100.0
+## The boulder landings start this high (the plane the legs stand on, over
+## the ground), and come down at landing_play's SINK.
+const BOULDER_DROP := 12.0
+## The camera for a landed ship: this far out from its hull's reach, at eye
+## height; at least BOULDER_VIEW from its middle.
+const BOULDER_VIEW := 25.0
+const VIEW_OFF := 13.0
+## While the Warden comes down the starter hovers this far behind the
+## camera's spot from it, this high, so the cover is drawn round the landing
+## and the starter is out of the shot.
+const WATCH_BACK := 50.0
+const WATCH_HIGH := 20.0
 const MOCKUP := "../docs/superpowers/specs/2026-11-03-desert-world/descent.html"
 
 ## The set asked for: land, cover or all.
@@ -110,6 +185,10 @@ var _terrain: WorldTerrain
 var _wind := Vector3.ZERO
 var _mesa := [Vector3.ZERO, INF]
 var _tower := [Vector3.ZERO, INF]
+## The cover set's landing spots: among grass, and the densest talus (ZERO if
+## none was found).
+var _grass_spot := Vector3.ZERO
+var _talus_spot := Vector3.ZERO
 
 func _run() -> void:
 	await _frames(3)
@@ -145,7 +224,7 @@ func _run() -> void:
 	if _which in ["land", "all"]:
 		await _land_set()
 	if _which in ["cover", "all"]:
-		print("SKIPPED cover: Task 7 adds the cover set")
+		await _cover_set()
 	_desert_sheet()
 	_let_go()
 	print("        the frame rate:")
@@ -588,6 +667,704 @@ func _land_here(at: Vector3, forward: Vector3, step: String) -> bool:
 		LAND_REACH, _spread(at, LAND_REACH)])
 	_check_stick(_starter, step)
 	return landed
+
+# --- the cover set -----------------------------------------------------------------
+
+## Points on the sphere binned on the tangent plane at a centre, each with how
+## far it reaches (a stone's farthest point; 0 for a tuft): how many come
+## within some metres of a direction, and how near the nearest comes.
+class Bins:
+	extends RefCounted
+	var a: Vector3
+	var b: Vector3
+	var radius: float
+	var cell: float
+	var cells := {}
+	var size := 0
+
+	func _init(centre: Vector3, p_radius: float, p_cell: float) -> void:
+		var d := centre.normalized()
+		a = d.cross(Vector3.UP if absf(d.y) < 0.9 else Vector3.RIGHT).normalized()
+		b = d.cross(a)
+		radius = p_radius
+		cell = p_cell
+
+	func flat(d: Vector3) -> Vector2:
+		return Vector2(d.dot(a), d.dot(b)) * radius
+
+	## `items` as _scattered gives them: [direction, reach, ...].
+	func add_all(items: Array) -> void:
+		for it: Array in items:
+			var p := flat(it[0])
+			var k := Vector2i(floori(p.x / cell), floori(p.y / cell))
+			if not cells.has(k):
+				cells[k] = []
+			(cells[k] as Array).append(Vector3(p.x, p.y, float(it[1])))
+			size += 1
+
+	## [how many reach within `r` m of `d`, how near the nearest reaches, m].
+	func near(d: Vector3, r: float) -> Array:
+		var p := flat(d)
+		var n := ceili((r + 4.0) / cell)
+		var kx := floori(p.x / cell)
+		var ky := floori(p.y / cell)
+		var count := 0
+		var gap := INF
+		for i in range(-n, n + 1):
+			for j in range(-n, n + 1):
+				var list: Variant = cells.get(Vector2i(kx + i, ky + j))
+				if list == null:
+					continue
+				for q: Vector3 in list:
+					var g := Vector2(q.x, q.y).distance_to(p) - q.z
+					gap = minf(gap, g)
+					if g < r:
+						count += 1
+		return [count, gap]
+
+func _cover_set() -> void:
+	print("cover   the boulders, the grass and the blowing sand")
+	await _aboard()
+	await _among_grass()
+	await _before_the_mesa_and_tower()
+	await _aboard()
+	_talus_spot = _densest_talus()
+	await _cover_low()
+	await _boulder_landings()
+
+## What GroundCover scatters within `reach` m of `centre` (every finest chunk
+## that might hold some), as the collision has it: [stones, tufts], a stone
+## [direction, its farthest point from its middle, m, diameter], a tuft
+## [direction, 0].
+func _scattered(centre: Vector3, reach: float) -> Array:
+	var d := centre.normalized()
+	var ab := _tangents(d)
+	var depth := CubeSphere.depth_for(_planet.radius)
+	var edge := CubeSphere.edge_m(_planet.radius, depth)
+	var steps := ceili(reach / (edge * 0.5))
+	var keys := {}
+	for i in range(-steps, steps + 1):
+		for j in range(-steps, steps + 1):
+			if i * i + j * j > (steps + 1) * (steps + 1):
+				continue
+			var o := (ab[0] * i + ab[1] * j) * (reach / steps / _planet.radius)
+			keys[CubeSphere.key_for((d + o).normalized(), depth)] = true
+	var stones := []
+	var tufts := []
+	for key: Vector4i in keys:
+		var c := Vector3(TerrainChunkData.centre_of(_terrain, key))
+		var cover := GroundCover.scatter(_terrain, key)
+		for stone: Array in cover.boulders:
+			var place: Transform3D = stone[0]
+			var extent := 0.0
+			for p in RockMesh.cut_vertices(stone[1], 0):
+				extent = maxf(extent, (place.basis * p).length())
+			stones.append([(c + place.origin).normalized(), extent, float(stone[3])])
+		for tuft: Array in cover.grass:
+			tufts.append([(c + (tuft[0] as Transform3D).origin).normalized(), 0.0])
+	return [stones, tufts]
+
+## Directions on a grid `step` m apart within `reach` m of `centre`.
+func _grid_round(centre: Vector3, reach: float, step: float) -> Array[Vector3]:
+	var ab := _tangents(centre)
+	var n := int(reach / step)
+	var out: Array[Vector3] = []
+	for i in range(-n, n + 1):
+		for j in range(-n, n + 1):
+			if i * i + j * j <= n * n:
+				out.append((centre + (ab[0] * i + ab[1] * j) * (step / _planet.radius)).normalized())
+	return out
+
+## `dirs` ordered by `score` (callable: direction -> float), highest first.
+static func _by_score(dirs: Array[Vector3], score: Callable) -> Array[Vector3]:
+	var order: Array[Vector2] = []
+	for i in dirs.size():
+		order.append(Vector2(-float(score.call(dirs[i])), i))
+	order.sort()
+	var out: Array[Vector3] = []
+	for o in order:
+		out.append(dirs[int(o.y)])
+	return out
+
+## The way along the ground at `from` toward `to`.
+func _way_to(from: Vector3, to: Vector3) -> Vector3:
+	var v := to - from
+	return (v - from * v.dot(from)).normalized()
+
+## `d`, or the nearest ground within 20 m (rings 2 m apart) no stone reaches
+## within STONE_CLEAR m of: somewhere to stand.
+func _off_the_stones(d: Vector3) -> Vector3:
+	var bins := Bins.new(d, _planet.radius, 4.0)
+	bins.add_all(_scattered(d, 30.0)[0])
+	if float(bins.near(d, STONE_CLEAR)[1]) >= STONE_CLEAR:
+		return d
+	var ab := _tangents(d)
+	for ring in range(1, 11):
+		for k in 12:
+			var o := (ab[0] * cos(k * TAU / 12.0) + ab[1] * sin(k * TAU / 12.0)) * (ring * 2.0 / _planet.radius)
+			var e := (d + o).normalized()
+			if float(bins.near(e, STONE_CLEAR)[1]) >= STONE_CLEAR:
+				return e
+	return d
+
+## You, stood on the ground at `dir` far from where you are, facing `way`:
+## the ground round it built first (and its stones solid), then stood again.
+func _stand_far(dir: Vector3, way: Vector3) -> void:
+	var up := dir.normalized()
+	_avatar.place(Transform3D(_level(up, way), _centre() + up * (_ground_r(up) + 0.1)))
+	_moved()
+	await _ground_built()
+	await _stand_at(dir, way)
+
+## Landed among grass, the nose toward the most of it: seated, and the frame
+## rate over COVER_SECONDS; out on foot in the grassiest ground near, toward
+## the sun and away, with the sand blowing and hidden, and the frame rate.
+func _among_grass() -> void:
+	var t0 := Time.get_ticks_msec()
+	var found := _scattered(_spot, COVER_SEARCH + GRASS_SEEN + GRASS_STAND)
+	var stones := Bins.new(_spot, _planet.radius, 10.0)
+	stones.add_all(found[0])
+	var tufts := Bins.new(_spot, _planet.radius, 10.0)
+	tufts.add_all(found[1])
+	var cands := _by_score(_grid_round(_spot, COVER_SEARCH, COVER_STEP),
+		func(d: Vector3) -> float: return float(tufts.near(d, GRASS_SEEN)[0]))
+	_grass_spot = Vector3.ZERO
+	for d in cands:
+		if float(stones.near(d, HULL_CLEAR)[1]) < HULL_CLEAR or _spread(d, LAND_REACH) > GRASS_LAND_SPREAD:
+			continue
+		_grass_spot = d
+		break
+	if _grass_spot == Vector3.ZERO:
+		_check(false, "cover a spot among grass within %.0f m with no stone within %.0f m and the ground within %.1f m" % [
+			COVER_SEARCH, HULL_CLEAR, GRASS_LAND_SPREAD])
+		return
+	# The nose toward the tufts within GRASS_SEEN m of it.
+	var pull := Vector3.ZERO
+	for d in _grid_round(_grass_spot, GRASS_SEEN, 5.0):
+		pull += (d - _grass_spot) * float(tufts.near(d, 3.0)[0])
+	var nose := _way_to(_grass_spot, _grass_spot + pull) if pull.length() > 1e-9 else _across
+	print("        among grass: %d tufts and %d stones within %.0f m of the spot; landing %.0f m from it with %d tufts within %.0f m, the nearest stone %.1f m off, the ground within %.0f m rising or falling %.2f m; the nose %.0f deg round from the sun's way (%d ms)" % [
+		tufts.size, stones.size, COVER_SEARCH + GRASS_SEEN + GRASS_STAND, _spot.angle_to(_grass_spot) * _planet.radius,
+		int(tufts.near(_grass_spot, GRASS_SEEN)[0]), GRASS_SEEN, float(stones.near(_grass_spot, 100.0)[1]), LAND_REACH,
+		_spread(_grass_spot, LAND_REACH), _bearing(nose), Time.get_ticks_msec() - t0])
+	if not await _land_here(_grass_spot, nose, "cover"):
+		return
+	await _seconds(1.0)
+	await _shot("cover_seated")
+	await _reading_for("seated at the starter's helm landed among grass, the sand blowing", COVER_SECONDS)
+	_director.stand_now()
+	await _frames(3)
+	var lock: Airlock = _starter.airlocks.values()[0]
+	if not await _out_through(lock, "", "cover"):
+		return
+	# The grassiest ground near the ship, off the hull and clear of stones,
+	# across the sun's way from it: the ship in neither view.
+	var hull := _up(_starter.exterior.global_position)
+	var sun_at := _sun_way(hull)
+	var near: Array[Vector3] = []
+	for d in _grid_round(hull, GRASS_STAND, 4.0):
+		if d.angle_to(hull) * _planet.radius >= GRASS_OFF and absf(_way_to(hull, d).dot(sun_at)) < 0.5:
+			near.append(d)
+	var stand := hull
+	for d in _by_score(near, func(e: Vector3) -> float: return float(tufts.near(e, GRASS_NEAR)[0])):
+		if float(stones.near(d, STONE_CLEAR)[1]) >= STONE_CLEAR:
+			stand = d
+			break
+	var sun_way := _flat(_sun_dir())
+	await _stand_at(stand, -sun_way)
+	var eye := _gravity.altitude_at(_avatar.camera.global_position)
+	print("        on foot among grass, across the sun's way from the hull, %.0f m from its middle: %d tufts within %.0f m, %d within %.0f m, eye %.2f m over the ground; the sand %s, %d of %d streaks (amount_ratio %.2f)" % [
+		stand.angle_to(hull) * _planet.radius, int(tufts.near(stand, GRASS_NEAR)[0]), GRASS_NEAR,
+		int(tufts.near(stand, 20.0)[0]), 20.0, eye, "blowing" if _stars.sand.emitting else "still",
+		roundi(_stars.sand.amount * _stars.sand.amount_ratio), _stars.sand.amount, _stars.sand.amount_ratio])
+	_check(absf(eye - EYE) < 0.15, "cover the eye %.2f m over the ground on foot among grass (%.1f within 0.15)" % [eye, EYE])
+	_check(_stars.sand.emitting and _stars.sand.amount_ratio > 0.9,
+		"cover on foot on the desert the sand blows (amount_ratio %.2f)" % _stars.sand.amount_ratio)
+	await _foot_view("cover_sand_sun", sun_way, SUN_PITCH)
+	await _foot_view("cover_sand_away", -sun_way, 0.0)
+	await _reading_for("on foot among grass, away from the sun, the sand blowing", FPS_SECONDS)
+	var sand := _stars.sand
+	sand.visible = false
+	await _foot_view("cover_still_sun", sun_way, SUN_PITCH)
+	await _foot_view("cover_still", -sun_way, 0.0)
+	await _reading_for("on foot among grass, away from the sun, the sand hidden by hand", FPS_SECONDS)
+	sand.visible = true
+
+## On foot at the nearest mesa's foot among its boulders (cover_talus), and
+## before the nearest tower (cover_tower).
+func _before_the_mesa_and_tower() -> void:
+	await _foot_near("cover_talus", _mesa, true)
+	await _foot_near("cover_tower", _tower, false)
+
+## On foot before `near`'s foot (from _nearest: [direction, m]), FOOT_BACK m
+## back toward the spot (with `talus`, on in_talus ground, up to
+## TALUS_BACK_MOST), off any stone, facing it, the head pitched up half the way
+## to its highest ground within 60 m past its foot (at most FOOT_PITCH_MOST).
+func _foot_near(shot_name: String, near: Array, talus: bool) -> void:
+	if float(near[1]) == INF:
+		_check(false, "%s: none within reach of the spot" % shot_name)
+		return
+	var foot: Vector3 = near[0]
+	var back := _way_to(foot, _spot)
+	var m := FOOT_BACK
+	var d := _off(foot, back, m)
+	while talus and not _terrain.in_talus(d) and m < TALUS_BACK_MOST:
+		m += 5.0
+		d = _off(foot, back, m)
+	d = _off_the_stones(d)
+	await _stand_far(d, -back)
+	var top := foot
+	for k in 13:
+		var e := _off(foot, -back, k * 5.0)
+		if _terrain.height_at(e) > _terrain.height_at(top):
+			top = e
+	var eye := _avatar.camera.global_position
+	var to := _centre() + top * (_planet.radius + _terrain.height_at(top)) - eye
+	_face(to)
+	var pitch := clampf(atan2(to.dot(_avatar.up) * 0.5, _flat(to).length()), 0.0, deg_to_rad(FOOT_PITCH_MOST))
+	_avatar.set_head_pitch(pitch)
+	var here := _up(_avatar.global_position)
+	var bins := Bins.new(here, _planet.radius, 10.0)
+	bins.add_all(_scattered(here, 40.0)[0])
+	print("        %s: %.0f m from its foot (%s), its top %.0f m over your eye, %.0f m off; %d stones within 15 m, %d within 30 m, the nearest %.1f m off; pitched %.0f deg; eye %.2f m over the ground" % [
+		shot_name, m, "talus" if _terrain.in_talus(here) else "not talus", to.dot(_avatar.up), _flat(to).length(),
+		int(bins.near(here, 15.0)[0]), int(bins.near(here, 30.0)[0]), float(bins.near(here, 100.0)[1]), rad_to_deg(pitch),
+		_gravity.altitude_at(_avatar.camera.global_position)])
+	await _seconds(0.5)
+	await _shot(shot_name)
+
+## The densest talus spot within TALUS_REACH of the nearest talus to the spot
+## (stones reaching within TALUS_NEAR m), on ground no steeper than
+## TALUS_TILT; ZERO if there is no talus near.
+func _densest_talus() -> Vector3:
+	var t0 := Time.get_ticks_msec()
+	var near := _nearest(_spot, func(d: Vector3) -> bool: return _terrain.in_talus(d), TALUS_STEP, TALUS_SEARCH)
+	if float(near[1]) == INF:
+		_check(false, "cover talus within %.0f m of the spot" % TALUS_SEARCH)
+		return Vector3.ZERO
+	var anchor: Vector3 = near[0]
+	var stones := Bins.new(anchor, _planet.radius, TALUS_NEAR)
+	stones.add_all(_scattered(anchor, TALUS_REACH + TALUS_NEAR + 4.0)[0])
+	var cands := _by_score(_grid_round(anchor, TALUS_REACH, TALUS_STEP),
+		func(d: Vector3) -> float: return float(stones.near(d, TALUS_NEAR)[0]))
+	var best := Vector3.ZERO
+	var looked := 0
+	for d in cands:
+		looked += 1
+		if not _terrain.in_talus(d) or rad_to_deg(atan(_spread(d, LAND_REACH) / LAND_REACH)) > TALUS_TILT:
+			continue
+		best = d
+		break
+	if best == Vector3.ZERO:
+		_check(false, "cover a talus spot within %.0f m of the nearest talus no steeper than %.0f deg" % [TALUS_REACH, TALUS_TILT])
+		return Vector3.ZERO
+	var most := 0
+	for d in cands:
+		most = maxi(most, int(stones.near(d, TALUS_NEAR)[0]))
+	print("        talus: the nearest %.0f m from the spot; %d stones within %.0f m of it; the densest spot no steeper than %.0f deg (%d looked at) %.0f m from it with %d stones within %.0f m (the most anywhere %d), the nearest's edge %.1f m off, the ground within %.0f m rising or falling %.2f m (%.1f deg), the sun %.0f deg up (%d ms)" % [
+		float(near[1]), stones.size, TALUS_REACH + TALUS_NEAR + 4.0, TALUS_TILT, looked, anchor.angle_to(best) * _planet.radius,
+		int(stones.near(best, TALUS_NEAR)[0]), TALUS_NEAR, most, float(stones.near(best, 100.0)[1]), LAND_REACH,
+		_spread(best, LAND_REACH), rad_to_deg(atan(_spread(best, LAND_REACH) / LAND_REACH)),
+		90.0 - rad_to_deg(best.angle_to(_to_star())), Time.get_ticks_msec() - t0])
+	return best
+
+## Seated, COVER_LOW over a talus band at 120 m/s and then at the speed limit
+## there, COVER_SECONDS each: the frame rate, and CoverField keeping ahead.
+func _cover_low() -> void:
+	if _talus_spot == Vector3.ZERO:
+		return
+	await _hold_at(_talus_spot, COVER_LOW, _across)
+	await _seconds(1.0)
+	var limit := _starter.flight_computer.speed_limit_now()
+	var length := maxf(limit, FAST_LEAST) * (COVER_SECONDS + 2.0) + 100.0
+	# The bearing from the densest talus with the most talus along the way.
+	var ab := _tangents(_talus_spot)
+	var way := ab[0]
+	var share := -1.0
+	for k in 16:
+		var w: Vector3 = ab[0] * cos(k * TAU / 16.0) + ab[1] * sin(k * TAU / 16.0)
+		var s := _off(_talus_spot, -w, 100.0)
+		var on := 0
+		var n := 0
+		var m := 0.0
+		while m <= length:
+			n += 1
+			if _terrain.in_talus(_off(s, w, m)):
+				on += 1
+			m += 20.0
+		if float(on) / n > share:
+			share = float(on) / n
+			way = w
+	var start := _off(_talus_spot, -way, 100.0)
+	var axis := start.cross(way).normalized()
+	# The ground along it every 10 m, and the highest within LOW_WINDOW.
+	var ground := PackedFloat32Array()
+	var along := 0.0
+	while along <= length + LOW_WINDOW:
+		ground.append(_terrain.height_at(start.rotated(axis, along / _planet.radius)))
+		along += 10.0
+	var win := int(LOW_WINDOW / 10.0)
+	var profile := PackedFloat32Array()
+	var lo := INF
+	var hi := -INF
+	for i in ground.size():
+		var top := -INF
+		for j in range(maxi(i - win, 0), mini(i + win, ground.size() - 1) + 1):
+			top = maxf(top, ground[j])
+		profile.append(top)
+		lo = minf(lo, ground[i])
+		hi = maxf(hi, ground[i])
+	print("low     over the talus: %.0f%% of %.0f m along the route from the densest talus is talus; the ground %.1f to %.1f m over the radius; the speed limit %.0f m above it is %.0f m/s" % [
+		share * 100.0, length, lo, hi, COVER_LOW, limit])
+	await _fly_low(LOW_SPEED, start, axis, profile, "cover_low")
+	# The limit this low is about LOW_SPEED: CoverField is tried at FAST_LEAST
+	# at least, to see it keep ahead.
+	await _fly_low(maxf(limit, FAST_LEAST), start, axis, profile, "cover_low_fast")
+
+## Flown from `start` round `axis` at `speed` for COVER_SECONDS, COVER_LOW over
+## `profile` (the ground's height every 10 m), level: the frame rate, each
+## second the blocks wanted ahead and not drawn and the blocks that appeared
+## within POP_NEAR ahead; rendered at the end as `shot_name`.
+func _fly_low(speed: float, start: Vector3, axis: Vector3, profile: PackedFloat32Array, shot_name: String) -> void:
+	var cover := _surface.cover
+	var h0 := profile[0] - _terrain.height_at(start) + COVER_LOW
+	await _hold_at(start, h0, axis.cross(start))
+	await _seconds(1.0)
+	var flown := [0.0, INF, -INF]
+	var fly := func() -> void:
+		flown[0] = float(flown[0]) + speed / Engine.physics_ticks_per_second
+		var at := float(flown[0])
+		var dir := start.rotated(axis, at / _planet.radius)
+		var i := mini(int(at / 10.0), profile.size() - 2)
+		var t := clampf(at / 10.0 - i, 0.0, 1.0)
+		var r := _planet.radius + lerpf(profile[i], profile[i + 1], t) + _starter.stance_depth() + COVER_LOW
+		_starter.exterior.global_transform = Transform3D(_level(dir, axis.cross(dir)), _centre() + dir * r)
+		var over := _alt(_starter)
+		flown[1] = minf(float(flown[1]), over)
+		flown[2] = maxf(float(flown[2]), over)
+	# The blocks drawn last frame; pops [this second, frames with any, all,
+	# the nearest's gap].
+	var memo := {}
+	var drawn := {}
+	for k in cover.block_keys():
+		drawn[k] = true
+	var pops := [0, 0, 0, INF]
+	var watch := func() -> void:
+		var here := _up(_starter.exterior.global_position)
+		var nose := axis.cross(here).normalized()
+		var now := {}
+		var popped := 0
+		for k in cover.block_keys():
+			now[k] = true
+			if drawn.has(k):
+				continue
+			var g := _block_gap(k, here, nose, memo)
+			if bool(g[1]) and float(g[0]) < POP_NEAR:
+				popped += 1
+				pops[3] = minf(float(pops[3]), float(g[0]))
+		drawn.clear()
+		drawn.merge(now)
+		if popped > 0:
+			pops[0] = int(pops[0]) + popped
+			pops[1] = int(pops[1]) + 1
+			pops[2] = int(pops[2]) + popped
+	physics_frame.connect(fly)
+	process_frame.connect(watch)
+	var shifts := _universe.shifts
+	var vp := root.get_viewport_rid()
+	RenderingServer.viewport_set_measure_render_time(vp, true)
+	var frames := 0
+	var gpu := 0.0
+	var cpu := 0.0
+	var worst_ms := 0.0
+	var t0 := Time.get_ticks_usec()
+	var last := t0
+	var second := 1
+	var lines: Array[String] = []
+	var most_missing := 0
+	while Time.get_ticks_usec() - t0 < int(COVER_SECONDS * 1e6):
+		await process_frame
+		var tick := Time.get_ticks_usec()
+		frames += 1
+		worst_ms = maxf(worst_ms, (tick - last) / 1000.0)
+		last = tick
+		gpu += RenderingServer.viewport_get_measured_render_time_gpu(vp)
+		cpu += RenderingServer.viewport_get_measured_render_time_cpu(vp)
+		if tick - t0 >= second * 1000000:
+			var under := _up(_starter.exterior.global_position)
+			var ahead := axis.cross(under).normalized()
+			var missing := 0
+			var nearest := INF
+			for k: Vector4i in cover._wanted:
+				if cover._blocks.has(k):
+					continue
+				var g := _block_gap(k, under, ahead, memo)
+				if bool(g[1]):
+					missing += 1
+					nearest = minf(nearest, float(g[0]))
+			most_missing = maxi(most_missing, missing)
+			lines.append("        %s %d s: %.0f m flown, %.1f m over the ground; %d blocks drawn of %d wanted, %d wanted ahead not drawn%s, %d building; %d blocks appeared within %.0f m ahead this second" % [
+				shot_name, second, float(flown[0]), _alt(_starter), cover.block_count(), cover._wanted.size(), missing,
+				" (the nearest %.0f m off)" % nearest if missing > 0 else "", cover.jobs_in_flight(), int(pops[0]), POP_NEAR])
+			pops[0] = 0
+			second += 1
+	RenderingServer.viewport_set_measure_render_time(vp, false)
+	var fps := frames / COVER_SECONDS
+	_gpu_ms = gpu / maxf(frames, 1.0)
+	_cpu_ms = cpu / maxf(frames, 1.0)
+	process_frame.disconnect(watch)
+	for l in lines:
+		print(l)
+	var line := "fps     %.0f seated in low flight at %.0f m/s over a talus band for %.0f s (%.0f m flown, %.0f to %.0f m over the ground under the keel, the longest frame %.1f ms, the origin shifted %d times; %d frames saw a block appear within %.0f m ahead, %d blocks in all, the nearest %s; at most %d wanted ahead not drawn) %s" % [
+		fps, speed, COVER_SECONDS, float(flown[0]), float(flown[1]), float(flown[2]), worst_ms, _universe.shifts - shifts,
+		int(pops[1]), POP_NEAR, int(pops[2]), "%.0f m off" % float(pops[3]) if float(pops[3]) < INF else "none",
+		most_missing, _ms()]
+	print(line)
+	_readings.append(line)
+	_check(fps >= FPS_FLOOR, "fps %.0f seated in low flight at %.0f m/s, %.0f m over a talus band (at least %.0f)" % [
+		fps, speed, COVER_LOW, FPS_FLOOR])
+	_check(int(pops[1]) == 0, "%s no block of boulders appeared within %.0f m ahead (%d frames saw one)" % [
+		shot_name, POP_NEAR, int(pops[1])])
+	await _shot(shot_name)
+	physics_frame.disconnect(fly)
+
+## Block `key`'s nearest ground from `here` (a direction), m along the ground
+## (0 if it is under you), and whether it lies ahead along `nose`: [m, ahead].
+func _block_gap(key: Vector4i, here: Vector3, nose: Vector3, memo: Dictionary) -> Array:
+	var b: Variant = memo.get(key)
+	if b == null:
+		b = CoverField._bound(key, _planet.radius)
+		memo[key] = b
+	var middle: Vector3 = b[0]
+	var at := here * _planet.radius
+	var gap := maxf(at.distance_to(middle) - float(b[1]), 0.0)
+	return [gap, gap == 0.0 or (middle - at).dot(nose) > 0.0]
+
+## The starter and the heaviest library ship each brought down at SINK m/s
+## onto the densest talus spot; the starter's frame rate on foot 6 m off.
+func _boulder_landings() -> void:
+	if _talus_spot == Vector3.ZERO:
+		return
+	print("boulder the starter onto the densest talus")
+	await _unland()
+	_starter.exterior.freeze = false
+	_starter.flight_computer.assist_enabled = true
+	_place(_starter, _talus_spot, BOULDER_DROP, _across)
+	await _ground_built()
+	var landed := await _set_down(_starter, true, "the starter")
+	var way := await _boulder_shot("cover_starter_boulders_a", _starter, Vector3(17.0, 0.0, 18.0))
+	await _boulder_shot("cover_starter_boulders_b", _starter, Vector3(-17.0, 0.0, -18.0))
+	if landed:
+		_director.stand_now()
+		await _frames(3)
+		var lock: Airlock = _starter.airlocks.values()[0]
+		if await _out_through(lock, "", "boulder"):
+			_face(_starter.exterior.global_position - _avatar.global_position)
+			_avatar.set_head_pitch(0.0)
+			await _seconds(0.5)
+			await _shot("cover_boulder_foot")
+			await _reading_for("on foot %.1f m off the hatch of the starter landed among boulders, facing it" % [
+				_flat(_avatar.global_position - lock.beacon()).length()], FPS_SECONDS)
+		await _aboard()
+	else:
+		print("        no frame rate on foot by the starter: it did not land, so its airlock will not open")
+	await _warden_landing(way)
+
+## The heaviest library ship, spawned and brought down at SINK m/s onto the
+## densest talus spot, unseated (its own flight computer's input), the
+## starter hovering out of the shot (WATCH_BACK behind the camera's spot along
+## `way`, WATCH_HIGH up); rendered as the starter was, and let go.
+func _warden_landing(way: Vector3) -> void:
+	var library: ShipLibrary = _scene.get("library")
+	var heaviest := &""
+	var mass := 0.0
+	for id in library.ids():
+		var m := ShipStats.compute(library.grid(id), _starter.catalog).total_mass_kg
+		if m > mass:
+			mass = m
+			heaviest = id
+	print("boulder %s (%s, %.0f t, the heaviest library ship) onto the densest talus" % [library.name_of(heaviest), heaviest, mass / 1000.0])
+	var watch_at := _off(_talus_spot, way, BOULDER_VIEW + VIEW_OFF + WATCH_BACK)
+	await _hold_at(watch_at, WATCH_HIGH, -way)
+	var grid := library.grid(heaviest)
+	var big := _fleet.spawn(grid, Transform3D(Basis.IDENTITY, _centre() + _talus_spot * (_ground_r(_talus_spot) + 600.0)),
+		true, "", ShipBlueprint.from_grid(grid, library.name_of(heaviest)))
+	if big == null:
+		_check(false, "boulder the heaviest library ship (%s) spawns" % heaviest)
+		return
+	big.flight_computer.assist_enabled = true
+	_place(big, _talus_spot, BOULDER_DROP, _across)
+	await _ground_built()
+	await _set_down(big, false, library.name_of(heaviest))
+	# From the same side as the starter's first: the starter is behind you.
+	var hull := big.exterior.global_transform
+	var side := hull.basis.inverse() * way
+	side.y = 0.0
+	await _boulder_shot("cover_warden_boulders", big, side.normalized())
+	_fleet.remove(big, true)
+	await _frames(2)
+
+## `ship` from SINK m/s down until it touches and settles or not: the
+## monitor's word, its tilt or refusal, any hard landing, the damage (none),
+## its feet, and any stone inside a hull cell. `seated` flies it by the stick,
+## else by its flight computer's input. True if LANDED.
+func _set_down(ship: Ship, seated: bool, who: String) -> bool:
+	var landing := ship.landing
+	var hard: Array[float] = []
+	var on_hard := func(speed: float) -> void: hard.append(speed)
+	landing.hard_landing.connect(on_hard)
+	var damage := _block_damage(ship)
+	var whole := ship.hull_whole()
+	var legs := ship.exterior_builder.legs()
+	var legs_down := await _until(func() -> bool: return legs == null or legs.is_down(), 6.0)
+	var start := _alt(ship)
+	var sinks: Array[float] = []
+	var end := Time.get_ticks_msec() + 30000
+	while landing.state == LandingMonitor.State.FLYING and Time.get_ticks_msec() < end:
+		_sink_by(ship, seated, SINK)
+		if _alt(ship) < 3.0:
+			sinks.append(_sink(ship))
+		await physics_frame
+	var touch := sinks[-1] if not sinks.is_empty() else _sink(ship)
+	_sink_by(ship, seated, NAN)
+	var landed := await _until(func() -> bool: return landing.is_landed(), 10.0)
+	await _seconds(0.5)
+	await _frames(5)
+	var damage_after := _block_damage(ship)
+	landing.hard_landing.disconnect(on_hard)
+	var mean := 0.0
+	for s in sinks:
+		mean += s / maxf(sinks.size(), 1.0)
+	var feet: Array[String] = []
+	if legs != null:
+		for foot in legs.feet():
+			feet.append("%.2f" % _gravity.altitude_at(foot))
+	var clip := _stones_in_hull(ship)
+	print("        %s: legs %s; from %.1f m, down at %.2f m/s over the last 3 m (%.2f at the touch): %s, tilt %.1f deg; the monitor %s; feet %s m over the ground; %s" % [
+		who, "down" if legs_down else "NOT down", start, mean, touch,
+		"LANDED" if landed else "NOT landed (%s)" % LandingMonitor.State.keys()[landing.state],
+		rad_to_deg(landing.tilt()), "says nothing" if landing.refusal() == "" else "refuses: '%s'" % landing.refusal(),
+		", ".join(feet), clip[1]])
+	_check(hard.is_empty(), "boulder %s: no hard landing (%s)" % [who, "none said" if hard.is_empty() else "said at %s m/s" % str(hard)])
+	_check(damage_after == damage and ship.hull_whole() == whole,
+		"boulder %s: the blocks' damage %.1f hp before and %.1f after (none taken); HULL %.0f%% and %.0f%%" % [
+		who, damage, damage_after, whole * 100.0, ship.hull_whole() * 100.0])
+	_check(int(clip[0]) == 0, "boulder %s: no stone's corner inside the hull's colliders (%d)" % [who, int(clip[0])])
+	if seated:
+		_check_stick(ship, "boulder")
+	return landed
+
+## `ship`'s vertical input so it sinks at `rate` m/s (NAN: hands off), by the
+## stick when `seated`, else by its flight computer's pilot input.
+func _sink_by(ship: Ship, seated: bool, rate: float) -> void:
+	if seated:
+		if is_nan(rate):
+			_stick_y(0.0)
+		else:
+			_hold_sink(ship, rate)
+		return
+	var s := 0.0
+	if not is_nan(rate):
+		s = clampf((_sink(ship) - rate) * 0.5, -1.0, 1.0)
+		if absf(s) < 0.02:
+			s = 0.02 if _sink(ship) > rate else -0.02
+	ship.flight_computer.set_pilot_input(Vector3(0.0, s, 0.0), Vector3.ZERO, false)
+
+## The stones round `ship` (as the collision has them, detail 0) with a
+## corner inside one of its occupied cells' boxes, and of those corners how
+## many lie inside the hull's own colliders (a box is a whole cell, so a part
+## block's empty half counts in the first): [corners in its colliders, a line
+## saying so].
+func _stones_in_hull(ship: Ship) -> Array:
+	var hull := ship.exterior.global_transform
+	var inv := hull.affine_inverse()
+	var here := _up(hull.origin)
+	var reach := _reach(ship, Vector3.ZERO, Vector3.FORWARD)
+	for d: Vector3 in [Vector3.BACK, Vector3.LEFT, Vector3.RIGHT]:
+		reach = maxf(reach, _reach(ship, Vector3.ZERO, d))
+	var depth := CubeSphere.depth_for(_planet.radius)
+	var edge := CubeSphere.edge_m(_planet.radius, depth)
+	var ab := _tangents(here)
+	var span := reach + 6.0
+	var steps := ceili(span / (edge * 0.5))
+	var keys := {}
+	for i in range(-steps, steps + 1):
+		for j in range(-steps, steps + 1):
+			keys[CubeSphere.key_for((here + (ab[0] * i + ab[1] * j) * (span / steps / _planet.radius)).normalized(), depth)] = true
+	var corners := 0
+	var stones := 0
+	var near := 0
+	var deepest := 0.0
+	var which := ""
+	# A corner in a cell's box may be in a part-block's empty half: the hull's
+	# own colliders are asked too.
+	var solid := 0
+	var space := ship.exterior.get_world_3d().direct_space_state
+	var query := PhysicsPointQueryParameters3D.new()
+	query.collision_mask = ship.exterior.collision_layer
+	query.collide_with_areas = false
+	for key: Vector4i in keys:
+		var c := _centre() + Vector3(TerrainChunkData.centre_of(_terrain, key))
+		for stone: Array in GroundCover.scatter(_terrain, key).boulders:
+			var place: Transform3D = stone[0]
+			if (inv * (c + place.origin)).length() > span:
+				continue
+			near += 1
+			var inside := 0
+			for v in RockMesh.cut_vertices(stone[1], 0):
+				var p := inv * (c + place * v)
+				var cell := Vector3i(roundi(p.x / ShipGrid.CELL_SIZE), roundi(p.y / ShipGrid.CELL_SIZE), roundi(p.z / ShipGrid.CELL_SIZE))
+				if ship.grid.has_block(cell):
+					inside += 1
+					query.position = c + place * v
+					for hit: Dictionary in space.intersect_point(query, 8):
+						if hit["collider"] == ship.exterior:
+							solid += 1
+							break
+					var off := (p - ShipGrid.cell_center(cell)).abs()
+					var depth_in := ShipGrid.CELL_SIZE * 0.5 - maxf(off.x, maxf(off.y, off.z))
+					if depth_in > deepest:
+						deepest = depth_in
+						which = "%s at %s, the stone %.1f m across" % [ship.grid.get_block(cell).block_id, cell, float(stone[3])]
+			if inside > 0:
+				corners += inside
+				stones += 1
+	return [solid, "%d stones within %.0f m of its middle; %d corners of %d of them inside occupied hull cells' boxes%s; %d inside the hull's own colliders" % [
+		near, span, corners, stones, ", the deepest %.2f m in (%s)" % [deepest, which] if corners > 0 else "", solid]]
+
+## `ship` landed (or resting) from BOULDER_VIEW m off its middle at eye height
+## along `toward` (hull axes, level; farther if its hull reaches past
+## BOULDER_VIEW - VIEW_OFF that way), turned by up to 60 deg if a stone stands
+## at the camera, looking at its keel. Returns the way the camera stands from
+## the hull, in the world, level.
+func _boulder_shot(shot_name: String, ship: Ship, toward: Vector3) -> Vector3:
+	var hull := ship.exterior.global_transform
+	var dir := Vector3(toward.x, 0.0, toward.z).normalized()
+	var flat := dir
+	for turn: float in [0.0, 15.0, -15.0, 30.0, -30.0, 45.0, -45.0, 60.0, -60.0]:
+		var d := dir.rotated(Vector3.UP, deg_to_rad(turn))
+		var dist := maxf(BOULDER_VIEW, _reach(ship, Vector3.ZERO, d) + VIEW_OFF)
+		flat = d * dist
+		var at := _up(_over_ground(ship, flat, EYE))
+		var bins := Bins.new(at, _planet.radius, 4.0)
+		bins.add_all(_scattered(at, 8.0)[0])
+		if float(bins.near(at, 0.5)[1]) >= 0.5:
+			break
+	await _ground_shot(shot_name, ship, flat, EYE, Vector3(0.0, -ship.stance_depth() + 1.0, 0.0))
+	var way := hull.basis * flat
+	var up := _up(hull.origin)
+	way = (way - up * way.dot(up)).normalized()
+	print("        %s from %.0f m off its middle at eye height" % [shot_name, flat.length()])
+	return way
+
+## The frame rate over `seconds`, `what` it is of, against the floor.
+func _reading_for(what: String, seconds: float) -> float:
+	var fps := await _fps(seconds)
+	var line := "fps     %.0f %s, over %.0f s %s" % [fps, what, seconds, _ms()]
+	print(line)
+	_readings.append(line)
+	_check(fps >= FPS_FLOOR, "fps %.0f %s (at least %.0f)" % [fps, what, FPS_FLOOR])
+	return fps
 
 # --- the renders -----------------------------------------------------------------
 

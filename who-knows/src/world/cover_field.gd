@@ -5,9 +5,12 @@ extends Node3D
 ## plan, Task 5 and call 9): boulders on every world, out to BOULDER_REACH,
 ## and on a desert dry grass, out to GRASS_REACH. GroundCover scatters each
 ## finest chunk's worth; here they are gathered into blocks BLOCK_UP levels
-## coarser (16 finest chunks, 64-128 m across: 84 m on 1337's p3), so 300 m
-## of boulders is some 65 blocks and two MultiMeshes each, not 700 finest
-## chunks' worth.
+## coarser (16 finest chunks, 64-128 m across: 84 m on 1337's p3), so 200 m
+## of boulders is some 45 blocks and two MultiMeshes each (drawn twice: with
+## shadows near, without past BOULDER_SHADOW_REACH), not 300 finest chunks'
+## worth. BOULDER_REACH was 300 m until Task 7's frame rate seated among grass
+## and in low flight over a talus band (2.2 million triangles there, half of
+## them stones, each drawn again into the sun's shadow splits).
 ##
 ## A block is built on a worker -- its 16 scatters, packed straight into
 ## MultiMesh buffers -- and put in on the main thread nearest first within
@@ -40,8 +43,17 @@ extends Node3D
 ## A block is the key this many levels above the finest.
 const BLOCK_UP := 2
 ## How far boulders are drawn, and the margin they fade over past it.
-const BOULDER_REACH := 300.0
+const BOULDER_REACH := 200.0
 const BOULDER_FADE := 40.0
+## Boulders cast shadows only in blocks whose ground lies within this: the
+## sun's shadows reach 2 km (AsteroidStream.SHADOW_REACH), so every stone drawn
+## was drawn again into each shadow split. Past it a block's stones are a
+## second instance of the same MultiMesh, "Far<shape>", with no shadow; the
+## two meet at the block's middle BOULDER_SHADOW_REACH plus half its diagonal
+## off, overlapping by SHADOW_OVERLAP so no frame draws neither (Task 7's
+## third cut).
+const BOULDER_SHADOW_REACH := 100.0
+const SHADOW_OVERLAP := 1.0
 ## How far grass is drawn, and its fade.
 const GRASS_REACH := 70.0
 const GRASS_FADE := 15.0
@@ -527,13 +539,25 @@ func _grass_step(deadline: float) -> bool:
 func _make_block(data: BlockData) -> void:
 	var block := Node3D.new()
 	block.name = "Cover_%d_%d_%d_%d" % [data.key.x, data.key.y, data.key.z, data.key.w]
+	var near := data.reach - BOULDER_REACH + BOULDER_SHADOW_REACH
 	for shape: int in data.boulders:
 		var entry: Array = data.boulders[shape]
 		var m := _stones("Boulders%d" % shape, RockMesh.mesh(shape, 1), entry[0], entry[1], boulder_material())
 		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-		m.visibility_range_end = data.reach
-		m.visibility_range_end_margin = BOULDER_FADE
+		m.visibility_range_end = near
+		m.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
 		block.add_child(m)
+		var far := MultiMeshInstance3D.new()
+		far.name = "Far%d" % shape
+		far.multimesh = m.multimesh
+		far.material_override = m.material_override
+		far.layers = m.layers
+		far.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		far.visibility_range_begin = near - SHADOW_OVERLAP
+		far.visibility_range_end = data.reach
+		far.visibility_range_end_margin = BOULDER_FADE
+		far.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+		block.add_child(far)
 	block.add_to_group(Universe.EXTERIOR_SPACE)
 	add_child(block)
 	block.global_position = universe.to_engine(body.point.plus(Vector3(data.centre)))

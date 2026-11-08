@@ -133,7 +133,7 @@ func test_nothing_high_up():
 func test_higher_up_less_is_wanted():
 	var t := _terrain()
 	var low := _up * (t.radius + t.height_at(_up) + 2.0)
-	var high := _up * (t.radius + t.height_at(_up) + 250.0)
+	var high := _up * (t.radius + t.height_at(_up) + CoverField.BOULDER_REACH * 0.9)
 	var at_low := CoverField.blocks_near(t, low, CoverField.BOULDER_REACH)
 	var at_high := CoverField.blocks_near(t, high, CoverField.BOULDER_REACH)
 	assert_gt(at_high.size(), 0)
@@ -145,19 +145,19 @@ func test_higher_up_less_is_wanted():
 		var bound := CoverField._bound(b, t.radius)
 		var d := here.distance_to(bound[0]) - float(bound[1])
 		assert_lte(d, along + 0.01, "%s lies within %.0f m along the ground" % [b, along])
-	gut.p("%d blocks wanted at 2 m, %d at 250 m" % [at_low.size(), at_high.size()])
+	gut.p("%d blocks wanted at 2 m, %d at %.0f m" % [at_low.size(), at_high.size(), CoverField.BOULDER_REACH * 0.9])
 
 ## Level flight about BOULDER_REACH up: climbing a little past it wants
 ## nothing new but frees nothing either, so coming back down asks for nothing.
 func test_level_flight_near_the_reach_keeps_its_blocks():
-	var s := _surface(270.0)
+	var s := _surface(CoverField.BOULDER_REACH * 0.9)
 	s.cover.finish()
 	var first := s.cover.block_keys()
 	assert_gt(first.size(), 0)
-	s.update(_above(s, 310.0))
+	s.update(_above(s, CoverField.BOULDER_REACH + 10.0))
 	assert_eq(s.cover._wanted.size(), 0, "nothing wanted over the reach")
 	assert_eq(s.cover.block_keys().size(), first.size(), "and nothing let go")
-	s.update(_above(s, 270.0))
+	s.update(_above(s, CoverField.BOULDER_REACH * 0.9))
 	assert_eq(s.cover.jobs_in_flight(), 0, "back down, nothing to build again")
 	assert_eq(s.cover.block_keys().size(), first.size())
 
@@ -265,13 +265,30 @@ func test_a_block_is_drawn_as_the_plan_says():
 				continue
 			var m := n as MultiMeshInstance3D
 			assert_not_null(m)
-			stones.append(m)
-			assert_eq(m.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_ON)
 			# Its middle may lie half a diagonal past its nearest ground.
-			assert_almost_eq(m.visibility_range_end, CoverField.BOULDER_REACH + float(bound[1]), 0.01)
-			assert_eq(m.visibility_range_end_margin, 40.0)
+			var near := CoverField.BOULDER_SHADOW_REACH + float(bound[1])
+			if String(n.name).begins_with("Far"):
+				# The same stones past the shadows' reach, without them, to the end.
+				var shape := int(String(n.name).trim_prefix("Far"))
+				var with_shadow := block.get_node("Boulders%d" % shape) as MultiMeshInstance3D
+				assert_eq(m.multimesh, with_shadow.multimesh, "%s draws its shape's own MultiMesh" % n.name)
+				assert_eq(m.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
+				assert_almost_eq(m.visibility_range_begin, near - CoverField.SHADOW_OVERLAP, 0.01)
+				assert_almost_eq(m.visibility_range_end, CoverField.BOULDER_REACH + float(bound[1]), 0.01)
+				assert_eq(m.visibility_range_end_margin, 40.0)
+				stones.append(m)
+				continue
+			assert_eq(m.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_ON)
+			assert_almost_eq(m.visibility_range_end, near, 0.01)
+			assert_eq(m.visibility_range_fade_mode, GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED)
+			assert_not_null(block.get_node_or_null("Far%s" % String(n.name).trim_prefix("Boulders")),
+				"%s has its shadowless twin" % n.name)
 			var shape := int(String(n.name).trim_prefix("Boulders"))
 			assert_eq(m.multimesh.mesh, RockMesh.mesh(shape, 1))
+			assert_true(m.multimesh.use_colors, "instance colours")
+			var look := m.material_override as StandardMaterial3D
+			assert_true(look.vertex_color_use_as_albedo)
+			assert_eq(look.roughness, 1.0)
 		if holder == null:
 			continue
 		for n in holder.get_children():
