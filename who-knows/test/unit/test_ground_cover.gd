@@ -175,7 +175,9 @@ func test_boulders_sit_on_the_collision_ground():
 				hi = maxf(hi, h)
 			assert_lt(lo, 0.0, "the ground passes through it")
 			assert_gt(hi, 0.0, "the ground passes through it")
-			assert_gte(-lo, GroundCover.BOULDER_SUNK * d * 0.8, "a third of it sunk (%.2f m of %.2f)" % [-lo, d])
+			# Sunk from the collision triangle's own point, to the millimetre: a
+			# height sampled between the corners would be centimetres out.
+			assert_almost_eq(-lo, GroundCover.BOULDER_SUNK * d, 1e-3, "a third of it sunk (%.4f m of %.2f)" % [-lo, d])
 			seen += 1
 	gut.p("%d boulders on 30 chunks" % seen)
 	assert_gt(seen, 40)
@@ -216,8 +218,7 @@ func test_grass_only_on_desert_sand():
 	for key in _keys(_rolling_t, 30, 5, _any):
 		assert_eq(GroundCover.scatter(_rolling_t, key).grass.size(), 0, "no grass off a desert")
 	var tufts := 0
-	var chunks := _keys(_desert_t, 25, 5, _open)
-	chunks.append_array(_keys(_desert_t, 25, 5, _talus))
+	var chunks := _keys(_desert_t, 50, 5, _open)
 	var on := {}
 	for key in chunks:
 		var c := TerrainChunkData.build(_desert_t, key)
@@ -229,8 +230,17 @@ func test_grass_only_on_desert_sand():
 			assert_true(ground == &"ground_low" or ground == &"dust", "a tuft on %s" % ground)
 			on[ground] = int(on.get(ground, 0)) + 1
 			tufts += 1
-	gut.p("%d tufts over 50 chunks: %s" % [tufts, on])
+	gut.p("%d tufts over 50 open chunks: %s" % [tufts, on])
 	assert_gt(tufts, 0, "some grass on the sand")
+	# And by the mesas and towers, where rock and mesa tops are near, still
+	# none on them.
+	for key in _keys(_desert_t, 25, 5, _talus):
+		var c := TerrainChunkData.build(_desert_t, key)
+		for g: Array in GroundCover.scatter(_desert_t, key).grass:
+			var hit := _under(c, (g[0] as Transform3D).origin)
+			if not hit.is_empty():
+				var ground: StringName = _ground_of(_desert_t, c, hit[0])[1]
+				assert_true(ground == &"ground_low" or ground == &"dust", "a tuft on %s at the talus" % ground)
 
 func test_boulders_gather_at_the_talus():
 	var talus := 0

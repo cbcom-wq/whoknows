@@ -34,18 +34,30 @@ const LIFT_GRACE := 0.25
 ## your ship handed to its pilot flies on the hold with the stick centred, and
 ## must lift off as the stick would (final review M1).
 const HOLD_LIFTS := 0.5
-## A hull restored landed (a save, a ship woken) whose stance plane is more
-## than RESTORE_SLACK m off the ground under it -- saved on a world whose ground
-## has changed since, as a world that is a desert since phase 2 -- is set down
-## again rather than left frozen in the air or in the ground: lifted to
-## RESTORE_DROP m over the ground if buried, or brought down to it if more than
-## RESTORE_FALL m up, then let fall with its hold off until it touches, and it
-## settles and lands as any landing does (desert world phase 2, Review Focus 4).
-## Between the two it falls where it is: a ship saved standing on a boulder
-## only settles back onto it.
+## A hull restored landed (a save, a ship woken) that is not resting on
+## anything solid -- saved on a world whose ground has changed since, as a
+## world that is a desert since phase 2 -- is set down again rather than left
+## frozen in the air or in the ground (desert world phase 2, Review Focus 4).
+## How far it can move down before its colliders meet the solid ground (the
+## world's chunks with their boulders) is measured: within RESTORE_SLACK m it
+## is resting -- on the ground, on a boulder, on uneven ground -- and stays
+## frozen where it is. Further, it is let fall with its hold off until it
+## lands, as any landing does: from where it is up to RESTORE_FALL m, or
+## brought down to RESTORE_DROP m over what is under it first. Buried, its
+## stance plane more than RESTORE_SLACK under the analytic ground (which a
+## physics query cannot see out of), it is lifted to RESTORE_DROP m over that.
 const RESTORE_SLACK := 0.5
 const RESTORE_DROP := 0.5
 const RESTORE_FALL := 2.0
+## Physics ticks a restored hull is left frozen before the check, so the
+## solid chunks round it (and their boulders) are built and in the physics
+## space; and the most it waits for any solid ground under it before it trusts
+## the analytic ground alone.
+const RESTORE_SETTLE := 10
+const RESTORE_WAIT := 60
+## Seconds a restored hull is let fall at most before its hold is back, in
+## case it never lands.
+const DROP_MOST := 10.0
 
 signal state_changed(state: State)
 signal hard_landing(speed: float)
@@ -65,11 +77,14 @@ var _in_contact := false
 ## The hull's velocity at the previous tick: the contact is reported after the
 ## step that took the speed off, so the closing speed is read from before it.
 var _last_velocity := Vector3.ZERO
-## Restored landed and not yet checked against the ground (RESTORE_SLACK).
+## Restored landed and not yet checked against the ground (RESTORE_SLACK),
+## and for how many ticks it has waited for solid ground (RESTORE_WAIT).
 var _check_restore := false
-## Let go by that check: the hold stands down until it lands again, or the
-## pilot moves it.
+var _check_ticks := 0
+## Let go by that check: the hold stands down until it lands again, the pilot
+## moves it, it bounces off into the air, or DROP_MOST has passed.
 var _dropping := false
+var _dropping_for := 0.0
 
 ## One tick of the table (Planetfall §9). `s` has `state`, `held` (seconds
 ## settled) and `apart` (seconds without contact); `i` has `touching`,
@@ -138,9 +153,10 @@ func ground_status() -> String:
 func restore_landed() -> void:
 	_s = {state = State.LANDED, held = SETTLE_TIME, apart = 0.0}
 	restored = true
-	_check_restore = true
 	_dropping = false
 	_set_state(State.LANDED)
+	_check_restore = true
+	_check_ticks = 0
 
 func _physics_process(delta: float) -> void:
 	if hull == null or flight == null:
@@ -150,12 +166,14 @@ func _physics_process(delta: float) -> void:
 		up = flight.gravity.up_at(hull.global_position)
 	if up.is_zero_approx():
 		# Out of a well nothing steps: a flying ship stays flying, and one
-		# restored landed stays landed.
+		# restored landed stays landed, with no ground to check it against.
+		# (Its gravity not wired yet is not out of a well: that waits.)
+		if flight.gravity != null:
+			_check_restore = false
 		_in_contact = false
 		_publish()
 		return
 	if _check_restore:
-		_check_restore = false
 		if _set_down_again(up):
 			# Its contacts are from where it was: read them next tick.
 			_last_velocity = Vector3.ZERO
@@ -174,9 +192,12 @@ func _physics_process(delta: float) -> void:
 	}
 	_last_velocity = velocity
 	var result := step(_s, inputs, delta)
+	if _dropping:
+		_dropping_for += delta
+		if result.state == State.LANDED or inputs.translating or _dropping_for > DROP_MOST \
+				or (int(_s.state) == State.TOUCHING and result.state == State.FLYING):
+			_dropping = false
 	_s = {state = result.state, held = result.held, apart = result.apart}
-	if _dropping and (result.state == State.LANDED or inputs.translating):
-		_dropping = false
 	_set_state(result.state)
 	_publish()
 	if result.hard > 0.0:
@@ -190,19 +211,61 @@ static func translating(fc: FlightComputer, up: Vector3) -> bool:
 		return true
 	return fc.velocity_hold and fc.held_velocity.dot(up) > HOLD_LIFTS
 
-## A restored landed hull more than RESTORE_SLACK off the ground under it,
-## `up` the local up: put within reach of the ground and let fall (see
-## RESTORE_SLACK); true if it was. One on the ground stays frozen where it is.
+## The restore check (see RESTORE_SLACK), `up` the local up: true if the
+## hull was let go to fall. One resting on something stays frozen where it is,
+## `restored` and all; the check stays pending while it waits for the ground.
 func _set_down_again(up: Vector3) -> bool:
 	var off := flight.keel_altitude()
-	if not is_finite(off) or absf(off) <= RESTORE_SLACK:
+	if state != State.LANDED or not hull.freeze or not is_finite(off):
+		_check_restore = false
 		return false
-	if off < 0.0 or off > RESTORE_FALL:
-		hull.global_position += up * (RESTORE_DROP - off)
+	_check_ticks += 1
+	if _check_ticks < RESTORE_SETTLE:
+		return false
+	var move := 0.0
+	if off < -RESTORE_SLACK:
+		move = RESTORE_DROP - off
+	else:
+		var gap := _gap_below(up, maxf(off, 0.0) + RESTORE_FALL + RESTORE_SLACK)
+		if gap < 0.0:
+			# Nothing solid within reach yet: wait for the chunks under it,
+			# then go by the analytic ground.
+			if _check_ticks < RESTORE_WAIT:
+				return false
+			gap = off
+		if gap <= RESTORE_SLACK:
+			_check_restore = false
+			return false
+		if gap > RESTORE_FALL:
+			move = RESTORE_DROP - gap
+	_check_restore = false
+	hull.global_position += up * move
 	_s = {state = State.FLYING, held = 0.0, apart = 0.0}
 	_dropping = true
+	_dropping_for = 0.0
 	_set_state(State.FLYING)
 	return true
+
+## How far the hull can move down `up` before one of its colliders meets the
+## solid ground (BodyProxy.LAYER), looking `reach` m; -1 if nothing is there.
+## Already touching is 0.
+func _gap_below(up: Vector3, reach: float) -> float:
+	var space := hull.get_world_3d().direct_space_state
+	var q := PhysicsShapeQueryParameters3D.new()
+	q.collision_mask = BodyProxy.LAYER
+	q.exclude = [hull.get_rid()]
+	q.motion = -up * reach
+	var best := INF
+	for node in hull.find_children("*", "CollisionShape3D", true, false):
+		var cs := node as CollisionShape3D
+		if cs.disabled or cs.shape == null:
+			continue
+		q.shape = cs.shape
+		q.transform = cs.global_transform
+		var r := space.cast_motion(q)
+		if r.size() > 0 and float(r[0]) < 1.0:
+			best = minf(best, float(r[0]) * reach)
+	return best if best < INF else -1.0
 
 ## Whether the hull reports a contact with the ground this tick.
 func _touching_ground() -> bool:
@@ -239,6 +302,7 @@ func _set_state(next: State) -> void:
 	state = next
 	if next != State.LANDED:
 		restored = false
+		_check_restore = false
 	if hull != null:
 		if next == State.LANDED:
 			hull.linear_velocity = Vector3.ZERO

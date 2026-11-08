@@ -188,3 +188,60 @@ func test_restored_landed_off_the_ground_falls_and_settles():
 	assert_lt(keel, 1.0, "and on it, not thrown off it")
 	assert_true(monitor.is_landed(), "landed")
 	assert_eq(_starter.damage.hull_whole(), whole, "not damaged")
+
+## Between RESTORE_SLACK and RESTORE_FALL over what is under it, it falls from
+## where it is: not moved first.
+func test_restored_landed_a_metre_up_falls_from_where_it_is():
+	await _to_a_world()
+	_fleet.restore_hull(_starter, _saved_landed_at(1.2))
+	var monitor := _starter.landing
+	var at := _universe.to_universe(_starter.exterior.global_position)
+	var first_drop := [INF]
+	assert_true(await _within(10.0, func() -> bool:
+		if not monitor.is_landed() and first_drop[0] == INF:
+			first_drop[0] = at.minus(_universe.to_universe(_starter.exterior.global_position)).dot(_up)
+		return first_drop[0] != INF and monitor.is_landed()), "leaves LANDED and lands again within 10 s")
+	gut.p("1.2 m up: %.3f m lower on the tick it was let go" % first_drop[0])
+	assert_lt(first_drop[0], 0.3, "let fall from where it was, not moved down first")
+	var keel := _starter.flight_computer.keel_altitude()
+	assert_lt(absf(keel), 0.5, "on the ground (%.2f m)" % keel)
+
+## A ship landed where it stands -- on the ground, or with its feet on a tall
+## boulder far over the analytic ground -- loads frozen where it was, restored,
+## and is never moved or let go.
+func test_restored_landed_where_it_stands_stays_put():
+	await _to_a_world()
+	var monitor := _starter.landing
+	_fleet.restore_hull(_starter, _saved_landed_at(0.0))
+	var at := _universe.to_universe(_starter.exterior.global_position)
+	var stayed := [true]
+	await _within(2.0, func() -> bool:
+		stayed[0] = stayed[0] and monitor.is_landed()
+		return false)
+	assert_true(stayed[0], "on the ground: landed throughout")
+	assert_true(monitor.restored, "restored: the ramp and legs never animate")
+	assert_lt(at.minus(_universe.to_universe(_starter.exterior.global_position)).length(), 0.01, "not moved")
+	# A boulder 4 m tall under its feet (a box on the terrain layer, its top
+	# 2 cm under the stance plane): RESTORE_FALL and more over the ground.
+	var rock := StaticBody3D.new()
+	rock.collision_layer = BodyProxy.LAYER
+	rock.collision_mask = 0
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(30.0, 3.96, 30.0)
+	shape.shape = box
+	rock.add_child(shape)
+	rock.add_to_group(Universe.EXTERIOR_SPACE)
+	add_child_autofree(rock)
+	rock.global_transform = Transform3D(_basis, _centre() + _up * (_ground + 1.98))
+	_fleet.restore_hull(_starter, _saved_landed_at(4.0))
+	at = _universe.to_universe(_starter.exterior.global_position)
+	stayed[0] = true
+	await _within(2.0, func() -> bool:
+		stayed[0] = stayed[0] and monitor.is_landed()
+		return false)
+	assert_true(stayed[0], "on a boulder: landed throughout")
+	assert_true(_starter.exterior.freeze, "frozen")
+	assert_true(monitor.restored, "restored")
+	assert_lt(at.minus(_universe.to_universe(_starter.exterior.global_position)).length(), 0.01,
+		"not moved into the boulder")
