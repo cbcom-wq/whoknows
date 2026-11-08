@@ -121,9 +121,10 @@ const TOWER_FOOT := 1.12
 ## How far a tower's centre strays from its cell's, as FastNoiseLite's
 ## cellular jitter: at 0.6 two centres are at least 0.48 of a cell apart, over
 ## twice the widest flank, so no tower's flank meets another cell's; and every
-## point of a tower (centre within 0.26 of its cell's, flank within 0.22 of
-## that: TOWER_RADIUS.y * TOWER_FOOT, 92 m, is 0.22 of a 417 m cell, and a
-## cell is at least 418 m on any world over 6 km) lies inside its own cell.
+## point of a tower lies inside its own cell: its centre within 0.262 of its
+## cell's, its flank within TOWER_RADIUS.y * TOWER_FOOT = 92 m of that, under
+## 0.221 of any cell of 418 m or more (every world over 6 km), 0.483 < 0.5 in
+## all.
 const TOWER_JITTER := 0.6
 ## Each cube face's tower cells start this many cells from the last face's,
 ## more than a face is across, so the faces never share a cell.
@@ -404,7 +405,8 @@ func _phase_of(dir: Vector3) -> float:
 ## so the ridges never fold back. The dunes' heights (written out there),
 ## their colours and wind_at all use it.
 func _phase(d: Vector3, a: float) -> float:
-	return -radius * acos(clampf(a, -1.0, 1.0)) / DUNE_WAVE 		+ DUNE_WARP * _wind.get_noise_3dv(d * (radius / DUNE_TURN))
+	return -radius * acos(clampf(a, -1.0, 1.0)) / DUNE_WAVE \
+		+ DUNE_WARP * _wind.get_noise_3dv(d * (radius / DUNE_TURN))
 
 ## How much of a tower stands at `d`, whose continent layer is `z`: 1 on its
 ## top, 0 off it. Towers stand in the band below the mesa line and merge into

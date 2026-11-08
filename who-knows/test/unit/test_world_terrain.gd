@@ -242,6 +242,50 @@ func test_crests_are_as_far_apart_near_the_poles_as_at_the_equator():
 		gut.p("|d . axis| %.2f: %d crests in %.1f km" % [absf(d.dot(t.wind_axis)), crests, length / 1000.0])
 		assert_between(crests, 15, 25, "crests DUNE_WAVE apart at |d . axis| %.2f" % absf(d.dot(t.wind_axis)))
 
+func test_the_phase_s_crest_is_the_height_s_crest():
+	# _desert_height writes the dune's phase and stand out; _phase and
+	# _dune_stand (the colours, wind_at) keep them as functions. They agree:
+	# where _phase_of crosses _CREST along the wind, the height peaks, within
+	# the crest's rounding, and the lee falls away past it.
+	var ease_m := WorldTerrain.DUNE_CREST_EASE * WorldTerrain.DUNE_WAVE
+	var crests := 0
+	for seed in [1, 200, 400]:
+		var t := _desert(seed)
+		var rng := RandomNumberGenerator.new()
+		rng.seed = seed + 11
+		for n in 5:
+			var d := _open_dune(t, rng)
+			var w := t.wind_at(d)
+			# The first crossing of _CREST within a wave downwind, in 0.5 m steps.
+			var at := -1.0
+			var before := fposmod(t._phase_of(d), 1.0)
+			var m := 0.5
+			while m <= WorldTerrain.DUNE_WAVE * 1.2:
+				var now := fposmod(t._phase_of(_walk(t, d, w, m)), 1.0)
+				if before < WorldTerrain._CREST and now >= WorldTerrain._CREST:
+					at = m
+					break
+				before = now
+				m += 0.5
+			assert_gt(at, 0.0, "seed %d: a crest within a wave" % seed)
+			if at < 0.0:
+				continue
+			# The highest ground within 3 crest roundings either side.
+			var best := 0.0
+			var top := -INF
+			var off := -3.0 * ease_m
+			while off <= 3.0 * ease_m:
+				var h := t.height_at(_walk(t, d, w, at + off))
+				if h > top:
+					top = h
+					best = off
+				off += 0.25
+			assert_lt(absf(best), ease_m, "seed %d: the height peaks %.1f m from the phase's crest" % [seed, best])
+			assert_gt(top - t.height_at(_walk(t, d, w, at + 3.0 * ease_m)), 0.5, "seed %d: the lee falls past it" % seed)
+			assert_gt(top - t.height_at(_walk(t, d, w, at - 3.0 * ease_m)), 0.1, "seed %d: the windward rises to it" % seed)
+			crests += 1
+	gut.p("%d crests where the phase says" % crests)
+
 func test_only_a_desert_has_wind_and_talus():
 	var t := WorldTerrain.new(_recipe(105, WorldRecipe.Archetype.MESA))
 	var rng := RandomNumberGenerator.new()
@@ -357,47 +401,55 @@ func test_towers_stand_in_the_band_and_nowhere_else():
 	assert_eq(outside, 0, "and none on the open dunes")
 
 func test_no_tower_is_cut():
-	# Round each tower top, half of them found on cube faces' edges, the
-	# ground falls away on every side down a flank (TOWER_FOOT), never by a
-	# cliff where a neighbouring cell or a face's edge slices it.
+	# From the centre of each tower top, half of them found near cube faces'
+	# edges, the ground falls away on every side down a flank (TOWER_FOOT),
+	# never by a cliff where a neighbouring cell or a face's edge slices it.
+	# Each profile runs past the widest flank, so it covers the whole tower.
 	var t := _desert()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 6
 	var floor := WorldTerrain.MESA_FROM - WorldTerrain.TOWER_BAND
-	var tops: Array[Vector3] = []
+	var widest := WorldTerrain.TOWER_RADIUS.y * WorldTerrain.TOWER_FOOT
+	var near_edge := WorldTerrain.TOWER_WAVE * 0.25
+	var centres: Array[Vector3] = []
 	var on_edges := 0
 	var tries := 0
-	while tops.size() < 30 and tries < 6000:
+	while centres.size() < 30 and tries < 6000:
 		tries += 1
 		var edge := tries % 2 == 0
 		var p := _dir(rng)
 		if edge:
-			# 40 to 100 m in from an edge, so the search reaches the towers
-			# nearest it.
-			p = _by_face_edge(t, p, rng.randf_range(40.0, 100.0))
+			p = _by_face_edge(t, p, rng.randf_range(10.0, near_edge))
 		var z := t.continent_at(p)
 		if z < floor or z >= WorldTerrain.MESA_FROM:
 			continue
-		var top := _tower_top_near(t, p)
-		if top != Vector3.ZERO:
-			tops.append(top)
-			on_edges += 1 if edge else 0
-	gut.p("%d tower tops, %d within 140 m of a face's edge" % [tops.size(), on_edges])
-	assert_gte(tops.size(), 20, "towers to look round")
+		var centre := _tower_centre_near(t, p)
+		if centre == Vector3.ZERO \
+				or centres.any(func(c: Vector3) -> bool: return c.angle_to(centre) * t.radius < widest):
+			continue
+		centres.append(centre)
+		on_edges += 1 if edge else 0
+	gut.p("%d towers, %d found from within %.0f m of a face's edge" % [centres.size(), on_edges, near_edge])
+	assert_gte(centres.size(), 20, "towers to look round")
 	assert_gte(on_edges, 5, "towers by the faces' edges among them")
 	var cut := 0
-	for top in tops:
-		var side := top.cross(Vector3.UP if absf(top.y) < 0.9 else Vector3.RIGHT).normalized()
+	var fell := 0
+	for centre in centres:
+		var side := centre.cross(Vector3.UP if absf(centre.y) < 0.9 else Vector3.RIGHT).normalized()
 		for k in 16:
-			var heights := _profile_fine(t, top, side.rotated(top, k * TAU / 16.0), 60.0)
+			var heights := _profile_fine(t, centre, side.rotated(centre, k * TAU / 16.0), widest + 20.0)
 			var fall := heights[0]
 			var drop := 0.0
 			for i in range(1, heights.size()):
 				fall = minf(fall, heights[i])
 				drop = maxf(drop, heights[i - 1] - heights[i])
 			fall = heights[0] - fall
-			if fall > 5.0 and drop > fall * 0.35:
-				cut += 1
+			if fall > 5.0:
+				fell += 1
+				if drop > fall * 0.35:
+					cut += 1
+	gut.p("%d of %d profiles fall over 5 m from the top; %d by a cliff" % [fell, centres.size() * 16, cut])
+	assert_gte(fell, centres.size() * 16 * 3 / 4, "the profiles reach down the towers' flanks")
 	assert_eq(cut, 0, "every tower's flank all the way round")
 
 ## Heights every 0.25 m along `toward` from `d`, over `metres`.
@@ -419,29 +471,30 @@ static func _by_face_edge(t: WorldTerrain, d: Vector3, metres: float) -> Vector3
 	axis[big] = signf(d[big])
 	return _walk(t, on, (axis - on * on.dot(axis)).normalized(), metres)
 
-## The top of a tower within 40 m of `p`, or ZERO: a point of rock on level
-## ground below the mesa line (only a tower is that), climbed to its highest.
-static func _tower_top_near(t: WorldTerrain, p: Vector3) -> Vector3:
+## The centre of a tower near `p`, or ZERO: a point of rock below the mesa
+## line (only a tower is that) on a grid as wide as the widest flank and as
+## fine as half the narrowest top, then the middle of where its rock ends on
+## 16 bearings, found again from there until it settles.
+static func _tower_centre_near(t: WorldTerrain, p: Vector3) -> Vector3:
 	var e1 := p.cross(Vector3.UP if absf(p.y) < 0.9 else Vector3.RIGHT).normalized()
 	var e2 := p.cross(e1)
-	for j in 21:
-		for i in 21:
-			var d := (p * t.radius + e1 * (i * 4.0 - 40.0) + e2 * (j * 4.0 - 40.0)).normalized()
+	var reach := WorldTerrain.TOWER_RADIUS.y * WorldTerrain.TOWER_FOOT
+	var step := WorldTerrain.TOWER_RADIUS.x * 0.5
+	var n := ceili(reach / step)
+	for j in range(-n, n + 1):
+		for i in range(-n, n + 1):
+			var d := (p * t.radius + e1 * (i * step) + e2 * (j * step)).normalized()
 			if t.ground_at(d, 0.0) != &"rock" or t.continent_at(d) >= WorldTerrain.MESA_FROM:
 				continue
-			# Climb to the highest ground near it, 1 m at a time.
-			var h := t.height_at(d)
-			var climbing := true
-			while climbing:
-				climbing = false
-				for k in 8:
-					var q := _walk(t, d, e1.rotated(d, k * TAU / 8.0), 1.0)
-					var hq := t.height_at(q)
-					if hq > h + 0.001:
-						d = q
-						h = hq
-						climbing = true
-						break
+			for settle in 3:
+				var feet := Vector3.ZERO
+				for k in 16:
+					var way := e1.rotated(d, k * TAU / 16.0)
+					var m := 0.0
+					while m < reach * 2.0 + 10.0 and t.ground_at(_walk(t, d, way, m), 0.0) == &"rock":
+						m += 1.0
+					feet += _walk(t, d, way, m)
+				d = feet.normalized()
 			return d
 	return Vector3.ZERO
 
