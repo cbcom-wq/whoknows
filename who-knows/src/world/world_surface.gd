@@ -20,7 +20,8 @@ extends Node3D
 ##
 ## The floating origin (CLAUDE.md): this node never moves and is not a member;
 ## each chunk is a member of Universe.EXTERIOR_SPACE of its own, placed from
-## its UniversePoint when made.
+## its UniversePoint when made. The boulders and grass round the focus are its
+## CoverField's (a child that never moves either; its blocks are members).
 ##
 ## Choosing the leaves is pure (the statics below). A node is culled by its
 ## cull bound (corner chord plus half the relief: safe for the horizon) but
@@ -56,6 +57,8 @@ var universe: Universe
 var terrain: WorldTerrain
 var depth_max := 0
 var leaves: Array[Vector4i] = []
+## The boulders and grass drawn round the focus: a child that never moves.
+var cover: CoverField
 
 var _split := {}
 var _bounds := {}
@@ -157,6 +160,9 @@ func setup(p_body: SystemBody, p_universe: Universe) -> void:
 	# The finest chunks scatter their boulders (GroundCover) on the jobs: what
 	# they read is built here first, on the main thread.
 	RockMesh.warm()
+	cover = CoverField.new()
+	cover.setup(body, universe, terrain)
+	add_child(cover)
 
 ## The six coarsest chunks, built now: whole on the first frame.
 func build_roots() -> void:
@@ -165,7 +171,7 @@ func build_roots() -> void:
 
 ## Chooses the leaves for `focus` if it has moved, collects finished jobs,
 ## asks for what is missing nearest first, applies what fits in the budget,
-## and lets go of what nothing needs.
+## and lets go of what nothing needs; then the cover does the same.
 func update(focus: UniversePoint) -> void:
 	_local = focus.minus(body.point)
 	if _selected_at == null or focus.minus(_selected_at).length() >= RESELECT_AFTER:
@@ -183,6 +189,7 @@ func update(focus: UniversePoint) -> void:
 	_apply(Time.get_ticks_usec() + APPLY_BUDGET_USEC)
 	_prune()
 	_keep_anchors_above_ground()
+	cover.update(focus)
 
 ## The bounds the last selection looked at: the roots, and every child of a
 ## split node.
@@ -209,6 +216,7 @@ func finish() -> void:
 		_jobs.clear()
 		_apply(INF)
 	_prune()
+	cover.finish()
 
 func chunk_count() -> int:
 	return _chunks.size()
@@ -228,6 +236,8 @@ func _exit_tree() -> void:
 	for id: int in _jobs.values():
 		WorkerThreadPool.wait_for_task_completion(id)
 	_jobs.clear()
+	if cover != null:
+		cover.wait_for_jobs()
 
 ## The ground's height at a node centre's direction `d`, remembered (see
 ## _heights).

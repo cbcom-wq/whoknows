@@ -146,18 +146,24 @@ func test_chunks_are_members_and_the_surface_never_moves():
 	s.finish()
 	assert_false(s.is_in_group(Universe.EXTERIOR_SPACE))
 	assert_eq(s.global_transform, Transform3D.IDENTITY)
+	# The cover field never moves either; its blocks are members (test_cover_field).
+	assert_false(s.cover.is_in_group(Universe.EXTERIOR_SPACE))
 	for c in s.get_children():
-		assert_true(c.is_in_group(Universe.EXTERIOR_SPACE), "%s shifts" % c.name)
+		if c != s.cover:
+			assert_true(c.is_in_group(Universe.EXTERIOR_SPACE), "%s shifts" % c.name)
 
 func test_a_shift_moves_every_chunk_with_the_focus():
 	var s := _surface(500.0)
 	s.finish()
 	var before := {}
 	for c: Node3D in s.get_children():
-		before[c.name] = c.global_position
+		if c != s.cover:
+			before[c.name] = c.global_position
 	_universe.shift(Vector3(2000, 0, -1000))
 	for c: Node3D in s.get_children():
-		assert_almost_eq(c.global_position, before[c.name] - Vector3(2000, 0, -1000), Vector3.ONE * 0.001)
+		if c != s.cover:
+			assert_almost_eq(c.global_position, before[c.name] - Vector3(2000, 0, -1000), Vector3.ONE * 0.001)
+	assert_eq(s.cover.global_transform, Transform3D.IDENTITY)
 
 func test_climbing_away_merges_chunks():
 	var s := _surface(300.0)
