@@ -3,8 +3,8 @@ extends Node3D
 
 ## The star system as you see it (the system skeleton spec §3, §7): the only
 ## node that knows the system. It builds a BodyProxy per star, planet and
-## moon, the star's StarHalo, a BeltLook per belt, the space dust and
-## Whereabouts, places every one each physics tick for where the focus is, and
+## moon, the star's StarHalo, a BeltLook per belt, the space dust, the
+## blowing sand and Whereabouts, places every one each physics tick for where the focus is, and
 ## aims the sun from the star.
 ##
 ## The floating origin (CLAUDE.md): this node and its `Bodies` holder sit at
@@ -18,6 +18,9 @@ var sun: DirectionalLight3D
 var proxies: Array[BodyProxy] = []
 var belts: Array[BeltLook] = []
 var dust: SpaceDust
+## The streaks of sand at a desert's ground (BlowingSand), which tick
+## themselves from Whereabouts.
+var sand: BlowingSand
 var whereabouts: Whereabouts
 ## The star's glow seen through air, on the star's proxy (StarHalo); AirMood
 ## sets how strong it is.
@@ -56,6 +59,9 @@ func setup(p_recipe: SystemRecipe, p_universe: Universe, p_sun: DirectionalLight
 	whereabouts = Whereabouts.new()
 	add_child(whereabouts)
 	whereabouts.setup(recipe, universe)
+	sand = BlowingSand.new()
+	add_child(sand)
+	sand.setup(whereabouts, universe)
 	if sun != null:
 		var palette: Dictionary = SpacePalette.STARS[recipe.star.star_palette]
 		sun.light_color = palette[&"light"]

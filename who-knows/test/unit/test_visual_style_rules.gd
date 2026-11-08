@@ -75,6 +75,7 @@ const PAINTING_FILES := [
 	"res://src/world/ring_look.gd",
 	"res://src/world/belt_look.gd",
 	"res://src/world/space_dust.gd",
+	"res://src/world/blowing_sand.gd",
 	"res://src/flight/rcs_show.gd",
 	"res://src/flight/warp_arrival.gd",
 	"res://src/ship/interior/readout_panel.gd",
