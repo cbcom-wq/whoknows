@@ -1020,25 +1020,50 @@ func _cover_low() -> void:
 	# The limit this low is about LOW_SPEED: CoverField is tried at FAST_LEAST
 	# at least, to see it keep ahead.
 	await _fly_low(maxf(limit, FAST_LEAST), start, axis, profile, "cover_low_fast")
+	# The same 120 m/s with the hull truly moving: carried, the hull's
+	# velocity is 0 and TerrainCollider asks for its 64 m reach; flown, for
+	# 64 m + 1 s of travel (Task 7b fix round 1).
+	await _fly_low(LOW_SPEED, start, axis, profile, "cover_low_moving", true)
 
 ## Flown from `start` round `axis` at `speed` for COVER_SECONDS, COVER_LOW over
 ## `profile` (the ground's height every 10 m), level: the frame rate, each
 ## second the blocks wanted ahead and not drawn and the blocks that appeared
 ## within POP_NEAR ahead; rendered at the end as `shot_name`.
-func _fly_low(speed: float, start: Vector3, axis: Vector3, profile: PackedFloat32Array, shot_name: String) -> void:
+## With `moving`, the hull is not carried but flown: thawed, the assist off
+## (no thrust), its velocity set each tick to reach the next point on the
+## route, so the physics moves it and everything that asks its speed (the
+## solid ground's reach) sees 120 m/s.
+func _fly_low(speed: float, start: Vector3, axis: Vector3, profile: PackedFloat32Array, shot_name: String,
+		moving := false) -> void:
 	var cover := _surface.cover
 	var h0 := profile[0] - _terrain.height_at(start) + COVER_LOW
 	await _hold_at(start, h0, axis.cross(start))
 	await _seconds(1.0)
-	var flown := [0.0, INF, -INF]
-	var fly := func() -> void:
-		flown[0] = float(flown[0]) + speed / Engine.physics_ticks_per_second
-		var at := float(flown[0])
+	var flown := [0.0, INF, -INF, 0.0, 0]
+	var hull := _starter.exterior
+	var assist := _starter.flight_computer.assist_enabled
+	var point_at := func(at: float) -> Vector3:
 		var dir := start.rotated(axis, at / _planet.radius)
 		var i := mini(int(at / 10.0), profile.size() - 2)
 		var t := clampf(at / 10.0 - i, 0.0, 1.0)
 		var r := _planet.radius + lerpf(profile[i], profile[i + 1], t) + _starter.stance_depth() + COVER_LOW
-		_starter.exterior.global_transform = Transform3D(_level(dir, axis.cross(dir)), _centre() + dir * r)
+		return _centre() + dir * r
+	if moving:
+		_starter.flight_computer.assist_enabled = false
+		hull.freeze = false
+	var fly := func() -> void:
+		var dt := 1.0 / Engine.physics_ticks_per_second
+		flown[0] = float(flown[0]) + speed * dt
+		var at := float(flown[0])
+		if moving:
+			# The hull is where the physics put it; aimed at the route's next point.
+			hull.linear_velocity = (point_at.call(at) - hull.global_position) / dt
+			hull.angular_velocity = Vector3.ZERO
+			flown[3] = maxf(float(flown[3]), TerrainCollider.reach_for(hull.linear_velocity.length()))
+			flown[4] = maxi(int(flown[4]), _surface.solid_keys().size())
+		else:
+			var dir := start.rotated(axis, at / _planet.radius)
+			_starter.exterior.global_transform = Transform3D(_level(dir, axis.cross(dir)), point_at.call(at))
 		var over := _alt(_starter)
 		flown[1] = minf(float(flown[1]), over)
 		flown[2] = maxf(float(flown[2]), over)
@@ -1115,8 +1140,10 @@ func _fly_low(speed: float, start: Vector3, axis: Vector3, profile: PackedFloat3
 	process_frame.disconnect(watch)
 	for l in lines:
 		print(l)
-	var line := "fps     %.0f seated in low flight at %.0f m/s over a talus band for %.0f s (%.0f m flown, %.0f to %.0f m over the ground under the keel, the longest frame %.1f ms, the origin shifted %d times; %d frames saw a block appear within %.0f m ahead, %d blocks in all, the nearest %s; at most %d wanted ahead not drawn) %s" % [
-		fps, speed, COVER_SECONDS, float(flown[0]), float(flown[1]), float(flown[2]), worst_ms, _universe.shifts - shifts,
+	var how := "the hull flown (moving at %.0f m/s, the solid ground's reach %.0f m, at most %d solid chunks)" % [
+		hull.linear_velocity.length(), float(flown[3]), int(flown[4])] if moving else "the hull carried (frozen)"
+	var line := "fps     %.0f seated in low flight at %.0f m/s over a talus band for %.0f s, %s (%.0f m flown, %.0f to %.0f m over the ground under the keel, the longest frame %.1f ms, the origin shifted %d times; %d frames saw a block appear within %.0f m ahead, %d blocks in all, the nearest %s; at most %d wanted ahead not drawn) %s" % [
+		fps, speed, COVER_SECONDS, how, float(flown[0]), float(flown[1]), float(flown[2]), worst_ms, _universe.shifts - shifts,
 		int(pops[1]), POP_NEAR, int(pops[2]), "%.0f m off" % float(pops[3]) if float(pops[3]) < INF else "none",
 		most_missing, _ms()]
 	print(line)
@@ -1127,6 +1154,11 @@ func _fly_low(speed: float, start: Vector3, axis: Vector3, profile: PackedFloat3
 		shot_name, POP_NEAR, int(pops[1])])
 	await _shot(shot_name)
 	physics_frame.disconnect(fly)
+	if moving:
+		hull.linear_velocity = Vector3.ZERO
+		hull.angular_velocity = Vector3.ZERO
+		hull.freeze = true
+		_starter.flight_computer.assist_enabled = assist
 
 ## Block `key`'s nearest ground from `here` (a direction), m along the ground
 ## (0 if it is under you), and whether it lies ahead along `nose`: [m, ahead].
@@ -1154,6 +1186,7 @@ func _boulder_landings() -> void:
 	var landed := await _set_down(_starter, true, "the starter")
 	var way := await _boulder_shot("cover_starter_boulders_a", _starter, Vector3(17.0, 0.0, 18.0))
 	await _boulder_shot("cover_starter_boulders_b", _starter, Vector3(-17.0, 0.0, -18.0))
+	await _stone_shadows()
 	if landed:
 		_director.stand_now()
 		await _frames(3)
@@ -1169,6 +1202,45 @@ func _boulder_landings() -> void:
 	else:
 		print("        no frame rate on foot by the starter: it did not land, so its airlock will not open")
 	await _warden_landing(way)
+
+## The stones round the landed starter from its sunward side, the sun at
+## the camera's back so every stone's shadow falls away in view, 5 m up:
+## once as drawn, once with the stones' distance fade off. The shadow pass
+## measures the fade from the light, so a stone's shadow inside the reach
+## could be dithered or lost; the two renders side by side say whether.
+func _stone_shadows() -> void:
+	var flat := _sunward(_starter) * 35.0
+	var target := Vector3(0.0, -_starter.stance_depth(), 0.0)
+	await _ground_shot("cover_shadows", _starter, flat, 5.0, target)
+	var looks: Array[StandardMaterial3D] = []
+	for tier in 2:
+		var look := CoverField.boulder_material(tier)
+		if not look in looks:
+			looks.append(look)
+	var modes: Array = []
+	for look in looks:
+		modes.append(look.distance_fade_mode)
+		look.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_DISABLED
+	await _ground_shot("cover_shadows_unfaded", _starter, flat, 5.0, target)
+	for i in looks.size():
+		looks[i].distance_fade_mode = modes[i]
+	var a: Image = _images["cover_shadows"]
+	var b: Image = _images["cover_shadows_unfaded"]
+	var differ := 0
+	var dark_a := 0
+	var dark_b := 0
+	for y in range(0, a.get_height(), 2):
+		for x in range(0, a.get_width(), 2):
+			var ca := a.get_pixel(x, y)
+			var cb := b.get_pixel(x, y)
+			if absf(ca.get_luminance() - cb.get_luminance()) > 0.04:
+				differ += 1
+			if ca.get_luminance() < 0.25:
+				dark_a += 1
+			if cb.get_luminance() < 0.25:
+				dark_b += 1
+	print("shadows the stones from 35 m sunward, 5 m up: %d sampled pixels differ with the fade off; dark pixels %d faded, %d unfaded" % [
+		differ, dark_a, dark_b])
 
 ## The heaviest library ship, spawned and brought down at SINK m/s onto the
 ## densest talus spot, unseated (its own flight computer's input), the

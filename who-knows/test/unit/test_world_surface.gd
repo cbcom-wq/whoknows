@@ -334,6 +334,42 @@ func test_the_keys_are_the_ground_within_the_reach():
 				assert_lt(here.distance_to(mid), reach + edge, "%s lies within the reach" % k)
 			gut.p("%.0f m reach: %d keys" % [reach, keys.size()])
 
+## The keys are worked out again only once an anchor has moved half a
+## finest edge; until then the ground within the reach of where it is now,
+## not where they were worked out, must still be solid (fix round 1 of
+## Task 7b: cut at exactly the reach, it shrank to ~48 m ahead).
+func test_the_reach_holds_until_the_keys_are_worked_out_again():
+	var s := _surface(3000.0)
+	var a := _anchor(s, 20.0)
+	var t := s.terrain
+	var d := s.depth_max
+	var edge := CubeSphere.edge_m(t.radius, d)
+	var reach := TerrainCollider.REACH
+	s._solid_wanted()
+	var a_dir := _up.cross(Vector3.UP).normalized()
+	var b_dir := _up.cross(a_dir)
+	var worst := 0
+	for heading: Vector3 in [a_dir, -a_dir, b_dir, -b_dir, (a_dir + b_dir).normalized()]:
+		var start := _universe.to_engine(_above(_planet(), s, 20.0))
+		a.global_position = start + heading * edge * 0.49
+		var wanted := s._solid_wanted()
+		var local := _universe.to_universe(a.global_position).minus(_planet().point)
+		var dir := local.normalized()
+		var step := edge * 0.25
+		var n := int(reach / step)
+		var missed := 0
+		for j in range(-n, n + 1):
+			for i in range(-n, n + 1):
+				var off := a_dir * (i * step) + b_dir * (j * step)
+				if off.length() > reach:
+					continue
+				if not wanted.has(CubeSphere.key_for(dir * t.radius + off, d)):
+					missed += 1
+		worst = maxi(worst, missed)
+		a.global_position = start
+		s._solid_wanted()
+	assert_eq(worst, 0, "every point within the reach of where the anchor is now is wanted solid")
+
 func test_an_anchor_near_the_ground_has_solid_ground_round_it():
 	var s := _surface(3000.0)
 	var a := _anchor(s, 20.0)

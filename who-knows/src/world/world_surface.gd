@@ -293,7 +293,8 @@ func _request() -> void:
 	for k in missing:
 		if _jobs.size() >= MAX_JOBS:
 			return
-		_jobs[k] = WorkerThreadPool.add_task(_job.bind(k, body.recipe, not _leaf_set.has(k), _wanted_solid.has(k)),
+		_jobs[k] = WorkerThreadPool.add_task(_job.bind(k, body.recipe, not _leaf_set.has(k),
+			_wanted_solid.has(k) and not _solid.has(k)),
 			false, "world chunk")
 
 ## On a worker: its own terrain, one chunk; for collision alone if
@@ -436,8 +437,8 @@ func solid_keys() -> Array[Vector4i]:
 ## Every finest chunk some anchor needs solid; the one under an anchor that
 ## is missing is built now, every tick (it is one key_for). The rest of an
 ## anchor's keys are worked out again only once it has moved half a finest
-## edge, or its reach has changed by as much: near a cube edge they cost
-## milliseconds.
+## edge, or its reach has changed by as much (near a cube edge they cost
+## milliseconds), so they are worked out half an edge wider than the reach.
 func _solid_wanted() -> Dictionary:
 	var out := {}
 	var seen := {}
@@ -453,7 +454,11 @@ func _solid_wanted() -> Dictionary:
 		var cached: Dictionary = _solid_cache.get(id, {})
 		if cached.is_empty() or (cached.local as Vector3).distance_to(local) > half_edge \
 				or absf(float(cached.reach) - reach) > half_edge:
-			cached = {"local": local, "reach": reach, "keys": TerrainCollider.keys_near(terrain, depth_max, local, reach)}
+			# Kept for up to half an edge of travel, so worked out that much
+			# wider: cut at the reach itself, the ground ahead shrank to
+			# ~48 m before they were worked out again (Task 7b fix round 1).
+			cached = {"local": local, "reach": reach,
+				"keys": TerrainCollider.keys_near(terrain, depth_max, local, reach + half_edge)}
 			_solid_cache[id] = cached
 		var keys: Array = cached.keys
 		if keys.is_empty():
@@ -463,7 +468,7 @@ func _solid_wanted() -> Dictionary:
 		var under := CubeSphere.key_for(local, depth_max)
 		out[under] = true
 		if not _solid.has(under):
-			_make_solid(TerrainChunkData.build(terrain, under))
+			_make_solid(TerrainChunkData.build(terrain, under, true))
 	for id: int in _solid_cache.keys():
 		if not seen.has(id):
 			_solid_cache.erase(id)
@@ -482,7 +487,13 @@ static func mesh_of(data: TerrainChunkData) -> ArrayMesh:
 
 ## A chunk's collision: its faces, solid from both sides. Pure; a worker
 ## makes it (a shape no body holds yet is the worker's own, as a threaded
-## load's are).
+## load's are). This relies on GodotPhysics3D (the project's physics
+## server, run on the main thread) keeping its shapes in a thread-safe RID
+## owner (`RID_PtrOwner<GodotShape3D, true>`): creating a shape and setting
+## its data from a worker only touches that owner and the new shape. A
+## physics server without that (another engine, or one whose shape owner
+## is not thread-safe) needs the shape made on the main thread again, in
+## `_make_solid`, which still makes one when `data.shape` is null.
 static func shape_of(data: TerrainChunkData) -> ConcavePolygonShape3D:
 	var shape := ConcavePolygonShape3D.new()
 	shape.backface_collision = true

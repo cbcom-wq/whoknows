@@ -253,8 +253,9 @@ func test_a_block_is_drawn_as_the_plan_says():
 	var grass := 0
 	var t := _terrain()
 	var here := _up * t.radius
-	var stones: Array[MultiMeshInstance3D] = []
+	var grass_nodes: Array[MultiMeshInstance3D] = []
 	var far_seen := {}
+	var shadows_seen := 0
 	for b in s.cover.block_keys():
 		var block := s.cover.get_node(_name(b)) as Node3D
 		var bound := CoverField._bound(b, t.radius)
@@ -267,7 +268,18 @@ func test_a_block_is_drawn_as_the_plan_says():
 				continue
 			var m := n as MultiMeshInstance3D
 			assert_not_null(m)
-			# "Boulders<shape>_<tier>" and its shadowless twin "Far<shape>_<tier>".
+			if String(n.name).begins_with("Shadow"):
+				# The near stones' shadows, undithered, as far as they are drawn.
+				var seen := block.get_node("Boulders" + String(n.name).trim_prefix("Shadow")) as MultiMeshInstance3D
+				assert_eq(m.multimesh, seen.multimesh, "%s casts its stones' shadows" % n.name)
+				assert_eq(m.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY)
+				assert_same(m.material_override, CoverField.shadow_material())
+				assert_eq((m.material_override as StandardMaterial3D).distance_fade_mode, BaseMaterial3D.DISTANCE_FADE_DISABLED)
+				assert_almost_eq(m.visibility_range_end, seen.visibility_range_end, 0.01)
+				shadows_seen += 1
+				continue
+			# "Boulders<shape>_<tier>", its shadows "Shadow<shape>_<tier>" and its
+			# twin past the shadows "Far<shape>_<tier>".
 			var far := String(n.name).begins_with("Far")
 			var label := String(n.name).trim_prefix("Far" if far else "Boulders")
 			var shape := int(label.get_slice("_", 0))
@@ -287,7 +299,8 @@ func test_a_block_is_drawn_as_the_plan_says():
 				assert_almost_eq(m.visibility_range_end, end, 0.01)
 				far_seen[tier] = true
 				continue
-			assert_eq(m.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_ON)
+			assert_eq(m.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "%s's shadows are its Shadow twin's" % n.name)
+			assert_not_null(block.get_node_or_null("Shadow" + label), "%s has its shadows" % n.name)
 			assert_almost_eq(m.visibility_range_end, minf(near, end), 0.01)
 			if end > near:
 				assert_not_null(block.get_node_or_null("Far" + label), "%s has its shadowless twin" % n.name)
@@ -301,7 +314,7 @@ func test_a_block_is_drawn_as_the_plan_says():
 		for n in holder.get_children():
 			var m := n as MultiMeshInstance3D
 			assert_not_null(m)
-			stones.append(m)
+			grass_nodes.append(m)
 			grass += 1
 			assert_eq(m.multimesh.mesh, GroundCover.grass_mesh())
 			assert_eq(m.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
@@ -309,7 +322,8 @@ func test_a_block_is_drawn_as_the_plan_says():
 			assert_eq(m.visibility_range_end_margin, 15.0)
 			assert_eq((m.material_override as StandardMaterial3D).cull_mode, BaseMaterial3D.CULL_DISABLED)
 	assert_eq(far_seen.size(), 2, "both size tiers drawn past the shadows")
-	for m in stones:
+	assert_gt(shadows_seen, 0, "near stones cast their shadows")
+	for m in grass_nodes:
 		assert_eq(m.visibility_range_fade_mode, GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF)
 		assert_true(m.multimesh.use_colors, "instance colours")
 		var mat := m.material_override as StandardMaterial3D

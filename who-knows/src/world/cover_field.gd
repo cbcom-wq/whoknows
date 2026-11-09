@@ -66,7 +66,11 @@ const SMALL_FADE := 60.0
 ## second instance of the same MultiMesh, "Far<shape>", with no shadow; the
 ## two meet at the block's middle BOULDER_SHADOW_REACH plus half its diagonal
 ## off, overlapping by SHADOW_OVERLAP so no frame draws neither (Task 7's
-## third cut).
+## third cut). Near, the stones seen and their shadows are two instances of
+## one MultiMesh: "Boulders<shape>_<tier>" drawn with the dither and casting
+## nothing, "Shadow<shape>_<tier>" shadows only, undithered. The shadow pass
+## measures the material's distance fade from the light, not the eye, so a
+## dithered caster lost the near stones' shadows (Task 7b fix round 1).
 const BOULDER_SHADOW_REACH := 100.0
 const SHADOW_OVERLAP := 1.0
 ## How far grass is drawn, and its fade.
@@ -140,6 +144,7 @@ var _settled := true
 
 static var _boulder_looks: Array[StandardMaterial3D] = []
 static var _grass_look: StandardMaterial3D
+static var _shadow_look: StandardMaterial3D
 
 ## One block's cover, packed on a worker. Boulders per shape and size tier
 ## (tier_slot: shape * 2 + tier, tier 1 the big) [count, buffer], relative
@@ -577,10 +582,19 @@ func _make_block(data: BlockData) -> void:
 		var end := data.half + tier_reach(tier)
 		var label := "%d_%d" % [shape, tier]
 		var m := _stones("Boulders" + label, RockMesh.mesh(shape, 1), entry[0], entry[1], boulder_material(tier))
-		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		m.visibility_range_end = minf(near, end)
 		m.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
 		block.add_child(m)
+		var caster := MultiMeshInstance3D.new()
+		caster.name = "Shadow" + label
+		caster.multimesh = m.multimesh
+		caster.material_override = shadow_material()
+		caster.layers = m.layers
+		caster.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
+		caster.visibility_range_end = m.visibility_range_end
+		caster.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
+		block.add_child(caster)
 		if end <= near:
 			continue
 		var far := MultiMeshInstance3D.new()
@@ -646,6 +660,13 @@ static func boulder_material(tier: int) -> StandardMaterial3D:
 			look.distance_fade_max_distance = tier_reach(t) - tier_fade(t)
 			_boulder_looks.append(look)
 	return _boulder_looks[tier]
+
+## The near stones' shadows': the plain look with no dither (the shadow pass
+## would measure a dither's distance from the light).
+static func shadow_material() -> StandardMaterial3D:
+	if _shadow_look == null:
+		_shadow_look = _plain_look()
+	return _shadow_look
 
 ## The grass's: the same with no dither (the visibility range fades it), seen
 ## from both sides (a blade is one triangle).

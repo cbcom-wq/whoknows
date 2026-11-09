@@ -428,3 +428,58 @@ func test_boulders_gather_in_clusters():
 		assert_gt(float(s[1]), 1.5, "%s: gathered, not even (a random scatter's variance is its mean)" % c[0])
 		assert_gt(float(s[2]), 0.25, "%s: bare ground between the clusters" % c[0])
 		assert_gt(float(by[0]), float(by[1]) * 1.2, "%s: the big stones at the clusters' hearts" % c[0])
+
+## The clusters are laid on the world, not rolled chunk by chunk: a cluster
+## spans the line between two chunks, so side by side their stone counts go
+## up and down together. A mask rolled per chunk would leave neighbours
+## unrelated (correlation near 0) and a hard edge on every chunk's border.
+## With two to four stones a chunk the counting alone is noisy (a random
+## scatter's variance is its mean, half the variance here), so even a
+## perfectly shared mask reads well under 1: rolled per chunk it read 0.04
+## and 0.00, laid on the world 0.25 and 0.34.
+func test_clusters_lie_across_chunk_edges():
+	var cases: Array = [
+		["ROLLING", _rolling_t, _keys(_rolling_t, 3, 11, _any), _any],
+		["talus", _desert_t, _keys(_desert_t, 3, 11, _talus), _talus],
+	]
+	for c: Array in cases:
+		var t: WorldTerrain = c[1]
+		var xs: Array[float] = []
+		var ys: Array[float] = []
+		for key: Vector4i in c[2]:
+			var cells := 1 << key.y
+			var x0 := clampi(key.z - PATCH / 2, 0, cells - PATCH)
+			var y0 := clampi(key.w - PATCH / 2, 0, cells - PATCH)
+			var count := {}
+			for j in PATCH:
+				for i in PATCH:
+					var k := Vector4i(key.x, key.y, x0 + i, y0 + j)
+					if (c[3] as Callable).call(_mid(k)):
+						count[Vector2i(i, j)] = GroundCover.scatter(t, k).boulders.size()
+			for at: Vector2i in count:
+				for next: Vector2i in [at + Vector2i(1, 0), at + Vector2i(0, 1)]:
+					if count.has(next):
+						xs.append(float(count[at]))
+						ys.append(float(count[next]))
+		var r := _correlation(xs, ys)
+		gut.p("%s: %d neighbouring pairs, their stone counts correlate %.2f" % [c[0], xs.size(), r])
+		assert_gt(xs.size(), 100, "%s: enough pairs to judge" % c[0])
+		assert_gt(r, 0.2, "%s: neighbours share their clusters" % c[0])
+
+static func _correlation(xs: Array[float], ys: Array[float]) -> float:
+	var n := float(xs.size())
+	var mx := 0.0
+	var my := 0.0
+	for i in xs.size():
+		mx += xs[i]
+		my += ys[i]
+	mx /= n
+	my /= n
+	var sxy := 0.0
+	var sxx := 0.0
+	var syy := 0.0
+	for i in xs.size():
+		sxy += (xs[i] - mx) * (ys[i] - my)
+		sxx += (xs[i] - mx) * (xs[i] - mx)
+		syy += (ys[i] - my) * (ys[i] - my)
+	return sxy / sqrt(maxf(sxx * syy, 1e-9))
