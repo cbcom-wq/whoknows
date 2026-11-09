@@ -275,7 +275,10 @@ func test_a_block_is_drawn_as_the_plan_says():
 				assert_eq(m.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY)
 				assert_same(m.material_override, CoverField.shadow_material())
 				assert_eq((m.material_override as StandardMaterial3D).distance_fade_mode, BaseMaterial3D.DISTANCE_FADE_DISABLED)
-				assert_almost_eq(m.visibility_range_end, seen.visibility_range_end, 0.01)
+				var shadow_tier := int(String(n.name).get_slice("_", 1))
+				var whole := float(bound[1]) + CoverField.tier_reach(shadow_tier) - CoverField.tier_fade(shadow_tier)
+				assert_almost_eq(m.visibility_range_end, minf(seen.visibility_range_end, whole), 0.01,
+					"%s's shadows end where its stones begin to fade, or with them" % n.name)
 				shadows_seen += 1
 				continue
 			# "Boulders<shape>_<tier>", its shadows "Shadow<shape>_<tier>" and its

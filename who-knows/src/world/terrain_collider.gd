@@ -15,6 +15,16 @@ extends RefCounted
 
 const REACH := 64.0
 const LOOKAHEAD := 1.0
+## The longest way looked along: LOOKAHEAD at 300 m/s. Faster (a dive with
+## the assist off reaches ~2 km/s) the way is cut there: 615 keys at 2 km/s
+## took 16 ms a tick and no worker could build them in time (Task 7b fix
+## round 3). Up to it the guarantee holds; past it, the 64 m round the hull
+## and the first 300 m of its way.
+const TRAVEL_MAX := 300.0
+## How much further a fast anchor's keys are worked out than its way, so
+## they last a few ticks: its way's tenth, at most LEAD_MAX (WorldSurface).
+const LEAD := 0.1
+const LEAD_MAX := 100.0
 
 ## The finest chunks within `reach` of `local` (from the world's centre): the
 ## one that holds it first, then the rest nearest first; none from the centre
@@ -28,11 +38,13 @@ static func keys_near(terrain: WorldTerrain, depth: int, local: Vector3, reach: 
 ## first. None from the centre, or if no point of the way comes within
 ## `reach` of the ground. A hull diving at the ground has its way's end under
 ## it: the ground under that end is in, as is all the ground under the way.
+## A way longer than TRAVEL_MAX + LEAD_MAX is cut to it.
 static func keys_along(terrain: WorldTerrain, depth: int, local: Vector3, travel: Vector3,
 		reach: float) -> Array[Vector4i]:
 	var out: Array[Vector4i] = []
 	if local.is_zero_approx():
 		return out
+	travel = travel.limit_length(TRAVEL_MAX + LEAD_MAX)
 	var end := local + travel
 	if end.is_zero_approx():
 		end = local

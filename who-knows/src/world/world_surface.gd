@@ -95,6 +95,9 @@ var _solid_cache := {}
 var _spare: Array[StaticBody3D] = []
 var _solids_made := 0
 const SPARE_SOLIDS := 64
+## An anchor this close over the ground has the chunk under it made solid
+## at once (see _touching_soon).
+const ARRIVE := 10.0
 ## A node centre's direction -> the ground's height there: the selection asks
 ## the same few hundred nodes again every RESELECT_AFTER, and the ground never
 ## changes. Cleared with the bounds.
@@ -276,8 +279,11 @@ func _missing() -> Array[Vector4i]:
 	for k in leaves:
 		if not _chunks.has(k) and not _jobs.has(k) and not _done.has(k):
 			out.append(k)
+	var listed := {}
+	for k in out:
+		listed[k] = true
 	for k: Vector4i in _wanted_solid:
-		if not _solid.has(k) and not _jobs.has(k) and not _done.has(k) and not out.has(k):
+		if not _solid.has(k) and not _jobs.has(k) and not _done.has(k) and not listed.has(k):
 			out.append(k)
 	_mutex.unlock()
 	return out
@@ -457,16 +463,22 @@ func _solid_wanted() -> Dictionary:
 		var id := a.get_instance_id()
 		seen[id] = true
 		var local := universe.to_universe(a.global_position).minus(body.point)
-		var travel := _velocity_of(a) * TerrainCollider.LOOKAHEAD
+		var velocity := _velocity_of(a)
+		var travel := (velocity * TerrainCollider.LOOKAHEAD).limit_length(TerrainCollider.TRAVEL_MAX)
 		var cached: Dictionary = _solid_cache.get(id, {})
-		if cached.is_empty() or (cached.local as Vector3).distance_to(local) > half_edge \
-				or (cached.end as Vector3).distance_to(local + travel) > half_edge:
-			# Kept while both ends of the way stay within half an edge of
-			# where they were (a turn of ~6 deg at 120 m/s moves its end that
-			# far), so every point of the way stays within half an edge of the
-			# old one: worked out that much wider (Task 7b fix rounds 1, 2).
-			cached = {"local": local, "end": local + travel,
-				"keys": TerrainCollider.keys_along(terrain, depth_max, local, travel,
+		if cached.is_empty() \
+				or TerrainCollider._to_segment(local, cached.local, cached.end) > half_edge \
+				or TerrainCollider._to_segment(local + travel, cached.local, cached.end) > half_edge:
+			# Kept while both ends of the way stay within half an edge of the
+			# way they were worked out for (a turn of ~6 deg at 120 m/s moves
+			# its end that far), so every point of it does: worked out that
+			# much wider (Task 7b fix rounds 1, 2). That way runs a tenth
+			# further ahead (at most LEAD_MAX), so a fast anchor's keys last a
+			# few ticks: at 2 km/s they were worked out every tick (fix round 3).
+			var lead := travel.normalized() * minf(travel.length() * TerrainCollider.LEAD, TerrainCollider.LEAD_MAX) \
+				if not travel.is_zero_approx() else Vector3.ZERO
+			cached = {"local": local, "end": local + travel + lead,
+				"keys": TerrainCollider.keys_along(terrain, depth_max, local, travel + lead,
 					TerrainCollider.REACH + half_edge)}
 			_solid_cache[id] = cached
 		var keys: Array = cached.keys
@@ -476,12 +488,25 @@ func _solid_wanted() -> Dictionary:
 			out[k] = true
 		var under := CubeSphere.key_for(local, depth_max)
 		out[under] = true
-		if not _solid.has(under):
+		# Built on this thread only for an anchor that could touch the ground
+		# under it within two ticks (arriving, landing, falling): a level pass
+		# at 2 km/s crosses a cell a tick, each a main-thread build (~2.5 ms;
+		# fix round 3). Every other is a worker's, nearest first.
+		if not _solid.has(under) and _touching_soon(local, velocity):
 			_make_solid(TerrainChunkData.build(terrain, under, true))
 	for id: int in _solid_cache.keys():
 		if not seen.has(id):
 			_solid_cache.erase(id)
 	return out
+
+## True if an anchor at `local`, moving at `velocity`, is within ARRIVE of
+## the ground under it, or will be within two ticks (falling, or skimming
+## toward rising ground).
+func _touching_soon(local: Vector3, velocity: Vector3) -> bool:
+	if terrain.altitude_of(local) <= ARRIVE:
+		return true
+	var soon := local + velocity * 2.0 / Engine.physics_ticks_per_second
+	return not soon.is_zero_approx() and terrain.altitude_of(soon) <= ARRIVE
 
 ## A chunk's look: its triangles, normals and colours. Pure.
 static func mesh_of(data: TerrainChunkData) -> ArrayMesh:

@@ -437,19 +437,99 @@ func test_a_hard_turn_is_covered_at_once():
 	a.linear_velocity = east.rotated(_up, deg_to_rad(2.0)) * 120.0
 	s._solid_wanted()
 	assert_same(s._solid_cache[a.get_instance_id()], before, "a 2 deg turn keeps the keys")
+	var north := _up.cross(east)
+	var step := CubeSphere.edge_m(t.radius, d) * 0.25
 	for turn: float in [90.0, 180.0, -45.0]:
 		var v := east.rotated(_up, deg_to_rad(turn)) * 120.0
 		a.linear_velocity = v
 		var wanted := s._solid_wanted()
 		var local := _universe.to_universe(a.global_position).minus(_planet().point)
+		# Every ground point within the reach of the new way's ground track.
+		var ga := local.normalized() * t.radius
+		var gb := (local + v * TerrainCollider.LOOKAHEAD).normalized() * t.radius
+		var n := int((TerrainCollider.REACH + ga.distance_to(gb)) / step) + 1
 		var missed := 0
-		for i in 21:
-			var p := local + v * TerrainCollider.LOOKAHEAD * (i / 20.0)
-			if not wanted.has(CubeSphere.key_for(p, d)):
-				missed += 1
-		assert_eq(missed, 0, "turned %.0f deg: the ground under the new way is wanted solid" % turn)
+		var tried := 0
+		for j in range(-n, n + 1):
+			for i in range(-n, n + 1):
+				var g := ga + east * (i * step) + north * (j * step)
+				if TerrainCollider._to_segment(g, ga, gb) > TerrainCollider.REACH:
+					continue
+				tried += 1
+				if not wanted.has(CubeSphere.key_for(g, d)):
+					missed += 1
+		assert_eq(missed, 0, "turned %.0f deg: the ground within 64 m of the new way is wanted solid (%d tried)" % [turn, tried])
 	a.linear_velocity = Vector3.ZERO
 	s.finish()   # no job left holding the surface when it is freed
+
+## Fix round 3 of Task 7b: a dive with the assist off reaches ~2 km/s. The
+## way is cut at TRAVEL_MAX, so a 2 km/s pass 30 m up costs a few hundred
+## keys at most and well under 2 ms a tick to work out, and the guarantee
+## holds to the cut: at 300 m/s every point of the next second is solid,
+## and past it the 64 m round the hull and the first TRAVEL_MAX of the way.
+func test_a_2_km_s_pass_stays_in_budget():
+	var s := _surface(3000.0)
+	var a := _anchor(s, 30.0)
+	var t := s.terrain
+	var d := s.depth_max
+	var east := _up.cross(Vector3.UP).normalized()
+	var north := _up.cross(east)
+	var dt := 1.0 / Engine.physics_ticks_per_second
+	var most := 0
+	var total := 0
+	var ticks := 30
+	for way: Vector3 in [east, (east + north).normalized()]:
+		a.global_position = _universe.to_engine(_above(_planet(), s, 30.0))
+		a.linear_velocity = way * 2100.0
+		s._solid_cache.clear()
+		for i in ticks:
+			a.global_position += way * 2100.0 * dt
+			var t0 := Time.get_ticks_usec()
+			s._wanted_solid = s._solid_wanted()
+			s._missing()
+			total += Time.get_ticks_usec() - t0
+			most = maxi(most, s._wanted_solid.size())
+	var per_tick := total / float(ticks * 2) / 1000.0
+	gut.p("2.1 km/s, 30 m up: %.2f ms a tick for the keys and what is missing; at most %d keys" % [per_tick, most])
+	assert_lt(per_tick, 2.0, "a 2 km/s pass works out its solid ground in under 2 ms a tick")
+	assert_lt(most, 260, "the keys are bounded")
+	# To the cut, every point of the next second; past it, the hull's own 64 m
+	# and the first TRAVEL_MAX of its way.
+	var local := _up * (t.radius + t.height_at(_up) + 30.0)
+	for speed: float in [TerrainCollider.TRAVEL_MAX, 2100.0]:
+		for way: Vector3 in [east, (east - _up).normalized(), -_up]:
+			var v := way * speed * TerrainCollider.LOOKAHEAD
+			var keys := TerrainCollider.keys_along(t, d, local, v, TerrainCollider.REACH)
+			var have := {}
+			for k in keys:
+				have[k] = true
+			for k in TerrainCollider.keys_near(t, d, local, TerrainCollider.REACH):
+				assert_true(have.has(k), "%.0f m/s along %s: the 64 m round the hull" % [speed, way])
+			var missed := 0
+			var reach_m := minf(v.length(), TerrainCollider.TRAVEL_MAX)
+			for i in 31:
+				var p := local + v.normalized() * reach_m * (i / 30.0)
+				if t.altitude_of(p) > TerrainCollider.REACH:
+					continue
+				if not have.has(CubeSphere.key_for(p, d)):
+					missed += 1
+			assert_eq(missed, 0, "%.0f m/s along %s: the ground under the first %.0f m of its way" % [speed, way, reach_m])
+	a.linear_velocity = Vector3.ZERO
+	s.finish()   # no job left holding the surface when it is freed
+
+## The chunk under a hull is built on the main thread only when it could
+## touch the ground within two ticks (fix round 3 of Task 7b).
+func test_only_an_anchor_near_the_ground_has_its_chunk_built_at_once():
+	var s := _surface(3000.0)
+	var t := s.terrain
+	var east := _up.cross(Vector3.UP).normalized()
+	var at := func(h: float) -> Vector3: return _up * (t.radius + t.height_at(_up) + h)
+	var tick := 1.0 / Engine.physics_ticks_per_second
+	assert_true(s._touching_soon(at.call(5.0), Vector3.ZERO), "5 m up and still")
+	assert_false(s._touching_soon(at.call(30.0), Vector3.ZERO), "30 m up and still: a worker's")
+	assert_false(s._touching_soon(at.call(30.0), east * 2100.0), "a level pass at 2 km/s, 30 m up")
+	assert_true(s._touching_soon(at.call(30.0), -_up * 30.0 / tick), "falling 30 m a tick")
+	s.finish()
 
 ## The keys are worked out again only once an anchor has moved half a
 ## finest edge; until then the ground within the reach of where it is now,
@@ -573,7 +653,9 @@ func test_an_anchors_keys_are_kept_until_it_has_moved_half_an_edge():
 	var s := _surface(3000.0)
 	var a := _anchor(s, 40.0)
 	s.update(_universe.to_universe(a.global_position))
-	var first := s.solid_keys()
+	# 40 m up and still, the chunk under it is a worker's (not built at once:
+	# see _touching_soon), so the keys it wants are what is checked.
+	var first: Array = s._solid_cache[a.get_instance_id()].keys
 	var edge := CubeSphere.edge_m(_planet().radius, s.depth_max)
 	a.global_position += Vector3(0.1, 0, 0) * edge   # well under half an edge, in the same cell or a neighbour
 	var cached_before: Dictionary = s._solid_cache.duplicate(true)

@@ -592,7 +592,10 @@ func _make_block(data: BlockData) -> void:
 		caster.material_override = shadow_material()
 		caster.layers = m.layers
 		caster.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
-		caster.visibility_range_end = m.visibility_range_end
+		# No further than its stones are whole: the small tier's dither out
+		# by SMALL_REACH, its shadows had stood alone out to ~280 m.
+		caster.visibility_range_end = minf(m.visibility_range_end,
+			data.half + tier_reach(tier) - tier_fade(tier))
 		caster.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
 		block.add_child(caster)
 		if end <= near:
