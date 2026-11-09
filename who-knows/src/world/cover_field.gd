@@ -86,7 +86,7 @@ const APPLY_BUDGET_USEC := WorldSurface.APPLY_BUDGET_USEC
 ## tenths of a millisecond and low flight has little to spare.
 const RESELECT_AFTER := 20.0
 ## A focus moving at v wants the ground v x LOOKAHEAD ahead too, and first
-## (as TerrainCollider.reach_for looks ahead); never more than the reach.
+## (as TerrainCollider.keys_along looks ahead); never more than the reach.
 const LOOKAHEAD := TerrainCollider.LOOKAHEAD
 ## A step between choices faster than this, or one under a physics tick, is a
 ## jump (boarding, a load, a warp's arrival), not flight: no velocity. Phase

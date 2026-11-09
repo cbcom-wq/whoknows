@@ -1021,8 +1021,8 @@ func _cover_low() -> void:
 	# at least, to see it keep ahead.
 	await _fly_low(maxf(limit, FAST_LEAST), start, axis, profile, "cover_low_fast")
 	# The same 120 m/s with the hull truly moving: carried, the hull's
-	# velocity is 0 and TerrainCollider asks for its 64 m reach; flown, for
-	# 64 m + 1 s of travel (Task 7b fix round 1).
+	# velocity is 0 and TerrainCollider asks for 64 m round it; flown, for
+	# 64 m round its way over the next second (Task 7b fix rounds 1, 2).
 	await _fly_low(LOW_SPEED, start, axis, profile, "cover_low_moving", true)
 
 ## Flown from `start` round `axis` at `speed` for COVER_SECONDS, COVER_LOW over
@@ -1059,7 +1059,7 @@ func _fly_low(speed: float, start: Vector3, axis: Vector3, profile: PackedFloat3
 			# The hull is where the physics put it; aimed at the route's next point.
 			hull.linear_velocity = (point_at.call(at) - hull.global_position) / dt
 			hull.angular_velocity = Vector3.ZERO
-			flown[3] = maxf(float(flown[3]), TerrainCollider.reach_for(hull.linear_velocity.length()))
+			flown[3] = maxf(float(flown[3]), hull.linear_velocity.length() * TerrainCollider.LOOKAHEAD)
 			flown[4] = maxi(int(flown[4]), _surface.solid_keys().size())
 		else:
 			var dir := start.rotated(axis, at / _planet.radius)
@@ -1140,8 +1140,8 @@ func _fly_low(speed: float, start: Vector3, axis: Vector3, profile: PackedFloat3
 	process_frame.disconnect(watch)
 	for l in lines:
 		print(l)
-	var how := "the hull flown (moving at %.0f m/s, the solid ground's reach %.0f m, at most %d solid chunks)" % [
-		hull.linear_velocity.length(), float(flown[3]), int(flown[4])] if moving else "the hull carried (frozen)"
+	var how := "the hull flown (moving at %.0f m/s, solid ground %.0f m round a way of %.0f m ahead, at most %d solid chunks)" % [
+		hull.linear_velocity.length(), TerrainCollider.REACH, float(flown[3]), int(flown[4])] if moving else "the hull carried (frozen)"
 	var line := "fps     %.0f seated in low flight at %.0f m/s over a talus band for %.0f s, %s (%.0f m flown, %.0f to %.0f m over the ground under the keel, the longest frame %.1f ms, the origin shifted %d times; %d frames saw a block appear within %.0f m ahead, %d blocks in all, the nearest %s; at most %d wanted ahead not drawn) %s" % [
 		fps, speed, COVER_SECONDS, how, float(flown[0]), float(flown[1]), float(flown[2]), worst_ms, _universe.shifts - shifts,
 		int(pops[1]), POP_NEAR, int(pops[2]), "%.0f m off" % float(pops[3]) if float(pops[3]) < INF else "none",

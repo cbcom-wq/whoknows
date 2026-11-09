@@ -288,7 +288,7 @@ func test_the_ground_under_you_is_among_the_keys_and_they_are_few():
 	var t := WorldTerrain.new(_planet().recipe)
 	var d := CubeSphere.depth_for(t.radius)
 	var local := _up * (t.radius + t.height_at(_up) + 10.0)
-	var keys := TerrainCollider.keys_near(t, d, local, TerrainCollider.REACH_MAX)
+	var keys := TerrainCollider.keys_near(t, d, local, 160.0)
 	assert_eq(keys[0], CubeSphere.key_for(local, d), "the one under you first")
 	# A finest edge is 16-32 m, so 160 m reach is a disc of 6-11 cells' radius: 113 to
 	# 380 chunks, 149 here. "A few dozen" (spec §5.5) is the common case, at 64 m.
@@ -305,7 +305,7 @@ func test_the_keys_are_the_ground_within_the_reach():
 	var edge := CubeSphere.edge_m(t.radius, d)
 	var near_edge := Vector3(1.0, 0.31, 0.999).normalized()
 	for dir: Vector3 in [_up, near_edge]:
-		for reach: float in [TerrainCollider.REACH, TerrainCollider.REACH_MAX]:
+		for reach: float in [TerrainCollider.REACH, 160.0]:
 			var local := dir * (t.radius + t.height_at(dir) + 30.0)
 			var keys := TerrainCollider.keys_near(t, d, local, reach)
 			var have := {}
@@ -333,6 +333,123 @@ func test_the_keys_are_the_ground_within_the_reach():
 				var mid := CubeSphere.direction(k.x, r.x + r.z * 0.5, r.y + r.z * 0.5) * t.radius
 				assert_lt(here.distance_to(mid), reach + edge, "%s lies within the reach" % k)
 			gut.p("%.0f m reach: %d keys" % [reach, keys.size()])
+
+## Fix round 2 of Task 7b: the solid ground is a capsule, 64 m round where
+## the anchor is and round its way over the next second. Every cell with
+## ground within the reach of that way's ground track is a key, on a face and
+## across a cube edge, flying level, slanting down and diving.
+func test_the_keys_are_the_ground_within_the_reach_of_the_way():
+	var t := WorldTerrain.new(_planet().recipe)
+	var d := CubeSphere.depth_for(t.radius)
+	var edge := CubeSphere.edge_m(t.radius, d)
+	var reach := TerrainCollider.REACH
+	var near_edge := Vector3(1.0, 0.31, 0.999).normalized()
+	for dir: Vector3 in [_up, near_edge]:
+		var east := dir.cross(Vector3.UP).normalized()
+		var north := dir.cross(east)
+		var local := dir * (t.radius + t.height_at(dir) + 30.0)
+		for v: Vector3 in [east * 150.0, (north - east).normalized() * 120.0,
+				(east - dir).normalized() * 120.0]:
+			var keys := TerrainCollider.keys_along(t, d, local, v * TerrainCollider.LOOKAHEAD, reach)
+			var have := {}
+			for k in keys:
+				have[k] = true
+			assert_eq(have.size(), keys.size(), "no key twice")
+			var a := local.normalized() * t.radius
+			var b := (local + v).normalized() * t.radius
+			var step := edge * 0.25
+			var n := int((reach + a.distance_to(b)) / step) + 1
+			var missed := 0
+			var tried := 0
+			for j in range(-n, n + 1):
+				for i in range(-n, n + 1):
+					var g := a + east * (i * step) + north * (j * step)
+					if TerrainCollider._to_segment(g, a, b) > reach:
+						continue
+					tried += 1
+					if not have.has(CubeSphere.key_for(g, d)):
+						missed += 1
+			assert_eq(missed, 0, "%s, %s: every cell with ground within the reach of the way (%d tried)" % [dir, v, tried])
+			# And none whose ground lies a cell's width past it.
+			for k in keys:
+				var r := CubeSphere.node_rect(k)
+				var mid := CubeSphere.direction(k.x, r.x + r.z * 0.5, r.y + r.z * 0.5) * t.radius
+				assert_lt(TerrainCollider._to_segment(mid, a, b), reach + edge, "%s lies within the reach" % k)
+			gut.p("%s at %.0f m/s: %d keys (a still anchor's: %d)" % [dir, v.length(), keys.size(),
+				TerrainCollider.keys_near(t, d, local, reach).size()])
+
+## A hull at the speed limit, any way it flies -- level on eight headings,
+## slanting down, diving straight at the ground, climbing -- never outruns the
+## solid ground: under every point of its way over the next second, and
+## round it as far as a hull reaches (20 m), the ground is a key.
+func test_a_fast_hull_never_outruns_the_solid_ground():
+	var t := WorldTerrain.new(_planet().recipe)
+	var d := CubeSphere.depth_for(t.radius)
+	var well := 1.0e6
+	var near_edge := Vector3(1.0, 0.31, 0.999).normalized()
+	var worst := 0
+	var cases := 0
+	for dir: Vector3 in [_up, near_edge]:
+		var east := dir.cross(Vector3.UP).normalized()
+		var north := dir.cross(east)
+		var ways: Array[Vector3] = [-dir, dir, (east - dir).normalized(), (east - dir * 2.0).normalized()]
+		for k in 8:
+			ways.append(east.rotated(dir, k * TAU / 8.0))
+		for altitude: float in [3.0, 30.0, 64.0, 120.0]:
+			var speed := FlightComputer.speed_limit(altitude, well)
+			var local := dir * (t.radius + t.height_at(dir) + altitude)
+			for way in ways:
+				var v := way * speed
+				var keys := TerrainCollider.keys_along(t, d, local, v * TerrainCollider.LOOKAHEAD, TerrainCollider.REACH)
+				var have := {}
+				for k in keys:
+					have[k] = true
+				var missed := 0
+				for i in 41:
+					var p := local + v * TerrainCollider.LOOKAHEAD * (i / 40.0)
+					if t.altitude_of(p) > TerrainCollider.REACH:
+						continue
+					var g := p.normalized() * t.radius
+					var round_it: Array[Vector3] = [g]
+					for q in 8:
+						round_it.append(g + east.rotated(dir, q * TAU / 8.0) * 20.0)
+					for at in round_it:
+						if not have.has(CubeSphere.key_for(at, d)):
+							missed += 1
+				cases += 1
+				worst = maxi(worst, missed)
+				assert_eq(missed, 0, "%s, %.0f m up at %.0f m/s along %s: the ground under its way is solid" % [
+					dir, altitude, speed, way])
+	gut.p("%d ways flown at the speed limit; the most points uncovered on one: %d" % [cases, worst])
+
+## A hull that turns hard is covered on its new heading at once: the keys
+## are worked out again when the way's end has moved half an edge, not only
+## when the hull has.
+func test_a_hard_turn_is_covered_at_once():
+	var s := _surface(3000.0)
+	var a := _anchor(s, 30.0)
+	var t := s.terrain
+	var d := s.depth_max
+	var east := _up.cross(Vector3.UP).normalized()
+	a.linear_velocity = east * 120.0
+	s._solid_wanted()
+	var before: Dictionary = s._solid_cache[a.get_instance_id()]
+	a.linear_velocity = east.rotated(_up, deg_to_rad(2.0)) * 120.0
+	s._solid_wanted()
+	assert_same(s._solid_cache[a.get_instance_id()], before, "a 2 deg turn keeps the keys")
+	for turn: float in [90.0, 180.0, -45.0]:
+		var v := east.rotated(_up, deg_to_rad(turn)) * 120.0
+		a.linear_velocity = v
+		var wanted := s._solid_wanted()
+		var local := _universe.to_universe(a.global_position).minus(_planet().point)
+		var missed := 0
+		for i in 21:
+			var p := local + v * TerrainCollider.LOOKAHEAD * (i / 20.0)
+			if not wanted.has(CubeSphere.key_for(p, d)):
+				missed += 1
+		assert_eq(missed, 0, "turned %.0f deg: the ground under the new way is wanted solid" % turn)
+	a.linear_velocity = Vector3.ZERO
+	s.finish()   # no job left holding the surface when it is freed
 
 ## The keys are worked out again only once an anchor has moved half a
 ## finest edge; until then the ground within the reach of where it is now,
@@ -369,6 +486,7 @@ func test_the_reach_holds_until_the_keys_are_worked_out_again():
 		a.global_position = start
 		s._solid_wanted()
 	assert_eq(worst, 0, "every point within the reach of where the anchor is now is wanted solid")
+	s.finish()   # no job left holding the surface when it is freed
 
 func test_an_anchor_near_the_ground_has_solid_ground_round_it():
 	var s := _surface(3000.0)
@@ -378,11 +496,42 @@ func test_an_anchor_near_the_ground_has_solid_ground_round_it():
 	var solid := s.solid_keys()
 	assert_gt(solid.size(), 0)
 	var bodies := s.get_children().filter(func(n: Node) -> bool: return n is StaticBody3D)
-	assert_eq(bodies.size(), solid.size())
+	# Kept bodies (fix round 2 of Task 7b) hold no shape; the rest one each.
+	var holding := bodies.filter(func(b: StaticBody3D) -> bool:
+		return (b.get_child(0) as CollisionShape3D).shape != null)
+	assert_eq(holding.size(), solid.size())
+	assert_eq(bodies.size() - holding.size(), s.spare_solids())
 	for b: StaticBody3D in bodies:
 		assert_eq(b.collision_layer, BodyProxy.LAYER)
 		assert_eq(b.collision_mask, 0)
 		assert_true(b.is_in_group(Universe.EXTERIOR_SPACE))
+
+## A solid let go of is kept and used again: moving on, no new body is made
+## while one is kept, none kept holds a shape, and at most SPARE_SOLIDS are.
+func test_solid_bodies_are_used_again():
+	var s := _surface(3000.0)
+	var a := _anchor(s, 20.0)
+	s.update(_universe.to_universe(a.global_position))
+	s.finish()
+	var made := s._solids_made
+	var east := _up.cross(Vector3.UP).normalized()
+	for step in 6:
+		a.global_position += east * 40.0
+		s.update(_universe.to_universe(a.global_position))
+		s.finish()
+		assert_lte(s.spare_solids(), WorldSurface.SPARE_SOLIDS)
+		for b: StaticBody3D in s._spare:
+			assert_null((b.get_child(0) as CollisionShape3D).shape, "a kept body holds no shape")
+			assert_false(s._solid.values().has(b), "a kept body stands for no chunk")
+	var solid := s.solid_keys()
+	for k in solid:
+		var cs := (s._solid[k] as StaticBody3D).get_child(0) as CollisionShape3D
+		assert_not_null(cs.shape, "%s is solid" % k)
+	var bodies := s.get_children().filter(func(n: Node) -> bool: return n is StaticBody3D)
+	assert_eq(bodies.size(), solid.size() + s.spare_solids(), "every body holds a chunk or is kept")
+	gut.p("240 m flown: %d bodies made at first, %d in all; %d solid, %d kept" % [
+		made, s._solids_made, solid.size(), s.spare_solids()])
+	assert_lt(s._solids_made, made + solid.size(), "moving on uses kept bodies, not all new")
 
 func test_an_anchor_arriving_fast_has_ground_under_it():
 	var s := _surface(3000.0)

@@ -86,8 +86,15 @@ var floor_fired := 0
 ## key -> StaticBody3D
 var _solid := {}
 var _wanted_solid := {}
-## anchor instance id -> {local, reach, keys}: what keys_near last said for it.
+## anchor instance id -> {local, end, keys}: what keys_along last said for it.
 var _solid_cache := {}
+## Solid bodies let go of, kept with no shape to be used again: making a
+## StaticBody3D with its shape took ~0.3 ms (a hull at 120 m/s wants ~60 a
+## second), setting a kept one's shape a few microseconds (Task 7b fix
+## round 2). At most SPARE_SOLIDS; the rest are freed.
+var _spare: Array[StaticBody3D] = []
+var _solids_made := 0
+const SPARE_SOLIDS := 64
 ## A node centre's direction -> the ground's height there: the selection asks
 ## the same few hundred nodes again every RESELECT_AFTER, and the ground never
 ## changes. Cleared with the bounds.
@@ -378,8 +385,7 @@ func _prune(now := false) -> void:
 		_prune_chunks()
 	for k: Vector4i in _solid.keys():
 		if not _wanted_solid.has(k):
-			(_solid[k] as Node).queue_free()
-			_solid.erase(k)
+			_let_go_solid(k)
 
 func _prune_chunks() -> void:
 	var wanted := {}
@@ -434,11 +440,12 @@ func solid_keys() -> Array[Vector4i]:
 	out.assign(_solid.keys())
 	return out
 
-## Every finest chunk some anchor needs solid; the one under an anchor that
-## is missing is built now, every tick (it is one key_for). The rest of an
-## anchor's keys are worked out again only once it has moved half a finest
-## edge, or its reach has changed by as much (near a cube edge they cost
-## milliseconds), so they are worked out half an edge wider than the reach.
+## Every finest chunk some anchor needs solid: those with ground within
+## TerrainCollider.REACH of its way over the next second (a capsule). The one
+## under an anchor that is missing is built now, every tick (it is one
+## key_for). The rest are worked out again only once either end of its way
+## has moved half a finest edge (near a cube edge they cost milliseconds),
+## so they are worked out half an edge wider than the reach.
 func _solid_wanted() -> Dictionary:
 	var out := {}
 	var seen := {}
@@ -450,15 +457,17 @@ func _solid_wanted() -> Dictionary:
 		var id := a.get_instance_id()
 		seen[id] = true
 		var local := universe.to_universe(a.global_position).minus(body.point)
-		var reach := TerrainCollider.reach_for(_speed_of(a))
+		var travel := _velocity_of(a) * TerrainCollider.LOOKAHEAD
 		var cached: Dictionary = _solid_cache.get(id, {})
 		if cached.is_empty() or (cached.local as Vector3).distance_to(local) > half_edge \
-				or absf(float(cached.reach) - reach) > half_edge:
-			# Kept for up to half an edge of travel, so worked out that much
-			# wider: cut at the reach itself, the ground ahead shrank to
-			# ~48 m before they were worked out again (Task 7b fix round 1).
-			cached = {"local": local, "reach": reach,
-				"keys": TerrainCollider.keys_near(terrain, depth_max, local, reach + half_edge)}
+				or (cached.end as Vector3).distance_to(local + travel) > half_edge:
+			# Kept while both ends of the way stay within half an edge of
+			# where they were (a turn of ~6 deg at 120 m/s moves its end that
+			# far), so every point of the way stays within half an edge of the
+			# old one: worked out that much wider (Task 7b fix rounds 1, 2).
+			cached = {"local": local, "end": local + travel,
+				"keys": TerrainCollider.keys_along(terrain, depth_max, local, travel,
+					TerrainCollider.REACH + half_edge)}
 			_solid_cache[id] = cached
 		var keys: Array = cached.keys
 		if keys.is_empty():
@@ -494,24 +503,56 @@ static func mesh_of(data: TerrainChunkData) -> ArrayMesh:
 ## physics server without that (another engine, or one whose shape owner
 ## is not thread-safe) needs the shape made on the main thread again, in
 ## `_make_solid`, which still makes one when `data.shape` is null.
+##
+## It is also given to a CollisionShape3D outside the tree, once, here: the
+## first time any CollisionShape3D takes a shape costs ~0.2 ms in the
+## engine's debug build (it sets the shape's debug look; the second time,
+## with the look the same, costs ~0.02 ms). Done here, it is off the main
+## thread (Task 7b fix round 2, measured in a scratch bench).
 static func shape_of(data: TerrainChunkData) -> ConcavePolygonShape3D:
 	var shape := ConcavePolygonShape3D.new()
 	shape.backface_collision = true
 	shape.set_faces(data.faces)
+	var holder := CollisionShape3D.new()
+	holder.shape = shape
+	holder.shape = null
+	holder.free()
 	return shape
 
+## Chunk `data` solid: a kept body if there is one, else a new one; put in
+## its place first, then given its shape.
 func _make_solid(data: TerrainChunkData) -> void:
+	var b: StaticBody3D = _spare.pop_back() if not _spare.is_empty() else _new_solid()
+	b.global_position = universe.to_engine(body.point.plus(Vector3(data.centre)))
+	(b.get_child(0) as CollisionShape3D).shape = data.shape if data.shape != null else shape_of(data)
+	_solid[data.key] = b
+
+## A solid body with no shape yet, in the tree and the exterior's group.
+func _new_solid() -> StaticBody3D:
 	var b := StaticBody3D.new()
-	b.name = "S%d_%d_%d_%d" % [data.key.x, data.key.y, data.key.z, data.key.w]
+	b.name = "Solid%d" % _solids_made
+	_solids_made += 1
 	b.collision_layer = BodyProxy.LAYER
 	b.collision_mask = 0
-	var cs := CollisionShape3D.new()
-	cs.shape = data.shape if data.shape != null else shape_of(data)
-	b.add_child(cs)
+	b.add_child(CollisionShape3D.new())
 	b.add_to_group(Universe.EXTERIOR_SPACE)
 	add_child(b)
-	b.global_position = universe.to_engine(body.point.plus(Vector3(data.centre)))
-	_solid[data.key] = b
+	return b
+
+## Chunk `key` no longer solid: its body keeps no shape and is kept for the
+## next, or freed if SPARE_SOLIDS are kept already.
+func _let_go_solid(key: Vector4i) -> void:
+	var b: StaticBody3D = _solid[key]
+	_solid.erase(key)
+	(b.get_child(0) as CollisionShape3D).shape = null
+	if _spare.size() < SPARE_SOLIDS:
+		_spare.append(b)
+	else:
+		b.queue_free()
+
+## The solid bodies kept for use again (none holds a shape).
+func spare_solids() -> int:
+	return _spare.size()
 
 ## The analytic floor (§5.5): an anchor more than FLOOR_SLACK under the
 ## ground is put back above it, clear by its own reach, moving in no more.
@@ -537,12 +578,12 @@ func _keep_anchors_above_ground() -> void:
 		if warn_on_floor:
 			push_warning("WorldSurface: %s was under %s's ground; lifted out" % [a.name, body.name])
 
-static func _speed_of(a: Node3D) -> float:
+static func _velocity_of(a: Node3D) -> Vector3:
 	if a is RigidBody3D:
-		return (a as RigidBody3D).linear_velocity.length()
+		return (a as RigidBody3D).linear_velocity
 	if a is CharacterBody3D:
-		return (a as CharacterBody3D).velocity.length()
-	return 0.0
+		return (a as CharacterBody3D).velocity
+	return Vector3.ZERO
 
 ## True if an ancestor of `key` is in `set`. The parent is worked out here
 ## rather than by CubeSphere.parent: _prune walks every chunk to the root, and
