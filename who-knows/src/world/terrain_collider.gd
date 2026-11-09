@@ -22,7 +22,10 @@ const LOOKAHEAD := 1.0
 ## and the first 300 m of its way.
 const TRAVEL_MAX := 300.0
 ## How much further a fast anchor's keys are worked out than its way, so
-## they last a few ticks: its way's tenth, at most LEAD_MAX (WorldSurface).
+## they last a few ticks: a tenth of the way it would go in LOOKAHEAD
+## uncapped, at most LEAD_MAX (WorldSurface). From 1 km/s on that is
+## LEAD_MAX, and the way worked out is TRAVEL_MAX + LEAD_MAX long (fix round
+## 4 of Task 7b: taken from the capped way it never passed 30 m).
 const LEAD := 0.1
 const LEAD_MAX := 100.0
 

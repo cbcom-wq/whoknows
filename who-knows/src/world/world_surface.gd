@@ -95,8 +95,8 @@ var _solid_cache := {}
 var _spare: Array[StaticBody3D] = []
 var _solids_made := 0
 const SPARE_SOLIDS := 64
-## An anchor this close over the ground has the chunk under it made solid
-## at once (see _touching_soon).
+## An anchor whose lowest point is this close over the ground has the chunk
+## under it made solid at once (see _touching_soon).
 const ARRIVE := 10.0
 ## A node centre's direction -> the ground's height there: the selection asks
 ## the same few hundred nodes again every RESELECT_AFTER, and the ground never
@@ -472,11 +472,13 @@ func _solid_wanted() -> Dictionary:
 			# Kept while both ends of the way stay within half an edge of the
 			# way they were worked out for (a turn of ~6 deg at 120 m/s moves
 			# its end that far), so every point of it does: worked out that
-			# much wider (Task 7b fix rounds 1, 2). That way runs a tenth
-			# further ahead (at most LEAD_MAX), so a fast anchor's keys last a
-			# few ticks: at 2 km/s they were worked out every tick (fix round 3).
-			var lead := travel.normalized() * minf(travel.length() * TerrainCollider.LEAD, TerrainCollider.LEAD_MAX) \
-				if not travel.is_zero_approx() else Vector3.ZERO
+			# much wider (Task 7b fix rounds 1, 2). That way runs further
+			# ahead by a tenth of the way the anchor would go uncapped (at most
+			# LEAD_MAX), so a fast anchor's keys last a few ticks: at 2 km/s
+			# they were worked out every tick (fix round 3), and a lead taken
+			# from the capped way never passed 30 m (fix round 4).
+			var lead := travel.normalized() * minf(velocity.length() * TerrainCollider.LOOKAHEAD * TerrainCollider.LEAD,
+				TerrainCollider.LEAD_MAX) if not travel.is_zero_approx() else Vector3.ZERO
 			cached = {"local": local, "end": local + travel + lead,
 				"keys": TerrainCollider.keys_along(terrain, depth_max, local, travel + lead,
 					TerrainCollider.REACH + half_edge)}
@@ -488,25 +490,43 @@ func _solid_wanted() -> Dictionary:
 			out[k] = true
 		var under := CubeSphere.key_for(local, depth_max)
 		out[under] = true
+		# And the one under where it will be in two ticks: the one it hits on
+		# a fast slanting arrival, ~33 m a tick sideways (fix round 4).
+		var soon := _soon(local, velocity)
+		var ahead := CubeSphere.key_for(soon, depth_max) if not soon.is_zero_approx() else under
+		out[ahead] = true
 		# Built on this thread only for an anchor that could touch the ground
-		# under it within two ticks (arriving, landing, falling): a level pass
-		# at 2 km/s crosses a cell a tick, each a main-thread build (~2.5 ms;
-		# fix round 3). Every other is a worker's, nearest first.
-		if not _solid.has(under) and _touching_soon(local, velocity):
-			_make_solid(TerrainChunkData.build(terrain, under, true))
+		# within two ticks (arriving, landing, falling): a level pass at 2 km/s
+		# crosses a cell a tick, each a main-thread build (~2.5 ms; fix round
+		# 3). Every other is a worker's, nearest the focus first, so another
+		# anchor's would wait behind the focus's.
+		if (not _solid.has(under) or not _solid.has(ahead)) and _touching_soon(a, local, velocity):
+			if not _solid.has(under):
+				_make_solid(TerrainChunkData.build(terrain, under, true))
+			if not _solid.has(ahead):
+				_make_solid(TerrainChunkData.build(terrain, ahead, true))
 	for id: int in _solid_cache.keys():
 		if not seen.has(id):
 			_solid_cache.erase(id)
 	return out
 
-## True if an anchor at `local`, moving at `velocity`, is within ARRIVE of
-## the ground under it, or will be within two ticks (falling, or skimming
-## toward rising ground).
-func _touching_soon(local: Vector3, velocity: Vector3) -> bool:
-	if terrain.altitude_of(local) <= ARRIVE:
+## True if `anchor`, at `local` and moving at `velocity`, has its lowest
+## point within ARRIVE of the ground under it, or will within two ticks
+## (falling, or skimming toward rising ground). Its lowest point is its
+## ANCHOR_RADIUS under its origin: measured from the origin, a hull whose
+## stance is over 10 m touched down with the chunk under it left to the
+## workers, and the Warden's feet, 6 m under its origin, had 4 m to spare
+## (Task 7b fix round 4).
+func _touching_soon(anchor: Node, local: Vector3, velocity: Vector3) -> bool:
+	var within := ARRIVE + float(anchor.get_meta(AsteroidStream.ANCHOR_RADIUS, 1.0))
+	if terrain.altitude_of(local) <= within:
 		return true
-	var soon := local + velocity * 2.0 / Engine.physics_ticks_per_second
-	return not soon.is_zero_approx() and terrain.altitude_of(soon) <= ARRIVE
+	var soon := _soon(local, velocity)
+	return not soon.is_zero_approx() and terrain.altitude_of(soon) <= within
+
+## Where an anchor at `local`, moving at `velocity`, will be in two ticks.
+static func _soon(local: Vector3, velocity: Vector3) -> Vector3:
+	return local + velocity * 2.0 / Engine.physics_ticks_per_second
 
 ## A chunk's look: its triangles, normals and colours. Pure.
 static func mesh_of(data: TerrainChunkData) -> ArrayMesh:

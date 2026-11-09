@@ -464,9 +464,11 @@ func test_a_hard_turn_is_covered_at_once():
 
 ## Fix round 3 of Task 7b: a dive with the assist off reaches ~2 km/s. The
 ## way is cut at TRAVEL_MAX, so a 2 km/s pass 30 m up costs a few hundred
-## keys at most and well under 2 ms a tick to work out, and the guarantee
-## holds to the cut: at 300 m/s every point of the next second is solid,
-## and past it the 64 m round the hull and the first TRAVEL_MAX of the way.
+## keys at most, and the guarantee holds to the cut: at 300 m/s every point
+## of the next second is solid, and past it the 64 m round the hull and the
+## first TRAVEL_MAX of the way. Fix round 4: the lead is taken from the
+## uncapped speed (LEAD_MAX at 2 km/s), so the keys last a few ticks. The key
+## count is the tight guard; the time a loose one (a loaded machine is slow).
 func test_a_2_km_s_pass_stays_in_budget():
 	var s := _surface(3000.0)
 	var a := _anchor(s, 30.0)
@@ -477,22 +479,37 @@ func test_a_2_km_s_pass_stays_in_budget():
 	var dt := 1.0 / Engine.physics_ticks_per_second
 	var most := 0
 	var total := 0
+	var peak := 0
+	var worked_out := 0
 	var ticks := 30
 	for way: Vector3 in [east, (east + north).normalized()]:
 		a.global_position = _universe.to_engine(_above(_planet(), s, 30.0))
 		a.linear_velocity = way * 2100.0
 		s._solid_cache.clear()
+		var last: Variant = null
 		for i in ticks:
 			a.global_position += way * 2100.0 * dt
 			var t0 := Time.get_ticks_usec()
 			s._wanted_solid = s._solid_wanted()
 			s._missing()
-			total += Time.get_ticks_usec() - t0
+			var took := Time.get_ticks_usec() - t0
+			total += took
+			peak = maxi(peak, took)
 			most = maxi(most, s._wanted_solid.size())
+			var cached: Dictionary = s._solid_cache[a.get_instance_id()]
+			if not is_same(cached, last):
+				worked_out += 1
+				last = cached
+				assert_almost_eq((cached.end - cached.local).length(),
+					TerrainCollider.TRAVEL_MAX + TerrainCollider.LEAD_MAX, 0.01,
+					"at 2 km/s the way is cut at TRAVEL_MAX and led by LEAD_MAX")
 	var per_tick := total / float(ticks * 2) / 1000.0
-	gut.p("2.1 km/s, 30 m up: %.2f ms a tick for the keys and what is missing; at most %d keys" % [per_tick, most])
-	assert_lt(per_tick, 2.0, "a 2 km/s pass works out its solid ground in under 2 ms a tick")
-	assert_lt(most, 260, "the keys are bounded")
+	gut.p("2.1 km/s, 30 m up: %.2f ms a tick on average, %.2f ms at most, for the keys and what is missing; at most %d keys; worked out on %d of %d ticks" % [
+		per_tick, peak / 1000.0, most, worked_out, ticks * 2])
+	# 169 keys and 16 of 60 measured (fix round 4).
+	assert_lt(most, 190, "the keys are bounded")
+	assert_lte(worked_out, ticks * 2 / 3, "the keys last a few ticks, not one")
+	assert_lt(per_tick, 4.0, "a 2 km/s pass works out its solid ground in a few ms a tick")
 	# To the cut, every point of the next second; past it, the hull's own 64 m
 	# and the first TRAVEL_MAX of its way.
 	var local := _up * (t.radius + t.height_at(_up) + 30.0)
@@ -517,18 +534,81 @@ func test_a_2_km_s_pass_stays_in_budget():
 	a.linear_velocity = Vector3.ZERO
 	s.finish()   # no job left holding the surface when it is freed
 
+## A node standing for an anchor of `radius` (its ANCHOR_RADIUS), or of none.
+func _sized(radius := -1.0) -> Node:
+	var n := Node.new()
+	if radius >= 0.0:
+		n.set_meta(AsteroidStream.ANCHOR_RADIUS, radius)
+	autofree(n)
+	return n
+
 ## The chunk under a hull is built on the main thread only when it could
-## touch the ground within two ticks (fix round 3 of Task 7b).
+## touch the ground within two ticks (fix round 3 of Task 7b), measured from
+## its lowest point, ANCHOR_RADIUS under its origin (fix round 4: a hull
+## whose stance is over 10 m touched down with its chunk left to workers).
 func test_only_an_anchor_near_the_ground_has_its_chunk_built_at_once():
 	var s := _surface(3000.0)
 	var t := s.terrain
 	var east := _up.cross(Vector3.UP).normalized()
 	var at := func(h: float) -> Vector3: return _up * (t.radius + t.height_at(_up) + h)
 	var tick := 1.0 / Engine.physics_ticks_per_second
-	assert_true(s._touching_soon(at.call(5.0), Vector3.ZERO), "5 m up and still")
-	assert_false(s._touching_soon(at.call(30.0), Vector3.ZERO), "30 m up and still: a worker's")
-	assert_false(s._touching_soon(at.call(30.0), east * 2100.0), "a level pass at 2 km/s, 30 m up")
-	assert_true(s._touching_soon(at.call(30.0), -_up * 30.0 / tick), "falling 30 m a tick")
+	var small := _sized()
+	assert_true(s._touching_soon(small, at.call(5.0), Vector3.ZERO), "5 m up and still")
+	assert_false(s._touching_soon(small, at.call(30.0), Vector3.ZERO), "30 m up and still: a worker's")
+	assert_false(s._touching_soon(small, at.call(30.0), east * 2100.0), "a level pass at 2 km/s, 30 m up")
+	assert_true(s._touching_soon(small, at.call(30.0), -_up * 30.0 / tick), "falling 30 m a tick")
+	var big := _sized(30.0)
+	assert_true(s._touching_soon(big, at.call(30.0), Vector3.ZERO), "a 30 m hull 30 m up stands on the ground")
+	assert_true(s._touching_soon(big, at.call(39.0), Vector3.ZERO), "a 30 m hull 39 m up is 9 m off it")
+	assert_false(s._touching_soon(big, at.call(45.0), Vector3.ZERO), "a 30 m hull 45 m up is 15 m off it: a worker's")
+	assert_true(s._touching_soon(big, at.call(45.0), -_up * 3.0 / tick), "a 30 m hull 45 m up, falling 3 m a tick")
+	s.finish()
+
+## Fix round 4 of Task 7b (M3): the build itself, not only the gate. Small
+## and 5 m up, the chunk under an anchor is solid after one _solid_wanted;
+## the starter's size (24 m) 40 m up, and small 30 m up, it is left to the
+## workers; a 30 m hull 30 m up, where a small anchor's would wait, has it
+## built at once.
+func test_the_chunk_under_a_hull_about_to_touch_is_built_at_once():
+	for c: Array in [[-1.0, 5.0, true], [-1.0, 30.0, false], [24.0, 40.0, false], [30.0, 30.0, true]]:
+		var s := _surface(3000.0)
+		var a := _anchor(s, c[1])
+		if c[0] >= 0.0:
+			a.set_meta(AsteroidStream.ANCHOR_RADIUS, c[0])
+		var local := _universe.to_universe(a.global_position).minus(_planet().point)
+		var under := CubeSphere.key_for(local, s.depth_max)
+		var wanted := s._solid_wanted()
+		assert_true(wanted.has(under), "radius %.0f, %.0f m up: wanted solid" % [c[0], c[1]])
+		assert_eq(s.solid_keys().has(under), c[2], "radius %.0f, %.0f m up: %s" % [c[0], c[1],
+			"built at once" if c[2] else "left to the workers"])
+		s.finish()
+		a.remove_from_group(AsteroidStream.SPACE_ANCHOR)   # the next case's surface sees only its own
+
+## Fix round 4 of Task 7b (M4): on a fast slanting arrival the hull hits the
+## chunk under where it will be two ticks on, not the one under it now; that
+## one is built at once too.
+func test_a_fast_slanting_arrival_has_the_chunk_it_will_hit_built_at_once():
+	var s := _surface(3000.0)
+	var a := _anchor(s, 5.0)
+	var east := _up.cross(Vector3.UP).normalized()
+	var tick := 1.0 / Engine.physics_ticks_per_second
+	var local := _universe.to_universe(a.global_position).minus(_planet().point)
+	var under := CubeSphere.key_for(local, s.depth_max)
+	# Some heading 33 m a tick sideways crosses into a neighbour in two ticks.
+	var v := Vector3.ZERO
+	var ahead := under
+	for k in 8:
+		v = east.rotated(_up, k * TAU / 8.0) * 33.0 / tick - _up * 1.0 / tick
+		ahead = CubeSphere.key_for(local + v * 2.0 * tick, s.depth_max)
+		if ahead != under:
+			break
+	assert_ne(ahead, under, "a heading whose two ticks cross a chunk's edge")
+	a.linear_velocity = v
+	var wanted := s._solid_wanted()
+	assert_true(wanted.has(ahead), "the chunk it will hit is wanted")
+	assert_true(s.solid_keys().has(under), "the chunk under it is built at once")
+	assert_true(s.solid_keys().has(ahead), "the chunk it will hit is built at once")
+	a.linear_velocity = Vector3.ZERO
 	s.finish()
 
 ## The keys are worked out again only once an anchor has moved half a
