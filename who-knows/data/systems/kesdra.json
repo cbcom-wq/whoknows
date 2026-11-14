@@ -1,0 +1,10 @@
+{
+	"seed": 1337,
+	"bodies": {
+		"p3": {
+			"tweak": {"archetype": "DUNES", "palette": "desert", "atmosphere": "THICK"},
+			"stamps": [],
+			"places": []
+		}
+	}
+}
