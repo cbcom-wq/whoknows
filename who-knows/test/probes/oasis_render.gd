@@ -17,7 +17,8 @@ extends "res://test/probes/desert_render.gd"
 ##            the pad, nosed at the pool (its tilt and damage printed), seen
 ##            from outside (starter_pad), seated (landed_seated) and its frame
 ##            rate over LANDED_SECONDS; on foot, eye 1.6 m over the ground, at
-##            the pad's edge looking at the oasis (foot_pad_edge), at the
+##            the pad's edge, then from the far side of the pool looking across
+##            it to the pad (foot_pad_and_pool), at the
 ##            pool's edge looking over the water (foot_pool_edge) and back at
 ##            the pad (foot_pool_edge_back), the frame rate there, and in the
 ##            pool (foot_in_pool) with the wading speed against the dry speed;
@@ -68,6 +69,9 @@ const GROUND_AT := 45.0
 const MAX_TILT_DEG := 2.0
 ## On the pad, on foot: this far in from its edge toward the pool, m.
 const PAD_EDGE_IN := 2.0
+## The view with the pad and the pool both in it is taken from this far (m) past
+## the pool's middle, on the side away from the pad.
+const BEHIND_POOL := 45.0
 ## On the pool's bank, this far from its middle, m (the basin's rim is 17 m, the
 ## water's edge a little in from it), and in the water this far from it.
 const BANK_RADIUS := 16.0
@@ -93,7 +97,7 @@ const OASIS_COLUMNS := 4
 const OASIS_SHEET := [
 	"warp_arrival_seated", "warp_inside_well", "seated_2000_lit", "seated_2000_side",
 	"seated_300_lit", "seated_300_side", "starter_pad", "landed_seated",
-	"foot_pad_edge", "foot_pool_edge", "foot_pool_edge_back", "foot_in_pool",
+	"foot_pad_and_pool", "foot_pool_edge", "foot_pool_edge_back", "foot_in_pool",
 	"warden_pad",
 ]
 
@@ -390,8 +394,14 @@ func _on_foot_at_the_oasis() -> void:
 		edge.angle_to(_pool_dir) * _planet.radius, _gravity.altitude_at(_avatar.camera.global_position),
 		_surface.terrain.ground_at(edge, 0.0), _surface.terrain.height_at(edge), 90.0 - rad_to_deg(edge.angle_to(_to_star()))])
 	await _seconds(0.5)
-	await _shot("foot_pad_edge")
 	_dry_speed = await _walk_speed("on the pad")
+	# Then the view with both in it: on the far side of the pool, BEHIND_POOL m
+	# from its middle, looking across the water to the pad and the ship on it.
+	var behind := _off(_pool_dir, _way_to(_pool_dir, _pad_dir), -BEHIND_POOL)
+	await _stand_far(behind, _way_to(behind, _pad_dir))
+	_avatar.set_head_pitch(0.0)
+	await _seconds(0.5)
+	await _shot("foot_pad_and_pool")
 	# The bank, toward the pad's side of the pool, then the water.
 	var bank := _towards(_pool_dir, _pad_dir, BANK_RADIUS)
 	await _stand_far(bank, _way_to(bank, _pool_dir))

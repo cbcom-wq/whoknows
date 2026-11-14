@@ -7,7 +7,7 @@ extends RefCounted
 ## and tracks join it as their tasks land. The style guide (§2.2) is why
 ## colours live in a palette: nothing that paints names a literal.
 
-## The pool: a muted green-blue, a little grey, that sits in the desert's warm
+## The pool: a muted, slightly dark teal-green (never icy pale blue or bright pool blue), that sits in the desert's warm
 ## light without turning it cold or sci-fi blue. Flat and opaque (the water is
 ## one faceted disc), dim enough to read as a still pool against pale sand.
-const WATER := Color("4f827c")
+const WATER := Color("3f7664")

@@ -97,4 +97,12 @@ func test_on_ground_is_in_the_places_frame_and_on_the_terrain():
 	assert_almost_eq(from_centre.length() - _body.radius, _terrain.height_at(d), 0.01)
 	assert_almost_eq(pad.x, -80.0, 0.1)
 	assert_almost_eq(pad.z, 40.0, 0.1)
-	assert_almost_eq(pad.y, 0.15 - 0.18, 0.2, "the pad, a little under the flat plane at 90 m")
+	# The pad stands 0.15 m over its own level; the floor rolls, so that level is the
+	# pad stamp's, not the bank's. The world curves about 0.18 m away at 90 m.
+	var pad_over_bank := 0.15
+	for s in _terrain.stamps:
+		if s.id == &"pad":
+			pad_over_bank += s.level
+		elif s.id == &"pool_bank":
+			pad_over_bank -= s.level
+	assert_almost_eq(pad.y, pad_over_bank - 0.18, 0.2, "the pad, over the pool's bank less the curve at 90 m")

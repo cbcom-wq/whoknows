@@ -121,7 +121,7 @@ const WORLDS: Array[Dictionary] = [
 		&"dust": Color("863c16"), &"accent": Color("ffd9a8"), &"sky": Color("dca47c"),
 		&"sky_low": Color("dca47c"), &"sky_high": Color("7a84a8"),
 		&"boulder": Color("63301a"), &"grass": Color("8f6420"), &"streak": Color("e6be90"),
-			&"pad": Color("b09a7e"), &"damp": Color("7a5a3c")},
+			&"pad": Color("a0642c"), &"damp": Color("7a5a3c")},
 ]
 
 ## Space as the outside shows it with no air (desert-world spec §6.2): the

@@ -14,6 +14,10 @@ const PAD_SLACK := 0.005
 const FLAT := 0.02
 ## The water stands this far under the floor (m).
 const WATER_BELOW := 0.3
+## The floor between 30 and 115 m rolls by at least this standard deviation (m), and
+## no 2 m step on it is steeper than MAX_FLOOR_SLOPE_DEG.
+const MIN_ROLL := 0.5
+const MAX_FLOOR_SLOPE_DEG := 15.0
 ## A ship's pad margin beyond its half-diagonal (m).
 const PAD_MARGIN := 5.0
 
@@ -57,7 +61,9 @@ func test_the_desert_world_is_p3() -> void:
 	assert_true(r.is_desert(), "a desert")
 	assert_eq(r.atmosphere, WorldRecipe.Atmosphere.THICK, "thick air")
 	assert_almost_eq(r.surface_gravity, 5.28, 0.01, "gravity")
-	assert_eq(r.name, WorldRecipe.from_seed(_planet.seed).name, "its name is the seed's")
+	assert_eq(r.name, "WADIS", "the owner named it")
+	for m in _system.moons_of(_planet):
+		assert_true(m.name.begins_with("WADIS "), m.name)
 
 func test_the_oasis_is_placed() -> void:
 	assert_not_null(_place, "p3 has the place oasis")
@@ -66,8 +72,8 @@ func test_the_oasis_is_placed() -> void:
 	assert_eq(_place.name, "OASIS")
 	assert_true(_place.beacon)
 	assert_eq(_place.heading, 0.0)
-	assert_eq(_terrain.stamps.size(), 3, "three stamps")
-	for id in [&"oasis_floor", &"pad", &"pool"]:
+	assert_eq(_terrain.stamps.size(), 4, "four stamps")
+	for id in [&"oasis_floor", &"pool_bank", &"pad", &"pool"]:
 		assert_not_null(_stamp(id), str(id))
 	assert_eq(_system.design.problems(_system), PackedStringArray(), "the design is valid")
 
@@ -81,14 +87,14 @@ func test_the_sun_stands_low_over_the_oasis() -> void:
 	gut.p("the sun is %.2f degrees up at the oasis" % elevation)
 	assert_between(elevation, 30.0 - SUN_SLACK, 30.0 + SUN_SLACK)
 
-func test_the_floor_and_the_pad_are_flat() -> void:
+func test_the_pad_and_the_bank_are_flat_and_the_floor_rolls() -> void:
 	var floor_stamp := _stamp(&"oasis_floor")
+	var bank := _stamp(&"pool_bank")
 	var pad := _stamp(&"pad")
 	var pool := _stamp(&"pool")
-	if floor_stamp == null or pad == null or pool == null:
+	if floor_stamp == null or bank == null or pad == null or pool == null:
 		fail_test("the oasis stamps are not there")
 		return
-	var level := floor_stamp.level
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 41
 	var lo := INF
@@ -97,23 +103,45 @@ func test_the_floor_and_the_pad_are_flat() -> void:
 		var h := _terrain.height_at(_disc_sample(pad.centre, rng, 0.0, pad.radius))
 		lo = minf(lo, h)
 		hi = maxf(hi, h)
-	gut.p("pad: %.4f .. %.4f over the floor's %.4f" % [lo, hi, level])
+	gut.p("pad: %.4f .. %.4f over its own level %.4f" % [lo, hi, pad.level])
 	assert_lt(hi - lo, FLAT, "the pad is level")
-	assert_between((hi + lo) * 0.5 - level, PAD_RAISE - PAD_SLACK, PAD_RAISE + PAD_SLACK, "0.15 m over the floor")
+	assert_between((hi + lo) * 0.5 - pad.level, PAD_RAISE - PAD_SLACK, PAD_RAISE + PAD_SLACK, "0.15 m over the floor")
 	lo = INF
 	hi = -INF
-	var n := 0
-	while n < 400:
-		var d := _disc_sample(floor_stamp.centre, rng, 30.0, 120.0)
-		if pad.metres_from(d, _terrain.radius) <= pad.reach() or pool.metres_from(d, _terrain.radius) <= pool.radius:
-			continue
-		n += 1
-		var h := _terrain.height_at(d)
+	for i in 200:
+		var h := _terrain.height_at(_disc_sample(bank.centre, rng, pool.radius, bank.radius))
 		lo = minf(lo, h)
 		hi = maxf(hi, h)
-	gut.p("floor: %.4f .. %.4f" % [lo, hi])
-	assert_lt(hi - level, FLAT, "the floor is level (high side)")
-	assert_lt(level - lo, FLAT, "the floor is level (low side)")
+	gut.p("pool bank: %.4f .. %.4f" % [lo, hi])
+	assert_lt(hi - lo, FLAT, "the pool's bank is level")
+	assert_lt(absf((hi + lo) * 0.5 - bank.level), FLAT, "at the bank's own level")
+	# The rest of the floor rolls, gently.
+	var heights := PackedFloat64Array()
+	while heights.size() < 400:
+		var d := _disc_sample(floor_stamp.centre, rng, 30.0, 115.0)
+		if pad.metres_from(d, _terrain.radius) <= pad.reach() or bank.metres_from(d, _terrain.radius) <= bank.reach():
+			continue
+		heights.append(_terrain.height_at(d))
+	var mean := 0.0
+	for h in heights:
+		mean += h
+	mean /= heights.size()
+	var variance := 0.0
+	for h in heights:
+		variance += (h - mean) * (h - mean)
+	var deviation := sqrt(variance / heights.size())
+	gut.p("floor: standard deviation %.3f m over 400 samples" % deviation)
+	assert_gte(deviation, MIN_ROLL, "the floor rolls")
+	var steepest := 0.0
+	for i in 400:
+		var d := _disc_sample(floor_stamp.centre, rng, 30.0, 115.0)
+		if pad.metres_from(d, _terrain.radius) <= pad.reach() or bank.metres_from(d, _terrain.radius) <= bank.reach():
+			continue
+		var turn := rng.randf() * TAU
+		var step := _terrain.height_at(_toward(d, turn, 2.0)) - _terrain.height_at(d)
+		steepest = maxf(steepest, rad_to_deg(atan(absf(step) / 2.0)))
+	gut.p("steepest 2 m step on the floor: %.1f deg" % steepest)
+	assert_lte(steepest, MAX_FLOOR_SLOPE_DEG, "the floor stays walkable")
 
 ## R3: the file and the stamp name one pad radius.
 func test_the_pad_matches_the_oasis_file() -> void:
@@ -154,7 +182,7 @@ func test_the_pool_is_wadeable() -> void:
 	if pool == null or floor_stamp == null:
 		fail_test("the oasis stamps are not there")
 		return
-	var water := floor_stamp.level - WATER_BELOW
+	var water := _stamp(&"pool_bank").level - WATER_BELOW
 	var worst := 0.0
 	for k in 8:
 		var bearing := TAU * k / 8.0 + 0.2

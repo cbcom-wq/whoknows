@@ -239,5 +239,5 @@ func test_level_is_the_same_on_every_thread():
 
 func test_the_desert_palette_has_pad_and_damp():
 	var p: Dictionary = SpacePalette.WORLDS[SpacePalette.DESERT_PALETTE]
-	assert_eq(p[&"pad"], Color("b09a7e"))
+	assert_eq(p[&"pad"], Color("a0642c"))
 	assert_eq(p[&"damp"], Color("7a5a3c"))

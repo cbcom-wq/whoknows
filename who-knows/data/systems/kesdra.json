@@ -2,12 +2,13 @@
 	"seed": 1337,
 	"bodies": {
 		"p3": {
-			"tweak": {"archetype": "DUNES", "palette": "desert", "atmosphere": "THICK"},
+			"tweak": {"name": "WADIS", "archetype": "DUNES", "palette": "desert", "atmosphere": "THICK"},
 			"places": [
 				{"id": "oasis", "name": "OASIS", "lat": -2.16, "lon": -171.97, "heading": 0, "beacon": true}
 			],
 			"stamps": [
-				{"id": "oasis_floor", "kind": "flatten", "place": "oasis", "at": [0, 0], "radius": 120, "edge": 150},
+				{"id": "oasis_floor", "kind": "flatten", "place": "oasis", "at": [0, 0], "radius": 120, "edge": 150, "keep": 0.35},
+				{"id": "pool_bank", "kind": "flatten", "place": "oasis", "at": [0, 0], "radius": 24, "edge": 12},
 				{"id": "pad", "kind": "flatten", "place": "oasis", "at": [-80, -40], "radius": 26, "edge": 4, "raise": 0.15, "ground": "pad"},
 				{"id": "pool", "kind": "basin", "place": "oasis", "at": [0, 0], "radius": 17, "floor": 9, "depth": 1.3, "ground": "damp"}
 			]

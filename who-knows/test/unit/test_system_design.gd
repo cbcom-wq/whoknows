@@ -165,23 +165,36 @@ func test_lat_lon_frame() -> void:
 	assert_lt((-turned.z).distance_to(frame.x), 1e-6, "heading 90 faces east")
 	assert_lt(turned.y.distance_to(d), 1e-6)
 
+## `text` without its lines that name `world`.
+func _unnamed(text: String, world: String) -> PackedStringArray:
+	var out := PackedStringArray()
+	for line in text.split("
+"):
+		if not line.contains(world):
+			out.append(line)
+	return out
+
 func test_no_design_no_change() -> void:
 	var plain := SystemRecipe.from_seed(1337, false)
 	var designed := SystemRecipe.from_seed(1337)
 	assert_null(plain.design)
 	assert_not_null(designed.design)
-	assert_eq(designed.describe(), plain.describe())
+	# Only p3 and its moons are named differently (WADIS); every other line is the same.
+	assert_eq(_unnamed(designed.describe(), "WADIS"), _unnamed(plain.describe(), "DRANAXNAX-50"))
 	assert_eq(designed.bodies.size(), plain.bodies.size())
 	for b in plain.bodies:
 		var other := designed.body(b.id)
 		if b.recipe == null:
 			continue
 		for field in FIELDS:
+			if field == "name" and b.id == &"p3":
+				assert_eq(other.recipe.name, "WADIS", "the owner named p3")
+				continue
 			assert_eq(other.recipe.get(field), b.recipe.get(field), "%s's %s" % [b.id, field])
 		assert_eq(other.recipe.seed, b.recipe.seed)
 		assert_eq(other.recipe.kind, b.recipe.kind)
-		# Only p3 has the design's stamps (the oasis floor, its pad and its pool).
-		assert_eq(other.recipe.stamps.size(), 3 if b.id == &"p3" else 0, "%s's stamps" % b.id)
+		# Only p3 has the design's stamps (the oasis floor, its pool bank, its pad and its pool).
+		assert_eq(other.recipe.stamps.size(), 4 if b.id == &"p3" else 0, "%s's stamps" % b.id)
 
 func test_the_kesdra_tweak_pins_what_p3_rolls() -> void:
 	var p3 := SystemRecipe.from_seed(1337, false).body(&"p3").recipe
