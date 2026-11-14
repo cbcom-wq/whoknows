@@ -921,6 +921,33 @@ func test_the_gate_uses_finished_work_before_building():
 	a.remove_from_group(AsteroidStream.SPACE_ANCHOR)
 	s.finish()
 
+## The gate builds at once only the cells whose ground lies within the hull's
+## reach plus ARRIVE of it, in 3D: the starter flown low (24 m reach, 33 m
+## up, its lowest point 9 m over the ground) opens the gate, but the cells
+## round it whose ground is 34 m and more away are left to the workers. Judged
+## on the sphere it built every cell within 34 m along the ground, every tick
+## a new one came in reach: low flight went from 98 fps to 93.
+func test_flown_low_the_gate_builds_only_the_ground_in_reach():
+	var s := _surface(3000.0)
+	var c := _a_corner(s.depth_max)
+	var corner: Vector3 = c[0]
+	var a := _anchor_at(corner * (s.terrain.radius + s.terrain.height_at(corner) + 33.0), 24.0)
+	var built := s.gate_builds
+	s._solid_wanted()
+	var gate: Dictionary = s._gate_cache[a.get_instance_id()]
+	var on_sphere := 0
+	var mid := corner * s.terrain.radius
+	for k: Vector4i in gate.keys:
+		if TerrainCollider.cell_gap(k, s.terrain.radius, mid, mid) <= 24.0 + WorldSurface.ARRIVE:
+			on_sphere += 1
+	gut.p("a 24 m hull 33 m up: %d chunks made solid at once (%d within its reach along the ground), %d built here" % [
+		(gate.now as Array).size(), on_sphere, s.gate_builds - built])
+	for k: Vector4i in c[1]:
+		assert_true(s.solid_keys().has(k), "%s, a cell under it, solid at once" % k)
+	assert_lte((gate.now as Array).size(), 6, "only the ground within its reach of it")
+	a.remove_from_group(AsteroidStream.SPACE_ANCHOR)
+	s.finish()
+
 ## Within 3 x ARRIVE of the ground the footprint is not built at once, but it
 ## is first in the workers' queue: a ship woken 18 km from you had its
 ## footprint queued behind every chunk round you.

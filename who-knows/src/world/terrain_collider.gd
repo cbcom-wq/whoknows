@@ -159,6 +159,35 @@ static func cell_gap(key: Vector4i, radius: float, a: Vector3, b: Vector3) -> fl
 		chord = maxf(chord, corner.distance_to(mid))
 	return _to_segment(mid, a, b) - chord
 
+## How near finest cell `key`'s ground comes to the segment `a`-`b` (points
+## from the world's middle, in 3D): from the segment's point nearest the
+## cell's middle to the cell's own rectangle on its face, held at its highest
+## ground (of its middle and corners), so never much farther than it is. The
+## near-ground gate builds at once only the cells this puts in reach: flown
+## 33 m up, the cells round the one under you are not (cell_gap, on the
+## sphere, put every cell within reach along the ground in).
+static func ground_gap(key: Vector4i, terrain: WorldTerrain, a: Vector3, b: Vector3) -> float:
+	var r := CubeSphere.node_rect(key)
+	var mid_dir := CubeSphere.direction(key.x, r.x + r.z * 0.5, r.y + r.z * 0.5)
+	var high := terrain.height_at(mid_dir)
+	for c in 4:
+		high = maxf(high, terrain.height_at(
+			CubeSphere.direction(key.x, r.x + r.z * float(c & 1), r.y + r.z * float(c >> 1))))
+	var at := terrain.radius + high
+	var p := _nearest_on_segment(mid_dir * at, a, b)
+	var fuv := CubeSphere.face_uv(p)
+	if int(fuv.x) != key.x:
+		return cell_gap(key, at, a, b)
+	var q := CubeSphere.direction(key.x, clampf(fuv.y, r.x, r.x + r.z), clampf(fuv.z, r.y, r.y + r.z)) * at
+	return p.distance_to(q)
+
+static func _nearest_on_segment(p: Vector3, a: Vector3, b: Vector3) -> Vector3:
+	var ab := b - a
+	var l2 := ab.length_squared()
+	if l2 < 1e-6:
+		return a
+	return a + ab * clampf((p - a).dot(ab) / l2, 0.0, 1.0)
+
 ## How far `p` is from the segment `a`-`b`.
 static func _to_segment(p: Vector3, a: Vector3, b: Vector3) -> float:
 	var ab := b - a

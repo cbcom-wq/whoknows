@@ -562,10 +562,8 @@ func _gate_keys(id: int, local: Vector3, soon: Vector3, radius: float, half_edge
 		if not keys.has(ahead):
 			keys.insert(1, ahead)
 		var now: Array[Vector4i] = []
-		var a := local.normalized() * terrain.radius
-		var b := end.normalized() * terrain.radius
 		for k in keys:
-			if k == keys[0] or k == ahead or TerrainCollider.cell_gap(k, terrain.radius, a, b) <= radius + ARRIVE:
+			if k == keys[0] or k == ahead or TerrainCollider.ground_gap(k, terrain, local, end) <= radius + ARRIVE:
 				now.append(k)
 		cached = {"local": local, "soon": soon, "keys": keys, "now": now}
 		_gate_cache[id] = cached
