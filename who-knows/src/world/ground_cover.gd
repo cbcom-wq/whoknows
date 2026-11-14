@@ -183,6 +183,7 @@ func _boulders(terrain: WorldTerrain, ground: _Ground, rng: RandomNumberGenerato
 	var most := BOULDER_TALUS if desert else BOULDERS_PER_100M2
 	var base: Color = terrain.palette[&"boulder"]
 	var noise := _cluster_noise(terrain)
+	var stamped := not terrain.stamps.is_empty()
 	for n in _count(rng, area * most / 100.0):
 		# Every roll is made, kept or not, so one stone never moves the next.
 		var u := rng.randf()
@@ -196,6 +197,10 @@ func _boulders(terrain: WorldTerrain, ground: _Ground, rng: RandomNumberGenerato
 		var shape := RockMesh.Shape.BOULDER if rng.randf() < ROUND_SHARE else RockMesh.Shape.SHARD
 		var shade := rng.randi_range(0, SpacePalette.SHADES.size() - 1)
 		var dir := ground.direction(u, v)
+		# On a stamp's flat part (and its margin) nothing lies; every roll is
+		# already made, so the stones elsewhere are the same as ever.
+		if stamped and terrain.stamp_clear(dir):
+			continue
 		var talus := desert and terrain.in_talus(dir)
 		var heart := (BOULDER_TALUS if talus else DESERT_BOULDERS) if desert else BOULDERS_PER_100M2
 		var m := cluster_at(terrain, noise, dir, talus or not desert)
@@ -224,13 +229,18 @@ func _grass(terrain: WorldTerrain, ground: _Ground, rng: RandomNumberGenerator, 
 	clumps.fractal_type = FastNoiseLite.FRACTAL_NONE
 	var scale := terrain.radius / GRASS_CLUMP_WAVE
 	var base: Color = terrain.palette[&"grass"]
+	var stamped := not terrain.stamps.is_empty()
 	for n in _count(rng, area * GRASS_PER_100M2 / 100.0):
 		var u := rng.randf()
 		var v := rng.randf()
 		var spin := rng.randf() * TAU
 		var tall := rng.randf_range(GRASS_HEIGHT.x, GRASS_HEIGHT.y)
 		var shade := rng.randi_range(0, SpacePalette.SHADES.size() - 1)
-		if clumps.get_noise_3dv(ground.direction(u, v) * scale) <= 1.0 - 2.0 * GRASS_CLUMP:
+		var dir := ground.direction(u, v)
+		# Off a stamp's flat part and margin, as the boulders (all rolls made).
+		if stamped and terrain.stamp_clear(dir):
+			continue
+		if clumps.get_noise_3dv(dir * scale) <= 1.0 - 2.0 * GRASS_CLUMP:
 			continue
 		var at := ground.at(u, v)
 		if at.slope > GRASS_SLOPE:

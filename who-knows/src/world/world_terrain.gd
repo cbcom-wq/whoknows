@@ -232,7 +232,9 @@ func height_at(dir: Vector3) -> float:
 	if stamps.is_empty():
 		return base_height_at(dir)
 	var d := dir.normalized()
-	var h := base_height_at(d)
+	# The base ground from `dir` as given, as with no stamps: normalising it a second
+	# time would shift far ground by a rounding (bit for bit beyond a stamp's reach).
+	var h := base_height_at(dir)
 	for i in stamps.size():
 		if d.dot(stamps[i].centre) < _stamp_cos[i]:
 			continue
