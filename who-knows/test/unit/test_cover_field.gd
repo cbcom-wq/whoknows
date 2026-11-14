@@ -172,6 +172,25 @@ func test_a_jump_has_no_velocity():
 	var at_rest := CoverField.blocks_near(s.terrain, f.minus(_planet().point), CoverField.BOULDER_REACH)
 	assert_eq(s.cover._wanted, at_rest)
 
+## Final review, deferred: a choice less than a tick after the last (the
+## wall clock's jitter, at very high speed) still reads the velocity, from
+## half a tick: the blocks ahead come first.
+func test_a_choice_under_a_tick_after_the_last_still_reads_the_velocity():
+	var s := _surface(2.0)
+	var along := _up.cross(Vector3.RIGHT).normalized()
+	s.cover._select_for(_above(s, 2.0))
+	var tick := 1.0 / Engine.physics_ticks_per_second
+	var dt := tick * 0.75
+	var there := (_up + along * (1000.0 * dt / _planet().radius)).normalized()
+	var f := _above(s, 2.0, there)
+	s.cover._selected_usec = Time.get_ticks_usec() - int(dt * 1e6)
+	s.cover._select_for(f)
+	var at_rest := CoverField.blocks_near(s.terrain, f.minus(_planet().point), CoverField.BOULDER_REACH)
+	var moving := CoverField.blocks_near(s.terrain, f.minus(_planet().point), CoverField.BOULDER_REACH,
+		along * 1000.0)
+	assert_ne(moving, at_rest, "at 1 km/s the blocks ahead come first")
+	assert_ne(s.cover._wanted, at_rest, "the velocity was read")
+
 # --- drawing them ---------------------------------------------------------------
 
 func test_cover_is_what_scatter_says():
