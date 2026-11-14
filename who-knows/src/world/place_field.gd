@@ -30,6 +30,10 @@ const SHORE_LAP := 0.6
 ## Metres between the stones of a path, and between the joints of the pump's pipe.
 const STONE_STEP := 0.9
 const PIPE_STEP := 1.5
+## Grass keeps this far out of a garden bed's circle, the pump's and a path stone's, m.
+const GRASS_MARGIN := 0.5
+const PUMP_CLEAR := 1.2
+const PATH_CLEAR := 1.0
 
 var universe: Universe
 var system: SystemRecipe
@@ -140,6 +144,7 @@ func _build_village(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionar
 	holder.name = "Village"
 	node.add_child(holder)
 	var kit := OasisLooks.kit_under(holder)
+	var avoid: Array[Vector3] = []
 	var palms: Array = layout.get("palms", [])
 	if not palms.is_empty():
 		var trunks := StaticBody3D.new()
@@ -158,11 +163,13 @@ func _build_village(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionar
 		var f := Transform3D(Basis.IDENTITY, ground.call(float(at[0]), float(at[1])))
 		OasisLooks.garden(kit, f, Vector2(float(size[0]), float(size[1])), bool(g.get("dried", false)),
 			float(at[0] * 0.173 + at[1] * 0.291))
+		avoid.append(Vector3(f.origin.x, f.origin.z, Vector2(float(size[0]), float(size[1])).length() * 0.5 + GRASS_MARGIN))
 	if layout.has("pump"):
 		var pump: Dictionary = layout["pump"]
 		var at: Array = pump["at"]
 		var foot: Vector3 = ground.call(float(at[0]), float(at[1]))
 		OasisLooks.pump(kit, Transform3D(Basis.IDENTITY, foot))
+		avoid.append(Vector3(foot.x, foot.z, PUMP_CLEAR))
 		var end: Array = pump.get("pipe_to", at)
 		var from := foot + Vector3(0.0, 0.2, 0.0)
 		var steps := maxi(int(Vector2(float(end[0]) - float(at[0]), float(end[1]) - float(at[1])).length() / PIPE_STEP), 1)
@@ -185,6 +192,8 @@ func _build_village(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionar
 				stones.append(ground.call(p.x, p.y))
 		var last: Array = points[points.size() - 1]
 		stones.append(ground.call(float(last[0]), float(last[1])))
+		for stone in stones:
+			avoid.append(Vector3(stone.x, stone.z, PATH_CLEAR))
 		OasisLooks.path(kit, stones, float(path.get("width", 1.4)))
 	kit.commit()
 	if layout.has("grass_ring") and layout.has("pool"):
@@ -196,7 +205,7 @@ func _build_village(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionar
 			return on_ground(place, terrain, x, -z).y
 		node.add_child(OasisLooks.grass_ring(Transform3D(Basis.IDENTITY, centre),
 			Vector2(float(axes[0]), float(axes[1])), water_radius, float(ring.get("inner", 1.5)),
-			hash(String(place.id)), floor_of))
+			hash(String(place.id)), floor_of, avoid))
 
 # --- the ground, pure ---------------------------------------------------------
 

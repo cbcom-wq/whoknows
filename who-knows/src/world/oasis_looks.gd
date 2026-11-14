@@ -38,8 +38,6 @@ const COLLIDER_RADIUS := 0.4
 const TUFT_HEIGHT := Vector2(0.35, 0.7)
 const TUFTS_PER_M2 := 1.1
 
-static var _grass_material: StandardMaterial3D
-
 ## Where the palm's trunk is, `t` from its foot (0) to its crown (1), in its
 ## frame: the lean grows as the square of the height, so it curves.
 static func _trunk_point(variety: float, t: float) -> Vector3:
@@ -124,9 +122,10 @@ static func palm_collider(f: Transform3D, variety: float) -> CollisionShape3D:
 ## from `water_radius` + `inner` (the water edge and a bank) out to the
 ## ellipse `axes` (half its width along the frame x, and along its z), as
 ## one MultiMesh with no collision. `floor_of(x, z)` is the ground height in
-## the frame's own terms, where each tuft stands.
+## the frame's own terms, where each tuft stands. No tuft stands within an
+## `avoid` circle (x, z in the frame, radius): a bed, the pump, a stone.
 static func grass_ring(f: Transform3D, axes: Vector2, water_radius: float, inner: float,
-		seed: int, floor_of: Callable) -> MultiMeshInstance3D:
+		seed: int, floor_of: Callable, avoid: Array[Vector3] = []) -> MultiMeshInstance3D:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed
 	var keep_out := water_radius + inner
@@ -145,9 +144,16 @@ static func grass_ring(f: Transform3D, axes: Vector2, water_radius: float, inner
 		if Vector2(offset.x, offset.z).length() <= keep_out:
 			continue
 		var at: Vector3 = f * offset
+		var blocked := false
+		for a in avoid:
+			if Vector2(at.x - a.x, at.z - a.y).length() < a.z:
+				blocked = true
+				break
+		if blocked:
+			continue
 		at.y = float(floor_of.call(at.x, at.z))
 		transforms.append(Transform3D(Basis(Vector3.UP, yaw) * Basis.from_scale(Vector3(width, height, width)), at))
-		colours.append(InteriorKit.solid(SpacePalette.shade(OasisPalette.GRASS, k)))
+		colours.append(SpacePalette.shade(OasisPalette.GRASS, k))
 		feet.append(at)
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
@@ -163,19 +169,10 @@ static func grass_ring(f: Transform3D, axes: Vector2, water_radius: float, inner
 	## Where each tuft stands, kept here too: a MultiMesh reads back nothing
 	## without a renderer (the headless tests).
 	inst.set_meta(&"tufts", feet)
-	inst.material_override = _grass()
+	inst.material_override = CoverField.grass_material()
 	inst.layers = WORLD_LAYER
 	inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	return inst
-
-static func _grass() -> StandardMaterial3D:
-	if _grass_material == null:
-		var m := StandardMaterial3D.new()
-		m.vertex_color_use_as_albedo = true
-		m.cull_mode = BaseMaterial3D.CULL_DISABLED
-		m.roughness = 1.0
-		_grass_material = m
-	return _grass_material
 
 ## A garden at `f`: a low raised bed of `size` (x and z, m) of soil with rows
 ## of crops, green, or collapsed and dry when `dried`.

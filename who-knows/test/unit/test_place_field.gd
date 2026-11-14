@@ -157,3 +157,13 @@ func test_the_grass_stays_out_of_the_water():
 	for i in tufts.size():
 		var at := tufts[i]
 		assert_gt(Vector2(at.x, at.z).length(), edge - PlaceField.SHORE_LAP + 1.5 - 0.01, "tuft %d" % i)
+
+func test_no_grass_grows_in_a_garden_bed():
+	await _hold_over(0, 0, 60.0)
+	var ring := _oasis().find_children("*", "MultiMeshInstance3D", true, false)[0] as MultiMeshInstance3D
+	var tufts: PackedVector3Array = ring.get_meta(&"tufts")
+	for g: Dictionary in _place.layout()["gardens"]:
+		var at := PlaceField.on_ground(_place, _terrain, float(g["at"][0]), float(g["at"][1]))
+		var half := Vector2(float(g["size"][0]), float(g["size"][1])) * 0.5
+		for t in tufts:
+			assert_false(absf(t.x - at.x) < half.x and absf(t.z - at.z) < half.y, "a tuft in the bed at %s" % [g["at"]])
