@@ -243,7 +243,11 @@ func test_a_landed_starter_given_a_1_m_s_climb_rises_off_within_3_s():
 	var surface: WorldSurface = (root.star_system.proxy(planet.id) as BodyProxy).surface()
 	var centre := universe.to_engine(planet.point)
 	# Level ground near the hop: on a desert, off the dunes.
-	var up := LevelGround.near(surface.terrain, (ship.exterior.global_position - centre).normalized())
+	var level: Variant = LevelGround.near(surface.terrain, (ship.exterior.global_position - centre).normalized())
+	assert_not_null(level, "level, clear ground near the hop")
+	if level == null:
+		return
+	var up: Vector3 = level
 	assert_lt(LevelGround.tilt(surface.terrain, up), LevelGround.LEVEL, "level ground found")
 	var along := up.cross(Vector3.UP).normalized()
 	ship.exterior.global_transform = Transform3D(Basis(along, up, along.cross(up).normalized()),

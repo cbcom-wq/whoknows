@@ -150,7 +150,11 @@ func _hover_over_flat_ground(clearance: float) -> Vector3:
 	assert_not_null(surface, "3 km off: its ground is drawn")
 	var centre := _universe.to_engine(planet.point)
 	# Level, clear ground near the hop: on a desert, off the dunes and stones.
-	var out := LevelGround.near(surface.terrain, (_ship.exterior.global_position - centre).normalized())
+	var level: Variant = LevelGround.near(surface.terrain, (_ship.exterior.global_position - centre).normalized())
+	assert_not_null(level, "level, clear ground near the hop")
+	if level == null:
+		return Vector3.ZERO
+	var out: Vector3 = level
 	assert_lt(LevelGround.tilt(surface.terrain, out), LevelGround.LEVEL, "level ground found")
 	assert_true(LevelGround.clear(surface.terrain, out), "and no boulder on it")
 	var ground := planet.radius + surface.terrain.height_at(out)

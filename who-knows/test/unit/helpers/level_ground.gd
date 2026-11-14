@@ -31,13 +31,12 @@ const NUDGE_BEARINGS := 16
 
 ## The nearest level, clear spot to unit direction `near` on `terrain`'s world
 ## (the first found ring by ring, each level spot with the ground round it),
-## or the levellest found if none is.
-static func near(terrain: WorldTerrain, near_dir: Vector3) -> Vector3:
+## or null if none is within SEARCH: the caller asserts it is not null and
+## stops, never setting a ship down on sloping or stony ground.
+static func near(terrain: WorldTerrain, near_dir: Vector3) -> Variant:
 	var a := near_dir.cross(Vector3.UP if absf(near_dir.y) < 0.9 else Vector3.RIGHT).normalized()
 	var b := near_dir.cross(a)
-	var best := near_dir
-	var least := tilt(terrain, near_dir)
-	if least < LEVEL:
+	if tilt(terrain, near_dir) < LEVEL:
 		var here := _clear_round(terrain, near_dir)
 		if here != Vector3.ZERO:
 			return here
@@ -46,17 +45,13 @@ static func near(terrain: WorldTerrain, near_dir: Vector3) -> Vector3:
 		for k in BEARINGS:
 			var o := (a * cos(k * TAU / BEARINGS) + b * sin(k * TAU / BEARINGS)) * (ring * RING_STEP / terrain.radius)
 			var d := (near_dir + o).normalized()
-			var s := tilt(terrain, d)
 			# Clear is only asked round a level spot: it scatters the chunks' cover.
-			if s < LEVEL:
+			if tilt(terrain, d) < LEVEL:
 				var spot := _clear_round(terrain, d)
 				if spot != Vector3.ZERO:
 					return spot
-			if s < least:
-				least = s
-				best = d
 		ring += 1
-	return best
+	return null
 
 ## A level, clear spot at level unit direction `dir` or within NUDGE m of it,
 ## nearest first; Vector3.ZERO if there is none.

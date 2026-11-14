@@ -272,7 +272,11 @@ func test_restored_landed_where_it_stands_stays_put():
 func test_restored_landed_hovering_on_its_ramp_s_tip_is_set_down():
 	await _to_a_world()
 	var surface: WorldSurface = (_root.star_system.proxy(_planet.id) as BodyProxy).surface()
-	_up = LevelGround.near(surface.terrain, _up)
+	var level: Variant = LevelGround.near(surface.terrain, _up)
+	assert_not_null(level, "level, clear ground near the hop")
+	if level == null:
+		return
+	_up = level
 	assert_lt(LevelGround.tilt(surface.terrain, _up), LevelGround.LEVEL, "level ground")
 	_ground = _planet.radius + surface.terrain.height_at(_up)
 	var along := _up.cross(Vector3.UP).normalized()
@@ -316,7 +320,11 @@ func test_a_ship_woken_landed_off_is_checked_once_its_footprint_is_solid():
 	await _to_a_world()
 	var surface: WorldSurface = (_root.star_system.proxy(_planet.id) as BodyProxy).surface()
 	var east := _up.cross(Vector3.UP).normalized()
-	var there := LevelGround.near(surface.terrain, (_up + east * (1500.0 / _planet.radius)).normalized())
+	var level: Variant = LevelGround.near(surface.terrain, (_up + east * (1500.0 / _planet.radius)).normalized())
+	assert_not_null(level, "level, clear ground 1.5 km off")
+	if level == null:
+		return
+	var there: Vector3 = level
 	assert_lt(LevelGround.tilt(surface.terrain, there), LevelGround.LEVEL, "level ground 1.5 km off")
 	var along := there.cross(Vector3.UP).normalized()
 	var ship := _spawn(Vector3(300, 0, 0))
