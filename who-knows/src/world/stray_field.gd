@@ -207,6 +207,7 @@ func sync() -> void:
 		e["v"] = item.linear_velocity
 		e["w"] = item.angular_velocity
 		e["use"] = _use_of(item)
+		e["frozen"] = item.freeze and item.state == Item.State.LOOSE
 
 func to_dict() -> Dictionary:
 	sync()
@@ -232,13 +233,20 @@ func _load(id: int) -> void:
 	item.angular_velocity = e["w"]
 	add_child(item, true)
 	item.add_to_group(Universe.EXTERIOR_SPACE)
-	_settle_loaded(item)
+	if e["frozen"]:
+		# It lay frozen where it came to rest: on the ground, or on a boulder,
+		# which far from every anchor has no collider to stop it falling into
+		# the stone (final review M3). It lies there again.
+		_freeze(item)
+	else:
+		_settle_loaded(item)
 	_track(id, item)
 
-## A stray loaded on a world (final review I3, T9a): lying on the ground, or
-## under it, it is put on it and frozen; higher -- saved mid-fall, or resting
-## on a hull or ramp -- it loads live and falls to whatever is under it now, as
-## pull() lets it, and is frozen only once it rests on the ground.
+## A stray loaded on a world, not saved frozen (final review I3, T9a): lying
+## on the ground, or under it, it is put on it and frozen; higher -- saved
+## mid-fall, or resting on a hull or ramp -- it loads live and falls to
+## whatever is under it now, as pull() lets it, and is frozen only once it
+## rests on the ground.
 func _settle_loaded(item: Item) -> void:
 	if gravity == null or not gravity.on_world_at(item.global_position):
 		return
