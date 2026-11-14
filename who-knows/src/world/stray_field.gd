@@ -122,9 +122,15 @@ func pull(delta: float) -> void:
 		var up := gravity.up_at(p)
 		var altitude := gravity.altitude_at(p)
 		if not up.is_zero_approx() and altitude < -WorldSurface.FLOOR_SLACK:
-			_onto_ground(item, up, altitude)
-			_calm.erase(id)
-			continue
+			# Under the analytic ground; under the ground the collision has
+			# too? At a lip that lies metres lower, and a stray resting on it
+			# is on the ground (final review I1). Worked out only here, so a
+			# falling stray costs what it did.
+			altitude = gravity.solid_altitude_at(p)
+			if altitude < -WorldSurface.FLOOR_SLACK:
+				_onto_ground(item, up, altitude)
+				_calm.erase(id)
+				continue
 		item.apply_central_force(gravity.at(p) * item.mass)
 		item.apply_central_force(gravity.drag_at(p, item.linear_velocity) * item.mass)
 		if item.linear_velocity.length() < REST_SPEED:
@@ -156,8 +162,10 @@ static func extent_along(item: Item, up: Vector3) -> float:
 	var h := item.definition.size * 0.5
 	return absf(b.x.dot(up)) * h.x + absf(b.y.dot(up)) * h.y + absf(b.z.dot(up)) * h.z
 
-## Puts `item`, its middle `altitude` over the ground along `up`, lying on the
-## ground (WorldGravity.altitude_at's), frozen.
+## Puts `item`, its middle `altitude` over the ground along `up`, lying on
+## that ground, frozen: the ground the collision has
+## (WorldGravity.solid_altitude_at's), so at a lip it lies on the triangles,
+## not in mid-air over them.
 static func _onto_ground(item: Item, up: Vector3, altitude: float) -> void:
 	item.global_position += up * (extent_along(item, up) - altitude)
 	_freeze(item)
@@ -237,7 +245,9 @@ func _settle_loaded(item: Item) -> void:
 	var up := gravity.up_at(item.global_position)
 	if up.is_zero_approx():
 		return
-	var altitude := gravity.altitude_at(item.global_position)
+	# The ground the collision has: at a lip, metres under the analytic one
+	# (final review I1).
+	var altitude := gravity.solid_altitude_at(item.global_position)
 	if altitude <= extent_along(item, up) + ON_GROUND:
 		_onto_ground(item, up, altitude)
 

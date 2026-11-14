@@ -20,6 +20,11 @@ class FakeGravity extends WorldGravity:
 		return Vector3.UP
 	func altitude_at(p: Vector3) -> float:
 		return p.y
+	## The ground the collision has: `solid` m under the analytic ground, as
+	## at a mesa's lip (final review I1); level with it by default.
+	var solid := 0.0
+	func solid_altitude_at(p: Vector3) -> float:
+		return p.y + solid
 
 var _universe: Universe
 var _field: StrayField
@@ -234,3 +239,28 @@ func test_a_stray_in_air_slows():
 		_field.pull(1.0 / 60.0)
 		await wait_physics_frames(1)
 	assert_lt(item.linear_velocity.length(), 50.0 - 0.5)
+
+## Final review I1: at a mesa's lip the ground the collision has (the
+## triangles) sits metres under the analytic ground. A stray lying on it there
+## is on the ground: it rests and freezes on the collider, never lifted onto
+## the analytic ground and frozen in mid-air; and it loads there again.
+func test_a_stray_at_a_lip_rests_on_the_triangles_under_the_analytic_ground():
+	_gravity.solid = 3.0
+	_slab(BodyProxy.LAYER, -3.0)
+	await wait_physics_frames(1)
+	var item := _stray(Vector3(0, -3.0 + 0.3, 0))
+	await _settle(StrayField.REST_TIME + 1.5)
+	assert_true(item.freeze, "frozen, lying on the ground")
+	assert_almost_eq(_gap(item), -3.0, 0.02, "on the collider (%.2f m), not lifted onto the analytic ground" % _gap(item))
+	var id := _field.ledger.entries.keys()[0] as int
+	_field._unload(id)
+	_field._load(id)
+	var loaded := _field.live(id)
+	assert_true(loaded.freeze, "frozen on load")
+	assert_almost_eq(_gap(loaded), -3.0, 0.02, "loaded on the collider (%.2f m)" % _gap(loaded))
+	# Under the collider there it is still put on it: on it, not on the
+	# analytic ground over it.
+	var under := _stray(Vector3(0, -4.0, 0), Vector3(0, -8, 0))
+	_field.pull(1.0 / 60.0)
+	assert_true(under.freeze, "frozen")
+	assert_almost_eq(_gap(under), -3.0, 0.001, "put on the collider")

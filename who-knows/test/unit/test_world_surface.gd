@@ -756,3 +756,101 @@ func test_a_ghosted_hull_is_left_alone():
 	s.update(_universe.to_universe(a.global_position))
 	assert_eq(s.floor_fired, 0, "at warp the hull passes through everything")
 	s.finish()
+
+# --- the floor at a lip (final review I1) --------------------------------------
+
+## 1337's desert, p3: its mesas' risers are near-sheer, so at a lip the finest
+## chunk's triangles cut the convex edge metres under height_at.
+func _desert() -> SystemBody:
+	if _system == null:
+		_system = SystemRecipe.from_seed(1337)
+	return _system.body(&"p3")
+
+## A point on the ground the collision has (a finest chunk's triangle, found
+## as GroundCover finds it) where that triangle is more than `under` m under
+## the analytic ground: on a mesa's or a tower's lip. Body-local; ZERO if none
+## is found. The reviewer's search: lines across the mesa line, a step of more
+## than 8 m in 2 m is an edge.
+static func _a_lip(t: WorldTerrain, under: float) -> Vector3:
+	var depth := CubeSphere.depth_for(t.radius)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var tried := {}
+	for line in 4000:
+		var d := Vector3(rng.randf_range(-1, 1), rng.randf_range(-1, 1), rng.randf_range(-1, 1)).normalized()
+		if absf(t.continent_at(d) - WorldTerrain.MESA_FROM) > 0.03:
+			continue
+		var a := d.cross(Vector3.UP).normalized()
+		var h0 := t.height_at(d)
+		for i in 1500:
+			var p := (d + a * (i * 2.0 / t.radius)).normalized()
+			var h := t.height_at(p)
+			var key := CubeSphere.key_for(p, depth)
+			if absf(h - h0) > 8.0 and not tried.has(key):
+				tried[key] = true
+				var g := GroundCover._Ground.new(t, key, PackedVector3Array())
+				var centre := Vector3(TerrainChunkData.centre_of(t, key))
+				for j in 16:
+					for k in 16:
+						var at: Vector3 = g.at((k + 0.5) / 16.0, (j + 0.5) / 16.0).point + centre
+						if -t.altitude_of(at) > under:
+							return at
+			h0 = h
+	return Vector3.ZERO
+
+## The ground the collision has, worked out from a point: on a lip it is the
+## triangle, metres under height_at; on open ground the same triangle too.
+func test_the_solid_altitude_is_the_triangle_under_a_point():
+	var t := WorldTerrain.new(_desert().recipe)
+	var lip := _a_lip(t, 3.0)
+	assert_ne(lip, Vector3.ZERO, "a lip with its triangle 3 m under the analytic ground")
+	var up := lip.normalized()
+	gut.p("a lip on p3: the triangle %.2f m under height_at" % -t.altitude_of(lip))
+	assert_almost_eq(TerrainChunkData.solid_altitude_of(t, lip), 0.0, 0.05, "on the triangle")
+	assert_almost_eq(TerrainChunkData.solid_altitude_of(t, lip + up * 2.0), 2.0, 0.05, "2 m over it")
+	# Open ground: any point's triangle, as GroundCover finds it.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 99
+	var depth := CubeSphere.depth_for(t.radius)
+	for n in 20:
+		var d := Vector3(rng.randf_range(-1, 1), rng.randf_range(-1, 1), rng.randf_range(-1, 1)).normalized()
+		var key := CubeSphere.key_for(d, depth)
+		var g := GroundCover._Ground.new(t, key, PackedVector3Array())
+		var at: Vector3 = g.at(rng.randf(), rng.randf()).point + Vector3(TerrainChunkData.centre_of(t, key))
+		assert_almost_eq(TerrainChunkData.solid_altitude_of(t, at + at.normalized() * 0.5), 0.5, 0.05, "point %d" % n)
+
+## Final review I1: standing on the triangle at a lip, metres under the
+## analytic ground, is standing on the ground, not under it: the floor leaves
+## the anchor alone. A metre under the triangle there it is still lifted out.
+func test_the_floor_leaves_an_anchor_on_the_triangles_at_a_lip_alone():
+	var p := _desert()
+	_universe = Universe.new()
+	add_child_autofree(_universe)
+	var s := WorldSurface.new()
+	s.setup(p, _universe)
+	add_child_autofree(s)
+	s.build_roots()
+	var lip := _a_lip(s.terrain, 3.0)
+	assert_ne(lip, Vector3.ZERO, "a lip found")
+	var up := lip.normalized()
+	var focus := p.point.plus(lip + up * 1.6)
+	_universe.origin = focus
+	s.update(focus)
+	var a := RigidBody3D.new()
+	a.freeze = true
+	a.collision_mask = BodyProxy.LAYER
+	a.add_to_group(AsteroidStream.SPACE_ANCHOR)
+	a.add_to_group(Universe.EXTERIOR_SPACE)
+	add_child_autofree(a)
+	a.global_position = _universe.to_engine(p.point.plus(lip + up * 0.05))
+	for i in 3:
+		s.update(focus)
+	assert_eq(s.floor_fired, 0, "on the triangle, %.2f m under height_at: left alone" % -s.terrain.altitude_of(lip))
+	WorldSurface.warn_on_floor = false
+	a.global_position = _universe.to_engine(p.point.plus(lip - up * 1.0))
+	s.update(focus)
+	WorldSurface.warn_on_floor = true
+	assert_eq(s.floor_fired, 1, "a metre under the triangle: lifted out")
+	assert_gt(TerrainChunkData.solid_altitude_of(s.terrain, _universe.to_universe(a.global_position).minus(p.point)), 0.0,
+		"over the triangle")
+	s.finish()

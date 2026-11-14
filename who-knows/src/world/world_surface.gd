@@ -601,6 +601,13 @@ func spare_solids() -> int:
 
 ## The analytic floor (§5.5): an anchor more than FLOOR_SLACK under the
 ## ground is put back above it, clear by its own reach, moving in no more.
+## Under the ground means under the analytic ground and under the ground the
+## collision has (TerrainChunkData.solid_altitude_of) both: at a mesa's or a
+## tower's lip the triangles sit up to ~9 m under height_at, and judged by
+## height_at alone the suit standing there was lifted, fell back and was
+## lifted again (final review I1). The triangle is worked out only when the
+## analytic ground says under, so open ground costs what it did. Lifted, it
+## goes clear of the higher of the two.
 ## Not a ghosted hull at warp: it passes through everything on purpose.
 func _keep_anchors_above_ground() -> void:
 	for node in get_tree().get_nodes_in_group(AsteroidStream.SPACE_ANCHOR):
@@ -610,9 +617,13 @@ func _keep_anchors_above_ground() -> void:
 		var local := universe.to_universe(a.global_position).minus(body.point)
 		if local.is_zero_approx() or terrain.altitude_of(local) >= -FLOOR_SLACK:
 			continue
+		var solid := TerrainChunkData.solid_altitude_of(terrain, local)
+		if solid >= -FLOOR_SLACK:
+			continue
 		var up := local.normalized()
 		var clear := float(a.get_meta(AsteroidStream.ANCHOR_RADIUS, 1.0))
-		a.global_position = universe.to_engine(body.point.plus(up * (terrain.radius + terrain.height_at(up) + clear)))
+		var ground := maxf(terrain.radius + terrain.height_at(up), local.length() - solid)
+		a.global_position = universe.to_engine(body.point.plus(up * (ground + clear)))
 		if a is RigidBody3D:
 			var v := (a as RigidBody3D).linear_velocity
 			(a as RigidBody3D).linear_velocity = v - up * minf(v.dot(up), 0.0)
