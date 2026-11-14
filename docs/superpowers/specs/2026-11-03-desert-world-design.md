@@ -195,9 +195,9 @@ this is the land it lives in).
 >   collision shapes are built on worker threads. That rests on GodotPhysics3D keeping its
 >   shapes in a thread-safe owner, written in `WorldSurface.shape_of` (and a test fails if the
 >   project's physics engine changes). Near the ground (the hull's lowest point within
->   `WorldSurface.ARRIVE` 10 m plus its anchor radius, now or in two ticks) every cell within
->   the hull's reach plus `ARRIVE` of its way to where it will be in two ticks is made solid at
->   once (final review I2): a finished worker result first, then a job in flight waited on, then
+>   `WorldSurface.ARRIVE` 10 m plus its anchor radius, now or in two ticks) every cell whose
+>   ground lies within the hull's reach plus `ARRIVE` of its way to where it will be in two
+>   ticks, in 3D (`TerrainCollider.ground_gap`), is made solid at once (final review I2): a finished worker result first, then a job in flight waited on, then
 >   a build on the main thread. From three times `ARRIVE` those cells jump the workers' queue.
 >   The disc was already costing `main` (73 fps flown low).
 > - **The floor and the strays judge the ground by the triangle under them** (final review I1).
@@ -232,7 +232,8 @@ this is the land it lives in).
 > rough ground.** Seated 30 m over a talus band, flown at 121 m/s: **98 fps**, against **73** on
 > `main` before phase 2; carried (the hull held): 109 at 120 m/s, 102 at 150. The rest of that
 > frame is the GPU's draw (3.9 ms), the HUD (1.1 ms), the surface's select and the ship's tick.
-> A follow-up will chase it.
+> A follow-up will chase it. After the final review's fix wave (2026-11-13): 99 flown, 110 and
+> 101 carried; the boulder landings as above.
 >
 > **Open for phase 3:**
 > - **The pad and the stamps must keep the cover clear.** `GroundCover.scatter` knows nothing of
