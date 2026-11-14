@@ -106,3 +106,54 @@ func test_on_ground_is_in_the_places_frame_and_on_the_terrain():
 		elif s.id == &"pool_bank":
 			pad_over_bank -= s.level
 	assert_almost_eq(pad.y, pad_over_bank - 0.18, 0.2, "the pad, over the pool's bank less the curve at 90 m")
+
+## The layout points of `key` in oasis.json: arrays of [east, north].
+func _layout_points(key: String) -> Array:
+	return _place.layout().get(key, [])
+
+func test_palms_stand_on_the_ground():
+	await _hold_over(0, 0, 60.0)
+	var palms := _oasis().get_node("Palms") as StaticBody3D
+	var points := _layout_points("palms")
+	assert_eq(points.size(), 7, "seven palms")
+	assert_eq(palms.get_child_count(), points.size(), "a trunk each")
+	for i in points.size():
+		var c := palms.get_child(i) as CollisionShape3D
+		var shape := c.shape as CapsuleShape3D
+		var foot := c.transform.origin - c.transform.basis.y * shape.height * 0.5
+		var want := PlaceField.on_ground(_place, _terrain, float(points[i][0]), float(points[i][1]))
+		assert_lt(foot.distance_to(want), 0.05, "palm %d's foot is on the ground" % i)
+
+func test_palm_trunks_are_solid():
+	await _hold_over(0, 0, 60.0)
+	var palms := _oasis().get_node("Palms") as StaticBody3D
+	assert_eq(palms.collision_layer, BodyProxy.LAYER, "on the terrain's layer")
+	var at: Array = _layout_points("palms")[3]
+	var foot := PlaceField.on_ground(_place, _terrain, float(at[0]), float(at[1]))
+	var from := _oasis().to_global(foot + Vector3(-4.0, 1.2, 0.0))
+	var to := _oasis().to_global(foot + Vector3(4.0, 1.2, 0.0))
+	var query := PhysicsRayQueryParameters3D.create(from, to, BodyProxy.LAYER)
+	var hit := _oasis().get_world_3d().direct_space_state.intersect_ray(query)
+	assert_false(hit.is_empty(), "a ray at chest height hits something")
+	if not hit.is_empty():
+		assert_eq(hit["collider"], palms, "the palms")
+		assert_lt(_oasis().to_local(hit["position"]).distance_to(foot + Vector3(0, 1.2, 0)), 0.7, "at the trunk")
+
+func test_the_green_ring_and_the_village_pieces_are_one_kit_and_one_multimesh():
+	await _hold_over(0, 0, 60.0)
+	var meshes := _oasis().find_children("*", "MultiMeshInstance3D", true, false)
+	assert_eq(meshes.size(), 1, "one MultiMesh for all the grass")
+	var village := _oasis().get_node("Village")
+	var solids := village.get_children().filter(func(n): return n is MeshInstance3D and n.name == &"DressingSolid")
+	assert_eq(solids.size(), 1, "one kit's solids")
+
+func test_the_grass_stays_out_of_the_water():
+	await _hold_over(0, 0, 60.0)
+	var ring := _oasis().find_children("*", "MultiMeshInstance3D", true, false)[0] as MultiMeshInstance3D
+	var pool := _oasis().find_children("*", "MeshInstance3D", true, false)[0] as MeshInstance3D
+	var edge := pool.get_aabb().size.x * 0.5
+	var tufts: PackedVector3Array = ring.get_meta(&"tufts")
+	assert_gt(tufts.size(), 500)
+	for i in tufts.size():
+		var at := tufts[i]
+		assert_gt(Vector2(at.x, at.z).length(), edge - PlaceField.SHORE_LAP + 1.5 - 0.01, "tuft %d" % i)

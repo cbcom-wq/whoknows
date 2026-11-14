@@ -27,6 +27,9 @@ const SHORE_STEP := 0.25
 ## The water disc reaches this far past the shore, m: under the ground there,
 ## so the disc's facets never leave a gap at the bank.
 const SHORE_LAP := 0.6
+## Metres between the stones of a path, and between the joints of the pump's pipe.
+const STONE_STEP := 0.9
+const PIPE_STEP := 1.5
 
 var universe: Universe
 var system: SystemRecipe
@@ -97,12 +100,15 @@ func _free(id: StringName) -> void:
 func _build(place: PlaceDesign, body: SystemBody, node: Node3D) -> void:
 	var terrain := whereabouts.terrain_of(body)
 	var layout := place.layout()
+	var water_radius := 0.0
 	if layout.has("pool"):
-		_build_pool(place, terrain, layout["pool"], node)
+		water_radius = _build_pool(place, terrain, layout["pool"], node)
+	_build_village(place, terrain, layout, node, water_radius)
 
 ## The pool: its water, a flat faceted disc at its level, and the area that
-## slows you in it.
-func _build_pool(place: PlaceDesign, terrain: WorldTerrain, pool: Dictionary, node: Node3D) -> void:
+## slows you in it. Returns the water's edge: how far from the pool's centre
+## the ground comes up to the water level, m.
+func _build_pool(place: PlaceDesign, terrain: WorldTerrain, pool: Dictionary, node: Node3D) -> float:
 	var at: Array = pool.get("at", [0, 0])
 	var east := float(at[0])
 	var north := float(at[1])
@@ -120,6 +126,77 @@ func _build_pool(place: PlaceDesign, terrain: WorldTerrain, pool: Dictionary, no
 	OasisLooks.water(kit, Transform3D(Basis.IDENTITY, Vector3(centre.x, level, centre.y)), shore + SHORE_LAP)
 	kit.commit()
 	node.add_child(PoolWater.make(centre, shore + SHORE_LAP, level, ground))
+	return shore
+
+## The green and the village outside: palms (trunks solid), the grass ring,
+## gardens, the pump and its pipe, and the path. Every solid is one kit's, every
+## tuft one MultiMesh's, and each piece stands on the ground of its layout
+## point (on_ground), never on a height of its own.
+func _build_village(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionary, node: Node3D,
+		water_radius: float) -> void:
+	var ground := func(east: float, north: float) -> Vector3:
+		return on_ground(place, terrain, east, north)
+	var holder := Node3D.new()
+	holder.name = "Village"
+	node.add_child(holder)
+	var kit := OasisLooks.kit_under(holder)
+	var palms: Array = layout.get("palms", [])
+	if not palms.is_empty():
+		var trunks := StaticBody3D.new()
+		trunks.name = "Palms"
+		trunks.collision_layer = BodyProxy.LAYER
+		trunks.collision_mask = 0
+		node.add_child(trunks)
+		for i in palms.size():
+			var f := Transform3D(Basis.IDENTITY, ground.call(float(palms[i][0]), float(palms[i][1])))
+			var variety := float((i * 37 + 13) % 100) / 100.0
+			OasisLooks.palm(kit, f, variety)
+			trunks.add_child(OasisLooks.palm_collider(f, variety))
+	for g: Dictionary in layout.get("gardens", []):
+		var at: Array = g["at"]
+		var size: Array = g.get("size", [4.0, 3.0])
+		var f := Transform3D(Basis.IDENTITY, ground.call(float(at[0]), float(at[1])))
+		OasisLooks.garden(kit, f, Vector2(float(size[0]), float(size[1])), bool(g.get("dried", false)),
+			float(at[0] * 0.173 + at[1] * 0.291))
+	if layout.has("pump"):
+		var pump: Dictionary = layout["pump"]
+		var at: Array = pump["at"]
+		var foot: Vector3 = ground.call(float(at[0]), float(at[1]))
+		OasisLooks.pump(kit, Transform3D(Basis.IDENTITY, foot))
+		var end: Array = pump.get("pipe_to", at)
+		var from := foot + Vector3(0.0, 0.2, 0.0)
+		var steps := maxi(int(Vector2(float(end[0]) - float(at[0]), float(end[1]) - float(at[1])).length() / PIPE_STEP), 1)
+		for k in range(1, steps + 1):
+			var t := float(k) / steps
+			var to: Vector3 = ground.call(lerpf(float(at[0]), float(end[0]), t), lerpf(float(at[1]), float(end[1]), t))
+			to.y += 0.1
+			OasisLooks.pipe(kit, from, to)
+			from = to
+	if layout.has("path"):
+		var path: Dictionary = layout["path"]
+		var stones := PackedVector3Array()
+		var points: Array = path["points"]
+		for k in range(points.size() - 1):
+			var a := Vector2(float(points[k][0]), float(points[k][1]))
+			var b := Vector2(float(points[k + 1][0]), float(points[k + 1][1]))
+			var n := maxi(int(a.distance_to(b) / STONE_STEP), 1)
+			for j in n:
+				var p := a.lerp(b, float(j) / n)
+				stones.append(ground.call(p.x, p.y))
+		var last: Array = points[points.size() - 1]
+		stones.append(ground.call(float(last[0]), float(last[1])))
+		OasisLooks.path(kit, stones, float(path.get("width", 1.4)))
+	kit.commit()
+	if layout.has("grass_ring") and layout.has("pool"):
+		var ring: Dictionary = layout["grass_ring"]
+		var axes: Array = ring.get("axes", [36, 26])
+		var at: Array = layout["pool"].get("at", [0, 0])
+		var centre: Vector3 = ground.call(float(at[0]), float(at[1]))
+		var floor_of := func(x: float, z: float) -> float:
+			return on_ground(place, terrain, x, -z).y
+		node.add_child(OasisLooks.grass_ring(Transform3D(Basis.IDENTITY, centre),
+			Vector2(float(axes[0]), float(axes[1])), water_radius, float(ring.get("inner", 1.5)),
+			hash(String(place.id)), floor_of))
 
 # --- the ground, pure ---------------------------------------------------------
 

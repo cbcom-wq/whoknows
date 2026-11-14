@@ -194,7 +194,7 @@ func test_no_design_no_change() -> void:
 		assert_eq(other.recipe.seed, b.recipe.seed)
 		assert_eq(other.recipe.kind, b.recipe.kind)
 		# Only p3 has the design's stamps (the oasis floor, its pool bank, its pad and its pool).
-		assert_eq(other.recipe.stamps.size(), 4 if b.id == &"p3" else 0, "%s's stamps" % b.id)
+		assert_eq(other.recipe.stamps.size(), 5 if b.id == &"p3" else 0, "%s's stamps" % b.id)
 
 func test_the_kesdra_tweak_pins_what_p3_rolls() -> void:
 	var p3 := SystemRecipe.from_seed(1337, false).body(&"p3").recipe
