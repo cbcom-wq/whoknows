@@ -193,15 +193,29 @@ this is the land it lives in).
 >   the way cut at `TerrainCollider.TRAVEL_MAX` 300 m, worked out a little further ahead
 >   (`LEAD`, at most `LEAD_MAX` 100 m). Bodies let go of are pooled and used again, and their
 >   collision shapes are built on worker threads. That rests on GodotPhysics3D keeping its
->   shapes in a thread-safe owner, written in `WorldSurface.shape_of`. Near the ground (the
->   hull's lowest point within `WorldSurface.ARRIVE` 10 m plus its anchor radius, now or in two
->   ticks) the chunk under the hull and the one it will hit are built at once on the main
->   thread. The disc was already costing `main` (73 fps flown low).
+>   shapes in a thread-safe owner, written in `WorldSurface.shape_of` (and a test fails if the
+>   project's physics engine changes). Near the ground (the hull's lowest point within
+>   `WorldSurface.ARRIVE` 10 m plus its anchor radius, now or in two ticks) every cell within
+>   the hull's reach plus `ARRIVE` of its way to where it will be in two ticks is made solid at
+>   once (final review I2): a finished worker result first, then a job in flight waited on, then
+>   a build on the main thread. From three times `ARRIVE` those cells jump the workers' queue.
+>   The disc was already costing `main` (73 fps flown low).
+> - **The floor and the strays judge the ground by the triangle under them** (final review I1).
+>   The finest chunks' triangles sit up to ~9 m under `height_at` at a mesa or tower lip, so an
+>   anchor or a stray is "under the ground" only when it is under both
+>   (`TerrainChunkData.solid_altitude_of`), and is lifted over the higher.
+> - **A ship spawned in a world's well arrives clear of its ground** (final review M4): F6's and a
+>   hostile's spot is lifted to `SpawnSpot.GROUND_CLEAR` 10 m plus the ship's reach over the
+>   highest ground within that reach.
 > - **A ship lands in a boulder field.** The starter and the Warden, set down on the densest talus
 >   spot, land with a tilt of 8.6° and 7.8°, no hard landing and no damage, and no stone inside
->   their colliders. A ship restored landed (a save, a ship woken) checks what is under it by
->   casting its own colliders down (`LandingMonitor._gap_below`): resting on a stone it stays put,
->   off the ground it is let fall and lands again, buried it is lifted.
+>   their colliders. A ship restored landed (a save, a ship woken) waits until the ground within
+>   its reach is solid (`WorldSurface.solid_round`, at most `RESTORE_WAIT` 60 ticks), then checks
+>   what is under it once (final review I3): buried, its stance under the *lowest* ground under
+>   its footprint's middle and corners, it is lifted over the highest (I4: astride a dune's crest
+>   it is resting, not buried); else it casts its own colliders, never the ramp's (I5), down
+>   (`LandingMonitor._gap_below`): resting on a stone it stays put, off the ground it is let fall
+>   and lands again.
 > - **`Whereabouts.over(body)`** gives the focus's altitude, air and up over one world in one
 >   go, for whoever wants all three every tick (the sand).
 > - **Tests find level, clear ground** with `test/unit/helpers/level_ground.gd` (`LevelGround`),
@@ -230,6 +244,19 @@ this is the land it lives in).
 >   select (0.7 ms a tick) and the ship's tick (1.1 ms) are the places to look.
 > - **The dither's stipple** shows on the farthest stones if you look for it, the price of
 >   fading each stone without a shader.
+> - **For the low-flight fps follow-up** (final review, not taken in its fix wave):
+>   - **M2, the near-ground gate is open in low flight.** It measures the hull's lowest point as
+>     `ANCHOR_RADIUS`, its bounding radius (24 m for the starter), not its stance depth, so it is
+>     open from ~30 m for the starter and ~40 m for the Warden, and every cell crossed low is
+>     built on the main thread. Give anchors their real lowest-point depth
+>     (`Ship.stance_depth()`) as a meta and gate on that.
+>   - **M8, stone vertices rebuilt per stone.** `GroundCover._boulders` and `boulder_faces` call
+>     `RockMesh.cut_vertices` for every stone, twice, in the gate's main-thread builds too. Cache
+>     them per shape in `RockMesh.warm()`.
+>   - **One shared apply budget.** The surface and the cover each spend up to 2 ms a tick
+>     applying; share one budget between them.
+>   - **The gate's one-time hitch.** A hull restored or woken with nothing built has up to ~16
+>     cells built at once on the main thread (~2.5 ms each).
 
 ---
 
