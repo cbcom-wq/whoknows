@@ -233,3 +233,15 @@ func test_aligning_follows_the_drop():
 	assert_eq(on_drop.status, WarpPlan.Status.READY, on_drop.text())
 	assert_eq(on_drop.direction, on_centre.direction)
 	assert_almost_eq(on_drop.distance, on_drop.drop.minus(from).length(), 0.01)
+
+func test_inside_the_limit_is_close_with_or_without_a_side():
+	var system := SystemRecipe.from_seed(1337)
+	var sided := system.warp_target(&"p3")
+	var plain := system.warp_target(&"p2") if system.warp_target(&"p2") != null else system.warp_targets()[0]
+	for t in [sided, plain]:
+		var from: UniversePoint = t.point.plus(Vector3(t.limit * 0.5, 0.0, 0.0))
+		var p := WarpPlan.check(from, Vector3.LEFT, t, system.warp_targets(), [], null)
+		var want := _old_plan(from, t)
+		assert_eq(p.status, WarpPlan.Status.CLOSE, "%s: inside its limit" % t.id)
+		assert_eq(p.distance, want["distance"], "%s: the old maths" % t.id)
+		assert_eq(p.direction, want["direction"], "%s: the old direction" % t.id)

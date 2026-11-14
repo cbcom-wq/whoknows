@@ -87,7 +87,8 @@ static func check(from: UniversePoint, nose: Vector3, p_target: WarpTarget, targ
 		return p
 	var line := p_target.point.minus(from)
 	p.to_centre = line.length()
-	if p_target.arrive.is_zero_approx():
+	if p_target.arrive.is_zero_approx() or p.to_centre <= p_target.limit:
+		# No side, or already inside the limit: the old maths, so CLOSE still reads.
 		p.direction = line / maxf(p.to_centre, 0.001)
 		p.distance = p.to_centre - p_target.limit
 		p.drop = from.plus(p.direction * maxf(p.distance, 0.0))
