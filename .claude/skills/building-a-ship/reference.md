@@ -72,7 +72,11 @@ Warden use them).
 `o = (forward_index << 2) | roll`. The forwards are `[FORWARD(-Z), BACK(+Z), LEFT(-X), RIGHT(+X),
 UP(+Y), DOWN(-Y)]` (`BlockOrientation`). A thruster's force on the ship acts along its local −Z.
 
-| o | name in flight_test.gd | force / use |
+The names below are this table's own. They were `flight_test.gd`'s constants until the starter
+moved to `data/ships/starter.json` (8d80c6e); only `O_FORWARD` and `O_STERN` are still constants
+in code (`ModuleCatalog`). A ship file writes the number.
+
+| o | name | force / use |
 |---|---|---|
 | 0 | `O_FORWARD` | pushes the ship bow-ward (main engines at the stern); canopy and wedge slope up-forward |
 | 1 / 3 | `O_STARBOARD_FWD` / `O_PORT_FWD` | forward, rolled: `hull_wedge` chamfer to +X / −X |
@@ -455,8 +459,9 @@ pieces, all under `src/ship/` unless stated:
     follow their levels.
 - **At the helm:** `lights_flood` on **L**, `lights_forward` on **K** (`project.godot`).
   `PilotControls.lights` (set by the scene) toggles while seated only, and adds `has_lights`,
-  `floods_on`, `forward_on` to the telemetry; `VelocityPanel.lights_label` reads `FLOOD ON   FWD
-  OFF`; the controls card lists *Floods* and *Forward lights*.
+  `floods_on`, `forward_on` to the telemetry; `VelocityPanel`'s `flood_label` and
+  `forward_label` read `FLOOD ON` / `FWD OFF`, each in `HudPalette.GO` when on and `DIM` when off;
+  the controls card lists *Floods* and *Forward lights*.
 - **On the bridge:** `LightsPanel` (`lights_panel.gd`), two `ReadoutPanel` buttons FLOOD and FWD,
   lit `&"go"` while on, built by `InteriorDressing` on a shoulder's wall (the starboard one first,
   then the nearer the helm; never a fixture's) and bound by `Ship`. `InteriorBuilder.lights_panels()`
@@ -981,8 +986,9 @@ frozen kinematic with layer and mask 0; `QuantumPlant` runs the cores at `&"warp
 | Speed limit in a well, assist on | 120 m/s + 1 m/s per 40 m of altitude, at most 1,500 | `FlightComputer.speed_limit`, `LIMIT_PER_M`, `LIMIT_CAP` |
 | Easing at the well's edge | back to 120 m/s over the top tenth | `FlightComputer.LIMIT_EASE` |
 | The limit now | what the assist clamps to and the HUD shows | `FlightComputer.current_limit`, `limit_raised` |
-| Where you are | the well and the altitude over its ground | `Whereabouts.well()`, `altitude()` |
-| Solid ground round the hull | 64 m + 1 s × speed, at most 160 m | `TerrainCollider` |
+| Where you are | the well and the altitude over its ground; with the well in hand, the altitude, air and up over it in one go (for a per-tick reader, as the blowing sand) | `Whereabouts.well()`, `altitude()`, `over(body)` |
+| Boulders (desert world phase 2) | on every world, 0.5–4 m across (skewed small, a third sunk, none over 30°), gathered in clusters; on a desert most on the talus under the mesas and towers. **Solid:** each stone's hull is in its finest chunk's collision, on `BodyProxy.LAYER`, so it is in the solid ground above and a hull, a leg or a stray rests on it. Drawn out to `BOULDER_REACH` 240 m (1.4 m and over) and `SMALL_REACH` 140 m (the rest), each stone fading by the built-in dither; shadows within `BOULDER_SHADOW_REACH` 100 m. Grass (deserts only) is not solid | `GroundCover.BOULDER_SIZE`, `GroundCover.boulder_faces()`, `CoverField.BOULDER_REACH`, `SMALL_REACH`, `BOULDER_SHADOW_REACH` |
+| Solid ground round the hull | the finest cells with ground within 64 m of the hull's way over the next second (a capsule: 64 m round where it is and round where its velocity takes it in 1 s, the way cut at `TRAVEL_MAX` 300 m; faster, the 64 m round the hull and the first 300 m of the way still hold), boulders included, worked out half a finest edge wider and further ahead by a tenth of the uncapped way (`LEAD` of `|v|` x 1 s, at most `LEAD_MAX` 100 m, reached from 1 km/s, so at 2 km/s the way worked out is 400 m and lasts ~4 ticks), and again when either end of the way has strayed half an edge from the way worked out (a turn of ~6 deg at 120 m/s); the chunk under the hull, and the one under where it will be in two ticks, are built on the main thread only when the hull's lowest point (`ANCHOR_RADIUS` under its origin) is within `ARRIVE` (10 m) of the ground or two ticks of falling to it (a 2 km/s pass costs ~0.9 ms a tick on average, ~3 ms at the worst tick, at most 169 keys); built and shaped on workers, which relies on GodotPhysics3D's thread-safe shape RID owner (another physics server: make the shape on the main thread); bodies let go of are kept shapeless and used again (up to 64) | `TerrainCollider.keys_along`, `WorldSurface.shape_of`, `WorldSurface._make_solid`, `WorldSurface._touching_soon` |
 | The floor | an anchor > 0.5 m under the ground is lifted out; `WorldSurface.floor_fired` counts it | `WorldSurface.FLOOR_SLACK` |
 | Far plane | `BodyProxy.PROXY_AT` + the star's largest radius + 50 km = 700 km | `BodyProxy.VIEW_FAR` |
 | Bodies shrunk onto a shell | beyond 350 km | `BodyProxy.PROXY_AT` |
@@ -1031,6 +1037,8 @@ thrust over weight here (INF outside a well); under 1.0 the HUD says `TOO HEAVY 
 | On the ground | `FlightComputer.on_ground` is set only by `_publish()`: true when LANDED, or TOUCHING with terrain contact this tick. With it and the translation input zero, `_resting_on_ground()` skips both the hold and the levelling (Ruling 7a), so weight reaches the ground. Any translation input brings both back at once | `_publish`, `on_ground` |
 | Asking | `refusal()` (`""` when landed, else `Uneven ground · tilt n°` or `Not landed`), `ground_status()` (the HUD's word), `is_landed()`, `tilt()`, `static is_ground(body)` | `LandingMonitor` |
 | Saving | `hull.landed` is saved (`Ship.to_dict`), and carried through `Fleet`'s sleep and wake (Ruling 9). `restore_landed()` lands it frozen on load | `restore_landed`, `Fleet` |
+| Restored, then checked (desert world phase 2) | the ground under a restored landed hull may have changed (a world that is a desert since phase 2), so after `RESTORE_SETTLE` 10 ticks it casts its own colliders down onto `BodyProxy.LAYER` (`_gap_below`, boulders included): within `RESTORE_SLACK` 0.5 m it is resting (on the ground, a stone, uneven ground) and stays frozen; further, it is let fall with its hold off and lands again (from where it is up to `RESTORE_FALL` 2 m, else first brought to `RESTORE_DROP` 0.5 m over what is under it); its stance more than 0.5 m under the analytic ground (buried), it is lifted. With nothing solid found by `RESTORE_WAIT` 60 ticks it goes by the analytic ground | `LandingMonitor._set_down_again`, `_gap_below`; `test_landing_save.gd` |
+| A boulder field | legs and keel rest on solid stones (above), so a ship tilts with them: the starter and the Warden on the densest talus spot land tilted 8.6° and 7.8°, no hard landing, no damage, no stone inside their colliders. Over `MAX_TILT` it refuses (`UNEVEN GROUND · TILT n°`) and does not settle | `test/probes/desert_render.gd -- <out> cover` |
 | Crash | terrain deals crash damage only from `Ship.TERRAIN_CRASH_FROM` 10 m/s (a touchdown is not a crash, Ruling 8); everything else from `CRASH_FROM` 2. `crash_damage(knock, from)` | `Ship` |
 
 **The airlock on a world** (`src/ship/airlock/airlock.gd`):
@@ -1059,6 +1067,12 @@ thrust over weight here (INF outside a well); under 1.0 the HUD says `TOO HEAVY 
 - Proof: `test_landing_monitor.gd`, `test_landing_save.gd`, the `test_airlock_world.gd` file, and
   `test/probes/landing_play.gd` (windowed; hover, level, land, step out, walk, jump, drop, walk
   back in, lift off, low power, a spacewalk over the air, the head lamp at night).
+- **A test that sets a ship down to stand level** finds its spot with
+  `test/unit/helpers/level_ground.gd` (`LevelGround.near(terrain, out)`, preloaded): within 0.5°
+  over 20 m and no stone within 12 m; `out` is a direction from the world's centre, and so is
+  what it returns. Never assume the hop point is flat: on a desert the dunes leave no level
+  ground for a ship's legs, and every world has boulders
+  (`test_landing_legs.gd`, `test_landing_monitor.gd`, `test_system_scene.gd` use it).
 
 Measured by `landing_play` on a GTX 960 at 1280×720: 140 fps seated landed, 187 standing beside
 the ship, 149 at the foot of the ramp looking up it. The Warden (265 t) levels from 15° to 0.03°
@@ -1414,6 +1428,11 @@ wake there. A hostile bolt that hits you on a spacewalk is not counted as a hit 
   <id or ship .json> <abs out.plan>`, and `-- to-json <abs plan> <abs out\<id>.json>`.
 - **The full suite** takes about 17 minutes (2,033 tests on 2026-10-08): run it in the background,
   logged to a file.
+- **Desert probe:** `<godot> --path who-knows --resolution 1280x720 --script res://test/probes/desert_render.gd --
+  <abs out dir> [land|cover|all]`, windowed, on p3 of system 1337. `cover` lands the starter and
+  the Warden in a boulder field (the landing check in the checklist), flies low over a talus band
+  and prints its `fps` lines; it exits 1 on the low, fast lines over talus, which the owner
+  accepted under 120 for phase 2 (98 flown, 109 / 102 carried).
 - **Combat probe:** `<godot> --path who-knows --resolution 1280x720 --script res://test/probes/combat_probe.gd -- <abs out dir>`
   (windowed). The Warden in `ENGAGE` on a jinking starter: `hit` lines by range, three `fps`
   lines, `heavy`, and the `combat_*.png` renders (*Weapons* above).

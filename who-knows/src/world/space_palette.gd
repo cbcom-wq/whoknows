@@ -75,31 +75,49 @@ static func scree(colour: Color) -> Color:
 ## `ground_high` are the plains and the heights, `rock` the steep and the
 ## dark, `dust` loose stuff, `accent` a site's lit parts, `sky` the
 ## atmosphere's tint (`sky_low` at the horizon, `sky_high` overhead). Tuned by rendering; approved by the owner from renders.
+## The palettes a seed's palette draw can pick: all but the desert's, which only
+## the desert roll gives (WorldRecipe.DESERT_SHARE).
+const DRAWN_PALETTES := 8
+## The index of the desert palette in WORLDS. `boulder` is a lifted rock, `grass`
+## the cover plants (drawn on deserts only for now), `streak` a pale wind line.
+const DESERT_PALETTE := 8
 const WORLDS: Array[Dictionary] = [
 	{&"name": &"ochre", &"ground_low": Color("6e5236"), &"ground_high": Color("a07a4c"), &"rock": Color("4a3a2e"),
 		&"dust": Color("8a6a48"), &"accent": Color("ffb45a"), &"sky": Color("d9a066"),
-		&"sky_low": Color("d9a066"), &"sky_high": Color("7d8fb8")},
+		&"sky_low": Color("d9a066"), &"sky_high": Color("7d8fb8"),
+		&"boulder": Color("755a3d"), &"grass": Color("7e6d58")},
 	{&"name": &"slate", &"ground_low": Color("3f4a58"), &"ground_high": Color("6d7c8c"), &"rock": Color("2c323b"),
 		&"dust": Color("56606c"), &"accent": Color("8cc8f0"), &"sky": Color("7fa6c8"),
-		&"sky_low": Color("7fa6c8"), &"sky_high": Color("4f6f9a")},
+		&"sky_low": Color("7fa6c8"), &"sky_high": Color("4f6f9a"),
+		&"boulder": Color("4c5764"), &"grass": Color("697077")},
 	{&"name": &"rust", &"ground_low": Color("6b3a2a"), &"ground_high": Color("9a5a3e"), &"rock": Color("45281f"),
 		&"dust": Color("7e4a36"), &"accent": Color("f07c5a"), &"sky": Color("d08060"),
-		&"sky_low": Color("d08060"), &"sky_high": Color("8a7fa8")},
+		&"sky_low": Color("d08060"), &"sky_high": Color("8a7fa8"),
+		&"boulder": Color("70412e"), &"grass": Color("73564a")},
 	{&"name": &"sage", &"ground_low": Color("4e5a40"), &"ground_high": Color("7d8a62"), &"rock": Color("353b2c"),
 		&"dust": Color("626c50"), &"accent": Color("8fd6a0"), &"sky": Color("a8c090"),
-		&"sky_low": Color("a8c090"), &"sky_high": Color("7f9cbc")},
+		&"sky_low": Color("a8c090"), &"sky_high": Color("7f9cbc"),
+		&"boulder": Color("596247"), &"grass": Color("6e7462")},
 	{&"name": &"ash", &"ground_low": Color("4a4744"), &"ground_high": Color("7a7570"), &"rock": Color("302e2c"),
 		&"dust": Color("5e5a56"), &"accent": Color("ffd9a8"), &"sky": Color("b0a898"),
-		&"sky_low": Color("b0a898"), &"sky_high": Color("8c96a8")},
+		&"sky_low": Color("b0a898"), &"sky_high": Color("8c96a8"),
+		&"boulder": Color("55524e"), &"grass": Color("6c6967")},
 	{&"name": &"heather", &"ground_low": Color("54485e"), &"ground_high": Color("857592"), &"rock": Color("3a3242"),
 		&"dust": Color("6a5c76"), &"accent": Color("b9a6e0"), &"sky": Color("a898c8"),
-		&"sky_low": Color("a898c8"), &"sky_high": Color("7a74b0")},
+		&"sky_low": Color("a898c8"), &"sky_high": Color("7a74b0"),
+		&"boulder": Color("60546a"), &"grass": Color("77707d")},
 	{&"name": &"sand", &"ground_low": Color("7a6a4e"), &"ground_high": Color("b09a70"), &"rock": Color("54483a"),
 		&"dust": Color("928060"), &"accent": Color("ffd9a8"), &"sky": Color("e0c898"),
-		&"sky_low": Color("e0c898"), &"sky_high": Color("7d93bd")},
+		&"sky_low": Color("e0c898"), &"sky_high": Color("7d93bd"),
+		&"boulder": Color("827155"), &"grass": Color("928875")},
 	{&"name": &"ice", &"ground_low": Color("7890a0"), &"ground_high": Color("b8ccd6"), &"rock": Color("4c5a66"),
 		&"dust": Color("90a4b0"), &"accent": Color("d6e7ee"), &"sky": Color("c0dcea"),
-		&"sky_low": Color("c0dcea"), &"sky_high": Color("8fb4d8")},
+		&"sky_low": Color("c0dcea"), &"sky_high": Color("8fb4d8"),
+		&"boulder": Color("82939e"), &"grass": Color("adb6bb")},
+	{&"name": &"desert", &"ground_low": Color("a14a1c"), &"ground_high": Color("ae6630"), &"rock": Color("6e3519"),
+		&"dust": Color("863c16"), &"accent": Color("ffd9a8"), &"sky": Color("dca47c"),
+		&"sky_low": Color("dca47c"), &"sky_high": Color("7a84a8"),
+		&"boulder": Color("63301a"), &"grass": Color("8f6420"), &"streak": Color("e6be90")},
 ]
 
 ## Space as the outside shows it with no air (desert-world spec §6.2): the

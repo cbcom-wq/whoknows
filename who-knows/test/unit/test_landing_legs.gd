@@ -7,6 +7,7 @@ extends GutTest
 ## sand, instead of resting on its keel and reading as hovering.
 
 const EPS := 0.001
+const LevelGround := preload("res://test/unit/helpers/level_ground.gd")
 const SHIPS: Array[StringName] = [&"starter", &"lamplighter", &"warden"]
 
 var _blocks: BlockCatalog
@@ -288,8 +289,8 @@ func _scene() -> void:
 func _legs() -> LandingLegs:
 	return _ship.exterior_builder.legs()
 
-## Hops to the biggest planet and finds the flattest ground near where it puts
-## the starter (test_landing_ramp's way to a world).
+## Hops to the biggest planet and finds level ground near where it puts the
+## starter (LevelGround: on a desert, off the dunes).
 func _find_flat() -> void:
 	var system: SystemRecipe = _root.system
 	var planet: SystemBody = system.planets()[0]
@@ -303,21 +304,9 @@ func _find_flat() -> void:
 	assert_not_null(surface, "3 km off: its ground is drawn")
 	_planet = planet
 	var out := (_ship.exterior.global_position - _centre()).normalized()
-	var best := out
-	var flattest := INF
-	var tries: Array[Vector3] = [out]
-	for k in 12:
-		tries.append((out + Vector3(cos(k * 0.52), 0.0, sin(k * 0.52)) * 0.02 * (1 + k % 3)).normalized())
-	for dir in tries:
-		var spread := 0.0
-		var h0: float = surface.terrain.height_at(dir)
-		for k in 8:
-			var o := Vector3(cos(k * 0.785), 0.0, sin(k * 0.785)) * (40.0 / planet.radius)
-			spread = maxf(spread, absf(surface.terrain.height_at((dir + o).normalized()) - h0))
-		if spread < flattest:
-			flattest = spread
-			best = dir
-	_up = best
+	_up = LevelGround.near(surface.terrain, out)
+	assert_lt(LevelGround.tilt(surface.terrain, _up), LevelGround.LEVEL, "level ground found within %.0f km of the hop" % [
+		LevelGround.SEARCH / 1000.0])
 	_ground = planet.radius + surface.terrain.height_at(_up)
 	var along := _up.cross(Vector3.UP).normalized()
 	_basis = Basis(along, _up, along.cross(_up).normalized())

@@ -9,13 +9,22 @@ extends RefCounted
 ##
 ## Built by the system skeleton ahead of Planetfall, which adds terrain,
 ## boulders and sites under sub-seeds of their own.
+##
+## DUNES is the one archetype the terrain draw never reaches: a planet with air
+## becomes a desert by its own roll (DESERT_SHARE, sub-seed "desert"), so every
+## other world keeps the archetype and palette it always had.
 
 enum Kind { PLANET, MOON }
-enum Archetype { CRATERED, ROLLING, RIDGED, MESA }
+enum Archetype { CRATERED, ROLLING, RIDGED, MESA, DUNES }
 enum Atmosphere { NONE, THIN, THICK }
 
 ## Part of a world's identity: bumped whenever a seed's world changes.
-const GENERATOR_VERSION := 2
+## 3: a quarter of planets with air became deserts (desert world spec §7.4).
+const GENERATOR_VERSION := 3
+## The archetypes the terrain draw can pick: all but DUNES.
+const DRAWN_ARCHETYPES := 4
+## The share of planets with air that are deserts.
+const DESERT_SHARE := 0.25
 ## Radius, metres, by kind: uniform. Worlds you fly down into, not balls you
 ## orbit (the world scale spec §3.1).
 const RADIUS: Array[Vector2] = [Vector2(15000.0, 60000.0), Vector2(4000.0, 15000.0)]
@@ -56,11 +65,17 @@ static func from_seed(p_seed: int, p_kind := Kind.PLANET) -> WorldRecipe:
 	r.radius_m = size.randf_range(RADIUS[p_kind].x, RADIUS[p_kind].y)
 	r.surface_gravity = WorldSeed.rng(p_seed, &"gravity").randf_range(GRAVITY[p_kind].x, GRAVITY[p_kind].y)
 	var terrain := WorldSeed.rng(p_seed, &"terrain")
-	r.archetype = terrain.randi_range(0, Archetype.size() - 1) as Archetype
+	r.archetype = terrain.randi_range(0, DRAWN_ARCHETYPES - 1) as Archetype
 	r.relief_m = minf(r.radius_m * terrain.randf_range(RELIEF.x, RELIEF.y), RELIEF_MAX)
-	r.palette = WorldSeed.rng(p_seed, &"palette").randi_range(0, SpacePalette.WORLDS.size() - 1)
+	r.palette = WorldSeed.rng(p_seed, &"palette").randi_range(0, SpacePalette.DRAWN_PALETTES - 1)
 	r.atmosphere = WorldSeed.rng(p_seed, &"atmosphere").rand_weighted(PackedFloat32Array(ATMOSPHERE_WEIGHTS[p_kind])) as Atmosphere
+	if p_kind == Kind.PLANET and r.atmosphere != Atmosphere.NONE 			and WorldSeed.rng(p_seed, &"desert").randf() < DESERT_SHARE:
+		r.archetype = Archetype.DUNES
+		r.palette = SpacePalette.DESERT_PALETTE
 	return r
+
+func is_desert() -> bool:
+	return archetype == Archetype.DUNES
 
 ## Metres above `radius_m` where this world's air ends: below it gravity holds
 ## the avatar, loose items and NPCs (the desert world spec §5.1, §6.1). Ships

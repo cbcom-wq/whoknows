@@ -152,6 +152,38 @@ the air's top (10.9 km) to 300 m, the slowest 5 s: 129; **seated at full entry h
 floor**, so leave it no more to draw. The same dive squeezed into 5 s at 2.1 km/s, recorded and
 not gated, read 67, and that is phase 0's ground streaming, not the air.
 
+The desert (desert world phase 2, 2026-11-07 to 11-08, the same machine and size,
+`desert_render.gd`'s own runs, one probe at a time). The land, the cover and the blowing sand
+added no shader. On the desert p3 of system 1337:
+- seated hovering at 2 km: 150 fps; at 300 m: 138;
+- seated in low flight at 120 m/s, 60 m over the dunes: 127;
+- seated landed on open dunes: 136; on foot there: 213;
+- seated landed among grass, the sand blowing: 132; on foot among grass: 198 with the sand, 207
+  without (the sand costs nothing measurable);
+- on foot 6 m off the starter landed in a boulder field: 203;
+- `landing_play` on the same world: 147 seated landed, 226 beside the hull, 199 at the ramp's
+  foot.
+
+**One view stays under the floor, and the owner accepted it for this phase (2026-11-08): low,
+fast flight over rough ground.** Seated, 30 m over a talus band:
+- flown at 121 m/s (the speed limit there): **98 fps** on this branch, against **73** on `main`
+  before phase 2 (its p3's roughest ground, the same flight);
+- the hull carried at 120 m/s and 150 m/s: 109 and 102.
+
+The cover, the solid ground and the streaming now cost that frame about 1 ms. The rest goes to
+the GPU's draw (3.9 ms), the HUD (1.1 ms a frame), the surface's select (0.7 ms a tick) and the
+ship's tick (1.1 ms). Hovering still at that spot reads 117. A follow-up will chase it. The cuts
+that brought it there, each measured:
+- `CoverField.BOULDER_REACH` 300 m to 200 at first (Task 7);
+- boulder shadows only within `BOULDER_SHADOW_REACH` (100 m): every stone drawn had been drawn
+  again into the sun's 2 km of shadow splits;
+- fewer stones, in clusters (§3.9), and two size tiers, each stone fading out by itself (Task
+  7b): the big out to `BOULDER_REACH`, now 240 m, the small out to `SMALL_REACH` 140 m;
+- the solid ground under a moving hull a capsule along its way, not a 160 m disc (it was the disc
+  that cost `main` its 73).
+
+Cutting the grass's reach and the sand's count measured no gain, so neither was cut.
+
 Measure after any change that adds lights, pieces, windows, particles or post-processing.
 
 ### 2.7 Windows show the real outside
@@ -496,8 +528,8 @@ Phase 1 of the desert world, "air" (`docs/superpowers/specs/2026-11-03-desert-wo
 §6, as built). Built from renders shown to the owner, who **approved phase 1 as it stands on
 2026-11-07** ("phase 1 looks good"): the sky pairs, the halo's size, the rim, the entry glow,
 `HOLD_SHOW` 0, `HEARD_OUTSIDE` / `OUTSIDE_DB` and the wind levels keep their values, and this
-section and §3.8's exception are rules. Ground cover, the desert, palms and brick come
-with phases 2 and 3, and will join this section.
+section and §3.8's exception are rules. *The desert* and *Ground cover* below are phase 2's.
+Palms and brick come with phase 3, and will join this section.
 
 - **No exterior shader: engine materials only.** `Environment`, `ProceduralSkyMaterial`,
   `StandardMaterial3D` and particles. The interior's three shaders stay the budget (§2.5); a
@@ -528,7 +560,94 @@ with phases 2 and 3, and will join this section.
   showing it as puffs drew a white blob under every hovering ship. Thrusters show only what the
   pilot and the assist change (`RcsShow.HOLD_SHOW` is 0).
 - **The floating origin** (CLAUDE.md) still holds: `LimbGlow` and `EntryGlow` are children of
-  members of `Universe.EXTERIOR_SPACE`; world-space particles join `Universe.HOLDS_SHIFT`.
+  members of `Universe.EXTERIOR_SPACE`; world-space particles join `Universe.HOLDS_SHIFT`, except
+  an emitter that never stops (the blowing sand, below).
+
+#### The desert
+
+Phase 2 of the desert world, "the desert style" (desert world spec §7, as built). The owner
+approved the land at Checkpoint A (2026-11-07): warm orange sand, dunes 600 m apart and 40 m
+high with a crisper crest, fewer and broader towers, more mesas and a cheaper ground. On
+2026-11-08 the owner said the retuned land "looks good". Those are rules; the other numbers are
+the builder's, tuned from renders.
+
+- **A quarter of planets with air are deserts.** `WorldRecipe.DESERT_SHARE` 0.25, rolled on a
+  sub-seed of its own (`&"desert"`), so every other world keeps the archetype and palette it
+  always had. Moons and worlds with no air are never deserts. A desert is the `DUNES` archetype
+  (`WorldRecipe.is_desert()`), which the terrain draw never picks (`DRAWN_ARCHETYPES` 4).
+- **The desert palette.** `SpacePalette.WORLDS` has a ninth entry, `desert`
+  (`DESERT_PALETTE` 8), which only the desert roll gives (`DRAWN_PALETTES` 8): warm orange sand,
+  `ground_low` a14a1c; the dunes' lee faces `dust`, a little darker and redder; the mesa tops
+  `ground_high`; risers, towers and steep ground `rock`; a peach horizon `sky_low` and a dusty
+  lavender-blue `sky_high`. It also carries `boulder`, `grass` and `streak` (below). The `sand`
+  palette is untouched, so worlds that already rolled it keep their look. The hex looks deep
+  because the ground's vertex colours are linear albedo: a14a1c renders as about c88050 in the
+  sun.
+- **Dunes:** long parallel ridges, crests `WorldTerrain.DUNE_WAVE` 600 m apart, up to
+  `DUNE_HEIGHT` 40 m, a soft windward side (about 5°) and a steep lee (about 20°,
+  `DUNE_LEE` 0.18 of each wave), the crest eased over only about 7 m either side
+  (`DUNE_CREST_EASE`): crisp, never a knife edge. Their height swells along the crest from half to
+  full, so they read as a field, not corduroy. All run one way across a region, turning slowly
+  across the world, along one wind axis per world (`wind_at`). Near that axis's poles they fade
+  into flat sand sheets.
+- **Mesas and towers.** Where the continent layer is high (`MESA_FROM` 0.10), the ground steps up
+  in flat terraces with near-sheer rock risers. In a band below the mesa line stand towers:
+  broad flat-topped buttes 60–164 m across with near-sheer walls (`TOWER_RADIUS`, `TOWER_FOOT`
+  1.12), in cells 440 m apart, six cells in ten holding one (`TOWER_WAVE`, `TOWER_SHARE`): a fifth
+  as many as first built, never a rash of cones.
+- **Colour comes from `ground_at`,** as on every world, so the far mesh, the chunks and the
+  cover agree: mesa tops `ground_high`, their risers and the towers `rock`, a standing dune's lee
+  face from crest to trough `dust`, the rest of the sand `ground_low`, and anything over 35°
+  `rock`. The colour changes along a ridge and at the foot of the slip face, where the ground
+  folds, never across a slope. A desert's shade patches are twice as broad
+  (`DESERT_PATCH`): on smooth sand narrower ones read as blotches.
+- **The ground is one ground.** Dunes, mesas and towers live only in `WorldTerrain.height_at` and
+  `ground_at`. Nothing else shapes it. The far mesh shows them, so a desert is orange from orbit.
+
+#### Ground cover
+
+Boulders, grass and blowing sand (desert world spec §7.3, as built). At Checkpoint B
+(2026-11-08) the owner said of the blowing sand "leave as is", asked for the boulder field's far
+edge to be hidden and for fewer stones, in clusters, and then of the clusters: "looks good".
+Those are rules.
+
+- **Boulders on every world,** not only deserts (`GroundCover`, `src/world/ground_cover.gd`). They
+  are the asteroids' stones (§3.5): `RockMesh`'s boulder and shard, chunky and faceted, a shade of
+  the palette's `boulder` each (every `WORLDS` entry has one). 0.5–4 m across
+  (`GroundCover.BOULDER_SIZE`), skewed small, a third sunk, none on ground over 30°.
+- **Stones gather in clusters** with bare ground between: a slow noise of the world's own, about
+  55 m across (`CLUSTER_WAVE`), so a cluster runs across chunk edges and is the same every visit.
+  The big stones sit in a cluster's heart and the small round its rim. On a desert most lie in
+  rockfalls on the talus at the feet of the mesas and towers (`WorldTerrain.in_talus`) and few on
+  the dunes. Over a talus band that is about 4.4 stones a finest chunk, a third of the even
+  scatter it replaced.
+- **Grass on deserts only:** spiky tufts of thin dry blades, 0.3–0.7 m, in clumps, on sand
+  (`ground_low` and `dust`) no steeper than 15°, a shade of the palette's `grass`, a straw set apart
+  from the sand. Drawn out to 70 m (`CoverField.GRASS_REACH`), fading a finest chunk at a time.
+  **Grass does not sway.**
+- **Boulders are solid; grass is not.** A boulder's hull is in its finest chunk's collision, on
+  `BodyProxy.LAYER`, so a ship lands on stones and you stand on them.
+- **Drawn in blocks** (`CoverField`, `src/world/cover_field.gd`): two levels coarser than the
+  finest chunks, a MultiMesh per shape and size tier. Stones of 1.4 m or more are drawn out to
+  `BOULDER_REACH` 240 m, the rest to `SMALL_REACH` 140 m.
+- **No line where the stones stop.** Each stone fades out by itself with the material's built-in
+  distance dither, as the asteroids do (§3.5), never a new shader: the big over their last 100 m,
+  the small over their last 60. The dither's stipple shows on the farthest stones if you look for
+  it. The shadow pass measures that fade from the light, so near stones cast their shadows from an
+  undithered twin, shadows only. Stones cast shadows only within `BOULDER_SHADOW_REACH` 100 m.
+- **Blowing sand** (`BlowingSand`, `src/world/blowing_sand.gd`): thin pale streaks of the desert
+  palette's `streak`, 1.5–3 m long and 0.05 m wide, faded by alpha alone, blowing along the wind
+  near the ground. **By air and altitude:** only on a desert, only in air of 0.3 or more, full
+  below 15 m over the ground, gone by 60 m. There is no sand in the air above low flight, and none
+  at entry heat. Kept to 160 thin quads, faded out within 2 m of the eye: it is transparent and
+  close to the camera (§2.6).
+- **The sand is in `Universe.EXTERIOR_SPACE`, with `local_coords`, and never in
+  `HOLDS_SHIFT`.** An emitter that never stops would hold the floating origin back until the
+  forced shift at 4 km, as the hover puffs once did (§3.9's steady hold, above). The shift moves
+  the node and its live streaks together.
+- **No shader.** Boulders, grass and sand are `StandardMaterial3D`, MultiMeshes and particles.
+- **Every cover block is a member of `Universe.EXTERIOR_SPACE`,** placed from its
+  `UniversePoint`.
 
 ## 4. Adding something new
 
@@ -595,7 +714,8 @@ shader.
 `test/unit/test_visual_style_rules.gd` fails the build if:
 
 - a colour literal appears in interior, hull, item, hand, airlock, asteroid, NPC-look or
-  world-air code (`air_mood.gd`, `star_halo.gd`, `limb_glow.gd` and `entry_glow.gd` are in `PAINTING_FILES`) other
+  world-air code (`air_mood.gd`, `star_halo.gd`, `limb_glow.gd` and `entry_glow.gd` are in `PAINTING_FILES`),
+  or ground-cover code (`ground_cover.gd`, `cover_field.gd` and `blowing_sand.gd`, phase 2) other
   than the palettes (`InteriorPalette`, `HullPalette` for the hull's outside, `SpacePalette` for
   rocks and skitters; `InteriorKit` is exempt: it packs data into vertex colours). The hull's
   files are `hull_props.gd`, `hull_materials.gd`, `hull_layout.gd` and `hull_dressing.gd`, and

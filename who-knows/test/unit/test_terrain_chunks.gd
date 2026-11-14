@@ -70,3 +70,24 @@ func test_a_chunk_builds_in_time():
 	var ms := (Time.get_ticks_usec() - t0) / 5000.0
 	gut.p("a chunk builds in %.1f ms on one thread (spec §5.6: 10 ms)" % ms)
 	assert_lt(ms, 40.0, "far over budget: see the spec's fallbacks")
+
+## Task 7b: a chunk built for collision alone (WorldSurface's for a finest
+## chunk only an anchor wants solid) has the full build's grid and faces to
+## the bit, boulders and all, and nothing to draw.
+func test_a_chunk_built_for_collision_alone_is_as_solid():
+	var finest := CubeSphere.depth_for(_terrain.radius)
+	for key in [Vector4i(2, 5, 7, 11), Vector4i(4, finest, 2000, 1000), Vector4i(1, finest, 77, 4001)]:
+		var whole := TerrainChunkData.build(_terrain, key)
+		var solid := TerrainChunkData.build(_terrain, key, true)
+		assert_true(solid.solid_only)
+		assert_false(whole.solid_only)
+		assert_eq(solid.centre, whole.centre)
+		assert_eq(solid.grid, whole.grid, "%s: the same ground" % key)
+		assert_eq(solid.faces, whole.faces, "%s: the same collision" % key)
+		assert_eq(solid.positions.size(), 0, "nothing drawn")
+		assert_eq(solid.colours.size(), 0)
+	# And the shape WorldSurface makes of it holds exactly those faces.
+	var c := TerrainChunkData.build(_terrain, Vector4i(4, finest, 2000, 1000), true)
+	var shape := WorldSurface.shape_of(c)
+	assert_true(shape.backface_collision)
+	assert_eq(shape.get_faces(), c.faces)

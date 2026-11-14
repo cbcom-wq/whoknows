@@ -288,6 +288,12 @@ z -1  H    Qk12 D    D    Qm   Qk8  H
   ship needs it; then read the `legs` line (`feet … (keel … + …: its lowest look … under the
   keel, cleared by 0.10)`) and the `ramp` line, and keep the cells the longer ramp comes down
   through empty.
+- **Legs stand on boulders up to 4 m** (desert world phase 2): every world has solid stones
+  0.5–4 m across, a third sunk, gathered in clusters, so a ship lands with feet on stones and
+  tilts with them. It must land or refuse (*UNEVEN GROUND*, over 25°), never crash, stick or take
+  damage. The starter and the Warden land on the densest talus tilted 8.6° and 7.8°, undamaged.
+  `building-a-ship`'s checklist has the landing to run (`desert_render.gd -- <out> cover`): read
+  its word, its damage and the stones inside the hull's colliders (none).
 - **Size:** 400 blocks at most. A 400-block ship builds in about 1.2 s when it spawns, a freeze the
   owner accepted for now; its rules take 0.3 s; it holds 121 fps in the worst view, just over the
   120 floor, so **a big ship costs frames**: keep it no bigger than the brief needs.

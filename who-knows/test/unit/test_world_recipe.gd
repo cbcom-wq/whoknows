@@ -33,7 +33,7 @@ func test_each_field_draws_from_its_own_sub_seed():
 	# recipe draws: adding a field never moves it.
 	var r := WorldRecipe.from_seed(42)
 	var rng := WorldSeed.rng(42, &"palette")
-	assert_eq(r.palette, rng.randi_range(0, SpacePalette.WORLDS.size() - 1))
+	assert_eq(r.palette, rng.randi_range(0, SpacePalette.DRAWN_PALETTES - 1))
 	var size := WorldSeed.rng(42, &"size")
 	assert_eq(r.radius_m, size.randf_range(15000.0, 60000.0))
 
@@ -52,7 +52,7 @@ func test_worlds_are_tens_of_kilometres_with_real_mountains():
 	for s in 200:
 		var r := WorldRecipe.from_seed(s * 131 + 7)
 		assert_between(r.relief_m, minf(r.radius_m * 0.01, 1200.0) - 0.001, 1200.0)
-	assert_eq(WorldRecipe.GENERATOR_VERSION, 2)
+	assert_eq(WorldRecipe.GENERATOR_VERSION, 3)
 
 func test_planets_pull_at_most_seven():
 	assert_eq(WorldRecipe.GRAVITY[WorldRecipe.Kind.PLANET], Vector2(2.0, 7.0))
@@ -104,3 +104,53 @@ func test_thin_air_and_none():
 	r.atmosphere = WorldRecipe.Atmosphere.NONE
 	assert_eq(r.air_at(0.0), 0.0)
 	assert_eq(r.air_at(100.0), 0.0)
+
+func test_today_s_worlds_keep_their_archetype_and_palette():
+	for s in range(1, 601):
+		var r := WorldRecipe.from_seed(s)
+		if r.is_desert():
+			continue
+		assert_eq(r.archetype, WorldSeed.rng(s, &"terrain").randi_range(0, 3), "seed %d" % s)
+		assert_eq(r.palette, WorldSeed.rng(s, &"palette").randi_range(0, 7), "seed %d" % s)
+
+func test_a_quarter_of_planets_with_air_are_deserts():
+	var air := 0
+	var deserts := 0
+	for s in range(1, 2001):
+		var r := WorldRecipe.from_seed(s)
+		if r.atmosphere == WorldRecipe.Atmosphere.NONE:
+			assert_false(r.is_desert())
+			continue
+		air += 1
+		if r.is_desert():
+			deserts += 1
+			assert_eq(r.palette, SpacePalette.DESERT_PALETTE)
+	assert_almost_eq(float(deserts) / air, 0.25, 0.03)
+
+func test_moons_are_never_deserts():
+	for s in range(1, 501):
+		assert_false(WorldRecipe.from_seed(s, WorldRecipe.Kind.MOON).is_desert())
+
+func test_a_desert_keeps_its_size_relief_gravity_and_air():
+	# Find seeds that are deserts, and compare with the draws they would have had.
+	var found := 0
+	for s in range(1, 400):
+		var r := WorldRecipe.from_seed(s)
+		if not r.is_desert():
+			continue
+		found += 1
+		var terrain := WorldSeed.rng(s, &"terrain")
+		terrain.randi_range(0, 3)
+		assert_almost_eq(r.relief_m, minf(r.radius_m * terrain.randf_range(0.01, 0.025), 1200.0), 0.001)
+	assert_gt(found, 10)
+
+func test_the_starting_system_has_its_deserts():
+	var sr := SystemRecipe.from_seed(1337)
+	assert_true(sr.body(&"p3").recipe.is_desert())
+	assert_true(sr.body(&"p4").recipe.is_desert())
+	assert_false(sr.body(&"p2").recipe.is_desert())
+
+func test_every_palette_has_cover_colours():
+	for p in SpacePalette.WORLDS:
+		assert_true(p.has(&"boulder") and p.has(&"grass"), String(p[&"name"]))
+	assert_true(SpacePalette.WORLDS[SpacePalette.DESERT_PALETTE].has(&"streak"))

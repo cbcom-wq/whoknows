@@ -89,3 +89,159 @@ func test_a_flying_ship_put_to_sleep_wakes_flying():
 	_fleet.wake(ship)
 	assert_false(ship.landing.is_landed())
 	assert_false(ship.exterior.freeze)
+
+# --- Review Focus 4: a save made before phase 2 on a world now a desert ---------
+
+## The world the starter is put on, and its ground's up and height there. Its
+## centre is worked out from its universe point at each use, never kept as an
+## engine Vector3 (the floating origin, CLAUDE.md).
+var _planet: SystemBody
+var _up := Vector3.UP
+var _ground := 0.0
+var _basis := Basis.IDENTITY
+
+## Hops to the system's largest desert (the largest planet if it has none) and
+## finds flat ground near where the hop puts the starter (test_landing_legs'
+## way to a world).
+func _to_a_world() -> void:
+	await wait_physics_frames(3)
+	_root.reload = func() -> void: pass
+	var system: SystemRecipe = _root.system
+	var planet: SystemBody = null
+	for p in system.planets():
+		var better := planet == null or (p.recipe.is_desert() and not planet.recipe.is_desert()) \
+			or (p.recipe.is_desert() == planet.recipe.is_desert() and p.radius > planet.radius)
+		if better:
+			planet = p
+	_root.hop_index = system.bodies.find(planet) - 1
+	assert_true(_root.hop(1))
+	await wait_physics_frames(2)
+	var surface: WorldSurface = (_root.star_system.proxy(planet.id) as BodyProxy).surface()
+	assert_not_null(surface, "3 km off: its ground is drawn")
+	_planet = planet
+	var out := (_starter.exterior.global_position - _centre()).normalized()
+	var best := out
+	var flattest := INF
+	for k in 13:
+		var dir := out if k == 0 else (out + Vector3(cos(k * 0.52), 0.0, sin(k * 0.52)) * 0.02 * (1 + k % 3)).normalized()
+		var spread := 0.0
+		var h0: float = surface.terrain.height_at(dir)
+		for j in 8:
+			var o := Vector3(cos(j * 0.785), 0.0, sin(j * 0.785)) * (40.0 / planet.radius)
+			spread = maxf(spread, absf(surface.terrain.height_at((dir + o).normalized()) - h0))
+		if spread < flattest:
+			flattest = spread
+			best = dir
+	_up = best
+	_ground = planet.radius + surface.terrain.height_at(_up)
+	var along := _up.cross(Vector3.UP).normalized()
+	_basis = Basis(along, _up, along.cross(_up).normalized())
+	gut.p("on %s (%s): spread %.2f m over 40 m" % [planet.id, "a desert" if planet.recipe.is_desert() else "not a desert",
+		flattest])
+
+func _centre() -> Vector3:
+	return _universe.to_engine(_planet.point)
+
+## The starter's save with its stance plane `height` m over the ground, landed:
+## what a save made on the world's old ground reads like on its new one.
+func _saved_landed_at(height: float) -> Dictionary:
+	_starter.exterior.global_transform = Transform3D(_basis,
+		_centre() + _up * (_ground + _starter.stance_depth() + height))
+	_starter.exterior.linear_velocity = Vector3.ZERO
+	_starter.exterior.angular_velocity = Vector3.ZERO
+	var saved := _starter.to_dict(_universe)
+	saved["hull"]["landed"] = true
+	return saved
+
+## Physics frames until `done` holds, up to `seconds`; true if it did.
+func _within(seconds: float, done: Callable) -> bool:
+	for k in roundi(seconds * 60.0):
+		if done.call():
+			return true
+		await wait_physics_frames(1)
+	return done.call()
+
+func test_restored_landed_off_the_ground_falls_and_settles():
+	await _to_a_world()
+	var whole := _starter.damage.hull_whole()
+	# Saved landed 3 m over the ground: it must not hang there frozen.
+	_fleet.restore_hull(_starter, _saved_landed_at(3.0))
+	assert_true(_starter.landing.is_landed(), "loads landed")
+	var left := [false]
+	var monitor := _starter.landing
+	assert_true(await _within(10.0, func() -> bool:
+		if not monitor.is_landed():
+			left[0] = true
+		return left[0] and monitor.is_landed()), "leaves LANDED and lands again within 10 s")
+	assert_true(left[0], "it left LANDED")
+	var keel := _starter.flight_computer.keel_altitude()
+	gut.p("3 m up: landed again, its stance plane %.2f m over the ground" % keel)
+	assert_lt(absf(keel), 0.5, "on the ground (%.2f m)" % keel)
+	assert_true(_starter.exterior.freeze, "frozen on the ground")
+	# Saved landed with its keel 1 m under the ground (its feet deeper still):
+	# it ends above it.
+	_fleet.restore_hull(_starter, _saved_landed_at(-1.0 - (_starter.stance_depth() - _starter.keel_depth())))
+	await _within(10.0, func() -> bool: return monitor.is_landed() and _starter.flight_computer.keel_altitude() > -0.5)
+	keel = _starter.flight_computer.keel_altitude()
+	gut.p("keel 1 m under: its stance plane ends %.2f m over the ground" % keel)
+	assert_gt(keel, -WorldSurface.FLOOR_SLACK, "above the ground, not buried in it")
+	assert_lt(keel, 1.0, "and on it, not thrown off it")
+	assert_true(monitor.is_landed(), "landed")
+	assert_eq(_starter.damage.hull_whole(), whole, "not damaged")
+
+## Between RESTORE_SLACK and RESTORE_FALL over what is under it, it falls from
+## where it is: not moved first.
+func test_restored_landed_a_metre_up_falls_from_where_it_is():
+	await _to_a_world()
+	_fleet.restore_hull(_starter, _saved_landed_at(1.2))
+	var monitor := _starter.landing
+	var at := _universe.to_universe(_starter.exterior.global_position)
+	var first_drop := [INF]
+	assert_true(await _within(10.0, func() -> bool:
+		if not monitor.is_landed() and first_drop[0] == INF:
+			first_drop[0] = at.minus(_universe.to_universe(_starter.exterior.global_position)).dot(_up)
+		return first_drop[0] != INF and monitor.is_landed()), "leaves LANDED and lands again within 10 s")
+	gut.p("1.2 m up: %.3f m lower on the tick it was let go" % first_drop[0])
+	assert_lt(first_drop[0], 0.3, "let fall from where it was, not moved down first")
+	var keel := _starter.flight_computer.keel_altitude()
+	assert_lt(absf(keel), 0.5, "on the ground (%.2f m)" % keel)
+
+## A ship landed where it stands -- on the ground, or with its feet on a tall
+## boulder far over the analytic ground -- loads frozen where it was, restored,
+## and is never moved or let go.
+func test_restored_landed_where_it_stands_stays_put():
+	await _to_a_world()
+	var monitor := _starter.landing
+	_fleet.restore_hull(_starter, _saved_landed_at(0.0))
+	var at := _universe.to_universe(_starter.exterior.global_position)
+	var stayed := [true]
+	await _within(2.0, func() -> bool:
+		stayed[0] = stayed[0] and monitor.is_landed()
+		return false)
+	assert_true(stayed[0], "on the ground: landed throughout")
+	assert_true(monitor.restored, "restored: the ramp and legs never animate")
+	assert_lt(at.minus(_universe.to_universe(_starter.exterior.global_position)).length(), 0.01, "not moved")
+	# A boulder 4 m tall under its feet (a box on the terrain layer, its top
+	# 2 cm under the stance plane): RESTORE_FALL and more over the ground.
+	var rock := StaticBody3D.new()
+	rock.collision_layer = BodyProxy.LAYER
+	rock.collision_mask = 0
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(30.0, 3.96, 30.0)
+	shape.shape = box
+	rock.add_child(shape)
+	rock.add_to_group(Universe.EXTERIOR_SPACE)
+	add_child_autofree(rock)
+	rock.global_transform = Transform3D(_basis, _centre() + _up * (_ground + 1.98))
+	_fleet.restore_hull(_starter, _saved_landed_at(4.0))
+	at = _universe.to_universe(_starter.exterior.global_position)
+	stayed[0] = true
+	await _within(2.0, func() -> bool:
+		stayed[0] = stayed[0] and monitor.is_landed()
+		return false)
+	assert_true(stayed[0], "on a boulder: landed throughout")
+	assert_true(_starter.exterior.freeze, "frozen")
+	assert_true(monitor.restored, "restored")
+	assert_lt(at.minus(_universe.to_universe(_starter.exterior.global_position)).length(), 0.01,
+		"not moved into the boulder")
