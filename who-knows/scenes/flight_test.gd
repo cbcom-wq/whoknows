@@ -1220,11 +1220,12 @@ func spawn_from_library(id: StringName) -> String:
 	for ship in fleet.awake():
 		others.append(ship.exterior.global_position)
 	var v := _spawn_velocity()
-	var spot: Variant = SpawnSpot.find(view.translated(v * WarpArrival.DURATION), others, _rock_near, v)
+	var grid := library.grid(id)
+	var spot: Variant = SpawnSpot.find(view.translated(v * WarpArrival.DURATION), others, _rock_near, v,
+		_clear_of_ground.bind(Ship.anchor_radius_of(grid)))
 	if spot == null:
 		return "NO CLEAR SPOT NEAR"
 	var place: Transform3D = spot
-	var grid := library.grid(id)
 	var ship := fleet.spawn(grid, place, true, "", ShipBlueprint.from_grid(grid, library.name_of(id)))
 	if ship == null:
 		return "NO BERTH FREE"
@@ -1260,10 +1261,10 @@ func spawn_hostile(id: StringName) -> String:
 	var why := _spawn_refusal(id)
 	if why != "":
 		return why
-	var spot: Variant = _hostile_spot(_spawn_view())
+	var grid := library.grid(id)
+	var spot: Variant = _hostile_spot(_spawn_view(), Ship.anchor_radius_of(grid))
 	if spot == null:
 		return "NO CLEAR SPOT NEAR"
-	var grid := library.grid(id)
 	var ship := fleet.spawn(grid, spot, true, "", ShipBlueprint.from_grid(grid, library.name_of(id)))
 	if ship == null:
 		return "NO BERTH FREE"
@@ -1276,8 +1277,9 @@ func spawn_hostile(id: StringName) -> String:
 
 ## Where a hostile comes from `view`: SPAWN_RANGE off at the first of
 ## HOSTILE_ANGLES, either side, clear of rocks as a warp's drop-out is and
-## SpawnSpot.CLEAR of every hull; null when none is.
-func _hostile_spot(view: Transform3D) -> Variant:
+## SpawnSpot.CLEAR of every hull, lifted clear of a world's ground for a ship
+## reaching `radius`; null when none is.
+func _hostile_spot(view: Transform3D, radius := 0.0) -> Variant:
 	var up := view.basis.y.normalized()
 	var ahead := -view.basis.z.normalized()
 	var side := _hostile_side
@@ -1285,11 +1287,21 @@ func _hostile_spot(view: Transform3D) -> Variant:
 	for angle in HOSTILE_ANGLES:
 		for s: float in [side, -side]:
 			var dir := ahead.rotated(up, deg_to_rad(angle * s))
-			var p := view.origin + dir * PilotValues.SPAWN_RANGE
+			var p := _clear_of_ground(view.origin + dir * PilotValues.SPAWN_RANGE, radius)
 			if _rock_near(p) or _near_a_hull(p):
 				continue
 			return Transform3D(Basis.looking_at(-dir, up), p)
 	return null
+
+## `p` lifted clear of the ground of the world whose well holds it
+## (SpawnSpot.clear_of_ground, final review M4), for a ship reaching `radius`;
+## unchanged outside every well.
+func _clear_of_ground(p: Vector3, radius: float) -> Vector3:
+	var body := world_gravity.body_at(p) if world_gravity != null else null
+	var terrain := star_system.whereabouts.terrain_of(body) if body != null else null
+	if terrain == null:
+		return p
+	return SpawnSpot.clear_of_ground(p, _universe.to_engine(body.point), terrain, radius)
 
 func _near_a_hull(p: Vector3) -> bool:
 	for ship in fleet.awake():

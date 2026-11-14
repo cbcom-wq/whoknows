@@ -907,10 +907,15 @@ func _bind_computers() -> void:
 
 ## How far the hull reaches from its origin, for the asteroid bubble.
 func _set_anchor_radius() -> void:
+	exterior.set_meta(AsteroidStream.ANCHOR_RADIUS, anchor_radius_of(grid))
+
+## How far from its hull's origin a ship built from `layout` reaches: its
+## farthest cell's middle plus a cell's half-diagonal (the ANCHOR_RADIUS meta).
+static func anchor_radius_of(layout: ShipGrid) -> float:
 	var reach := 0.0
-	for c: Vector3i in grid.coords():
+	for c: Vector3i in layout.coords():
 		reach = maxf(reach, ShipGrid.cell_center(c).length())
-	exterior.set_meta(AsteroidStream.ANCHOR_RADIUS, reach + ShipGrid.CELL_SIZE * 0.87)
+	return reach + ShipGrid.CELL_SIZE * 0.87
 
 ## The interior's NPC director and the holder its NPCs stand under, made once
 ## and kept across rebuilds, like Airlocks. Inside, every record of the ship
