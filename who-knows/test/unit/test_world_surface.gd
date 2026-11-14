@@ -955,3 +955,11 @@ func test_a_far_anchor_near_the_ground_has_its_footprint_queued_first():
 		queued, s.jobs_in_flight()])
 	a.remove_from_group(AsteroidStream.SPACE_ANCHOR)
 	s.finish()
+
+## Final review M5: the solid ground's ConcavePolygonShape3Ds are made and
+## first assigned on worker threads, which only GodotPhysics3D allows. A
+## change of physics engine (Jolt) must move those builds to the main thread.
+func test_the_physics_engine_allows_shapes_built_on_workers():
+	var engine := str(ProjectSettings.get_setting("physics/3d/physics_engine", "DEFAULT"))
+	assert_true(engine in ["DEFAULT", "GodotPhysics3D"],
+		"physics/3d/physics_engine is %s: WorldSurface builds and assigns collision shapes on worker threads, which relies on GodotPhysics3D" % engine)
