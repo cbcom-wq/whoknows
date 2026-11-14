@@ -455,6 +455,14 @@ func _drawn_above(key: Vector4i, memo: Dictionary) -> bool:
 	memo[p] = out
 	return out
 
+## Whether every finest chunk with ground within `radius` of `point` is
+## solid (a restored hull's footprint: LandingMonitor waits on it).
+func solid_round(point: UniversePoint, radius: float) -> bool:
+	for k in TerrainCollider.keys_near(terrain, depth_max, point.minus(body.point), radius, true):
+		if not _solid.has(k):
+			return false
+	return true
+
 func solid_keys() -> Array[Vector4i]:
 	var out: Array[Vector4i] = []
 	out.assign(_solid.keys())

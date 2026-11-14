@@ -155,6 +155,21 @@ func _saved_landed_at(height: float) -> Dictionary:
 	saved["hull"]["landed"] = true
 	return saved
 
+## Calls `each` every physics tick, first in the tick, until freed.
+class Watcher extends Node:
+	var each: Callable
+	func _init(p_each: Callable) -> void:
+		each = p_each
+		process_physics_priority = -1000
+	func _physics_process(_delta: float) -> void:
+		each.call()
+
+## A Watcher of `each`, in the tree; free it before the test ends.
+func _watch(each: Callable) -> Watcher:
+	var w := Watcher.new(each)
+	add_child(w)
+	return w
+
 ## Physics frames until `done` holds, up to `seconds`; true if it did.
 func _within(seconds: float, done: Callable) -> bool:
 	for k in roundi(seconds * 60.0):
@@ -275,16 +290,64 @@ func test_restored_landed_hovering_on_its_ramp_s_tip_is_set_down():
 	await wait_physics_frames(30)
 	for r in ramps:
 		r.stow(true)
-	_fleet.restore_hull(_starter, _saved_landed_at(1.0))
+	# Watched every physics tick: the check comes a tick or two after the load.
 	var ramp_down := [false]
-	var left := [false]
-	assert_true(await _within(10.0, func() -> bool:
+	var watch := func() -> void:
 		if monitor.is_landed() and ramps[0].is_down() and ramps[0].angle > LandingRamp.SLOPE:
 			ramp_down[0] = true
+	var watcher := _watch(watch)
+	_fleet.restore_hull(_starter, _saved_landed_at(1.0))
+	var left := [false]
+	assert_true(await _within(10.0, func() -> bool:
 		if not monitor.is_landed():
 			left[0] = true
 		return left[0] and monitor.is_landed()), "leaves LANDED and lands again within 10 s")
+	watcher.free()
 	assert_true(ramp_down[0], "its ramp was down while it waited, its tip on the ground")
 	var keel := _starter.flight_computer.keel_altitude()
 	gut.p("1 m up on its ramp: landed again, its stance plane %.2f m over the ground" % keel)
 	assert_lt(absf(keel), 0.5, "on the ground (%.2f m)" % keel)
+
+## Final review I3, on a world: a ship woken landed 1.5 km from you is checked
+## once every chunk under its footprint is solid and not before, through the
+## world's real surface (not after RESTORE_WAIT for want of it), and stays
+## landed and unmoved on level ground.
+func test_a_ship_woken_landed_off_is_checked_once_its_footprint_is_solid():
+	await _to_a_world()
+	var surface: WorldSurface = (_root.star_system.proxy(_planet.id) as BodyProxy).surface()
+	var east := _up.cross(Vector3.UP).normalized()
+	var there := LevelGround.near(surface.terrain, (_up + east * (1500.0 / _planet.radius)).normalized())
+	assert_lt(LevelGround.tilt(surface.terrain, there), LevelGround.LEVEL, "level ground 1.5 km off")
+	var along := there.cross(Vector3.UP).normalized()
+	var ship := _spawn(Vector3(300, 0, 0))
+	ship.exterior.global_transform = Transform3D(Basis(along, there, along.cross(there).normalized()),
+		_centre() + there * (_planet.radius + surface.terrain.height_at(there) + ship.stance_depth()))
+	ship.exterior.linear_velocity = Vector3.ZERO
+	ship.exterior.angular_velocity = Vector3.ZERO
+	ship.landing.restore_landed()
+	_fleet.sleep(ship)
+	_fleet.wake(ship)
+	assert_true(ship.landing.is_landed(), "woken landed")
+	var at := _universe.to_universe(ship.exterior.global_position)
+	var radius := float(ship.exterior.get_meta(AsteroidStream.ANCHOR_RADIUS))
+	# Watched every physics tick, before the tick's own work: [ticks, solid
+	# at, checked at].
+	var seen := [0, -1, -1]
+	var watch := func() -> void:
+		if seen[2] < 0 and not ship.landing._check_restore:
+			seen[2] = seen[0]
+		if seen[1] < 0 and surface.solid_round(_universe.to_universe(ship.exterior.global_position), radius):
+			seen[1] = seen[0]
+		seen[0] += 1
+	var watcher := _watch(watch)
+	await wait_physics_frames(LandingMonitor.RESTORE_WAIT)
+	watcher.free()
+	var solid_at: int = seen[1]
+	var checked_at: int = seen[2]
+	gut.p("woken 1.5 km off: footprint solid by tick %d, checked by tick %d" % [solid_at, checked_at])
+	assert_gte(solid_at, 0, "its footprint was made solid")
+	assert_gte(checked_at, 0, "and it was checked")
+	assert_lt(checked_at, LandingMonitor.RESTORE_WAIT / 2, "well before the timeout")
+	assert_lt(solid_at, checked_at, "after its footprint was solid, not before")
+	assert_true(ship.landing.is_landed(), "landed")
+	assert_lt(at.minus(_universe.to_universe(ship.exterior.global_position)).length(), 0.01, "not moved")

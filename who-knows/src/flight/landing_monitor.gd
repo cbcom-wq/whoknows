@@ -49,11 +49,13 @@ const HOLD_LIFTS := 0.5
 const RESTORE_SLACK := 0.5
 const RESTORE_DROP := 0.5
 const RESTORE_FALL := 2.0
-## Physics ticks a restored hull is left frozen before the check, so the
-## solid chunks round it (and their boulders) are built and in the physics
-## space; and the most it waits for any solid ground under it before it trusts
-## the analytic ground alone.
-const RESTORE_SETTLE := 10
+## The check waits until every chunk under the hull's footprint (its
+## ANCHOR_RADIUS round it) is solid (WorldSurface.solid_round), then one
+## physics tick more, so the broadphase has their shapes: a fixed 10 ticks
+## left a woken ship's neighbouring chunks queued behind every other, and a
+## foot over one not solid yet read a gap, fell and sank (final review I3).
+## RESTORE_WAIT physics ticks is the most it waits before it trusts the
+## analytic ground alone.
 const RESTORE_WAIT := 60
 ## Seconds a restored hull is let fall at most before its hold is back, in
 ## case it never lands.
@@ -78,9 +80,12 @@ var _in_contact := false
 ## step that took the speed off, so the closing speed is read from before it.
 var _last_velocity := Vector3.ZERO
 ## Restored landed and not yet checked against the ground (RESTORE_SLACK),
-## and for how many ticks it has waited for solid ground (RESTORE_WAIT).
+## for how many ticks it has waited for solid ground (RESTORE_WAIT), and
+## whether the ground under its footprint has been seen solid (the check runs
+## the tick after).
 var _check_restore := false
 var _check_ticks := 0
+var _footprint_seen := false
 ## Let go by that check: the hold stands down until it lands again, the pilot
 ## moves it, it bounces off into the air, or DROP_MOST has passed.
 var _dropping := false
@@ -157,6 +162,7 @@ func restore_landed() -> void:
 	_set_state(State.LANDED)
 	_check_restore = true
 	_check_ticks = 0
+	_footprint_seen = false
 
 func _physics_process(delta: float) -> void:
 	if hull == null or flight == null:
@@ -213,14 +219,16 @@ static func translating(fc: FlightComputer, up: Vector3) -> bool:
 
 ## The restore check (see RESTORE_SLACK), `up` the local up: true if the
 ## hull was let go to fall. One resting on something stays frozen where it is,
-## `restored` and all; the check stays pending while it waits for the ground.
+## `restored` and all; the check stays pending while it waits for the ground
+## under its footprint (RESTORE_WAIT), and is then one cast.
 func _set_down_again(up: Vector3) -> bool:
 	var off := flight.keel_altitude()
 	if state != State.LANDED or not hull.freeze or not is_finite(off):
 		_check_restore = false
 		return false
 	_check_ticks += 1
-	if _check_ticks < RESTORE_SETTLE:
+	if not _footprint_seen and _check_ticks < RESTORE_WAIT:
+		_footprint_seen = _footprint_solid()
 		return false
 	var move := 0.0
 	if off < -RESTORE_SLACK:
@@ -228,10 +236,8 @@ func _set_down_again(up: Vector3) -> bool:
 	else:
 		var gap := _gap_below(up, maxf(off, 0.0) + RESTORE_FALL + RESTORE_SLACK)
 		if gap < 0.0:
-			# Nothing solid within reach yet: wait for the chunks under it,
-			# then go by the analytic ground.
-			if _check_ticks < RESTORE_WAIT:
-				return false
+			# Nothing solid within reach, with the ground under it solid (or
+			# the wait over): go by the analytic ground.
 			gap = off
 		if gap <= RESTORE_SLACK:
 			_check_restore = false
@@ -245,6 +251,16 @@ func _set_down_again(up: Vector3) -> bool:
 	_dropping_for = 0.0
 	_set_state(State.FLYING)
 	return true
+
+## Whether every finest chunk under the hull's footprint (its ANCHOR_RADIUS
+## round its origin) is solid on the world it is on; false off a world's
+## ground, or with no surface drawn.
+func _footprint_solid() -> bool:
+	var surface := flight.gravity.surface_at(hull.global_position) if flight.gravity != null else null
+	if surface == null:
+		return false
+	return surface.solid_round(surface.universe.to_universe(hull.global_position),
+		float(hull.get_meta(AsteroidStream.ANCHOR_RADIUS, 1.0)))
 
 ## How far the hull can move down `up` before one of its colliders meets the
 ## solid ground (BodyProxy.LAYER), looking `reach` m; -1 if nothing is there.

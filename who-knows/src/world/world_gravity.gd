@@ -95,6 +95,13 @@ func solid_altitude_at(p: Vector3) -> float:
 	var t := whereabouts.terrain_of(b) if whereabouts != null else null
 	return TerrainChunkData.solid_altitude_of(t, local) if t != null else local.length() - b.radius
 
+## The drawn ground (WorldSurface) of the world whose well holds `p`, or
+## null: outside every well, before setup(), or while that world is drawn
+## far off.
+func surface_at(p: Vector3) -> WorldSurface:
+	var b := body_at(p)
+	return whereabouts.surface_of(b) if b != null and whereabouts != null else null
+
 ## How thick the air is at `p`, 0 to 1; 0 outside a world's well (spec §6.1).
 func air_at(p: Vector3) -> float:
 	var b := body_at(p)

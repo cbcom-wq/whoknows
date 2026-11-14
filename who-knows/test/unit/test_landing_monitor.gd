@@ -303,3 +303,64 @@ func test_only_terrain_is_ground():
 	assert_false(LandingMonitor.is_ground(rock))
 	assert_false(LandingMonitor.is_ground(hull))
 	assert_false(LandingMonitor.is_ground(null))
+
+## Final review I3: a hull restored landed (a save, a ship woken) is checked
+## against the ground once the chunks under its footprint are solid, and one
+## physics tick later (so the broadphase has them), not after a fixed 10
+## ticks: a woken ship's neighbours were queued behind every other chunk, and
+## a foot over one not yet solid read a gap, fell and sank. RESTORE_WAIT stays
+## the timeout. The check is one cast, not one a tick.
+class StubRestore extends LandingMonitor:
+	var gap := 1.2
+	var solid := false
+	var casts := 0
+	func _gap_below(_up: Vector3, _reach: float) -> float:
+		casts += 1
+		return gap
+	func _footprint_solid() -> bool:
+		return solid
+	func _touching_ground() -> bool:
+		return false
+
+func _restore_rig() -> Array:
+	var hull := RigidBody3D.new()
+	add_child_autofree(hull)
+	var fc := FlightComputer.new()
+	fc.hull_path = NodePath("../" + hull.name)
+	hull.get_parent().add_child(fc)
+	autofree(fc)
+	fc.gravity = Pull.new()
+	var m := StubRestore.new()
+	m.hull = hull
+	m.flight = fc
+	add_child_autofree(m)
+	m.set_physics_process(false)
+	m.restore_landed()
+	return [hull, fc, m]
+
+func test_a_restored_hull_waits_for_its_footprint_to_be_solid():
+	var r := _restore_rig()
+	var m: StubRestore = r[2]
+	for i in 30:
+		m._physics_process(1.0 / 60.0)
+	assert_eq(m.state, LandingMonitor.State.LANDED, "30 ticks with its footprint not solid: still landed")
+	assert_true((r[0] as RigidBody3D).freeze, "and frozen")
+	assert_eq(m.casts, 0, "nothing cast while it waits")
+	m.solid = true
+	m._physics_process(1.0 / 60.0)
+	assert_eq(m.state, LandingMonitor.State.LANDED, "the tick it is solid: not yet (the broadphase)")
+	m._physics_process(1.0 / 60.0)
+	assert_eq(m.state, LandingMonitor.State.FLYING, "the tick after: checked, 1.2 m up, let fall")
+	assert_eq(m.casts, 1, "one cast")
+
+func test_with_its_footprint_never_solid_it_goes_by_the_analytic_ground_at_the_timeout():
+	var r := _restore_rig()
+	var m: StubRestore = r[2]
+	m.gap = -1.0
+	for i in LandingMonitor.RESTORE_WAIT - 1:
+		m._physics_process(1.0 / 60.0)
+	assert_true(m._check_restore, "still waiting")
+	m._physics_process(1.0 / 60.0)
+	assert_false(m._check_restore, "checked at RESTORE_WAIT")
+	assert_eq(m.state, LandingMonitor.State.LANDED, "on the analytic ground: stays landed")
+	assert_eq(m.casts, 1, "one cast, not one a tick")
