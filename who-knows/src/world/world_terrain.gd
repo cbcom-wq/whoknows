@@ -250,7 +250,10 @@ func height_at(dir: Vector3) -> float:
 		if s.kind == TerrainStamp.Kind.FLATTEN:
 			var w := s.weight(m)
 			if w > 0.0:
-				h = lerpf(h, s.level + s.raise, w)
+				var surface := s.level + s.raise
+				if s.keep > 0.0:
+					surface += s.keep * (h - s.level)
+				h = lerpf(h, surface, w)
 		else:
 			h -= s.dig(m)
 	return h

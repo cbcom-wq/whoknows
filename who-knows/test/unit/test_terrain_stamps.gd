@@ -40,6 +40,8 @@ static func _at(centre: Vector3, m: float, turn: float, world_radius: float) -> 
 	return (centre * cos(a) + (side * cos(turn) + other * sin(turn)) * sin(a)).normalized()
 
 const HERE := Vector3(0.6, 0.3, -0.7)
+## Over p3's oasis, where the dunes roll by metres.
+const DUNES := Vector3(-0.9895, -0.0377, 0.1397)
 
 func test_no_stamps_no_change():
 	var seeds: Array[int] = []
@@ -96,6 +98,62 @@ func test_a_flatten_blends_smoothly():
 			var h := t.height_at(_at(s.centre, m, turn, r.radius_m))
 			assert_lt(atan(absf(h - prev) / 2.0), WorldTerrain.ROCK_SLOPE - deg_to_rad(5.0), "ray %d at %.0f m" % [ray, m])
 			prev = h
+
+## `keep` lets a FLATTEN keep some of the land's roll: inside the flat part the
+## height is level + keep * (ground before - level), and keep 0 is as it always was.
+func test_keep_zero_is_unchanged():
+	var r := _p3()
+	var plain := _flatten(&"floor", HERE, 120.0, 150.0)
+	r.stamps.append(plain)
+	var kept := WorldRecipe.from_seed(r.seed)
+	var zero := _flatten(&"floor", HERE, 120.0, 150.0)
+	zero.keep = 0.0
+	kept.stamps.append(zero)
+	var a := WorldTerrain.new(r)
+	var b := WorldTerrain.new(kept)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5
+	for i in 200:
+		var d := _at(HERE.normalized(), 300.0 * rng.randf(), rng.randf() * TAU, r.radius_m)
+		assert_eq(b.height_at(d), a.height_at(d))
+	assert_eq(zero.copy().keep, 0.0)
+
+func test_keep_half_halves_the_roll_inside_the_flat_part():
+	var r := _p3()
+	var s := _flatten(&"floor", DUNES, 120.0, 150.0)
+	s.keep = 0.5
+	r.stamps.append(s)
+	var t := WorldTerrain.new(r)
+	var level := t.stamps[0].level
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 9
+	var rolled := false
+	var spread := 0.0
+	for i in 200:
+		var d := _at(s.centre, 119.0 * sqrt(rng.randf()), rng.randf() * TAU, r.radius_m)
+		var ground := t.base_height_at(d)
+		assert_almost_eq(t.height_at(d), level + 0.5 * (ground - level), 1e-9)
+		rolled = rolled or absf(ground - level) > 0.2
+		spread = maxf(spread, absf(ground - level))
+	gut.p("land spread %.2f m" % spread)
+	assert_true(rolled, "the land rolls by more than 0.2 m here")
+	# Past the blend the land is untouched, and the blend runs from the kept surface.
+	for i in 50:
+		var d := _at(s.centre, s.reach() + 1.0 + 300.0 * rng.randf(), rng.randf() * TAU, r.radius_m)
+		assert_eq(t.height_at(d), t.base_height_at(d))
+	var edge := _at(s.centre, 135.0, 0.3, r.radius_m)
+	var base := t.base_height_at(edge)
+	var kept := level + 0.5 * (base - level)
+	var w := s.weight(135.0)
+	assert_almost_eq(t.height_at(edge), lerpf(base, kept, w), 1e-6)
+
+func test_keep_counts_in_the_design_and_is_checked():
+	var d := SystemDesign.new()
+	d.seed = 4242
+	d.bodies = {"x": {"stamps": [{"id": "s", "lat": 1.0, "lon": 1.0, "radius": 10.0, "keep": 0.4}]}}
+	var out := d._stamps(&"x", 10000.0, PackedStringArray())
+	assert_eq(out.size(), 1)
+	assert_eq(out[0].keep, 0.4)
 
 func test_a_raised_flatten_stands_proud():
 	var r := _p3()

@@ -28,6 +28,11 @@ var edge := 0.0
 var level := NAN
 ## A FLATTEN stands this far (m) above its level.
 var raise := 0.0
+## A FLATTEN keeps this share (0 to 1) of the land's roll: inside its flat part
+## the height is level + keep * (ground before - level), where the ground before
+## is what the stamps ahead of it left. 0 is dead flat; the blend outside runs
+## from that kept surface to the land.
+var keep := 0.0
 ## A BASIN's flat floor out to this radius (m), and how far under the ground it is.
 var floor_radius := 0.0
 var depth := 0.0
@@ -82,6 +87,7 @@ func copy() -> TerrainStamp:
 	s.edge = edge
 	s.level = level
 	s.raise = raise
+	s.keep = keep
 	s.floor_radius = floor_radius
 	s.depth = depth
 	s.ground = ground

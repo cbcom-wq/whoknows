@@ -10,14 +10,14 @@ extends RefCounted
 ##
 ## Tweak keys: name, radius, gravity, palette (a palette's name), archetype and
 ## atmosphere (enum names). Stamp keys: id, kind (flatten / basin), lat + lon or
-## place + at ([east, north] in that place's frame), radius, edge, level, raise,
+## place + at ([east, north] in that place's frame), radius, edge, level, raise, keep,
 ## floor, depth, ground. Place keys: id, name, lat, lon, heading, beacon.
 
 const DIR := "res://data/systems"
 
 const TWEAK_KEYS: Array[String] = ["name", "radius", "gravity", "palette", "archetype", "atmosphere"]
 const STAMP_KEYS: Array[String] = ["id", "kind", "lat", "lon", "place", "at", "radius", "edge", "level",
-	"raise", "floor", "depth", "ground"]
+	"raise", "keep", "floor", "depth", "ground"]
 const PLACE_KEYS: Array[String] = ["id", "name", "lat", "lon", "heading", "beacon"]
 const BODY_KEYS: Array[String] = ["tweak", "stamps", "places"]
 ## A stamp's kind as the file spells it.
@@ -211,6 +211,7 @@ func _stamps(body_id: StringName, world_radius: float, errors: PackedStringArray
 		s.edge = float(data.get("edge", 0.0))
 		s.level = float(data["level"]) if data.has("level") else NAN
 		s.raise = float(data.get("raise", 0.0))
+		s.keep = float(data.get("keep", 0.0))
 		s.floor_radius = float(data.get("floor", 0.0))
 		s.depth = float(data.get("depth", 0.0))
 		s.ground = StringName(str(data.get("ground", "")))
@@ -234,6 +235,9 @@ func _stamps(body_id: StringName, world_radius: float, errors: PackedStringArray
 				errors.append("%s: stamp %s has latitude %s, outside 90" % [body_id, s.id, lat])
 				bad = true
 			s.centre = dir_of(lat, float(data.get("lon", 0.0)))
+		if s.keep < 0.0 or s.keep >= 1.0:
+			errors.append("%s: stamp %s has keep %s, outside 0 to 1" % [body_id, s.id, s.keep])
+			bad = true
 		if not bad:
 			out.append(s)
 	return out

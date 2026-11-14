@@ -119,6 +119,7 @@ func test_problems_name_the_body() -> void:
 		"unknown palette": {id: {"tweak": {"palette": "mauve"}}},
 		"unknown stamp key": {id: {"stamps": [flat.merged({"wobble": 1}, true)]}},
 		"latitude": {id: {"stamps": [flat.merged({"lat": 95.0}, true)]}},
+		"keep outside 0 to 1": {id: {"stamps": [flat.merged({"keep": 1.0}, true)]}},
 		"ground the palette lacks": {id: {"tweak": {"palette": "ice"}, "stamps": [flat.merged({"ground": "pad"}, true)]}},
 		"stamps that overlap": {id: {"stamps": [flat, flat.merged({"id": "b", "lon": 10.01}, true)]}},
 		"a place off the flat": {id: {"stamps": [flat],
