@@ -13,8 +13,9 @@ extends Node3D
 ## built at once, so the world is whole on its first frame.
 ##
 ## Round every space anchor near the ground its finest chunks are solid too
-## (§5.5): the one right under it built at once if it is missing, the rest
-## streamed. If an anchor ever ends up more than FLOOR_SLACK under the ground
+## (§5.5): those under its footprint made solid at once once it is about to
+## touch (a worker's result if there is one), the rest streamed, the
+## footprint's first. If an anchor ever ends up more than FLOOR_SLACK under the ground
 ## -- a chunk late, or continuous collision missing -- it is lifted out and a
 ## warning logged. That should never happen; the probe counts it.
 ##
@@ -83,11 +84,21 @@ var _local := Vector3.ZERO
 
 ## How many times an anchor was lifted out from under the ground.
 var floor_fired := 0
+## How many chunks the near-ground gate built on the main thread, having no
+## worker's result to use (see _solid_now).
+var gate_builds := 0
 ## key -> StaticBody3D
 var _solid := {}
 var _wanted_solid := {}
 ## anchor instance id -> {local, end, keys}: what keys_along last said for it.
 var _solid_cache := {}
+## anchor instance id -> {local, soon, keys}: its footprint and the way of its
+## next two ticks, as the near-ground gate last worked them out (_gate_keys).
+var _gate_cache := {}
+## The keys some anchor near the ground needs first (its _gate_keys): key ->
+## its place in that anchor's list, nearest first. _request and _apply put
+## them before everything else. Filled afresh each _solid_wanted.
+var _urgent := {}
 ## Solid bodies let go of, kept with no shape to be used again: making a
 ## StaticBody3D with its shape took ~0.3 ms (a hull at 120 m/s wants ~60 a
 ## second), setting a kept one's shape a few microseconds (Task 7b fix
@@ -95,9 +106,12 @@ var _solid_cache := {}
 var _spare: Array[StaticBody3D] = []
 var _solids_made := 0
 const SPARE_SOLIDS := 64
-## An anchor whose lowest point is this close over the ground has the chunk
-## under it made solid at once (see _touching_soon).
+## An anchor whose lowest point is this close over the ground has the ground
+## under its footprint made solid at once (see _touching_soon, _gate_keys).
 const ARRIVE := 10.0
+## Within this many ARRIVEs its footprint is first in the workers' queue, so
+## it is usually built before the gate needs it (final review I2).
+const URGENT_ARRIVES := 3.0
 ## A node centre's direction -> the ground's height there: the selection asks
 ## the same few hundred nodes again every RESELECT_AFTER, and the ground never
 ## changes. Cleared with the bounds.
@@ -279,11 +293,11 @@ func _missing() -> Array[Vector4i]:
 	for k in leaves:
 		if not _chunks.has(k) and not _jobs.has(k) and not _done.has(k):
 			out.append(k)
-	var listed := {}
-	for k in out:
-		listed[k] = true
+	# A wanted leaf not drawn is listed already (final review M9: no
+	# dictionary of them made every tick).
 	for k: Vector4i in _wanted_solid:
-		if not _solid.has(k) and not _jobs.has(k) and not _done.has(k) and not listed.has(k):
+		if not _solid.has(k) and not _jobs.has(k) and not _done.has(k) \
+				and not (_leaf_set.has(k) and not _chunks.has(k)):
 			out.append(k)
 	_mutex.unlock()
 	return out
@@ -301,7 +315,7 @@ func _request() -> void:
 	var missing := _missing()
 	var near := {}
 	for k in missing:
-		near[k] = _distance(k)
+		near[k] = _rank(k)
 	missing.sort_custom(func(a: Vector4i, b: Vector4i) -> bool: return near[a] < near[b])
 	for k in missing:
 		if _jobs.size() >= MAX_JOBS:
@@ -340,7 +354,7 @@ func _apply(deadline: float) -> void:
 			_done.erase(k)
 	_mutex.unlock()
 	for k: Vector4i in near:
-		near[k] = _distance(k)
+		near[k] = _rank(k)
 	var ready: Array = near.keys()
 	ready.sort_custom(func(a: Vector4i, b: Vector4i) -> bool: return near[a] < near[b])
 	var applied := 0
@@ -447,14 +461,17 @@ func solid_keys() -> Array[Vector4i]:
 	return out
 
 ## Every finest chunk some anchor needs solid: those with ground within
-## TerrainCollider.REACH of its way over the next second (a capsule). The one
-## under an anchor that is missing is built now, every tick (it is one
-## key_for). The rest are worked out again only once either end of its way
-## has moved half a finest edge (near a cube edge they cost milliseconds),
-## so they are worked out half an edge wider than the reach.
+## TerrainCollider.REACH of its way over the next second (a capsule). They
+## are worked out again only once either end of its way has moved half a
+## finest edge (near a cube edge they cost milliseconds), so they are worked
+## out half an edge wider than the reach. An anchor near the ground has its
+## footprint and the way of its next two ticks (_gate_keys) first in the
+## workers' queue, and once it could touch the ground within two ticks,
+## made solid now (_solid_now).
 func _solid_wanted() -> Dictionary:
 	var out := {}
 	var seen := {}
+	_urgent.clear()
 	var half_edge := CubeSphere.edge_m(body.radius, depth_max) * 0.5
 	for node in get_tree().get_nodes_in_group(AsteroidStream.SPACE_ANCHOR):
 		var a := node as Node3D
@@ -483,32 +500,88 @@ func _solid_wanted() -> Dictionary:
 				"keys": TerrainCollider.keys_along(terrain, depth_max, local, travel + lead,
 					TerrainCollider.REACH + half_edge)}
 			_solid_cache[id] = cached
-		var keys: Array = cached.keys
-		if keys.is_empty():
-			continue
-		for k: Vector4i in keys:
+		for k: Vector4i in cached.keys:
 			out[k] = true
-		var under := CubeSphere.key_for(local, depth_max)
-		out[under] = true
-		# And the one under where it will be in two ticks: the one it hits on
-		# a fast slanting arrival, ~33 m a tick sideways (fix round 4).
+		# Near the ground, its footprint and the way of its next two ticks
+		# (the cells it hits on a fast slanting arrival, ~33 m a tick
+		# sideways: fix round 4) go first to the workers; once it could touch
+		# the ground within two ticks (arriving, landing, falling, restored or
+		# woken) every one missing is made solid now. A hull's footprint is up
+		# to 3 x 3 cells, and one left to the workers was queued behind the
+		# focus's own (final review I2). Never on this thread for a level pass
+		# higher up: at 2 km/s it crosses a cell a tick, each a main-thread
+		# build (~2.5 ms; fix round 3).
+		var radius := float(a.get_meta(AsteroidStream.ANCHOR_RADIUS, 1.0))
 		var soon := _soon(local, velocity)
-		var ahead := CubeSphere.key_for(soon, depth_max) if not soon.is_zero_approx() else under
-		out[ahead] = true
-		# Built on this thread only for an anchor that could touch the ground
-		# within two ticks (arriving, landing, falling): a level pass at 2 km/s
-		# crosses a cell a tick, each a main-thread build (~2.5 ms; fix round
-		# 3). Every other is a worker's, nearest the focus first, so another
-		# anchor's would wait behind the focus's.
-		if (not _solid.has(under) or not _solid.has(ahead)) and _touching_soon(a, local, velocity):
-			if not _solid.has(under):
-				_make_solid(TerrainChunkData.build(terrain, under, true))
-			if not _solid.has(ahead):
-				_make_solid(TerrainChunkData.build(terrain, ahead, true))
+		if not _near_soon(local, soon, radius + ARRIVE * URGENT_ARRIVES):
+			continue
+		var gate := _gate_keys(id, local, soon, radius, half_edge)
+		var now: Array = gate[1]
+		var rank := 0
+		for list: Array in [now, gate[0]]:
+			for k: Vector4i in list:
+				out[k] = true
+				if not _urgent.has(k):
+					_urgent[k] = rank
+				rank += 1
+		if _near_soon(local, soon, radius + ARRIVE):
+			for k: Vector4i in now:
+				if not _solid.has(k):
+					_solid_now(k)
 	for id: int in _solid_cache.keys():
 		if not seen.has(id):
 			_solid_cache.erase(id)
+	for id: int in _gate_cache.keys():
+		if not seen.has(id):
+			_gate_cache.erase(id)
 	return out
+
+## The finest chunks under an anchor of `radius` (its ANCHOR_RADIUS) at
+## `local`, there in two ticks at `soon`: [every one with ground within
+## `radius` + ARRIVE + `half_edge` of that way, the one under it first, then
+## nearest it first; and of those, the ones within `radius` + ARRIVE, which
+## the gate makes solid at once]. The one under `soon` is in both. Kept while
+## both ends stay within half an edge (`half_edge`) of where they were worked
+## out, which the first list's margin covers; a landed hull's never change.
+func _gate_keys(id: int, local: Vector3, soon: Vector3, radius: float, half_edge: float) -> Array:
+	var cached: Dictionary = _gate_cache.get(id, {})
+	if cached.is_empty() or local.distance_to(cached.local) > half_edge \
+			or soon.distance_to(cached.soon) > half_edge:
+		var end := soon if not soon.is_zero_approx() else local
+		var keys: Array[Vector4i] = TerrainCollider.keys_along(terrain, depth_max, local, end - local,
+			radius + ARRIVE + half_edge, true)
+		var ahead := CubeSphere.key_for(end, depth_max)
+		if not keys.has(ahead):
+			keys.insert(1, ahead)
+		var now: Array[Vector4i] = []
+		var a := local.normalized() * terrain.radius
+		var b := end.normalized() * terrain.radius
+		for k in keys:
+			if k == keys[0] or k == ahead or TerrainCollider.cell_gap(k, terrain.radius, a, b) <= radius + ARRIVE:
+				now.append(k)
+		cached = {"local": local, "soon": soon, "keys": keys, "now": now}
+		_gate_cache[id] = cached
+	return [cached.keys, cached.now]
+
+## Chunk `key` solid now, for the near-ground gate: a worker's finished
+## result if there is one, else its job in flight waited on, and only with
+## neither built here (final review M1: it was built here every time, ~2.5
+## ms, with a worker's result waiting). A full build of a leaf not yet drawn
+## stays for _apply to draw.
+func _solid_now(key: Vector4i) -> void:
+	var job: Variant = _jobs.get(key)
+	if job != null:
+		WorkerThreadPool.wait_for_task_completion(job)
+		_jobs.erase(key)
+	_mutex.lock()
+	var data: TerrainChunkData = _done.get(key)
+	if data != null and (data.solid_only or not _leaf_set.has(key) or _chunks.has(key)):
+		_done.erase(key)
+	_mutex.unlock()
+	if data == null:
+		data = TerrainChunkData.build(terrain, key, true)
+		gate_builds += 1
+	_make_solid(data)
 
 ## True if `anchor`, at `local` and moving at `velocity`, has its lowest
 ## point within ARRIVE of the ground under it, or will within two ticks
@@ -518,10 +591,14 @@ func _solid_wanted() -> Dictionary:
 ## workers, and the Warden's feet, 6 m under its origin, had 4 m to spare
 ## (Task 7b fix round 4).
 func _touching_soon(anchor: Node, local: Vector3, velocity: Vector3) -> bool:
-	var within := ARRIVE + float(anchor.get_meta(AsteroidStream.ANCHOR_RADIUS, 1.0))
+	return _near_soon(local, _soon(local, velocity),
+		ARRIVE + float(anchor.get_meta(AsteroidStream.ANCHOR_RADIUS, 1.0)))
+
+## True if `local`, or `soon` (where it will be in two ticks), is within
+## `within` of the ground under it.
+func _near_soon(local: Vector3, soon: Vector3, within: float) -> bool:
 	if terrain.altitude_of(local) <= within:
 		return true
-	var soon := _soon(local, velocity)
 	return not soon.is_zero_approx() and terrain.altitude_of(soon) <= within
 
 ## Where an anchor at `local`, moving at `velocity`, will be in two ticks.
@@ -651,6 +728,12 @@ static func _below_any(key: Vector4i, set: Dictionary) -> bool:
 		if set.has(p):
 			return true
 	return false
+
+## Where `key` goes in the queue: an anchor's footprint near the ground first
+## (_urgent, nearest the anchor first), then the rest nearest the focus first.
+func _rank(key: Vector4i) -> float:
+	var urgent: Variant = _urgent.get(key)
+	return float(urgent) - 1e9 if urgent != null else _distance(key)
 
 func _distance(key: Vector4i) -> float:
 	var b := bound_of(key, body.radius, terrain.relief, _bounds)

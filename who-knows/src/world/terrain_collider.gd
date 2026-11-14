@@ -31,19 +31,22 @@ const LEAD_MAX := 100.0
 
 ## The finest chunks within `reach` of `local` (from the world's centre): the
 ## one that holds it first, then the rest nearest first; none from the centre
-## or from higher than `reach` up. A still anchor's capsule.
-static func keys_near(terrain: WorldTerrain, depth: int, local: Vector3, reach: float) -> Array[Vector4i]:
-	return keys_along(terrain, depth, local, Vector3.ZERO, reach)
+## or from higher than `reach` up, unless `always`. A still anchor's capsule.
+static func keys_near(terrain: WorldTerrain, depth: int, local: Vector3, reach: float,
+		always := false) -> Array[Vector4i]:
+	return keys_along(terrain, depth, local, Vector3.ZERO, reach, always)
 
 ## The finest chunks whose ground lies within `reach` of the way from `local`
 ## to `local + travel` (both from the world's centre), measured along the
 ## ground under it: the one under `local` first, then the rest nearest it
 ## first. None from the centre, or if no point of the way comes within
-## `reach` of the ground. A hull diving at the ground has its way's end under
-## it: the ground under that end is in, as is all the ground under the way.
-## A way longer than TRAVEL_MAX + LEAD_MAX is cut to it.
+## `reach` of the ground, unless `always` (the ground under the way however
+## high it is: the near-ground gate's, which asks from higher than its reach).
+## A hull diving at the ground has its way's end under it: the ground under
+## that end is in, as is all the ground under the way. A way longer than
+## TRAVEL_MAX + LEAD_MAX is cut to it.
 static func keys_along(terrain: WorldTerrain, depth: int, local: Vector3, travel: Vector3,
-		reach: float) -> Array[Vector4i]:
+		reach: float, always := false) -> Array[Vector4i]:
 	var out: Array[Vector4i] = []
 	if local.is_zero_approx():
 		return out
@@ -54,8 +57,8 @@ static func keys_along(terrain: WorldTerrain, depth: int, local: Vector3, travel
 	# Near the ground anywhere along the way? Sampled every quarter reach,
 	# with an eighth of the reach to spare between samples.
 	var samples := maxi(ceili(travel.length() / (reach * 0.25)), 1)
-	var near := false
-	for i in samples + 1:
+	var near := always
+	for i in (0 if always else samples + 1):
 		var p := local.lerp(end, float(i) / samples)
 		if not p.is_zero_approx() and terrain.altitude_of(p) <= reach * 1.125:
 			near = true
@@ -142,6 +145,19 @@ static func keys_along(terrain: WorldTerrain, depth: int, local: Vector3, travel
 	kept.sort_custom(func(p: Vector4i, q: Vector4i) -> bool: return d[p] < d[q])
 	kept.push_front(under)
 	return kept
+
+## How near finest cell `key` comes to the segment `a`-`b` (points on the
+## sphere of `radius`, as keys_along takes them), judged on the sphere as
+## keys_along keeps its cells: its middle's distance less its chord, so never
+## farther than it is.
+static func cell_gap(key: Vector4i, radius: float, a: Vector3, b: Vector3) -> float:
+	var r := CubeSphere.node_rect(key)
+	var mid := CubeSphere.direction(key.x, r.x + r.z * 0.5, r.y + r.z * 0.5) * radius
+	var chord := 0.0
+	for c in 4:
+		var corner := CubeSphere.direction(key.x, r.x + r.z * float(c & 1), r.y + r.z * float(c >> 1)) * radius
+		chord = maxf(chord, corner.distance_to(mid))
+	return _to_segment(mid, a, b) - chord
 
 ## How far `p` is from the segment `a`-`b`.
 static func _to_segment(p: Vector3, a: Vector3, b: Vector3) -> float:

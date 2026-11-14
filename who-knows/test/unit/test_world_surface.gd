@@ -854,3 +854,104 @@ func test_the_floor_leaves_an_anchor_on_the_triangles_at_a_lip_alone():
 	assert_gt(TerrainChunkData.solid_altitude_of(s.terrain, _universe.to_universe(a.global_position).minus(p.point)), 0.0,
 		"over the triangle")
 	s.finish()
+
+# --- the near-ground gate makes the whole footprint solid (final review I2, M1) --
+
+## An anchor of `radius` (its ANCHOR_RADIUS) at `local` (body-local), frozen.
+func _anchor_at(local: Vector3, radius: float) -> RigidBody3D:
+	var a := RigidBody3D.new()
+	a.freeze = true
+	a.collision_mask = BodyProxy.LAYER
+	a.set_meta(AsteroidStream.ANCHOR_RADIUS, radius)
+	a.add_to_group(AsteroidStream.SPACE_ANCHOR)
+	a.add_to_group(Universe.EXTERIOR_SPACE)
+	add_child_autofree(a)
+	a.global_position = _universe.to_engine(_planet().point.plus(local))
+	return a
+
+## The corner of the finest cell under `_up` where four cells meet, and those
+## four: [corner direction, keys].
+func _a_corner(depth: int) -> Array:
+	var t := WorldTerrain.new(_planet().recipe)
+	var k := CubeSphere.key_for(_up * t.radius, depth)
+	var rect := CubeSphere.node_rect(k)
+	var corner := CubeSphere.direction(k.x, rect.x, rect.y)
+	var keys: Array[Vector4i] = []
+	for dy in 2:
+		for dx in 2:
+			keys.append(Vector4i(k.x, depth, k.z - dx, k.w - dy))
+	return [corner, keys]
+
+## A 30 m hull 12 m up, centred where four cells meet: its footprint covers
+## all four, so all four are solid after one _solid_wanted, not only the one
+## under its origin (the gate built "under" and "ahead" alone).
+func test_a_wide_hull_has_its_whole_footprint_solid_at_once():
+	var s := _surface(3000.0)
+	var c := _a_corner(s.depth_max)
+	var corner: Vector3 = c[0]
+	var a := _anchor_at(corner * (s.terrain.radius + s.terrain.height_at(corner) + 12.0), 30.0)
+	s._solid_wanted()
+	for k: Vector4i in c[1]:
+		assert_true(s.solid_keys().has(k), "%s, a corner cell, solid at once" % k)
+	a.remove_from_group(AsteroidStream.SPACE_ANCHOR)
+	s.finish()
+
+## Final review M1: the gate uses a worker's finished result, or waits on the
+## job in flight, before it builds a chunk itself on the main thread.
+func test_the_gate_uses_finished_work_before_building():
+	var s := _surface(3000.0)
+	var c := _a_corner(s.depth_max)
+	var keys: Array = c[1]
+	# One finished, waiting to be applied; one still on a worker.
+	var done := TerrainChunkData.build(s.terrain, keys[0], true)
+	done.shape = WorldSurface.shape_of(done)
+	s._done[keys[0]] = done
+	s._jobs[keys[1]] = WorkerThreadPool.add_task(s._job.bind(keys[1], _planet().recipe, true, true), false, "test chunk")
+	var corner: Vector3 = c[0]
+	var a := _anchor_at(corner * (s.terrain.radius + s.terrain.height_at(corner) + 12.0), 30.0)
+	var built := s.gate_builds
+	s._solid_wanted()
+	assert_true(s.solid_keys().has(keys[0]) and s.solid_keys().has(keys[1]), "both solid")
+	assert_eq((s._solid[keys[0]].get_child(0) as CollisionShape3D).shape, done.shape, "the finished result's own shape")
+	assert_false(s._jobs.has(keys[1]), "the job in flight was waited on and taken")
+	assert_false(s._done.has(keys[0]) or s._done.has(keys[1]), "and neither is left to apply again")
+	var now: Array = s._gate_cache[a.get_instance_id()].now
+	gut.p("a 30 m hull 12 m up: %d chunks made solid at once, %d of them built here" % [now.size(), s.gate_builds - built])
+	assert_eq(s.gate_builds - built, now.size() - 2, "all but those two were built here")
+	a.remove_from_group(AsteroidStream.SPACE_ANCHOR)
+	s.finish()
+
+## Within 3 x ARRIVE of the ground the footprint is not built at once, but it
+## is first in the workers' queue: a ship woken 18 km from you had its
+## footprint queued behind every chunk round you.
+func test_a_far_anchor_near_the_ground_has_its_footprint_queued_first():
+	_universe = Universe.new()
+	add_child_autofree(_universe)
+	var p := _planet()
+	var s := WorldSurface.new()
+	s.setup(p, _universe)
+	add_child_autofree(s)
+	s.build_roots()
+	var focus := _above(p, s, 3.0)
+	_universe.origin = focus
+	var east := _up.cross(Vector3.UP).normalized()
+	var far := (_up + east * (18000.0 / p.radius)).normalized()
+	var lowest := WorldSurface.ARRIVE * 2.0
+	var a := _anchor_at(far * (s.terrain.radius + s.terrain.height_at(far) + 30.0 + lowest), 30.0)
+	s.update(focus)
+	var local := _universe.to_universe(a.global_position).minus(p.point)
+	# Its footprint and the way of its next two ticks, as wide as the gate
+	# works it out (half an edge wider, as the reach is).
+	var half_edge := CubeSphere.edge_m(p.radius, s.depth_max) * 0.5
+	var want := TerrainCollider.keys_near(s.terrain, s.depth_max, local, 30.0 + WorldSurface.ARRIVE + half_edge, true)
+	assert_gt(want.size(), WorldSurface.MAX_JOBS, "more than a queue's worth")
+	var queued := 0
+	for k: Vector4i in s._jobs:
+		if want.has(k):
+			queued += 1
+	assert_false(s.solid_keys().has(want[0]), "%.0f m over the ground: not built at once" % lowest)
+	assert_eq(s.jobs_in_flight(), WorldSurface.MAX_JOBS)
+	assert_eq(queued, WorldSurface.MAX_JOBS, "every job in flight is its footprint's (%d of %d)" % [
+		queued, s.jobs_in_flight()])
+	a.remove_from_group(AsteroidStream.SPACE_ANCHOR)
+	s.finish()
