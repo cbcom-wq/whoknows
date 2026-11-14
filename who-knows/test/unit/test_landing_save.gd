@@ -206,6 +206,34 @@ func test_restored_landed_off_the_ground_falls_and_settles():
 	assert_true(monitor.is_landed(), "landed")
 	assert_eq(_starter.damage.hull_whole(), whole, "not damaged")
 
+## The oasis floor moved the ground up to 20 m under a ship saved before it: a
+## hull restored where the old ground is 6 m over the stamped ground is let
+## fall and lands; one where it is 6 m under (now buried) is lifted onto it.
+## Neither is hurt. A pin: phase 2's restore already does both.
+func test_a_ship_saved_where_the_floor_moved_settles():
+	await _to_a_world()
+	var whole := _starter.damage.hull_whole()
+	var monitor := _starter.landing
+	# Saved landed 6 m over where the floor now is.
+	_fleet.restore_hull(_starter, _saved_landed_at(6.0))
+	assert_true(await _within(10.0, func() -> bool: return not monitor.is_landed()), "6 m over the floor it is let go")
+	assert_true(await _within(10.0, func() -> bool: return monitor.is_landed()), "and lands again within 10 s")
+	var keel := _starter.flight_computer.keel_altitude()
+	gut.p("6 m over the floor: landed again, its stance plane %.2f m over the ground" % keel)
+	assert_lt(absf(keel), 0.5, "on the floor (%.2f m)" % keel)
+	assert_eq(_starter.damage.hull_whole(), whole, "not damaged")
+	# Saved landed 6 m under it: buried, and lifted.
+	_fleet.restore_hull(_starter, _saved_landed_at(-6.0 - (_starter.stance_depth() - _starter.keel_depth())))
+	assert_true(await _within(10.0, func() -> bool:
+		return monitor.is_landed() and _starter.flight_computer.keel_altitude() > -0.5), "lifted onto the floor")
+	# The world's surface notes, as a warning, that it lifted a hull out of the ground.
+	assert_engine_error("lifted out", "the surface says it lifted it")
+	keel = _starter.flight_computer.keel_altitude()
+	gut.p("6 m under the floor: lifted, its stance plane %.2f m over the ground" % keel)
+	assert_gt(keel, -WorldSurface.FLOOR_SLACK, "not buried")
+	assert_lt(keel, 1.0, "and on it")
+	assert_eq(_starter.damage.hull_whole(), whole, "not damaged")
+
 ## Between RESTORE_SLACK and RESTORE_FALL over what is under it, it falls from
 ## where it is: not moved first.
 func test_restored_landed_a_metre_up_falls_from_where_it_is():

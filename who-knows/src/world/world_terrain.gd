@@ -146,6 +146,13 @@ var band_axis := Vector3.UP
 ## their warp), and its wind blows across them, toward the axis.
 var wind_axis := Vector3.UP
 
+## Extra angle (radians) the stamp cull allows past a stamp's reach. A unit
+## direction's dot with a stamp's centre is a 32-bit float, good to about 6e-8
+## in cos: near 1 that is a few tenths of a milliradian of angle, so a tight cull
+## dropped a pad's outer 10 m or more. The exact test (`metres_from`) still
+## decides what a stamp changes.
+const STAMP_CULL_SLACK := 2.0e-3
+
 ## The recipe's stamps, as this terrain's own copies (a FLATTEN's level filled
 ## in), and per stamp the cosine of the angle past which it is of no concern.
 var stamps: Array[TerrainStamp] = []
@@ -224,7 +231,7 @@ func _take_stamps() -> void:
 			s.level = sum / points.size()
 		stamps.append(s)
 		var outer := maxf(s.reach(), s.radius + TerrainStamp.CLEAR_MARGIN)
-		_stamp_cos.append(cos(minf(outer / radius, PI)))
+		_stamp_cos.append(cos(minf(outer / radius + STAMP_CULL_SLACK, PI)))
 
 ## Metres above radius at `dir`, within half the relief either way: the base
 ## ground with each stamp applied in order.
