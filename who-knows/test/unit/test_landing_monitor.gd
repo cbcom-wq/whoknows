@@ -243,7 +243,11 @@ func test_a_landed_starter_given_a_1_m_s_climb_rises_off_within_3_s():
 	var surface: WorldSurface = (root.star_system.proxy(planet.id) as BodyProxy).surface()
 	var centre := universe.to_engine(planet.point)
 	# Level ground near the hop: on a desert, off the dunes.
-	var up := LevelGround.near(surface.terrain, (ship.exterior.global_position - centre).normalized())
+	var level: Variant = LevelGround.near(surface.terrain, (ship.exterior.global_position - centre).normalized())
+	assert_not_null(level, "level, clear ground near the hop")
+	if level == null:
+		return
+	var up: Vector3 = level
 	assert_lt(LevelGround.tilt(surface.terrain, up), LevelGround.LEVEL, "level ground found")
 	var along := up.cross(Vector3.UP).normalized()
 	ship.exterior.global_transform = Transform3D(Basis(along, up, along.cross(up).normalized()),
@@ -303,3 +307,157 @@ func test_only_terrain_is_ground():
 	assert_false(LandingMonitor.is_ground(rock))
 	assert_false(LandingMonitor.is_ground(hull))
 	assert_false(LandingMonitor.is_ground(null))
+
+## Final review I3: a hull restored landed (a save, a ship woken) is checked
+## against the ground once the chunks under its footprint are solid, and one
+## physics tick later (so the broadphase has them), not after a fixed 10
+## ticks: a woken ship's neighbours were queued behind every other chunk, and
+## a foot over one not yet solid read a gap, fell and sank. RESTORE_WAIT stays
+## the timeout. The check is one cast, not one a tick.
+class StubRestore extends LandingMonitor:
+	var gap := 1.2
+	var solid := false
+	var casts := 0
+	func _gap_below(_up: Vector3, _reach: float) -> float:
+		casts += 1
+		return gap
+	func _footprint_solid() -> bool:
+		return solid
+	func _touching_ground() -> bool:
+		return false
+
+func _restore_rig() -> Array:
+	var hull := RigidBody3D.new()
+	add_child_autofree(hull)
+	var fc := FlightComputer.new()
+	fc.hull_path = NodePath("../" + hull.name)
+	hull.get_parent().add_child(fc)
+	autofree(fc)
+	fc.gravity = Pull.new()
+	var m := StubRestore.new()
+	m.hull = hull
+	m.flight = fc
+	add_child_autofree(m)
+	m.set_physics_process(false)
+	m.restore_landed()
+	return [hull, fc, m]
+
+func test_a_restored_hull_waits_for_its_footprint_to_be_solid():
+	var r := _restore_rig()
+	var m: StubRestore = r[2]
+	for i in 30:
+		m._physics_process(1.0 / 60.0)
+	assert_eq(m.state, LandingMonitor.State.LANDED, "30 ticks with its footprint not solid: still landed")
+	assert_true((r[0] as RigidBody3D).freeze, "and frozen")
+	assert_eq(m.casts, 0, "nothing cast while it waits")
+	m.solid = true
+	m._physics_process(1.0 / 60.0)
+	assert_eq(m.state, LandingMonitor.State.LANDED, "the tick it is solid: not yet (the broadphase)")
+	m._physics_process(1.0 / 60.0)
+	assert_eq(m.state, LandingMonitor.State.FLYING, "the tick after: checked, 1.2 m up, let fall")
+	assert_eq(m.casts, 1, "one cast")
+
+func test_with_its_footprint_never_solid_it_goes_by_the_analytic_ground_at_the_timeout():
+	var r := _restore_rig()
+	var m: StubRestore = r[2]
+	m.gap = -1.0
+	for i in LandingMonitor.RESTORE_WAIT - 1:
+		m._physics_process(1.0 / 60.0)
+	assert_true(m._check_restore, "still waiting")
+	m._physics_process(1.0 / 60.0)
+	assert_false(m._check_restore, "checked at RESTORE_WAIT")
+	assert_eq(m.state, LandingMonitor.State.LANDED, "on the analytic ground: stays landed")
+	assert_eq(m.casts, 1, "one cast, not one a tick")
+
+## Final review I4: "buried" is judged against the ground under the hull's
+## footprint, not under its origin. Astride a crest the ground under the
+## origin is the crest top, above where the feet rest: such a hull, resting,
+## stays landed and is not moved. A hull truly sunk is still lifted, to
+## RESTORE_DROP over the highest ground under it.
+class Ridge extends WorldGravity:
+	## The ground's height: `top` along x = 0, falling `fall` a metre either
+	## way (a crest); flat at `top` with `fall` 0.
+	var top := 1.5
+	var fall := 0.15
+	func up_at(_p: Vector3) -> Vector3:
+		return Vector3.UP
+	func at(_p: Vector3) -> Vector3:
+		return Vector3(0, -3.0, 0)
+	func altitude_at(p: Vector3) -> float:
+		return p.y - (top - fall * absf(p.x))
+	func solid_altitude_at(p: Vector3) -> float:
+		return altitude_at(p)
+
+## A rig whose hull is a 20 x 2 x 20 m box, its bottom KEEL m under the
+## origin (the stance plane), the stance plane `stance` m up.
+const KEEL := 2.0
+func _boxed_rig(gravity: WorldGravity, stance: float) -> Array:
+	var r := _restore_rig_on(gravity)
+	var hull: RigidBody3D = r[0]
+	var box := BoxShape3D.new()
+	box.size = Vector3(20.0, 2.0, 20.0)
+	var cs := CollisionShape3D.new()
+	cs.shape = box
+	cs.position = Vector3(0.0, -KEEL + 1.0, 0.0)
+	hull.add_child(cs)
+	(r[1] as FlightComputer).keel_depth = KEEL
+	hull.global_position = Vector3(0.0, stance + KEEL, 0.0)
+	(r[2] as LandingMonitor).restore_landed()
+	return r
+
+func _restore_rig_on(gravity: WorldGravity) -> Array:
+	var hull := RigidBody3D.new()
+	add_child_autofree(hull)
+	var fc := FlightComputer.new()
+	fc.hull_path = NodePath("../" + hull.name)
+	hull.get_parent().add_child(fc)
+	autofree(fc)
+	fc.gravity = gravity
+	var m := StubRestore.new()
+	m.hull = hull
+	m.flight = fc
+	m.solid = true
+	add_child_autofree(m)
+	m.set_physics_process(false)
+	return [hull, fc, m]
+
+func test_a_hull_resting_astride_a_crest_is_not_buried():
+	# Its footprint's edges 10 m either side of the crest, 1.5 m down it; its
+	# stance plane 0.1 m over them, 1.4 m under the crest top at its middle.
+	var r := _boxed_rig(Ridge.new(), 0.1)
+	var m: StubRestore = r[2]
+	m.gap = 0.1
+	var was := (r[0] as RigidBody3D).global_position
+	for i in 5:
+		m._physics_process(1.0 / 60.0)
+	assert_false(m._check_restore, "checked")
+	assert_eq(m.state, LandingMonitor.State.LANDED, "resting: stays landed")
+	assert_eq((r[0] as RigidBody3D).global_position, was, "not moved")
+
+func test_a_hull_sunk_a_metre_is_still_lifted():
+	var flat := Ridge.new()
+	flat.top = 0.0
+	flat.fall = 0.0
+	var r := _boxed_rig(flat, -1.0)
+	var m: StubRestore = r[2]
+	m.gap = 0.0
+	for i in 5:
+		m._physics_process(1.0 / 60.0)
+	assert_eq(m.state, LandingMonitor.State.FLYING, "let fall")
+	var stance := (r[0] as RigidBody3D).global_position.y - KEEL
+	assert_almost_eq(stance, LandingMonitor.RESTORE_DROP, 0.001, "its stance plane RESTORE_DROP over the ground")
+
+func test_a_hull_sunk_on_a_slope_is_lifted_over_its_highest_ground():
+	# On a slope rising 0.15 a metre to +x: one side 1 m sunk, the other 4 m.
+	var slope := Ridge.new()
+	slope.top = 0.0
+	slope.fall = 0.0
+	var r := _boxed_rig(slope, -1.0)
+	var m: StubRestore = r[2]
+	m.gap = 0.0
+	(m.flight.gravity as Ridge).fall = -0.15   # rises both ways from the middle: a trough
+	for i in 5:
+		m._physics_process(1.0 / 60.0)
+	assert_eq(m.state, LandingMonitor.State.FLYING, "let fall")
+	var stance := (r[0] as RigidBody3D).global_position.y - KEEL
+	assert_almost_eq(stance, 1.5 + LandingMonitor.RESTORE_DROP, 0.001, "RESTORE_DROP over the highest ground under it")

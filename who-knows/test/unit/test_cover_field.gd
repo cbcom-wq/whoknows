@@ -172,6 +172,25 @@ func test_a_jump_has_no_velocity():
 	var at_rest := CoverField.blocks_near(s.terrain, f.minus(_planet().point), CoverField.BOULDER_REACH)
 	assert_eq(s.cover._wanted, at_rest)
 
+## Final review, deferred: a choice less than a tick after the last (the
+## wall clock's jitter, at very high speed) still reads the velocity, from
+## half a tick: the blocks ahead come first.
+func test_a_choice_under_a_tick_after_the_last_still_reads_the_velocity():
+	var s := _surface(2.0)
+	var along := _up.cross(Vector3.RIGHT).normalized()
+	s.cover._select_for(_above(s, 2.0))
+	var tick := 1.0 / Engine.physics_ticks_per_second
+	var dt := tick * 0.75
+	var there := (_up + along * (1000.0 * dt / _planet().radius)).normalized()
+	var f := _above(s, 2.0, there)
+	s.cover._selected_usec = Time.get_ticks_usec() - int(dt * 1e6)
+	s.cover._select_for(f)
+	var at_rest := CoverField.blocks_near(s.terrain, f.minus(_planet().point), CoverField.BOULDER_REACH)
+	var moving := CoverField.blocks_near(s.terrain, f.minus(_planet().point), CoverField.BOULDER_REACH,
+		along * 1000.0)
+	assert_ne(moving, at_rest, "at 1 km/s the blocks ahead come first")
+	assert_ne(s.cover._wanted, at_rest, "the velocity was read")
+
 # --- drawing them ---------------------------------------------------------------
 
 func test_cover_is_what_scatter_says():
@@ -469,6 +488,7 @@ func test_a_tick_is_cheap():
 	var t := _terrain()
 	var memo := {}
 	var edge_worst := 0.0
+	var edge_samples: Array[float] = []
 	var crossed := 0
 	var first_cold := 0.0
 	var u := 0.97
@@ -490,6 +510,7 @@ func test_a_tick_is_cheap():
 		# The first choice fills the memo: an arrival's cost, not the edge's.
 		if crossed > 0:
 			edge_worst = maxf(edge_worst, us)
+			edge_samples.append(us)
 		else:
 			first_cold = us
 		crossed += 1
@@ -515,13 +536,18 @@ func test_a_tick_is_cheap():
 		busy_worst = maxf(busy_worst, us)
 		ticks += 1
 	assert_true(s.cover._settled, "it catches up")
-	gut.p("cover tick: idle %.1f us; reselect in the open mean %.0f us, worst %.0f us; flying to a cube edge (%d choices) worst %.0f us; a first choice, cold, in the open %.0f us, by a corner %.0f us"
-		% [idle, total / 20.0, worst, crossed, edge_worst, first_cold, cold])
+	edge_samples.sort()
+	var edge_median := edge_samples[edge_samples.size() / 2] if not edge_samples.is_empty() else 0.0
+	gut.p("cover tick: idle %.1f us; reselect in the open mean %.0f us, worst %.0f us; flying to a cube edge (%d choices) median %.0f us, worst %.0f us; a first choice, cold, in the open %.0f us, by a corner %.0f us"
+		% [idle, total / 20.0, worst, crossed, edge_median, edge_worst, first_cold, cold])
 	gut.p("cover tick: one block applied in %.0f us, its grass (%d nodes) in %.0f us; a block built in %.1f ms; streaming %d blocks: %d ticks, mean %.0f us, worst %.0f us"
 		% [apply, grass_nodes, grass, build, s.cover.block_count(), ticks, busy / maxf(ticks, 1), busy_worst])
 	assert_lt(idle, 50.0, "nothing to do costs next to nothing")
 	assert_lt(apply, CoverField.APPLY_BUDGET_USEC * 2.0)
-	assert_lt(edge_worst, 1000.0, "a cube edge costs well under a millisecond")
+	# The median, not the worst sample (final review M7): one wall-clock sample
+	# flaps while a probe or another test shares the machine.
+	assert_false(edge_samples.is_empty(), "choices made on the way to the edge")
+	assert_lt(edge_median, 1000.0, "a cube edge costs well under a millisecond")
 
 ## Task 7b: each size tier fades out by the material's own pixel dither, the
 ## small first, ending at its reach: no line where the stones stop, and no

@@ -388,8 +388,18 @@ static func _dune_stand(a: float, z: float) -> float:
 	if z > MESA_FROM - MESA_EDGE:
 		stand = 1.0 - smoothstep(MESA_FROM - MESA_EDGE, MESA_FROM, z)
 	if absf(a) > DUNE_POLE:
-		stand *= 1.0 - smoothstep(DUNE_POLE, (1.0 + DUNE_POLE) * 0.5, absf(a))
+		stand *= pole_fade(a)
 	return stand
+
+## How much of the dunes stands, and of the sand blows (BlowingSand), at a
+## point whose d . wind_axis is `a`: 1 up to DUNE_POLE, fading to 0 halfway on
+## to the pole, where the ridges would close into rings and the wind's way
+## spins round the pole.
+static func pole_fade(a: float) -> float:
+	var pole := absf(a)
+	if pole <= DUNE_POLE:
+		return 1.0
+	return 1.0 - smoothstep(DUNE_POLE, (1.0 + DUNE_POLE) * 0.5, pole)
 
 ## The dune phase (see _phase) at `dir`, which need not be unit length.
 func _phase_of(dir: Vector3) -> float:

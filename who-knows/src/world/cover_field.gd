@@ -358,14 +358,16 @@ func update(focus: UniversePoint) -> void:
 
 ## Chooses the blocks for `focus`, its velocity worked out from the last
 ## choice (BodyProxy passes only the point; a jump has none), and lets go of
-## the blocks far behind.
+## the blocks far behind. A choice from half a tick after the last reads it:
+## the wall clock jitters, and at very high speed a choice can come a little
+## under a tick after the last.
 func _select_for(focus: UniversePoint) -> void:
 	var now := Time.get_ticks_usec()
 	var velocity := Vector3.ZERO
 	if _selected_at != null:
 		var dt := float(now - _selected_usec) / 1e6
 		var step := focus.minus(_selected_at)
-		if dt >= 1.0 / Engine.physics_ticks_per_second and step.length() <= FLIGHT_MAX * dt:
+		if dt >= 0.5 / Engine.physics_ticks_per_second and step.length() <= FLIGHT_MAX * dt:
 			velocity = step / dt
 	_selected_at = focus
 	_selected_usec = now

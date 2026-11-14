@@ -69,18 +69,21 @@ static func shade(colour: Color, k: int) -> Color:
 static func scree(colour: Color) -> Color:
 	return Color(colour.r * SCREE, colour.g * SCREE, colour.b * SCREE, colour.a)
 
+## The palettes a seed's palette draw can pick: all but the desert's, which only
+## the desert roll gives (WorldRecipe.DESERT_SHARE).
+const DRAWN_PALETTES := 8
+## The index of the desert palette in WORLDS.
+const DESERT_PALETTE := 8
+
 ## The worlds' palettes (Planetfall §5.3; the system skeleton spec §7.1):
 ## dusty and warm, like the rocks, each whole -- a seed picks one and never
 ## jitters its hue, so every world keeps the tight palette. `ground_low` and
 ## `ground_high` are the plains and the heights, `rock` the steep and the
 ## dark, `dust` loose stuff, `accent` a site's lit parts, `sky` the
-## atmosphere's tint (`sky_low` at the horizon, `sky_high` overhead). Tuned by rendering; approved by the owner from renders.
-## The palettes a seed's palette draw can pick: all but the desert's, which only
-## the desert roll gives (WorldRecipe.DESERT_SHARE).
-const DRAWN_PALETTES := 8
-## The index of the desert palette in WORLDS. `boulder` is a lifted rock, `grass`
-## the cover plants (drawn on deserts only for now), `streak` a pale wind line.
-const DESERT_PALETTE := 8
+## atmosphere's tint (`sky_low` at the horizon, `sky_high` overhead),
+## `boulder` a lifted rock, `grass` the cover plants (drawn on deserts only for
+## now), `streak` a pale wind line. Tuned by rendering; approved by the owner
+## from renders.
 const WORLDS: Array[Dictionary] = [
 	{&"name": &"ochre", &"ground_low": Color("6e5236"), &"ground_high": Color("a07a4c"), &"rock": Color("4a3a2e"),
 		&"dust": Color("8a6a48"), &"accent": Color("ffb45a"), &"sky": Color("d9a066"),

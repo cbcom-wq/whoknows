@@ -185,6 +185,13 @@ func terrain_of(body: SystemBody) -> WorldTerrain:
 		_terrains[body.id] = WorldTerrain.new(body.recipe)
 	return _terrains[body.id]
 
+## `body`'s drawn ground while it is near (BodyProxy.surface()), else null:
+## through the StarSystem that made this node, its parent.
+func surface_of(body: SystemBody) -> WorldSurface:
+	var system := get_parent() as StarSystem
+	var proxy := system.proxy(body.id) if system != null else null
+	return proxy.surface() if proxy != null else null
+
 static func well_at(system: SystemRecipe, u: UniversePoint) -> SystemBody:
 	for b in system.bodies:
 		if u.minus(b.point).length() <= b.well_radius:

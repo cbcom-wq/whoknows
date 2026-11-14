@@ -44,16 +44,22 @@ const HOLD_LIFTS := 0.5
 ## frozen where it is. Further, it is let fall with its hold off until it
 ## lands, as any landing does: from where it is up to RESTORE_FALL m, or
 ## brought down to RESTORE_DROP m over what is under it first. Buried, its
-## stance plane more than RESTORE_SLACK under the analytic ground (which a
-## physics query cannot see out of), it is lifted to RESTORE_DROP m over that.
+## stance plane more than RESTORE_SLACK under the lowest ground under its
+## footprint (a physics query cannot see out of the ground), it is lifted to
+## RESTORE_DROP m over the highest. Judged under the footprint, not the
+## origin: astride a dune's crest or at a mesa's lip the ground under the
+## origin is above where the feet rest, and a ship resting there jumped on
+## load and landed hard (final review I4).
 const RESTORE_SLACK := 0.5
 const RESTORE_DROP := 0.5
 const RESTORE_FALL := 2.0
-## Physics ticks a restored hull is left frozen before the check, so the
-## solid chunks round it (and their boulders) are built and in the physics
-## space; and the most it waits for any solid ground under it before it trusts
-## the analytic ground alone.
-const RESTORE_SETTLE := 10
+## The check waits until every chunk under the hull's footprint (its
+## ANCHOR_RADIUS round it) is solid (WorldSurface.solid_round), then one
+## physics tick more, so the broadphase has their shapes: a fixed 10 ticks
+## left a woken ship's neighbouring chunks queued behind every other, and a
+## foot over one not solid yet read a gap, fell and sank (final review I3).
+## RESTORE_WAIT physics ticks is the most it waits before it trusts the
+## analytic ground alone.
 const RESTORE_WAIT := 60
 ## Seconds a restored hull is let fall at most before its hold is back, in
 ## case it never lands.
@@ -78,9 +84,12 @@ var _in_contact := false
 ## step that took the speed off, so the closing speed is read from before it.
 var _last_velocity := Vector3.ZERO
 ## Restored landed and not yet checked against the ground (RESTORE_SLACK),
-## and for how many ticks it has waited for solid ground (RESTORE_WAIT).
+## for how many ticks it has waited for solid ground (RESTORE_WAIT), and
+## whether the ground under its footprint has been seen solid (the check runs
+## the tick after).
 var _check_restore := false
 var _check_ticks := 0
+var _footprint_seen := false
 ## Let go by that check: the hold stands down until it lands again, the pilot
 ## moves it, it bounces off into the air, or DROP_MOST has passed.
 var _dropping := false
@@ -157,6 +166,7 @@ func restore_landed() -> void:
 	_set_state(State.LANDED)
 	_check_restore = true
 	_check_ticks = 0
+	_footprint_seen = false
 
 func _physics_process(delta: float) -> void:
 	if hull == null or flight == null:
@@ -213,25 +223,26 @@ static func translating(fc: FlightComputer, up: Vector3) -> bool:
 
 ## The restore check (see RESTORE_SLACK), `up` the local up: true if the
 ## hull was let go to fall. One resting on something stays frozen where it is,
-## `restored` and all; the check stays pending while it waits for the ground.
+## `restored` and all; the check stays pending while it waits for the ground
+## under its footprint (RESTORE_WAIT), and is then one cast.
 func _set_down_again(up: Vector3) -> bool:
 	var off := flight.keel_altitude()
 	if state != State.LANDED or not hull.freeze or not is_finite(off):
 		_check_restore = false
 		return false
 	_check_ticks += 1
-	if _check_ticks < RESTORE_SETTLE:
+	if not _footprint_seen and _check_ticks < RESTORE_WAIT:
+		_footprint_seen = _footprint_solid()
 		return false
 	var move := 0.0
-	if off < -RESTORE_SLACK:
-		move = RESTORE_DROP - off
+	var stance := _stance_over_ground(up)
+	if stance.x < -RESTORE_SLACK:
+		move = RESTORE_DROP - stance.y
 	else:
 		var gap := _gap_below(up, maxf(off, 0.0) + RESTORE_FALL + RESTORE_SLACK)
 		if gap < 0.0:
-			# Nothing solid within reach yet: wait for the chunks under it,
-			# then go by the analytic ground.
-			if _check_ticks < RESTORE_WAIT:
-				return false
+			# Nothing solid within reach, with the ground under it solid (or
+			# the wait over): go by the analytic ground.
 			gap = off
 		if gap <= RESTORE_SLACK:
 			_check_restore = false
@@ -246,9 +257,87 @@ func _set_down_again(up: Vector3) -> bool:
 	_set_state(State.FLYING)
 	return true
 
+## How high the stance plane (FlightComputer.keel_depth under the origin)
+## stands over the ground the collision has (WorldGravity.solid_altitude_at)
+## under the hull's footprint, `up` the local up: Vector2(over the lowest of
+## that ground, over the highest).
+func _stance_over_ground(up: Vector3) -> Vector2:
+	var most := -INF
+	var least := INF
+	for spot in footprint(up):
+		var over := flight.gravity.solid_altitude_at(spot)
+		most = maxf(most, over)
+		least = minf(least, over)
+	return Vector2(most, least)
+
+## The hull's footprint on its stance plane, `up` the local up: the point
+## under its origin, then the four corners of its colliders' box (the hull
+## body's own, not a landing ramp's) seen along `up`. Engine positions.
+func footprint(up: Vector3) -> Array[Vector3]:
+	var origin := hull.global_position
+	var plane := origin - up * flight.keel_depth
+	var along := hull.global_basis.x - up * hull.global_basis.x.dot(up)
+	if along.length_squared() < 0.01:
+		along = hull.global_basis.z - up * hull.global_basis.z.dot(up)
+	along = along.normalized()
+	var across := up.cross(along)
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	for cs in _hull_shapes():
+		var box := _shape_box(cs.shape)
+		for k in 8:
+			var corner := cs.global_transform * (box.position + box.size * Vector3(k & 1, (k >> 1) & 1, (k >> 2) & 1))
+			var flat := Vector2((corner - origin).dot(along), (corner - origin).dot(across))
+			lo = lo.min(flat)
+			hi = hi.max(flat)
+	var spots: Array[Vector3] = [plane]
+	if lo.x <= hi.x:
+		for k in 4:
+			var at := Vector2(hi.x if k & 1 else lo.x, hi.y if k & 2 else lo.y)
+			spots.append(plane + along * at.x + across * at.y)
+	return spots
+
+## The hull body's own collision shapes that are on: not a landing ramp's
+## (LandingRamp.COLLIDER_META), nor any other body's or area's under it.
+func _hull_shapes() -> Array[CollisionShape3D]:
+	var out: Array[CollisionShape3D] = []
+	for node in hull.get_children():
+		var cs := node as CollisionShape3D
+		if cs != null and not cs.disabled and cs.shape != null and not cs.has_meta(LandingRamp.COLLIDER_META):
+			out.append(cs)
+	return out
+
+## A collision shape's box in its own space: a box's, a convex hull's points';
+## any other's debug mesh's.
+static func _shape_box(shape: Shape3D) -> AABB:
+	if shape is BoxShape3D:
+		var size := (shape as BoxShape3D).size
+		return AABB(-size * 0.5, size)
+	if shape is ConvexPolygonShape3D:
+		var points := (shape as ConvexPolygonShape3D).points
+		var box := AABB(points[0], Vector3.ZERO) if not points.is_empty() else AABB()
+		for p in points:
+			box = box.expand(p)
+		return box
+	return shape.get_debug_mesh().get_aabb()
+
+## Whether every finest chunk under the hull's footprint (its ANCHOR_RADIUS
+## round its origin) is solid on the world it is on; false off a world's
+## ground, or with no surface drawn.
+func _footprint_solid() -> bool:
+	var surface := flight.gravity.surface_at(hull.global_position) if flight.gravity != null else null
+	if surface == null:
+		return false
+	return surface.solid_round(surface.universe.to_universe(hull.global_position),
+		float(hull.get_meta(AsteroidStream.ANCHOR_RADIUS, 1.0)))
+
 ## How far the hull can move down `up` before one of its colliders meets the
 ## solid ground (BodyProxy.LAYER), looking `reach` m; -1 if nothing is there.
-## Already touching is 0.
+## Already touching is 0; a collider already inside the ground is not counted
+## (a cast ignores what it starts inside). Not a landing ramp's collider
+## (LandingRamp.COLLIDER_META): a restored hull's ramp is down at once with
+## its tip on the ground, and counted it held a hull hovering a metre up
+## frozen in the air (final review I5).
 func _gap_below(up: Vector3, reach: float) -> float:
 	var space := hull.get_world_3d().direct_space_state
 	var q := PhysicsShapeQueryParameters3D.new()
@@ -256,10 +345,7 @@ func _gap_below(up: Vector3, reach: float) -> float:
 	q.exclude = [hull.get_rid()]
 	q.motion = -up * reach
 	var best := INF
-	for node in hull.find_children("*", "CollisionShape3D", true, false):
-		var cs := node as CollisionShape3D
-		if cs.disabled or cs.shape == null:
-			continue
+	for cs in _hull_shapes():
 		q.shape = cs.shape
 		q.transform = cs.global_transform
 		var r := space.cast_motion(q)

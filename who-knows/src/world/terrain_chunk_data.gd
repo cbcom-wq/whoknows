@@ -97,6 +97,50 @@ static func ground_point(terrain: WorldTerrain, d: Vector3, centre: Vector3i) ->
 	var r := terrain.radius + terrain.height_at(d)
 	return Vector3(d.x * r - float(centre.x), d.y * r - float(centre.y), d.z * r - float(centre.z))
 
+## How far `local` (from the world's centre) is over the ground the collision
+## has there: the triangle of the finest chunk under it, found in the same
+## quad and split build() makes (as GroundCover._Ground finds it), measured
+## along the up through `local`. On open ground it is within centimetres of
+## WorldTerrain.altitude_of; at a mesa's or a tower's lip the triangles cut
+## the near-sheer edge and sit up to ~9 m under height_at (final review I1).
+## About four height_at calls and a face_uv. Pure.
+static func solid_altitude_of(terrain: WorldTerrain, local: Vector3) -> float:
+	if local.is_zero_approx():
+		return -terrain.radius
+	var n := CubeSphere.QUADS
+	var depth := CubeSphere.depth_for(terrain.radius)
+	var fuv := CubeSphere.face_uv(local)
+	var cells := 1 << depth
+	var key := Vector4i(int(fuv.x), depth,
+		clampi(floori((fuv.y + 1.0) * 0.5 * cells), 0, cells - 1),
+		clampi(floori((fuv.z + 1.0) * 0.5 * cells), 0, cells - 1))
+	var rect := CubeSphere.node_rect(key)
+	var step := rect.z / n
+	var fi := (fuv.y - rect.x) / step
+	var fj := (fuv.z - rect.y) / step
+	var i := clampi(floori(fi), 0, n - 1)
+	var j := clampi(floori(fj), 0, n - 1)
+	var up := local.normalized()
+	# Each corner as build() works it out, relative to `local`; the triangle
+	# i00-i10-i11 or i00-i11-i01, as build() splits the quad.
+	var p00 := _solid_corner(terrain, key.x, rect.x + i * step, rect.y + j * step, local)
+	var p11 := _solid_corner(terrain, key.x, rect.x + (i + 1) * step, rect.y + (j + 1) * step, local)
+	var other := _solid_corner(terrain, key.x, rect.x + (i + 1) * step, rect.y + j * step, local) \
+		if fi - i >= fj - j else _solid_corner(terrain, key.x, rect.x + i * step, rect.y + (j + 1) * step, local)
+	var normal := (p11 - p00).cross(other - p00)
+	var across := normal.dot(up)
+	if absf(across) < 1e-6 * normal.length():
+		return terrain.altitude_of(local)
+	# Where the up through `local` meets the triangle's plane, along up.
+	return -normal.dot(p00) / across
+
+## Grid point (u, v) of `face`, as build() works it out, relative to `local`
+## (64-bit until the difference).
+static func _solid_corner(terrain: WorldTerrain, face: int, u: float, v: float, local: Vector3) -> Vector3:
+	var d := CubeSphere.direction(face, u, v)
+	var r := terrain.radius + terrain.height_at(d)
+	return Vector3(d.x * r - local.x, d.y * r - local.y, d.z * r - local.z)
+
 ## One ground triangle, wound so Godot draws its outward side.
 func _ground(terrain: WorldTerrain, dirs: PackedVector3Array, ia: int, ib: int, ic: int, patch: float) -> void:
 	var a := grid[ia]

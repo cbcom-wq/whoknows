@@ -105,6 +105,46 @@ func test_on_at_the_desert_s_ground():
 	assert_false(_sand.is_in_group(Universe.HOLDS_SHIFT))
 	assert_true(_sand.visibility_aabb.has_point(m.emission_shape_offset), "drawn where it blows")
 
+## Puts the frozen hull, already in `planet`'s well, `clearance` m over its
+## ground at the unit direction `out` from its middle, the origin brought
+## along, and lets the sand tick.
+func _move_over(planet: SystemBody, out: Vector3, clearance := 2.0) -> void:
+	var centre := _universe.to_engine(planet.point)
+	var ground := planet.radius + _where().terrain_of(planet).height_at(out)
+	var along := out.cross(Vector3.UP if absf(out.y) < 0.9 else Vector3.RIGHT).normalized()
+	_ship.exterior.global_transform = Transform3D(Basis(along, out, along.cross(out).normalized()),
+		centre + out * (ground + _ship.stance_depth() + clearance))
+	var p := _ship.exterior.global_position
+	_universe.shift(Vector3(snappedf(p.x, Universe.STEP), snappedf(p.y, Universe.STEP), snappedf(p.z, Universe.STEP)))
+	_root.star_system.place_all()
+	_where().look()
+	await wait_physics_frames(2)
+
+## Final review, deferred: toward the wind axis's poles the dunes fade into a
+## flat sheet (WorldTerrain.DUNE_POLE) and the wind's way spins round the
+## pole; the sand fades out with the dunes, by the same pole_fade, and
+## is gone where they are.
+func test_the_sand_fades_out_with_the_dunes_toward_the_wind_s_poles():
+	assert_eq(WorldTerrain.pole_fade(0.0), 1.0)
+	assert_eq(WorldTerrain.pole_fade(WorldTerrain.DUNE_POLE), 1.0, "whole up to DUNE_POLE")
+	assert_eq(WorldTerrain.pole_fade(-(1.0 + WorldTerrain.DUNE_POLE) * 0.5), 0.0, "gone halfway to the pole")
+	assert_eq(WorldTerrain.pole_fade(1.0), 0.0)
+	for a: float in [0.0, 0.5, 0.91, -0.93, 0.95, 0.99]:
+		assert_eq(WorldTerrain._dune_stand(a, 0.0), WorldTerrain.pole_fade(a), "the dunes stand by it")
+	var p3 := _body(&"p3")
+	await _set_down(&"p3")
+	assert_true(_sand.emitting, "sand on the open dunes")
+	var axis := _where().terrain_of(p3).wind_axis
+	var across := axis.cross(Vector3.UP if absf(axis.y) < 0.9 else Vector3.RIGHT).normalized()
+	await _move_over(p3, (axis * 0.98 + across * sqrt(1.0 - 0.98 * 0.98)).normalized())
+	assert_almost_eq(_where().up().dot(axis), 0.98, 0.001)
+	assert_lt(_where().altitude(), BlowingSand.SAND_LOW, "low over the sheet")
+	assert_eq(_sand.amount_ratio, 0.0, "none where the dunes are gone")
+	assert_false(_sand.emitting)
+	await _move_over(p3, (axis * 0.925 + across * sqrt(1.0 - 0.925 * 0.925)).normalized())
+	assert_lt(_where().altitude(), BlowingSand.SAND_LOW)
+	assert_between(_sand.amount_ratio, 0.05, 0.95, "thinning as the dunes do")
+
 ## Moves the frozen hull straight up or down until it is `altitude` m over
 ## the ground, and lets the sand tick.
 func _hull_to(altitude: float) -> void:

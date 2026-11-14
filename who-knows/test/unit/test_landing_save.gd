@@ -4,6 +4,8 @@ extends GutTest
 ## (docs/superpowers/specs/2026-11-03-desert-world-design.md §5.3). Old saves
 ## without the key load flying.
 
+const LevelGround := preload("res://test/unit/helpers/level_ground.gd")
+
 var _root: Node
 var _fleet: Fleet
 var _starter: Ship
@@ -153,6 +155,21 @@ func _saved_landed_at(height: float) -> Dictionary:
 	saved["hull"]["landed"] = true
 	return saved
 
+## Calls `each` every physics tick, first in the tick, until freed.
+class Watcher extends Node:
+	var each: Callable
+	func _init(p_each: Callable) -> void:
+		each = p_each
+		process_physics_priority = -1000
+	func _physics_process(_delta: float) -> void:
+		each.call()
+
+## A Watcher of `each`, in the tree; free it before the test ends.
+func _watch(each: Callable) -> Watcher:
+	var w := Watcher.new(each)
+	add_child(w)
+	return w
+
 ## Physics frames until `done` holds, up to `seconds`; true if it did.
 func _within(seconds: float, done: Callable) -> bool:
 	for k in roundi(seconds * 60.0):
@@ -245,3 +262,196 @@ func test_restored_landed_where_it_stands_stays_put():
 	assert_true(monitor.restored, "restored")
 	assert_lt(at.minus(_universe.to_universe(_starter.exterior.global_position)).length(), 0.01,
 		"not moved into the boulder")
+
+## Final review I5: a ship restored landed hovering a metre up -- over
+## RESTORE_SLACK, under RESTORE_FALL -- has its ramp down at once, its tip
+## just over the ground (a cast ignores what a shape starts inside, so a tip
+## sunk in the ground was never the trouble). The check measures the hull's own colliders, never
+## the ramp's: it is let fall from where it is and lands, not left frozen in
+## the air on its ramp's tip.
+func test_restored_landed_hovering_on_its_ramp_s_tip_is_set_down():
+	await _to_a_world()
+	var surface: WorldSurface = (_root.star_system.proxy(_planet.id) as BodyProxy).surface()
+	var level: Variant = LevelGround.near(surface.terrain, _up)
+	assert_not_null(level, "level, clear ground near the hop")
+	if level == null:
+		return
+	_up = level
+	assert_lt(LevelGround.tilt(surface.terrain, _up), LevelGround.LEVEL, "level ground")
+	_ground = _planet.radius + surface.terrain.height_at(_up)
+	var along := _up.cross(Vector3.UP).normalized()
+	_basis = Basis(along, _up, along.cross(_up).normalized())
+	var monitor := _starter.landing
+	var ramps: Array[LandingRamp] = []
+	for lock: Airlock in _starter.airlocks.values():
+		if is_instance_valid(lock.alcove) and lock.alcove.ramp != null:
+			ramps.append(lock.alcove.ramp)
+	assert_false(ramps.is_empty(), "the starter has a ramp")
+	# Once there first, so the ground is solid when it loads, its ramps
+	# stowed as a loaded hull's are built: they find the ground at once, as on
+	# a save loaded where you are.
+	_fleet.restore_hull(_starter, _saved_landed_at(0.0))
+	await wait_physics_frames(30)
+	for r in ramps:
+		r.stow(true)
+	# Watched every physics tick: the check comes a tick or two after the load.
+	var ramp_down := [false]
+	var watch := func() -> void:
+		if monitor.is_landed() and ramps[0].is_down() and ramps[0].angle > LandingRamp.SLOPE:
+			ramp_down[0] = true
+	var watcher := _watch(watch)
+	_fleet.restore_hull(_starter, _saved_landed_at(1.0))
+	var left := [false]
+	assert_true(await _within(10.0, func() -> bool:
+		if not monitor.is_landed():
+			left[0] = true
+		return left[0] and monitor.is_landed()), "leaves LANDED and lands again within 10 s")
+	watcher.free()
+	assert_true(ramp_down[0], "its ramp was down while it waited, its tip on the ground")
+	var keel := _starter.flight_computer.keel_altitude()
+	gut.p("1 m up on its ramp: landed again, its stance plane %.2f m over the ground" % keel)
+	assert_lt(absf(keel), 0.5, "on the ground (%.2f m)" % keel)
+
+## Final review I3, on a world: a ship woken landed 1.5 km from you is checked
+## once every chunk under its footprint is solid and not before, through the
+## world's real surface (not after RESTORE_WAIT for want of it), and stays
+## landed and unmoved on level ground.
+func test_a_ship_woken_landed_off_is_checked_once_its_footprint_is_solid():
+	await _to_a_world()
+	var surface: WorldSurface = (_root.star_system.proxy(_planet.id) as BodyProxy).surface()
+	var east := _up.cross(Vector3.UP).normalized()
+	var level: Variant = LevelGround.near(surface.terrain, (_up + east * (1500.0 / _planet.radius)).normalized())
+	assert_not_null(level, "level, clear ground 1.5 km off")
+	if level == null:
+		return
+	var there: Vector3 = level
+	assert_lt(LevelGround.tilt(surface.terrain, there), LevelGround.LEVEL, "level ground 1.5 km off")
+	var along := there.cross(Vector3.UP).normalized()
+	var ship := _spawn(Vector3(300, 0, 0))
+	ship.exterior.global_transform = Transform3D(Basis(along, there, along.cross(there).normalized()),
+		_centre() + there * (_planet.radius + surface.terrain.height_at(there) + ship.stance_depth()))
+	ship.exterior.linear_velocity = Vector3.ZERO
+	ship.exterior.angular_velocity = Vector3.ZERO
+	ship.landing.restore_landed()
+	_fleet.sleep(ship)
+	_fleet.wake(ship)
+	assert_true(ship.landing.is_landed(), "woken landed")
+	var at := _universe.to_universe(ship.exterior.global_position)
+	var radius := float(ship.exterior.get_meta(AsteroidStream.ANCHOR_RADIUS))
+	# Watched every physics tick, before the tick's own work: [ticks, solid
+	# at, checked at].
+	var seen := [0, -1, -1]
+	var watch := func() -> void:
+		if seen[2] < 0 and not ship.landing._check_restore:
+			seen[2] = seen[0]
+		if seen[1] < 0 and surface.solid_round(_universe.to_universe(ship.exterior.global_position), radius):
+			seen[1] = seen[0]
+		seen[0] += 1
+	var watcher := _watch(watch)
+	await wait_physics_frames(LandingMonitor.RESTORE_WAIT)
+	watcher.free()
+	var solid_at: int = seen[1]
+	var checked_at: int = seen[2]
+	gut.p("woken 1.5 km off: footprint solid by tick %d, checked by tick %d" % [solid_at, checked_at])
+	assert_gte(solid_at, 0, "its footprint was made solid")
+	assert_gte(checked_at, 0, "and it was checked")
+	assert_lt(checked_at, LandingMonitor.RESTORE_WAIT / 2, "well before the timeout")
+	assert_lt(solid_at, checked_at, "after its footprint was solid, not before")
+	assert_true(ship.landing.is_landed(), "landed")
+	assert_lt(at.minus(_universe.to_universe(ship.exterior.global_position)).length(), 0.01, "not moved")
+
+## Dune crests near `from` on the desert, up to `most` of them: walking out
+## in 4 m steps on eight bearings in turn, up to 8 km, each top along the
+## wind with the ground at least 0.5 m lower 12 m either side, level along the
+## crest (within 0.1 m 12 m either way), on the open dunes (below the tower
+## band). Unit directions.
+static func _crests(t: WorldTerrain, from: Vector3, most: int) -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	var a := from.cross(Vector3.UP if absf(from.y) < 0.9 else Vector3.RIGHT).normalized()
+	var b := from.cross(a)
+	for k in 8:
+		var way := a * cos(k * TAU / 8.0) + b * sin(k * TAU / 8.0)
+		var i := 3
+		while i < 2000:
+			i += 1
+			var d := (from + way * (i * 4.0 / t.radius)).normalized()
+			if t.continent_at(d) >= WorldTerrain.MESA_FROM - WorldTerrain.TOWER_BAND - WorldTerrain.MESA_EDGE:
+				continue
+			var w := t.wind_at(d)
+			var h := t.height_at(d)
+			if h < t.height_at((d - w * (3.0 / t.radius)).normalized()) \
+					or h < t.height_at((d + w * (3.0 / t.radius)).normalized()):
+				continue
+			if h - t.height_at((d - w * (12.0 / t.radius)).normalized()) < 0.5 \
+					or h - t.height_at((d + w * (12.0 / t.radius)).normalized()) < 0.5:
+				continue
+			var along := d.cross(w)
+			if absf(t.height_at((d + along * (12.0 / t.radius)).normalized()) - h) > 0.1 \
+					or absf(t.height_at((d - along * (12.0 / t.radius)).normalized()) - h) > 0.1:
+				continue
+			out.append(d)
+			if out.size() >= most:
+				return out
+			i += 25
+	return out
+
+## Final review I4, on a world: a ship landed astride a dune's crest -- its
+## stance plane 2 cm over the highest ground under its footprint's corners,
+## the crest top under its middle more than RESTORE_SLACK higher -- restored
+## (a save, or woken), stays landed and is never moved: it is resting, not
+## buried. Judged under its origin it was lifted and dropped back, a hard
+## landing. The Warden: the widest library ship spans the most of a crest's
+## rounded top.
+func test_restored_landed_astride_a_crest_stays_put():
+	await _to_a_world()
+	var surface: WorldSurface = (_root.star_system.proxy(_planet.id) as BodyProxy).surface()
+	var t := surface.terrain
+	var ship := _fleet.spawn(_root.library.grid(&"warden"),
+		Transform3D(_starter.exterior.global_basis, _starter.exterior.global_position + _starter.exterior.global_basis.x * 300.0))
+	assert_not_null(ship, "the Warden spawned")
+	await wait_physics_frames(2)
+	var monitor := ship.landing
+	# The first crest, and heading across it, whose top stands over the
+	# footprint's corners by RESTORE_SLACK_PLUS.
+	var found := false
+	var highest := 0.0
+	var best := 0.0
+	var place := Transform3D()
+	for crest in _crests(t, _up, 60):
+		for sign: float in [1.0, -1.0]:
+			var wind := t.wind_at(crest) * sign
+			var basis := Basis(wind, crest, wind.cross(crest).normalized())
+			ship.exterior.global_transform = Transform3D(basis,
+				_centre() + crest * (_planet.radius + t.height_at(crest) + ship.stance_depth()))
+			var corners := -INF
+			for spot in monitor.footprint(crest).slice(1):
+				corners = maxf(corners, -_world_gravity().solid_altitude_at(spot))
+			var over := -_world_gravity().solid_altitude_at(monitor.footprint(crest)[0]) - corners
+			best = maxf(best, over)
+			if over > RESTORE_SLACK_PLUS:
+				found = true
+				highest = corners
+				place = Transform3D(basis, ship.exterior.global_transform.origin + crest * (highest + 0.02))
+				break
+		if found:
+			break
+	gut.p("astride a crest: the crest top %.2f m over the highest of the Warden's footprint's corners (best %.2f)" % [
+		best if not found else -_world_gravity().solid_altitude_at(monitor.footprint(place.basis.y)[0]) - highest, best])
+	assert_true(found, "a crest whose top stands over the footprint's corners by %.1f m" % RESTORE_SLACK_PLUS)
+	ship.exterior.global_transform = place
+	ship.exterior.linear_velocity = Vector3.ZERO
+	ship.exterior.angular_velocity = Vector3.ZERO
+	ship.landing.restore_landed()
+	var at := _universe.to_universe(ship.exterior.global_position)
+	var stayed := [true]
+	await _within(2.0, func() -> bool:
+		stayed[0] = stayed[0] and monitor.is_landed()
+		return false)
+	assert_true(stayed[0], "landed throughout")
+	assert_false(monitor._check_restore, "checked")
+	assert_lt(at.minus(_universe.to_universe(ship.exterior.global_position)).length(), 0.01, "not moved")
+
+const RESTORE_SLACK_PLUS := LandingMonitor.RESTORE_SLACK + 0.2
+
+func _world_gravity() -> WorldGravity:
+	return _root.world_gravity

@@ -756,3 +756,237 @@ func test_a_ghosted_hull_is_left_alone():
 	s.update(_universe.to_universe(a.global_position))
 	assert_eq(s.floor_fired, 0, "at warp the hull passes through everything")
 	s.finish()
+
+# --- the floor at a lip (final review I1) --------------------------------------
+
+## 1337's desert, p3: its mesas' risers are near-sheer, so at a lip the finest
+## chunk's triangles cut the convex edge metres under height_at.
+func _desert() -> SystemBody:
+	if _system == null:
+		_system = SystemRecipe.from_seed(1337)
+	return _system.body(&"p3")
+
+## A point on the ground the collision has (a finest chunk's triangle, found
+## as GroundCover finds it) where that triangle is more than `under` m under
+## the analytic ground: on a mesa's or a tower's lip. Body-local; ZERO if none
+## is found. The reviewer's search: lines across the mesa line, a step of more
+## than 8 m in 2 m is an edge.
+static func _a_lip(t: WorldTerrain, under: float) -> Vector3:
+	var depth := CubeSphere.depth_for(t.radius)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var tried := {}
+	for line in 4000:
+		var d := Vector3(rng.randf_range(-1, 1), rng.randf_range(-1, 1), rng.randf_range(-1, 1)).normalized()
+		if absf(t.continent_at(d) - WorldTerrain.MESA_FROM) > 0.03:
+			continue
+		var a := d.cross(Vector3.UP).normalized()
+		var h0 := t.height_at(d)
+		for i in 1500:
+			var p := (d + a * (i * 2.0 / t.radius)).normalized()
+			var h := t.height_at(p)
+			var key := CubeSphere.key_for(p, depth)
+			if absf(h - h0) > 8.0 and not tried.has(key):
+				tried[key] = true
+				var g := GroundCover._Ground.new(t, key, PackedVector3Array())
+				var centre := Vector3(TerrainChunkData.centre_of(t, key))
+				for j in 16:
+					for k in 16:
+						var at: Vector3 = g.at((k + 0.5) / 16.0, (j + 0.5) / 16.0).point + centre
+						if -t.altitude_of(at) > under:
+							return at
+			h0 = h
+	return Vector3.ZERO
+
+## The ground the collision has, worked out from a point: on a lip it is the
+## triangle, metres under height_at; on open ground the same triangle too.
+func test_the_solid_altitude_is_the_triangle_under_a_point():
+	var t := WorldTerrain.new(_desert().recipe)
+	var lip := _a_lip(t, 3.0)
+	assert_ne(lip, Vector3.ZERO, "a lip with its triangle 3 m under the analytic ground")
+	var up := lip.normalized()
+	gut.p("a lip on p3: the triangle %.2f m under height_at" % -t.altitude_of(lip))
+	assert_almost_eq(TerrainChunkData.solid_altitude_of(t, lip), 0.0, 0.05, "on the triangle")
+	assert_almost_eq(TerrainChunkData.solid_altitude_of(t, lip + up * 2.0), 2.0, 0.05, "2 m over it")
+	# Open ground: any point's triangle, as GroundCover finds it.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 99
+	var depth := CubeSphere.depth_for(t.radius)
+	for n in 20:
+		var d := Vector3(rng.randf_range(-1, 1), rng.randf_range(-1, 1), rng.randf_range(-1, 1)).normalized()
+		var key := CubeSphere.key_for(d, depth)
+		var g := GroundCover._Ground.new(t, key, PackedVector3Array())
+		var at: Vector3 = g.at(rng.randf(), rng.randf()).point + Vector3(TerrainChunkData.centre_of(t, key))
+		assert_almost_eq(TerrainChunkData.solid_altitude_of(t, at + at.normalized() * 0.5), 0.5, 0.05, "point %d" % n)
+
+## Final review I1: standing on the triangle at a lip, metres under the
+## analytic ground, is standing on the ground, not under it: the floor leaves
+## the anchor alone. A metre under the triangle there it is still lifted out.
+func test_the_floor_leaves_an_anchor_on_the_triangles_at_a_lip_alone():
+	var p := _desert()
+	_universe = Universe.new()
+	add_child_autofree(_universe)
+	var s := WorldSurface.new()
+	s.setup(p, _universe)
+	add_child_autofree(s)
+	s.build_roots()
+	var lip := _a_lip(s.terrain, 3.0)
+	assert_ne(lip, Vector3.ZERO, "a lip found")
+	var up := lip.normalized()
+	var focus := p.point.plus(lip + up * 1.6)
+	_universe.origin = focus
+	s.update(focus)
+	var a := RigidBody3D.new()
+	a.freeze = true
+	a.collision_mask = BodyProxy.LAYER
+	a.add_to_group(AsteroidStream.SPACE_ANCHOR)
+	a.add_to_group(Universe.EXTERIOR_SPACE)
+	add_child_autofree(a)
+	a.global_position = _universe.to_engine(p.point.plus(lip + up * 0.05))
+	for i in 3:
+		s.update(focus)
+	assert_eq(s.floor_fired, 0, "on the triangle, %.2f m under height_at: left alone" % -s.terrain.altitude_of(lip))
+	WorldSurface.warn_on_floor = false
+	a.global_position = _universe.to_engine(p.point.plus(lip - up * 1.0))
+	s.update(focus)
+	WorldSurface.warn_on_floor = true
+	assert_eq(s.floor_fired, 1, "a metre under the triangle: lifted out")
+	assert_gt(TerrainChunkData.solid_altitude_of(s.terrain, _universe.to_universe(a.global_position).minus(p.point)), 0.0,
+		"over the triangle")
+	s.finish()
+
+# --- the near-ground gate makes the whole footprint solid (final review I2, M1) --
+
+## An anchor of `radius` (its ANCHOR_RADIUS) at `local` (body-local), frozen.
+func _anchor_at(local: Vector3, radius: float) -> RigidBody3D:
+	var a := RigidBody3D.new()
+	a.freeze = true
+	a.collision_mask = BodyProxy.LAYER
+	a.set_meta(AsteroidStream.ANCHOR_RADIUS, radius)
+	a.add_to_group(AsteroidStream.SPACE_ANCHOR)
+	a.add_to_group(Universe.EXTERIOR_SPACE)
+	add_child_autofree(a)
+	a.global_position = _universe.to_engine(_planet().point.plus(local))
+	return a
+
+## The corner of the finest cell under `_up` where four cells meet, and those
+## four: [corner direction, keys].
+func _a_corner(depth: int) -> Array:
+	var t := WorldTerrain.new(_planet().recipe)
+	var k := CubeSphere.key_for(_up * t.radius, depth)
+	var rect := CubeSphere.node_rect(k)
+	var corner := CubeSphere.direction(k.x, rect.x, rect.y)
+	var keys: Array[Vector4i] = []
+	for dy in 2:
+		for dx in 2:
+			keys.append(Vector4i(k.x, depth, k.z - dx, k.w - dy))
+	return [corner, keys]
+
+## A 30 m hull 12 m up, centred where four cells meet: its footprint covers
+## all four, so all four are solid after one _solid_wanted, not only the one
+## under its origin (the gate built "under" and "ahead" alone).
+func test_a_wide_hull_has_its_whole_footprint_solid_at_once():
+	var s := _surface(3000.0)
+	var c := _a_corner(s.depth_max)
+	var corner: Vector3 = c[0]
+	var a := _anchor_at(corner * (s.terrain.radius + s.terrain.height_at(corner) + 12.0), 30.0)
+	s._solid_wanted()
+	for k: Vector4i in c[1]:
+		assert_true(s.solid_keys().has(k), "%s, a corner cell, solid at once" % k)
+	a.remove_from_group(AsteroidStream.SPACE_ANCHOR)
+	s.finish()
+
+## Final review M1: the gate uses a worker's finished result, or waits on the
+## job in flight, before it builds a chunk itself on the main thread.
+func test_the_gate_uses_finished_work_before_building():
+	var s := _surface(3000.0)
+	var c := _a_corner(s.depth_max)
+	var keys: Array = c[1]
+	# One finished, waiting to be applied; one still on a worker.
+	var done := TerrainChunkData.build(s.terrain, keys[0], true)
+	done.shape = WorldSurface.shape_of(done)
+	s._done[keys[0]] = done
+	s._jobs[keys[1]] = WorkerThreadPool.add_task(s._job.bind(keys[1], _planet().recipe, true, true), false, "test chunk")
+	var corner: Vector3 = c[0]
+	var a := _anchor_at(corner * (s.terrain.radius + s.terrain.height_at(corner) + 12.0), 30.0)
+	var built := s.gate_builds
+	s._solid_wanted()
+	assert_true(s.solid_keys().has(keys[0]) and s.solid_keys().has(keys[1]), "both solid")
+	assert_eq((s._solid[keys[0]].get_child(0) as CollisionShape3D).shape, done.shape, "the finished result's own shape")
+	assert_false(s._jobs.has(keys[1]), "the job in flight was waited on and taken")
+	assert_false(s._done.has(keys[0]) or s._done.has(keys[1]), "and neither is left to apply again")
+	var now: Array = s._gate_cache[a.get_instance_id()].now
+	gut.p("a 30 m hull 12 m up: %d chunks made solid at once, %d of them built here" % [now.size(), s.gate_builds - built])
+	assert_eq(s.gate_builds - built, now.size() - 2, "all but those two were built here")
+	a.remove_from_group(AsteroidStream.SPACE_ANCHOR)
+	s.finish()
+
+## The gate builds at once only the cells whose ground lies within the hull's
+## reach plus ARRIVE of it, in 3D: the starter flown low (24 m reach, 33 m
+## up, its lowest point 9 m over the ground) opens the gate, but the cells
+## round it whose ground is 34 m and more away are left to the workers. Judged
+## on the sphere it built every cell within 34 m along the ground, every tick
+## a new one came in reach: low flight went from 98 fps to 93.
+func test_flown_low_the_gate_builds_only_the_ground_in_reach():
+	var s := _surface(3000.0)
+	var c := _a_corner(s.depth_max)
+	var corner: Vector3 = c[0]
+	var a := _anchor_at(corner * (s.terrain.radius + s.terrain.height_at(corner) + 33.0), 24.0)
+	var built := s.gate_builds
+	s._solid_wanted()
+	var gate: Dictionary = s._gate_cache[a.get_instance_id()]
+	var on_sphere := 0
+	var mid := corner * s.terrain.radius
+	for k: Vector4i in gate.keys:
+		if TerrainCollider.cell_gap(k, s.terrain.radius, mid, mid) <= 24.0 + WorldSurface.ARRIVE:
+			on_sphere += 1
+	gut.p("a 24 m hull 33 m up: %d chunks made solid at once (%d within its reach along the ground), %d built here" % [
+		(gate.now as Array).size(), on_sphere, s.gate_builds - built])
+	for k: Vector4i in c[1]:
+		assert_true(s.solid_keys().has(k), "%s, a cell under it, solid at once" % k)
+	assert_lte((gate.now as Array).size(), 6, "only the ground within its reach of it")
+	a.remove_from_group(AsteroidStream.SPACE_ANCHOR)
+	s.finish()
+
+## Within 3 x ARRIVE of the ground the footprint is not built at once, but it
+## is first in the workers' queue: a ship woken 18 km from you had its
+## footprint queued behind every chunk round you.
+func test_a_far_anchor_near_the_ground_has_its_footprint_queued_first():
+	_universe = Universe.new()
+	add_child_autofree(_universe)
+	var p := _planet()
+	var s := WorldSurface.new()
+	s.setup(p, _universe)
+	add_child_autofree(s)
+	s.build_roots()
+	var focus := _above(p, s, 3.0)
+	_universe.origin = focus
+	var east := _up.cross(Vector3.UP).normalized()
+	var far := (_up + east * (18000.0 / p.radius)).normalized()
+	var lowest := WorldSurface.ARRIVE * 2.0
+	var a := _anchor_at(far * (s.terrain.radius + s.terrain.height_at(far) + 30.0 + lowest), 30.0)
+	s.update(focus)
+	var local := _universe.to_universe(a.global_position).minus(p.point)
+	# Its footprint and the way of its next two ticks, as wide as the gate
+	# works it out (half an edge wider, as the reach is).
+	var half_edge := CubeSphere.edge_m(p.radius, s.depth_max) * 0.5
+	var want := TerrainCollider.keys_near(s.terrain, s.depth_max, local, 30.0 + WorldSurface.ARRIVE + half_edge, true)
+	assert_gt(want.size(), WorldSurface.MAX_JOBS, "more than a queue's worth")
+	var queued := 0
+	for k: Vector4i in s._jobs:
+		if want.has(k):
+			queued += 1
+	assert_false(s.solid_keys().has(want[0]), "%.0f m over the ground: not built at once" % lowest)
+	assert_eq(s.jobs_in_flight(), WorldSurface.MAX_JOBS)
+	assert_eq(queued, WorldSurface.MAX_JOBS, "every job in flight is its footprint's (%d of %d)" % [
+		queued, s.jobs_in_flight()])
+	a.remove_from_group(AsteroidStream.SPACE_ANCHOR)
+	s.finish()
+
+## Final review M5: the solid ground's ConcavePolygonShape3Ds are made and
+## first assigned on worker threads, which only GodotPhysics3D allows. A
+## change of physics engine (Jolt) must move those builds to the main thread.
+func test_the_physics_engine_allows_shapes_built_on_workers():
+	var engine := str(ProjectSettings.get_setting("physics/3d/physics_engine", "DEFAULT"))
+	assert_true(engine in ["DEFAULT", "GodotPhysics3D"],
+		"physics/3d/physics_engine is %s: WorldSurface builds and assigns collision shapes on worker threads, which relies on GodotPhysics3D" % engine)

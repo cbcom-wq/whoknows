@@ -13,7 +13,9 @@ const FORGET_BEYOND := 5000.0
 const FORGET_AFTER := 600.0
 
 ## int id -> {kind: StringName, variety: float, at: UniversePoint, turn: Basis,
-## v: Vector3, w: Vector3, use: Dictionary, far: float}
+## v: Vector3, w: Vector3, use: Dictionary, far: float, frozen: bool}. `frozen`:
+## it lay frozen where it came to rest on a world's ground (StrayField), and
+## loads frozen there again.
 var entries := {}
 var _next_id := 1
 
@@ -23,7 +25,7 @@ func add(kind: StringName, variety: float, at: UniversePoint, turn: Basis, v: Ve
 	var id := _next_id
 	_next_id += 1
 	entries[id] = {"kind": kind, "variety": variety, "at": at, "turn": turn, "v": v, "w": w, "use": use,
-		"far": 0.0}
+		"far": 0.0, "frozen": false}
 	return id
 
 func has(id: int) -> bool:
@@ -58,7 +60,7 @@ func to_dict() -> Dictionary:
 		out.append({
 			"kind": String(e["kind"]), "variety": e["variety"], "at": SaveCodec.upoint(e["at"]),
 			"turn": SaveCodec.basis(e["turn"]), "v": SaveCodec.vec3(e["v"]), "w": SaveCodec.vec3(e["w"]),
-			"use": e["use"], "far": e["far"],
+			"use": e["use"], "far": e["far"], "frozen": e["frozen"],
 		})
 	return {"strays": out}
 
@@ -74,3 +76,4 @@ func from_dict(d: Dictionary) -> void:
 			SaveCodec.to_basis(s.get("turn")), SaveCodec.to_vec3(s.get("v")), SaveCodec.to_vec3(s.get("w")),
 			use if use is Dictionary else {})
 		entries[id]["far"] = maxf(float(s.get("far", 0.0)), 0.0)
+		entries[id]["frozen"] = bool(s.get("frozen", false))

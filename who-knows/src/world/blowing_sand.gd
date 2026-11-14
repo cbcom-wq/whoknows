@@ -115,7 +115,10 @@ func tick() -> void:
 		if terrain != null and terrain.archetype == WorldRecipe.Archetype.DUNES:
 			over = whereabouts.over(body)
 		if over != null:
-			ratio = strength(true, over.air, over.altitude)
+			# Faded out with the dunes toward the wind axis's poles, where the
+			# wind's way spins round the pole (WorldTerrain.pole_fade).
+			ratio = strength(true, over.air, over.altitude) \
+				* WorldTerrain.pole_fade(over.up.dot(terrain.wind_axis))
 	if ratio <= 0.0:
 		if emitting or amount_ratio != 0.0:
 			amount_ratio = 0.0

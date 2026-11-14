@@ -122,9 +122,15 @@ func pull(delta: float) -> void:
 		var up := gravity.up_at(p)
 		var altitude := gravity.altitude_at(p)
 		if not up.is_zero_approx() and altitude < -WorldSurface.FLOOR_SLACK:
-			_onto_ground(item, up, altitude)
-			_calm.erase(id)
-			continue
+			# Under the analytic ground; under the ground the collision has
+			# too? At a lip that lies metres lower, and a stray resting on it
+			# is on the ground (final review I1). Worked out only here, so a
+			# falling stray costs what it did.
+			altitude = gravity.solid_altitude_at(p)
+			if altitude < -WorldSurface.FLOOR_SLACK:
+				_onto_ground(item, up, altitude)
+				_calm.erase(id)
+				continue
 		item.apply_central_force(gravity.at(p) * item.mass)
 		item.apply_central_force(gravity.drag_at(p, item.linear_velocity) * item.mass)
 		if item.linear_velocity.length() < REST_SPEED:
@@ -156,8 +162,10 @@ static func extent_along(item: Item, up: Vector3) -> float:
 	var h := item.definition.size * 0.5
 	return absf(b.x.dot(up)) * h.x + absf(b.y.dot(up)) * h.y + absf(b.z.dot(up)) * h.z
 
-## Puts `item`, its middle `altitude` over the ground along `up`, lying on the
-## ground (WorldGravity.altitude_at's), frozen.
+## Puts `item`, its middle `altitude` over the ground along `up`, lying on
+## that ground, frozen: the ground the collision has
+## (WorldGravity.solid_altitude_at's), so at a lip it lies on the triangles,
+## not in mid-air over them.
 static func _onto_ground(item: Item, up: Vector3, altitude: float) -> void:
 	item.global_position += up * (extent_along(item, up) - altitude)
 	_freeze(item)
@@ -199,6 +207,7 @@ func sync() -> void:
 		e["v"] = item.linear_velocity
 		e["w"] = item.angular_velocity
 		e["use"] = _use_of(item)
+		e["frozen"] = item.freeze and item.state == Item.State.LOOSE
 
 func to_dict() -> Dictionary:
 	sync()
@@ -224,20 +233,29 @@ func _load(id: int) -> void:
 	item.angular_velocity = e["w"]
 	add_child(item, true)
 	item.add_to_group(Universe.EXTERIOR_SPACE)
-	_settle_loaded(item)
+	if e["frozen"]:
+		# It lay frozen where it came to rest: on the ground, or on a boulder,
+		# which far from every anchor has no collider to stop it falling into
+		# the stone (final review M3). It lies there again.
+		_freeze(item)
+	else:
+		_settle_loaded(item)
 	_track(id, item)
 
-## A stray loaded on a world (final review I3, T9a): lying on the ground, or
-## under it, it is put on it and frozen; higher -- saved mid-fall, or resting
-## on a hull or ramp -- it loads live and falls to whatever is under it now, as
-## pull() lets it, and is frozen only once it rests on the ground.
+## A stray loaded on a world, not saved frozen (final review I3, T9a): lying
+## on the ground, or under it, it is put on it and frozen; higher -- saved
+## mid-fall, or resting on a hull or ramp -- it loads live and falls to
+## whatever is under it now, as pull() lets it, and is frozen only once it
+## rests on the ground.
 func _settle_loaded(item: Item) -> void:
 	if gravity == null or not gravity.on_world_at(item.global_position):
 		return
 	var up := gravity.up_at(item.global_position)
 	if up.is_zero_approx():
 		return
-	var altitude := gravity.altitude_at(item.global_position)
+	# The ground the collision has: at a lip, metres under the analytic one
+	# (final review I1).
+	var altitude := gravity.solid_altitude_at(item.global_position)
 	if altitude <= extent_along(item, up) + ON_GROUND:
 		_onto_ground(item, up, altitude)
 

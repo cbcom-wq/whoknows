@@ -80,6 +80,28 @@ func altitude_at(p: Vector3) -> float:
 	var t := whereabouts.terrain_of(b) if whereabouts != null else null
 	return t.altitude_of(local) if t != null else local.length() - b.radius
 
+## Over the ground the collision has (TerrainChunkData.solid_altitude_of: the
+## finest chunk's triangle under `p`), which at a mesa's or a tower's lip sits
+## metres under the analytic ground altitude_at reads (final review I1); INF
+## outside a world's well. Before setup(), altitude_at's.
+func solid_altitude_at(p: Vector3) -> float:
+	if system == null or universe == null:
+		return altitude_at(p)
+	var u := universe.to_universe(p)
+	var b := _world_at(system, u)
+	if b == null:
+		return INF
+	var local := u.minus(b.point)
+	var t := whereabouts.terrain_of(b) if whereabouts != null else null
+	return TerrainChunkData.solid_altitude_of(t, local) if t != null else local.length() - b.radius
+
+## The drawn ground (WorldSurface) of the world whose well holds `p`, or
+## null: outside every well, before setup(), or while that world is drawn
+## far off.
+func surface_at(p: Vector3) -> WorldSurface:
+	var b := body_at(p)
+	return whereabouts.surface_of(b) if b != null and whereabouts != null else null
+
 ## How thick the air is at `p`, 0 to 1; 0 outside a world's well (spec §6.1).
 func air_at(p: Vector3) -> float:
 	var b := body_at(p)

@@ -304,7 +304,11 @@ func _find_flat() -> void:
 	assert_not_null(surface, "3 km off: its ground is drawn")
 	_planet = planet
 	var out := (_ship.exterior.global_position - _centre()).normalized()
-	_up = LevelGround.near(surface.terrain, out)
+	var level: Variant = LevelGround.near(surface.terrain, out)
+	assert_not_null(level, "level, clear ground within %.0f km of the hop" % [LevelGround.SEARCH / 1000.0])
+	if level == null:
+		return
+	_up = level
 	assert_lt(LevelGround.tilt(surface.terrain, _up), LevelGround.LEVEL, "level ground found within %.0f km of the hop" % [
 		LevelGround.SEARCH / 1000.0])
 	_ground = planet.radius + surface.terrain.height_at(_up)
