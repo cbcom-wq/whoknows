@@ -4,6 +4,8 @@ extends GutTest
 ## (docs/superpowers/specs/2026-11-03-desert-world-design.md §5.3). Old saves
 ## without the key load flying.
 
+const LevelGround := preload("res://test/unit/helpers/level_ground.gd")
+
 var _root: Node
 var _fleet: Fleet
 var _starter: Ship
@@ -245,3 +247,44 @@ func test_restored_landed_where_it_stands_stays_put():
 	assert_true(monitor.restored, "restored")
 	assert_lt(at.minus(_universe.to_universe(_starter.exterior.global_position)).length(), 0.01,
 		"not moved into the boulder")
+
+## Final review I5: a ship restored landed hovering a metre up -- over
+## RESTORE_SLACK, under RESTORE_FALL -- has its ramp down at once, its tip
+## just over the ground (a cast ignores what a shape starts inside, so a tip
+## sunk in the ground was never the trouble). The check measures the hull's own colliders, never
+## the ramp's: it is let fall from where it is and lands, not left frozen in
+## the air on its ramp's tip.
+func test_restored_landed_hovering_on_its_ramp_s_tip_is_set_down():
+	await _to_a_world()
+	var surface: WorldSurface = (_root.star_system.proxy(_planet.id) as BodyProxy).surface()
+	_up = LevelGround.near(surface.terrain, _up)
+	assert_lt(LevelGround.tilt(surface.terrain, _up), LevelGround.LEVEL, "level ground")
+	_ground = _planet.radius + surface.terrain.height_at(_up)
+	var along := _up.cross(Vector3.UP).normalized()
+	_basis = Basis(along, _up, along.cross(_up).normalized())
+	var monitor := _starter.landing
+	var ramps: Array[LandingRamp] = []
+	for lock: Airlock in _starter.airlocks.values():
+		if is_instance_valid(lock.alcove) and lock.alcove.ramp != null:
+			ramps.append(lock.alcove.ramp)
+	assert_false(ramps.is_empty(), "the starter has a ramp")
+	# Once there first, so the ground is solid when it loads, its ramps
+	# stowed as a loaded hull's are built: they find the ground at once, as on
+	# a save loaded where you are.
+	_fleet.restore_hull(_starter, _saved_landed_at(0.0))
+	await wait_physics_frames(30)
+	for r in ramps:
+		r.stow(true)
+	_fleet.restore_hull(_starter, _saved_landed_at(1.0))
+	var ramp_down := [false]
+	var left := [false]
+	assert_true(await _within(10.0, func() -> bool:
+		if monitor.is_landed() and ramps[0].is_down() and ramps[0].angle > LandingRamp.SLOPE:
+			ramp_down[0] = true
+		if not monitor.is_landed():
+			left[0] = true
+		return left[0] and monitor.is_landed()), "leaves LANDED and lands again within 10 s")
+	assert_true(ramp_down[0], "its ramp was down while it waited, its tip on the ground")
+	var keel := _starter.flight_computer.keel_altitude()
+	gut.p("1 m up on its ramp: landed again, its stance plane %.2f m over the ground" % keel)
+	assert_lt(absf(keel), 0.5, "on the ground (%.2f m)" % keel)

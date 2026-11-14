@@ -248,7 +248,11 @@ func _set_down_again(up: Vector3) -> bool:
 
 ## How far the hull can move down `up` before one of its colliders meets the
 ## solid ground (BodyProxy.LAYER), looking `reach` m; -1 if nothing is there.
-## Already touching is 0.
+## Already touching is 0; a collider already inside the ground is not counted
+## (a cast ignores what it starts inside). Not a landing ramp's collider
+## (LandingRamp.COLLIDER_META): a restored hull's ramp is down at once with
+## its tip on the ground, and counted it held a hull hovering a metre up
+## frozen in the air (final review I5).
 func _gap_below(up: Vector3, reach: float) -> float:
 	var space := hull.get_world_3d().direct_space_state
 	var q := PhysicsShapeQueryParameters3D.new()
@@ -258,7 +262,7 @@ func _gap_below(up: Vector3, reach: float) -> float:
 	var best := INF
 	for node in hull.find_children("*", "CollisionShape3D", true, false):
 		var cs := node as CollisionShape3D
-		if cs.disabled or cs.shape == null:
+		if cs.disabled or cs.shape == null or cs.has_meta(LandingRamp.COLLIDER_META):
 			continue
 		q.shape = cs.shape
 		q.transform = cs.global_transform

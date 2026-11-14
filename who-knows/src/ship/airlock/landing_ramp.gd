@@ -99,6 +99,10 @@ const SETTLE_EAGER := 1.0
 ## The hatch's own motor (Synth's hatch_motor), heard as the ramp moves, as the
 ## airlock's players are.
 const SOUND := &"hatch_motor"
+## The meta the ramp's collider carries: it is on the hull's body but is not
+## the hull, so what measures the hull against the ground (the landing
+## monitor's restore check) leaves it out (final review I5).
+const COLLIDER_META := &"landing_ramp"
 
 var state := State.STOWED
 ## How far the sill stands over the stance plane, and the ramp's length from
@@ -189,6 +193,7 @@ func _make(body: CollisionObject3D) -> void:
 	shape.size = Vector3(WIDTH, THICKNESS, length)
 	collider = CollisionShape3D.new()
 	collider.name = "LandingRamp"
+	collider.set_meta(COLLIDER_META, true)
 	collider.shape = shape
 	collider.disabled = true
 	body.add_child(collider)
