@@ -698,3 +698,62 @@ func _stand_in_a_hole() -> void:
 	assert_false(_ship.grid.has_block(cell))
 	_avatar.global_position = _ship.interior.to_global(ShipGrid.cell_center(cell))
 	_root._on_blocks_lost([] as Array[Vector3i], _ship)
+
+# --- wading (desert world phase 3, the oasis's pool) ---------------------------
+
+func test_wade_factor():
+	assert_eq(Avatar.wade_factor(0.0), 1.0, "dry")
+	assert_almost_eq(Avatar.wade_factor(1.0), 0.55, 1e-6, "waist deep")
+	assert_almost_eq(Avatar.wade_factor(2.0), 0.55, 1e-6, "no slower than that")
+	var half := Avatar.wade_factor(0.5)
+	assert_gt(half, 0.55)
+	assert_lt(half, 1.0)
+
+## A pool 1 m deep over the flat ground at y = 0, 15 m across, in the world.
+func _pool() -> PoolWater:
+	var pool := PoolWater.make(Vector2.ZERO, 15.0, 1.0, func(_x_z: Vector2) -> float: return 0.0)
+	_world.add_child(pool)
+	return pool
+
+## How far you walk forward in one second from the origin.
+func _walk_a_second() -> float:
+	_avatar.global_position = Vector3(0, 0.02, 0)
+	_avatar.velocity = Vector3.ZERO
+	await wait_physics_frames(3)
+	var start := _avatar.global_position
+	Input.action_press(&"move_forward")
+	await wait_physics_frames(60)
+	Input.action_release(&"move_forward")
+	return Vector2(_avatar.global_position.x - start.x, _avatar.global_position.z - start.z).length()
+
+func test_wading_slows_you_in_the_pool():
+	_lone()
+	_ground()
+	_field(Vector3(0, 0.02, 0))
+	await wait_physics_frames(10)
+	var dry := await _walk_a_second()
+	var pool := _pool()
+	var wet := await _walk_a_second()
+	assert_gt(dry, 1.0, "you walked")
+	assert_almost_eq(_avatar.wade_depth, 1.0, 0.01, "waist deep at the middle")
+	assert_between(wet / dry, 0.5, 0.6, "%f m wading against %f m dry" % [wet, dry])
+	pool.queue_free()
+	await wait_physics_frames(2)
+	assert_eq(_avatar.wade_depth, 0.0, "and out of it you are dry")
+
+func test_wading_survives_a_shift():
+	_lone()
+	_ground()
+	var universe := Universe.new()
+	_world.add_child(universe)
+	_field(Vector3(0, 0.02, 0))
+	var pool := _pool()
+	pool.add_to_group(Universe.EXTERIOR_SPACE)
+	var slab := _world.get_child(2) as Node3D
+	slab.add_to_group(Universe.EXTERIOR_SPACE)
+	await wait_physics_frames(10)
+	assert_almost_eq(_avatar.wade_depth, 1.0, 0.01, "in the pool")
+	universe.shift(Vector3(1000, 0, 0))
+	await wait_physics_frames(10)
+	assert_almost_eq(_avatar.global_position.x, -1000.0, 0.01, "the avatar was moved by the shift")
+	assert_almost_eq(_avatar.wade_depth, 1.0, 0.01, "still in the pool")

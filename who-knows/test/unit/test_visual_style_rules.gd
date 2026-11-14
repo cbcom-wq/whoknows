@@ -72,6 +72,8 @@ const PAINTING_FILES := [
 	"res://src/world/world_surface.gd",
 	"res://src/world/body_proxy.gd",
 	"res://src/world/star_system.gd",
+	"res://src/world/place_field.gd",
+	"res://src/world/oasis_looks.gd",
 	"res://src/world/ring_look.gd",
 	"res://src/world/belt_look.gd",
 	"res://src/world/space_dust.gd",

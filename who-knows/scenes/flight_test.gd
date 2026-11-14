@@ -66,6 +66,8 @@ var world_gravity: WorldGravity
 var salvage: SalvageField
 ## Every stray item adrift outside (saving spec §7), under Outside.
 var strays: StrayField
+## The system's named places, under Outside (the oasis).
+var places: PlaceField
 
 ## Saving (saving spec §9): on in the real game, off in headless runs. A test
 ## turns it on, with a path of its own, before the scene enters the tree.
@@ -873,7 +875,16 @@ func _wire_star_system() -> void:
 	# loaded there has stepped you out already (_restore_places, before this):
 	# the first tick finds it set.
 	_avatar.gravity = world_gravity
+	_wire_places()
 	_wire_air()
+
+## The system's named places (the oasis), made real near you: the field under
+## Outside at the identity, which steps itself each physics tick.
+func _wire_places() -> void:
+	places = PlaceField.new()
+	places.name = "PlaceField"
+	$Outside.add_child(places)
+	places.setup(_universe, system, star_system.whereabouts, _starter.item_catalog)
 
 ## The sky, haze and light follow the air (desert-world spec §6.2-§6.3), and
 ## the star's halo with them.
