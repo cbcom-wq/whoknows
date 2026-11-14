@@ -392,10 +392,11 @@ Delver kept 1.1-1.2 m/s on every leg, arrived on all five and never stalled for 
   `wait_process_frames` for overlays and looks.
 - Expected warnings and errors: `assert_engine_error(text)` / `assert_push_error(text)`.
 
-## Worlds (desert world phase 0; `docs/superpowers/specs/2026-11-03-desert-world-design.md` §5)
+## Worlds (desert world phases 0–2; `docs/superpowers/specs/2026-11-03-desert-world-design.md` §5–§7)
 
-**Nothing lives on a world yet.** No NPC, creature or droid stands on one. Phase 1 onward puts
-fauna there; what follows is what it must respect.
+**Nothing lives on a world yet.** No NPC, creature or droid stands on one. The first world
+creature is the beast, in its own design (desert world spec §5.7); what follows is what it, and
+any fauna after it, must respect.
 
 - **`WorldGravity` exists** (`src/world/world_gravity.gd`): `at(p)`, `up_at(p)`, `altitude_at(p)`,
   `surface_gravity_at(p)`, `on_world_at(p)` and `body_at(p)`. **Anything outside, on a world, must
@@ -418,6 +419,17 @@ fauna there; what follows is what it must respect.
   World ground is solid only near a `SPACE_ANCHOR`, while strays stay live within 3 km
   (`SalvageField.LOAD_WITHIN`), so a stray left awake where the ground has no collider falls
   through the world. **A new thing that rests on a world needs the same.**
+- **Worlds have ground cover** (desert world phase 2; `GroundCover`, `CoverField`). **Boulders,
+  on every world, are solid:** 0.5–4 m across (`GroundCover.BOULDER_SIZE`), a third sunk,
+  gathered in clusters, most on a desert's talus under the mesas and towers. Each stone's hull is
+  in its finest chunk's collision on `BodyProxy.LAYER`, the same body as the ground, so it is
+  solid only where the ground is (near a `SPACE_ANCHOR`, above) and `LandingMonitor.is_ground` /
+  a ray onto `BodyProxy.LAYER` cannot tell a stone from the ground. **Grass, on deserts only, is
+  not solid:** 0.3–0.7 m tufts with no collision. A world creature (the beast) walks among
+  them: to its locomotor a stone is ground it must climb or go round, and grass is nothing. Cover is the
+  same every visit (from the chunk's own sub-seed), so the stones it meets are too. It is drawn
+  round the focus only (stones out to `CoverField.BOULDER_REACH` 240 m).
+- **The blowing sand** (`BlowingSand`) is a look, round the focus only; it pushes nothing.
 - **Hostile pilots stay high.** `ShipPilot.AIR_FLOOR_MARGIN` 2000 m: a hostile ship flies no lower
   than a world's air top plus that, through the static `ShipPilot.above_air(target_v, up, altitude,
   floor_m)`. It applies to `Sides.HOSTILE` only: the same pilot flies your ship when you hand it

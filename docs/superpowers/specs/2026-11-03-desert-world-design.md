@@ -147,6 +147,90 @@ this is the land it lives in).
 > - a descent faster than the speed limit reads 67–72 fps: phase 0's ground streaming;
 > - seated at full heat sits at the floor (120–126 fps), so no more may be drawn there.
 
+> **Status, 2026-11-08: phase 2 (the desert style) is built** (branch `desert-style`, to merge
+> after the owner's look). The style guide (§2.6, §3.9's *The desert* and *Ground cover*, §5)
+> and the skills record it. Phase 3 is not started.
+>
+> **Differences as built:**
+> - **Deserts are a quarter of the planets with air** (`WorldRecipe.DESERT_SHARE` 0.25), thin air
+>   or thick, rolled on the `&"desert"` sub-seed after the old draws. Moons and bare worlds never
+>   are. `DUNES` is the fifth archetype, and the terrain draw never reaches it
+>   (`DRAWN_ARCHETYPES` 4), so every other world keeps its archetype and palette bit for bit.
+> - **A desert palette, not `sand`.** `SpacePalette.WORLDS` gains a ninth entry, `desert`
+>   (`DESERT_PALETTE` 8), which only the desert roll gives (`DRAWN_PALETTES` 8): warm orange sand
+>   (`ground_low` a14a1c), the lee faces `dust`, a peach horizon and a dusty lavender-blue sky,
+>   and `boulder`, `grass` and `streak`. `sand` is untouched. Every palette gained `boulder` and
+>   `grass`.
+> - **`GENERATOR_VERSION` is 3.** In the starting system 1337, `p3` (thick air, 55 km) and `p4`
+>   (thick, 15 km) are deserts now (`test_world_recipe` pins both, and `p2` not), and none of
+>   its four pinned seeds changed. Nothing in `src` reads `GENERATOR_VERSION` yet,
+>   so no save is migrated: a ship saved landed on what is now a desert is set down again on load
+>   (below). `p3` is the probes' desert.
+> - **The land, retuned at Checkpoint A** (the owner, 2026-11-07, and "looks good" on 11-08):
+>   warm orange sand; dunes `DUNE_WAVE` 600 m apart and `DUNE_HEIGHT` 40 m high (the plan said
+>   320 and 18), with a crisper crest (`DUNE_CREST_EASE`); fewer and broader towers, flat-topped
+>   buttes 60–164 m across in 440 m cells (a fifth as many); more mesas (`MESA_FROM` 0.10, not
+>   0.12); and a cheaper ground (a desert's `height_at` 1.33 times a mesa world's, not 1.75;
+>   `WorldSurface` prunes only when due and remembers its heights, on every world). The lee faces,
+>   not the troughs, are `dust`, so the colour changes along the ridges.
+> - **Boulders on every world** (§5.6 folded in), not only deserts, from the chunk's own
+>   sub-seed (`&"cover"`) on the workers. Their hulls are in the finest chunks' collision on
+>   `BodyProxy.LAYER`, not Planetfall's spheres. Grass, on deserts only, has no collision.
+> - **Fewer stones, in clusters** (the owner at Checkpoint B, 2026-11-08: "Would fewer stones but
+>   broken up into clusters help?", then "looks good"). A world-space noise gathers them; the
+>   big ones sit in the hearts. Over a talus band about 4.4 stones a finest chunk, down from 13.
+> - **The boulder field's edge is hidden** (Checkpoint B). Each stone fades out by itself with
+>   the built-in distance dither; near stones' shadows come from an undithered shadows-only twin.
+>   Big stones reach `CoverField.BOULDER_REACH` 240 m, small ones `SMALL_REACH` 140 m, and only
+>   stones within `BOULDER_SHADOW_REACH` 100 m cast shadows. The plan's 300 m reach cost too much.
+> - **The blowing sand is not in `HOLDS_SHIFT`** (a ruling against §7.3). It is one emitter that
+>   never stops while it blows, so in `HOLDS_SHIFT` it would hold the origin back until the forced
+>   shift at 4 km, as phase 0's hover puffs did. It is a member of `EXTERIOR_SPACE` with
+>   `local_coords`, so the shift carries the node and its live streaks together. The owner, of the
+>   sand at Checkpoint B: "leave as is".
+> - **The solid ground under a hull is a capsule round its way over the next second**, not
+>   Planetfall's 160 m disc: 64 m round where it is and round where its velocity takes it in 1 s,
+>   the way cut at `TerrainCollider.TRAVEL_MAX` 300 m, worked out a little further ahead
+>   (`LEAD`, at most `LEAD_MAX` 100 m). Bodies let go of are pooled and used again, and their
+>   collision shapes are built on worker threads. That rests on GodotPhysics3D keeping its
+>   shapes in a thread-safe owner, written in `WorldSurface.shape_of`. Near the ground (the
+>   hull's lowest point within `WorldSurface.ARRIVE` 10 m plus its anchor radius, now or in two
+>   ticks) the chunk under the hull and the one it will hit are built at once on the main
+>   thread. The disc was already costing `main` (73 fps flown low).
+> - **A ship lands in a boulder field.** The starter and the Warden, set down on the densest talus
+>   spot, land with a tilt of 8.6° and 7.8°, no hard landing and no damage, and no stone inside
+>   their colliders. A ship restored landed (a save, a ship woken) checks what is under it by
+>   casting its own colliders down (`LandingMonitor._gap_below`): resting on a stone it stays put,
+>   off the ground it is let fall and lands again, buried it is lifted.
+> - **`Whereabouts.over(body)`** gives the focus's altitude, air and up over one world in one
+>   go, for whoever wants all three every tick (the sand).
+> - **Tests find level, clear ground** with `test/unit/helpers/level_ground.gd` (`LevelGround`),
+>   since a desert's dunes leave none for a ship's legs and every world has boulders now. The
+>   landing tests and `test_system_scene` use it.
+>
+> **Measured** (`desert_render.gd`, windowed 1280 × 720, GTX 960; the floor is 120 fps): seated
+> hovering at 2 km 150, at 300 m 138; low flight 60 m over the dunes 127; landed on open dunes 136
+> seated, 213 on foot; landed among grass with the sand blowing 132 seated, 198 on foot; on foot
+> by the boulder landing 203. `landing_play` on p3: 147 seated landed, 226 beside the hull, 199 at
+> the ramp's foot. `landing_play` and `fleet_play` are ALL OK.
+>
+> **Accepted under the floor for this phase** (the owner, 2026-11-08): **low, fast flight over
+> rough ground.** Seated 30 m over a talus band, flown at 121 m/s: **98 fps**, against **73** on
+> `main` before phase 2; carried (the hull held): 109 at 120 m/s, 102 at 150. The rest of that
+> frame is the GPU's draw (3.9 ms), the HUD (1.1 ms), the surface's select and the ship's tick.
+> A follow-up will chase it.
+>
+> **Open for phase 3:**
+> - **The pad and the stamps must keep the cover clear.** `GroundCover.scatter` knows nothing of
+>   stamps: it needs to ask them, so no stone or tuft lies on the pad, in the basin or in the
+>   oasis.
+> - **The oasis's grass and palms** (§8.3) are its own: green, by the pool, hand-placed. Today's
+>   grass is dry and on deserts only.
+> - **Low, fast flight over rough ground** (above): the HUD's 1.1 ms a frame, the surface's
+>   select (0.7 ms a tick) and the ship's tick (1.1 ms) are the places to look.
+> - **The dither's stipple** shows on the farthest stones if you look for it, the price of
+>   fading each stone without a shader.
+
 ---
 
 ## 1. Why

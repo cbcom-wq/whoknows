@@ -42,6 +42,23 @@ Slice 6; piloting HUD spec §4.3, §5, §6, §10; starter shuttle art direction 
 > the `WorldEnvironment` does change now (`AirMood`), which §7.3 had said it would not. **§12 and §13 (sites,
 > signals, the discovery log and the surface readout) are still open.**
 
+> **Boulders built 2026-11-08 by the desert world's phase 2** (`2026-11-03-desert-world-design.md`
+> §7.3, branch `desert-style`), as its ground cover, with grass and blowing sand on deserts. They
+> differ from §5.2, §5.3 and §6.5 here:
+> - every world has them, scattered per finest chunk from the `&"cover"` sub-seed (the
+>   `&"boulders"` sub-seed gathers them into clusters), not by a per-archetype `boulder_density`;
+>   on a desert most lie on the talus at the feet of the mesas and towers;
+> - their colour is each palette's own `boulder` key, not `dust`;
+> - they are `RockMesh`'s boulder and shard, 0.5–4 m across, a third sunk, and **every** stone is
+>   solid: its hull is in the finest chunk's collision (`GroundCover.boulder_faces`), not a
+>   `SphereShape3D` for those over 1 m;
+> - they are drawn by `CoverField` in blocks two levels coarser than the finest chunks, the big
+>   out to 240 m and the small to 140, each fading out by the built-in distance dither.
+>
+> §6.5's collision reach changed too: a hull keeps solid the ground within 64 m of its way over
+> the next second (a capsule, the way cut at 300 m), not a disc of `64 m + 1.0 s × speed` capped
+> at 160 m.
+
 ---
 
 ## 1. Why this document exists
