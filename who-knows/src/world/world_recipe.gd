@@ -69,7 +69,8 @@ static func from_seed(p_seed: int, p_kind := Kind.PLANET) -> WorldRecipe:
 	r.relief_m = minf(r.radius_m * terrain.randf_range(RELIEF.x, RELIEF.y), RELIEF_MAX)
 	r.palette = WorldSeed.rng(p_seed, &"palette").randi_range(0, SpacePalette.DRAWN_PALETTES - 1)
 	r.atmosphere = WorldSeed.rng(p_seed, &"atmosphere").rand_weighted(PackedFloat32Array(ATMOSPHERE_WEIGHTS[p_kind])) as Atmosphere
-	if p_kind == Kind.PLANET and r.atmosphere != Atmosphere.NONE 			and WorldSeed.rng(p_seed, &"desert").randf() < DESERT_SHARE:
+	if p_kind == Kind.PLANET and r.atmosphere != Atmosphere.NONE \
+			and WorldSeed.rng(p_seed, &"desert").randf() < DESERT_SHARE:
 		r.archetype = Archetype.DUNES
 		r.palette = SpacePalette.DESERT_PALETTE
 	return r
