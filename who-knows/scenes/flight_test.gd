@@ -298,6 +298,7 @@ func _wire_ship(ship: Ship) -> void:
 	ship.sensors.add_source(LifeContacts.new(_stream, exterior_npcs, _universe))
 	ship.sensors.add_source(RockContacts.new(_stream.seed, _stream.recipe.start, _stream.shapes))
 	ship.sensors.add_source(BodyContacts.new(system))
+	ship.sensors.add_source(PlaceContacts.new(system))
 	ship.sensors.add_source(TargetContacts.new(ship.exterior, _universe))
 	ship.sensors.system = system
 	ship.sensors.whereabouts = star_system.whereabouts

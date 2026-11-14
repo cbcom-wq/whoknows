@@ -564,6 +564,10 @@ func _make_targets() -> void:
 			t.radius = b.radius
 			t.edge = b.well_radius
 			t.limit = b.warp_limit
+			for place in places():
+				if place.body_id == b.id and place.beacon:
+					t.arrive = place.dir()
+					break
 			_targets.append(t)
 	_targets.append_array(clusters)
 	for t in _targets:
