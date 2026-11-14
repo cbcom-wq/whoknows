@@ -55,6 +55,10 @@ var relief_m: float
 ## An index into SpacePalette.WORLDS.
 var palette: int
 var atmosphere: Atmosphere
+## Hand-made shapes in the ground (TerrainStamp), in the order they apply, outer
+## first. Empty unless a design fills it; read-only once built, since every
+## thread's terrain reads it.
+var stamps: Array[TerrainStamp] = []
 
 static func from_seed(p_seed: int, p_kind := Kind.PLANET) -> WorldRecipe:
 	var r := WorldRecipe.new()
