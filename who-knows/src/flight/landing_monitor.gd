@@ -44,8 +44,12 @@ const HOLD_LIFTS := 0.5
 ## frozen where it is. Further, it is let fall with its hold off until it
 ## lands, as any landing does: from where it is up to RESTORE_FALL m, or
 ## brought down to RESTORE_DROP m over what is under it first. Buried, its
-## stance plane more than RESTORE_SLACK under the analytic ground (which a
-## physics query cannot see out of), it is lifted to RESTORE_DROP m over that.
+## stance plane more than RESTORE_SLACK under the lowest ground under its
+## footprint (a physics query cannot see out of the ground), it is lifted to
+## RESTORE_DROP m over the highest. Judged under the footprint, not the
+## origin: astride a dune's crest or at a mesa's lip the ground under the
+## origin is above where the feet rest, and a ship resting there jumped on
+## load and landed hard (final review I4).
 const RESTORE_SLACK := 0.5
 const RESTORE_DROP := 0.5
 const RESTORE_FALL := 2.0
@@ -231,8 +235,9 @@ func _set_down_again(up: Vector3) -> bool:
 		_footprint_seen = _footprint_solid()
 		return false
 	var move := 0.0
-	if off < -RESTORE_SLACK:
-		move = RESTORE_DROP - off
+	var stance := _stance_over_ground(up)
+	if stance.x < -RESTORE_SLACK:
+		move = RESTORE_DROP - stance.y
 	else:
 		var gap := _gap_below(up, maxf(off, 0.0) + RESTORE_FALL + RESTORE_SLACK)
 		if gap < 0.0:
@@ -251,6 +256,70 @@ func _set_down_again(up: Vector3) -> bool:
 	_dropping_for = 0.0
 	_set_state(State.FLYING)
 	return true
+
+## How high the stance plane (FlightComputer.keel_depth under the origin)
+## stands over the ground the collision has (WorldGravity.solid_altitude_at)
+## under the hull's footprint, `up` the local up: Vector2(over the lowest of
+## that ground, over the highest).
+func _stance_over_ground(up: Vector3) -> Vector2:
+	var most := -INF
+	var least := INF
+	for spot in footprint(up):
+		var over := flight.gravity.solid_altitude_at(spot)
+		most = maxf(most, over)
+		least = minf(least, over)
+	return Vector2(most, least)
+
+## The hull's footprint on its stance plane, `up` the local up: the point
+## under its origin, then the four corners of its colliders' box (the hull
+## body's own, not a landing ramp's) seen along `up`. Engine positions.
+func footprint(up: Vector3) -> Array[Vector3]:
+	var origin := hull.global_position
+	var plane := origin - up * flight.keel_depth
+	var along := hull.global_basis.x - up * hull.global_basis.x.dot(up)
+	if along.length_squared() < 0.01:
+		along = hull.global_basis.z - up * hull.global_basis.z.dot(up)
+	along = along.normalized()
+	var across := up.cross(along)
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	for cs in _hull_shapes():
+		var box := _shape_box(cs.shape)
+		for k in 8:
+			var corner := cs.global_transform * (box.position + box.size * Vector3(k & 1, (k >> 1) & 1, (k >> 2) & 1))
+			var flat := Vector2((corner - origin).dot(along), (corner - origin).dot(across))
+			lo = lo.min(flat)
+			hi = hi.max(flat)
+	var spots: Array[Vector3] = [plane]
+	if lo.x <= hi.x:
+		for k in 4:
+			var at := Vector2(hi.x if k & 1 else lo.x, hi.y if k & 2 else lo.y)
+			spots.append(plane + along * at.x + across * at.y)
+	return spots
+
+## The hull body's own collision shapes that are on: not a landing ramp's
+## (LandingRamp.COLLIDER_META), nor any other body's or area's under it.
+func _hull_shapes() -> Array[CollisionShape3D]:
+	var out: Array[CollisionShape3D] = []
+	for node in hull.get_children():
+		var cs := node as CollisionShape3D
+		if cs != null and not cs.disabled and cs.shape != null and not cs.has_meta(LandingRamp.COLLIDER_META):
+			out.append(cs)
+	return out
+
+## A collision shape's box in its own space: a box's, a convex hull's points';
+## any other's debug mesh's.
+static func _shape_box(shape: Shape3D) -> AABB:
+	if shape is BoxShape3D:
+		var size := (shape as BoxShape3D).size
+		return AABB(-size * 0.5, size)
+	if shape is ConvexPolygonShape3D:
+		var points := (shape as ConvexPolygonShape3D).points
+		var box := AABB(points[0], Vector3.ZERO) if not points.is_empty() else AABB()
+		for p in points:
+			box = box.expand(p)
+		return box
+	return shape.get_debug_mesh().get_aabb()
 
 ## Whether every finest chunk under the hull's footprint (its ANCHOR_RADIUS
 ## round its origin) is solid on the world it is on; false off a world's
@@ -276,10 +345,7 @@ func _gap_below(up: Vector3, reach: float) -> float:
 	q.exclude = [hull.get_rid()]
 	q.motion = -up * reach
 	var best := INF
-	for node in hull.find_children("*", "CollisionShape3D", true, false):
-		var cs := node as CollisionShape3D
-		if cs.disabled or cs.shape == null or cs.has_meta(LandingRamp.COLLIDER_META):
-			continue
+	for cs in _hull_shapes():
 		q.shape = cs.shape
 		q.transform = cs.global_transform
 		var r := space.cast_motion(q)
