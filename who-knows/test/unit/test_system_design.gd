@@ -186,3 +186,46 @@ func test_the_kesdra_tweak_pins_what_p3_rolls() -> void:
 	assert_eq(p3.archetype, WorldRecipe.Archetype.DUNES)
 	assert_eq(p3.palette, SpacePalette.DESERT_PALETTE)
 	assert_eq(p3.atmosphere, WorldRecipe.Atmosphere.THICK)
+
+func test_the_offset_points_east_and_north_of_the_place() -> void:
+	var plain := SystemRecipe.from_seed(4242, false)
+	var id := StringName(str(_first_planet(plain).id))
+	var r := plain.body(id).recipe.radius_m
+	for heading in [0.0, 90.0]:
+		var bodies := {str(id): {"places": [{"id": "camp", "lat": 20.0, "lon": 35.0, "heading": heading}]}}
+		var place := _design(bodies).places_on(id)[0]
+		var true_frame := SystemDesign.frame_at(place.dir(), 0.0)
+		var east: Vector3 = true_frame.x
+		var north: Vector3 = -true_frame.z
+		# Layout [east, north] metres, in metres on the ground (the call 3 formula).
+		var e_off := (place.local_dir(12.0, 0.0, r) - place.dir()) * r
+		var n_off := (place.local_dir(0.0, 7.0, r) - place.dir()) * r
+		if heading == 0.0:
+			assert_almost_eq(e_off.dot(east), 12.0, 0.01, "+e is east")
+			assert_almost_eq(n_off.dot(north), 7.0, 0.01, "+n is north")
+		else:
+			# Clockwise about up: layout north turns onto true east, layout east onto true south.
+			assert_almost_eq(n_off.dot(east), 7.0, 0.01, "+n is east at heading 90")
+			assert_almost_eq(e_off.dot(-north), 12.0, 0.01, "+e is south at heading 90")
+		assert_almost_eq(e_off.length(), 12.0, 0.01)
+		assert_almost_eq(n_off.length(), 7.0, 0.01)
+
+func test_a_moons_own_name_tweak_wins() -> void:
+	var plain: SystemRecipe
+	var planet: SystemBody
+	for seed in range(4242, 4442):
+		plain = SystemRecipe.from_seed(seed, false)
+		for p in plain.planets():
+			if planet == null and plain.moons_of(p).size() >= 2:
+				planet = p
+		if planet != null:
+			break
+	assert_not_null(planet, "some seed has a planet with two moons")
+	var moons := plain.moons_of(planet)
+	var design := _design({str(moons[0].id): {"tweak": {"name": "PEBBLE"}}}, plain.seed)
+	var changed := SystemRecipe.with_design(plain.seed, design)
+	assert_eq(changed.body(moons[0].id).name, "PEBBLE")
+	assert_eq(changed.body(moons[0].id).recipe.name, "PEBBLE")
+	assert_eq(changed.warp_target(moons[0].id).name, "PEBBLE")
+	assert_eq(changed.body(moons[1].id).name, moons[1].name, "a sibling keeps its derived name")
+	assert_eq(changed.body(planet.id).name, planet.name)

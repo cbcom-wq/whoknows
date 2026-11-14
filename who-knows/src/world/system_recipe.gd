@@ -430,8 +430,11 @@ func _make_moons(i: int, p: SystemBody, room: float) -> Array:
 		m.seed = WorldSeed.sub(seed, StringName("moon_%d_%d" % [i, k + 1]))
 		m.recipe = WorldRecipe.from_seed(m.seed, WorldRecipe.Kind.MOON)
 		if design != null:
+			var rolled := m.recipe.name
 			design.apply_to(m.recipe, m.id)
-		m.name = WorldNames.moon(p.name, out.size())
+			m.name = m.recipe.name if m.recipe.name != rolled else WorldNames.moon(p.name, out.size())
+		else:
+			m.name = WorldNames.moon(p.name, out.size())
 		m.radius = m.recipe.radius_m
 		m.well_radius = m.recipe.well_radius()
 		m.neighbourhood = m.well_radius + MOON_ROOM
