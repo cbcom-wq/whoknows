@@ -34,6 +34,13 @@ const PIPE_STEP := 1.5
 const GRASS_MARGIN := 0.5
 const PUMP_CLEAR := 1.2
 const PATH_CLEAR := 1.0
+## The ground under the green patch is gathered this far past its reach, m,
+## and the patch lies on or over the ground drawn up to GREEN_COARSER levels
+## coarser than the finest: what the world draws round the oasis from up to
+## about 300 m over it (2.6 and 5.2 m quads), which cut under the finest's
+## where the pool bank's stamp eases out.
+const GREEN_MARGIN := 2.0
+const GREEN_COARSER := 2
 ## The broken wall's foot follows the ground, sampled about this often, m.
 const WALL_STEP := 2.0
 ## A shell's footprint is sampled this often for the lowest ground under it,
@@ -250,9 +257,31 @@ func _build_village(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionar
 		var centre: Vector3 = ground.call(float(at[0]), float(at[1]))
 		var floor_of := func(x: float, z: float) -> float:
 			return (ground.call(x, -z) as Vector3).y
+		var size := Vector2(float(axes[0]), float(axes[1]))
 		node.add_child(OasisLooks.grass_ring(Transform3D(Basis.IDENTITY, centre),
-			Vector2(float(axes[0]), float(axes[1])), water_radius, float(ring.get("inner", 1.5)),
-			hash(String(place.id)), floor_of, avoid))
+			size, water_radius, float(ring.get("inner", 1.5)), hash(String(place.id)), floor_of, avoid))
+		_build_green(place, terrain, node, centre, size, water_radius)
+
+## The green patch under the grass ring: its own mesh "GreenPatch", lit as the
+## ground is (BodyLook's material), laid on the finest ground's own triangles
+## round the pool, raised where a coarser chunk's lie higher
+## (ground_triangles, GREEN_COARSER). Every vertex laid is kept as its meta
+## `laid` (a headless test reads them).
+func _build_green(place: PlaceDesign, terrain: WorldTerrain, node: Node3D, centre: Vector3, axes: Vector2,
+		water_radius: float) -> void:
+	var holder := Node3D.new()
+	holder.name = "GreenPatch"
+	node.add_child(holder)
+	var kit := OasisLooks.kit_under(holder)
+	kit.materials[InteriorKit.Batch.SOLID] = BodyLook.material(false)
+	var reach := axes * (1.0 + OasisLooks.green_spill()) + Vector2.ONE * GREEN_MARGIN
+	var east := centre.x
+	var north := -centre.z
+	var laid := OasisLooks.green_patch(kit, ground_triangles(place, terrain, east, north, reach, GREEN_COARSER),
+		centre, axes, water_radius, hash(String(place.id)))
+	for m in kit.commit():
+		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	holder.set_meta(&"laid", laid)
 
 ## The brick: the shells, the broken wall's runs, its rubble and the shade
 ## sails, into the village's `kit`, their solid parts on one StaticBody3D
@@ -509,6 +538,118 @@ static func ground_fn(place: PlaceDesign, terrain: WorldTerrain) -> Callable:
 			var angle := metres / radius
 			at = (d * cos(angle) + offset / metres * sin(angle)).normalized()
 		return inverse * (at * (radius + terrain.height_at(at)) - origin)
+
+## The finest ground's own triangles over the rectangle `half` (east by north,
+## m) either side of layout point `east`, `north`, in the place's frame: each
+## a PackedVector3Array of three points, the very corners and split a finest
+## chunk draws and collides with (TerrainChunkData.build: quad i00-i10-i11-
+## i01, split i00-i10-i11 and i00-i11-i01). A quad is kept if any of its
+## corners lies in the rectangle. With `coarser` over 0, a corner is raised
+## to the ground drawn that many levels coarser where that lies higher (from
+## the air the world draws a place in coarser chunks, whose quads cut under
+## or over the finest's where the ground bends), so what lies on them lies
+## on every one. The grid is the face's under the point; a rectangle across a
+## cube face's edge is not handled (the oasis is far from one). Pure.
+static func ground_triangles(place: PlaceDesign, terrain: WorldTerrain, east: float, north: float,
+		half: Vector2, coarser := 0) -> Array:
+	var depth := CubeSphere.depth_for(terrain.radius)
+	var fuv := CubeSphere.face_uv(place.local_dir(east, north, terrain.radius))
+	var face := int(fuv.x)
+	var last := (1 << depth) * CubeSphere.QUADS
+	var step := 2.0 / last
+	var gi := floori((fuv.y + 1.0) / step)
+	var gj := floori((fuv.z + 1.0) / step)
+	var inverse := place.frame().inverse()
+	var origin := origin_of(place, terrain)
+	# The rectangle in grid steps: one step along i and along j, in east and
+	# north metres, inverted at the rectangle's corners (the grid is near
+	# enough even over 100 m).
+	var p0 := _grid_corner(terrain, face, depth, gi, gj, inverse, origin)
+	var di := _grid_corner(terrain, face, depth, gi + 1, gj, inverse, origin) - p0
+	var dj := _grid_corner(terrain, face, depth, gi, gj + 1, inverse, origin) - p0
+	var to_grid := Transform2D(Vector2(di.x, -di.z), Vector2(dj.x, -dj.z), Vector2.ZERO).affine_inverse()
+	var lo := Vector2(INF, INF)
+	var hi := -lo
+	for sx in [-1.0, 1.0]:
+		for sy in [-1.0, 1.0]:
+			var g := to_grid * Vector2(east + sx * half.x - p0.x, north + sy * half.y + p0.z)
+			lo = lo.min(g)
+			hi = hi.max(g)
+	# The quads looked at, and every corner they and their coarser quads need,
+	# in one flat grid (a coarser chunk's grid points are every 2nd, 4th... of
+	# the finest's).
+	var m_most := 1 << coarser
+	var qi0 := maxi(gi + floori(lo.x) - 2, 0)
+	var qj0 := maxi(gj + floori(lo.y) - 2, 0)
+	var qi1 := mini(gi + ceili(hi.x) + 2, last)
+	var qj1 := mini(gj + ceili(hi.y) + 2, last)
+	var ci0 := floori(float(qi0) / m_most) * m_most
+	var cj0 := floori(float(qj0) / m_most) * m_most
+	var w := mini(ceili(float(qi1 + 1) / m_most) * m_most, last) - ci0 + 1
+	var h := mini(ceili(float(qj1 + 1) / m_most) * m_most, last) - cj0 + 1
+	var us := PackedFloat64Array()
+	for i in w:
+		us.append(_grid_uv(depth, ci0 + i))
+	var vs := PackedFloat64Array()
+	for j in h:
+		vs.append(_grid_uv(depth, cj0 + j))
+	var grid := PackedVector3Array()
+	grid.resize(w * h)
+	for j in h:
+		for i in w:
+			var d := CubeSphere.direction(face, us[i], vs[j])
+			grid[j * w + i] = inverse * (d * (terrain.radius + terrain.height_at(d)) - origin)
+	# Each corner raised, where it must be, onto the ground drawn up to
+	# `coarser` levels coarser: a coarser quad's diagonal runs along the
+	# finest's, so within a finest triangle the coarser ground is flat, and a
+	# triangle whose corners lie on or over it lies on or over it all through.
+	var raised := grid.duplicate()
+	for level in range(1, coarser + 1):
+		var m := 1 << level
+		for j in h:
+			for i in w:
+				var a := floori(float(i) / m) * m
+				var b := floori(float(j) / m) * m
+				if a + m >= w or b + m >= h:
+					continue
+				var p := grid[j * w + i]
+				var c00 := grid[b * w + a]
+				var c11 := grid[(b + m) * w + a + m]
+				var other := grid[b * w + a + m] if i - a >= j - b else grid[(b + m) * w + a]
+				var normal := (c11 - c00).cross(other - c00)
+				if absf(normal.y) > 1e-9:
+					var y := c00.y - (normal.x * (p.x - c00.x) + normal.z * (p.z - c00.z)) / normal.y
+					if y > raised[j * w + i].y:
+						raised[j * w + i] = Vector3(p.x, y, p.z)
+	var inside := PackedByteArray()
+	inside.resize(w * h)
+	for k in w * h:
+		var c := grid[k]
+		inside[k] = 1 if absf(c.x - east) <= half.x and absf(-c.z - north) <= half.y else 0
+	var out := []
+	for j in range(qj0 - cj0, mini(qj1 - cj0, h - 1)):
+		for i in range(qi0 - ci0, mini(qi1 - ci0, w - 1)):
+			var k := j * w + i
+			if inside[k] + inside[k + 1] + inside[k + w] + inside[k + w + 1] > 0:
+				out.append(PackedVector3Array([raised[k], raised[k + 1], raised[k + w + 1]]))
+				out.append(PackedVector3Array([raised[k], raised[k + w + 1], raised[k + w]]))
+	return out
+
+## Grid point `i`, `j` (counted over the whole face) of the finest chunks of
+## `face`, in a place's frame (`inverse` of its basis, `origin` its point on
+## the world's axes), worked out as the chunk holding it does: its rect's
+## start plus whole steps, at height_at.
+static func _grid_corner(terrain: WorldTerrain, face: int, depth: int, i: int, j: int, inverse: Basis,
+		origin: Vector3) -> Vector3:
+	var d := CubeSphere.direction(face, _grid_uv(depth, i), _grid_uv(depth, j))
+	return inverse * (d * (terrain.radius + terrain.height_at(d)) - origin)
+
+## The face coordinate of finest grid line `i`, as its chunk works it out.
+static func _grid_uv(depth: int, i: int) -> float:
+	var n := CubeSphere.QUADS
+	var c := clampi(floori(float(i) / n), 0, (1 << depth) - 1)
+	var rect := CubeSphere.node_rect(Vector4i(0, depth, c, 0))
+	return rect.x + (i - c * n) * (rect.z / n)
 
 ## The same point with any basin dug out of it: the level of the floor there
 ## (the stamps' FLATTENs), which a pool's water level is measured from.

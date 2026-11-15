@@ -105,6 +105,10 @@ func test_a_green_garden_is_green():
 	assert_gt(_count_of(colours, OasisPalette.CROP_GREEN), 0)
 	assert_eq(_count_of(colours, OasisPalette.CROP_DRY), 0)
 
+## The tufts of a GrassRing: [where each stands (its meta), its tiles].
+func _tiles(ring: Node3D) -> Array:
+	return ring.find_children("*", "MultiMeshInstance3D", true, false)
+
 func test_the_grass_ring_keeps_out_of_the_water():
 	var f := Transform3D(Basis.IDENTITY, Vector3(3, 1, -2))
 	var axes := Vector2(36, 26)
@@ -112,15 +116,122 @@ func test_the_grass_ring_keeps_out_of_the_water():
 	var inner := 1.5
 	var ring := OasisLooks.grass_ring(f, axes, water, inner, 7, func(_x: float, _z: float) -> float: return 0.5)
 	add_child_autofree(ring)
-	var mm := ring.multimesh
-	assert_gt(mm.instance_count, 500, "a ring of tufts")
-	assert_eq(mm.mesh, GroundCover.grass_mesh())
+	var tiles := _tiles(ring)
+	assert_gt(tiles.size(), 8, "tiles of tufts, each fading by its own distance")
+	var count := 0
+	for t: MultiMeshInstance3D in tiles:
+		count += t.multimesh.instance_count
+		assert_eq(t.multimesh.mesh, GroundCover.grass_mesh())
+	assert_gt(count, 500, "a ring of tufts")
 	var tufts: PackedVector3Array = ring.get_meta(&"tufts")
-	assert_eq(tufts.size(), mm.instance_count)
+	assert_eq(tufts.size(), count)
 	for i in tufts.size():
 		var at := tufts[i]
 		var d := Vector2(at.x - f.origin.x, at.z - f.origin.z)
 		assert_gt(d.length(), water + inner - 0.001, "tuft %d is out of the water and its bank" % i)
-		assert_lte(d.x * d.x / (axes.x * axes.x) + d.y * d.y / (axes.y * axes.y), 1.000001, "tuft %d is inside the ellipse" % i)
+		assert_lte(d.length(), OasisLooks.green_reach(axes, d.angle(), 7) + 0.001, "tuft %d is inside the green" % i)
 		assert_almost_eq(at.y, 0.5, 0.0001, "on the ground")
 	assert_eq(ring.find_children("*", "CollisionObject3D", true, false).size(), 0, "no collision")
+
+## From the air only the green patch shows: every tile of tufts fades out by
+## distance (Checkpoint B), gone by about 100 m, never cast a shadow, and
+## each tile's node sits among its own tufts, so it is judged by their
+## distance.
+func test_the_tufts_fade_out_by_distance():
+	var f := Transform3D(Basis.IDENTITY, Vector3(3, 1, -2))
+	var ring := OasisLooks.grass_ring(f, Vector2(36, 26), 14.5, 1.5, 7, func(_x: float, _z: float) -> float: return 0.5)
+	add_child_autofree(ring)
+	for t: MultiMeshInstance3D in _tiles(ring):
+		assert_eq(t.visibility_range_fade_mode, GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF)
+		assert_between(t.visibility_range_end + t.visibility_range_end_margin, 90.0, 110.0, "gone by about 100 m")
+		assert_gt(t.visibility_range_end - t.visibility_range_end_margin, 50.0, "whole up close")
+		assert_eq(t.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
+		var reach := 0.0
+		for i in t.multimesh.instance_count:
+			reach = maxf(reach, t.multimesh.get_instance_transform(i).origin.length())
+		assert_lt(reach, OasisLooks.TUFT_TILE * 1.5, "%s's tufts lie round it" % t.name)
+
+## Flat ground triangles over a square `half` either side of `centre`, `quad` m
+## a side, at height `y`, split as the world splits its quads.
+func _flat_ground(centre: Vector3, half: float, quad: float, y: float) -> Array:
+	var out := []
+	var n := int(ceil(2.0 * half / quad))
+	for j in n:
+		for i in n:
+			var p00 := Vector3(centre.x - half + i * quad, y, centre.z - half + j * quad)
+			var p10 := p00 + Vector3(quad, 0, 0)
+			var p01 := p00 + Vector3(0, 0, quad)
+			var p11 := p00 + Vector3(quad, 0, quad)
+			out.append(PackedVector3Array([p00, p10, p11]))
+			out.append(PackedVector3Array([p00, p11, p01]))
+	return out
+
+func test_the_green_patch_lies_on_the_ground_out_of_the_water():
+	var centre := Vector3(3, 0.5, -2)
+	var axes := Vector2(36, 26)
+	var water := 14.5
+	var laid := OasisLooks.green_patch(_kit, _flat_ground(centre, 45.0, 1.31, 0.5), centre, axes, water, 7)
+	var solid := _solid()
+	var vertices: PackedVector3Array = solid[0]
+	assert_gt(vertices.size(), 3000, "a carpet of triangles")
+	assert_eq(_count_of(solid[1], OasisPalette.GREEN_PATCH), vertices.size(), "all of it the green, in its shades")
+	var reach_lo := INF
+	var reach_hi := 0.0
+	var near := INF
+	for v in vertices:
+		assert_almost_eq(v.y, 0.5 + OasisLooks.PATCH_PROUD, 0.0005, "PATCH_PROUD over the ground")
+		var d := Vector2(v.x - centre.x, v.z - centre.z)
+		near = minf(near, d.length())
+		# A cut point is on its triangle's edge, where the outline is straight.
+		assert_lte(d.length(), OasisLooks.green_reach(axes, d.angle(), 7) + 0.05, "inside the green's outline")
+	assert_almost_eq(near, water + OasisLooks.PATCH_SHORE, 0.05, "out of the water, up to its shore")
+	assert_eq(laid.size() > 0, true)
+	# The outline is ragged: its reach strays from the ellipse's by more than 8%.
+	for k in 72:
+		var a := TAU * k / 72.0
+		var ellipse := 1.0 / sqrt(pow(cos(a) / axes.x, 2) + pow(sin(a) / axes.y, 2))
+		var share := OasisLooks.green_reach(axes, a, 7) / ellipse
+		reach_lo = minf(reach_lo, share)
+		reach_hi = maxf(reach_hi, share)
+	assert_gt(reach_hi - reach_lo, 0.16, "an organic outline, not a perfect ellipse")
+	assert_between(reach_lo, 0.8, 1.0)
+	assert_between(reach_hi, 1.0, 1.2)
+
+func test_the_green_patch_is_darker_and_greener_than_the_tufts():
+	var patch := OasisPalette.GREEN_PATCH
+	var tuft := OasisPalette.GRASS
+	assert_lt(patch.get_luminance(), tuft.get_luminance(), "darker")
+	assert_gt(patch.g / (patch.r + patch.g + patch.b), tuft.g / (tuft.r + tuft.g + tuft.b), "and greener")
+	var code := FileAccess.get_file_as_string("res://src/world/oasis_looks.gd")
+	assert_true(code.contains("OasisPalette.GREEN_PATCH"), "the patch takes the palette's green")
+
+## The tracks are 1.5 times as big since Checkpoint B: a print about 3.6 m
+## long, and the gait scaled with it.
+func test_the_tracks_are_big_enough_to_read_from_the_seat():
+	assert_almost_eq(OasisLooks.PRINT_LENGTH, 3.6, 0.001)
+	assert_almost_eq(OasisLooks.PRINT_WIDTH / OasisLooks.PRINT_LENGTH, 1.4 / 2.4, 0.01, "the same shape")
+	assert_almost_eq(OasisLooks.STRIDE / OasisLooks.PRINT_LENGTH, 7.0 / 2.4, 0.01, "the stride scaled with it")
+	assert_almost_eq(OasisLooks.FRONT_GAUGE / OasisLooks.PRINT_LENGTH, 2.0 / 2.4, 0.01, "and the gauge")
+	var tracks := OasisLooks.tracks(Transform3D.IDENTITY, Vector2.ZERO, 0.0, 60.0,
+		func(_x: float, _z: float) -> float: return 0.0, 0.4)
+	add_child_autofree(tracks)
+	var prints: Array = tracks.get_meta(&"prints")
+	assert_gt(prints.size(), 15)
+	var first: PackedVector3Array = prints[0]
+	var lo := Vector3.INF
+	var hi := -Vector3.INF
+	for v in first:
+		lo = lo.min(v)
+		hi = hi.max(v)
+		assert_almost_eq(v.y, OasisLooks.PRINT_PROUD, 0.0001, "on the ground")
+	assert_between(hi.z - lo.z, 3.2, 3.7, "a print about 3.6 m long (its toes notched)")
+	assert_between(hi.x - lo.x, 1.9, 2.5, "and about 2.1 m wide")
+	var colours: PackedColorArray = (tracks.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+	var sand: Color = SpacePalette.WORLDS[SpacePalette.DESERT_PALETTE][&"ground_low"]
+	var track := InteriorKit.solid(OasisPalette.TRACK)
+	for c in colours:
+		# Every print is OasisPalette.TRACK faded part way to the sand.
+		var t := (c.r - track.r) / (sand.r - track.r)
+		assert_between(t, -0.02, OasisLooks.TRACK_FADE + 0.02)
+		# (A mesh keeps its vertex colours in 8 bits.)
+		assert_almost_eq(c.g, lerpf(track.g, sand.g, t), 0.008, "TRACK toward the sand")

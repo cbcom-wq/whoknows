@@ -147,15 +147,20 @@ func test_palm_trunks_are_solid():
 func test_the_green_ring_and_the_village_pieces_are_one_kit_and_one_multimesh():
 	await _hold_over(0, 0, 60.0)
 	var meshes := _oasis().find_children("*", "MultiMeshInstance3D", true, false)
-	assert_eq(meshes.size(), 1, "one MultiMesh for all the grass")
+	var ring := _oasis().get_node("GrassRing")
+	assert_gt(meshes.size(), 8, "the grass in tiles, each fading by its own distance")
+	for m in meshes:
+		assert_eq(m.get_parent(), ring, "all of them the ring's")
+	var green := _oasis().get_node("GreenPatch").get_children().filter(func(n): return n is MeshInstance3D)
+	assert_eq(green.size(), 1, "one mesh for the green patch")
 	var village := _oasis().get_node("Village")
 	var solids := village.get_children().filter(func(n): return n is MeshInstance3D and n.name == &"DressingSolid")
 	assert_eq(solids.size(), 1, "one kit's solids")
 
 func test_the_grass_stays_out_of_the_water():
 	await _hold_over(0, 0, 60.0)
-	var ring := _oasis().find_children("*", "MultiMeshInstance3D", true, false)[0] as MultiMeshInstance3D
-	var pool := _oasis().find_children("*", "MeshInstance3D", true, false)[0] as MeshInstance3D
+	var ring := _oasis().get_node("GrassRing")
+	var pool := _oasis().get_node("Pool").find_children("*", "MeshInstance3D", true, false)[0] as MeshInstance3D
 	var edge := pool.get_aabb().size.x * 0.5
 	var tufts: PackedVector3Array = ring.get_meta(&"tufts")
 	assert_gt(tufts.size(), 500)
@@ -165,13 +170,84 @@ func test_the_grass_stays_out_of_the_water():
 
 func test_no_grass_grows_in_a_garden_bed():
 	await _hold_over(0, 0, 60.0)
-	var ring := _oasis().find_children("*", "MultiMeshInstance3D", true, false)[0] as MultiMeshInstance3D
+	var ring := _oasis().get_node("GrassRing")
 	var tufts: PackedVector3Array = ring.get_meta(&"tufts")
 	for g: Dictionary in _place.layout()["gardens"]:
 		var at := PlaceField.on_ground(_place, _terrain, float(g["at"][0]), float(g["at"][1]))
 		var half := Vector2(float(g["size"][0]), float(g["size"][1])) * 0.5
 		for t in tufts:
 			assert_false(absf(t.x - at.x) < half.x and absf(t.z - at.z) < half.y, "a tuft in the bed at %s" % [g["at"]])
+
+## The green patch under the ring (Checkpoint B) lies on the ground the world
+## draws: every vertex at least 1.5 cm over the finest ground's triangle under
+## it (the solid ground, drawn near you), nearly all of them no more than 3.5
+## cm over it; where the pool bank's stamp eases out, coarser chunks' quads
+## (drawn from the air) cut over the finest's, and the patch is raised to lie
+## on them too, never more than PATCH_RAISED_MOST over the finest. It is never
+## under the ground drawn from the pad's eye, from 150 m or from 300 m over
+## the oasis. None of it is in the water: every vertex lies past the water's
+## edge and over its level.
+const PATCH_OVER_FINEST := [0.015, 0.035]
+const PATCH_RAISED_MOST := 0.13
+
+func test_the_green_patch_lies_on_the_drawn_ground_out_of_the_water():
+	await _hold_over(0, 0, 60.0)
+	var laid: PackedVector3Array = _oasis().get_node("GreenPatch").get_meta(&"laid")
+	assert_gt(laid.size(), 3000, "a carpet of triangles")
+	var pool := _oasis().get_node("Pool").find_children("*", "MeshInstance3D", true, false)[0] as MeshInstance3D
+	var edge := pool.get_aabb().size.x * 0.5 - PlaceField.SHORE_LAP
+	var level := PlaceField.floor_at(_place, _terrain, 0, 0).y + float(_place.layout()["pool"].get("level", -0.3))
+	var frame := _place.frame()
+	var origin := PlaceField.origin_of(_place, _terrain)
+	var depth_max := CubeSphere.depth_for(_body.radius)
+	var lo := INF
+	var hi := -INF
+	var near := INF
+	var wet := 0
+	var raised := 0
+	for v in laid:
+		var local := frame * v + origin
+		var over := TerrainChunkData.drawn_altitude_of(_terrain, local, depth_max)
+		lo = minf(lo, over)
+		hi = maxf(hi, over)
+		if over > PATCH_OVER_FINEST[1]:
+			raised += 1
+		near = minf(near, Vector2(v.x, v.z).length())
+		if v.y < level + 0.01:
+			wet += 1
+	gut.p("the patch: %.3f-%.3f m over the finest drawn ground, %d of %d vertices raised over %.3f; nearest the pool's middle %.2f m (its edge %.2f)" % [
+		lo, hi, raised, laid.size(), PATCH_OVER_FINEST[1], near, edge])
+	assert_between(lo, PATCH_OVER_FINEST[0], PATCH_OVER_FINEST[1], "none buried in the finest ground")
+	assert_lt(hi, PATCH_RAISED_MOST, "and none floating far over it")
+	assert_lt(raised, laid.size() / 20, "nearly all of it within %.3f m of it" % PATCH_OVER_FINEST[1])
+	assert_gt(near, edge, "none of it in the water")
+	assert_eq(wet, 0, "and all of it over the water's level")
+	var height_at := func(d: Vector3) -> float: return _terrain.height_at(d)
+	for spot: Array in [["the pad's eye", -80.0, -40.0, 1.6], ["150 m over the oasis", 0.0, 0.0, 150.0],
+			["300 m over the oasis", 0.0, 0.0, 300.0]]:
+		var d := _place.local_dir(spot[1], spot[2], _body.radius)
+		var focus := d * (_body.radius + _terrain.height_at(d) + float(spot[3]))
+		var drawn := {}
+		for k: Vector4i in WorldSurface.select(_body.radius, _terrain.relief, depth_max, focus, {}, {}, height_at)[0]:
+			drawn[k] = true
+		var low := INF
+		var coarsest := depth_max
+		var under := 0
+		var under_near := INF
+		for v in laid:
+			var local := frame * v + origin
+			var depth := 0
+			while depth < depth_max and not drawn.has(CubeSphere.key_for(local.normalized(), depth)):
+				depth += 1
+			coarsest = mini(coarsest, depth)
+			var over := TerrainChunkData.drawn_altitude_of(_terrain, local, depth)
+			low = minf(low, over)
+			if over < 0.0:
+				under += 1
+				under_near = minf(under_near, Vector2(v.x, v.z).length())
+		gut.p("from %s: at least %.3f m over the drawn ground (quads up to %.1f m); %d of %d vertices under it, the nearest the pool %.1f m out" % [
+			spot[0], low, CubeSphere.edge_m(_body.radius, coarsest) / CubeSphere.QUADS, under, laid.size(), under_near])
+		assert_gt(low, 0.01, "%s: the patch is never under the drawn ground" % spot[0])
 
 # --- the village outside: shells, the wall, the tracks, the outcrop (Task 9) ---
 
@@ -334,11 +410,25 @@ func test_the_tracks_lead_out_of_the_gap():
 	assert_gt(inward.size(), 4, "and a short set in to the crushed hut")
 	if not inward.is_empty():
 		var last := _centre(inward[inward.size() - 1])
-		var to_hut := Vector2(last.x, -last.z).distance_to(Vector2(float(hut["at"][0]), float(hut["at"][1])))
+		var hut_at := Vector2(float(hut["at"][0]), float(hut["at"][1]))
+		var to_hut := Vector2(last.x, -last.z).distance_to(hut_at)
 		# Ending by the hut but short of its stamp's lip (hut_crushed, reach
 		# 9 m): coarser chunks cut across a lip, so a print on it is half
-		# buried there (test_the_tracks_lie_on_the_drawn_ground).
-		assert_between(to_hut, 10.5, 13.0, "ending by the hut, short of its stamp's lip")
+		# buried there (test_the_tracks_lie_on_the_drawn_ground). Since the
+		# prints grew to 3.6 m (Checkpoint B) the last one's middle is about
+		# 13 m off, so its heel stays clear of the lip.
+		var lip := 0.0
+		var hut_dir := _place.local_dir(hut_at.x, hut_at.y, _body.radius)
+		for st: TerrainStamp in _terrain.stamps:
+			if st.metres_from(hut_dir, _body.radius) < 1.0:
+				lip = st.reach()
+		assert_almost_eq(lip, 9.0, 0.01, "the hut's stamp reaches 9 m")
+		assert_between(to_hut, 10.5, 13.5, "ending by the hut")
+		var nearest := INF
+		for p: PackedVector3Array in inward:
+			for v in p:
+				nearest = minf(nearest, Vector2(v.x, -v.z).distance_to(hut_at))
+		assert_gt(nearest, lip + 0.5, "every print short of its stamp's lip")
 
 ## The ground drawn under each print, not height_at: beyond the near chunks
 ## the world draws coarser quads (5-10 m at 150-400 m), which stray from

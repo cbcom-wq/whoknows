@@ -5,7 +5,9 @@ extends RefCounted
 ## walls with a bevelled parapet and a flat roof of slabs, a few proud brick
 ## courses and chunky lintels; a round hut; a hut crushed in; a broken brick
 ## wall along a line; rubble; a brick patch for a flat wall; and a cloth shade
-## sail on four poles. Built from a kit, a frame and a variety alone, in
+## sail on four poles. Adobe since Checkpoint B: big sun-baked blocks a shade
+## each on the outer faces, wooden roof beams (vigas) poking out under the
+## parapet, a stepped parapet, and deep, dark reveals under wooden lintels. Built from a kit, a frame and a variety alone, in
 ## OasisPalette's brick and cloth: it never sees a grid or a place, so Part C's
 ## BaseExterior builds its homes with it too.
 ##
@@ -39,8 +41,29 @@ const COPING := Vector2(0.12, 0.06)
 ## the roof.
 const COURSE := Vector2(0.1, 0.03)
 const COURSES: Array[float] = [0.3, 0.66]
-## A lintel: height, overhang each side and how far proud.
-const LINTEL := Vector3(0.24, 0.18, 0.05)
+## A lintel, of wood: height, overhang each side and how far proud.
+const LINTEL := Vector3(0.22, 0.22, 0.07)
+## Adobe (Checkpoint B). The outer faces are laid in big blocks BLOCK long and
+## a course high, each a SpacePalette shade of BRICK, BLOCK_SKIN proud of the
+## wall (the darkest shade), with BLOCK_JOINT between them where it shows.
+const BLOCK := Vector2(1.1, 0.5)
+const BLOCK_SKIN := 0.012
+const BLOCK_JOINT := 0.025
+## The roof's beams (vigas): logs VIGA_RADIUS thick with VIGA_SIDES facets,
+## about VIGA_SPAN apart, poking VIGA_OUT out of the wall just under the roof.
+const VIGA_RADIUS := 0.11
+const VIGA_SIDES := 6
+const VIGA_SPAN := 1.3
+const VIGA_OUT := 0.5
+## The parapet steps up at its corners (and the middle of a long wall):
+## STEP_UP high over the coping and STEP_LONG long, softly rounded.
+const STEP_UP := 0.18
+const STEP_LONG := 0.85
+## An opening's reveal: lined REVEAL_LINING thick in OasisPalette.REVEAL
+## through the wall, framed outside by a SURROUND (width, how far proud) in
+## the wall's own brick.
+const REVEAL_LINING := 0.035
+const SURROUND := Vector2(0.18, 0.05)
 ## The round hut's sides, and the door every round hut has in its front.
 const HUT_SIDES := 12
 const DOOR := Vector2(1.1, 2.0)
@@ -80,19 +103,27 @@ static func box(kit: InteriorKit, f: Transform3D, size: Vector3, openings: Array
 		var w: Transform3D = walls[i][0]
 		var length: float = walls[i][1]
 		var holes := _holes(w, length, openings)
-		var colour := _brick(variety, i)
-		for p: Array in _pieces(length, size.y, holes):
-			kit.bevel_box(InteriorKit.Batch.SOLID, f * w * _span(p), _span_size(p, WALL), BEVEL, colour)
+		var pieces := _pieces(length, size.y, holes)
+		for p: Array in pieces:
+			kit.bevel_box(InteriorKit.Batch.SOLID, f * w * _span(p), _span_size(p, WALL), BEVEL, _base())
+		_blocks(kit, f * w, length, pieces, WALL, size.y - COPING.x * 0.5, variety, i)
 		# The front and back walls run over the corners; the sides fit between.
 		var reach := length * 0.5 + (COURSE.y if i < 2 else -COURSE.y)
 		for share in COURSES:
-			_course(kit, f * w, -reach, reach, roof_y * share, holes, WALL, dark)
+			_course(kit, f * w, -reach, reach, _course_y(roof_y, share), holes, WALL, dark)
 		for h: Array in holes:
-			_lintel(kit, f * w, h, size.y, dark)
+			_reveal(kit, f * w, h, h[3], h[3] < size.y - LINTEL.x, variety, i)
+			_lintel(kit, f * w, h, size.y)
 		var rim := length + (2.0 * COPING.y if i < 2 else -2.0 * COPING.y)
 		var drop := 0.0 if i < 2 else 0.005
-		kit.bevel_box(InteriorKit.Batch.SOLID, f * w * InteriorKit.at(Vector3(0, size.y + COPING.x * 0.5 - 0.03 - drop, 0)),
+		var coping_top := size.y + COPING.x - 0.03 - drop
+		kit.bevel_box(InteriorKit.Batch.SOLID, f * w * InteriorKit.at(Vector3(0, coping_top - COPING.x * 0.5, 0)),
 			Vector3(rim, COPING.x, WALL + 2.0 * COPING.y), 0.03, dark)
+		if i < 2:
+			# The beams span front to back, so they show on these two walls,
+			# and the parapet steps up at the corners over them.
+			_vigas(kit, f * w, length - 2.0 * WALL, roof_y, holes, variety, i)
+			_steps(kit, f * w, rim, coping_top, variety, i)
 	var span := Vector2(size.x - 2.0 * WALL, size.z - 2.0 * WALL)
 	for slab: Array in _roof_slabs(span, roof_y):
 		kit.bevel_box(InteriorKit.Batch.SOLID, f * (slab[0] as Transform3D), slab[1], 0.03, _roof(variety, int(slab[2])))
@@ -120,15 +151,24 @@ static func round_hut(kit: InteriorKit, f: Transform3D, radius: float, height: f
 	for i in HUT_SIDES:
 		var w := _hut_wall(radius, i)
 		var holes := _hut_holes(i)
-		var colour := _brick(variety, i % 3)
-		for p: Array in _pieces(side, height, holes):
-			kit.bevel_box(InteriorKit.Batch.SOLID, f * w * _span(p), _span_size(p, WALL), BEVEL, colour)
+		var pieces := _pieces(side, height, holes)
+		for p: Array in pieces:
+			kit.bevel_box(InteriorKit.Batch.SOLID, f * w * _span(p), _span_size(p, WALL), BEVEL, _base())
+		_blocks(kit, f * w, side, pieces, WALL, height - COPING.x * 0.5, variety, i)
 		for share in COURSES:
-			_course(kit, f * w, -side * 0.5, side * 0.5, roof_y * share, holes, WALL, dark)
+			_course(kit, f * w, -side * 0.5, side * 0.5, _course_y(roof_y, share), holes, WALL, dark)
 		for h: Array in holes:
-			_lintel(kit, f * w, h, height, dark)
-		kit.bevel_box(InteriorKit.Batch.SOLID, f * w * InteriorKit.at(Vector3(0, height + COPING.x * 0.5 - 0.03, 0)),
+			_reveal(kit, f * w, h, h[3], h[3] < height - LINTEL.x, variety, i)
+			_lintel(kit, f * w, h, height)
+		var coping_top := height + COPING.x - 0.03
+		kit.bevel_box(InteriorKit.Batch.SOLID, f * w * InteriorKit.at(Vector3(0, coping_top - COPING.x * 0.5, 0)),
 			Vector3(side + 0.08, COPING.x, WALL + 2.0 * COPING.y), 0.03, dark)
+		# A beam out of every other segment, none over the door; the parapet
+		# steps up over every third, the door's first.
+		if i % 2 == 1:
+			_viga(kit, f * w, 0.0, roof_y, variety, i)
+		if i % 3 == 0:
+			_step(kit, f * w, 0.0, side * 0.6, STEP_UP, coping_top, variety, i)
 	# The roof: one HUT_SIDES-sided slab inside the walls.
 	var ring := PackedVector3Array()
 	var corner := (radius - WALL) / cos(PI / HUT_SIDES)
@@ -177,17 +217,29 @@ static func crushed(kit: InteriorKit, f: Transform3D, size: Vector3, variety: fl
 		var w: Transform3D = walls[i][0]
 		var length: float = walls[i][1]
 		var holes := _holes(w, length, [door])
-		var colour := _brick(variety, i)
-		for p: Array in _crushed_pieces(i, w, length, size, holes, variety):
-			kit.bevel_box(InteriorKit.Batch.SOLID, f * w * _span(p), _span_size(p, WALL), BEVEL, colour)
+		var pieces := _crushed_pieces(i, w, length, size, holes, variety)
+		for p: Array in pieces:
+			kit.bevel_box(InteriorKit.Batch.SOLID, f * w * _span(p), _span_size(p, WALL), BEVEL, _base())
 			for share in COURSES:
-				var y := (size.y - PARAPET) * share
+				var y := _course_y(size.y - PARAPET, share)
 				if p[2] < y - COURSE.x and p[3] > y + COURSE.x:
 					kit.box(InteriorKit.Batch.SOLID, f * w * InteriorKit.at(Vector3((p[0] + p[1]) * 0.5, y, 0)),
 						Vector3(p[1] - p[0], COURSE.x, WALL + 2.0 * COURSE.y), dark)
+		_blocks(kit, f * w, length, pieces, WALL, size.y, variety, i)
 		for h: Array in holes:
-			if _column_height(i, w, length, size, (h[0] + h[1]) * 0.5, variety) > h[3] + LINTEL.x:
-				_lintel(kit, f * w, h, size.y, dark)
+			# The jambs stand as high as their columns; the head and its
+			# lintel only where the wall still rises over it.
+			var jamb := minf(_column_height(i, w, length, size, h[0] - 0.1, variety),
+				_column_height(i, w, length, size, h[1] + 0.1, variety))
+			var headed: bool = _column_height(i, w, length, size, (h[0] + h[1]) * 0.5, variety) > h[3] + LINTEL.x
+			_reveal(kit, f * w, h, minf(jamb, h[3]), headed, variety, i)
+			if headed:
+				_lintel(kit, f * w, h, size.y)
+		# The beams still in the standing wall, over the far (whole) end.
+		if i < 2:
+			for v: Array in _viga_spots(length - 2.0 * WALL, size.y - PARAPET, holes, variety, i):
+				if _column_height(i, w, length, size, v[0], variety) > size.y - PARAPET + 0.05:
+					_viga(kit, f * w, v[0], size.y - PARAPET, variety, int(v[1]))
 	for slab: Array in _fallen(size, variety):
 		kit.bevel_box(InteriorKit.Batch.SOLID, f * (slab[0] as Transform3D), slab[1], 0.03, _roof(variety, int(slab[2])))
 	var span := Vector2(size.x - 2.0 * WALL, size.z - 2.0 * WALL)
@@ -322,7 +374,8 @@ static func wall(kit: InteriorKit, points: PackedVector3Array, height: float, va
 		var top: float = seg[2]
 		var dir: Vector3 = seg[3]
 		var side := dir.cross(Vector3.UP)
-		_prism(kit, a, b, top, side, _brick(variety, k))
+		_prism(kit, a, b, top, side, _base())
+		_run_blocks(kit, a, b, top - CHAMFER, side, variety, k)
 		var ground := (a.y + b.y) * 0.5 + SUNK
 		if top - maxf(a.y, b.y) > BAND_AT + 0.4:
 			var slope := (b - a).normalized()
@@ -545,6 +598,11 @@ static func _span(p: Array) -> Transform3D:
 static func _span_size(p: Array, thick: float) -> Vector3:
 	return Vector3(p[1] - p[0], p[3] - p[2], thick)
 
+## Where the proud course at `share` of the height to a roof at `roof_y`
+## runs: on the joint between two courses of blocks nearest it.
+static func _course_y(roof_y: float, share: float) -> float:
+	return maxi(1, roundi(roof_y * share / BLOCK.y)) * BLOCK.y
+
 ## A proud course at `y` along wall frame `w` from `u0` to `u1`, broken where a
 ## hole crosses it, stopping just short of each jamb.
 static func _course(kit: InteriorKit, w: Transform3D, u0: float, u1: float, y: float, holes: Array, thick: float,
@@ -568,12 +626,148 @@ static func _course(kit: InteriorKit, w: Transform3D, u0: float, u1: float, y: f
 			kit.box(InteriorKit.Batch.SOLID, w * InteriorKit.at(Vector3((r[0] + r[1]) * 0.5, y, 0)),
 				Vector3(r[1] - r[0], COURSE.x, thick + 2.0 * COURSE.y), colour)
 
-## A chunky lintel over hole `h` in wall frame `w`, if the wall rises over it.
-static func _lintel(kit: InteriorKit, w: Transform3D, h: Array, height: float, colour: Color) -> void:
+## A chunky wooden lintel over hole `h` in wall frame `w`, if the wall rises
+## over it.
+static func _lintel(kit: InteriorKit, w: Transform3D, h: Array, height: float) -> void:
 	if h[3] > height - LINTEL.x:
 		return
 	kit.bevel_box(InteriorKit.Batch.SOLID, w * InteriorKit.at(Vector3((h[0] + h[1]) * 0.5, h[3] + LINTEL.x * 0.5, 0)),
-		Vector3(h[1] - h[0] + 2.0 * LINTEL.y, LINTEL.x, WALL + 2.0 * LINTEL.z), 0.03, colour)
+		Vector3(h[1] - h[0] + 2.0 * LINTEL.y, LINTEL.x, WALL + 2.0 * LINTEL.z), 0.03,
+		InteriorKit.solid(OasisPalette.WOOD))
+
+## Hole `h`'s reveal in wall frame `w` (WALL thick, its outer face toward +z):
+## its jambs (up to `jamb_top`), its head (when `headed`) and its sill (a
+## window's) lined through the wall in the dark REVEAL, so the opening reads
+## deep; and outside, a proud SURROUND round its jambs and sill. Nothing here
+## narrows the opening's colliders.
+static func _reveal(kit: InteriorKit, w: Transform3D, h: Array, jamb_top: float, headed: bool, variety: float,
+		salt: int) -> void:
+	var dark := InteriorKit.solid(OasisPalette.REVEAL)
+	var deep := WALL + 0.004
+	var tall: float = jamb_top - h[2]
+	if tall > 0.05:
+		for u: float in [h[0] + REVEAL_LINING * 0.5, h[1] - REVEAL_LINING * 0.5]:
+			kit.box(InteriorKit.Batch.SOLID, w * InteriorKit.at(Vector3(u, h[2] + tall * 0.5, 0)),
+				Vector3(REVEAL_LINING, tall, deep), dark)
+	if headed:
+		kit.box(InteriorKit.Batch.SOLID, w * InteriorKit.at(Vector3((h[0] + h[1]) * 0.5, h[3] - REVEAL_LINING * 0.5, 0)),
+			Vector3(h[1] - h[0], REVEAL_LINING, deep), dark)
+	if h[2] > 0.02:
+		kit.box(InteriorKit.Batch.SOLID, w * InteriorKit.at(Vector3((h[0] + h[1]) * 0.5, h[2] + REVEAL_LINING * 0.5, 0)),
+			Vector3(h[1] - h[0], REVEAL_LINING, deep), dark)
+		kit.bevel_box(InteriorKit.Batch.SOLID, w * InteriorKit.at(Vector3((h[0] + h[1]) * 0.5, h[2] - SURROUND.x * 0.5,
+			WALL * 0.5 + SURROUND.y * 0.5)), Vector3(h[1] - h[0] + 2.0 * SURROUND.x, SURROUND.x, SURROUND.y), 0.02,
+			_base())
+	if tall > 0.05:
+		var foot: float = maxf(h[2] - (SURROUND.x if h[2] > 0.02 else 0.0), 0.0)
+		var top: float = jamb_top + (0.0 if headed else -0.02)
+		for u: float in [h[0] - SURROUND.x * 0.5, h[1] + SURROUND.x * 0.5]:
+			kit.bevel_box(InteriorKit.Batch.SOLID, w * InteriorKit.at(Vector3(u, (foot + top) * 0.5, WALL * 0.5 + SURROUND.y * 0.5)),
+				Vector3(SURROUND.x, top - foot, SURROUND.y), 0.02, _base())
+
+## Where the beams poke out of a wall whose inside is `inner` long, their tops
+## just under a roof at `roof_y`: [u along the wall, a salt] each, about
+## VIGA_SPAN apart, none over an opening whose lintel reaches them.
+static func _viga_spots(inner: float, roof_y: float, holes: Array, _variety: float, salt: int) -> Array:
+	var count := maxi(2, roundi(inner / VIGA_SPAN))
+	var y := roof_y - SLAB - VIGA_RADIUS
+	var out := []
+	for k in count:
+		var u := -inner * 0.5 + inner * (k + 0.5) / count
+		var clear := true
+		for h: Array in holes:
+			if u > h[0] - LINTEL.y - VIGA_RADIUS and u < h[1] + LINTEL.y + VIGA_RADIUS \
+					and h[3] + LINTEL.x > y - VIGA_RADIUS - 0.02:
+				clear = false
+		if clear:
+			out.append([u, salt * 16 + k])
+	return out
+
+## The beams of a wall frame `w` (see _viga_spots).
+static func _vigas(kit: InteriorKit, w: Transform3D, inner: float, roof_y: float, holes: Array, variety: float,
+		salt: int) -> void:
+	for v: Array in _viga_spots(inner, roof_y, holes, variety, salt):
+		_viga(kit, w, v[0], roof_y, variety, int(v[1]))
+
+## One beam at `u` along wall frame `w`, under a roof at `roof_y`: a faceted log
+## from inside the wall to VIGA_OUT (give or take) out of it, its end capped.
+static func _viga(kit: InteriorKit, w: Transform3D, u: float, roof_y: float, variety: float, salt: int) -> void:
+	var colour := InteriorKit.solid(SpacePalette.shade(OasisPalette.WOOD, int(_noise(variety, salt, 21.0) * 2.99)))
+	var y := roof_y - SLAB - VIGA_RADIUS
+	var out := VIGA_OUT * (0.8 + 0.4 * _noise(variety, salt, 22.0))
+	var a := w * Vector3(u, y, WALL * 0.5 - 0.1)
+	var b := w * Vector3(u, y - 0.03, WALL * 0.5 + out)
+	var axis := (b - a).normalized()
+	var across := (w.basis * Vector3.RIGHT).normalized()
+	var up := axis.cross(across).normalized()
+	if up.dot(w.basis * Vector3.UP) < 0.0:
+		up = -up
+	var turn := _noise(variety, salt, 23.0) * TAU
+	for k in VIGA_SIDES:
+		var t0 := turn + TAU * k / VIGA_SIDES
+		var t1 := turn + TAU * (k + 1) / VIGA_SIDES
+		var d0 := across * cos(t0) + up * sin(t0)
+		var d1 := across * cos(t1) + up * sin(t1)
+		kit.quad(InteriorKit.Batch.SOLID, a + d0 * VIGA_RADIUS, b + d0 * VIGA_RADIUS, b + d1 * VIGA_RADIUS,
+			a + d1 * VIGA_RADIUS, (d0 + d1).normalized(), colour)
+		kit.tri(InteriorKit.Batch.SOLID, b, b + d1 * VIGA_RADIUS, b + d0 * VIGA_RADIUS, axis, colour)
+
+## The parapet's steps on wall frame `w`: one at each end of a coping `rim`
+## long whose top is `coping_top`, and a lower one in the middle of a long wall.
+static func _steps(kit: InteriorKit, w: Transform3D, rim: float, coping_top: float, variety: float, salt: int) -> void:
+	for u: float in [-rim * 0.5 + STEP_LONG * 0.5, rim * 0.5 - STEP_LONG * 0.5]:
+		_step(kit, w, u, STEP_LONG, STEP_UP, coping_top, variety, salt)
+	if rim > 4.5:
+		_step(kit, w, 0.0, STEP_LONG * 1.6, STEP_UP * 0.6, coping_top, variety, salt + 1)
+
+## One softly rounded step `long` along and `rise` high on a coping at `u`.
+static func _step(kit: InteriorKit, w: Transform3D, u: float, long: float, rise: float, coping_top: float,
+		variety: float, salt: int) -> void:
+	kit.bevel_box(InteriorKit.Batch.SOLID, w * InteriorKit.at(Vector3(u, coping_top + rise * 0.5 - 0.02, 0)),
+		Vector3(long, rise + 0.02, WALL + COPING.y), 0.06, _light(variety, salt))
+
+## The blocks on the outer face (+z, `thick` / 2 out) of a wall frame `w`
+## `length` long, over each of its `pieces` ([u0, u1, y0, y1]) up to `top`:
+## courses BLOCK.y high, blocks about BLOCK.x long and staggered course to
+## course, each a shade of BRICK by `variety` and `salt`, BLOCK_SKIN proud
+## and BLOCK_JOINT apart, kept BEVEL in from a piece's edges.
+static func _blocks(kit: InteriorKit, w: Transform3D, length: float, pieces: Array, thick: float, top: float,
+		variety: float, salt: int) -> void:
+	var z := thick * 0.5 + BLOCK_SKIN
+	var normal := (w.basis * Vector3.BACK).normalized()
+	for course in ceili(top / BLOCK.y):
+		var y0 := course * BLOCK.y
+		var y1 := minf(y0 + BLOCK.y, top)
+		var u := -length * 0.5 - BLOCK.x * (0.5 if course % 2 == 1 else 0.15) * (0.6 + 0.8 * _noise(variety, salt, course))
+		var k := 0
+		while u < length * 0.5:
+			var long := BLOCK.x * (0.75 + 0.5 * _noise(variety, salt * 64 + course, k + 0.5))
+			var colour := _block_shade(variety, salt * 977 + course * 31 + k)
+			for p: Array in pieces:
+				var a := maxf(u + BLOCK_JOINT * 0.5, p[0] + BEVEL)
+				var b := minf(u + long - BLOCK_JOINT * 0.5, p[1] - BEVEL)
+				var lo := maxf(y0 + BLOCK_JOINT * 0.5, p[2] + BEVEL)
+				var hi := minf(y1 - BLOCK_JOINT * 0.5, p[3] - BEVEL)
+				if b - a > 0.08 and hi - lo > 0.08:
+					kit.quad(InteriorKit.Batch.SOLID, w * Vector3(a, lo, z), w * Vector3(b, lo, z), w * Vector3(b, hi, z),
+						w * Vector3(a, hi, z), normal, colour)
+			u += long
+			k += 1
+
+## Blocks on both faces of a run segment from foot `a` to foot `b` (RUN thick
+## across `side`), up to `top`, courses counted from its lower foot.
+static func _run_blocks(kit: InteriorKit, a: Vector3, b: Vector3, top: float, side: Vector3, variety: float,
+		salt: int) -> void:
+	var along := Vector3(b.x - a.x, 0, b.z - a.z)
+	var length := along.length()
+	var foot := minf(a.y, b.y)
+	var mid := Vector3((a.x + b.x) * 0.5, foot, (a.z + b.z) * 0.5)
+	for face: float in [1.0, -1.0]:
+		var x := along.normalized() * face
+		var z := side * face
+		var w := Transform3D(Basis(x, Vector3.UP, z), mid)
+		_blocks(kit, w, length, [[-length * 0.5, length * 0.5, 0.0, top - foot]], RUN, top - foot,
+			variety, salt * 2 + (0 if face > 0.0 else 1))
 
 ## The roof's slabs over `span` (x and z between the walls), their tops at
 ## `roof_y`: [frame, size, index] each.
@@ -609,9 +803,21 @@ static func _shape(xf: Transform3D, size: Vector3) -> CollisionShape3D:
 	c.transform = xf
 	return c
 
-## Wall `salt`'s brick, a shade of BRICK by `variety`.
-static func _brick(variety: float, salt: int) -> Color:
-	return InteriorKit.solid(SpacePalette.shade(OasisPalette.BRICK, int(_noise(variety, salt, 3.1) * 2.99)))
+## A wall's own colour, under its blocks: the middle shade of BRICK, so a
+## joint shows only beside a darker or a lighter block and the wall reads as
+## patched mud brick, never as a grid of stone.
+static func _base() -> Color:
+	return InteriorKit.solid(SpacePalette.shade(OasisPalette.BRICK, 1))
+
+## A block's shade of BRICK: the dark, the middle or the light, about a third
+## each.
+static func _block_shade(variety: float, salt: int) -> Color:
+	var n := _noise(variety, salt, 3.1)
+	return InteriorKit.solid(SpacePalette.shade(OasisPalette.BRICK, 0 if n < 0.3 else (1 if n < 0.65 else 2)))
+
+## The light, sun-bleached brick of a step or a surround.
+static func _light(variety: float, salt: int) -> Color:
+	return InteriorKit.solid(SpacePalette.shade(OasisPalette.BRICK, 2 if _noise(variety, salt, 3.7) < 0.7 else 1))
 
 ## A roof slab's colour: the darker shades of BRICK.
 static func _roof(variety: float, salt: int) -> Color:

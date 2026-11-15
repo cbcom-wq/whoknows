@@ -18,8 +18,14 @@ const WATER := Color("3f7664")
 const PALM_TRUNK := Color("8a6c48")
 const PALM_FROND := Color("5f7a35")
 const PALM_FROND_DRY := Color("a28d4c")
-## The grass base colour; the ring draws it in SpacePalette shades.
+## The grass base colour; the ring draws it in SpacePalette shades, as it
+## reads (linear, as the kit's colours are: the desert's cover grass takes its
+## straw raw, which here read as pale specks on the green patch).
 const GRASS := Color("6e8a3a")
+## The green ground under the grass ring (OasisLooks.green_patch): a flat,
+## faceted carpet laid on the ground, darker and greener than the tufts, so
+## from the air the ring reads as one green field and not as speckles.
+const GREEN_PATCH := Color("506a2c")
 const GARDEN_SOIL := Color("7c5c3c")
 const CROP_GREEN := Color("8f9a49")
 const CROP_DRY := Color("b39c5c")
@@ -33,12 +39,20 @@ const PUMP_DARK := Color("5c5144")
 const PIPE := Color("6b6254")
 
 ## Mud brick (BrickShell): the homes, the crushed hut, the broken wall and its
-## rubble. A warm tan-ochre, a little darker and browner than the orange sand
-## (whose a14a1c renders about c88050 in the sun), so a wall reads apart from
-## the ground it stands on. BRICK_DARK is the proud courses, the bevelled
-## rims (copings) and the lintels. Tuned by the owner at Checkpoint B.
-const BRICK := Color("a8774f")
-const BRICK_DARK := Color("7a5538")
+## rubble. A sun-baked mud brick: a pale, warm buff, lighter and less orange
+## than the sand (whose a14a1c renders about c88050 in the sun), so a wall
+## reads apart from the ground it stands on without going dark. Its blocks
+## take SpacePalette shades of it. BRICK_DARK is the proud courses, the
+## bevelled rims (copings) and a quarter of the rubble. Retuned at Checkpoint
+## B (the owner: "a dark, flat brown"; it was a8774f and 7a5538).
+const BRICK := Color("d29a6c")
+const BRICK_DARK := Color("aa7850")
+## The deep reveals of a doorway or a window: the shadowed brick inside the
+## opening, so it reads deep from across the village.
+const REVEAL := Color("6a4c34")
+## Weathered wood: the roof beams (vigas) poking out under the parapet, and
+## the lintels over the openings.
+const WOOD := Color("6f5237")
 ## A shade sail: faded warm cloth on dark wooden poles.
 const SAIL := Color("cbb48e")
 const SAIL_POLE := Color("4e3a28")

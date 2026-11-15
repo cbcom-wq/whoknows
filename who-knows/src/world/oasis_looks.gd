@@ -37,6 +37,27 @@ const COLLIDER_RADIUS := 0.4
 ## of ring.
 const TUFT_HEIGHT := Vector2(0.35, 0.7)
 const TUFTS_PER_M2 := 1.1
+## The ring's tufts are drawn in square tiles TUFT_TILE m across, one
+## MultiMesh a tile, so each tile fades by its own distance; they fade out
+## between TUFT_REACH - TUFT_FADE and TUFT_REACH + TUFT_FADE from the eye (the
+## engine's visibility range, measured to a tile's middle). From the air only
+## the green patch under them shows (Checkpoint B: the owner saw the tufts
+## from the air as speckled noise).
+const TUFT_TILE := 12.0
+const TUFT_REACH := 85.0
+const TUFT_FADE := 20.0
+
+## The green patch under the ring: PATCH_PROUD over the ground's own
+## triangles (as the tracks lie), from PATCH_SHORE out of the water's edge
+## (a bank of damp ground, as wide as the tufts' own; nearer the water the
+## pool's bank curves too much for a coarser chunk's quads, which would cut
+## over the patch from the air) to the green's ragged outline (green_reach).
+## Its shade changes in broad, faceted patches about PATCH_WAVE m across.
+const PATCH_PROUD := 0.025
+const PATCH_SHORE := 1.5
+const PATCH_WAVE := 9.0
+## The outline's wobble: [lobes round the ring, share of the ellipse's reach].
+const GREEN_WOBBLE := [[3, 0.07], [5, 0.05], [8, 0.035]]
 
 ## Where the palm's trunk is, `t` from its foot (0) to its crown (1), in its
 ## frame: the lean grows as the square of the height, so it curves.
@@ -118,30 +139,63 @@ static func palm_collider(f: Transform3D, variety: float) -> CollisionShape3D:
 	c.transform = Transform3D(Basis(Quaternion(Vector3.UP, axis)), (foot + top) * 0.5)
 	return c
 
+## How far the green reaches from its pool's centre at angle `theta` (in the
+## horizontal plane, from x toward z): the ellipse `axes` (half its width
+## along x and along z), its edge wobbled in and out by GREEN_WOBBLE so it is
+## an organic outline, never a perfect ellipse. The same outline bounds the
+## green patch and the tufts. Pure.
+static func green_reach(axes: Vector2, theta: float, seed: int) -> float:
+	return _reach(axes, theta, _wobble_phases(seed))
+
+## GREEN_WOBBLE's phases for `seed`, worked out once for many _reach calls.
+static func _wobble_phases(seed: int) -> PackedFloat64Array:
+	var out := PackedFloat64Array()
+	for k in GREEN_WOBBLE.size():
+		out.append(TAU * _noise(float(posmod(seed, 1000)), k, 70.0))
+	return out
+
+static func _reach(axes: Vector2, theta: float, phases: PackedFloat64Array) -> float:
+	var c := cos(theta) / axes.x
+	var s := sin(theta) / axes.y
+	var wobble := 0.0
+	for k in phases.size():
+		wobble += float(GREEN_WOBBLE[k][1]) * sin(float(GREEN_WOBBLE[k][0]) * theta + phases[k])
+	return (1.0 + wobble) / sqrt(c * c + s * s)
+
+## The most the green reaches out past its ellipse, as a share of it.
+static func green_spill() -> float:
+	var out := 0.0
+	for w: Array in GREEN_WOBBLE:
+		out += float(w[1])
+	return out
+
 ## The ring of grass round a pool at `f` (its centre, on the ground): tufts
 ## from `water_radius` + `inner` (the water edge and a bank) out to the
-## ellipse `axes` (half its width along the frame x, and along its z), as
-## one MultiMesh with no collision. `floor_of(x, z)` is the ground height in
-## the frame's own terms, where each tuft stands. No tuft stands within an
-## `avoid` circle (x, z in the frame, radius): a bed, the pump, a stone.
+## green's outline (green_reach on the ellipse `axes`), as MultiMeshes with no
+## collision, one a TUFT_TILE tile, each fading out round TUFT_REACH from the
+## eye. `floor_of(x, z)` is the ground height in the frame's own terms, where
+## each tuft stands. No tuft stands within an `avoid` circle (x, z in the
+## frame, radius): a bed, the pump, a stone. Returns a Node3D "GrassRing"
+## holding the tiles; where each tuft stands is kept as its meta `tufts`.
 static func grass_ring(f: Transform3D, axes: Vector2, water_radius: float, inner: float,
-		seed: int, floor_of: Callable, avoid: Array[Vector3] = []) -> MultiMeshInstance3D:
+		seed: int, floor_of: Callable, avoid: Array[Vector3] = []) -> Node3D:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed
 	var keep_out := water_radius + inner
-	var area := PI * axes.x * axes.y - PI * keep_out * keep_out
-	var transforms: Array[Transform3D] = []
-	var colours: Array[Color] = []
+	var spill := 1.0 + green_spill()
+	var area := PI * axes.x * axes.y * spill * spill - PI * keep_out * keep_out
+	var tiles := {}   # Vector2i -> [transforms, colours]
 	var feet := PackedVector3Array()
 	for i in int(maxf(area, 0.0) * TUFTS_PER_M2):
-		var rho := sqrt(rng.randf())
+		var rho := sqrt(rng.randf()) * spill
 		var theta := rng.randf() * TAU
 		var offset := Vector3(axes.x * rho * cos(theta), 0.0, axes.y * rho * sin(theta))
 		var yaw := rng.randf() * TAU
 		var height := rng.randf_range(TUFT_HEIGHT.x, TUFT_HEIGHT.y)
 		var width := rng.randf_range(0.9, 1.4)
 		var k := rng.randi_range(0, SpacePalette.SHADES.size() - 1)
-		if Vector2(offset.x, offset.z).length() <= keep_out:
+		var flat := Vector2(offset.x, offset.z)
+		if flat.length() <= keep_out or flat.length() > green_reach(axes, flat.angle(), seed):
 			continue
 		var at: Vector3 = f * offset
 		var blocked := false
@@ -152,27 +206,137 @@ static func grass_ring(f: Transform3D, axes: Vector2, water_radius: float, inner
 		if blocked:
 			continue
 		at.y = float(floor_of.call(at.x, at.z))
-		transforms.append(Transform3D(Basis(Vector3.UP, yaw) * Basis.from_scale(Vector3(width, height, width)), at))
-		colours.append(SpacePalette.shade(OasisPalette.GRASS, k))
+		var tile := Vector2i(floori(offset.x / TUFT_TILE), floori(offset.z / TUFT_TILE))
+		if not tiles.has(tile):
+			tiles[tile] = [[], []]
+		tiles[tile][0].append(Transform3D(Basis(Vector3.UP, yaw) * Basis.from_scale(Vector3(width, height, width)), at))
+		tiles[tile][1].append(InteriorKit.solid(SpacePalette.shade(OasisPalette.GRASS, k)))
 		feet.append(at)
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.use_colors = true
-	mm.mesh = GroundCover.grass_mesh()
-	mm.instance_count = transforms.size()
-	for i in transforms.size():
-		mm.set_instance_transform(i, transforms[i])
-		mm.set_instance_color(i, colours[i])
-	var inst := MultiMeshInstance3D.new()
-	inst.name = "GrassRing"
-	inst.multimesh = mm
+	var ring := Node3D.new()
+	ring.name = "GrassRing"
 	## Where each tuft stands, kept here too: a MultiMesh reads back nothing
 	## without a renderer (the headless tests).
-	inst.set_meta(&"tufts", feet)
-	inst.material_override = CoverField.grass_material()
-	inst.layers = WORLD_LAYER
-	inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	return inst
+	ring.set_meta(&"tufts", feet)
+	var keys := tiles.keys()
+	keys.sort()
+	for tile: Vector2i in keys:
+		var transforms: Array = tiles[tile][0]
+		var colours: Array = tiles[tile][1]
+		# Each tile's node at its tufts' middle, so the visibility range is
+		# measured to where its tufts are.
+		var middle := Vector3.ZERO
+		for t: Transform3D in transforms:
+			middle += t.origin
+		middle /= transforms.size()
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.use_colors = true
+		mm.mesh = GroundCover.grass_mesh()
+		mm.instance_count = transforms.size()
+		for i in transforms.size():
+			var t: Transform3D = transforms[i]
+			mm.set_instance_transform(i, Transform3D(t.basis, t.origin - middle))
+			mm.set_instance_color(i, colours[i])
+		var inst := MultiMeshInstance3D.new()
+		inst.name = "Tufts_%d_%d" % [tile.x, tile.y]
+		inst.multimesh = mm
+		inst.position = middle
+		inst.material_override = CoverField.grass_material()
+		inst.layers = WORLD_LAYER
+		inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		inst.visibility_range_end = TUFT_REACH
+		inst.visibility_range_end_margin = TUFT_FADE
+		inst.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+		ring.add_child(inst)
+	return ring
+
+## The green patch under a pool's grass ring: a flat, faceted carpet in
+## OasisPalette.GREEN_PATCH, laid on `ground`, the ground's own triangles
+## (each a PackedVector3Array of three points in the kit's space, y up, as the
+## world draws them), PATCH_PROUD over them. Each triangle is cut to the
+## green: inside its outline (green_reach on the ellipse `axes` round
+## `centre`) and out of the water (`water_radius` + PATCH_SHORE from
+## `centre`); a cut point lies on the triangle's own edge, so every vertex
+## lies on the drawn ground. Its shade changes in broad patches by where each
+## triangle lies. Returns every vertex laid, in the kit's space.
+static func green_patch(kit: InteriorKit, ground: Array, centre: Vector3, axes: Vector2, water_radius: float,
+		seed: int) -> PackedVector3Array:
+	var shore := water_radius + PATCH_SHORE
+	var phases := _wobble_phases(seed)
+	var lift := Vector3(0.0, PATCH_PROUD, 0.0)
+	var laid := PackedVector3Array()
+	var colours := {}
+	for tri: PackedVector3Array in ground:
+		# How far inside the outline and out of the water each corner is: a
+		# triangle wholly in is laid as it is, one wholly out is skipped, and
+		# only one across an edge is cut.
+		var outer := PackedFloat64Array()
+		var inner := PackedFloat64Array()
+		for p in tri:
+			var d := Vector2(p.x - centre.x, p.z - centre.z)
+			outer.append(_reach(axes, d.angle(), phases) - d.length())
+			inner.append(d.length() - shore)
+		if (outer[0] < 0.0 and outer[1] < 0.0 and outer[2] < 0.0) \
+				or (inner[0] < 0.0 and inner[1] < 0.0 and inner[2] < 0.0):
+			continue
+		var poly := tri
+		if outer[0] < 0.0 or outer[1] < 0.0 or outer[2] < 0.0:
+			poly = _clip(poly, outer)
+			inner.clear()
+			for p in poly:
+				inner.append(Vector2(p.x - centre.x, p.z - centre.z).length() - shore)
+		for v in inner:
+			if v < 0.0:
+				poly = _clip(poly, inner)
+				break
+		if poly.size() < 3:
+			continue
+		var middle := Vector3.ZERO
+		for p in poly:
+			middle += p
+		middle /= poly.size()
+		var k := _patch_shade(middle - centre, seed)
+		if not colours.has(k):
+			colours[k] = InteriorKit.solid(SpacePalette.shade(OasisPalette.GREEN_PATCH, k))
+		var colour: Color = colours[k]
+		for i in range(1, poly.size() - 1):
+			var a := poly[0] + lift
+			var b := poly[i] + lift
+			var c := poly[i + 1] + lift
+			var n := (b - a).cross(c - a)
+			if n.length_squared() < 1e-10:
+				continue
+			n = n.normalized()
+			kit.tri(InteriorKit.Batch.SOLID, a, b, c, n if n.y > 0.0 else -n, colour)
+		for p in poly:
+			laid.append(p + lift)
+	return laid
+
+## The shade (an index into SpacePalette.SHADES) of the green at `p` (from
+## its pool's centre): broad, soft bands about PATCH_WAVE across, mostly the
+## middle shade.
+static func _patch_shade(p: Vector3, seed: int) -> int:
+	var a := TAU * _noise(float(posmod(seed, 1000)), 1.0, 71.0)
+	var w := TAU / PATCH_WAVE
+	var n := sin(p.x * w + a) + sin(p.z * w * 0.83 - a * 1.7) + sin((p.x + p.z) * w * 0.61 + a * 2.3)
+	return 0 if n < -1.0 else (2 if n > 1.2 else 1)
+
+## The polygon `poly` cut to where `value` (one a point) is >= 0, each cut
+## point on the edge it crosses (so it stays on the polygon's plane), the
+## value taken to change evenly along it. Sutherland-Hodgman.
+static func _clip(poly: PackedVector3Array, value: PackedFloat64Array) -> PackedVector3Array:
+	var out := PackedVector3Array()
+	var n := poly.size()
+	if n < 3:
+		return out
+	for i in n:
+		var sp := value[i]
+		var sq := value[(i + 1) % n]
+		if sp >= 0.0:
+			out.append(poly[i])
+		if (sp >= 0.0) != (sq >= 0.0):
+			out.append(poly[i].lerp(poly[(i + 1) % n], sp / (sp - sq)))
+	return out
 
 ## A garden at `f`: a low raised bed of `size` (x and z, m) of soil with rows
 ## of crops, green, or collapsed and dry when `dried`. The bed's foot is 0.08 m
@@ -231,18 +395,23 @@ static func path(kit: InteriorKit, points: PackedVector3Array, width: float) -> 
 ## its toes), with three toe notches NOTCH_DEPTH of its radius deep in its
 ## front, drawn as PRINT_SECTORS sectors of PRINT_RINGS quads out from its
 ## middle, PRINT_PROUD over the ground.
-const PRINT_LENGTH := 2.4
-const PRINT_WIDTH := 1.4
+##
+## Checkpoint B (the owner: at 40 m "dark dots", at 150 m "a thin dotted
+## line") made them 1.5 times as big: the print 2.4 m to 3.6 m long, and the
+## stride and gauges with it. PRINT_RINGS went from 2 to 3 so the vertices
+## stay about as close as they were, each on the ground under it.
+const PRINT_LENGTH := 3.6
+const PRINT_WIDTH := 2.1
 const NOTCH_DEPTH := 0.3
 const PRINT_SECTORS := 24
-const PRINT_RINGS := 2
+const PRINT_RINGS := 3
 const PRINT_PROUD := 0.03
 ## The beast's gait: four feet to a STRIDE; the front feet FRONT_GAUGE either
 ## side of the line, the hind HIND_GAUGE (inside the front, so no two prints
 ## lie on each other), each toed out by TOE_OUT radians.
-const STRIDE := 7.0
-const FRONT_GAUGE := 2.0
-const HIND_GAUGE := 0.55
+const STRIDE := 10.5
+const FRONT_GAUGE := 3.0
+const HIND_GAUGE := 0.8
 const TOE_OUT := 0.12
 ## The first print this far along from where the tracks start, m.
 const TRACK_START := 1.5

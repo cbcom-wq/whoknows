@@ -67,7 +67,7 @@ func test_a_box_builds_alone():
 		lo = lo.min(v)
 		hi = hi.max(v)
 	assert_almost_eq(lo.y, 0.0, 0.01, "its walls stand on the frame")
-	assert_between(hi.y, SIZE.y - 0.01, SIZE.y + 0.2, "its parapet tops it")
+	assert_between(hi.y, SIZE.y - 0.01, SIZE.y + 0.3, "its parapet and its steps top it")
 	assert_lt(absf(hi.x - SIZE.x * 0.5), 0.1, "as wide as asked")
 	var code := _code(PATH)
 	for ident in RULES.GRID_SIDE:
@@ -108,7 +108,8 @@ func test_colours_come_from_the_palette():
 	BrickShell.rubble(_kit, InteriorKit.at(Vector3(0, 0, 14)), Vector2(4, 8), 20, 0.7)
 	BrickShell.patch(_kit, InteriorKit.at(Vector3(0, 1, 20)), Vector2(1.2, 0.9), 0.4)
 	BrickShell.sail(_kit, InteriorKit.at(Vector3(0, 0, 26)), Vector2(4.5, 3.5), 0.8)
-	var allowed := [OasisPalette.BRICK, OasisPalette.BRICK_DARK, OasisPalette.SAIL, OasisPalette.SAIL_POLE]
+	var allowed := [OasisPalette.BRICK, OasisPalette.BRICK_DARK, OasisPalette.SAIL, OasisPalette.SAIL_POLE,
+		OasisPalette.REVEAL, OasisPalette.WOOD]
 	var colours: PackedColorArray = _solid()[1]
 	assert_gt(colours.size(), 0)
 	var strays := 0
@@ -199,3 +200,99 @@ func test_a_wall_follows_the_ground_and_breaks_at_its_top():
 				under = minf(under, v.y)
 		if under < INF:
 			assert_almost_eq(under, p.y - BrickShell.SUNK, 0.02, "the base at %s is on the ground, sunk" % p)
+
+# --- adobe (Checkpoint B) -------------------------------------------------------
+
+## The vertices of `colour` (or a shade of it) among `solid` ([positions, colours]).
+func _of(solid: Array, colour: Color) -> PackedVector3Array:
+	var out := PackedVector3Array()
+	var vertices: PackedVector3Array = solid[0]
+	var colours: PackedColorArray = solid[1]
+	for i in vertices.size():
+		for k in SpacePalette.SHADES.size():
+			if _same(colours[i], InteriorKit.solid(SpacePalette.shade(colour, k))) or _same(colours[i], InteriorKit.solid(colour)):
+				out.append(vertices[i])
+				break
+	return out
+
+## The brick is sun-baked: lighter than it was and than the sand's shade,
+## warm, and not the sand's orange.
+func test_the_brick_is_sun_baked():
+	var brick := OasisPalette.BRICK
+	var sand: Color = SpacePalette.WORLDS[SpacePalette.DESERT_PALETTE][&"ground_low"]
+	assert_gt(brick.get_luminance(), Color("a8774f").get_luminance() + 0.08, "lighter than the dark brown it was")
+	assert_gt(brick.r, brick.b + 0.15, "warm")
+	assert_lt(brick.s, 0.5, "a buff, less saturated than the sand's orange (about c88050 in the sun, 0.6)")
+	assert_gt(brick.get_luminance(), sand.get_luminance(), "and lighter than the sand's own colour")
+	assert_lt(OasisPalette.REVEAL.get_luminance(), brick.get_luminance() * 0.6, "the reveals are deep and dark")
+
+## A box's beams poke out of its front and back under the parapet, in wood;
+## its openings have wooden lintels and dark reveals; and its outer faces are
+## laid in blocks of more than one shade.
+func test_a_box_is_adobe():
+	BrickShell.box(_kit, Transform3D.IDENTITY, SIZE, _openings(), 0.3)
+	var solid := _solid()
+	var wood := _of(solid, OasisPalette.WOOD)
+	var roof_y := SIZE.y - BrickShell.PARAPET
+	var beams := 0
+	for v in wood:
+		if absf(v.z) > SIZE.z * 0.5 + 0.3:
+			beams += 1
+			assert_between(v.y, roof_y - BrickShell.SLAB - 3.0 * BrickShell.VIGA_RADIUS, roof_y, "a beam under the roof")
+	assert_gt(beams, 8 * BrickShell.VIGA_SIDES, "beams poke out of the front and back")
+	for o: Array in _openings():
+		var c: Vector3 = o[0]
+		var top := c.y + float(o[2]) * 0.5
+		var lintel := 0
+		for v in wood:
+			if v.distance_to(Vector3(c.x, top + BrickShell.LINTEL.x * 0.5, c.z)) < float(o[1]) * 0.5 + BrickShell.LINTEL.y + 0.4:
+				lintel += 1
+		assert_gt(lintel, 0, "a wooden lintel over the opening at %s" % c)
+		var reveal := 0
+		for v in _of(solid, OasisPalette.REVEAL):
+			if absf(v.y - c.y) <= float(o[2]) * 0.5 + 0.01 and v.distance_to(c) < float(o[1]) * 0.5 + float(o[2]) * 0.5 + 0.3:
+				reveal += 1
+		assert_gt(reveal, 0, "a dark reveal in the opening at %s" % c)
+	var shades := {}
+	var colours: PackedColorArray = solid[1]
+	for v in colours:
+		for k in SpacePalette.SHADES.size():
+			if _same(v, InteriorKit.solid(SpacePalette.shade(OasisPalette.BRICK, k))):
+				shades[k] = true
+	assert_eq(shades.size(), SpacePalette.SHADES.size(), "blocks in every shade of the brick")
+
+## The round hut has its beams, its door's lintel and reveal; the crushed hut
+## keeps beams only in its standing wall; the broken wall is laid in blocks.
+func test_the_round_hut_the_crushed_hut_and_the_wall_are_adobe_too():
+	BrickShell.round_hut(_kit, Transform3D.IDENTITY, 5.4, 3.0, 0.6)
+	var solid := _solid()
+	var out := 0
+	for v in _of(solid, OasisPalette.WOOD):
+		if Vector2(v.x, v.z).length() > 5.4 + 0.3:
+			out += 1
+	assert_gt(out, 4 * BrickShell.VIGA_SIDES, "the round hut's beams poke out")
+	assert_gt(_of(solid, OasisPalette.REVEAL).size(), 0, "and its door is deep")
+	var crushed := InteriorKit.new(_root)
+	crushed.keep_arrays = true
+	var size := Vector3(12, 3.2, 8)
+	BrickShell.crushed(crushed, Transform3D.IDENTITY, size, 0.2)
+	var broken := _solid(crushed)
+	var beams_west := 0
+	var beams_east := 0
+	for v in _of(broken, OasisPalette.WOOD):
+		if absf(v.z) > size.z * 0.5 + 0.3:
+			if v.x < 0.0:
+				beams_west += 1
+			else:
+				beams_east += 1
+	assert_gt(beams_west, 0, "beams in the standing (west) wall")
+	assert_lt(beams_east, beams_west, "fewer where it was crushed in")
+	var run := InteriorKit.new(_root)
+	run.keep_arrays = true
+	BrickShell.wall(run, PackedVector3Array([Vector3(0, 0, 10), Vector3(2, 0.1, 10), Vector3(4, 0.15, 11)]), 2.6, 0.5)
+	var shades := {}
+	for c in (_solid(run)[1] as PackedColorArray):
+		for k in SpacePalette.SHADES.size():
+			if _same(c, InteriorKit.solid(SpacePalette.shade(OasisPalette.BRICK, k))):
+				shades[k] = true
+	assert_gt(shades.size(), 1, "the wall's blocks are shaded")
