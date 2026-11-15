@@ -4,8 +4,8 @@ extends RefCounted
 ## Mud-brick buildings outside (desert world phase 3, Task 9): thick chunky
 ## walls with a bevelled parapet and a flat roof of slabs, a few proud brick
 ## courses and chunky lintels; a round hut; a hut crushed in; a broken brick
-## wall along a line; rubble; a brick patch for a flat wall; and a cloth shade
-## sail on four poles. Adobe since Checkpoint B: big sun-baked blocks a shade
+## wall along a line; rubble; a brick patch for a flat wall; a cloth shade
+## sail on four poles; and a gate's pier (Rework 1's ring wall). Adobe since Checkpoint B: big sun-baked blocks a shade
 ## each on the outer faces, wooden roof beams (vigas) poking out under the
 ## parapet, a stepped parapet, and deep, dark reveals under wooden lintels. Built from a kit, a frame and a variety alone, in
 ## OasisPalette's brick and cloth: it never sees a grid or a place, so Part C's
@@ -543,6 +543,31 @@ static func sail(kit: InteriorKit, f: Transform3D, size: Vector2, variety: float
 					n = -n
 				kit.tri(InteriorKit.Batch.SOLID, p0, p1, p2, n, colour)
 				kit.tri(InteriorKit.Batch.SOLID, p0, p1, p2, -n, colour)
+
+# --- the gate's piers ----------------------------------------------------------
+
+## A gate pier at `f` (its foot, x along the wall, z across it): a thick block
+## `size` high in the wall's adobe, its four faces laid in blocks, under a
+## bevelled coping COPING.x thick that stands COPING.y proud all round, the
+## coping's top at `size.y`.
+static func pier(kit: InteriorKit, f: Transform3D, size: Vector3, variety: float) -> void:
+	var body := size.y - COPING.x
+	kit.bevel_box(InteriorKit.Batch.SOLID, f * InteriorKit.at(Vector3(0, body * 0.5, 0)), Vector3(size.x, body, size.z),
+		BEVEL, _base())
+	for i in 4:
+		var turn := Basis(Vector3.UP, PI * 0.5 * i)
+		var length := size.x if i % 2 == 0 else size.z
+		var thick := size.z if i % 2 == 0 else size.x
+		_blocks(kit, f * Transform3D(turn, Vector3.ZERO), length, [[-length * 0.5, length * 0.5, 0.0, body]], thick, body,
+			variety, 40 + i)
+	kit.bevel_box(InteriorKit.Batch.SOLID, f * InteriorKit.at(Vector3(0, size.y - COPING.x * 0.5, 0)),
+		Vector3(size.x + 2.0 * COPING.y, COPING.x, size.z + 2.0 * COPING.y), 0.03,
+		InteriorKit.solid(OasisPalette.BRICK_DARK))
+
+## pier's solid part: one box.
+static func pier_shapes(f: Transform3D, size: Vector3, _variety: float) -> Array[CollisionShape3D]:
+	var out: Array[CollisionShape3D] = [_shape(f * InteriorKit.at(Vector3(0, size.y * 0.5, 0)), size)]
+	return out
 
 # --- shared ------------------------------------------------------------------
 

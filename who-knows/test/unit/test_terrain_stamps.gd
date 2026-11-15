@@ -241,3 +241,76 @@ func test_the_desert_palette_has_pad_and_damp():
 	var p: Dictionary = SpacePalette.WORLDS[SpacePalette.DESERT_PALETTE]
 	assert_eq(p[&"pad"], Color("a0642c"))
 	assert_eq(p[&"damp"], Color("7a5a3c"))
+
+static func _mesa(id: StringName, centre: Vector3, radius: float, edge: float, height: float) -> TerrainStamp:
+	var s := TerrainStamp.new()
+	s.id = id
+	s.kind = TerrainStamp.Kind.MESA
+	s.centre = centre.normalized()
+	s.radius = radius
+	s.edge = edge
+	s.height = height
+	return s
+
+## A MESA (Rework 1, the ledge): a flat top `height` over the mean of the ground
+## under it (37 samples, as a FLATTEN's level), out to `radius`, falling over
+## `edge` to the ground beneath, steeply enough to be rock by the slope rule.
+func test_a_mesa_raises_a_flat_top():
+	var r := _p3()
+	r.stamps.append(_flatten(&"floor", DUNES, 120.0, 150.0))
+	var mesa := _mesa(&"ledge", _at(DUNES.normalized(), 80.0, 0.7, r.radius_m), 14.0, 5.5, 6.0)
+	mesa.ground = &"ground_high"
+	r.stamps.append(mesa)
+	var t := WorldTerrain.new(r)
+	var floor_only := _p3()
+	floor_only.stamps.append(_flatten(&"floor", DUNES, 120.0, 150.0))
+	var before := WorldTerrain.new(floor_only)
+	var sum := 0.0
+	for p in mesa.level_samples(r.radius_m):
+		sum += before.height_at(p)
+	var level := sum / 37.0
+	assert_almost_eq(t.stamps[1].level, level, 1e-6, "the level is the mean of the ground under it")
+	assert_true(is_nan(mesa.level), "the recipe's stamp is as it was")
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 21
+	for i in 200:
+		var d := _at(mesa.centre, 13.9 * sqrt(rng.randf()), rng.randf() * TAU, r.radius_m)
+		assert_almost_eq(t.height_at(d), level + 6.0, 0.01, "on the top")
+	for i in 200:
+		var d := _at(mesa.centre, mesa.reach() + 0.05 + 30.0 * rng.randf(), rng.randf() * TAU, r.radius_m)
+		assert_eq(t.height_at(d), before.height_at(d), "beyond its reach the ground is as it was")
+	# Mid-edge, over the ground's own triangles' size (2 m), it is steeper than rock.
+	for ray in 8:
+		var turn := TAU * ray / 8.0
+		var inner := _at(mesa.centre, mesa.radius + mesa.edge * 0.5 - 1.0, turn, r.radius_m)
+		var outer := _at(mesa.centre, mesa.radius + mesa.edge * 0.5 + 1.0, turn, r.radius_m)
+		var slope := atan(absf(t.height_at(inner) - t.height_at(outer)) / 2.0)
+		assert_gt(slope, WorldTerrain.ROCK_SLOPE, "ray %d: %.1f deg mid-edge" % [ray, rad_to_deg(slope)])
+		var mid := _at(mesa.centre, mesa.radius + mesa.edge * 0.5, turn, r.radius_m)
+		assert_eq(t.ground_at(mid, slope), &"rock", "the edge is rock by the slope rule")
+	assert_eq(t.ground_at(mesa.centre, 0.05), &"ground_high", "its top wears its ground")
+	assert_true(t.stamp_clear(_at(mesa.centre, 10.0, 0.3, r.radius_m)), "no cover on its top")
+	assert_eq(mesa.copy().height, 6.0)
+	assert_eq(mesa.copy().kind, TerrainStamp.Kind.MESA)
+
+## A world with no stamps is bit for bit what it was now MESA exists; and one
+## with a MESA alone is too beyond its reach.
+func test_no_stamps_is_unchanged_for_a_mesa():
+	var r := _p3()
+	var plain := WorldTerrain.new(r)
+	var with_mesa := _p3()
+	var mesa := _mesa(&"ledge", HERE, 14.0, 5.5, 6.0)
+	with_mesa.stamps.append(mesa)
+	var t := WorldTerrain.new(with_mesa)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 33
+	for i in 300:
+		var d := _dir(rng)
+		assert_eq(plain.height_at(d), plain.base_height_at(d))
+		assert_false(plain.stamp_clear(d))
+		if mesa.metres_from(d, r.radius_m) > mesa.reach() + 0.01:
+			assert_eq(t.height_at(d), plain.height_at(d))
+			assert_eq(t.ground_at(d, 0.1), plain.ground_at(d, 0.1))
+	for i in 100:
+		var d := _at(mesa.centre, mesa.reach() + 0.05 + 200.0 * rng.randf(), rng.randf() * TAU, r.radius_m)
+		assert_eq(t.height_at(d), plain.height_at(d))

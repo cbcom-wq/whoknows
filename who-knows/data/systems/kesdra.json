@@ -8,11 +8,25 @@
 			],
 			"stamps": [
 				{"id": "oasis_floor", "kind": "flatten", "place": "oasis", "at": [0, 0], "radius": 120, "edge": 150, "keep": 0.35},
-				{"id": "pool_bank", "kind": "flatten", "place": "oasis", "at": [0, 0], "radius": 32.2, "edge": 8},
+				{"id": "pool_bank", "kind": "flatten", "place": "oasis", "at": [0, 0], "radius": 20, "edge": 6},
 				{"id": "pad", "kind": "flatten", "place": "oasis", "at": [-80, -40], "radius": 26, "edge": 4, "raise": 0.15, "ground": "pad"},
 				{"id": "pool", "kind": "basin", "place": "oasis", "at": [0, 0], "radius": 17, "floor": 9, "depth": 1.3, "ground": "damp"},
-				{"id": "garden_dry", "kind": "flatten", "place": "oasis", "at": [40.14, -17.38], "radius": 2.6, "edge": 0.4},
-				{"id": "hut_crushed", "kind": "flatten", "place": "oasis", "at": [46, -28], "radius": 7.8, "edge": 1.2}
+				{"id": "ledge", "kind": "mesa", "place": "oasis", "at": [-21.2, 79.2], "radius": 14, "edge": 5.5, "height": 6, "ground": "ground_high"},
+				{"id": "home_3", "kind": "flatten", "place": "oasis", "at": [-44.1, 11.0], "radius": 5.8, "edge": 1.5},
+				{"id": "home_4", "kind": "flatten", "place": "oasis", "at": [-24.0, -36.9], "radius": 5.8, "edge": 1.5},
+				{"id": "workshop", "kind": "flatten", "place": "oasis", "at": [14.4, 39.5], "radius": 7.8, "edge": 2.0},
+				{"id": "comms", "kind": "flatten", "place": "oasis", "at": [12.6, -41.1], "radius": 6.1, "edge": 1.5},
+				{"id": "house_a", "kind": "flatten", "place": "oasis", "at": [30.6, 32.3], "radius": 5.3, "edge": 1.5},
+				{"id": "house_b", "kind": "flatten", "place": "oasis", "at": [-31.3, 30.2], "radius": 4.9, "edge": 1.5},
+				{"id": "house_c", "kind": "flatten", "place": "oasis", "at": [-17.1, 35.1], "radius": 4.5, "edge": 1.5},
+				{"id": "home_5", "kind": "flatten", "place": "oasis", "at": [-5.1, -41.7], "radius": 6.9, "edge": 1.5},
+				{"id": "hut_b", "kind": "flatten", "place": "oasis", "at": [-44.1, -6.2], "radius": 4.9, "edge": 1.5},
+				{"id": "store", "kind": "flatten", "place": "oasis", "at": [40.0, 18.2], "radius": 7.0, "edge": 2.0},
+				{"id": "hut_8", "kind": "flatten", "place": "oasis", "at": [32.2, -16.1], "radius": 6.0, "edge": 1.5},
+				{"id": "hut_9", "kind": "flatten", "place": "oasis", "at": [22.1, -27.7], "radius": 5.7, "edge": 1.5},
+				{"id": "garden_0", "kind": "flatten", "place": "oasis", "at": [-28.6, 16.5], "radius": 4.0, "edge": 1.5},
+				{"id": "garden_1", "kind": "flatten", "place": "oasis", "at": [-2.9, 32.9], "radius": 4.0, "edge": 1.5},
+				{"id": "garden_dry", "kind": "flatten", "place": "oasis", "at": [32.7, 4.6], "radius": 4.0, "edge": 1.5}
 			]
 		}
 	}

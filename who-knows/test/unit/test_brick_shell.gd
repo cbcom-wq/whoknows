@@ -108,6 +108,7 @@ func test_colours_come_from_the_palette():
 	BrickShell.rubble(_kit, InteriorKit.at(Vector3(0, 0, 14)), Vector2(4, 8), 20, 0.7)
 	BrickShell.patch(_kit, InteriorKit.at(Vector3(0, 1, 20)), Vector2(1.2, 0.9), 0.4)
 	BrickShell.sail(_kit, InteriorKit.at(Vector3(0, 0, 26)), Vector2(4.5, 3.5), 0.8)
+	BrickShell.pier(_kit, InteriorKit.at(Vector3(0, 0, 32)), Vector3(1.2, 3.4, 1.2), 0.3)
 	var allowed := [OasisPalette.BRICK, OasisPalette.BRICK_DARK, OasisPalette.SAIL, OasisPalette.SAIL_POLE,
 		OasisPalette.REVEAL, OasisPalette.WOOD]
 	var colours: PackedColorArray = _solid()[1]
@@ -159,6 +160,30 @@ func test_each_shape_twin_gives_boxes():
 		for s in shapes:
 			assert_true(s.shape is BoxShape3D, "boxes only")
 			s.free()
+
+## Rework 1: a gate pier, a thick block of the brick `size` (x along the wall,
+## y up, z across), its foot on the frame, one box its solid twin.
+func test_a_pier_builds_alone_and_is_solid():
+	var size := Vector3(1.2, 3.4, 1.2)
+	BrickShell.pier(_kit, Transform3D.IDENTITY, size, 0.4)
+	var vertices: PackedVector3Array = _solid()[0]
+	assert_gt(vertices.size(), 24, "it has a shape")
+	var lo := Vector3.INF
+	var hi := -Vector3.INF
+	for v in vertices:
+		lo = lo.min(v)
+		hi = hi.max(v)
+	assert_almost_eq(lo.y, 0.0, 0.01, "it stands on the frame")
+	assert_between(hi.y, size.y - 0.01, size.y + 0.2, "as tall as asked, its cap on top")
+	assert_between(hi.x - lo.x, size.x - 0.01, size.x + 0.3, "as thick as asked")
+	var shapes := BrickShell.pier_shapes(Transform3D.IDENTITY, size, 0.4)
+	assert_eq(shapes.size(), 1, "one box")
+	_solid_body(shapes)
+	await wait_physics_frames(2)
+	var hit := _ray(Vector3(-3, 1.5, 0), Vector3(3, 1.5, 0))
+	assert_false(hit.is_empty(), "solid")
+	if not hit.is_empty():
+		assert_almost_eq((hit["position"] as Vector3).x, -size.x * 0.5, 0.05, "at its face")
 
 func test_a_round_hut_is_round_and_open_at_its_door():
 	_solid_body(BrickShell.round_hut_shapes(Transform3D.IDENTITY, 5.4, 3.0, 0.5))

@@ -46,9 +46,16 @@ func _lying(kind: StringName) -> Item:
 			return c
 	return null
 
+## Where the layout lays item `id`, [east, north] m.
+func _layout_at(id: String) -> Array:
+	for it: Dictionary in _place.layout()["items"]:
+		if it["id"] == id:
+			return [float(it["at"][0]), float(it["at"][1])]
+	return [NAN, NAN]
+
 func test_items_lie_on_the_ground():
 	await _hold_over(0, 0, 60.0)
-	var items := {"crate": [40.0, -22.0], "canister": [-40.0, -33.0]}
+	var items := {"crate": _layout_at("crate_hut"), "canister": _layout_at("canister_path")}
 	for kind: String in items:
 		var item := _lying(StringName(kind))
 		assert_not_null(item, "%s lies in the place" % kind)
@@ -145,5 +152,6 @@ func test_items_stay_on_the_ground_across_a_shift():
 	await wait_physics_frames(2)
 	assert_true(_universe.to_universe(crate.global_position).is_equal_approx(before), "the same point")
 	assert_true(crate.freeze)
-	var ground := PlaceField.on_ground(_place, _terrain, 40.0, -22.0)
+	var at := _layout_at("crate_hut")
+	var ground := PlaceField.on_ground(_place, _terrain, at[0], at[1])
 	assert_almost_eq(_oasis().to_local(crate.global_position).y - crate.definition.size.y * 0.5, ground.y, 0.05)

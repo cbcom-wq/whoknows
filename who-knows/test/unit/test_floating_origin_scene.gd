@@ -352,7 +352,7 @@ func test_everything_outside_is_covered_beside_a_world():
 
 ## The oasis loaded (desert world phase 3): the starter is held (frozen) on its
 ## pad rather than flown down, as test_place_field holds it. The place is one
-## member; its pool, village, tracks and outcrop are its children.
+## member; its pool, village, wall and tracks are its children.
 func test_everything_outside_is_covered_at_the_oasis():
 	var system: SystemRecipe = _root.system
 	var place: PlaceDesign = system.places()[0]
@@ -366,7 +366,7 @@ func test_everything_outside_is_covered_at_the_oasis():
 	var oasis: Node3D = _root.places.loaded(place.id)
 	assert_not_null(oasis, "the oasis is loaded")
 	if oasis != null:
-		assert_not_null(oasis.get_node_or_null("Outcrop"), "with its village")
+		assert_not_null(oasis.get_node_or_null("Wall"), "with its village")
 	var surface: WorldSurface = (_root.star_system.proxy(body.id) as BodyProxy).surface()
 	assert_not_null(surface)
 	if surface != null:

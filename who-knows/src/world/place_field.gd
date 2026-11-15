@@ -132,7 +132,6 @@ func _build(place: PlaceDesign, body: SystemBody, node: Node3D) -> void:
 		water_radius = _build_pool(place, terrain, layout["pool"], node)
 	_build_village(place, terrain, layout, node, water_radius)
 	_build_tracks(place, terrain, layout, node)
-	_build_outcrop(place, terrain, layout, node)
 	_build_items(place, terrain, layout, node)
 
 ## The pool: its water, a flat faceted disc at its level, and the area that
@@ -159,13 +158,15 @@ func _build_pool(place: PlaceDesign, terrain: WorldTerrain, pool: Dictionary, no
 	return shore
 
 ## The green and the village outside: palms (trunks solid), the grass ring,
-## gardens, the pump and its pipe, the path, the brick shells (home 5 and the
-## crushed hut), the broken wall, its rubble and the shade sails. Every solid
-## is one kit's, every tuft one MultiMesh's, the palms' trunks one body's and
-## the brick's another's, and each piece stands on the ground of its layout
-## point (on_ground), never on a height of its own. Each piece's kind, id and
-## lowest vertex are kept as the holder's meta `pieces` (a headless test reads
-## them: a committed mesh reads back nothing without a renderer).
+## gardens, the pump and its pipe, the path, the brick shells (Rework 1: twelve,
+## each on its own stamp), the ring wall with its gate and breach, the rubble
+## and the shade sails. Every solid is one kit's, every tuft one MultiMesh's,
+## the palms' trunks one body's, the shells' another's and the wall's a third,
+## and each piece stands on the ground of its layout point (on_ground), never
+## on a height of its own. Each piece's kind, id, lowest vertex and (for a
+## shell or a garden) the floor it was built for are kept as the holder's meta
+## `pieces` (a headless test reads them: a committed mesh reads back nothing
+## without a renderer).
 func _build_village(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionary, node: Node3D,
 		water_radius: float) -> void:
 	var ground := ground_fn(place, terrain)
@@ -176,8 +177,8 @@ func _build_village(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionar
 	kit.keep_arrays = true
 	var avoid: Array[Vector3] = []
 	var marks := []
-	var mark := func(kind: String, id: String, from: int) -> void:
-		marks.append([kind, id, from, kit.vertex_count(InteriorKit.Batch.SOLID)])
+	var mark := func(kind: String, id: String, from: int, floor_y := NAN) -> void:
+		marks.append([kind, id, from, kit.vertex_count(InteriorKit.Batch.SOLID), floor_y])
 	var palms: Array = layout.get("palms", [])
 	if not palms.is_empty():
 		var trunks := StaticBody3D.new()
@@ -202,7 +203,7 @@ func _build_village(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionar
 		OasisLooks.garden(kit, f, Vector2(float(size[0]), float(size[1])), bool(g.get("dried", false)),
 			float(at[0] * 0.173 + at[1] * 0.291))
 		avoid.append(Vector3(f.origin.x, f.origin.z, Vector2(float(size[0]), float(size[1])).length() * 0.5 + GRASS_MARGIN))
-		mark.call("garden", "garden_%d" % i, from)
+		mark.call("garden", str(g.get("id", "garden_%d" % i)), from, f.origin.y)
 	if layout.has("pump"):
 		var from := kit.vertex_count(InteriorKit.Batch.SOLID)
 		var pump: Dictionary = layout["pump"]
@@ -248,7 +249,10 @@ func _build_village(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionar
 		var lowest := INF
 		for v in range(m[2], mini(m[3], positions.size())):
 			lowest = minf(lowest, positions[v].y)
-		pieces.append({"kind": m[0], "id": m[1], "lowest": lowest})
+		var piece := {"kind": m[0], "id": m[1], "lowest": lowest}
+		if not is_nan(m[4]):
+			piece["floor"] = m[4]
+		pieces.append(piece)
 	holder.set_meta(&"pieces", pieces)
 	if layout.has("grass_ring") and layout.has("pool"):
 		var ring: Dictionary = layout["grass_ring"]
@@ -283,23 +287,21 @@ func _build_green(place: PlaceDesign, terrain: WorldTerrain, node: Node3D, centr
 		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	holder.set_meta(&"laid", laid)
 
-## The brick: the shells, the broken wall's runs, its rubble and the shade
-## sails, into the village's `kit`, their solid parts on one StaticBody3D
-## "Brick" (BodyProxy.LAYER). An unstamped shell's walls start at the lowest
-## ground under its footprint (its plinth: home 5, which straddles the pool
-## bank's blend); a stamped one finds that ground level (the crushed hut).
-## The wall's foot follows the ground point to point.
+## The brick: the shells, the ring wall, its rubble and the shade sails, into
+## the village's `kit`. The shells' solid parts are on one StaticBody3D
+## "Brick", the wall's and its gate piers' on another, "Wall" (both on
+## BodyProxy.LAYER). Each shell stands on its own stamp (Rework 1): its walls
+## start SUNK under the lowest ground under its footprint, which the stamp
+## keeps level, and that ground is the floor it is built for. A box shell has
+## a door (BrickShell.DOOR) in the middle of its front, which its yaw turns
+## onto a lane. The wall's foot follows the ground point to point.
 func _build_brick(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionary, node: Node3D,
 		kit: InteriorKit, mark: Callable, avoid: Array[Vector3]) -> void:
 	var shells: Array = layout.get("shells", [])
 	var wall: Dictionary = layout.get("wall", {})
 	if shells.is_empty() and wall.is_empty() and not layout.has("rubble") and not layout.has("sails"):
 		return
-	var brick := StaticBody3D.new()
-	brick.name = "Brick"
-	brick.collision_layer = BodyProxy.LAYER
-	brick.collision_mask = 0
-	node.add_child(brick)
+	var brick := _solid_body(node, "Brick")
 	var add := func(shapes: Array[CollisionShape3D]) -> void:
 		for c in shapes:
 			brick.add_child(c)
@@ -312,10 +314,11 @@ func _build_brick(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionary,
 		var variety := float(s.get("variety", 0.5))
 		var centre := on_ground(place, terrain, east, north)
 		var turn := Basis(Vector3.UP, -deg_to_rad(yaw))
+		var foot := 0.0
 		if str(s["kind"]) == "round":
 			var radius := float(s["radius"])
 			var height := float(s.get("height", 3.0))
-			var foot := lowest_ground(place, terrain, east, north, Vector2(radius, radius), yaw, true)
+			foot = lowest_ground(place, terrain, east, north, Vector2(radius, radius), yaw, true)
 			var f := Transform3D(turn, Vector3(centre.x, foot - BrickShell.SUNK, centre.z))
 			BrickShell.round_hut(kit, f, radius, height, variety)
 			add.call(BrickShell.round_hut_shapes(f, radius, height, variety))
@@ -323,36 +326,20 @@ func _build_brick(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionary,
 		else:
 			var sz: Array = s["size"]
 			var size := Vector3(float(sz[0]), float(sz[1]), float(sz[2]))
-			var foot := lowest_ground(place, terrain, east, north, Vector2(size.x, size.z) * 0.5, yaw, false)
+			foot = lowest_ground(place, terrain, east, north, Vector2(size.x, size.z) * 0.5, yaw, false)
 			var f := Transform3D(turn, Vector3(centre.x, foot - BrickShell.SUNK, centre.z))
 			if str(s["kind"]) == "crushed":
 				BrickShell.crushed(kit, f, size, variety)
 				add.call(BrickShell.crushed_shapes(f, size, variety))
 			else:
-				var openings: Array = s.get("openings", [])
+				var openings: Array = s.get("openings", [[Vector3(0.0, BrickShell.DOOR.y * 0.5,
+					-size.z * 0.5 + BrickShell.WALL * 0.5), BrickShell.DOOR.x, BrickShell.DOOR.y]])
 				BrickShell.box(kit, f, size, openings, variety)
 				add.call(BrickShell.box_shapes(f, size, openings, variety))
 			avoid.append(Vector3(centre.x, centre.z, Vector2(size.x, size.z).length() * 0.5 + GRASS_MARGIN))
-		mark.call("shell", str(s["id"]), from)
-	var runs: Array = wall.get("runs", [])
-	for k in runs.size():
-		var from := kit.vertex_count(InteriorKit.Batch.SOLID)
-		var run: Array = runs[k]
-		var points := PackedVector3Array()
-		for j in run.size() - 1:
-			var a := Vector2(float(run[j][0]), float(run[j][1]))
-			var b := Vector2(float(run[j + 1][0]), float(run[j + 1][1]))
-			var n := maxi(1, roundi(a.distance_to(b) / WALL_STEP))
-			for i in n:
-				var p := a.lerp(b, float(i) / n)
-				points.append(on_ground(place, terrain, p.x, p.y))
-		var last: Array = run[run.size() - 1]
-		points.append(on_ground(place, terrain, float(last[0]), float(last[1])))
-		var height := float(wall.get("height", 2.6))
-		var variety := 0.31 + 0.27 * k
-		BrickShell.wall(kit, points, height, variety)
-		add.call(BrickShell.wall_shapes(points, height, variety))
-		mark.call("wall", "wall_%d" % k, from)
+		mark.call("shell", str(s["id"]), from, foot)
+	if wall.has("ring"):
+		_build_ring_wall(place, terrain, wall, node, kit, mark)
 	var rubble: Array = layout.get("rubble", [])
 	for k in rubble.size():
 		var from := kit.vertex_count(InteriorKit.Batch.SOLID)
@@ -376,6 +363,136 @@ func _build_brick(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionary,
 		avoid.append(Vector3(f.origin.x, f.origin.z, size.length() * 0.5 + GRASS_MARGIN))
 		mark.call("sail", "sail_%d" % k, from)
 
+## A StaticBody3D `name` under `node`, on BodyProxy.LAYER, colliding with nothing.
+static func _solid_body(node: Node3D, body_name: String) -> StaticBody3D:
+	var body := StaticBody3D.new()
+	body.name = body_name
+	body.collision_layer = BodyProxy.LAYER
+	body.collision_mask = 0
+	node.add_child(body)
+	return body
+
+## The ring wall (Rework 1): its runs between the gate and the breach
+## (ring_wall), their foot following the ground, and the gate's two piers,
+## thicker and taller, on the ground under them. All on one StaticBody3D "Wall".
+func _build_ring_wall(place: PlaceDesign, terrain: WorldTerrain, wall: Dictionary, node: Node3D,
+		kit: InteriorKit, mark: Callable) -> void:
+	var body := _solid_body(node, "Wall")
+	var ring := ring_wall(wall)
+	var height := float(wall.get("height", 2.6))
+	var runs: Array = ring["runs"]
+	for k in runs.size():
+		var from := kit.vertex_count(InteriorKit.Batch.SOLID)
+		var run: PackedVector2Array = runs[k]
+		var points := PackedVector3Array()
+		for j in run.size() - 1:
+			var n := maxi(1, roundi(run[j].distance_to(run[j + 1]) / WALL_STEP))
+			for i in n:
+				var p := run[j].lerp(run[j + 1], float(i) / n)
+				points.append(on_ground(place, terrain, p.x, p.y))
+		points.append(on_ground(place, terrain, run[run.size() - 1].x, run[run.size() - 1].y))
+		var variety := 0.31 + 0.27 * k
+		BrickShell.wall(kit, points, height, variety)
+		for c in BrickShell.wall_shapes(points, height, variety):
+			body.add_child(c)
+		mark.call("wall", "wall_%d" % k, from)
+	var pier: Array = wall.get("gate", {}).get("pier", [1.2, 3.4])
+	var size := Vector3(float(pier[0]), float(pier[1]), float(pier[0]))
+	var piers: Array = ring["piers"]
+	for k in piers.size():
+		var from := kit.vertex_count(InteriorKit.Batch.SOLID)
+		var at: Vector2 = piers[k][0]
+		var along: Vector2 = piers[k][1]
+		var x := Vector3(along.x, 0.0, -along.y)
+		var yaw := rad_to_deg(atan2(-along.y, along.x))
+		var foot := lowest_ground(place, terrain, at.x, at.y, Vector2.ONE * size.x * 0.5, yaw, false)
+		var centre := on_ground(place, terrain, at.x, at.y)
+		var f := Transform3D(Basis(x, Vector3.UP, x.cross(Vector3.UP)), Vector3(centre.x, foot - BrickShell.SUNK, centre.z))
+		BrickShell.pier(kit, f, size + Vector3(0.0, BrickShell.SUNK, 0.0), 0.6 + 0.2 * k)
+		for c in BrickShell.pier_shapes(f, size + Vector3(0.0, BrickShell.SUNK, 0.0), 0.6 + 0.2 * k):
+			body.add_child(c)
+		mark.call("pier", "pier_%d" % k, from)
+
+## The ring wall of a layout's `wall` ({"ring": [[east, north]...], "gate":
+## {"at", "width", "pier": [thickness, height]}, "breach": {"at", "width"}}),
+## in [east, north] m, pure: the closed polygon `ring` cut open where the gate
+## and the breach lie on it (each `at` taken to its nearest point on the ring).
+## The gate's cut runs to its piers' middles, so the clear way between the
+## piers is its `width`; the breach's is its `width`. Returns {"runs": the
+## pieces left, each a PackedVector2Array along the ring; "piers": [middle,
+## unit along the ring] for each gate pier; "gate", "breach": [the run ends
+## either side]}.
+static func ring_wall(wall: Dictionary) -> Dictionary:
+	var ring := PackedVector2Array()
+	for p: Array in wall.get("ring", []):
+		ring.append(Vector2(float(p[0]), float(p[1])))
+	var n := ring.size()
+	var out := {"runs": [], "piers": []}
+	if n < 3:
+		return out
+	var s_at := PackedFloat64Array([0.0])
+	for i in n:
+		s_at.append(s_at[i] + ring[i].distance_to(ring[(i + 1) % n]))
+	var total := s_at[n]
+	var cuts := []
+	for which in ["gate", "breach"]:
+		if not wall.has(which):
+			continue
+		var o: Dictionary = wall[which]
+		var c := Vector2(float(o["at"][0]), float(o["at"][1]))
+		var best := INF
+		var s := 0.0
+		for i in n:
+			var q := Geometry2D.get_closest_point_to_segment(c, ring[i], ring[(i + 1) % n])
+			if c.distance_to(q) < best:
+				best = c.distance_to(q)
+				s = s_at[i] + ring[i].distance_to(q)
+		var half := float(o.get("width", 4.0)) * 0.5
+		if which == "gate":
+			half += float(o.get("pier", [1.2, 3.4])[0]) * 0.5
+			for side in [-1.0, 1.0]:
+				out["piers"].append([_ring_point(ring, s_at, s + side * half), _ring_along(ring, s_at, s + side * half)])
+		out[which] = [_ring_point(ring, s_at, s - half), _ring_point(ring, s_at, s + half)]
+		cuts.append([s - half, s + half])
+	if cuts.is_empty():
+		var whole := ring.duplicate()
+		whole.append(ring[0])
+		out["runs"].append(whole)
+		return out
+	cuts.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
+	for k in cuts.size():
+		var start: float = cuts[k][1]
+		var end: float = cuts[(k + 1) % cuts.size()][0]
+		while end <= start:
+			end += total
+		var run := PackedVector2Array([_ring_point(ring, s_at, start)])
+		for lap in 3:
+			for i in n:
+				var si := s_at[i] + total * (lap - 1)
+				if si > start + 0.01 and si < end - 0.01:
+					run.append(ring[i])
+		run.append(_ring_point(ring, s_at, end))
+		out["runs"].append(run)
+	return out
+
+## The point `s` m round `ring` from its first corner (s_at: each corner's).
+static func _ring_point(ring: PackedVector2Array, s_at: PackedFloat64Array, s: float) -> Vector2:
+	var n := ring.size()
+	s = fposmod(s, s_at[n])
+	for i in n:
+		if s <= s_at[i + 1]:
+			return ring[i].lerp(ring[(i + 1) % n], (s - s_at[i]) / maxf(s_at[i + 1] - s_at[i], 1e-9))
+	return ring[0]
+
+## The unit way along `ring` at `s` m round it.
+static func _ring_along(ring: PackedVector2Array, s_at: PackedFloat64Array, s: float) -> Vector2:
+	var n := ring.size()
+	s = fposmod(s, s_at[n])
+	for i in n:
+		if s <= s_at[i + 1]:
+			return (ring[(i + 1) % n] - ring[i]).normalized()
+	return (ring[1] - ring[0]).normalized()
+
 ## The beast's tracks: one mesh a set, "Tracks_<id>", on the ground's own
 ## triangles, in the place's frame.
 func _build_tracks(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionary, node: Node3D) -> void:
@@ -391,18 +508,6 @@ func _build_tracks(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionary
 			float(t.get("fade_over", 0.0)))
 		mesh.name = "Tracks_%s" % str(t.get("id", k))
 		node.add_child(mesh)
-
-## The rock outcrop, its stones on the ground under each of them.
-func _build_outcrop(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionary, node: Node3D) -> void:
-	if not layout.has("outcrop"):
-		return
-	var o: Dictionary = layout["outcrop"]
-	var at: Array = o["at"]
-	var sz: Array = o.get("size", [50, 9, 18])
-	var f := Transform3D(Basis(Vector3.UP, -deg_to_rad(float(o.get("yaw", 0.0)))),
-		on_ground(place, terrain, float(at[0]), float(at[1])))
-	node.add_child(OasisLooks.outcrop(f, Vector3(float(sz[0]), float(sz[1]), float(sz[2])),
-		float(o.get("variety", 0.5)), _floor_in(place, terrain, f), terrain.palette))
 
 ## The things lying about (the layout's `items`: id, kind, at, yaw), each not
 ## yet taken: upright, the bottom centre of its box on the ground, frozen
@@ -522,7 +627,7 @@ static func on_ground(place: PlaceDesign, terrain: WorldTerrain, east: float, no
 ## on_ground as a Callable(east, north) -> Vector3 for one place, with its frame
 ## and origin worked out once: the same numbers to the bit, at about half the
 ## cost (on_ground works the origin's height out again each call). For pieces
-## that sample the ground thousands of times: the tracks, the outcrop.
+## that sample the ground thousands of times: the tracks.
 static func ground_fn(place: PlaceDesign, terrain: WorldTerrain) -> Callable:
 	var d := place.dir()
 	var frame := place.frame()

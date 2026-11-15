@@ -125,6 +125,8 @@ func test_problems_name_the_body() -> void:
 		"a place off the flat": {id: {"stamps": [flat],
 			"places": [{"id": "far", "lat": 40.0, "lon": 10.0}]}},
 		"a stamp's place that is not there": {id: {"stamps": [{"id": "s", "place": "nowhere", "at": [0, 0], "radius": 5.0}]}},
+		"a mesa with no height": {id: {"stamps": [flat.merged({"kind": "mesa"}, true)]}},
+		"a mesa with no edge": {id: {"stamps": [flat.merged({"kind": "mesa", "height": 6.0, "edge": 0.0}, true)]}},
 	}
 	for label: String in cases:
 		var out := _problems(cases[label])
@@ -141,6 +143,43 @@ func test_problems_pass_stamps_that_nest_or_keep_apart() -> void:
 	var places := [{"id": "home", "lat": 10.0, "lon": 10.0}]
 	assert_eq(_problems({id: {"stamps": [floor_stamp, pad, far], "places": places}}), PackedStringArray())
 	assert_eq(_problems({id: {"stamps": [pad, floor_stamp]}}).size(), 1, "the outer one comes first")
+
+## A MESA (Rework 1) reads from the file: its kind and its height.
+func test_a_mesa_reads_from_the_file() -> void:
+	var d := SystemDesign.new()
+	d.seed = 4242
+	d.bodies = {"x": {"stamps": [{"id": "ledge", "kind": "mesa", "lat": 1.0, "lon": 1.0, "radius": 14.0,
+		"edge": 5.5, "height": 6.0, "ground": "ground_high"}]}}
+	var errors := PackedStringArray()
+	var out := d._stamps(&"x", 10000.0, errors)
+	assert_eq(errors, PackedStringArray())
+	assert_eq(out.size(), 1)
+	assert_eq(out[0].kind, TerrainStamp.Kind.MESA)
+	assert_eq(out[0].height, 6.0)
+	assert_eq(out[0].reach(), 19.5)
+	assert_true(is_nan(out[0].level), "its level is the ground's mean, found by the terrain")
+
+## How far two stamps are from breaking nest-or-apart (m): apart, the gap
+## between their reaches; nested, how far inside the outer's flat part the
+## inner's reach lies. Under 0 is a problem.
+func test_the_margin_between_two_stamps() -> void:
+	var a := TerrainStamp.new()
+	a.radius = 120.0
+	a.edge = 150.0
+	a.centre = SystemDesign.dir_of(0.0, 0.0)
+	var b := TerrainStamp.new()
+	b.radius = 5.0
+	b.edge = 1.5
+	var world := 27300.0
+	b.centre = SystemDesign.dir_of(0.0, rad_to_deg(100.0 / world))
+	assert_almost_eq(SystemDesign.stamp_margin(a, b, world), 13.5, 0.001, "nested: 120 - (100 + 6.5)")
+	var c := TerrainStamp.new()
+	c.radius = 5.0
+	c.edge = 1.5
+	c.centre = SystemDesign.dir_of(0.0, rad_to_deg(115.0 / world))
+	assert_almost_eq(SystemDesign.stamp_margin(b, c, world), 2.0, 0.001, "apart: 15 - 13")
+	c.centre = SystemDesign.dir_of(0.0, rad_to_deg(110.0 / world))
+	assert_lt(SystemDesign.stamp_margin(b, c, world), 0.0, "overlapping")
 
 func test_a_malformed_file_is_null_and_an_error() -> void:
 	var file := FileAccess.open(TEST_FILE, FileAccess.WRITE)
@@ -193,8 +232,9 @@ func test_no_design_no_change() -> void:
 			assert_eq(other.recipe.get(field), b.recipe.get(field), "%s's %s" % [b.id, field])
 		assert_eq(other.recipe.seed, b.recipe.seed)
 		assert_eq(other.recipe.kind, b.recipe.kind)
-		# Only p3 has the design's stamps (the oasis floor, its pool bank, its pad, its pool, the dry garden and the crushed hut).
-		assert_eq(other.recipe.stamps.size(), 6 if b.id == &"p3" else 0, "%s's stamps" % b.id)
+		# Only p3 has the design's stamps (the oasis floor, its pool bank, its pad, its pool, the ledge, and
+		# a stamp under each of the twelve buildings and three gardens: Rework 1).
+		assert_eq(other.recipe.stamps.size(), 20 if b.id == &"p3" else 0, "%s's stamps" % b.id)
 
 func test_the_kesdra_tweak_pins_what_p3_rolls() -> void:
 	var p3 := SystemRecipe.from_seed(1337, false).body(&"p3").recipe

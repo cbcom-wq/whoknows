@@ -216,14 +216,15 @@ func _init(p_recipe: WorldRecipe) -> void:
 		_tower_scale = (floorf(PI * 0.25 * radius / TOWER_WAVE) + 0.5) / (PI * 0.25)
 	_take_stamps()
 
-## Copies the recipe's stamps, outer first, and gives each FLATTEN with no level
-## the mean of the ground under its flat part with the stamps before it applied.
+## Copies the recipe's stamps, outer first, and gives each FLATTEN or MESA with
+## no level the mean of the ground under its flat part with the stamps before
+## it applied.
 ## The copies are this terrain's own: the recipe is shared across threads and
 ## stays as it was.
 func _take_stamps() -> void:
 	for source in recipe.stamps:
 		var s := source.copy()
-		if s.kind == TerrainStamp.Kind.FLATTEN and is_nan(s.level):
+		if s.has_level() and is_nan(s.level):
 			var sum := 0.0
 			var points := s.level_samples(radius)
 			for p in points:
@@ -254,6 +255,10 @@ func height_at(dir: Vector3) -> float:
 				if s.keep > 0.0:
 					surface += s.keep * (h - s.level)
 				h = lerpf(h, surface, w)
+		elif s.kind == TerrainStamp.Kind.MESA:
+			var w := s.fall(m)
+			if w > 0.0:
+				h = lerpf(h, s.level + s.height, w)
 		else:
 			h -= s.dig(m)
 	return h

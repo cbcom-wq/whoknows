@@ -109,7 +109,7 @@ func test_on_ground_is_in_the_places_frame_and_on_the_terrain():
 
 func test_ground_fn_is_on_ground_to_the_bit():
 	var fast := PlaceField.ground_fn(_place, _terrain)
-	for p: Vector2 in [Vector2.ZERO, Vector2(-80, -40), Vector2(46, -28), Vector2(414, 188), Vector2(-19.5, 45.6)]:
+	for p: Vector2 in [Vector2.ZERO, Vector2(-80, -40), Vector2(32.2, -16.1), Vector2(414, 188), Vector2(-21.2, 79.2)]:
 		assert_eq(fast.call(p.x, p.y), PlaceField.on_ground(_place, _terrain, p.x, p.y), "at %s" % p)
 
 ## The layout points of `key` in oasis.json: arrays of [east, north].
@@ -120,7 +120,7 @@ func test_palms_stand_on_the_ground():
 	await _hold_over(0, 0, 60.0)
 	var palms := _oasis().get_node("Palms") as StaticBody3D
 	var points := _layout_points("palms")
-	assert_eq(points.size(), 7, "seven palms")
+	assert_eq(points.size(), 10, "seven palms by the pool and three among the buildings (Rework 1)")
 	assert_eq(palms.get_child_count(), points.size(), "a trunk each")
 	for i in points.size():
 		var c := palms.get_child(i) as CollisionShape3D
@@ -180,15 +180,22 @@ func test_no_grass_grows_in_a_garden_bed():
 
 ## The green patch under the ring (Checkpoint B) lies on the ground the world
 ## draws: every vertex at least 1.5 cm over the finest ground's triangle under
-## it (the solid ground, drawn near you), nearly all of them no more than 3.5
+## it (the solid ground, drawn near you), most of them no more than 3.5
 ## cm over it; where the pool bank's stamp eases out, coarser chunks' quads
 ## (drawn from the air) cut over the finest's, and the patch is raised to lie
 ## on them too, never more than PATCH_RAISED_MOST over the finest. It is never
 ## under the ground drawn from the pad's eye, from 150 m or from 300 m over
 ## the oasis. None of it is in the water: every vertex lies past the water's
-## edge and over its level.
+## edge, and every vertex on the bank's flat lies over its level.
+## Rework 1 shrank the bank to radius 20 with a 6 m edge, so the ring's outer
+## part lies on the oasis floor's own roll (keep 0.35, about +-1 m), whose
+## hollows may dip under the water's level 25 m from it, and the shorter edge
+## lets the coarser quads cut higher over the finest: PATCH_RAISED_MOST is
+## 0.18 and up to a quarter of the patch may be raised (was 0.13 and a
+## twentieth on the 32.2 m bank). Rework 2 owns the grass's edge.
 const PATCH_OVER_FINEST := [0.015, 0.035]
-const PATCH_RAISED_MOST := 0.13
+const PATCH_RAISED_MOST := 0.18
+const PATCH_RAISED_SHARE := 4
 
 func test_the_green_patch_lies_on_the_drawn_ground_out_of_the_water():
 	await _hold_over(0, 0, 60.0)
@@ -205,6 +212,10 @@ func test_the_green_patch_lies_on_the_drawn_ground_out_of_the_water():
 	var near := INF
 	var wet := 0
 	var raised := 0
+	var bank := INF
+	for s in _terrain.stamps:
+		if s.id == &"pool_bank":
+			bank = s.radius
 	for v in laid:
 		var local := frame * v + origin
 		var over := TerrainChunkData.drawn_altitude_of(_terrain, local, depth_max)
@@ -213,15 +224,15 @@ func test_the_green_patch_lies_on_the_drawn_ground_out_of_the_water():
 		if over > PATCH_OVER_FINEST[1]:
 			raised += 1
 		near = minf(near, Vector2(v.x, v.z).length())
-		if v.y < level + 0.01:
+		if v.y < level + 0.01 and Vector2(v.x, v.z).length() < bank:
 			wet += 1
 	gut.p("the patch: %.3f-%.3f m over the finest drawn ground, %d of %d vertices raised over %.3f; nearest the pool's middle %.2f m (its edge %.2f)" % [
 		lo, hi, raised, laid.size(), PATCH_OVER_FINEST[1], near, edge])
 	assert_between(lo, PATCH_OVER_FINEST[0], PATCH_OVER_FINEST[1], "none buried in the finest ground")
 	assert_lt(hi, PATCH_RAISED_MOST, "and none floating far over it")
-	assert_lt(raised, laid.size() / 20, "nearly all of it within %.3f m of it" % PATCH_OVER_FINEST[1])
+	assert_lt(raised, laid.size() / PATCH_RAISED_SHARE, "most of it within %.3f m of it" % PATCH_OVER_FINEST[1])
 	assert_gt(near, edge, "none of it in the water")
-	assert_eq(wet, 0, "and all of it over the water's level")
+	assert_eq(wet, 0, "and all of it on the bank over the water's level")
 	var height_at := func(d: Vector3) -> float: return _terrain.height_at(d)
 	for spot: Array in [["the pad's eye", -80.0, -40.0, 1.6], ["150 m over the oasis", 0.0, 0.0, 150.0],
 			["300 m over the oasis", 0.0, 0.0, 300.0]]:
@@ -249,7 +260,8 @@ func test_the_green_patch_lies_on_the_drawn_ground_out_of_the_water():
 			spot[0], low, CubeSphere.edge_m(_body.radius, coarsest) / CubeSphere.QUADS, under, laid.size(), under_near])
 		assert_gt(low, 0.01, "%s: the patch is never under the drawn ground" % spot[0])
 
-# --- the village outside: shells, the wall, the tracks, the outcrop (Task 9) ---
+
+# --- the village outside: shells, the wall, the tracks (Task 9, Rework 1) -------
 
 ## The ground's height at layout point `east`, `north`, in the place's frame.
 func _ground_y(east: float, north: float) -> float:
@@ -280,11 +292,11 @@ func _lowest_under_disc(at: Array, radius: float) -> float:
 	return lo
 
 ## The lowest ground along a run of the wall, under both its faces.
-func _lowest_along(run: Array) -> float:
+func _lowest_along(run: PackedVector2Array) -> float:
 	var lo := INF
 	for k in run.size() - 1:
-		var a := Vector2(float(run[k][0]), float(run[k][1]))
-		var b := Vector2(float(run[k + 1][0]), float(run[k + 1][1]))
+		var a := run[k]
+		var b := run[k + 1]
 		var side := (b - a).normalized().orthogonal() * BrickShell.RUN * 0.5
 		var n := int(ceil(a.distance_to(b) / 0.5))
 		for j in n + 1:
@@ -296,71 +308,303 @@ func _lowest_along(run: Array) -> float:
 func _pieces() -> Array:
 	return _oasis().get_node("Village").get_meta(&"pieces", [])
 
-## Each shell's, wall run's and garden's lowest point lies within 0.1 m of the
-## lowest ground under its footprint. On a stamped piece (the crushed hut, the
-## gardens) that ground is the stamp's level; on an unstamped one (home 5, on
-## the bank's blend; the wall) the piece starts at the lowest ground under it
-## (its plinth) or follows the ground down, so nowhere does a gap show.
+func _stamp_named(id: String) -> TerrainStamp:
+	for s in _terrain.stamps:
+		if str(s.id) == id:
+			return s
+	return null
+
+## The ring wall as built: its runs, gate piers, gate and breach.
+func _ring() -> Dictionary:
+	return PlaceField.ring_wall(_place.layout()["wall"])
+
+func _at_of(s: Dictionary) -> Vector2:
+	return Vector2(float(s["at"][0]), float(s["at"][1]))
+
+## A shell's footprint, [east, north], every quarter metre round its edge.
+func _outline(s: Dictionary) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	var c := _at_of(s)
+	if s["kind"] == "round":
+		for k in 96:
+			var a := TAU * k / 96.0
+			out.append(c + Vector2(sin(a), cos(a)) * float(s["radius"]))
+		return out
+	var half := Vector2(float(s["size"][0]), float(s["size"][2])) * 0.5
+	var turn := deg_to_rad(float(s.get("yaw", 0.0)))
+	var x := Vector2(cos(turn), -sin(turn))
+	var front := Vector2(sin(turn), cos(turn))
+	var corners := [Vector2(-half.x, -half.y), Vector2(half.x, -half.y), Vector2(half.x, half.y), Vector2(-half.x, half.y)]
+	for k in 4:
+		var a: Vector2 = corners[k]
+		var b: Vector2 = corners[(k + 1) % 4]
+		var n := maxi(1, ceili(a.distance_to(b) / 0.25))
+		for j in n:
+			var p := a.lerp(b, float(j) / n)
+			out.append(c + x * p.x + front * p.y)
+	return out
+
+## How far `p` is from the wall's faces (runs RUN thick, square gate piers), m.
+func _from_wall(p: Vector2, ring: Dictionary) -> float:
+	var best := INF
+	for run: PackedVector2Array in ring["runs"]:
+		for k in run.size() - 1:
+			best = minf(best, p.distance_to(Geometry2D.get_closest_point_to_segment(p, run[k], run[k + 1])) - BrickShell.RUN * 0.5)
+	var pier: Array = _place.layout()["wall"]["gate"].get("pier", [1.2, 3.4])
+	for q: Array in ring["piers"]:
+		var along: Vector2 = q[1]
+		var off: Vector2 = p - (q[0] as Vector2)
+		var local := Vector2(absf(off.dot(along)), absf(off.dot(along.orthogonal()))) - Vector2.ONE * float(pier[0]) * 0.5
+		best = minf(best, Vector2(maxf(local.x, 0.0), maxf(local.y, 0.0)).length() + minf(maxf(local.x, local.y), 0.0))
+	return best
+
+## The middle of the ring's gate or breach.
+func _opening(which: String) -> Vector2:
+	var ends: Array = _ring()[which]
+	return ((ends[0] as Vector2) + (ends[1] as Vector2)) * 0.5
+
+## Rework 1: each building's floor is its own stamp's level (within 0.02 m),
+## its walls start SUNK under it (no plinth sinks it in the sand), and the
+## ground under its whole footprint is that level. Each garden sits on its
+## own stamp's level; each run of the wall follows the ground.
 func test_every_piece_sits_on_the_ground():
 	await _hold_over(0, 0, 60.0)
 	var layout := _place.layout()
-	var lowest := {}
+	var by_id := {}
 	for p: Dictionary in _pieces():
-		lowest[p["id"]] = float(p["lowest"])
+		by_id[p["id"]] = p
 	var checked := 0
 	for s: Dictionary in layout["shells"]:
-		var want := _lowest_under_disc(s["at"], float(s["radius"])) if s["kind"] == "round" \
+		var id := str(s["id"])
+		assert_true(by_id.has(id), "shell %s was built" % id)
+		if not by_id.has(id):
+			continue
+		var level := _ground_y(float(s["at"][0]), float(s["at"][1]))
+		var floor_y := float(by_id[id].get("floor", INF))
+		assert_almost_eq(floor_y, level, 0.02, "%s's floor is its stamp's level" % id)
+		assert_almost_eq(float(by_id[id]["lowest"]), floor_y - BrickShell.SUNK, 0.02, "%s's walls start just under it" % id)
+		var under := _lowest_under_disc(s["at"], float(s["radius"])) if s["kind"] == "round" \
 			else _lowest_under_rect(s["at"], Vector2(float(s["size"][0]), float(s["size"][2])), float(s.get("yaw", 0)))
-		assert_true(lowest.has(s["id"]), "shell %s was built" % s["id"])
-		assert_almost_eq(float(lowest.get(s["id"], INF)), want, 0.1, "shell %s sits on the ground" % s["id"])
+		assert_almost_eq(under, level, 0.02, "%s: the ground under all of it is level" % id)
 		checked += 1
-	var runs: Array = layout["wall"]["runs"]
+	var runs: Array = _ring()["runs"]
 	for k in runs.size():
 		var id := "wall_%d" % k
-		assert_almost_eq(float(lowest.get(id, INF)), _lowest_along(runs[k]), 0.1, "%s follows the ground" % id)
+		assert_almost_eq(float(by_id.get(id, {}).get("lowest", INF)), _lowest_along(runs[k]) - BrickShell.SUNK, 0.1,
+			"%s follows the ground" % id)
 		checked += 1
-	var gardens: Array = layout["gardens"]
-	for k in gardens.size():
-		var g: Dictionary = gardens[k]
-		var id := "garden_%d" % k
-		var want := _lowest_under_rect(g["at"], Vector2(float(g["size"][0]), float(g["size"][1])), 0.0)
-		assert_almost_eq(float(lowest.get(id, INF)), want, 0.1, "%s sits on the ground" % id)
+	for g: Dictionary in layout["gardens"]:
+		var id := str(g["id"])
+		var level := _ground_y(float(g["at"][0]), float(g["at"][1]))
+		assert_almost_eq(float(by_id.get(id, {}).get("floor", INF)), level, 0.02, "%s is on its stamp's level" % id)
+		var under := _lowest_under_rect(g["at"], Vector2(float(g["size"][0]), float(g["size"][1])), 0.0)
+		assert_almost_eq(under, level, 0.02, "%s: the ground under it is level" % id)
 		checked += 1
-	assert_eq(checked, 7, "two shells, two runs, three gardens")
+	assert_eq(checked, 17, "twelve shells, two runs, three gardens")
 
-func _ray(from: Vector3, to: Vector3) -> Dictionary:
-	var query := PhysicsRayQueryParameters3D.create(_oasis().to_global(from), _oasis().to_global(to), BodyProxy.LAYER)
+func _ray(from: Vector3, to: Vector3, exclude: Array[RID] = []) -> Dictionary:
+	var query := PhysicsRayQueryParameters3D.create(_oasis().to_global(from), _oasis().to_global(to), BodyProxy.LAYER, exclude)
 	return _oasis().get_world_3d().direct_space_state.intersect_ray(query)
+
+## Whether the segment `from`-`to` meets the body `want`, whatever else lies
+## on the way (each other body met is left out and the ray cast again).
+func _meets(from: Vector3, to: Vector3, want: Node) -> bool:
+	var exclude: Array[RID] = []
+	for i in 8:
+		var hit := _ray(from, to, exclude)
+		if hit.is_empty():
+			return false
+		if hit["collider"] == want:
+			return true
+		exclude.append((hit["collider"] as CollisionObject3D).get_rid())
+	return false
 
 ## A point `height` m over the ground at layout [east, north].
 func _over(p: Vector2, height: float) -> Vector3:
 	return PlaceField.on_ground(_place, _terrain, p.x, p.y) + Vector3(0, height, 0)
 
-func test_the_wall_has_its_gap():
+## Rework 1: a full ring wall. A ray at 1 m from the pool outward, across the
+## wall's line, meets the wall in every direction but the gate's and the
+## breach's; those two are open; the gate faces the pad within 20 deg, and
+## the wall keeps off the pad's stamp.
+func test_the_wall_rings_the_village():
 	await _hold_over(0, 0, 60.0)
-	var wall: Dictionary = _place.layout()["wall"]
-	var runs: Array = wall["runs"]
-	var end_a: Array = runs[0][runs[0].size() - 1]
-	var end_b: Array = runs[1][0]
-	var a_end := Vector2(float(end_a[0]), float(end_a[1]))
-	var b_end := Vector2(float(end_b[0]), float(end_b[1]))
-	var gap := (a_end + b_end) * 0.5
-	var across := (b_end - a_end).normalized().orthogonal()
-	var at := _over(gap, 1.0)
-	var span := Vector3(across.x, 0, -across.y) * 5.0
-	var hit := _ray(at + span, at - span)
-	assert_true(hit.is_empty(), "nothing in the gap at 1 m: %s" % [hit.get("position")])
-	for run: Array in runs:
+	var wall_body := _oasis().get_node_or_null("Wall")
+	assert_not_null(wall_body, "the wall is its own body")
+	if wall_body == null:
+		return
+	assert_eq((wall_body as StaticBody3D).collision_layer, BodyProxy.LAYER)
+	var layout := _place.layout()
+	var wall: Dictionary = layout["wall"]
+	var ring_points: Array = wall["ring"]
+	assert_between(ring_points.size(), 12, 16, "a chunky polygon of 12 to 16 runs")
+	var radii := []
+	for p: Array in ring_points:
+		radii.append(Vector2(float(p[0]), float(p[1])).length())
+	assert_between(radii.min(), 50.5, 54.0, "its radius wanders, about 54 m")
+	assert_between(radii.max(), 54.0, 57.5, "by up to 3 m")
+	var ring := _ring()
+	var pier: Array = wall["gate"]["pier"]
+	var spans := []
+	for name in ["gate", "breach"]:
+		var ends: Array = ring[name]
+		var mid := _opening(name)
+		var gap := (ends[0] as Vector2).distance_to(ends[1])
+		var piers := float(pier[0]) if name == "gate" else 0.0
+		var width := gap - piers
+		gut.p("the %s at (%.1f, %.1f), %.2f m wide" % [name, mid.x, mid.y, width])
+		if name == "gate":
+			assert_between(width, 4.0, 5.0, "the gate is 4-5 m wide")
+		else:
+			assert_between(width, 7.0, 9.0, "the breach is 7-9 m wide")
+		# [bearing, how far out, the open half-width, the walled half-width]
+		spans.append([rad_to_deg(atan2(mid.x, mid.y)), mid.length(), width * 0.5 - 0.6, width * 0.5 + piers + 0.5])
+	var open := 0
+	var closed := 0
+	for k in 720:
+		var bearing := k * 0.5
+		var dir := Vector2(sin(deg_to_rad(bearing)), cos(deg_to_rad(bearing)))
+		var walled := true
+		var gap := false
+		for s: Array in spans:
+			var along := deg_to_rad(absf(wrapf(bearing - float(s[0]), -180.0, 180.0))) * float(s[1])
+			walled = walled and along > float(s[3])
+			gap = gap or along < float(s[2])
+		if not walled and not gap:
+			continue
+		var met := _meets(_over(dir * 44.0, 1.0), _over(dir * 64.0, 1.0), wall_body)
+		if gap:
+			assert_false(met, "open at bearing %.1f" % bearing)
+			open += 1
+		else:
+			assert_true(met, "the wall at bearing %.1f" % bearing)
+			closed += 1
+	gut.p("%d bearings walled, %d open" % [closed, open])
+	assert_gt(closed, 650, "walled nearly all round")
+	assert_gt(open, 6, "the gate and the breach are open")
+	# The gate faces the pad: its outward normal and the way to the pad's middle.
+	var g: Array = ring["gate"]
+	var gate_mid := _opening("gate")
+	var normal := ((g[1] as Vector2) - (g[0] as Vector2)).orthogonal().normalized()
+	if normal.dot(gate_mid) < 0.0:
+		normal = -normal
+	var pad := Vector2(float(layout["pad"]["at"][0]), float(layout["pad"]["at"][1]))
+	var off := rad_to_deg(normal.angle_to(pad - gate_mid))
+	gut.p("the gate faces %.1f deg off the pad" % off)
+	assert_lt(absf(off), 20.0, "the gate faces the pad")
+	var nearest := INF
+	for run: PackedVector2Array in ring["runs"]:
 		for k in run.size() - 1:
-			var a := Vector2(float(run[k][0]), float(run[k][1]))
-			var b := Vector2(float(run[k + 1][0]), float(run[k + 1][1]))
-			var side := (b - a).normalized().orthogonal()
-			var m := _over((a + b) * 0.5, 1.0)
-			var d := Vector3(side.x, 0, -side.y) * 3.0
-			var through := _ray(m + d, m - d)
-			assert_false(through.is_empty(), "the wall between %s and %s is solid" % [a, b])
-			if not through.is_empty():
-				assert_eq(through["collider"], _oasis().get_node("Brick"), "on the brick's body")
+			nearest = minf(nearest, pad.distance_to(Geometry2D.get_closest_point_to_segment(pad, run[k], run[k + 1])))
+	assert_gt(nearest, _stamp_named("pad").reach() + 3.0, "the wall keeps off the pad")
+	# The piers are thicker and taller than the wall.
+	assert_gt(float(pier[0]), BrickShell.RUN, "thicker")
+	assert_gt(float(pier[1]), float(wall.get("height", 2.6)), "taller")
+
+const SHELL_GAP := 3.0
+
+## The margin between two of the terrain's stamps, the earlier as the outer.
+func _margin(a: TerrainStamp, b: TerrainStamp) -> float:
+	if _terrain.stamps.find(a) > _terrain.stamps.find(b):
+		return SystemDesign.stamp_margin(b, a, _body.radius)
+	return SystemDesign.stamp_margin(a, b, _body.radius)
+
+## Rework 1: twelve buildings, 4 to enter (Part C), 6 whole shells and 2
+## crushed huts, each on its own stamp (keep 0, its footprint and an apron
+## within its flat part), keeping apart from every other stamp; none closer
+## than SHELL_GAP to another or to the wall.
+func test_twelve_buildings_on_their_own_ground():
+	var shells: Array = _place.layout()["shells"]
+	assert_eq(shells.size(), 12, "twelve buildings")
+	var enterable := []
+	var crushed := 0
+	var whole := 0
+	var round := 0
+	for s: Dictionary in shells:
+		if bool(s.get("enterable", false)):
+			enterable.append(s["id"])
+		elif s["kind"] == "crushed":
+			crushed += 1
+		else:
+			whole += 1
+		if s["kind"] == "round":
+			round += 1
+	enterable.sort()
+	assert_eq(enterable, ["comms", "home_3", "home_4", "workshop"], "the four Part C buildings")
+	assert_eq(whole, 6, "six whole shells")
+	assert_eq(crushed, 2, "two crushed huts")
+	assert_eq(round, 2, "two of them round")
+	assert_true(shells.any(func(s): return s["id"] == "home_5" and s["kind"] == "round"), "home 5 is one")
+	var ring := _ring()
+	var outlines := {}
+	for s: Dictionary in shells:
+		var id := str(s["id"])
+		outlines[id] = _outline(s)
+		var st := _stamp_named(id)
+		assert_not_null(st, "%s has its stamp" % id)
+		if st == null:
+			continue
+		var at := _place.local_dir(float(s["at"][0]), float(s["at"][1]), _body.radius)
+		assert_lt(st.metres_from(at, _body.radius), 0.05, "%s's stamp is under it" % id)
+		assert_eq(st.kind, TerrainStamp.Kind.FLATTEN)
+		assert_eq(st.keep, 0.0, "%s's ground is dead level" % id)
+		assert_eq(st.raise, 0.0)
+		var reach := 0.0
+		for p in outlines[id]:
+			reach = maxf(reach, p.distance_to(_at_of(s)))
+		assert_between(st.radius - reach, 1.2, 2.0, "%s: its footprint and an apron of about 1.5 m" % id)
+		assert_between(st.edge, 1.5, 2.0, "%s's edge" % id)
+		for other in _terrain.stamps:
+			if other != st and other.id != &"oasis_floor":
+				assert_gte(_margin(st, other), 0.3, "%s keeps apart from %s" % [id, other.id])
+	var ids := outlines.keys()
+	var tightest := INF
+	for i in ids.size():
+		var wall_gap := INF
+		for p in outlines[ids[i]]:
+			wall_gap = minf(wall_gap, _from_wall(p, ring))
+		assert_gte(wall_gap, SHELL_GAP, "%s keeps off the wall" % ids[i])
+		for j in range(i + 1, ids.size()):
+			var gap := INF
+			for p in outlines[ids[i]]:
+				for q in outlines[ids[j]]:
+					gap = minf(gap, p.distance_to(q))
+			tightest = minf(tightest, gap)
+			assert_gte(gap, SHELL_GAP, "%s and %s" % [ids[i], ids[j]])
+	gut.p("the closest two buildings are %.1f m apart" % tightest)
+	# Nor does the wall cross any building's stamp.
+	for s: Dictionary in shells:
+		var st := _stamp_named(str(s["id"]))
+		if st != null:
+			assert_gt(_from_wall(_at_of(s), ring), st.reach(), "the wall keeps off %s's stamp" % s["id"])
+
+## Rework 1: a 1.2 m wide walk from the gate to the pool, and from the breach
+## to the pool, meets nothing solid in the village: no shell, no wall, no
+## palm. Rays at knee, waist and head height across and along the way.
+func test_the_lanes_are_open():
+	await _hold_over(0, 0, 60.0)
+	var solid := [_oasis().get_node("Brick"), _oasis().get_node("Wall"), _oasis().get_node("Palms")]
+	for name in ["gate", "breach"]:
+		var mid := _opening(name)
+		var from := mid + mid.normalized() * 3.0
+		var to := mid.normalized() * 17.0
+		var across := (to - from).normalized().orthogonal() * 0.6
+		var n := ceili(from.distance_to(to) / 0.5)
+		var blocked := 0
+		for k in n + 1:
+			var p := from.lerp(to, float(k) / n)
+			var q := from.lerp(to, float(mini(k + 1, n)) / n)
+			for h in [0.3, 1.0, 1.8]:
+				var pairs := [[_over(p - across, h), _over(p + across, h)]]
+				if k < n:
+					for side in [-1.0, 0.0, 1.0]:
+						pairs.append([_over(p + across * side, h), _over(q + across * side, h)])
+				for pair: Array in pairs:
+					for body in solid:
+						if _meets(pair[0], pair[1], body):
+							blocked += 1
+							gut.p("the %s's lane meets %s at (%.1f, %.1f), %.1f m up" % [name, body.name, p.x, p.y, h])
+		assert_eq(blocked, 0, "the way from the %s to the pool is open" % name)
 
 ## The tracks' prints: each print's vertices, in the place's frame.
 func _prints(id: String) -> Array:
@@ -377,19 +621,20 @@ func _centre(print_vertices: PackedVector3Array) -> Vector3:
 		c += v
 	return c / maxf(print_vertices.size(), 1)
 
-func test_the_tracks_lead_out_of_the_gap():
+func test_the_tracks_lead_out_of_the_breach():
 	await _hold_over(0, 0, 60.0)
-	var gap_at: Array = _place.layout()["wall"]["gap"]
-	var gap := Vector2(float(gap_at[0]), float(gap_at[1]))
+	var gap := _opening("breach")
+	var ring := _ring()
 	var prints := _prints("out")
 	assert_gt(prints.size(), 100, "a long line of prints")
 	if prints.is_empty():
 		return
 	var first := _centre(prints[0])
-	assert_lt(Vector2(first.x, -first.z).distance_to(gap), 6.0, "the first by the gap")
+	assert_lt(Vector2(first.x, -first.z).distance_to(gap), 6.0, "the first by the breach")
 	var far := 0.0
 	var mean := Vector2.ZERO
 	var off_ground := 0
+	var under_wall := 0
 	for p: PackedVector3Array in prints:
 		var c := _centre(p)
 		var off := Vector2(c.x, -c.z) - gap
@@ -401,47 +646,63 @@ func test_the_tracks_lead_out_of_the_gap():
 		for v in p:
 			if absf(v.y - _ground_y(v.x, -v.z)) > 0.05:
 				off_ground += 1
+			if _from_wall(Vector2(v.x, -v.z), ring) < 0.2:
+				under_wall += 1
 	assert_eq(off_ground, 0, "every print's vertices are on the ground under them")
+	assert_eq(under_wall, 0, "no print runs under the wall")
 	mean /= prints.size()
-	assert_almost_eq(fposmod(rad_to_deg(atan2(mean.x, mean.y)), 360.0), 60.0, 10.0, "they bear 60 from the gap")
+	assert_almost_eq(fposmod(rad_to_deg(atan2(mean.x, mean.y)), 360.0), 60.0, 10.0, "they bear 60 from the breach")
 	assert_between(far, 350.0, 400.0, "the last is 350-400 m out")
-	var hut: Dictionary = _place.layout()["shells"].filter(func(s): return s["kind"] == "crushed")[0]
+	# In from the breach toward the crushed huts: the nearest one ends them.
+	var hut: Dictionary = {}
+	for s: Dictionary in _place.layout()["shells"]:
+		if s["kind"] == "crushed" and (hut.is_empty() or _at_of(s).distance_to(gap) < _at_of(hut).distance_to(gap)):
+			hut = s
 	var inward := _prints("in")
-	assert_gt(inward.size(), 4, "and a short set in to the crushed hut")
-	if not inward.is_empty():
-		var last := _centre(inward[inward.size() - 1])
-		var hut_at := Vector2(float(hut["at"][0]), float(hut["at"][1]))
-		var to_hut := Vector2(last.x, -last.z).distance_to(hut_at)
-		# Ending by the hut but short of its stamp's lip (hut_crushed, reach
-		# 9 m): coarser chunks cut across a lip, so a print on it is half
-		# buried there (test_the_tracks_lie_on_the_drawn_ground). Since the
-		# prints grew to 3.6 m (Checkpoint B) the last one's middle is about
-		# 13 m off, so its heel stays clear of the lip.
-		var lip := 0.0
-		var hut_dir := _place.local_dir(hut_at.x, hut_at.y, _body.radius)
-		for st: TerrainStamp in _terrain.stamps:
-			if st.metres_from(hut_dir, _body.radius) < 1.0:
-				lip = st.reach()
-		assert_almost_eq(lip, 9.0, 0.01, "the hut's stamp reaches 9 m")
-		assert_between(to_hut, 10.5, 13.5, "ending by the hut")
-		var nearest := INF
-		for p: PackedVector3Array in inward:
-			for v in p:
-				nearest = minf(nearest, Vector2(v.x, -v.z).distance_to(hut_at))
-		assert_gt(nearest, lip + 0.5, "every print short of its stamp's lip")
+	assert_gt(inward.size(), 4, "and a short set in toward the crushed huts")
+	if inward.is_empty() or hut.is_empty():
+		return
+	var hut_at := _at_of(hut)
+	var last := _centre(inward[inward.size() - 1])
+	var to_hut := Vector2(last.x, -last.z).distance_to(hut_at)
+	# Ending by the hut but short of its stamp's lip: coarser chunks cut across
+	# a lip, so a print on it is half buried there
+	# (test_the_tracks_lie_on_the_drawn_ground).
+	var lip := _stamp_named(str(hut["id"])).reach()
+	gut.p("the last print in is %.1f m from %s (its stamp reaches %.1f m)" % [to_hut, hut["id"], lip])
+	assert_lt(to_hut, lip + 5.0, "ending by %s" % hut["id"])
+	var nearest := INF
+	for p: PackedVector3Array in inward:
+		for v in p:
+			nearest = minf(nearest, Vector2(v.x, -v.z).distance_to(hut_at))
+			if _from_wall(Vector2(v.x, -v.z), ring) < 0.2:
+				under_wall += 1
+	assert_gt(nearest, lip + 0.5, "every print short of its stamp's lip")
+	assert_eq(under_wall, 0, "and none under the wall")
+	# No print lies across any stamp's lip but the floor's.
+	for id in ["out", "in"]:
+		for p: PackedVector3Array in _prints(id):
+			for st in _terrain.stamps:
+				if st.id == &"oasis_floor":
+					continue
+				var inside := 0
+				for v in p:
+					if st.metres_from(_place.local_dir(v.x, -v.z, _body.radius), _body.radius) < st.reach() + 0.5:
+						inside += 1
+				assert_eq(inside, 0, "a %s print on %s's ground" % [id, st.id])
 
 ## The ground drawn under each print, not height_at: beyond the near chunks
 ## the world draws coarser quads (5-10 m at 150-400 m), which stray from
 ## height_at between their corners. For the chunks really drawn with the
-## starter held over the gap, and for the leaves the surface would choose
-## from the pad, the lookout's top and 300 m over the oasis, every vertex of
+## starter held over the breach, and for the leaves the surface would choose
+## from the pad, the ledge's top and 300 m over the oasis, every vertex of
 ## every print lies over the drawn triangle under it (never buried) and no
 ## more than 8 cm over it (never floating).
 const TRACK_OVER_DRAWN := [0.005, 0.08]
 
 func test_the_tracks_lie_on_the_drawn_ground():
-	var gap_at: Array = _place.layout()["wall"]["gap"]
-	await _hold_over(float(gap_at[0]), float(gap_at[1]), 3.0)
+	var gap := _opening("breach")
+	await _hold_over(gap.x, gap.y, 3.0)
 	var surface: WorldSurface = (_root.star_system.proxy(_body.id) as BodyProxy).surface()
 	assert_not_null(surface)
 	if surface == null:
@@ -449,15 +710,16 @@ func test_the_tracks_lie_on_the_drawn_ground():
 	surface.finish()
 	var depth_max := CubeSphere.depth_for(_body.radius)
 	var height_at := func(d: Vector3) -> float: return _terrain.height_at(d)
-	var leaves := {"drawn, held over the gap": surface.visible_chunks()}
-	for spot: Array in [["the pad's eye", -80.0, -40.0, 1.6], ["the lookout's top", -19.5, 45.6, 9.6],
+	var leaves := {"drawn, held over the breach": surface.visible_chunks()}
+	var ledge := _stamp_named("ledge")
+	var ledge_at := _place.frame().inverse() * (ledge.centre - _place.dir()) * _body.radius
+	for spot: Array in [["the pad's eye", -80.0, -40.0, 1.6], ["the ledge's top", ledge_at.x, -ledge_at.z, 1.6],
 			["300 m over the oasis", 0.0, 0.0, 300.0]]:
 		var d := _place.local_dir(spot[1], spot[2], _body.radius)
 		var focus := d * (_body.radius + _terrain.height_at(d) + float(spot[3]))
 		leaves[spot[0]] = WorldSurface.select(_body.radius, _terrain.relief, depth_max, focus, {}, {}, height_at)[0]
 	var frame := _place.frame()
 	var origin := PlaceField.origin_of(_place, _terrain)
-	var gap := Vector2(float(gap_at[0]), float(gap_at[1]))
 	for seen: String in leaves:
 		var drawn := {}
 		for k: Vector4i in leaves[seen]:
@@ -490,144 +752,38 @@ func test_the_tracks_lie_on_the_drawn_ground():
 		assert_gt(lo, TRACK_OVER_DRAWN[0], "%s: no print is buried in the drawn ground" % seen)
 		assert_lt(hi, TRACK_OVER_DRAWN[1], "%s: and none floats over it" % seen)
 
-## Each stone's top (its highest point) in the place's frame.
-func _stone_tops() -> Array:
-	var outcrop := _oasis().get_node("Outcrop") as Node3D
-	var tops := []
-	for c in outcrop.find_children("*", "CollisionShape3D", true, false):
-		var shape := (c as CollisionShape3D).shape as ConvexPolygonShape3D
-		var to_place := _oasis().global_transform.affine_inverse() * (c as CollisionShape3D).global_transform
-		var top := Vector3(0, -INF, 0)
-		for p in shape.points:
-			var q := to_place * p
-			if q.y > top.y:
-				top = q
-		tops.append(top)
-	return tops
-
-## The stones' tops open to the sky (nothing lies over them, so you can stand
-## there) are the outcrop's tops; a step's top half under another stone is not.
-## From the floor (a top at most 0.7 m over the ground beside it), a chain of
-## them, each at most 0.7 m over the last and at most 2.5 m from it, reaches a
-## top at least 7 m over the ground under it.
-func test_the_outcrop_can_be_climbed():
-	await _hold_over(0, 0, 60.0)
-	var outcrop := _oasis().get_node("Outcrop") as Node3D
-	var body := outcrop.get_node("Stones") as StaticBody3D
-	assert_eq(body.collision_layer, BodyProxy.LAYER, "solid as the ground's boulders are")
-	var tops := []
-	for t: Vector3 in _stone_tops():
-		var down := _ray(t + Vector3(0, 3, 0), t - Vector3(0, 1, 0))
-		if not down.is_empty() and absf(_oasis().to_local(down["position"]).y - t.y) < 0.08:
-			tops.append(t)
-	assert_gt(tops.size(), 8, "big stones and steps, open to the sky")
-	var reached := {}
-	var queue := []
-	for i in tops.size():
-		var t: Vector3 = tops[i]
-		if t.y - _ground_y(t.x, -t.z) <= 0.7:
-			reached[i] = true
-			queue.append(i)
-	assert_false(queue.is_empty(), "a first step off the floor")
-	while not queue.is_empty():
-		var i: int = queue.pop_front()
-		for j in tops.size():
-			if reached.has(j):
-				continue
-			var a: Vector3 = tops[i]
-			var b: Vector3 = tops[j]
-			if b.y - a.y <= 0.7 and Vector2(a.x - b.x, a.z - b.z).length() <= 2.5:
-				reached[j] = true
-				queue.append(j)
-	var best := -INF
-	for i in reached:
-		var t: Vector3 = tops[i]
-		best = maxf(best, t.y - _ground_y(t.x, -t.z))
-	gut.p("%d tops open, %d reached, the highest %.2f m up" % [tops.size(), reached.size(), best])
-	assert_gt(best, 7.0, "a chain of tops reaches 7 m up")
-	# The lookout: the highest top of all. You stand on it: reached by the
-	# chain, or walked up to from a top the chain reaches, over the stones'
-	# own colliders at no more than WALK_SLOPE, and level enough at its top.
-	var lookout := 0
-	for i in tops.size():
-		if (tops[i] as Vector3).y > (tops[lookout] as Vector3).y:
-			lookout = i
-	var top: Vector3 = tops[lookout]
-	var up := top.y - _ground_y(top.x, -top.z)
-	assert_gt(up, 7.0, "the lookout is over 7 m up")
-	var walked := reached.has(lookout)
-	var how := "the chain reaches it" if walked else "not reached"
-	for i in reached:
-		if walked:
-			break
-		var from: Vector3 = tops[i]
-		var steepest := _walk_steepest(from, top)
-		if steepest <= WALK_SLOPE:
-			walked = true
-			how = "walked up from the top %.2f m up, %.1f m off, no steeper than %.0f deg" % [
-				from.y - _ground_y(from.x, -from.z), Vector2(from.x - top.x, from.z - top.z).length(), steepest]
-	gut.p("the lookout %.2f m up: %s; its top %.0f deg across" % [up, how, _steepest_round(top, 0.6)])
-	assert_true(walked, "you can climb onto the lookout's top")
-	assert_lt(_steepest_round(top, 0.6), WALK_SLOPE, "and stand there")
-
-## The steepest a walk may climb, deg: under the avatar's floor_max_angle (45).
-const WALK_SLOPE := 38.0
-
-## The steepest climb, deg, walking straight from `a` to `b` over whatever is
-## solid under the way (sampled every 0.2 m by rays down); INF if there is a
-## hole or a wall (a rise of more than 0.35 m between samples).
-func _walk_steepest(a: Vector3, b: Vector3) -> float:
-	var span := Vector2(b.x - a.x, b.z - a.z).length()
-	var n := maxi(1, ceili(span / 0.2))
-	var last := a.y
-	var steepest := 0.0
-	for k in range(1, n + 1):
-		var p := a.lerp(b, float(k) / n)
-		var hit := _ray(Vector3(p.x, maxf(a.y, b.y) + 3.0, p.z), Vector3(p.x, p.y - 20.0, p.z))
-		if hit.is_empty():
-			return INF
-		var y := _oasis().to_local(hit["position"]).y
-		var rise := y - last
-		if rise > 0.35:
-			return INF
-		steepest = maxf(steepest, rad_to_deg(atan2(rise, span / n)))
-		last = y
-	return steepest
-
-## The steepest the solid surface is round `p`, deg, within `radius`.
-func _steepest_round(p: Vector3, radius: float) -> float:
-	var steepest := 0.0
-	for k in 8:
-		var a := TAU * k / 8.0
-		var q := p + Vector3(cos(a), 0.0, sin(a)) * radius
-		var hit := _ray(Vector3(q.x, p.y + 3.0, q.z), Vector3(q.x, p.y - 5.0, q.z))
-		if hit.is_empty():
-			return INF
-		steepest = maxf(steepest, rad_to_deg(atan2(absf(p.y - _oasis().to_local(hit["position"]).y), radius)))
-	return steepest
-
-## Every item of call 7 this task builds has its piece (the enterable homes,
-## the workshop and the comms hut come with the buildings, later).
+## Every item of the layout this phase builds has its piece (the enterable
+## buildings are plain shells until Part C makes them bases).
 func test_the_village_is_whole():
 	await _hold_over(0, 0, 60.0)
 	var count := {}
 	for p: Dictionary in _pieces():
 		var kind := str(p["kind"])
 		count[kind] = int(count.get(kind, 0)) + 1
-	assert_eq(count.get("palm", 0), 7, "seven palms")
+	assert_eq(count.get("palm", 0), 10, "seven palms by the pool and three among the buildings")
 	assert_eq(count.get("garden", 0), 3, "three gardens")
 	assert_eq(count.get("pump", 0), 1, "the pump")
 	assert_eq(count.get("path", 0), 1, "the path")
-	assert_eq(count.get("shell", 0), 2, "home 5 and the crushed hut")
-	assert_eq(count.get("wall", 0), 2, "the wall's two runs")
-	assert_eq(count.get("rubble", 0), 1, "the rubble")
-	assert_eq(count.get("sail", 0), 2, "two shade sails")
-	var kinds := []
-	for s: Dictionary in _place.layout().get("shells", []):
-		kinds.append(s["kind"])
-	kinds.sort()
-	assert_eq(kinds, ["crushed", "round"], "home 5 is round, and the hut crushed")
+	assert_eq(count.get("shell", 0), 12, "twelve buildings")
+	assert_eq(count.get("wall", 0), 2, "the ring's two runs, between the gate and the breach")
+	assert_eq(count.get("pier", 0), 2, "the gate's two piers")
+	assert_eq(count.get("rubble", 0), 2, "rubble in and out of the breach")
+	assert_between(int(count.get("sail", 0)), 2, 3, "two or three shade sails")
 	assert_not_null(_oasis().get_node_or_null("Tracks_out"), "the tracks out")
 	assert_not_null(_oasis().get_node_or_null("Tracks_in"), "the tracks in")
-	assert_not_null(_oasis().get_node_or_null("Outcrop"), "the outcrop")
+	assert_null(_oasis().get_node_or_null("Outcrop"), "no outcrop: the ledge is ground")
 	assert_not_null(_oasis().get_node_or_null("Brick"), "the brick is solid")
+	assert_not_null(_oasis().get_node_or_null("Wall"), "and the wall")
+	# The items: the crate by a crushed hut, the canister by the path inside the gate.
+	var items := {}
+	for e: Dictionary in _place.layout()["items"]:
+		items[e["id"]] = _at_of(e)
+	var hut := INF
+	for s: Dictionary in _place.layout()["shells"]:
+		if s["kind"] == "crushed":
+			hut = minf(hut, _at_of(s).distance_to(items.get("crate_hut", Vector2.INF)))
+	assert_lt(hut, 8.0, "the crate is by a crushed hut")
+	var gate_mid := _opening("gate")
+	var canister: Vector2 = items.get("canister_path", Vector2.INF)
+	assert_lt(canister.length(), gate_mid.length(), "the canister is inside the gate")
+	assert_lt(canister.distance_to(gate_mid), 10.0, "near it")

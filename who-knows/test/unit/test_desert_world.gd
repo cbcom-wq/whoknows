@@ -72,10 +72,70 @@ func test_the_oasis_is_placed() -> void:
 	assert_eq(_place.name, "OASIS")
 	assert_true(_place.beacon)
 	assert_eq(_place.heading, 0.0)
-	assert_eq(_terrain.stamps.size(), 6, "six stamps")
-	for id in [&"oasis_floor", &"pool_bank", &"pad", &"pool", &"garden_dry", &"hut_crushed"]:
+	# Rework 1: the floor, the pool's bank, the pad, the pool, the ledge, and one
+	# under each of the twelve buildings and the three gardens.
+	assert_eq(_terrain.stamps.size(), 20, "twenty stamps")
+	var ids: Array[StringName] = [&"oasis_floor", &"pool_bank", &"pad", &"pool", &"ledge"]
+	var layout := _place.layout()
+	for s: Dictionary in layout.get("shells", []):
+		ids.append(StringName(s["id"]))
+	for g: Dictionary in layout.get("gardens", []):
+		ids.append(StringName(g["id"]))
+	assert_eq(ids.size(), 20, "twelve shells and three gardens in the layout")
+	for id in ids:
 		assert_not_null(_stamp(id), str(id))
 	assert_eq(_system.design.problems(_system), PackedStringArray(), "the design is valid")
+
+## Rework 1: every pair of stamps nests or keeps apart (the design's problems
+## check) with at least MARGIN to spare.
+const MARGIN := 0.3
+
+func test_every_stamp_keeps_a_margin() -> void:
+	var worst := INF
+	var where := ""
+	for i in _terrain.stamps.size():
+		for j in range(i + 1, _terrain.stamps.size()):
+			var a := _terrain.stamps[i]
+			var b := _terrain.stamps[j]
+			var m := SystemDesign.stamp_margin(a, b, _terrain.radius)
+			assert_gte(m, MARGIN, "%s and %s" % [a.id, b.id])
+			if m < worst:
+				worst = m
+				where = "%s and %s" % [a.id, b.id]
+	gut.p("the tightest stamps: %s, %.2f m to spare" % [where, worst])
+
+## Rework 1: the outcrop is replaced by a low sandstone ledge, a MESA north of
+## the village outside its wall, nested in the floor's flat part.
+func test_the_ledge_stands_north_outside_the_wall() -> void:
+	var ledge := _stamp(&"ledge")
+	var floor_stamp := _stamp(&"oasis_floor")
+	if ledge == null or floor_stamp == null or _place == null:
+		fail_test("the ledge is not there")
+		return
+	assert_eq(ledge.kind, TerrainStamp.Kind.MESA, "a mesa")
+	assert_between(ledge.height, 5.0, 7.0, "about 6 m up")
+	assert_between(ledge.radius, 12.0, 16.0, "about 14 m across its top's radius")
+	assert_between(ledge.edge, 5.0, 6.0, "its edge")
+	assert_eq(ledge.ground, &"ground_high", "its top is the world's mesa-top ground")
+	var from_floor := floor_stamp.metres_from(ledge.centre, _terrain.radius)
+	assert_lte(from_floor + ledge.reach(), floor_stamp.radius - MARGIN, "nested in the floor's flat part")
+	var layout := _place.layout()
+	assert_false(layout.has("outcrop"), "the outcrop is gone")
+	# North of the pool, and its foot clear of the wall's farthest point.
+	var off := ledge.centre - _place.dir()
+	var frame := _place.frame()
+	var local := frame.inverse() * off
+	assert_lt(local.z, 0.0, "north of the pool")
+	var far := 0.0
+	for p: Array in layout["wall"]["ring"]:
+		far = maxf(far, Vector2(float(p[0]), float(p[1])).length())
+	assert_gt(from_floor - ledge.reach(), far + 3.0, "outside the wall")
+	# Its top is flat at its level + height.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5
+	for i in 50:
+		var d := _disc_sample(ledge.centre, rng, 0.0, ledge.radius - 0.1)
+		assert_almost_eq(_terrain.height_at(d), ledge.level + ledge.height, FLAT, "a flat top")
 
 func test_the_sun_stands_low_over_the_oasis() -> void:
 	assert_not_null(_place, "p3 has the place oasis")
@@ -119,7 +179,7 @@ func test_the_pad_and_the_bank_are_flat_and_the_floor_rolls() -> void:
 	var heights := PackedFloat64Array()
 	while heights.size() < 400:
 		var d := _disc_sample(floor_stamp.centre, rng, 30.0, 115.0)
-		if pad.metres_from(d, _terrain.radius) <= pad.reach() or bank.metres_from(d, _terrain.radius) <= bank.reach():
+		if _on_a_stamp(d):
 			continue
 		heights.append(_terrain.height_at(d))
 	var mean := 0.0
@@ -135,13 +195,21 @@ func test_the_pad_and_the_bank_are_flat_and_the_floor_rolls() -> void:
 	var steepest := 0.0
 	for i in 400:
 		var d := _disc_sample(floor_stamp.centre, rng, 30.0, 115.0)
-		if pad.metres_from(d, _terrain.radius) <= pad.reach() or bank.metres_from(d, _terrain.radius) <= bank.reach():
+		if _on_a_stamp(d):
 			continue
 		var turn := rng.randf() * TAU
 		var step := _terrain.height_at(_toward(d, turn, 2.0)) - _terrain.height_at(d)
 		steepest = maxf(steepest, rad_to_deg(atan(absf(step) / 2.0)))
 	gut.p("steepest 2 m step on the floor: %.1f deg" % steepest)
 	assert_lte(steepest, MAX_FLOOR_SLOPE_DEG, "the floor stays walkable")
+
+## Whether `d` is within reach (and 2 m) of any stamp but the floor: the
+## pad, the bank, the ledge, each building's and garden's.
+func _on_a_stamp(d: Vector3) -> bool:
+	for s in _terrain.stamps:
+		if s.id != &"oasis_floor" and s.metres_from(d, _terrain.radius) <= s.reach() + 2.0:
+			return true
+	return false
 
 ## R3: the file and the stamp name one pad radius.
 func test_the_pad_matches_the_oasis_file() -> void:

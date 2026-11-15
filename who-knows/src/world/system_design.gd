@@ -9,19 +9,21 @@ extends RefCounted
 ## {"seed": 1337, "bodies": {"p3": {"tweak": {...}, "stamps": [...], "places": [...]}}}
 ##
 ## Tweak keys: name, radius, gravity, palette (a palette's name), archetype and
-## atmosphere (enum names). Stamp keys: id, kind (flatten / basin), lat + lon or
-## place + at ([east, north] in that place's frame), radius, edge, level, raise, keep,
-## floor, depth, ground. Place keys: id, name, lat, lon, heading, beacon.
+## atmosphere (enum names). Stamp keys: id, kind (flatten / basin / mesa), lat +
+## lon or place + at ([east, north] in that place's frame), radius, edge, level,
+## raise, keep, floor, depth, height (a mesa's top over its level), ground.
+## Place keys: id, name, lat, lon, heading, beacon.
 
 const DIR := "res://data/systems"
 
 const TWEAK_KEYS: Array[String] = ["name", "radius", "gravity", "palette", "archetype", "atmosphere"]
 const STAMP_KEYS: Array[String] = ["id", "kind", "lat", "lon", "place", "at", "radius", "edge", "level",
-	"raise", "keep", "floor", "depth", "ground"]
+	"raise", "keep", "floor", "depth", "height", "ground"]
 const PLACE_KEYS: Array[String] = ["id", "name", "lat", "lon", "heading", "beacon"]
 const BODY_KEYS: Array[String] = ["tweak", "stamps", "places"]
 ## A stamp's kind as the file spells it.
-const KINDS := {"flatten": TerrainStamp.Kind.FLATTEN, "basin": TerrainStamp.Kind.BASIN}
+const KINDS := {"flatten": TerrainStamp.Kind.FLATTEN, "basin": TerrainStamp.Kind.BASIN,
+	"mesa": TerrainStamp.Kind.MESA}
 
 ## Every design in DIR by seed, filled on the first for_seed call (SystemRecipe
 ## makes the starting system on the main thread before any worker); workers
@@ -214,6 +216,7 @@ func _stamps(body_id: StringName, world_radius: float, errors: PackedStringArray
 		s.keep = float(data.get("keep", 0.0))
 		s.floor_radius = float(data.get("floor", 0.0))
 		s.depth = float(data.get("depth", 0.0))
+		s.height = float(data.get("height", 0.0))
 		s.ground = StringName(str(data.get("ground", "")))
 		if data.has("place"):
 			var found: PlaceDesign = null
@@ -238,6 +241,9 @@ func _stamps(body_id: StringName, world_radius: float, errors: PackedStringArray
 		if s.keep < 0.0 or s.keep >= 1.0:
 			errors.append("%s: stamp %s has keep %s, outside 0 to 1" % [body_id, s.id, s.keep])
 			bad = true
+		if s.kind == TerrainStamp.Kind.MESA and (s.height <= 0.0 or s.edge <= 0.0):
+			errors.append("%s: mesa %s needs a height and an edge over 0" % [body_id, s.id])
+			bad = true
 		if not bad:
 			out.append(s)
 	return out
@@ -248,9 +254,13 @@ func _overlap_problems(body_id: StringName, stamps: Array[TerrainStamp], world_r
 		out: PackedStringArray) -> void:
 	for i in stamps.size():
 		for j in range(i + 1, stamps.size()):
-			var a := stamps[i]
-			var b := stamps[j]
-			var d := a.metres_from(b.centre, world_radius)
-			if d >= a.reach() + b.reach() or d + b.reach() <= a.radius:
-				continue
-			out.append("%s: stamps %s and %s neither keep apart nor nest" % [body_id, a.id, b.id])
+			if stamp_margin(stamps[i], stamps[j], world_radius) < 0.0:
+				out.append("%s: stamps %s and %s neither keep apart nor nest" % [body_id, stamps[i].id, stamps[j].id])
+
+## How far (m) the stamps `outer` and `inner` (in that order on their body) are
+## from breaking call 4: apart, the gap between their reaches; nested, how far
+## inside `outer`'s flat part `inner`'s reach lies; whichever is more. Under 0
+## is a problem.
+static func stamp_margin(outer: TerrainStamp, inner: TerrainStamp, world_radius: float) -> float:
+	var d := outer.metres_from(inner.centre, world_radius)
+	return maxf(d - outer.reach() - inner.reach(), outer.radius - d - inner.reach())

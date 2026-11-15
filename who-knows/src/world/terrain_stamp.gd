@@ -2,15 +2,16 @@ class_name TerrainStamp
 extends RefCounted
 
 ## A hand-made shape in a world's ground (docs/superpowers/specs/
-## 2026-11-03-desert-world-design.md §8.1): a flattened disc or a basin, blended
-## into WorldTerrain.height_at. It is data a design gives a world; the terrain
+## 2026-11-03-desert-world-design.md §8.1): a flattened disc, a basin or a mesa
+## (a raised flat top with a steep edge: Rework 1's ledge), blended into
+## WorldTerrain.height_at. It is data a design gives a world; the terrain
 ## reads it and never changes it (it keeps its own copies, with any level it
 ## works out), so a recipe stays read-only across threads.
 ##
 ## Two stamps on a body either keep apart (blend edges included) or one lies
 ## wholly inside the other's flat part; they apply in order, outer first.
 
-enum Kind { FLATTEN, BASIN }
+enum Kind { FLATTEN, BASIN, MESA }
 
 ## Ground cover is cleared this far past a stamp's flat part or rim (m).
 const CLEAR_MARGIN := 2.0
@@ -19,13 +20,16 @@ var id: StringName
 var kind: Kind = Kind.FLATTEN
 ## A unit direction from the world's centre.
 var centre := Vector3.UP
-## Metres: a FLATTEN's flat part, a BASIN's rim.
+## Metres: a FLATTEN's or a MESA's flat part, a BASIN's rim.
 var radius := 0.0
-## Metres: a FLATTEN's blend out from its flat part.
+## Metres: a FLATTEN's blend out from its flat part; a MESA's fall from its top
+## to the ground beneath, straight, as the world's own mesas' risers are.
 var edge := 0.0
-## A FLATTEN's height, metres above the world's radius_m. NAN: the terrain takes
-## the mean of the ground under the flat part.
+## A FLATTEN's or a MESA's level, metres above the world's radius_m. NAN: the
+## terrain takes the mean of the ground under the flat part.
 var level := NAN
+## A MESA's top stands this far (m) above its level.
+var height := 0.0
 ## A FLATTEN stands this far (m) above its level.
 var raise := 0.0
 ## A FLATTEN keeps this share (0 to 1) of the land's roll: inside its flat part
@@ -47,7 +51,11 @@ func metres_from(dir: Vector3, world_radius: float) -> float:
 
 ## How far from the centre this stamp changes the height (m).
 func reach() -> float:
-	return radius + edge if kind == Kind.FLATTEN else radius
+	return radius if kind == Kind.BASIN else radius + edge
+
+## Whether the terrain finds this stamp a level (a FLATTEN or a MESA).
+func has_level() -> bool:
+	return kind != Kind.BASIN
 
 ## A FLATTEN's pull toward its level at `m` metres from the centre: 1 within
 ## `radius`, easing to 0 over `edge`.
@@ -55,6 +63,14 @@ func weight(m: float) -> float:
 	if m <= radius:
 		return 1.0
 	return 1.0 - smoothstep(radius, radius + edge, m)
+
+## A MESA's share of its top at `m` metres from the centre: 1 within `radius`,
+## falling straight to 0 over `edge` (6 m over 5.5 m is 47 deg, past the rock
+## slope), with a crisp lip and foot as the world's mesas have.
+func fall(m: float) -> float:
+	if m <= radius:
+		return 1.0
+	return clampf(1.0 - (m - radius) / edge, 0.0, 1.0) if edge > 0.0 else 0.0
 
 ## A BASIN's depth at `m` metres from the centre: `depth` over its floor, easing
 ## to 0 at the rim.
@@ -86,6 +102,7 @@ func copy() -> TerrainStamp:
 	s.radius = radius
 	s.edge = edge
 	s.level = level
+	s.height = height
 	s.raise = raise
 	s.keep = keep
 	s.floor_radius = floor_radius

@@ -222,28 +222,30 @@ static func _toward(centre: Vector3, bearing: float, metres: float, p_radius: fl
 	var angle := metres / p_radius
 	return (centre * cos(angle) + (side * cos(bearing) + other * sin(bearing)) * sin(angle)).normalized()
 
-## The spot on the oasis floor, clear of the pad and the pool (and their
-## blends) by the hull's reach, where `base_height_at - height_at` is nearest
-## `want` metres. Returns [direction, that difference].
+## The spot on the oasis floor, clear of every other stamp (the pad, the pool,
+## the ledge, the buildings' and gardens': their blends too) by the hull's
+## reach, and outside the village's wall (Rework 1: OASIS_WALL m out at most),
+## where `base_height_at - height_at` is nearest `want` metres. Returns
+## [direction, that difference].
+const OASIS_WALL := 58.0
+
 func _oasis_spot(t: WorldTerrain, want: float) -> Array:
 	var floor_stamp: TerrainStamp = null
-	var pad: TerrainStamp = null
-	var pool: TerrainStamp = null
-	var bank: TerrainStamp = null
 	for s in t.stamps:
-		match s.id:
-			&"oasis_floor": floor_stamp = s
-			&"pad": pad = s
-			&"pool": pool = s
-			&"pool_bank": bank = s
+		if s.id == &"oasis_floor":
+			floor_stamp = s
 	var best := Vector3.ZERO
 	var best_off := INF
 	var best_diff := 0.0
 	var reach := 15.0
-	for r in range(20, int(floor_stamp.radius - reach), int(OASIS_STEP)):
+	for r in range(int(OASIS_WALL + reach), int(floor_stamp.radius - reach), int(OASIS_STEP)):
 		for k in 48:
 			var d := _toward(floor_stamp.centre, TAU * k / 48.0, float(r), t.radius)
-			if pad.metres_from(d, t.radius) < pad.reach() + reach or pool.metres_from(d, t.radius) < pool.radius + reach or bank.metres_from(d, t.radius) < bank.reach() + reach:
+			var clear := true
+			for s in t.stamps:
+				if s != floor_stamp and s.metres_from(d, t.radius) < s.reach() + reach:
+					clear = false
+			if not clear:
 				continue
 			var diff := t.base_height_at(d) - t.height_at(d)
 			if absf(diff - want) < best_off:
@@ -265,7 +267,7 @@ func test_a_ship_saved_where_the_floor_moved_settles():
 	assert_eq(_planet.id, &"p3", "the hop world is the desert world")
 	var surface: WorldSurface = (_root.star_system.proxy(_planet.id) as BodyProxy).surface()
 	var t := surface.terrain
-	assert_eq(t.stamps.size(), 6, "its terrain carries the oasis stamps")
+	assert_eq(t.stamps.size(), 20, "its terrain carries the oasis stamps")
 	var higher := _oasis_spot(t, OASIS_SPOT_DROP)
 	var lower := _oasis_spot(t, -OASIS_SPOT_DROP)
 	gut.p("old ground %.2f m over the floor at one spot, %.2f m at the other" % [higher[1], lower[1]])

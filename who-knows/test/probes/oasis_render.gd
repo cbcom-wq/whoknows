@@ -28,12 +28,12 @@ extends "res://test/probes/desert_render.gd"
 ##            (Review Focus 1: tilt under MAX_TILT_DEG, no damage).
 ##   village  Task 9's: the village outside, on foot with the eye 1.6 m over the
 ##            ground (the starter brought down on the pad and stepped out of
-##            first): home 5 (village_home5), the crushed hut
-##            (village_crushed), the wall's gap from inside (village_gap), the
-##            tracks out of it (village_tracks), the wall's north run
-##            (village_wall), a shade sail (village_sail), the outcrop
-##            (village_outcrop), the hut and the wall from the pool's side
-##            (village_from_the_pool); the frame rate there.
+##            first): home 5 (village_home5), the crushed huts
+##            (village_crushed), the wall's breach from inside (village_gap),
+##            the tracks out of it (village_tracks), the ring wall's north run
+##            (village_wall), a shade sail by the gate (village_sail), the
+##            sandstone ledge over the wall (village_ledge), the breach from
+##            the pool's side (village_from_the_pool); the frame rate there.
 ##   inside   Task 14's: inside a building (not built yet).
 ##   all      every set built so far.
 ##
@@ -107,45 +107,45 @@ const OASIS_SHEET := [
 	"foot_pad_and_pool", "foot_pool_edge", "foot_pool_edge_back", "foot_in_pool",
 	"warden_pad",
 	"village_home5", "village_crushed", "village_gap", "village_tracks",
-	"village_wall", "village_sail", "village_outcrop", "village_from_the_pool",
+	"village_wall", "village_sail", "village_ledge", "village_from_the_pool",
 	"village_pad_to_village", "village_pool_sunward", "village_pool_away", "village_lookout", "village_lookout_back",
 	"village_gardens", "village_approach_150", "village_approach_40", "village_top_down",
 ]
 ## The village set's views: [name, where you stand, what you look at], each
 ## [east, north] m in the oasis's layout.
 const VILLAGE_VIEWS := [
-	["village_home5", [-29.0, -25.0], [-20.0, -32.0]],
-	["village_crushed", [58.0, -18.0], [46.0, -28.0]],
-	["village_gap", [59.0, -6.0], [72.0, -12.0]],
-	["village_tracks", [70.5, -10.5], [110.0, 11.0]],
-	["village_wall", [46.0, 4.0], [66.0, 9.0]],
-	["village_sail", [-19.0, -8.0], [-27.0, -0.5]],
-	["village_outcrop", [-10.0, 25.0], [-19.5, 45.6]],
-	["village_from_the_pool", [14.0, -12.0], [50.0, -24.0]],
+	["village_home5", [-12.0, -30.0], [-5.1, -41.7]],
+	["village_crushed", [42.0, -8.0], [27.0, -22.0]],
+	["village_gap", [43.0, -4.0], [64.0, -6.0]],
+	["village_tracks", [57.5, -3.0], [92.0, 17.0]],
+	["village_wall", [0.0, 40.0], [-7.4, 53.0]],
+	["village_sail", [-30.0, -14.0], [-40.0, -20.0]],
+	["village_ledge", [-10.0, 28.0], [-21.2, 79.2]],
+	["village_from_the_pool", [14.0, -12.0], [52.0, -6.4]],
 ]
 
 ## Coming in over the oasis along the tracks, seated: at each of these heights
 ## (m), this many heights back from the village's middle, along the tracks' line.
 const APPROACH_HEIGHTS: Array[float] = [150.0, 40.0]
 const APPROACH_BACK := 1.4
-## The gap in the wall, where the tracks begin, and the tracks' bearing (deg),
-## [east, north] m; the village's middle, to look at.
-const GAP_AT := [68.4, -12.0]
+## The breach in the ring wall, where the tracks begin, and the tracks'
+## bearing (deg), [east, north] m; the village's middle, to look at.
+const GAP_AT := [52.0, -6.4]
 const TRACKS_BEARING := 60.0
 const VILLAGE_MIDDLE := [30.0, -10.0]
-## The outcrop's lookout: the cap stone's [east, north] m in the layout (the
-## outcrop at (-19.5, 45.6), the first stone 7 m east and 1 m north of its
-## middle), and the height over the ground you are put at (cap about 8.3 m).
-const LOOKOUT_AT := [-12.5, 46.6]
-const LOOKOUT_DROP_FROM := 9.5
+## The ledge's lookout: the middle of the mesa `ledge`'s flat top, [east,
+## north] m in the layout (Rework 1), and the height over the ground there you
+## are put at (the top is the ground, 6 m over the floor round it).
+const LOOKOUT_AT := [-21.2, 79.2]
+const LOOKOUT_DROP_FROM := 1.6
 ## The top-down render's height, m, over its middle [east, north] m.
 const TOP_DOWN_HIGH := 250.0
-const TOP_DOWN_AT := [-5.0, -5.0]
+const TOP_DOWN_AT := [-15.0, 10.0]
 ## Review Focus 1: the starter put down 12 m up over each of these, [what,
 ## [east, north] m].
 const SET_DOWNS := [
 	["across the floor's blend, 130 m south of the pool", [0.0, -130.0]],
-	["onto the crushed hut", [46.0, -28.0]],
+	["onto the crushed hut", [32.2, -16.1]],
 ]
 const SET_DOWN_FROM := 12.0
 
@@ -268,13 +268,13 @@ func _more_foot_views() -> void:
 	_face(-_sun_flat)
 	await _seconds(0.5)
 	await _shot("village_pool_away")
-	await _foot_look("village_gardens", [19.0, -11.5], [32.0, -11.5])
+	await _foot_look("village_gardens", [22.0, -2.0], [32.7, 4.6])
 	await _lookout()
 	# On foot in the village, the frame rate over 10 s.
-	await _foot_look("village_from_the_pool_fps", [14.0, -12.0], [50.0, -24.0])
-	await _reading_for("on foot in the village by the pool, looking at the hut and the wall", LANDED_SECONDS)
+	await _foot_look("village_from_the_pool_fps", [14.0, -12.0], [52.0, -6.4])
+	await _reading_for("on foot in the village by the pool, looking at the breach", LANDED_SECONDS)
 
-## Up on the outcrop's cap stone, looking out north over the dunes.
+## Up on the ledge's flat top, looking out north over the dunes.
 func _lookout() -> void:
 	var at := _oasis.local_dir(LOOKOUT_AT[0], LOOKOUT_AT[1], _planet.radius)
 	var to := _oasis.local_dir(LOOKOUT_AT[0], LOOKOUT_AT[1] + 200.0, _planet.radius)
@@ -288,7 +288,7 @@ func _lookout() -> void:
 	_face(way)
 	_avatar.set_head_pitch(deg_to_rad(-6.0))
 	await _seconds(0.5)
-	print("        the lookout: your feet %.2f m over the ground there (the cap's top is about 8.3), %s" % [
+	print("        the lookout: your feet %.2f m over the ground there (the ledge's top is the ground), %s" % [
 		_gravity.altitude_at(_avatar.global_position), "on a floor" if _avatar.is_on_floor() else "NOT on a floor"])
 	await _shot("village_lookout")
 	# And back at the oasis from up there.
