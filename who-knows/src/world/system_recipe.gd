@@ -94,6 +94,8 @@ const DEBRIS_TILT := deg_to_rad(20.0)
 
 var seed: int
 var name: String
+## The hand-made changes to this system (data/systems), or null.
+var design: SystemDesign
 var star: SystemBody
 ## The star first, then each planet followed by its moons.
 var bodies: Array[SystemBody] = []
@@ -116,9 +118,15 @@ var _entry: UniversePoint
 var _targets: Array[WarpTarget] = []
 var _target_by_id := {}
 
-static func from_seed(p_seed: int) -> SystemRecipe:
+## `use_design` false gives the system as its seed rolls it, with no design.
+static func from_seed(p_seed: int, use_design := true) -> SystemRecipe:
+	return with_design(p_seed, SystemDesign.for_seed(p_seed) if use_design else null)
+
+## The system of `p_seed` with `p_design` (or none) applied.
+static func with_design(p_seed: int, p_design: SystemDesign) -> SystemRecipe:
 	var s := SystemRecipe.new()
 	s.seed = p_seed
+	s.design = p_design
 	s._make_star()
 	s._make_slots()
 	for i in s.slots.size():
@@ -236,6 +244,15 @@ func problems() -> PackedStringArray:
 			out.append("%s's debris leaves its place" % ps[k].id)
 	return out
 
+## The named places of every body's design.
+func places() -> Array[PlaceDesign]:
+	var out: Array[PlaceDesign] = []
+	if design == null:
+		return out
+	for b in bodies:
+		out.append_array(design.places_on(b.id))
+	return out
+
 ## The system as plain text, for tests and for the owner.
 func describe() -> String:
 	var lines := PackedStringArray(["%s (seed %d)" % [name, seed]])
@@ -319,6 +336,8 @@ func _make_planet(i: int) -> void:
 	p.kind = SystemBody.Kind.PLANET
 	p.seed = WorldSeed.sub(seed, StringName("slot_%d" % i))
 	p.recipe = WorldRecipe.from_seed(p.seed, WorldRecipe.Kind.PLANET)
+	if design != null:
+		design.apply_to(p.recipe, p.id)
 	p.name = p.recipe.name
 	p.radius = p.recipe.radius_m
 	p.well_radius = p.recipe.well_radius()
@@ -410,7 +429,12 @@ func _make_moons(i: int, p: SystemBody, room: float) -> Array:
 		m.parent_id = p.id
 		m.seed = WorldSeed.sub(seed, StringName("moon_%d_%d" % [i, k + 1]))
 		m.recipe = WorldRecipe.from_seed(m.seed, WorldRecipe.Kind.MOON)
-		m.name = WorldNames.moon(p.name, out.size())
+		if design != null:
+			var rolled := m.recipe.name
+			design.apply_to(m.recipe, m.id)
+			m.name = m.recipe.name if m.recipe.name != rolled else WorldNames.moon(p.name, out.size())
+		else:
+			m.name = WorldNames.moon(p.name, out.size())
 		m.radius = m.recipe.radius_m
 		m.well_radius = m.recipe.well_radius()
 		m.neighbourhood = m.well_radius + MOON_ROOM
@@ -540,6 +564,10 @@ func _make_targets() -> void:
 			t.radius = b.radius
 			t.edge = b.well_radius
 			t.limit = b.warp_limit
+			for place in places():
+				if place.body_id == b.id and place.beacon:
+					t.arrive = place.dir()
+					break
 			_targets.append(t)
 	_targets.append_array(clusters)
 	for t in _targets:

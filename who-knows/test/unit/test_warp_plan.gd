@@ -141,3 +141,107 @@ func test_a_clear_drop_out_stays_put():
 			assert_true(WarpPlan.stepped_clear(recipe, u, Vector3.FORWARD).is_equal_approx(u))
 			return
 	fail_test("no clear point among twenty")
+
+## The arrival over a place (desert world spec §8.2; phase 3 plan, Task 5).
+
+func _p3_target() -> WarpTarget:
+	return SystemRecipe.from_seed(1337).warp_target(&"p3")
+
+## The old maths, as they were before a target had a side: the line to the centre.
+func _old_plan(from: UniversePoint, t: WarpTarget) -> Dictionary:
+	var line := t.point.minus(from)
+	var to_centre := line.length()
+	var direction := line / maxf(to_centre, 0.001)
+	var distance := to_centre - t.limit
+	return {
+		"direction": direction,
+		"cost": WarpPlan.cost_of(distance),
+		"drop": from.plus(direction * maxf(distance, 0.0)),
+		"distance": distance,
+		"duration": WarpProfile.new(maxf(distance, 0.0)).duration,
+	}
+
+func test_targets_without_a_side_are_unchanged():
+	var system := SystemRecipe.from_seed(1337)
+	var from := system.entry()
+	var seen := 0
+	for t in system.warp_targets():
+		if t.id == &"p3":
+			continue
+		assert_eq(t.arrive, Vector3.ZERO, "%s has no side" % t.id)
+		var want := _old_plan(from, t)
+		var p := WarpPlan.check(from, Vector3.LEFT, t, system.warp_targets(), [], null)
+		assert_eq(p.direction, want["direction"], "%s's direction" % t.id)
+		assert_eq(p.cost, want["cost"], "%s's cost" % t.id)
+		assert_eq(p.distance, want["distance"], "%s's distance" % t.id)
+		assert_eq(p.duration, want["duration"], "%s's duration" % t.id)
+		assert_eq(p.drop.minus(want["drop"]).length(), 0.0, "%s's drop" % t.id)
+		assert_eq(p.to_centre, t.point.minus(from).length(), "%s's centre" % t.id)
+		seen += 1
+	assert_gt(seen, 10, "every other target of 1337 compared (it has 16)")
+
+func test_arrival_over_the_oasis():
+	var system := SystemRecipe.from_seed(1337)
+	var t := system.warp_target(&"p3")
+	var oasis: PlaceDesign
+	for p in system.places():
+		if p.id == &"oasis":
+			oasis = p
+	assert_lt(t.arrive.distance_to(oasis.dir()), 1e-9, "p3's side is the oasis")
+	var from := system.entry()
+	var u := from.minus(t.point).normalized()
+	var reach := from.minus(t.point).length()
+	var clamp_at := minf(WarpPlan.ARRIVE_MAX, acos(t.limit / reach) - WarpPlan.ARRIVE_SPARE)
+	var plan := WarpPlan.check(from, Vector3.LEFT, t, system.warp_targets(), [], null)
+	var drop_dir := plan.drop.minus(t.point).normalized()
+	assert_almost_eq(plan.drop.minus(t.point).length(), t.limit, 0.01, "drops at the limit")
+	if oasis.dir().angle_to(u) <= clamp_at:
+		assert_lt(rad_to_deg(drop_dir.angle_to(oasis.dir())), 1.0, "over the oasis")
+	else:
+		assert_almost_eq(drop_dir.angle_to(u), clamp_at, 1e-6, "at the clamp")
+		assert_almost_eq(drop_dir.angle_to(oasis.dir()), oasis.dir().angle_to(u) - clamp_at, 1e-6, "on the way to the oasis")
+
+func test_arrival_never_crosses_the_world():
+	var system := SystemRecipe.from_seed(1337)
+	var t := system.warp_target(&"p3")
+	var well := system.body(&"p3").well_radius
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 77
+	for i in 50:
+		var dir := Vector3(rng.randf_range(-1, 1), rng.randf_range(-1, 1), rng.randf_range(-1, 1)).normalized()
+		var from := t.point.plus(dir * t.limit * rng.randf_range(1.2, 20.0))
+		var p := WarpPlan.check(from, Vector3.LEFT, t, system.warp_targets(), [], null)
+		var length := p.drop.minus(from).length()
+		var at := 0.0
+		var nearest := INF
+		while at <= length:
+			nearest = minf(nearest, from.plus(p.direction * at).minus(t.point).length())
+			at += 1000.0
+		nearest = minf(nearest, p.drop.minus(t.point).length())
+		assert_gt(nearest, well, "point %d stays outside the well" % i)
+
+func test_aligning_follows_the_drop():
+	var t := _target(&"side", WarpTarget.Kind.PLANET, Vector3.ZERO, 16000.0)
+	t.arrive = Vector3.LEFT
+	var from := UniversePoint.at(40000, 0, 0)
+	var targets: Array[WarpTarget] = [t]
+	var on_centre := WarpPlan.check(from, Vector3.LEFT, t, targets, [], _store)
+	assert_gt(on_centre.off_line, WarpPlan.ALIGN, "the drop is well off the centre line")
+	assert_eq(on_centre.status, WarpPlan.Status.ALIGN)
+	assert_almost_eq(on_centre.to_centre, 40000.0, 0.01, "to_centre stays the distance to the centre")
+	var on_drop := WarpPlan.check(from, on_centre.direction, t, targets, [], _store)
+	assert_eq(on_drop.status, WarpPlan.Status.READY, on_drop.text())
+	assert_eq(on_drop.direction, on_centre.direction)
+	assert_almost_eq(on_drop.distance, on_drop.drop.minus(from).length(), 0.01)
+
+func test_inside_the_limit_is_close_with_or_without_a_side():
+	var system := SystemRecipe.from_seed(1337)
+	var sided := system.warp_target(&"p3")
+	var plain := system.warp_target(&"p2") if system.warp_target(&"p2") != null else system.warp_targets()[0]
+	for t in [sided, plain]:
+		var from: UniversePoint = t.point.plus(Vector3(t.limit * 0.5, 0.0, 0.0))
+		var p := WarpPlan.check(from, Vector3.LEFT, t, system.warp_targets(), [], null)
+		var want := _old_plan(from, t)
+		assert_eq(p.status, WarpPlan.Status.CLOSE, "%s: inside its limit" % t.id)
+		assert_eq(p.distance, want["distance"], "%s: the old maths" % t.id)
+		assert_eq(p.direction, want["direction"], "%s: the old direction" % t.id)

@@ -47,6 +47,35 @@ var into_low_power := false
 ## INSIDE: metres until you are clear of `blocker`'s limit.
 var clear_in := 0.0
 
+## A warp to a world with a side arrives at most this far round from the side you
+## come from, and never past the limb seen from `from` less ARRIVE_SPARE, so the
+## line to the drop never grazes the world (phase 3 plan, call 8).
+const ARRIVE_MAX := deg_to_rad(75.0)
+const ARRIVE_SPARE := deg_to_rad(5.0)
+
+## The unit direction from `target`'s centre the warp drops out along. With no
+## `arrive`, the way you come from. Otherwise `arrive`, turned toward that
+## direction until it is within minf(ARRIVE_MAX, acos(limit / distance) -
+## ARRIVE_SPARE) of it; the angle is measured at the centre, and acos(limit /
+## distance) is where the limb stands. From inside the limit (distance <= limit)
+## acos is undefined: there is no room to clamp, and it is the way you come from.
+static func arrival_dir(target: WarpTarget, from: UniversePoint) -> Vector3:
+	var away := from.minus(target.point)
+	var distance := away.length()
+	var toward := away / maxf(distance, 0.001)
+	if target.arrive.is_zero_approx() or distance <= target.limit:
+		return toward
+	var room := minf(ARRIVE_MAX, acos(target.limit / distance) - ARRIVE_SPARE)
+	if room <= 0.0:
+		return toward
+	var angle := target.arrive.angle_to(toward)
+	if angle <= room:
+		return target.arrive
+	var axis := target.arrive.cross(toward)
+	if axis.length_squared() < 1e-12:
+		axis = target.arrive.cross(Vector3.UP if absf(target.arrive.y) < 0.9 else Vector3.RIGHT)
+	return target.arrive.rotated(axis.normalized(), angle - room).normalized()
+
 static func cost_of(travel: float) -> int:
 	return WARP_BASE + ceili(maxf(travel, 0.0) / WARP_M_PER_QE)
 
@@ -58,9 +87,17 @@ static func check(from: UniversePoint, nose: Vector3, p_target: WarpTarget, targ
 		return p
 	var line := p_target.point.minus(from)
 	p.to_centre = line.length()
-	p.direction = line / maxf(p.to_centre, 0.001)
-	p.distance = p.to_centre - p_target.limit
-	p.drop = from.plus(p.direction * maxf(p.distance, 0.0))
+	if p_target.arrive.is_zero_approx() or p.to_centre <= p_target.limit:
+		# No side, or already inside the limit: the old maths, so CLOSE still reads.
+		p.direction = line / maxf(p.to_centre, 0.001)
+		p.distance = p.to_centre - p_target.limit
+		p.drop = from.plus(p.direction * maxf(p.distance, 0.0))
+	else:
+		# The line runs to the chosen side's drop, not the centre's.
+		p.drop = p_target.point.plus(arrival_dir(p_target, from) * p_target.limit)
+		line = p.drop.minus(from)
+		p.distance = line.length()
+		p.direction = line / maxf(p.distance, 0.001)
 	p.cost = cost_of(p.distance)
 	p.duration = WarpProfile.new(maxf(p.distance, 0.0)).duration
 	p.off_line = nose.angle_to(line) if not nose.is_zero_approx() else PI

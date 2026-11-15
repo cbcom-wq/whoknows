@@ -28,6 +28,10 @@ const SALVAGE := Color("c3a8ff")
 ## readout's own cyan, and the same amber the bridge computer's holo gives it.
 const COURSE := Color("ffb45a")
 
+## A place's beacon (desert world spec §8.2): the interior's amber, so it reads
+## as a lit lamp on the ground and, like the course, never as the readout's cyan.
+const BEACON := InteriorPalette.AMBER
+
 ## Being hurt (health and damage spec §7.1): the warm red at the view's edge,
 ## and the black you fade into when you black out.
 const HURT := Color("c8452e")
@@ -65,4 +69,6 @@ static func for_kind(kind: StringName) -> Color:
 			return LIFE
 		&"salvage":
 			return SALVAGE
+		&"beacon":
+			return BEACON
 	return READOUT

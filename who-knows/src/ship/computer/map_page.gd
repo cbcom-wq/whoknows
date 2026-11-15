@@ -69,7 +69,7 @@ const OPEN_AT := 1
 ## Contacts that get a stalk, nearest first; the selected one always does.
 const STALKS := 12
 ## What a course can be set to (spec §15): a big rock or a salvage cloud.
-const COURSE_KINDS: Array[StringName] = [&"rock", &"salvage", &"body", &"moon", &"cluster"]
+const COURSE_KINDS: Array[StringName] = [&"rock", &"salvage", &"body", &"moon", &"cluster", &"beacon"]
 ## Mark sizes, metres across in the holo (spec §5.2), tuned at the renders:
 ## the spec's first figures vanished at arm's length.
 const ROCK_MIN_NEAR := 0.012
@@ -207,6 +207,8 @@ static func colour_for(kind: StringName) -> Color:
 			return InteriorPalette.WORLD
 		&"cluster":
 			return InteriorPalette.SKY
+		&"beacon":
+			return InteriorPalette.AMBER
 	return InteriorPalette.LIGHT_WARM
 
 ## What ◀ and ▶ step through, and the overlay lists: the contacts inside the

@@ -206,6 +206,105 @@ func test_restored_landed_off_the_ground_falls_and_settles():
 	assert_true(monitor.is_landed(), "landed")
 	assert_eq(_starter.damage.hull_whole(), whole, "not damaged")
 
+## A save made before phase 3 had its ship landed where the oasis floor now
+## stands, and the floor moved that ground (Review Focus 4). On p3's real
+## terrain with kesdra's stamps, a spot on the floor where the old ground
+## (`base_height_at`) was about 6 m over the stamped ground lets the hull fall
+## and land on the floor; one where it was about 6 m under (the hull is now
+## buried) lifts it onto the floor. Neither is hurt.
+const OASIS_STEP := 5.0
+const OASIS_SPOT_DROP := 6.0
+
+## The direction `metres` from `centre` along `bearing` (radians) on a world of `radius`.
+static func _toward(centre: Vector3, bearing: float, metres: float, p_radius: float) -> Vector3:
+	var side := centre.cross(Vector3.UP if absf(centre.y) < 0.9 else Vector3.RIGHT).normalized()
+	var other := centre.cross(side)
+	var angle := metres / p_radius
+	return (centre * cos(angle) + (side * cos(bearing) + other * sin(bearing)) * sin(angle)).normalized()
+
+## The spot on the oasis floor, clear of every other stamp (the pad, the pool,
+## the ledge, the buildings' and gardens': their blends too) by the hull's
+## reach, and outside the village's wall (Rework 1: OASIS_WALL m out at most),
+## where `base_height_at - height_at` is nearest `want` metres. Returns
+## [direction, that difference].
+const OASIS_WALL := 58.0
+
+func _oasis_spot(t: WorldTerrain, want: float) -> Array:
+	var floor_stamp: TerrainStamp = null
+	for s in t.stamps:
+		if s.id == &"oasis_floor":
+			floor_stamp = s
+	var best := Vector3.ZERO
+	var best_off := INF
+	var best_diff := 0.0
+	var reach := 15.0
+	for r in range(int(OASIS_WALL + reach), int(floor_stamp.radius - reach), int(OASIS_STEP)):
+		for k in 48:
+			var d := _toward(floor_stamp.centre, TAU * k / 48.0, float(r), t.radius)
+			var clear := true
+			for s in t.stamps:
+				if s != floor_stamp and s.metres_from(d, t.radius) < s.reach() + reach:
+					clear = false
+			if not clear:
+				continue
+			var diff := t.base_height_at(d) - t.height_at(d)
+			if absf(diff - want) < best_off:
+				best_off = absf(diff - want)
+				best = d
+				best_diff = diff
+	return [best, best_diff]
+
+## Puts the hull's saved place on the old (base) ground at `dir`, as a
+## pre-phase-3 save would have it.
+func _on_old_ground(t: WorldTerrain, dir: Vector3) -> void:
+	_up = dir
+	_ground = _planet.radius + t.base_height_at(dir)
+	var along := _up.cross(Vector3.UP).normalized()
+	_basis = Basis(along, _up, along.cross(_up).normalized())
+
+func test_a_ship_saved_where_the_floor_moved_settles():
+	await _to_a_world()
+	assert_eq(_planet.id, &"p3", "the hop world is the desert world")
+	var surface: WorldSurface = (_root.star_system.proxy(_planet.id) as BodyProxy).surface()
+	var t := surface.terrain
+	assert_eq(t.stamps.size(), 14, "its terrain carries the oasis stamps")
+	var higher := _oasis_spot(t, OASIS_SPOT_DROP)
+	var lower := _oasis_spot(t, -OASIS_SPOT_DROP)
+	gut.p("old ground %.2f m over the floor at one spot, %.2f m at the other" % [higher[1], lower[1]])
+	assert_gt(higher[1], 3.0, "a spot where the old ground was well over the floor")
+	assert_lt(lower[1], -3.0, "and one where it was well under")
+	var whole := _starter.damage.hull_whole()
+	var monitor := _starter.landing
+	# Saved landed on the old ground above the floor: let fall, and lands on the floor.
+	_on_old_ground(t, higher[0])
+	_fleet.restore_hull(_starter, _saved_landed_at(0.0))
+	var left := [false]
+	assert_true(await _within(10.0, func() -> bool:
+		if not monitor.is_landed():
+			left[0] = true
+		var keel_now := _starter.flight_computer.keel_altitude()
+		return left[0] and monitor.is_landed() and keel_now < 1.0), "it is let go and lands again within 10 s")
+	assert_true(left[0], "it left LANDED")
+	var floor_up: float = t.height_at(higher[0])
+	var keel := _starter.flight_computer.keel_altitude()
+	gut.p("old ground over the floor: landed again, stance plane %.2f m over the stamped ground (floor at %.2f m)" % [keel, floor_up])
+	assert_lt(absf(keel), 0.5, "on the floor (%.2f m)" % keel)
+	assert_eq(_starter.damage.hull_whole(), whole, "not damaged")
+	# Saved landed on the old ground under the floor: buried, and lifted onto it.
+	_on_old_ground(t, lower[0])
+	_fleet.restore_hull(_starter, _saved_landed_at(0.0))
+	assert_true(await _within(10.0, func() -> bool:
+		var keel_now := _starter.flight_computer.keel_altitude()
+		return monitor.is_landed() and keel_now > -0.5 and keel_now < 1.0), "lifted onto the floor and landed")
+	# The world's surface notes, as a warning, that it lifted a hull out of the ground.
+	assert_engine_error("lifted out", "the surface says it lifted it")
+	keel = _starter.flight_computer.keel_altitude()
+	gut.p("old ground under the floor: lifted, stance plane %.2f m over the stamped ground" % keel)
+	assert_gt(keel, -WorldSurface.FLOOR_SLACK, "not buried")
+	assert_lt(keel, 1.0, "and on it")
+	assert_eq(_starter.damage.hull_whole(), whole, "not damaged")
+
+
 ## Between RESTORE_SLACK and RESTORE_FALL over what is under it, it falls from
 ## where it is: not moved first.
 func test_restored_landed_a_metre_up_falls_from_where_it_is():

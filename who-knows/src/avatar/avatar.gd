@@ -140,6 +140,19 @@ var grav_strength: float = 9.8
 var gravity: WorldGravity
 ## Away from the world's centre, in FIELD (Planetfall §11.1); +Y otherwise.
 var up := Vector3.UP
+
+## How deep the water is where you stand, m: set each physics tick by the
+## PoolWater you are in, and 0 out of it. On foot on a world it slows you.
+var wade_depth := 0.0
+## The share of your speed left at WADE_DEEP metres of water (waist deep), and
+## how deep that is.
+const WADE_SPEED := 0.55
+const WADE_DEEP := 1.0
+
+## The share of your walking speed left in `depth` metres of water: all of it
+## on dry ground, WADE_SPEED of it at WADE_DEEP and deeper.
+static func wade_factor(depth: float) -> float:
+	return lerpf(1.0, WADE_SPEED, clampf(depth / WADE_DEEP, 0.0, 1.0))
 ## The suit lamp (Planetfall §11.3): a spot on your head, L outside, off and
 ## hidden aboard.
 var lamp: SpotLight3D
@@ -853,7 +866,7 @@ func _field_physics(delta: float) -> void:
 	)
 	var input_2d := Input.get_vector(&"move_left", &"move_right", &"move_forward", &"move_back")
 	var wish := (global_basis * Vector3(input_2d.x, 0.0, input_2d.y)).normalized()
-	_field_move(g, wish, speed, delta)
+	_field_move(g, wish, speed * wade_factor(wade_depth), delta)
 	var along_ground := velocity - up * velocity.dot(up)
 	_footfalls(speed == SPRINT_SPEED and along_ground.length() > WALK_SPEED * 0.5, delta)
 

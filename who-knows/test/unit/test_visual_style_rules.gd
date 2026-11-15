@@ -72,6 +72,9 @@ const PAINTING_FILES := [
 	"res://src/world/world_surface.gd",
 	"res://src/world/body_proxy.gd",
 	"res://src/world/star_system.gd",
+	"res://src/world/place_field.gd",
+	"res://src/world/oasis_looks.gd",
+	"res://src/world/brick_shell.gd",
 	"res://src/world/ring_look.gd",
 	"res://src/world/belt_look.gd",
 	"res://src/world/space_dust.gd",
@@ -134,6 +137,7 @@ const REUSABLE_FILES := [
 	"res://src/ship/computer/holo_volume.gd",
 	"res://src/ship/computer/ship_computer.gd",
 	"res://src/ship/computer/computer_station.gd",
+	"res://src/world/brick_shell.gd",
 ]
 const GRID_SIDE := ["ShipGrid", "BlockCatalog", "DeckGraph", "InteriorLayout", "InteriorBuilder",
 	"InteriorDressing"]

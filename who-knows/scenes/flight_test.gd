@@ -66,6 +66,8 @@ var world_gravity: WorldGravity
 var salvage: SalvageField
 ## Every stray item adrift outside (saving spec §7), under Outside.
 var strays: StrayField
+## The system's named places, under Outside (the oasis).
+var places: PlaceField
 
 ## Saving (saving spec §9): on in the real game, off in headless runs. A test
 ## turns it on, with a path of its own, before the scene enters the tree.
@@ -298,6 +300,7 @@ func _wire_ship(ship: Ship) -> void:
 	ship.sensors.add_source(LifeContacts.new(_stream, exterior_npcs, _universe))
 	ship.sensors.add_source(RockContacts.new(_stream.seed, _stream.recipe.start, _stream.shapes))
 	ship.sensors.add_source(BodyContacts.new(system))
+	ship.sensors.add_source(PlaceContacts.new(system))
 	ship.sensors.add_source(TargetContacts.new(ship.exterior, _universe))
 	ship.sensors.system = system
 	ship.sensors.whereabouts = star_system.whereabouts
@@ -772,6 +775,8 @@ func _on_blocks_lost(_coords: Array[Vector3i], ship: Ship) -> void:
 func _wire_hands() -> void:
 	_avatar.set_aboard_root(aboard.items)
 	_avatar.grasp.taken.connect(func(item: Item, _from: Transform3D) -> void:
+		if places != null:
+			places.take(item)
 		if strays != null:
 			strays.let_go(item))
 	_reticle = Reticle.new()
@@ -837,6 +842,8 @@ func _wire_universe(saved: Dictionary) -> void:
 			_restore_you(saved.get("avatar", {}), false)
 	_stream.start(_universe, start)
 	_wire_star_system()
+	if same_world:
+		places.from_dict(saved.get("places", {}))
 	_wire_salvage(saved if same_world else {}, _same_generator(saved, "salvage"))
 	_wire_strays(saved.get("strays", {}) if same_world else {})
 	# Godot's cameras stop drawing at 4 km; a world's horizon is about 120 km off
@@ -872,7 +879,16 @@ func _wire_star_system() -> void:
 	# loaded there has stepped you out already (_restore_places, before this):
 	# the first tick finds it set.
 	_avatar.gravity = world_gravity
+	_wire_places()
 	_wire_air()
+
+## The system's named places (the oasis), made real near you: the field under
+## Outside at the identity, which steps itself each physics tick.
+func _wire_places() -> void:
+	places = PlaceField.new()
+	places.name = "PlaceField"
+	$Outside.add_child(places)
+	places.setup(_universe, system, star_system.whereabouts, _starter.item_catalog)
 
 ## The sky, haze and light follow the air (desert-world spec §6.2-§6.3), and
 ## the star's halo with them.
@@ -1688,6 +1704,7 @@ func capture() -> Dictionary:
 		"avatar": _capture_you(),
 		"salvage": salvage.to_dict(),
 		"strays": strays.to_dict(),
+		"places": places.to_dict(),
 		"npcs": _capture_npcs(),
 		"bases": bases.to_dict(),
 		"home": {"base": String(home.name)} if home is Base else {},

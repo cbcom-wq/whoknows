@@ -483,3 +483,107 @@ static func _correlation(xs: Array[float], ys: Array[float]) -> float:
 		sxx += (xs[i] - mx) * (xs[i] - mx)
 		syy += (ys[i] - my) * (ys[i] - my)
 	return sxy / sqrt(maxf(sxx * syy, 1e-9))
+
+## Stamps (phase 3, Task 2): cover keeps off a stamp's flat part.
+
+const STAMP_RADIUS := 120.0
+
+## `p3` with a FLATTEN of STAMP_RADIUS on the middle of talus key `key`, and
+## the same world without it: [stamped terrain, bare terrain, the stamp].
+func _stamped(key: Vector4i) -> Array:
+	var seed: int = _system.body(&"p3").seed
+	var r := WorldRecipe.from_seed(seed)
+	var s := TerrainStamp.new()
+	s.id = &"test_flat"
+	s.kind = TerrainStamp.Kind.FLATTEN
+	s.centre = _mid(key)
+	s.radius = STAMP_RADIUS
+	s.edge = 150.0
+	r.stamps.append(s)
+	return [WorldTerrain.new(r), WorldTerrain.new(WorldRecipe.from_seed(seed)), s]
+
+## The finest keys within `reach` chunks of `key` on its face.
+static func _round(key: Vector4i, reach: int) -> Array[Vector4i]:
+	var out: Array[Vector4i] = []
+	var cells := 1 << key.y
+	for j in range(-reach, reach + 1):
+		for i in range(-reach, reach + 1):
+			var x := key.z + i
+			var y := key.w + j
+			if x >= 0 and y >= 0 and x < cells and y < cells:
+				out.append(Vector4i(key.x, key.y, x, y))
+	return out
+
+static func _from_stamp(s: TerrainStamp, t: WorldTerrain, centre: Vector3i, p: Vector3) -> float:
+	return s.metres_from((p + Vector3(centre)).normalized(), t.radius)
+
+func test_no_cover_on_a_stamp():
+	var seen := 0
+	var would := 0
+	# A talus chunk with stones in plenty round it, so the bare world has cover
+	# inside the stamp to lose.
+	for mid in _keys(_desert_t, 6, 21, _talus):
+		var made := _stamped(mid)
+		var t: WorldTerrain = made[0]
+		var s: TerrainStamp = made[2]
+		var limit := s.radius + TerrainStamp.CLEAR_MARGIN
+		var reach := ceili(limit / CubeSphere.edge_m(t.radius, _finest(t))) + 1
+		for key in _round(mid, reach):
+			var centre := TerrainChunkData.centre_of(t, key)
+			var bare := GroundCover.scatter(made[1], key)
+			for b: Array in bare.boulders:
+				if _from_stamp(s, t, centre, (b[0] as Transform3D).origin) < limit - 0.5:
+					would += 1
+			var cover := GroundCover.scatter(t, key)
+			for b: Array in cover.boulders:
+				assert_gte(_from_stamp(s, t, centre, (b[0] as Transform3D).origin), limit - 0.5, "a boulder on the stamp")
+				seen += 1
+			for g: Array in cover.grass:
+				assert_gte(_from_stamp(s, t, centre, (g[0] as Transform3D).origin), limit - 0.5, "a tuft on the stamp")
+				seen += 1
+	gut.p("%d stones and tufts kept, %d boulders cleared" % [seen, would])
+	assert_gt(would, 0, "the bare ground had cover there to clear")
+	assert_gt(seen, 0, "and cover stays beyond")
+
+func test_cover_beside_a_stamp_is_unchanged():
+	var mid: Vector4i = _keys(_desert_t, 1, 22, _talus)[0]
+	var made := _stamped(mid)
+	var t: WorldTerrain = made[0]
+	var s: TerrainStamp = made[2]
+	var far := s.reach() + 50.0
+	var stones := 0
+	var tufts := 0
+	for key in _keys(_desert_t, 60, 23, _talus):
+		var beyond := true
+		for c in [Vector2i(0, 0), Vector2i(N, 0), Vector2i(0, N), Vector2i(N, N)]:
+			beyond = beyond and s.metres_from(TerrainChunkData.corner_dir(key, c.x, c.y), t.radius) > far
+		if not beyond:
+			continue
+		var a := GroundCover.scatter(t, key)
+		var b := GroundCover.scatter(made[1], key)
+		assert_eq(a.boulders, b.boulders, "stone for stone at %s" % key)
+		assert_eq(a.grass, b.grass, "tuft for tuft at %s" % key)
+		stones += b.boulders.size()
+		tufts += b.grass.size()
+	assert_gt(stones, 0, "stones compared")
+	assert_gt(tufts, 0, "tufts compared")
+
+func test_a_cleared_chunk_is_solid_only_where_stones_are():
+	var mid: Vector4i = _keys(_desert_t, 1, 24, _talus)[0]
+	var made := _stamped(mid)
+	var t: WorldTerrain = made[0]
+	# Deep inside the flat part: every corner within the radius, no margin.
+	var ground := N * N * 2 * 3
+	var inside := 0
+	for key in _round(mid, 2):
+		var all := true
+		for c in [Vector2i(0, 0), Vector2i(N, 0), Vector2i(0, N), Vector2i(N, N)]:
+			all = all and (made[2] as TerrainStamp).metres_from(TerrainChunkData.corner_dir(key, c.x, c.y), t.radius) < STAMP_RADIUS
+		if not all:
+			continue
+		inside += 1
+		var c := TerrainChunkData.build(t, key)
+		assert_eq(c.faces.size(), ground, "the ground's faces alone at %s" % key)
+		# The bare world's same chunk may carry stones; the stamped one never.
+		assert_true(GroundCover.scatter(t, key).boulders.is_empty(), "no stones inside the stamp")
+	assert_gt(inside, 0, "chunks inside the stamp")

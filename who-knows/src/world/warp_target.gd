@@ -24,6 +24,9 @@ var edge: float
 var limit: float
 ## The belt a cluster lies on, its index in SystemRecipe.belts; -1 otherwise.
 var belt := -1
+## The side a warp arrives on: a unit direction from `point`, or ZERO for the
+## side you come from (WarpPlan.arrival_dir). A designed place's world has one.
+var arrive := Vector3.ZERO
 
 ## Its contact's id with the ship's sensors (BodyContacts).
 func contact_id() -> StringName:

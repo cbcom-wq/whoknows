@@ -146,6 +146,18 @@ var band_axis := Vector3.UP
 ## their warp), and its wind blows across them, toward the axis.
 var wind_axis := Vector3.UP
 
+## Extra angle (radians) the stamp cull allows past a stamp's reach. A unit
+## direction's dot with a stamp's centre is a 32-bit float, good to about 6e-8
+## in cos: near 1 that is a few tenths of a milliradian of angle, so a tight cull
+## dropped a pad's outer 10 m or more. The exact test (`metres_from`) still
+## decides what a stamp changes.
+const STAMP_CULL_SLACK := 2.0e-3
+
+## The recipe's stamps, as this terrain's own copies (a FLATTEN's level filled
+## in), and per stamp the cosine of the angle past which it is of no concern.
+var stamps: Array[TerrainStamp] = []
+var _stamp_cos: PackedFloat64Array = PackedFloat64Array()
+
 var _continents := FastNoiseLite.new()
 var _hills := FastNoiseLite.new()
 var _pattern := FastNoiseLite.new()
@@ -202,9 +214,83 @@ func _init(p_recipe: WorldRecipe) -> void:
 		_tower_gap = _cells(FastNoiseLite.RETURN_DISTANCE)
 		_tower_cell = _cells(FastNoiseLite.RETURN_CELL_VALUE)
 		_tower_scale = (floorf(PI * 0.25 * radius / TOWER_WAVE) + 0.5) / (PI * 0.25)
+	_take_stamps()
 
-## Metres above radius at `dir`, within half the relief either way.
+## Copies the recipe's stamps, outer first, and gives each FLATTEN or MESA with
+## no level the mean of the ground under its flat part with the stamps before
+## it applied.
+## The copies are this terrain's own: the recipe is shared across threads and
+## stays as it was.
+func _take_stamps() -> void:
+	for source in recipe.stamps:
+		var s := source.copy()
+		if s.has_level() and is_nan(s.level):
+			var sum := 0.0
+			var points := s.level_samples(radius)
+			for p in points:
+				sum += height_at(p)
+			s.level = sum / points.size()
+		stamps.append(s)
+		var outer := maxf(s.reach(), s.radius + TerrainStamp.CLEAR_MARGIN)
+		_stamp_cos.append(cos(minf(outer / radius + STAMP_CULL_SLACK, PI)))
+
+## Metres above radius at `dir`, within half the relief either way: the base
+## ground with each stamp applied in order.
 func height_at(dir: Vector3) -> float:
+	if stamps.is_empty():
+		return base_height_at(dir)
+	var d := dir.normalized()
+	# The base ground from `dir` as given, as with no stamps: normalising it a second
+	# time would shift far ground by a rounding (bit for bit beyond a stamp's reach).
+	var h := base_height_at(dir)
+	for i in stamps.size():
+		if d.dot(stamps[i].centre) < _stamp_cos[i]:
+			continue
+		var s := stamps[i]
+		var m := s.metres_from(d, radius)
+		if s.kind == TerrainStamp.Kind.FLATTEN:
+			var w := s.weight(m)
+			if w > 0.0:
+				var surface := s.level + s.raise
+				if s.keep > 0.0:
+					surface += s.keep * (h - s.level)
+				h = lerpf(h, surface, w)
+		elif s.kind == TerrainStamp.Kind.MESA:
+			var w := s.fall(m, d)
+			if w > 0.0:
+				h = lerpf(h, s.level + s.height, w)
+		else:
+			h -= s.dig(m)
+	return h
+
+## Whether `dir` is within TerrainStamp.CLEAR_MARGIN of some stamp's flat part
+## or rim: where ground cover keeps off.
+func stamp_clear(dir: Vector3) -> bool:
+	if stamps.is_empty():
+		return false
+	var d := dir.normalized()
+	for i in stamps.size():
+		if d.dot(stamps[i].centre) < _stamp_cos[i]:
+			continue
+		var s := stamps[i]
+		if s.metres_from(d, radius) <= s.flat_radius(d) + TerrainStamp.CLEAR_MARGIN:
+			return true
+	return false
+
+## The innermost stamp's ground at `d` if `d` is within its radius, else &"".
+func _stamp_ground(d: Vector3) -> StringName:
+	var found := &""
+	for i in stamps.size():
+		if d.dot(stamps[i].centre) < _stamp_cos[i]:
+			continue
+		var s := stamps[i]
+		if s.metres_from(d, radius) <= s.flat_radius(d):
+			found = s.ground
+	return found
+
+## The ground before any stamp, metres above radius within half the relief
+## either way.
+func base_height_at(dir: Vector3) -> float:
 	var d := dir.normalized()
 	var continent := _continents.get_noise_3dv(d * CONTINENT_SCALE)
 	if archetype == WorldRecipe.Archetype.DUNES:
@@ -274,6 +360,10 @@ func ground_at(dir: Vector3, slope: float) -> StringName:
 	if slope > ROCK_SLOPE:
 		return &"rock"
 	var d := dir.normalized()
+	if not stamps.is_empty():
+		var stamped := _stamp_ground(d)
+		if stamped != &"":
+			return stamped
 	if archetype == WorldRecipe.Archetype.DUNES:
 		return _desert_ground(d)
 	var n := _pattern.get_noise_3dv(d * PATTERN_SCALE)
