@@ -108,6 +108,8 @@ const OASIS_SHEET := [
 	"warden_pad",
 	"village_home5", "village_crushed", "village_gap", "village_tracks",
 	"village_wall", "village_sail", "village_outcrop", "village_from_the_pool",
+	"village_pad_to_village", "village_pool_sunward", "village_pool_away", "village_lookout", "village_lookout_back",
+	"village_gardens", "village_approach_150", "village_approach_40", "village_top_down",
 ]
 ## The village set's views: [name, where you stand, what you look at], each
 ## [east, north] m in the oasis's layout.
@@ -121,6 +123,31 @@ const VILLAGE_VIEWS := [
 	["village_outcrop", [-10.0, 25.0], [-19.5, 45.6]],
 	["village_from_the_pool", [14.0, -12.0], [50.0, -24.0]],
 ]
+
+## Coming in over the oasis along the tracks, seated: at each of these heights
+## (m), this many heights back from the village's middle, along the tracks' line.
+const APPROACH_HEIGHTS: Array[float] = [150.0, 40.0]
+const APPROACH_BACK := 1.4
+## The gap in the wall, where the tracks begin, and the tracks' bearing (deg),
+## [east, north] m; the village's middle, to look at.
+const GAP_AT := [68.4, -12.0]
+const TRACKS_BEARING := 60.0
+const VILLAGE_MIDDLE := [30.0, -10.0]
+## The outcrop's lookout: the cap stone's [east, north] m in the layout (the
+## outcrop at (-19.5, 45.6), the first stone 7 m east and 1 m north of its
+## middle), and the height over the ground you are put at (cap about 8.3 m).
+const LOOKOUT_AT := [-12.5, 46.6]
+const LOOKOUT_DROP_FROM := 9.5
+## The top-down render's height, m, over its middle [east, north] m.
+const TOP_DOWN_HIGH := 250.0
+const TOP_DOWN_AT := [-5.0, -5.0]
+## Review Focus 1: the starter put down 12 m up over each of these, [what,
+## [east, north] m].
+const SET_DOWNS := [
+	["across the floor's blend, 130 m south of the pool", [0.0, -130.0]],
+	["onto the crushed hut", [46.0, -28.0]],
+]
+const SET_DOWN_FROM := 12.0
 
 ## The oasis, and the pad's and the pool's directions on the world.
 var _oasis: PlaceDesign
@@ -189,6 +216,7 @@ func _village_set() -> void:
 		_find_the_oasis()
 	if _avatar.mode != Avatar.Mode.FIELD:
 		await _aboard()
+		await _approach_views()
 		await _starter_on_the_pad()
 		if not _starter.landing.is_landed():
 			print("village the starter did not land: no views on foot")
@@ -209,6 +237,118 @@ func _village_set() -> void:
 			await _reading("on foot by the crushed hut, looking at it")
 		elif view[0] == "village_tracks":
 			await _reading("on foot in the wall's gap, looking along the tracks")
+	await _more_foot_views()
+	await _top_down()
+	await _set_downs()
+
+## One spot on foot: [east, north] of where you stand and of what you look at.
+func _foot_look(shot_name: String, stand: Array, look: Array, pitch := 0.0) -> void:
+	var at := _oasis.local_dir(float(stand[0]), float(stand[1]), _planet.radius)
+	var to := _oasis.local_dir(float(look[0]), float(look[1]), _planet.radius)
+	await _stand_far(at, _way_to(at, to))
+	_avatar.set_head_pitch(pitch)
+	await _seconds(0.5)
+	await _shot(shot_name)
+
+## The rest of Task 11's views on foot.
+func _more_foot_views() -> void:
+	# From the pad's edge toward the village.
+	var edge := _towards(_pad_dir, _pool_dir, float(_oasis.layout()["pad"]["radius"]) - PAD_EDGE_IN)
+	var mid := _oasis.local_dir(VILLAGE_MIDDLE[0], VILLAGE_MIDDLE[1], _planet.radius)
+	await _stand_far(edge, _way_to(edge, mid))
+	_avatar.set_head_pitch(0.0)
+	await _seconds(0.5)
+	await _shot("village_pad_to_village")
+	# Among the palms at the pool's bank: toward the sun, then away.
+	var palms := _oasis.local_dir(-14.0, -8.0, _planet.radius)
+	await _stand_far(palms, _sun_flat)
+	_avatar.set_head_pitch(0.0)
+	await _seconds(0.5)
+	await _shot("village_pool_sunward")
+	_face(-_sun_flat)
+	await _seconds(0.5)
+	await _shot("village_pool_away")
+	await _foot_look("village_gardens", [19.0, -11.5], [32.0, -11.5])
+	await _lookout()
+	# On foot in the village, the frame rate over 10 s.
+	await _foot_look("village_from_the_pool_fps", [14.0, -12.0], [50.0, -24.0])
+	await _reading_for("on foot in the village by the pool, looking at the hut and the wall", LANDED_SECONDS)
+
+## Up on the outcrop's cap stone, looking out north over the dunes.
+func _lookout() -> void:
+	var at := _oasis.local_dir(LOOKOUT_AT[0], LOOKOUT_AT[1], _planet.radius)
+	var to := _oasis.local_dir(LOOKOUT_AT[0], LOOKOUT_AT[1] + 200.0, _planet.radius)
+	var way := _way_to(at, to)
+	var up := at.normalized()
+	_avatar.place(Transform3D(_level(up, way), _centre() + up * (_ground_r(up) + LOOKOUT_DROP_FROM)))
+	_moved()
+	await _ground_built()
+	_avatar.place(Transform3D(_level(up, way), _centre() + up * (_ground_r(up) + LOOKOUT_DROP_FROM)))
+	await _seconds(2.0)
+	_face(way)
+	_avatar.set_head_pitch(deg_to_rad(-6.0))
+	await _seconds(0.5)
+	print("        the lookout: your feet %.2f m over the ground there (the cap's top is about 8.3), %s" % [
+		_gravity.altitude_at(_avatar.global_position), "on a floor" if _avatar.is_on_floor() else "NOT on a floor"])
+	await _shot("village_lookout")
+	# And back at the oasis from up there.
+	var back := _oasis.local_dir(0.0, 0.0, _planet.radius)
+	_face(_way_to(at, back))
+	_avatar.set_head_pitch(deg_to_rad(-12.0))
+	await _seconds(0.5)
+	await _shot("village_lookout_back")
+
+## A camera TOP_DOWN_HIGH m over the oasis, looking straight down, north up.
+func _top_down() -> void:
+	var at := _oasis.local_dir(TOP_DOWN_AT[0], TOP_DOWN_AT[1], _planet.radius)
+	await _stand_far(at, _sun_flat)
+	var up := at.normalized()
+	var north := (Vector3.UP - up * Vector3.UP.dot(up)).normalized()
+	var pos := _centre() + up * (_ground_r(up) + TOP_DOWN_HIGH)
+	await _camera_shot("village_top_down", Transform3D(Basis.looking_at(-up, north), pos))
+	var file := "%s/oasis_top_down.png" % _out
+	(_images["village_top_down"] as Image).save_png(file)
+	print("render  %s (%.0f m up, north at the top)" % [file, TOP_DOWN_HIGH])
+
+## Seated, coming in over the oasis from the tracks' far end toward the village,
+## at each APPROACH_HEIGHTS: do the tracks read from the seat?
+func _approach_views() -> void:
+	var b := deg_to_rad(TRACKS_BEARING)
+	var toward := Vector2(sin(b), cos(b))
+	for h in APPROACH_HEIGHTS:
+		var back := h * APPROACH_BACK
+		var from_at: Vector2 = Vector2(GAP_AT[0], GAP_AT[1]) + toward * back
+		var from := _oasis.local_dir(from_at.x, from_at.y, _planet.radius)
+		var look := _oasis.local_dir(VILLAGE_MIDDLE[0], VILLAGE_MIDDLE[1], _planet.radius)
+		var flat := (from_at - Vector2(VILLAGE_MIDDLE[0], VILLAGE_MIDDLE[1])).length()
+		var nose := _way_to(from, look)
+		var pitch := Basis(_level(from, nose).x.normalized(), -atan2(h, flat))
+		print("approach seated %.0f m over the ground, %.0f m from the village's middle, along the tracks" % [h, flat])
+		await _hold_at(from, h, nose, pitch)
+		await _shot("village_approach_%d" % roundi(h))
+
+## Review Focus 1: the starter set down where the ground is not the pad's: the
+## floor's blend, and the crushed hut. Landed and its tilt, or the refusal, and
+## the damage (must be 0).
+func _set_downs() -> void:
+	await _aboard()
+	for case: Array in SET_DOWNS:
+		var at := _oasis.local_dir(float(case[1][0]), float(case[1][1]), _planet.radius)
+		await _unland()
+		_starter.exterior.freeze = false
+		_starter.flight_computer.assist_enabled = true
+		_place(_starter, at, SET_DOWN_FROM, _way_to(at, _pool_dir))
+		await _ground_built()
+		await _seconds(1.0)
+		var before := _block_damage(_starter)
+		var landed := await _set_down(_starter, true, "Review Focus 1 %s" % case[0])
+		var damage := _block_damage(_starter) - before
+		var line := "focus1  %s: %s, tilt %.2f deg, %s, damage %.1f hp (must be 0)" % [
+			case[0], "LANDED" if landed else "NOT landed", rad_to_deg(_starter.landing.tilt()),
+			"no refusal" if _starter.landing.refusal() == "" else "refuses: '%s'" % _starter.landing.refusal(), damage]
+		print(line)
+		_readings.append(line)
+		_check(damage == 0.0, "focus1 %s: no damage" % case[0])
 
 func _inside_set() -> void:
 	print("inside  not built yet (Task 14)")
