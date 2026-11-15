@@ -132,7 +132,7 @@ const VILLAGE_VIEWS := [
 	# from inside the village and its stair.
 	["village_gate_from_pad", [-62.0, -31.0], [-42.17, -22.47]],
 	["village_lane", [5.5, 20.0], [5.0, 44.0]],
-	["village_grass_edge", [-28.0, -27.0], [-8.0, -8.0]],
+	["village_grass_edge", [41.0, -15.0], [10.0, -3.0]],
 	["village_ledge_from_inside", [-14.0, 24.0], [-12.2, 80.0]],
 	["village_stair", [-17.5, 64.0], [-13.0, 77.0]],
 ]
@@ -306,7 +306,7 @@ func _more_foot_views() -> void:
 	_face(-_sun_flat)
 	await _seconds(0.5)
 	await _shot("village_pool_away")
-	await _foot_look("village_gardens", [-28.0, -4.0], [-42.1, -5.9])
+	await _foot_look("village_gardens", [-39.5, 0.5], [-42.1, -5.9], deg_to_rad(-10.0))
 	await _lookout()
 	# On foot in the village, the frame rate over 10 s.
 	await _foot_look("village_from_the_pool_fps", [14.0, -12.0], [46.4, -11.2])

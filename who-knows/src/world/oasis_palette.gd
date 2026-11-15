@@ -31,7 +31,7 @@ const GREEN_PATCH := Color("506a2c")
 ## of GRASS_DRY_EDGE, which sits close to the sand as the ground draws it, so
 ## the green dies into the desert. The tufts out there dry the same way.
 const GRASS_OLIVE := Color("737437")
-const GRASS_DRY_EDGE := Color("b08a4c")
+const GRASS_DRY_EDGE := Color("c29a5a")
 const GARDEN_SOIL := Color("7c5c3c")
 const CROP_GREEN := Color("8f9a49")
 const CROP_DRY := Color("b39c5c")

@@ -594,17 +594,20 @@ const BOULDER_BAND := Vector2(-0.6, 1.8)
 const TALUS_BAND := Vector2(-1.5, 4.5)
 const SPREAD := 1.4
 const STAIR_CLEAR := 2.0
-## A rough stair up the ledge's village side, along its face: flat-topped
-## stone blocks STAIR_STONE m (along, across), STAIR_TREAD apart along the
-## face, each rising the same, no more than STAIR_RISE (a jump peaks at 0.89 m),
-## from the ground at its foot to the flat top. Each block stands STAIR_OUT
-## out from where the face is halfway up its rise, its foot STAIR_UNDER under
-## the lowest ground beneath it, turned up to STAIR_TWIST either way. The last
-## lands LANDING_IN m inside the top's lip.
-const STAIR_STONE := Vector2(1.48, 2.0)
+## A rough stair cut into the ledge's village side, along its face:
+## flat-topped stone blocks STAIR_STONE m (along, across), in the face's own
+## rock (the palette's `ground_high`), STAIR_TREAD apart along the face, each
+## rising the same, no more than STAIR_RISE (a jump peaks at 0.89 m), from the
+## ground at its foot to the flat top. Each block's middle is STAIR_OUT out
+## from where the face stands STAIR_LIP under its tread, so its back is bitten
+## into the slope and it shows a low front, never a post; its foot STAIR_UNDER
+## under the lowest ground beneath it, turned up to STAIR_TWIST either way.
+## The last lands LANDING_IN m inside the top's lip.
+const STAIR_STONE := Vector2(1.48, 1.3)
 const STAIR_TREAD := 1.4
 const STAIR_RISE := 0.62
-const STAIR_OUT := 0.4
+const STAIR_OUT := 0.2
+const STAIR_LIP := 0.1
 const STAIR_UNDER := 0.3
 const STAIR_TWIST := 0.05
 const LANDING_IN := 0.5
@@ -635,9 +638,9 @@ static func ledge_stair(height_of: Callable, centre: Vector2, from: Vector2, to:
 	for k in range(1, n + 1):
 		var h := ground + rise * k
 		var along := from + dir * (STAIR_TREAD * k)
-		# Across the line, the face falls outward: where it stands at the
-		# rise's middle (the landing: just under the top).
-		var want := h - rise * 0.5 if k < n else top - 0.03
+		# Across the line, the face falls outward: where it stands just under
+		# the tread (the landing: just under the top).
+		var want := h - STAIR_LIP if k < n else top - 0.03
 		var lo := -12.0
 		var hi := 8.0
 		for i in 40:
@@ -709,14 +712,16 @@ static func ledge_rocks(height_of: Callable, centre: Vector2, foot_of: Callable,
 	return out
 
 ## The ledge's dressing: one Node3D "Ledge" holding one mesh (its stair's
-## stones and its foot's rocks, on the ground's own material, in `palette`'s
-## `boulder` shades as the world's boulders) and one StaticBody3D "Stones" on
+## stones in `palette`'s `ground_high` shades, as the face they are cut in,
+## and its foot's rocks in its `boulder` shades as the world's boulders, all
+## raw on the ground's own material) and one StaticBody3D "Stones" on
 ## BodyProxy.LAYER: a box a step and a hull a boulder (the talus is too small
 ## to stop you). The stair (ledge_stair's) is kept as its meta `steps`
 ## ([top middle, way] each) and `landing`; the counts as `boulders`, `talus`.
 static func ledge(stair: Dictionary, rocks: Array, boulders: int, palette: Dictionary = {}) -> Node3D:
 	var land: Dictionary = palette if not palette.is_empty() else SpacePalette.WORLDS[SpacePalette.DESERT_PALETTE]
 	var base: Color = land[&"boulder"]
+	var cut: Color = land[&"ground_high"]
 	var node := Node3D.new()
 	node.name = "Ledge"
 	var body := StaticBody3D.new()
@@ -736,7 +741,7 @@ static func ledge(stair: Dictionary, rocks: Array, boulders: int, palette: Dicti
 		var x := Basis(Vector3.UP, float(s[3])) * (s[4] as Vector3)
 		var basis := Basis(x, Vector3.UP, x.cross(Vector3.UP))
 		var xf := Transform3D(basis, at - Vector3(0, size.y * 0.5, 0))
-		kit.bevel_box(InteriorKit.Batch.SOLID, xf, size, 0.07, SpacePalette.shade(base, (k * 2 + 1) % SpacePalette.SHADES.size()))
+		kit.bevel_box(InteriorKit.Batch.SOLID, xf, size, 0.07, SpacePalette.shade(cut, (k * 2 + 1) % SpacePalette.SHADES.size()))
 		var box_shape := BoxShape3D.new()
 		box_shape.size = size
 		var c := CollisionShape3D.new()
