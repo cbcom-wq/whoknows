@@ -256,7 +256,7 @@ func height_at(dir: Vector3) -> float:
 					surface += s.keep * (h - s.level)
 				h = lerpf(h, surface, w)
 		elif s.kind == TerrainStamp.Kind.MESA:
-			var w := s.fall(m)
+			var w := s.fall(m, d)
 			if w > 0.0:
 				h = lerpf(h, s.level + s.height, w)
 		else:
@@ -273,7 +273,7 @@ func stamp_clear(dir: Vector3) -> bool:
 		if d.dot(stamps[i].centre) < _stamp_cos[i]:
 			continue
 		var s := stamps[i]
-		if s.metres_from(d, radius) <= s.radius + TerrainStamp.CLEAR_MARGIN:
+		if s.metres_from(d, radius) <= s.flat_radius(d) + TerrainStamp.CLEAR_MARGIN:
 			return true
 	return false
 
@@ -284,7 +284,7 @@ func _stamp_ground(d: Vector3) -> StringName:
 		if d.dot(stamps[i].centre) < _stamp_cos[i]:
 			continue
 		var s := stamps[i]
-		if s.metres_from(d, radius) <= s.radius:
+		if s.metres_from(d, radius) <= s.flat_radius(d):
 			found = s.ground
 	return found
 

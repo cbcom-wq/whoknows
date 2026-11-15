@@ -72,16 +72,19 @@ func test_the_oasis_is_placed() -> void:
 	assert_eq(_place.name, "OASIS")
 	assert_true(_place.beacon)
 	assert_eq(_place.heading, 0.0)
-	# Rework 1: the floor, the pool's bank, the pad, the pool, the ledge, and one
-	# under each of the twelve buildings and the three gardens.
-	assert_eq(_terrain.stamps.size(), 20, "twenty stamps")
+	# Rework 1, round 2: the floor, the pool's bank, the pad, the pool, the
+	# ledge, one under each of the five compounds and one under each of the three
+	# gardens.
+	assert_eq(_terrain.stamps.size(), 13, "thirteen stamps")
 	var ids: Array[StringName] = [&"oasis_floor", &"pool_bank", &"pad", &"pool", &"ledge"]
 	var layout := _place.layout()
 	for s: Dictionary in layout.get("shells", []):
-		ids.append(StringName(s["id"]))
+		var court := StringName(s["stamp"])
+		if not ids.has(court):
+			ids.append(court)
 	for g: Dictionary in layout.get("gardens", []):
 		ids.append(StringName(g["id"]))
-	assert_eq(ids.size(), 20, "twelve shells and three gardens in the layout")
+	assert_eq(ids.size(), 13, "five compounds and three gardens in the layout")
 	for id in ids:
 		assert_not_null(_stamp(id), str(id))
 	assert_eq(_system.design.problems(_system), PackedStringArray(), "the design is valid")
@@ -105,7 +108,8 @@ func test_every_stamp_keeps_a_margin() -> void:
 	gut.p("the tightest stamps: %s, %.2f m to spare" % [where, worst])
 
 ## Rework 1: the outcrop is replaced by a low sandstone ledge, a MESA north of
-## the village outside its wall, nested in the floor's flat part.
+## the village outside its wall, nested in the floor's flat part. Round 2: a
+## long shelf, not a plug: about 40 x 16 m, its edge wobbled.
 func test_the_ledge_stands_north_outside_the_wall() -> void:
 	var ledge := _stamp(&"ledge")
 	var floor_stamp := _stamp(&"oasis_floor")
@@ -114,7 +118,10 @@ func test_the_ledge_stands_north_outside_the_wall() -> void:
 		return
 	assert_eq(ledge.kind, TerrainStamp.Kind.MESA, "a mesa")
 	assert_between(ledge.height, 5.0, 7.0, "about 6 m up")
-	assert_between(ledge.radius, 12.0, 16.0, "about 14 m across its top's radius")
+	assert_between(ledge.radius, 18.0, 22.0, "about 40 m long")
+	assert_between(ledge.radius / ledge.stretch, 7.0, 9.0, "about 16 m deep")
+	assert_between(ledge.wobble, 0.04, 0.15, "its edge wanders a little")
+	assert_false(ledge.is_round(), "an ellipse, not a disc")
 	assert_between(ledge.edge, 5.0, 6.0, "its edge")
 	assert_eq(ledge.ground, &"ground_high", "its top is the world's mesa-top ground")
 	var from_floor := floor_stamp.metres_from(ledge.centre, _terrain.radius)
@@ -130,12 +137,23 @@ func test_the_ledge_stands_north_outside_the_wall() -> void:
 	for p: Array in layout["wall"]["ring"]:
 		far = maxf(far, Vector2(float(p[0]), float(p[1])).length())
 	assert_gt(from_floor - ledge.reach(), far + 3.0, "outside the wall")
-	# Its top is flat at its level + height.
+	# Its top is flat at its level + height, all the way out along its long
+	# axis, well past the short one.
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 5
-	for i in 50:
-		var d := _disc_sample(ledge.centre, rng, 0.0, ledge.radius - 0.1)
+	var tested := 0
+	var long_way := 0
+	for i in 400:
+		var d := _disc_sample(ledge.centre, rng, 0.0, ledge.radius * (1.0 + ledge.wobble))
+		var m := ledge.metres_from(d, _terrain.radius)
+		if m > ledge.flat_radius(d) - 0.3:
+			continue
+		tested += 1
+		if m > ledge.radius / ledge.stretch * 1.5:
+			long_way += 1
 		assert_almost_eq(_terrain.height_at(d), ledge.level + ledge.height, FLAT, "a flat top")
+	assert_gt(tested, 60, "enough of the top was walked")
+	assert_gt(long_way, 15, "and much of it far out along the long axis")
 
 func test_the_sun_stands_low_over_the_oasis() -> void:
 	assert_not_null(_place, "p3 has the place oasis")

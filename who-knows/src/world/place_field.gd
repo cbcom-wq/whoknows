@@ -43,6 +43,9 @@ const GREEN_MARGIN := 2.0
 const GREEN_COARSER := 2
 ## The broken wall's foot follows the ground, sampled about this often, m.
 const WALL_STEP := 2.0
+## A compound's yard walls (Rework 1, round 2) are this high (m) unless the
+## layout says otherwise: lower than the ring wall's 2.6, over your eye.
+const YARD_HEIGHT := 1.8
 ## A shell's footprint is sampled this often for the lowest ground under it,
 ## where an unstamped shell's walls start (its plinth), m.
 const FOOT_STEP := 1.0
@@ -159,8 +162,8 @@ func _build_pool(place: PlaceDesign, terrain: WorldTerrain, pool: Dictionary, no
 
 ## The green and the village outside: palms (trunks solid), the grass ring,
 ## gardens, the pump and its pipe, the path, the brick shells (Rework 1: twelve,
-## each on its own stamp), the ring wall with its gate and breach, the rubble
-## and the shade sails. Every solid is one kit's, every tuft one MultiMesh's,
+## in five compounds, each on its stamp), the compounds' yard walls, the ring
+## wall with its gate and breach, the rubble and the shade sails. Every solid is one kit's, every tuft one MultiMesh's,
 ## the palms' trunks one body's, the shells' another's and the wall's a third,
 ## and each piece stands on the ground of its layout point (on_ground), never
 ## on a height of its own. Each piece's kind, id, lowest vertex and (for a
@@ -287,19 +290,21 @@ func _build_green(place: PlaceDesign, terrain: WorldTerrain, node: Node3D, centr
 		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	holder.set_meta(&"laid", laid)
 
-## The brick: the shells, the ring wall, its rubble and the shade sails, into
-## the village's `kit`. The shells' solid parts are on one StaticBody3D
-## "Brick", the wall's and its gate piers' on another, "Wall" (both on
-## BodyProxy.LAYER). Each shell stands on its own stamp (Rework 1): its walls
-## start SUNK under the lowest ground under its footprint, which the stamp
-## keeps level, and that ground is the floor it is built for. A box shell has
-## a door (BrickShell.DOOR) in the middle of its front, which its yaw turns
-## onto a lane. The wall's foot follows the ground point to point.
+## The brick: the shells, the compounds' yard walls, the ring wall, its rubble
+## and the shade sails, into the village's `kit`. The shells' and yards' solid
+## parts are on one StaticBody3D "Brick", the ring wall's and its gate piers'
+## on another, "Wall" (both on BodyProxy.LAYER). Each shell stands on its
+## compound's stamp (Rework 1, round 2: the layout's `stamp`): its walls start
+## SUNK under the lowest ground under its footprint, which the stamp keeps
+## level, and that ground is the floor it is built for. A box shell has a door
+## (BrickShell.DOOR) in the middle of its front, which its yaw turns onto a
+## lane. A wall's or a yard's foot follows the ground point to point.
 func _build_brick(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionary, node: Node3D,
 		kit: InteriorKit, mark: Callable, avoid: Array[Vector3]) -> void:
 	var shells: Array = layout.get("shells", [])
 	var wall: Dictionary = layout.get("wall", {})
-	if shells.is_empty() and wall.is_empty() and not layout.has("rubble") and not layout.has("sails"):
+	if shells.is_empty() and wall.is_empty() and not layout.has("rubble") and not layout.has("sails") \
+			and not layout.has("yards"):
 		return
 	var brick := _solid_body(node, "Brick")
 	var add := func(shapes: Array[CollisionShape3D]) -> void:
@@ -338,6 +343,19 @@ func _build_brick(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionary,
 				add.call(BrickShell.box_shapes(f, size, openings, variety))
 			avoid.append(Vector3(centre.x, centre.z, Vector2(size.x, size.z).length() * 0.5 + GRASS_MARGIN))
 		mark.call("shell", str(s["id"]), from, foot)
+	var yards: Array = layout.get("yards", [])
+	for k in yards.size():
+		var from := kit.vertex_count(InteriorKit.Batch.SOLID)
+		var y: Dictionary = yards[k]
+		var run := PackedVector2Array()
+		for p: Array in y["points"]:
+			run.append(Vector2(float(p[0]), float(p[1])))
+		var points := wall_points(place, terrain, run)
+		var height := float(y.get("height", YARD_HEIGHT))
+		var variety := 0.17 + 0.23 * k
+		BrickShell.wall(kit, points, height, variety)
+		add.call(BrickShell.wall_shapes(points, height, variety))
+		mark.call("yard", str(y.get("id", "yard_%d" % k)), from)
 	if wall.has("ring"):
 		_build_ring_wall(place, terrain, wall, node, kit, mark)
 	var rubble: Array = layout.get("rubble", [])
@@ -363,6 +381,18 @@ func _build_brick(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionary,
 		avoid.append(Vector3(f.origin.x, f.origin.z, size.length() * 0.5 + GRASS_MARGIN))
 		mark.call("sail", "sail_%d" % k, from)
 
+## The ground under a wall's line `run` ([east, north] m), in the place's
+## frame, about every WALL_STEP: where its foot goes.
+static func wall_points(place: PlaceDesign, terrain: WorldTerrain, run: PackedVector2Array) -> PackedVector3Array:
+	var points := PackedVector3Array()
+	for j in run.size() - 1:
+		var n := maxi(1, roundi(run[j].distance_to(run[j + 1]) / WALL_STEP))
+		for i in n:
+			var p := run[j].lerp(run[j + 1], float(i) / n)
+			points.append(on_ground(place, terrain, p.x, p.y))
+	points.append(on_ground(place, terrain, run[run.size() - 1].x, run[run.size() - 1].y))
+	return points
+
 ## A StaticBody3D `name` under `node`, on BodyProxy.LAYER, colliding with nothing.
 static func _solid_body(node: Node3D, body_name: String) -> StaticBody3D:
 	var body := StaticBody3D.new()
@@ -383,14 +413,7 @@ func _build_ring_wall(place: PlaceDesign, terrain: WorldTerrain, wall: Dictionar
 	var runs: Array = ring["runs"]
 	for k in runs.size():
 		var from := kit.vertex_count(InteriorKit.Batch.SOLID)
-		var run: PackedVector2Array = runs[k]
-		var points := PackedVector3Array()
-		for j in run.size() - 1:
-			var n := maxi(1, roundi(run[j].distance_to(run[j + 1]) / WALL_STEP))
-			for i in n:
-				var p := run[j].lerp(run[j + 1], float(i) / n)
-				points.append(on_ground(place, terrain, p.x, p.y))
-		points.append(on_ground(place, terrain, run[run.size() - 1].x, run[run.size() - 1].y))
+		var points := wall_points(place, terrain, runs[k])
 		var variety := 0.31 + 0.27 * k
 		BrickShell.wall(kit, points, height, variety)
 		for c in BrickShell.wall_shapes(points, height, variety):

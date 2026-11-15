@@ -117,7 +117,7 @@ func test_problems_name_the_body() -> void:
 		"unknown archetype": {id: {"tweak": {"archetype": "SWAMP"}}},
 		"unknown atmosphere": {id: {"tweak": {"atmosphere": "SOUP"}}},
 		"unknown palette": {id: {"tweak": {"palette": "mauve"}}},
-		"unknown stamp key": {id: {"stamps": [flat.merged({"wobble": 1}, true)]}},
+		"unknown stamp key": {id: {"stamps": [flat.merged({"colour": 1}, true)]}},
 		"latitude": {id: {"stamps": [flat.merged({"lat": 95.0}, true)]}},
 		"keep outside 0 to 1": {id: {"stamps": [flat.merged({"keep": 1.0}, true)]}},
 		"ground the palette lacks": {id: {"tweak": {"palette": "ice"}, "stamps": [flat.merged({"ground": "pad"}, true)]}},
@@ -127,6 +127,9 @@ func test_problems_name_the_body() -> void:
 		"a stamp's place that is not there": {id: {"stamps": [{"id": "s", "place": "nowhere", "at": [0, 0], "radius": 5.0}]}},
 		"a mesa with no height": {id: {"stamps": [flat.merged({"kind": "mesa"}, true)]}},
 		"a mesa with no edge": {id: {"stamps": [flat.merged({"kind": "mesa", "height": 6.0, "edge": 0.0}, true)]}},
+		"a mesa stretched under 1": {id: {"stamps": [flat.merged({"kind": "mesa", "height": 6.0, "stretch": 0.5}, true)]}},
+		"a mesa wobbled by half": {id: {"stamps": [flat.merged({"kind": "mesa", "height": 6.0, "wobble": 0.5}, true)]}},
+		"a stretched flatten": {id: {"stamps": [flat.merged({"stretch": 2.0}, true)]}},
 	}
 	for label: String in cases:
 		var out := _problems(cases[label])
@@ -158,6 +161,25 @@ func test_a_mesa_reads_from_the_file() -> void:
 	assert_eq(out[0].height, 6.0)
 	assert_eq(out[0].reach(), 19.5)
 	assert_true(is_nan(out[0].level), "its level is the ground's mean, found by the terrain")
+
+## Round 2's ledge: a mesa's stretch, heading and wobble. Its long axis points
+## along its heading (clockwise from north), and its reach is the long axis's.
+func test_a_long_mesa_reads_from_the_file() -> void:
+	var d := SystemDesign.new()
+	d.seed = 4242
+	d.bodies = {"x": {"stamps": [{"id": "ledge", "kind": "mesa", "lat": 1.0, "lon": 1.0, "radius": 20.0,
+		"edge": 5.5, "height": 6.0, "stretch": 2.5, "heading": 90.0, "wobble": 0.1}]}}
+	var errors := PackedStringArray()
+	var out := d._stamps(&"x", 10000.0, errors)
+	assert_eq(errors, PackedStringArray())
+	assert_eq(out.size(), 1)
+	var s: TerrainStamp = out[0]
+	assert_eq([s.stretch, s.heading, s.wobble], [2.5, 90.0, 0.1])
+	assert_almost_eq(s.reach(), 20.0 * 1.1 + 5.5, 1e-9)
+	var north := (Vector3.UP - s.centre * s.centre.y).normalized()
+	var east := north.cross(s.centre)
+	assert_almost_eq(s.axis.normalized().dot(east), 1.0, 1e-6, "heading 90: its long axis points east")
+	assert_lt(absf(s.axis.dot(s.centre)), 1e-6, "along the ground")
 
 ## How far two stamps are from breaking nest-or-apart (m): apart, the gap
 ## between their reaches; nested, how far inside the outer's flat part the
@@ -233,8 +255,8 @@ func test_no_design_no_change() -> void:
 		assert_eq(other.recipe.seed, b.recipe.seed)
 		assert_eq(other.recipe.kind, b.recipe.kind)
 		# Only p3 has the design's stamps (the oasis floor, its pool bank, its pad, its pool, the ledge, and
-		# a stamp under each of the twelve buildings and three gardens: Rework 1).
-		assert_eq(other.recipe.stamps.size(), 20 if b.id == &"p3" else 0, "%s's stamps" % b.id)
+		# a stamp under each of the five compounds and three gardens: Rework 1).
+		assert_eq(other.recipe.stamps.size(), 13 if b.id == &"p3" else 0, "%s's stamps" % b.id)
 
 func test_the_kesdra_tweak_pins_what_p3_rolls() -> void:
 	var p3 := SystemRecipe.from_seed(1337, false).body(&"p3").recipe

@@ -109,19 +109,20 @@ const OASIS_SHEET := [
 	"village_home5", "village_crushed", "village_gap", "village_tracks",
 	"village_wall", "village_sail", "village_ledge", "village_from_the_pool",
 	"village_pad_to_village", "village_pool_sunward", "village_pool_away", "village_lookout", "village_lookout_back",
-	"village_gardens", "village_approach_150", "village_approach_40", "village_top_down",
+	"village_gardens", "village_gate_lane", "village_approach_150", "village_approach_40", "village_top_down",
 ]
 ## The village set's views: [name, where you stand, what you look at], each
 ## [east, north] m in the oasis's layout.
 const VILLAGE_VIEWS := [
-	["village_home5", [-12.0, -30.0], [-5.1, -41.7]],
-	["village_crushed", [42.0, -8.0], [27.0, -22.0]],
-	["village_gap", [43.0, -4.0], [64.0, -6.0]],
-	["village_tracks", [57.5, -3.0], [92.0, 17.0]],
-	["village_wall", [0.0, 40.0], [-7.4, 53.0]],
-	["village_sail", [-30.0, -14.0], [-40.0, -20.0]],
-	["village_ledge", [-10.0, 28.0], [-21.2, 79.2]],
-	["village_from_the_pool", [14.0, -12.0], [52.0, -6.4]],
+	["village_home5", [0.0, -21.0], [10.8, -37.7]],
+	["village_crushed", [42.0, -10.0], [27.0, -26.0]],
+	["village_gap", [36.0, -13.0], [62.0, -10.0]],
+	["village_tracks", [58.0, -5.0], [92.0, 15.0]],
+	["village_wall", [-22.0, 0.0], [-47.0, -2.0]],
+	["village_sail", [-12.0, -20.0], [-19.5, -33.8]],
+	["village_ledge", [5.0, 62.0], [-12.2, 87.1]],
+	["village_from_the_pool", [14.0, -12.0], [46.4, -11.2]],
+	["village_gate_lane", [-36.0, -19.0], [0.0, 0.0]],
 ]
 
 ## Coming in over the oasis along the tracks, seated: at each of these heights
@@ -130,13 +131,13 @@ const APPROACH_HEIGHTS: Array[float] = [150.0, 40.0]
 const APPROACH_BACK := 1.4
 ## The breach in the ring wall, where the tracks begin, and the tracks'
 ## bearing (deg), [east, north] m; the village's middle, to look at.
-const GAP_AT := [52.0, -6.4]
+const GAP_AT := [46.4, -11.2]
 const TRACKS_BEARING := 60.0
-const VILLAGE_MIDDLE := [30.0, -10.0]
+const VILLAGE_MIDDLE := [12.0, -6.0]
 ## The ledge's lookout: the middle of the mesa `ledge`'s flat top, [east,
 ## north] m in the layout (Rework 1), and the height over the ground there you
 ## are put at (the top is the ground, 6 m over the floor round it).
-const LOOKOUT_AT := [-21.2, 79.2]
+const LOOKOUT_AT := [-12.2, 87.1]
 const LOOKOUT_DROP_FROM := 1.6
 ## The top-down render's height, m, over its middle [east, north] m.
 const TOP_DOWN_HIGH := 250.0
@@ -145,7 +146,7 @@ const TOP_DOWN_AT := [-15.0, 10.0]
 ## [east, north] m].
 const SET_DOWNS := [
 	["across the floor's blend, 130 m south of the pool", [0.0, -130.0]],
-	["onto the crushed hut", [32.2, -16.1]],
+	["onto the crushed hut", [30.2, -24.4]],
 ]
 const SET_DOWN_FROM := 12.0
 
@@ -268,10 +269,10 @@ func _more_foot_views() -> void:
 	_face(-_sun_flat)
 	await _seconds(0.5)
 	await _shot("village_pool_away")
-	await _foot_look("village_gardens", [22.0, -2.0], [32.7, 4.6])
+	await _foot_look("village_gardens", [-28.0, -4.0], [-42.1, -5.9])
 	await _lookout()
 	# On foot in the village, the frame rate over 10 s.
-	await _foot_look("village_from_the_pool_fps", [14.0, -12.0], [52.0, -6.4])
+	await _foot_look("village_from_the_pool_fps", [14.0, -12.0], [46.4, -11.2])
 	await _reading_for("on foot in the village by the pool, looking at the breach", LANDED_SECONDS)
 
 ## Up on the ledge's flat top, looking out north over the dunes.

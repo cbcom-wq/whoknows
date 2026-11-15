@@ -314,3 +314,82 @@ func test_no_stamps_is_unchanged_for_a_mesa():
 	for i in 100:
 		var d := _at(mesa.centre, mesa.reach() + 0.05 + 200.0 * rng.randf(), rng.randf() * TAU, r.radius_m)
 		assert_eq(t.height_at(d), plain.height_at(d))
+
+## A point `along` m along `s`'s long axis and `across` m along its short one,
+## from its centre (on the world's surface).
+static func _on_axes(s: TerrainStamp, along: float, across: float, world_radius: float) -> Vector3:
+	var long := (s.axis - s.centre * s.centre.dot(s.axis)).normalized()
+	var short := s.centre.cross(long)
+	var way := long * along + short * across
+	var a := way.length() / world_radius
+	if a == 0.0:
+		return s.centre
+	return (s.centre * cos(a) + way.normalized() * sin(a)).normalized()
+
+## A long ledge (Rework 1, round 2): the MESA's top is an ellipse `stretch`
+## times as long as it is wide, its long axis along `axis`, its edge wobbled
+## in and out by at most `wobble` of it, the same every time. Inside the long
+## axis the top is level; off the short sides, within the long axis's reach,
+## the ground is as it was; and beyond its reach it is as it was bit for bit.
+func test_a_long_mesa_is_an_ellipse():
+	var r := _p3()
+	r.stamps.append(_flatten(&"floor", DUNES, 120.0, 150.0))
+	var mesa := _mesa(&"ledge", _at(DUNES.normalized(), 80.0, 0.7, r.radius_m), 20.0, 5.5, 6.0)
+	mesa.stretch = 2.5
+	mesa.wobble = 0.08
+	var north := (Vector3.UP - mesa.centre * mesa.centre.y).normalized()
+	mesa.axis = north.rotated(mesa.centre, -deg_to_rad(80.0))
+	r.stamps.append(mesa)
+	var t := WorldTerrain.new(r)
+	var floor_only := _p3()
+	floor_only.stamps.append(_flatten(&"floor", DUNES, 120.0, 150.0))
+	var before := WorldTerrain.new(floor_only)
+	assert_false(mesa.is_round())
+	assert_almost_eq(mesa.reach(), 20.0 * 1.08 + 5.5, 1e-9, "its reach is the long axis's, wobbled out, and its edge")
+	var top: float = t.stamps[1].level + 6.0
+	var short := 20.0 / 2.5
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 41
+	for i in 300:
+		# Inside the ellipse shrunk by the wobble's most.
+		var turn := rng.randf() * TAU
+		var k := sqrt(rng.randf()) * (1.0 - 0.08) - 0.01
+		var d := _on_axes(mesa, 20.0 * k * cos(turn), short * k * sin(turn), r.radius_m)
+		assert_almost_eq(t.height_at(d), top, 0.01, "on the top")
+	for along in [-19.0, -10.0, 0.0, 10.0, 18.0]:
+		assert_almost_eq(t.height_at(_on_axes(mesa, along, 0.0, r.radius_m)), top, 0.01, "level along the long axis at %.0f" % along)
+	for side in [-1.0, 1.0]:
+		var off := _on_axes(mesa, 0.0, side * (short * 1.08 + 5.5 + 0.3), r.radius_m)
+		assert_lt(mesa.metres_from(off, r.radius_m), mesa.reach(), "inside the long axis's reach")
+		assert_eq(t.height_at(off), before.height_at(off), "off its short side the ground is as it was")
+		assert_false(t.ground_at(off, 0.05) == &"ground_high", "and wears the land's own ground")
+	for i in 200:
+		var d := _at(mesa.centre, mesa.reach() + 0.05 + 30.0 * rng.randf(), rng.randf() * TAU, r.radius_m)
+		assert_eq(t.height_at(d), before.height_at(d), "beyond its reach the ground is as it was")
+	# The wobble moves the edge, at most `wobble` of the ellipse either way.
+	var least := INF
+	var most := 0.0
+	for k in 72:
+		var turn := TAU * k / 72.0
+		var way := _on_axes(mesa, cos(turn), sin(turn), r.radius_m)
+		var ellipse := 20.0 * short / sqrt(pow(short * cos(turn), 2.0) + pow(20.0 * sin(turn), 2.0))
+		var share := mesa.flat_radius(way) / ellipse - 1.0
+		least = minf(least, share)
+		most = maxf(most, share)
+	assert_between(most, 0.02, 0.0801, "out by up to the wobble")
+	assert_between(least, -0.0801, -0.02, "and in")
+	# The same every time, and a copy keeps it.
+	var again := WorldTerrain.new(r)
+	for i in 50:
+		var d := _at(mesa.centre, 30.0 * rng.randf(), rng.randf() * TAU, r.radius_m)
+		assert_eq(again.height_at(d), t.height_at(d))
+	var c := mesa.copy()
+	assert_eq([c.stretch, c.wobble, c.axis, c.heading], [mesa.stretch, mesa.wobble, mesa.axis, mesa.heading])
+	assert_eq(c.flat_radius(mesa.centre.rotated(Vector3.UP, 0.001)), mesa.flat_radius(mesa.centre.rotated(Vector3.UP, 0.001)))
+	# The edge is still steeper than rock across the short side.
+	for side in [-1.0, 1.0]:
+		var lip := mesa.flat_radius(_on_axes(mesa, 0.0, side, r.radius_m))
+		var inner := _on_axes(mesa, 0.0, side * (lip + 2.75 - 1.0), r.radius_m)
+		var outer := _on_axes(mesa, 0.0, side * (lip + 2.75 + 1.0), r.radius_m)
+		var slope := atan(absf(t.height_at(inner) - t.height_at(outer)) / 2.0)
+		assert_gt(slope, WorldTerrain.ROCK_SLOPE, "mid-edge off the short side: %.1f deg" % rad_to_deg(slope))
