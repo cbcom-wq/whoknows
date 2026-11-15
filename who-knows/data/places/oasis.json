@@ -8,6 +8,6 @@
  "wall": {"runs": [[[54, 24], [66, 9], [68.4, -9]], [[68.4, -15], [66, -30], [60, -39]]], "gap": [68.4, -12], "height": 2.6},
  "rubble": [{"at": [71, -12], "spread": [4, 8], "count": 40}],
  "tracks": [{"id": "out", "from": [68.4, -12], "bearing": 60, "length": 400},
-  {"id": "in", "from": [68.4, -12], "bearing": 234.5, "length": 21, "fade_over": 400}],
+  {"id": "in", "from": [68.4, -12], "bearing": 234.5, "length": 16, "fade_over": 400}],
  "outcrop": {"at": [-19.5, 45.6], "size": [50, 9, 18], "variety": 0.5},
  "sails": [{"at": [-27, -0.5], "size": [4.5, 3.5], "yaw": 15}, {"at": [13, -27], "size": [4.6, 3.4], "yaw": -10}]}

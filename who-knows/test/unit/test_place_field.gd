@@ -335,7 +335,70 @@ func test_the_tracks_lead_out_of_the_gap():
 	if not inward.is_empty():
 		var last := _centre(inward[inward.size() - 1])
 		var to_hut := Vector2(last.x, -last.z).distance_to(Vector2(float(hut["at"][0]), float(hut["at"][1])))
-		assert_lt(to_hut, 10.0, "ending at the hut")
+		# Ending by the hut but short of its stamp's lip (hut_crushed, reach
+		# 9 m): coarser chunks cut across a lip, so a print on it is half
+		# buried there (test_the_tracks_lie_on_the_drawn_ground).
+		assert_between(to_hut, 10.5, 13.0, "ending by the hut, short of its stamp's lip")
+
+## The ground drawn under each print, not height_at: beyond the near chunks
+## the world draws coarser quads (5-10 m at 150-400 m), which stray from
+## height_at between their corners. For the chunks really drawn with the
+## starter held over the gap, and for the leaves the surface would choose
+## from the pad, the lookout's top and 300 m over the oasis, every vertex of
+## every print lies over the drawn triangle under it (never buried) and no
+## more than 8 cm over it (never floating).
+const TRACK_OVER_DRAWN := [0.005, 0.08]
+
+func test_the_tracks_lie_on_the_drawn_ground():
+	var gap_at: Array = _place.layout()["wall"]["gap"]
+	await _hold_over(float(gap_at[0]), float(gap_at[1]), 3.0)
+	var surface: WorldSurface = (_root.star_system.proxy(_body.id) as BodyProxy).surface()
+	assert_not_null(surface)
+	if surface == null:
+		return
+	surface.finish()
+	var depth_max := CubeSphere.depth_for(_body.radius)
+	var height_at := func(d: Vector3) -> float: return _terrain.height_at(d)
+	var leaves := {"drawn, held over the gap": surface.visible_chunks()}
+	for spot: Array in [["the pad's eye", -80.0, -40.0, 1.6], ["the lookout's top", -19.5, 45.6, 9.6],
+			["300 m over the oasis", 0.0, 0.0, 300.0]]:
+		var d := _place.local_dir(spot[1], spot[2], _body.radius)
+		var focus := d * (_body.radius + _terrain.height_at(d) + float(spot[3]))
+		leaves[spot[0]] = WorldSurface.select(_body.radius, _terrain.relief, depth_max, focus, {}, {}, height_at)[0]
+	var frame := _place.frame()
+	var origin := PlaceField.origin_of(_place, _terrain)
+	var gap := Vector2(float(gap_at[0]), float(gap_at[1]))
+	for seen: String in leaves:
+		var drawn := {}
+		for k: Vector4i in leaves[seen]:
+			drawn[k] = true
+		var lo := INF
+		var hi := -INF
+		var coarsest := depth_max
+		var bands := {}
+		for id in ["out", "in"]:
+			for p: PackedVector3Array in _prints(id):
+				var band := "%s %d" % [id, int(Vector2(_centre(p).x, -_centre(p).z).distance_to(gap) / 100.0) * 100]
+				for v in p:
+					var local := frame * v + origin
+					var depth := 0
+					while depth < depth_max and not drawn.has(CubeSphere.key_for(local.normalized(), depth)):
+						depth += 1
+					var over := TerrainChunkData.drawn_altitude_of(_terrain, local, depth)
+					lo = minf(lo, over)
+					hi = maxf(hi, over)
+					coarsest = mini(coarsest, depth)
+					var b: Array = bands.get(band, [INF, -INF, depth_max])
+					bands[band] = [minf(b[0], over), maxf(b[1], over), mini(b[2], depth)]
+		var keys := bands.keys()
+		keys.sort()
+		for band in keys:
+			var b: Array = bands[band]
+			gut.p("%s, the %s m prints: %.3f-%.3f m over the drawn ground (quads up to %.1f m)" % [seen, band,
+				b[0], b[1], CubeSphere.edge_m(_body.radius, b[2]) / CubeSphere.QUADS])
+		assert_lt(coarsest, depth_max, "%s: some prints lie on coarser chunks than the finest" % seen)
+		assert_gt(lo, TRACK_OVER_DRAWN[0], "%s: no print is buried in the drawn ground" % seen)
+		assert_lt(hi, TRACK_OVER_DRAWN[1], "%s: and none floats over it" % seen)
 
 ## Each stone's top (its highest point) in the place's frame.
 func _stone_tops() -> Array:
@@ -392,6 +455,66 @@ func test_the_outcrop_can_be_climbed():
 		best = maxf(best, t.y - _ground_y(t.x, -t.z))
 	gut.p("%d tops open, %d reached, the highest %.2f m up" % [tops.size(), reached.size(), best])
 	assert_gt(best, 7.0, "a chain of tops reaches 7 m up")
+	# The lookout: the highest top of all. You stand on it: reached by the
+	# chain, or walked up to from a top the chain reaches, over the stones'
+	# own colliders at no more than WALK_SLOPE, and level enough at its top.
+	var lookout := 0
+	for i in tops.size():
+		if (tops[i] as Vector3).y > (tops[lookout] as Vector3).y:
+			lookout = i
+	var top: Vector3 = tops[lookout]
+	var up := top.y - _ground_y(top.x, -top.z)
+	assert_gt(up, 7.0, "the lookout is over 7 m up")
+	var walked := reached.has(lookout)
+	var how := "the chain reaches it" if walked else "not reached"
+	for i in reached:
+		if walked:
+			break
+		var from: Vector3 = tops[i]
+		var steepest := _walk_steepest(from, top)
+		if steepest <= WALK_SLOPE:
+			walked = true
+			how = "walked up from the top %.2f m up, %.1f m off, no steeper than %.0f deg" % [
+				from.y - _ground_y(from.x, -from.z), Vector2(from.x - top.x, from.z - top.z).length(), steepest]
+	gut.p("the lookout %.2f m up: %s; its top %.0f deg across" % [up, how, _steepest_round(top, 0.6)])
+	assert_true(walked, "you can climb onto the lookout's top")
+	assert_lt(_steepest_round(top, 0.6), WALK_SLOPE, "and stand there")
+
+## The steepest a walk may climb, deg: under the avatar's floor_max_angle (45).
+const WALK_SLOPE := 38.0
+
+## The steepest climb, deg, walking straight from `a` to `b` over whatever is
+## solid under the way (sampled every 0.2 m by rays down); INF if there is a
+## hole or a wall (a rise of more than 0.35 m between samples).
+func _walk_steepest(a: Vector3, b: Vector3) -> float:
+	var span := Vector2(b.x - a.x, b.z - a.z).length()
+	var n := maxi(1, ceili(span / 0.2))
+	var last := a.y
+	var steepest := 0.0
+	for k in range(1, n + 1):
+		var p := a.lerp(b, float(k) / n)
+		var hit := _ray(Vector3(p.x, maxf(a.y, b.y) + 3.0, p.z), Vector3(p.x, p.y - 20.0, p.z))
+		if hit.is_empty():
+			return INF
+		var y := _oasis().to_local(hit["position"]).y
+		var rise := y - last
+		if rise > 0.35:
+			return INF
+		steepest = maxf(steepest, rad_to_deg(atan2(rise, span / n)))
+		last = y
+	return steepest
+
+## The steepest the solid surface is round `p`, deg, within `radius`.
+func _steepest_round(p: Vector3, radius: float) -> float:
+	var steepest := 0.0
+	for k in 8:
+		var a := TAU * k / 8.0
+		var q := p + Vector3(cos(a), 0.0, sin(a)) * radius
+		var hit := _ray(Vector3(q.x, p.y + 3.0, q.z), Vector3(q.x, p.y - 5.0, q.z))
+		if hit.is_empty():
+			return INF
+		steepest = maxf(steepest, rad_to_deg(atan2(absf(p.y - _oasis().to_local(hit["position"]).y), radius)))
+	return steepest
 
 ## Every item of call 7 this task builds has its piece (the enterable homes,
 ## the workshop and the comms hut come with the buildings, later).

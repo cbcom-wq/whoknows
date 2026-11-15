@@ -105,10 +105,16 @@ static func ground_point(terrain: WorldTerrain, d: Vector3, centre: Vector3i) ->
 ## the near-sheer edge and sit up to ~9 m under height_at (final review I1).
 ## About four height_at calls and a face_uv. Pure.
 static func solid_altitude_of(terrain: WorldTerrain, local: Vector3) -> float:
+	return drawn_altitude_of(terrain, local, CubeSphere.depth_for(terrain.radius))
+
+## How far `local` (from the world's centre) is over the ground a chunk at
+## `depth` draws there: solid_altitude_of for a coarser chunk, whose quads are
+## bigger and so stray further from height_at between their corners. What a
+## far piece laid on the ground (the oasis's tracks) is checked against. Pure.
+static func drawn_altitude_of(terrain: WorldTerrain, local: Vector3, depth: int) -> float:
 	if local.is_zero_approx():
 		return -terrain.radius
 	var n := CubeSphere.QUADS
-	var depth := CubeSphere.depth_for(terrain.radius)
 	var fuv := CubeSphere.face_uv(local)
 	var cells := 1 << depth
 	var key := Vector4i(int(fuv.x), depth,

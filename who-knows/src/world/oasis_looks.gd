@@ -373,13 +373,20 @@ const OUTCROP_STONES := [
 ## The steps: squashed stones STEP_DIAMETER across, STEP_SPAN apart from west
 ## to east along the big stones' south flanks, each STEP_RISE at most over the
 ## last (a jump peaks at 0.89 m), its top STEP_PROUD over the rock or ground
-## it rests on, to STEP_BELOW under the lookout's top.
+## it rests on, up to the cap.
 const STEP_DIAMETER := 2.0
 const STEP_SQUASH := 0.45
 const STEP_SPAN := 1.9
 const STEP_RISE := 0.6
 const STEP_PROUD := 0.5
-const STEP_BELOW := 0.3
+## The lookout's own summit is a point (about 43 deg within 0.6 m of it), so
+## what you stand on up there is the cap: the chain's last stone, a broad flat
+## one CAP_DIAMETER across bedded on the summit, its top CAP_OVER over it. The
+## chain's last steps close on it no more than CAP_REACH apart.
+const CAP_DIAMETER := 2.8
+const CAP_SQUASH := 0.35
+const CAP_OVER := 0.3
+const CAP_REACH := 2.2
 ## The first step's top over the floor, and how far under the ground a big
 ## stone's middle lies at least, m.
 const STEP_FIRST := 0.55
@@ -395,8 +402,9 @@ const STEP_SWAY := 1.5
 ## A rock outcrop at `f` (on the ground, x along its length): big RockMesh
 ## stones in the world's `boulder` shades (from `palette`, as GroundCover takes
 ## them; the desert's when none is given), with smaller stones as steps up to
-## a lookout about 8 m up. `size` is its length, height and depth (the stones
-## are laid out for 50 x 9 x 18 m and scaled in x and z). `floor_of(x, z)` is
+## a lookout about 8 m up and a flat cap on its summit to stand on. `size` is
+## its length, height and depth (the stones are laid out for 50 x 9 x 18 m and
+## scaled in x and z). `floor_of(x, z)` is
 ## the ground's height in f's terms (f's plane when none is given). One Node3D
 ## "Outcrop" holding one mesh and one StaticBody3D "Stones" on BodyProxy.LAYER,
 ## a convex hull per stone, as solid as the ground's boulders.
@@ -478,17 +486,16 @@ static func outcrop_stones(size: Vector3, variety: float, floor_of := Callable()
 		for faces: Array in surfaces:
 			h = maxf(h, _surface(faces, x, z))
 		return h
-	# Steps from the west, along the south flanks, to just under the lookout:
-	# the first on the floor at the south edge, each next STEP_RISE higher.
-	var target := lookout.y - STEP_BELOW
+	# Steps from the west, along the south flanks, to one STEP_RISE under the
+	# cap: the first on the floor at the south edge, each next STEP_RISE higher.
+	var cap_top := lookout.y + CAP_OVER
+	var target := cap_top - STEP_RISE
 	var x := lookout.x - (ceili((target - float(ground.call(lookout.x, lookout.z))) / STEP_RISE) + 1) * STEP_SPAN
 	var south := size.z * 0.5 - STEP_DIAMETER * 0.5
 	var at_z := south
 	var h := float(ground.call(x, south)) + STEP_FIRST
 	var k := 0
 	while k < 40:
-		var basis := Basis(Vector3.UP, _noise(variety, k, 60.0) * TAU) * Basis.from_scale(Vector3(1.0, STEP_SQUASH, 1.1) * STEP_DIAMETER)
-		var top := _top_of(RockMesh.Shape.BOULDER, basis)
 		if k > 0:
 			# Walk north from the south edge until the rock under this step's
 			# top is high enough for it to stand STEP_PROUD over it; failing
@@ -507,25 +514,46 @@ static func outcrop_stones(size: Vector3, variety: float, floor_of := Callable()
 					break
 				z -= 0.1
 			at_z = clampf(best_z if is_nan(found) else found, at_z - STEP_SWAY, at_z + STEP_SWAY)
-		var under := float(support.call(x, at_z))
-		# Its top at (x, h, at_z): the stone's middle sits off it by the top's own offset.
-		stones.append([RockMesh.Shape.BOULDER, Transform3D(basis, Vector3(x - top.x, h - top.y, at_z - top.z))])
-		if h - under > STEP_PROUD + 0.25:
-			# Too little rock under it here: a pillar stone holds it up, its top
-			# hidden in the step.
-			var pillar := Basis(Vector3.UP, _noise(variety, k, 61.0) * TAU) * Basis.from_scale(Vector3(PILLAR_DIAMETER, 1.0, PILLAR_DIAMETER))
-			var rise := _top_of(RockMesh.Shape.BOULDER, pillar)
-			var low := _low_of(RockMesh.Shape.BOULDER, pillar)
-			var tall := (h - PILLAR_HIDDEN) - (under - SUNK_MIDDLE)
-			pillar = pillar * Basis.from_scale(Vector3(1.0, tall / (rise.y - low), 1.0))
-			rise = _top_of(RockMesh.Shape.BOULDER, pillar)
-			stones.append([RockMesh.Shape.BOULDER, Transform3D(pillar, Vector3(x - rise.x, h - PILLAR_HIDDEN - rise.y, at_z - rise.z))])
+		_step(stones, support, Vector3(x, h, at_z), _step_basis(variety, k), variety, k)
 		if h >= target - 0.01:
 			break
 		h = minf(h + STEP_RISE, target)
 		x += STEP_SPAN
 		k += 1
+	# Then straight across the lookout's flank to its summit, no more than
+	# CAP_REACH apart and rising evenly, and the cap bedded on the summit.
+	var last := Vector3(x, h, at_z)
+	var summit := Vector3(lookout.x, cap_top, lookout.z)
+	var m := maxi(1, ceili(Vector2(summit.x - last.x, summit.z - last.z).length() / CAP_REACH))
+	for i in range(1, m):
+		k += 1
+		_step(stones, support, last.lerp(summit, float(i) / m), _step_basis(variety, k), variety, k)
+	var cap := Basis(Vector3.UP, _noise(variety, k + 1, 60.0) * TAU) 		* Basis.from_scale(Vector3(1.0, CAP_SQUASH, 1.0) * CAP_DIAMETER)
+	var cap_peak := _top_of(RockMesh.Shape.BOULDER, cap)
+	stones.append([RockMesh.Shape.BOULDER, Transform3D(cap, summit - cap_peak)])
 	return stones
+
+## A step stone's turn and squash, the `k`th from the floor.
+static func _step_basis(variety: float, k: int) -> Basis:
+	return Basis(Vector3.UP, _noise(variety, k, 60.0) * TAU) 		* Basis.from_scale(Vector3(1.0, STEP_SQUASH, 1.1) * STEP_DIAMETER)
+
+## One step, its top at `at`, into `stones`; and, where too little rock lies
+## under it (`support`), a pillar stone holding it up, its top hidden in the
+## step.
+static func _step(stones: Array, support: Callable, at: Vector3, basis: Basis, variety: float, k: int) -> void:
+	var top := _top_of(RockMesh.Shape.BOULDER, basis)
+	var under := float(support.call(at.x, at.z))
+	# The stone's middle sits off its top by the top's own offset.
+	stones.append([RockMesh.Shape.BOULDER, Transform3D(basis, at - top)])
+	if at.y - under <= STEP_PROUD + 0.25:
+		return
+	var pillar := Basis(Vector3.UP, _noise(variety, k, 61.0) * TAU) 		* Basis.from_scale(Vector3(PILLAR_DIAMETER, 1.0, PILLAR_DIAMETER))
+	var rise := _top_of(RockMesh.Shape.BOULDER, pillar)
+	var low := _low_of(RockMesh.Shape.BOULDER, pillar)
+	var tall := (at.y - PILLAR_HIDDEN) - (under - SUNK_MIDDLE)
+	pillar = pillar * Basis.from_scale(Vector3(1.0, tall / (rise.y - low), 1.0))
+	rise = _top_of(RockMesh.Shape.BOULDER, pillar)
+	stones.append([RockMesh.Shape.BOULDER, Transform3D(pillar, at - Vector3(0.0, PILLAR_HIDDEN, 0.0) - rise)])
 
 ## The lowest vertex height of `shape` turned and scaled by `basis`.
 static func _low_of(shape: int, basis: Basis) -> float:
