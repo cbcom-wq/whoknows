@@ -374,9 +374,9 @@ static func _floor_in(place: PlaceDesign, terrain: WorldTerrain, f: Transform3D)
 
 ## The lowest ground under a footprint at layout `east`, `north`: `half` its
 ## half-size (east by north, before `yaw_deg` turns it clockwise), or a disc
-## of `half.x` when `round`, sampled every FOOT_STEP and along its edge.
+## of `half.x` when `is_round`, sampled every FOOT_STEP and along its edge.
 static func lowest_ground(place: PlaceDesign, terrain: WorldTerrain, east: float, north: float, half: Vector2,
-		yaw_deg: float, round: bool) -> float:
+		yaw_deg: float, is_round: bool) -> float:
 	var on := ground_fn(place, terrain)
 	var turn := deg_to_rad(yaw_deg)
 	var lo := INF
@@ -386,10 +386,10 @@ static func lowest_ground(place: PlaceDesign, terrain: WorldTerrain, east: float
 		for j in ny + 1:
 			var e := -half.x + 2.0 * half.x * i / nx
 			var n := -half.y + 2.0 * half.y * j / ny
-			if round and Vector2(e, n).length() > half.x:
+			if is_round and Vector2(e, n).length() > half.x:
 				continue
 			lo = minf(lo, (on.call(east + e * cos(turn) + n * sin(turn), north - e * sin(turn) + n * cos(turn)) as Vector3).y)
-	if round:
+	if is_round:
 		for k in 48:
 			var a := TAU * k / 48.0
 			lo = minf(lo, (on.call(east + half.x * sin(a), north + half.x * cos(a)) as Vector3).y)
