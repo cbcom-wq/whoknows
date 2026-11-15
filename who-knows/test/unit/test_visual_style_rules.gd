@@ -8,7 +8,8 @@ const SHADER_DIR := "res://data/materials/interior/"
 
 ## Code that paints: every colour must come from a palette -- InteriorPalette
 ## inside, HullPalette for the hull's outside (the airlock's hatch face),
-## SpacePalette for space: rocks, worlds and stars.
+## SpacePalette for space: rocks, worlds and stars, OasisPalette for the
+## oasis's outside: palms, water, grass, brick (desert world phase 3).
 ## InteriorKit is exempt -- it packs data (screen modes, glow energy) into
 ## vertex colours rather than choosing colours.
 const PAINTING_FILES := [

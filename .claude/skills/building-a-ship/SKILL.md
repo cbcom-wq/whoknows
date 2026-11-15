@@ -157,6 +157,9 @@ Do these in order. Each one names the check that proves it.
      Otherwise they are only heard from the seat.
 5. **Validate:** `ShipValidator.validate(grid, catalog)` returns **zero issues**. Warnings count:
    a ship you give the player must not greet them with a brownout or a dead airlock.
+   **A library ship must also fit the oasis pad on WADIS (`p3`):** `test_every_library_ship_fits_the_pad`
+   (`test_desert_world.gd`) wants its half-diagonal plus 5 m inside the pad's radius, which is
+   26 m in `data/systems/kesdra.json`: at most 21 m, or the pad grows with the ship.
 6. **Balance:** read `ShipStats.compute(grid, catalog)`:
    - `power_gen > power_draw`, with margin;
    - no zero component in `torque_budget`;

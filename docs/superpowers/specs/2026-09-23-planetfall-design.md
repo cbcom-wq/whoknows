@@ -42,6 +42,13 @@ Slice 6; piloting HUD spec §4.3, §5, §6, §10; starter shuttle art direction 
 > the `WorldEnvironment` does change now (`AirMood`), which §7.3 had said it would not. **§12 and §13 (sites,
 > signals, the discovery log and the surface readout) are still open.**
 
+> **Places built 2026-11-15 by the desert world's phase 3, Parts A and B**
+> (`2026-11-03-desert-world-design.md` §8, branch `desert-oasis`): one authored place on `p3`, WADIS
+> (the oasis, its beacon, its ground and a walled village outside), by hand and not by §12's site
+> generator. **Sites in general, signals, the discovery log and the surface readout (§12 and §13)
+> are still open.** The phase's own log is a datapad in the oasis (its Part C, not built yet), not
+> this spec's discovery log.
+
 > **Boulders built 2026-11-08 by the desert world's phase 2** (`2026-11-03-desert-world-design.md`
 > §7.3, branch `desert-style`), as its ground cover, with grass and blowing sand on deserts. They
 > differ from §5.2, §5.3 and §6.5 here:

@@ -399,6 +399,10 @@ terrain pass settles it (§13.7); the air part is done, below.
 > *Worlds up close* now holds the sky and haze by air, the rim, the dust going, the entry glow and
 > the unpuffed hold. **Ground cover, the desert, palms and brick come with phases 2 and 3** and
 > will add to it.
+>
+> **Done for the ground, 2026-11-08 and 2026-11-15** (desert world phases 2 and 3): §3.9 now holds
+> the desert, ground cover, and (Parts A and B of phase 3) the oasis's palms, water and brick.
+> *Worlds up close* is done. Part C's interiors will add to it.
 
 ---
 

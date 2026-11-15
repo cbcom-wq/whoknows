@@ -392,7 +392,7 @@ Delver kept 1.1-1.2 m/s on every leg, arrived on all five and never stalled for 
   `wait_process_frames` for overlays and looks.
 - Expected warnings and errors: `assert_engine_error(text)` / `assert_push_error(text)`.
 
-## Worlds (desert world phases 0–2; `docs/superpowers/specs/2026-11-03-desert-world-design.md` §5–§7)
+## Worlds (desert world phases 0–3; `docs/superpowers/specs/2026-11-03-desert-world-design.md` §5–§8)
 
 **Nothing lives on a world yet.** No NPC, creature or droid stands on one. The first world
 creature is the beast, in its own design (desert world spec §5.7); what follows is what it, and
@@ -430,6 +430,16 @@ any fauna after it, must respect.
   same every visit (from the chunk's own sub-seed), so the stones it meets are too. It is drawn
   round the focus only (stones out to `CoverField.BOULDER_REACH` 240 m).
 - **The blowing sand** (`BlowingSand`) is a look, round the focus only; it pushes nothing.
+- **Places exist on `p3` (WADIS) for the beast to come** (phase 3, Parts A and B; `PlaceField`,
+  `data/places/oasis.json`, `data/systems/kesdra.json`). The oasis is one node in
+  `Universe.EXTERIOR_SPACE`, built near the focus and freed far off, so a creature must not
+  depend on it being loaded. Its ground is the world's ground: a stamped floor (`TerrainStamp`,
+  in `height_at`) is walked like any ground, on `BodyProxy.LAYER`, with no special case. The
+  village's walls, shells, foundations, thresholds (0.15 m steps) and palms are solid
+  (`StaticBody3D` on `BodyProxy.LAYER`) and its grass, tracks and water are not; wading in the
+  pool slows the avatar (`Avatar.wade_factor`), and a creature gets nothing like it yet. The
+  tracks (`OasisLooks.tracks`) lead out of the village's breach: they are scenery, and the beast
+  itself is not built. Buildings you can enter, as bases, are Part C (not built yet).
 - **Hostile pilots stay high.** `ShipPilot.AIR_FLOOR_MARGIN` 2000 m: a hostile ship flies no lower
   than a world's air top plus that, through the static `ShipPilot.above_air(target_v, up, altitude,
   floor_m)`. It applies to `Sides.HOSTILE` only: the same pilot flies your ship when you hand it

@@ -1061,7 +1061,7 @@ thrust over weight here (INF outside a well); under 1.0 the HUD says `TOO HEAVY 
 - On foot (FIELD) the HUD shows no suit charge: `build_telemetry` blanks `energy_label` and the
   energy panel shows only the tool's text (`EnergyPanel.render`).
 - `Ship.on_world()` and `Ship.outside_refusal()` override `GridHome`'s defaults (false and ""),
-  which a `Base` still has. **Phase 3 must override them on `Base`** for the oasis buildings,
+  which a `Base` still has. **Part C of phase 3 (not built yet) must override them on `Base`** for the oasis buildings,
   or a base on a world steps you out in SUIT mode and asks for charge. The same goes for a
   ramp: nothing lowers one on a `Base` (the ramp comes down from `Ship._sync_ramps`).
 - Proof: `test_landing_monitor.gd`, `test_landing_save.gd`, the `test_airlock_world.gd` file, and
@@ -1190,6 +1190,24 @@ They are under the hull's `ExteriorBuilder`, so the floating origin carries them
   (landed from 25 m at eye height; and low under the belly from abeam, lit by a lamp of the
   probe's own at the camera, since the sun stands at the zenith there and the hull's shadow
   under it is black).
+
+## The oasis on WADIS (desert world phase 3, Parts A and B; `docs/superpowers/specs/2026-11-03-desert-world-design.md` §8)
+
+The desert world `p3` of system 1337 is named WADIS and holds one authored place, the oasis, with
+a landing pad. A ship meets it three ways:
+- **The pad's radius is 26 m,** the `pad` stamp in `data/systems/kesdra.json` (a FLATTEN raised
+  0.15 m, in a sandstone `a0642c`); `data/places/oasis.json`'s `pad.radius` must equal it (a test
+  asserts the two agree). Read it from the stamp, never from a number here. The pad sits at
+  (-80, -40) from the pool. `test_every_library_ship_fits_the_pad` in `test_desert_world.gd` holds
+  each library ship's half-diagonal plus `PAD_MARGIN` 5 m inside it (the Warden's is 20.1 m).
+- **Stamps live only in `WorldTerrain.height_at` and `ground_at`** and are authored in
+  `data/systems/*.json` (`TerrainStamp`: FLATTEN, BASIN, MESA). Nothing else flattens ground, so a
+  hull's legs, `LandingMonitor` and the solid chunks all meet the pad's own ground. The starter
+  and the Warden land on the pad from 150 m at tilt 0.0° with no damage; across the floor's blend
+  8.6°, onto the crushed hut 16.4°, no damage and no refusal (the tilt limit is phase 0's).
+- **Bases on a world have doorways: Part C, not built yet.** The oasis's four enterable buildings
+  are still plain brick shells; the doorway airlock (no cycle, no pressure) and `Base.on_world()`
+  come with Part C. Until then nothing about a ship's own airlock changes.
 
 ## The hose (`docs/superpowers/specs/2026-09-24-quantum-energy-design.md` §11, *As built* §11.5)
 
