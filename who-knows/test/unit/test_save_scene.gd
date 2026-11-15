@@ -502,3 +502,27 @@ func _bridge_scene() -> Node:
 	root.save_path = PATH
 	add_child(root)
 	return root
+
+func test_places_round_trip_and_a_save_before_phase_3_takes_nothing():
+	var a := _scene()
+	a.places.from_dict({"taken": {"oasis": ["crate_hut"]}})
+	assert_true(a.save_now())
+	_drop(a)
+
+	var b := _scene()
+	assert_true(b.places.is_taken(&"oasis", "crate_hut"), "taken stays taken through a save")
+	assert_false(b.places.is_taken(&"oasis", "canister_path"))
+	var saved := SaveGame._parse(PATH)
+	assert_true(saved.has("places"), "the part is written")
+	saved.erase("places")
+	_drop(b)
+	for suffix in [".bak", ".tmp"]:
+		if FileAccess.file_exists(PATH + suffix):
+			DirAccess.remove_absolute(PATH + suffix)
+	var f := FileAccess.open(PATH, FileAccess.WRITE)
+	f.store_string(JSON.stringify(saved))
+	f.close()
+
+	var c := _scene()
+	assert_eq(c.places.to_dict(), {"taken": {}}, "an older save takes nothing")
+	_drop(c)

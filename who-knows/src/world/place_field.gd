@@ -49,6 +49,13 @@ var _places: Array[PlaceDesign] = []
 ## Place id -> the UniversePoint of the place on its floor (made on first use).
 var _points := {}
 var _loaded := {}   # StringName id -> Node3D
+## Place id -> {item id: true}: what the hands have taken from each place, and
+## which is never put back (saved as the part "places").
+var _taken := {}
+## Item -> [place id, item id]: the items lying in a loaded place now, ours.
+var _lying := {}
+## Item -> the Callable its `consumed` calls.
+var _hooks := {}
 
 func setup(p_universe: Universe, p_system: SystemRecipe, p_whereabouts: Whereabouts,
 		p_catalog: ItemCatalog) -> void:
@@ -100,6 +107,10 @@ func _load(place: PlaceDesign, body: SystemBody) -> void:
 func _free(id: StringName) -> void:
 	var node: Node3D = _loaded[id]
 	_loaded.erase(id)
+	# What lies in the place goes with it; what was taken is the hand's.
+	for item: Variant in _lying.keys():
+		if _lying[item][0] == id:
+			_forget(item)
 	if is_instance_valid(node):
 		node.remove_from_group(Universe.EXTERIOR_SPACE)
 		node.queue_free()
@@ -115,6 +126,7 @@ func _build(place: PlaceDesign, body: SystemBody, node: Node3D) -> void:
 	_build_village(place, terrain, layout, node, water_radius)
 	_build_tracks(place, terrain, layout, node)
 	_build_outcrop(place, terrain, layout, node)
+	_build_items(place, terrain, layout, node)
 
 ## The pool: its water, a flat faceted disc at its level, and the area that
 ## slows you in it. Returns the water's edge: how far from the pool's centre
@@ -362,6 +374,80 @@ func _build_outcrop(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionar
 		on_ground(place, terrain, float(at[0]), float(at[1])))
 	node.add_child(OasisLooks.outcrop(f, Vector3(float(sz[0]), float(sz[1]), float(sz[2])),
 		float(o.get("variety", 0.5)), _floor_in(place, terrain, f), terrain.palette))
+
+## The things lying about (the layout's `items`: id, kind, at, yaw), each not
+## yet taken: upright, the bottom centre of its box on the ground, frozen
+## static, a child of the place's node (never a member of a shift group).
+func _build_items(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionary, node: Node3D) -> void:
+	if catalog == null:
+		return
+	var ground := ground_fn(place, terrain)
+	for entry: Dictionary in layout.get("items", []):
+		var item_id := str(entry["id"])
+		if is_taken(place.id, item_id):
+			continue
+		var def := catalog.get_def(StringName(entry["kind"]))
+		if def == null:
+			push_warning("PlaceField: no item called %s for %s" % [entry["kind"], item_id])
+			continue
+		var at: Array = entry["at"]
+		var item := Item.new()
+		item.setup(def, float(hash(item_id) % 100) / 100.0)
+		item.set_space(true)
+		item.can_sleep = false
+		item.freeze_mode = RigidBody3D.FREEZE_MODE_STATIC
+		item.freeze = true
+		var foot: Vector3 = ground.call(float(at[0]), float(at[1]))
+		item.transform = Transform3D(Basis(Vector3.UP, -deg_to_rad(float(entry.get("yaw", 0.0)))),
+			foot + Vector3(0.0, def.size.y * 0.5, 0.0))
+		node.add_child(item)
+		_lying[item] = [place.id, item_id]
+		_hooks[item] = take.bind(item)
+		item.consumed.connect(_hooks[item])
+
+## `item` has been taken into the hands (grasp.taken) or used up (Item.consumed):
+## if it is one lying in a place, it is marked taken and is ours no more, so
+## the place never makes it again. Any other item: nothing.
+func take(item: Item) -> void:
+	if not _lying.has(item):
+		return
+	var at: Array = _lying[item]
+	var ids: Dictionary = _taken.get(at[0], {})
+	ids[at[1]] = true
+	_taken[at[0]] = ids
+	_forget(item)
+
+func _forget(item: Variant) -> void:
+	var hook: Variant = _hooks.get(item)
+	if is_instance_valid(item) and hook != null and item.consumed.is_connected(hook):
+		item.consumed.disconnect(hook)
+	_lying.erase(item)
+	_hooks.erase(item)
+
+func is_taken(place_id: StringName, item_id: String) -> bool:
+	return _taken.get(place_id, {}).has(item_id)
+
+## What is kept of the places: {"taken": {place id: [item ids, sorted]}}.
+func to_dict() -> Dictionary:
+	var taken := {}
+	for id: Variant in _taken:
+		var ids: Array = _taken[id].keys()
+		ids.sort()
+		taken[str(id)] = ids
+	return {"taken": taken}
+
+## Reads it back; a save with none (before phase 3) takes nothing. Places loaded
+## now are made again, so what was taken is gone from them.
+func from_dict(d: Dictionary) -> void:
+	_taken = {}
+	var taken: Dictionary = d.get("taken", {}) if d.get("taken") is Dictionary else {}
+	for id: Variant in taken:
+		var ids := {}
+		for item_id: Variant in taken[id]:
+			ids[str(item_id)] = true
+		_taken[StringName(str(id))] = ids
+	for id: StringName in _loaded.keys():
+		_free(id)
 
 ## The ground's height under (x, z) of the frame `f` (in the place's frame),
 ## in f's own terms.
