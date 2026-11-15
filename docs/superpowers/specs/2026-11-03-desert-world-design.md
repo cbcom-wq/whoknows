@@ -306,7 +306,7 @@ this is the land it lives in).
 >   - palms, a green ring of grass that dries to straw at its edge with strays past it, gardens,
 >     a pump, a path of flat stones, shade sails, and the beast's tracks (1.5 times the first
 >     size so they read from the seat: a 3.6 m print, a 10.5 m stride, 375 m out and 12.5 m in).
->   The owner did not answer the last re-show; he said "Let's merge to main and push for now". The
+>   The owner did not answer the last re-show; the owner said "Let's merge to main and push for now". The
 >   rework is rules only as far as it was merged without objection.
 > - **Two colour spaces.** The oasis kit's colours (`OasisPalette`, grass tufts included) are
 >   linearised through `InteriorKit.solid`. The desert's cover grass and ground colours are used

@@ -717,7 +717,7 @@ without objection. The numbers beyond those are the builder's, tuned from render
   It is climbable: no rise over 0.62 m.
 - **The beast's tracks** (`OasisLooks.tracks`) are flat, darker prints laid on the ground's
   triangles in `TRACK`: a 3.6 m oval with three toe notches, a 10.5 m stride, fading into the dunes
-  over 400 m. They were 1.5 times smaller until Checkpoint B, when they did not read from the seat.
+  over 400 m. They were scaled up 1.5 times at Checkpoint B, when the smaller prints did not read from the seat.
 - **No shader.** Meshes from the kit, `StandardMaterial3D`, a MultiMesh for tufts. The interior's
   three shaders stay the budget.
 - **Every piece is in the place's node,** so the floating origin carries it
