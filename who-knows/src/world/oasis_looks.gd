@@ -56,8 +56,26 @@ const TUFT_FADE := 20.0
 const PATCH_PROUD := 0.025
 const PATCH_SHORE := 1.5
 const PATCH_WAVE := 9.0
-## The outline's wobble: [lobes round the ring, share of the ellipse's reach].
-const GREEN_WOBBLE := [[3, 0.07], [5, 0.05], [8, 0.035]]
+## The outline's wobble: [lobes round the ring, share of the ellipse's reach]:
+## broad lobes, and (Rework 2) finer bays and tongues.
+const GREEN_WOBBLE := [[3, 0.07], [5, 0.05], [8, 0.035], [13, 0.025], [19, 0.016]]
+## The green's dry rim (Rework 2: the owner, "the grass just ends abruptly"):
+## over its outer GREEN_FADE m the patch steps from GREEN_PATCH through
+## GRASS_OLIVE to GRASS_DRY_EDGE, a triangle at a time, each step's line
+## jittered by FADE_JITTER of the band; the tufts thin out over their outer
+## TUFT_FADE_BAND m (a tuft there is kept with the chance TUFT_KEEP.x +
+## TUFT_KEEP.y * (inside / TUFT_FADE_BAND)^2) and dry the same way; and
+## STRAYS single tufts and STRAY_CLUMPS clumps of CLUMP_TUFTS (within
+## CLUMP_RADIUS m) lie STRAY_OUT m past the outline, dry.
+const GREEN_FADE := 4.5
+const FADE_JITTER := 0.18
+const TUFT_FADE_BAND := 5.0
+const TUFT_KEEP := Vector2(0.08, 0.92)
+const STRAYS := 48
+const STRAY_CLUMPS := 3
+const CLUMP_TUFTS := Vector2i(7, 13)
+const CLUMP_RADIUS := 1.6
+const STRAY_OUT := Vector2(2.0, 8.0)
 
 ## Where the palm's trunk is, `t` from its foot (0) to its crown (1), in its
 ## frame: the lean grows as the square of the height, so it curves.
@@ -194,24 +212,35 @@ static func grass_ring(f: Transform3D, axes: Vector2, water_radius: float, inner
 		var height := rng.randf_range(TUFT_HEIGHT.x, TUFT_HEIGHT.y)
 		var width := rng.randf_range(0.9, 1.4)
 		var k := rng.randi_range(0, SpacePalette.SHADES.size() - 1)
+		var keep := rng.randf()
+		var jitter := rng.randf_range(-FADE_JITTER, FADE_JITTER)
 		var flat := Vector2(offset.x, offset.z)
-		if flat.length() <= keep_out or flat.length() > green_reach(axes, flat.angle(), seed):
+		var inside := green_reach(axes, flat.angle(), seed) - flat.length()
+		if flat.length() <= keep_out or inside < 0.0:
 			continue
-		var at: Vector3 = f * offset
-		var blocked := false
-		for a in avoid:
-			if Vector2(at.x - a.x, at.z - a.y).length() < a.z:
-				blocked = true
-				break
-		if blocked:
+		# Thinner toward the edge, and drier.
+		var t := clampf(inside / TUFT_FADE_BAND, 0.0, 1.0)
+		if keep > TUFT_KEEP.x + TUFT_KEEP.y * t * t:
 			continue
-		at.y = float(floor_of.call(at.x, at.z))
-		var tile := Vector2i(floori(offset.x / TUFT_TILE), floori(offset.z / TUFT_TILE))
-		if not tiles.has(tile):
-			tiles[tile] = [[], []]
-		tiles[tile][0].append(Transform3D(Basis(Vector3.UP, yaw) * Basis.from_scale(Vector3(width, height, width)), at))
-		tiles[tile][1].append(InteriorKit.solid(SpacePalette.shade(OasisPalette.GRASS, k)))
-		feet.append(at)
+		_tuft(tiles, feet, f, offset, yaw, Vector3(width, height, width), _fade_colour(inside / GREEN_FADE + jitter,
+			OasisPalette.GRASS, k), avoid, floor_of)
+	# The strays past the edge: singles, and a few clumps.
+	for i in STRAYS + STRAY_CLUMPS:
+		var theta := rng.randf() * TAU
+		var out := lerpf(STRAY_OUT.x, STRAY_OUT.y, pow(rng.randf(), 1.5))
+		var r := green_reach(axes, theta, seed) + out
+		var middle := Vector2(cos(theta), sin(theta)) * r
+		var n := 1 if i < STRAYS else rng.randi_range(CLUMP_TUFTS.x, CLUMP_TUFTS.y)
+		for j in n:
+			var p := middle
+			if n > 1:
+				p += Vector2.from_angle(rng.randf() * TAU) * CLUMP_RADIUS * sqrt(rng.randf())
+			var height := rng.randf_range(TUFT_HEIGHT.x, lerpf(TUFT_HEIGHT.x, TUFT_HEIGHT.y, 0.6))
+			var width := rng.randf_range(0.8, 1.2)
+			var colour := OasisPalette.GRASS_DRY_EDGE if rng.randf() < 0.7 else OasisPalette.GRASS_OLIVE
+			_tuft(tiles, feet, f, Vector3(p.x, 0.0, p.y), rng.randf() * TAU, Vector3(width, height, width),
+				InteriorKit.solid(SpacePalette.shade(colour, rng.randi_range(0, SpacePalette.SHADES.size() - 1))),
+				avoid, floor_of)
 	var ring := Node3D.new()
 	ring.name = "GrassRing"
 	## Where each tuft stands, kept here too: a MultiMesh reads back nothing
@@ -250,6 +279,29 @@ static func grass_ring(f: Transform3D, axes: Vector2, water_radius: float, inner
 		ring.add_child(inst)
 	return ring
 
+## One tuft at `offset` in `f`'s frame into its tile (unless it stands in an
+## `avoid` circle), on the ground `floor_of` gives.
+static func _tuft(tiles: Dictionary, feet: PackedVector3Array, f: Transform3D, offset: Vector3, yaw: float,
+		scale: Vector3, colour: Color, avoid: Array[Vector3], floor_of: Callable) -> void:
+	var at: Vector3 = f * offset
+	for a in avoid:
+		if Vector2(at.x - a.x, at.z - a.y).length() < a.z:
+			return
+	at.y = float(floor_of.call(at.x, at.z))
+	var tile := Vector2i(floori(offset.x / TUFT_TILE), floori(offset.z / TUFT_TILE))
+	if not tiles.has(tile):
+		tiles[tile] = [[], []]
+	tiles[tile][0].append(Transform3D(Basis(Vector3.UP, yaw) * Basis.from_scale(scale), at))
+	tiles[tile][1].append(colour)
+	feet.append(at)
+
+## The green's colour `fade` across its dry rim (GREEN_FADE bands in from the
+## outline, jittered): `green` (shade k) well inside, GRASS_OLIVE nearer the
+## edge, GRASS_DRY_EDGE at it. Linear, as the kit's colours are.
+static func _fade_colour(fade: float, green: Color, k: int) -> Color:
+	var base := green if fade > 0.67 else (OasisPalette.GRASS_OLIVE if fade > 0.3 else OasisPalette.GRASS_DRY_EDGE)
+	return InteriorKit.solid(SpacePalette.shade(base, k))
+
 ## The green patch under a pool's grass ring: a flat, faceted carpet in
 ## OasisPalette.GREEN_PATCH, laid on `ground`, the ground's own triangles
 ## (each a PackedVector3Array of three points in the kit's space, y up, as the
@@ -258,14 +310,15 @@ static func grass_ring(f: Transform3D, axes: Vector2, water_radius: float, inner
 ## `centre`) and out of the water (`water_radius` + PATCH_SHORE from
 ## `centre`); a cut point lies on the triangle's own edge, so every vertex
 ## lies on the drawn ground. Its shade changes in broad patches by where each
-## triangle lies. Returns every vertex laid, in the kit's space.
+## triangle lies, and (Rework 2) over its outer GREEN_FADE m it dries,
+## through GRASS_OLIVE to GRASS_DRY_EDGE (_fade_colour). Returns every vertex
+## laid, in the kit's space.
 static func green_patch(kit: InteriorKit, ground: Array, centre: Vector3, axes: Vector2, water_radius: float,
 		seed: int) -> PackedVector3Array:
 	var shore := water_radius + PATCH_SHORE
 	var phases := _wobble_phases(seed)
 	var lift := Vector3(0.0, PATCH_PROUD, 0.0)
 	var laid := PackedVector3Array()
-	var colours := {}
 	for tri: PackedVector3Array in ground:
 		# How far inside the outline and out of the water each corner is: a
 		# triangle wholly in is laid as it is, one wholly out is skipped, and
@@ -296,9 +349,10 @@ static func green_patch(kit: InteriorKit, ground: Array, centre: Vector3, axes: 
 			middle += p
 		middle /= poly.size()
 		var k := _patch_shade(middle - centre, seed)
-		if not colours.has(k):
-			colours[k] = InteriorKit.solid(SpacePalette.shade(OasisPalette.GREEN_PATCH, k))
-		var colour: Color = colours[k]
+		var from := Vector2(middle.x - centre.x, middle.z - centre.z)
+		var jitter := (_noise(middle.x, middle.z, 72.0) - 0.5) * 2.0 * FADE_JITTER
+		var fade := (_reach(axes, from.angle(), phases) - from.length()) / GREEN_FADE + jitter
+		var colour := _fade_colour(fade, OasisPalette.GREEN_PATCH, k)
 		for i in range(1, poly.size() - 1):
 			var a := poly[0] + lift
 			var b := poly[i] + lift
@@ -518,3 +572,214 @@ static func _print_tri(kit: InteriorKit, a: Vector3, b: Vector3, c: Vector3, up:
 	if n.dot(up) < 0.0:
 		n = -n
 	kit.tri(InteriorKit.Batch.SOLID, a, b, c, n, colour)
+
+# --- the ledge (Rework 2) ----------------------------------------------------------
+
+## The ledge is the world's own ground (a MESA stamp, its sides in the world's
+## rock look); what dresses it is here (the owner: the old outcrop "looks
+## totally out of place"). Its foot: a few RockMesh boulders fallen from the
+## face, LEDGE_BOULDER m across, sunk BOULDER_SUNK of that, and a talus of
+## smaller stones LEDGE_TALUS m across, all in the world's `boulder` shades as
+## its own boulders take them (raw, on the ground's material). Its boulders are
+## RockMesh's at LEDGE_DETAIL, the talus at TALUS_DETAIL.
+const LEDGE_DETAIL := 1
+const TALUS_DETAIL := 0
+const LEDGE_BOULDER := Vector2(1.6, 3.4)
+const LEDGE_TALUS := Vector2(0.25, 0.8)
+const BOULDER_SUNK := 0.25
+## Where they lie: boulders within this band of the foot (m: in, out), the
+## talus within the wider one; most on the village side, within SPREAD
+## radians of its bearing; none within STAIR_CLEAR m of a step's middle.
+const BOULDER_BAND := Vector2(-0.6, 1.8)
+const TALUS_BAND := Vector2(-1.5, 4.5)
+const SPREAD := 1.4
+const STAIR_CLEAR := 2.0
+## A rough stair up the ledge's village side, along its face: flat-topped
+## stone blocks STAIR_STONE m (along, across), STAIR_TREAD apart along the
+## face, each rising the same, no more than STAIR_RISE (a jump peaks at 0.89 m),
+## from the ground at its foot to the flat top. Each block stands STAIR_OUT
+## out from where the face is halfway up its rise, its foot STAIR_UNDER under
+## the lowest ground beneath it, turned up to STAIR_TWIST either way. The last
+## lands LANDING_IN m inside the top's lip.
+const STAIR_STONE := Vector2(1.48, 2.0)
+const STAIR_TREAD := 1.4
+const STAIR_RISE := 0.62
+const STAIR_OUT := 0.4
+const STAIR_UNDER := 0.3
+const STAIR_TWIST := 0.05
+const LANDING_IN := 0.5
+
+## A layout point [east, north] and a height as a point in the place's frame.
+static func _at(p: Vector2, y: float) -> Vector3:
+	return Vector3(p.x, y, -p.y)
+
+## The stair up a ledge whose middle is `centre` ([east, north] m) and whose
+## flat top stands at `top` (in the place's frame), from `from` along the way
+## to `to` (both [east, north], on the ledge's side, out past its foot):
+## `height_of(east, north)` is the ground's height. Each step k is found where
+## the face, measured across the line, stands at its rise's middle. Pure.
+## Returns {"steps": [[top middle (place frame), unit way up to it from the
+## last, size (along, height, across), turn off the line, the line's unit
+## way]...], "landing": the point on the flat top the last step leads to}.
+static func ledge_stair(height_of: Callable, centre: Vector2, from: Vector2, to: Vector2, top: float,
+		variety: float) -> Dictionary:
+	var dir := (to - from).normalized()
+	var out := Vector2(-dir.y, dir.x)
+	if out.dot(from - centre) < 0.0:
+		out = -out
+	var ground := float(height_of.call(from.x, from.y))
+	var n := maxi(2, ceili((top - ground) / STAIR_RISE))
+	var rise := (top - ground) / n
+	var steps := []
+	var last := _at(from, ground)
+	for k in range(1, n + 1):
+		var h := ground + rise * k
+		var along := from + dir * (STAIR_TREAD * k)
+		# Across the line, the face falls outward: where it stands at the
+		# rise's middle (the landing: just under the top).
+		var want := h - rise * 0.5 if k < n else top - 0.03
+		var lo := -12.0
+		var hi := 8.0
+		for i in 40:
+			var mid := (lo + hi) * 0.5
+			if float(height_of.call(along.x + out.x * mid, along.y + out.y * mid)) > want:
+				lo = mid
+			else:
+				hi = mid
+		var t := (lo + hi) * 0.5
+		if k == n:
+			var landing := along + out * (t - LANDING_IN)
+			return {"steps": steps, "landing": _at(landing, float(height_of.call(landing.x, landing.y)))}
+		var middle := along + out * (t + STAIR_OUT)
+		var turn := (_noise(variety, k, 80.0) - 0.5) * 2.0 * STAIR_TWIST
+		var x := dir.rotated(-turn)
+		var low := INF
+		for sx in [-0.5, 0.0, 0.5]:
+			for sz in [-0.5, 0.0, 0.5]:
+				var p: Vector2 = middle + x * (STAIR_STONE.x * sx) + Vector2(-x.y, x.x) * (STAIR_STONE.y * sz)
+				low = minf(low, float(height_of.call(p.x, p.y)))
+		var at := _at(middle, h)
+		var way := at - last
+		way.y = 0.0
+		steps.append([at, way.normalized(), Vector3(STAIR_STONE.x, h - low + STAIR_UNDER, STAIR_STONE.y), turn,
+			Vector3(dir.x, 0.0, -dir.y)])
+		last = at
+	return {"steps": steps, "landing": last}
+
+## The rocks at a ledge's foot: `boulders` and `talus` of them round `centre`
+## ([east, north] m), most toward `facing` (a bearing, rad), at the foot
+## `foot_of(bearing)` m out, each resting on `height_of(east, north)`, none on
+## the stair's `steps`. Pure. Returns [[shape, placement (place frame),
+## diameter, shade, detail]...], the boulders first.
+static func ledge_rocks(height_of: Callable, centre: Vector2, foot_of: Callable, facing: float, steps: Array,
+		boulders: int, talus: int, variety: float) -> Array:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(variety * 100003.0) * 17 + boulders * 131 + talus
+	var out := []
+	var tries := 0
+	while out.size() < boulders + talus and tries < (boulders + talus) * 20:
+		tries += 1
+		var big := out.size() < boulders
+		# Two thirds toward the village, a third anywhere round it.
+		var bearing := facing + rng.randfn(0.0, SPREAD * 0.5) if rng.randf() < 0.67 else rng.randf() * TAU
+		var band := BOULDER_BAND if big else TALUS_BAND
+		var r := float(foot_of.call(bearing)) + rng.randf_range(band.x, band.y)
+		var p := centre + Vector2(sin(bearing), cos(bearing)) * r
+		var clear := true
+		for s: Array in steps:
+			var m: Vector3 = s[0]
+			if Vector2(m.x, -m.z).distance_to(p) < STAIR_CLEAR * (1.0 if big else 0.7):
+				clear = false
+		if not clear:
+			continue
+		var size := LEDGE_BOULDER if big else LEDGE_TALUS
+		var d := lerpf(size.x, size.y, pow(rng.randf(), 1.6))
+		var stretch := Vector3(rng.randf_range(0.8, 1.25), rng.randf_range(0.65, 1.0), rng.randf_range(0.8, 1.25))
+		var basis := Basis.from_euler(Vector3(rng.randf_range(-0.5, 0.5), rng.randf() * TAU, rng.randf_range(-0.5, 0.5))) \
+			* Basis.from_scale(stretch * d)
+		var shape := RockMesh.Shape.BOULDER if rng.randf() < 0.6 else RockMesh.Shape.SHARD
+		var detail := LEDGE_DETAIL if big else TALUS_DETAIL
+		var lo := INF
+		for v in RockMesh.cut_vertices(shape, detail):
+			lo = minf(lo, (basis * v).y)
+		var ground := float(height_of.call(p.x, p.y))
+		var sunk := BOULDER_SUNK * d if big else 0.12 * d
+		out.append([shape, Transform3D(basis, _at(p, ground - sunk - lo)), d, rng.randi_range(0, SpacePalette.SHADES.size() - 1),
+			detail])
+	return out
+
+## The ledge's dressing: one Node3D "Ledge" holding one mesh (its stair's
+## stones and its foot's rocks, on the ground's own material, in `palette`'s
+## `boulder` shades as the world's boulders) and one StaticBody3D "Stones" on
+## BodyProxy.LAYER: a box a step and a hull a boulder (the talus is too small
+## to stop you). The stair (ledge_stair's) is kept as its meta `steps`
+## ([top middle, way] each) and `landing`; the counts as `boulders`, `talus`.
+static func ledge(stair: Dictionary, rocks: Array, boulders: int, palette: Dictionary = {}) -> Node3D:
+	var land: Dictionary = palette if not palette.is_empty() else SpacePalette.WORLDS[SpacePalette.DESERT_PALETTE]
+	var base: Color = land[&"boulder"]
+	var node := Node3D.new()
+	node.name = "Ledge"
+	var body := StaticBody3D.new()
+	body.name = "Stones"
+	body.collision_layer = BodyProxy.LAYER
+	body.collision_mask = 0
+	node.add_child(body)
+	var kit := kit_under(node)
+	kit.materials[InteriorKit.Batch.SOLID] = BodyLook.material(false)
+	var meta := []
+	var steps: Array = stair["steps"]
+	for k in steps.size():
+		var s: Array = steps[k]
+		var at: Vector3 = s[0]
+		var size: Vector3 = s[2]
+		var way: Vector3 = s[1]
+		var x := Basis(Vector3.UP, float(s[3])) * (s[4] as Vector3)
+		var basis := Basis(x, Vector3.UP, x.cross(Vector3.UP))
+		var xf := Transform3D(basis, at - Vector3(0, size.y * 0.5, 0))
+		kit.bevel_box(InteriorKit.Batch.SOLID, xf, size, 0.07, SpacePalette.shade(base, (k * 2 + 1) % SpacePalette.SHADES.size()))
+		var box_shape := BoxShape3D.new()
+		box_shape.size = size
+		var c := CollisionShape3D.new()
+		c.shape = box_shape
+		c.transform = xf
+		body.add_child(c)
+		meta.append([at, way])
+	var tris0: PackedInt32Array = RockMesh.sphere(TALUS_DETAIL)[1]
+	var tris1: PackedInt32Array = RockMesh.sphere(LEDGE_DETAIL)[1]
+	for i in rocks.size():
+		var r: Array = rocks[i]
+		var shape: int = r[0]
+		var place: Transform3D = r[1]
+		var detail: int = r[4]
+		var tris := tris1 if detail == LEDGE_DETAIL else tris0
+		var dirs: PackedVector3Array = RockMesh.sphere(detail)[0]
+		var verts := RockMesh.cut_vertices(shape, detail)
+		var own: int = r[3]
+		for t in range(0, tris.size(), 3):
+			var a := place * verts[tris[t]]
+			var b := place * verts[tris[t + 1]]
+			var c := place * verts[tris[t + 2]]
+			var n := (b - a).cross(c - a).normalized()
+			if n.dot((a + b + c) / 3.0 - place.origin) < 0.0:
+				n = -n
+			# Each cut facet its own shade, so neighbouring planes read apart.
+			var facet := RockMesh.cut_index(shape, (dirs[tris[t]] + dirs[tris[t + 1]] + dirs[tris[t + 2]]).normalized())
+			var k := own if facet < 0 else (facet + own) % SpacePalette.SHADES.size()
+			kit.tri(InteriorKit.Batch.SOLID, a, b, c, n, SpacePalette.shade(base, k))
+		if i < boulders:
+			var hull := ConvexPolygonShape3D.new()
+			var points := PackedVector3Array()
+			for p in RockMesh.hull_points(shape, detail):
+				points.append(place.basis * p)
+			hull.points = points
+			var collider := CollisionShape3D.new()
+			collider.shape = hull
+			collider.position = place.origin
+			body.add_child(collider)
+	for m in kit.commit():
+		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	node.set_meta(&"steps", meta)
+	node.set_meta(&"landing", stair["landing"])
+	node.set_meta(&"boulders", boulders)
+	node.set_meta(&"talus", rocks.size() - boulders)
+	return node

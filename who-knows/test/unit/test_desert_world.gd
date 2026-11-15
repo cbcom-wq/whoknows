@@ -74,9 +74,9 @@ func test_the_oasis_is_placed() -> void:
 	assert_eq(_place.heading, 0.0)
 	# Rework 1, round 2: the floor, the pool's bank, the pad, the pool, the
 	# ledge, one under each of the five compounds and one under each of the three
-	# gardens.
-	assert_eq(_terrain.stamps.size(), 13, "thirteen stamps")
-	var ids: Array[StringName] = [&"oasis_floor", &"pool_bank", &"pad", &"pool", &"ledge"]
+	# gardens; Rework 2: and the pool's level shore.
+	assert_eq(_terrain.stamps.size(), 14, "fourteen stamps")
+	var ids: Array[StringName] = [&"oasis_floor", &"pool_bank", &"pad", &"pool_shore", &"pool", &"ledge"]
 	var layout := _place.layout()
 	for s: Dictionary in layout.get("shells", []):
 		var court := StringName(s["stamp"])
@@ -84,7 +84,7 @@ func test_the_oasis_is_placed() -> void:
 			ids.append(court)
 	for g: Dictionary in layout.get("gardens", []):
 		ids.append(StringName(g["id"]))
-	assert_eq(ids.size(), 13, "five compounds and three gardens in the layout")
+	assert_eq(ids.size(), 14, "five compounds and three gardens in the layout")
 	for id in ids:
 		assert_not_null(_stamp(id), str(id))
 	assert_eq(_system.design.problems(_system), PackedStringArray(), "the design is valid")
@@ -102,6 +102,8 @@ func test_every_stamp_keeps_a_margin() -> void:
 			var b := _terrain.stamps[j]
 			var m := SystemDesign.stamp_margin(a, b, _terrain.radius)
 			assert_gte(m, MARGIN, "%s and %s" % [a.id, b.id])
+			if a.id in [&"pool_bank", &"pool_shore"] or b.id in [&"pool_bank", &"pool_shore"]:
+				gut.p("  %s and %s: %.2f m" % [a.id, b.id, m])
 			if m < worst:
 				worst = m
 				where = "%s and %s" % [a.id, b.id]
@@ -168,9 +170,10 @@ func test_the_sun_stands_low_over_the_oasis() -> void:
 func test_the_pad_and_the_bank_are_flat_and_the_floor_rolls() -> void:
 	var floor_stamp := _stamp(&"oasis_floor")
 	var bank := _stamp(&"pool_bank")
+	var shore := _stamp(&"pool_shore")
 	var pad := _stamp(&"pad")
 	var pool := _stamp(&"pool")
-	if floor_stamp == null or bank == null or pad == null or pool == null:
+	if floor_stamp == null or bank == null or pad == null or pool == null or shore == null:
 		fail_test("the oasis stamps are not there")
 		return
 	var rng := RandomNumberGenerator.new()
@@ -186,13 +189,35 @@ func test_the_pad_and_the_bank_are_flat_and_the_floor_rolls() -> void:
 	assert_between((hi + lo) * 0.5 - pad.level, PAD_RAISE - PAD_SLACK, PAD_RAISE + PAD_SLACK, "0.15 m over the floor")
 	lo = INF
 	hi = -INF
+	# Rework 2: the pool's shore is level (its own stamp, keep 0) ...
 	for i in 200:
-		var h := _terrain.height_at(_disc_sample(bank.centre, rng, pool.radius, bank.radius))
+		var h := _terrain.height_at(_disc_sample(shore.centre, rng, pool.radius, shore.radius))
 		lo = minf(lo, h)
 		hi = maxf(hi, h)
-	gut.p("pool bank: %.4f .. %.4f" % [lo, hi])
-	assert_lt(hi - lo, FLAT, "the pool's bank is level")
-	assert_lt(absf((hi + lo) * 0.5 - bank.level), FLAT, "at the bank's own level")
+	gut.p("pool shore: %.4f .. %.4f" % [lo, hi])
+	assert_lt(hi - lo, FLAT, "the pool's shore is level")
+	assert_lt(absf((hi + lo) * 0.5 - shore.level - shore.raise), FLAT, "at the shore's own level")
+	# ... and the bank round it keeps a fifth of the floor's roll: gentle, but
+	# not dead flat.
+	assert_almost_eq(bank.keep, 0.2, 0.05, "the bank keeps about a fifth of the roll")
+	var bank_lo := INF
+	var bank_hi := -INF
+	var bank_n := 0
+	while bank_n < 200:
+		var d := _disc_sample(bank.centre, rng, shore.reach() + 2.0, bank.radius)
+		var on_another := false
+		for st in _terrain.stamps:
+			if st.id != &"oasis_floor" and st.id != &"pool_bank" and st.metres_from(d, _terrain.radius) <= st.reach() + 1.0:
+				on_another = true
+		if on_another:
+			continue
+		bank_n += 1
+		var h := _terrain.height_at(d)
+		bank_lo = minf(bank_lo, h)
+		bank_hi = maxf(bank_hi, h)
+	gut.p("pool bank: %.4f .. %.4f" % [bank_lo, bank_hi])
+	assert_gt(bank_hi - bank_lo, FLAT, "the bank rolls")
+	assert_lt(bank_hi - bank_lo, 0.6, "gently")
 	# The rest of the floor rolls, gently.
 	var heights := PackedFloat64Array()
 	while heights.size() < 400:
@@ -268,7 +293,8 @@ func test_the_pool_is_wadeable() -> void:
 	if pool == null or floor_stamp == null:
 		fail_test("the oasis stamps are not there")
 		return
-	var water := _stamp(&"pool_bank").level - WATER_BELOW
+	var shore := _stamp(&"pool_shore")
+	var water := shore.level + shore.raise - WATER_BELOW
 	var worst := 0.0
 	for k in 8:
 		var bearing := TAU * k / 8.0 + 0.2

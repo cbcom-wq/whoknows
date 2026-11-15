@@ -78,7 +78,9 @@ func test_colours_come_from_the_palette():
 	OasisLooks.path(_kit, PackedVector3Array([Vector3.ZERO, Vector3(1, 0, 0), Vector3(2, 0, 0.3)]), 1.4)
 	var allowed := [OasisPalette.PALM_TRUNK, OasisPalette.PALM_FROND, OasisPalette.PALM_FROND_DRY,
 		OasisPalette.GARDEN_SOIL, OasisPalette.CROP_GREEN, OasisPalette.PUMP, OasisPalette.PUMP_DARK,
-		OasisPalette.PIPE, OasisPalette.PATH]
+		OasisPalette.PIPE, OasisPalette.PATH, OasisPalette.GREEN_PATCH, OasisPalette.GRASS_OLIVE,
+		OasisPalette.GRASS_DRY_EDGE]
+	OasisLooks.green_patch(_kit, _flat_ground(Vector3.ZERO, 30.0, 2.0, 0.0), Vector3.ZERO, Vector2(20, 15), 6.0, 3)
 	var colours: PackedColorArray = _solid()[1]
 	assert_gt(colours.size(), 0)
 	var strays := 0
@@ -129,7 +131,9 @@ func test_the_grass_ring_keeps_out_of_the_water():
 		var at := tufts[i]
 		var d := Vector2(at.x - f.origin.x, at.z - f.origin.z)
 		assert_gt(d.length(), water + inner - 0.001, "tuft %d is out of the water and its bank" % i)
-		assert_lte(d.length(), OasisLooks.green_reach(axes, d.angle(), 7) + 0.001, "tuft %d is inside the green" % i)
+		# Rework 2: a few strays lie up to STRAY_OUT past the outline.
+		assert_lte(d.length(), OasisLooks.green_reach(axes, d.angle(), 7) + OasisLooks.STRAY_OUT.y + OasisLooks.CLUMP_RADIUS,
+			"tuft %d is in the green or a stray by it" % i)
 		assert_almost_eq(at.y, 0.5, 0.0001, "on the ground")
 	assert_eq(ring.find_children("*", "CollisionObject3D", true, false).size(), 0, "no collision")
 
@@ -174,7 +178,21 @@ func test_the_green_patch_lies_on_the_ground_out_of_the_water():
 	var solid := _solid()
 	var vertices: PackedVector3Array = solid[0]
 	assert_gt(vertices.size(), 3000, "a carpet of triangles")
-	assert_eq(_count_of(solid[1], OasisPalette.GREEN_PATCH), vertices.size(), "all of it the green, in its shades")
+	var colours: PackedColorArray = solid[1]
+	var green := _count_of(colours, OasisPalette.GREEN_PATCH)
+	var olive := _count_of(colours, OasisPalette.GRASS_OLIVE)
+	var dry := _count_of(colours, OasisPalette.GRASS_DRY_EDGE)
+	assert_eq(green + olive + dry, vertices.size(), "all of it the green or its dry rim, in their shades")
+	assert_gt(green, vertices.size() / 2, "mostly green")
+	assert_gt(olive, 0, "olive toward its edge")
+	assert_gt(dry, 0, "and straw at it")
+	# Rework 2: the green dries only in its outer GREEN_FADE m.
+	for i in vertices.size():
+		var v := vertices[i]
+		var d := Vector2(v.x - centre.x, v.z - centre.z)
+		var inside := OasisLooks.green_reach(axes, d.angle(), 7) - d.length()
+		if _count_of(PackedColorArray([colours[i]]), OasisPalette.GRASS_DRY_EDGE) > 0:
+			assert_lt(inside, OasisLooks.GREEN_FADE + 2.0, "straw only at the rim (%.1f m in)" % inside)
 	var reach_lo := INF
 	var reach_hi := 0.0
 	var near := INF
@@ -182,8 +200,9 @@ func test_the_green_patch_lies_on_the_ground_out_of_the_water():
 		assert_almost_eq(v.y, 0.5 + OasisLooks.PATCH_PROUD, 0.0005, "PATCH_PROUD over the ground")
 		var d := Vector2(v.x - centre.x, v.z - centre.z)
 		near = minf(near, d.length())
-		# A cut point is on its triangle's edge, where the outline is straight.
-		assert_lte(d.length(), OasisLooks.green_reach(axes, d.angle(), 7) + 0.05, "inside the green's outline")
+		# A cut point is on its triangle's edge, where the outline is straight
+		# (Rework 2: its finer bays bend it more within an edge).
+		assert_lte(d.length(), OasisLooks.green_reach(axes, d.angle(), 7) + 0.1, "inside the green's outline")
 	assert_almost_eq(near, water + OasisLooks.PATCH_SHORE, 0.05, "out of the water, up to its shore")
 	assert_eq(laid.size() > 0, true)
 	# The outline is ragged: its reach strays from the ellipse's by more than 8%.

@@ -255,7 +255,10 @@ func test_the_green_patch_lies_on_the_drawn_ground_out_of_the_water():
 		lo, hi, raised, laid.size(), PATCH_OVER_FINEST[1], near, edge])
 	assert_between(lo, PATCH_OVER_FINEST[0], PATCH_OVER_FINEST[1], "none buried in the finest ground")
 	assert_lt(hi, PATCH_RAISED_MOST, "and none floating far over it")
-	assert_lt(raised, laid.size() / 20, "nearly all of it within %.3f m of it" % PATCH_OVER_FINEST[1])
+	# Rework 2: the bank rolls (keep 0.2), so the level courts and the pool's
+	# shore meet it at small lips, where coarser chunks lift the patch a little
+	# more often (about 7%, the most under 0.1 m).
+	assert_lt(raised, laid.size() / 11, "nearly all of it within %.3f m of it" % PATCH_OVER_FINEST[1])
 	assert_gt(near, edge, "none of it in the water")
 	assert_eq(wet, 0, "and all of it over the water's level")
 	var height_at := func(d: Vector3) -> float: return _terrain.height_at(d)
@@ -913,3 +916,190 @@ func test_the_village_is_whole():
 	var canister: Vector2 = items.get("canister_path", Vector2.INF)
 	assert_lt(canister.length(), gate_mid.length(), "the canister is inside the gate")
 	assert_lt(canister.distance_to(gate_mid), 10.0, "near it")
+
+# --- Rework 2: floors, doors, the grass's edge, the ledge -------------------------
+
+## The shell pieces, by id.
+func _shell_pieces() -> Dictionary:
+	var out := {}
+	for p: Dictionary in _pieces():
+		if p["kind"] == "shell":
+			out[p["id"]] = p
+	return out
+
+## The height a ray straight down from `from_height` m over the ground at
+## layout point `p` meets the Brick body at (in the place's frame), or NAN.
+func _brick_down(p: Vector2, from_height: float) -> float:
+	var top := _over(p, from_height)
+	var hit := _ray(top, top - Vector3(0, from_height + 2.0, 0))
+	if hit.is_empty() or hit["collider"] != _oasis().get_node("Brick"):
+		return NAN
+	return _oasis().to_local(hit["position"]).y
+
+## Rework 2 (the owner: "They don't have floors?"): inside every shell a ray
+## down meets its floor slab at the foundation's height over its stamp's
+## level. A crushed hut's fallen slabs lie on that floor, so the lowest of a
+## few rays is the floor.
+func test_every_shell_has_a_floor():
+	await _hold_over(0, 0, 60.0)
+	var pieces := _shell_pieces()
+	for s: Dictionary in _place.layout()["shells"]:
+		var id := str(s["id"])
+		var level := _ground_y(float(s["at"][0]), float(s["at"][1]))
+		var lowest := INF
+		var met := 0
+		var c := _at_of(s)
+		for off: Vector2 in [Vector2.ZERO, Vector2(1.0, 0.6), Vector2(-1.0, -0.6), Vector2(0.8, -0.8), Vector2(-0.8, 0.8)]:
+			var y := _brick_down(c + off, 1.5)
+			if not is_nan(y):
+				met += 1
+				lowest = minf(lowest, y)
+		assert_eq(met, 5, "%s: every ray down inside meets something" % id)
+		assert_almost_eq(lowest, level + BrickShell.FOUNDATION, 0.02, "%s: its floor is the foundation's height over its stamp" % id)
+		assert_almost_eq(float(pieces.get(id, {}).get("slab", INF)), level + BrickShell.FOUNDATION, 0.02, "%s's slab" % id)
+
+## Rework 2: at every door the way in rises by steps: the ground, a threshold
+## stone, the floor in the doorway; each step over 0 and no more than 0.15 m.
+func test_a_threshold_is_a_step():
+	await _hold_over(0, 0, 60.0)
+	var pieces := _shell_pieces()
+	var checked := 0
+	for id: String in pieces:
+		var doors: Array = pieces[id].get("doors", [])
+		assert_gt(doors.size(), 0, "%s has a door" % id)
+		for d: Array in doors:
+			var middle: Vector3 = d[0]
+			var out: Vector3 = d[1]
+			var foot := middle + out * (BrickShell.WALL * 0.5 + BrickShell.THRESHOLD_DEEP + 0.4)
+			var heights := [_ground_y(foot.x, -foot.z)]
+			for along in [BrickShell.WALL * 0.5 + BrickShell.FOUNDATION_PROUD + 0.2, 0.0]:
+				var p: Vector3 = middle + out * along
+				var y := _brick_down(Vector2(p.x, -p.z), 0.9)
+				assert_false(is_nan(y), "%s: something to stand on %.2f m out of its door" % [id, along])
+				heights.append(y)
+			gut.p("%s's door: ground %.3f, threshold %.3f, floor %.3f" % [id, heights[0], heights[1], heights[2]])
+			for k in range(1, heights.size()):
+				var rise: float = heights[k] - heights[k - 1]
+				assert_gt(rise, 0.0, "%s: a step up" % id)
+				assert_lte(rise, 0.15 + 0.005, "%s: no more than 0.15 m" % id)
+			checked += 1
+	assert_eq(checked, 12, "a door in every shell")
+
+## Rework 2: a whole shell's door is shut (a ray through its middle meets its
+## collider); a crushed hut stays open where its walls broke.
+func test_shell_doors_are_shut():
+	await _hold_over(0, 0, 60.0)
+	var pieces := _shell_pieces()
+	var brick := _oasis().get_node("Brick")
+	for s: Dictionary in _place.layout()["shells"]:
+		var id := str(s["id"])
+		var p: Dictionary = pieces.get(id, {})
+		if s["kind"] == "crushed":
+			# Across the broken (+x) side, over the stumps and what fell in.
+			var turn := deg_to_rad(float(s.get("yaw", 0.0)))
+			var x := Vector2(cos(turn), -sin(turn))
+			var c := _at_of(s)
+			var floor_y := float(p.get("slab", 0.0))
+			var from := _over(c + x * (float(s["size"][0]) * 0.5 + 2.0), 0.0)
+			var to := _over(c, 0.0)
+			from.y = floor_y + 1.9
+			to.y = floor_y + 1.9
+			assert_false(_meets(from, to, brick), "%s is open where it broke" % id)
+			continue
+		var doors: Array = p.get("doors", [])
+		assert_gt(doors.size(), 0, "%s has a door" % id)
+		for d: Array in doors:
+			var middle: Vector3 = (d[0] as Vector3) + Vector3(0, 1.0, 0)
+			var out: Vector3 = d[1]
+			assert_true(_meets(middle + out * 1.0, middle - out * 1.0, brick), "%s's door is shut" % id)
+
+## How far inside the green's outline (its tufts' and its patch's, round the
+## pool's middle on the ground) `at` is, m: under 0 past it.
+func _green_edge_of(at: Vector3, centre: Vector3) -> float:
+	var axes: Array = _place.layout()["grass_ring"]["axes"]
+	var d := Vector2(at.x - centre.x, at.z - centre.z)
+	return OasisLooks.green_reach(Vector2(float(axes[0]), float(axes[1])), d.angle(), hash(String(_place.id))) - d.length()
+
+## Rework 2 (the owner: "the grass just ends abruptly"): the tufts thin out
+## toward the green's edge, its outer 4 m band under half as thick as the 4 m
+## within it, and a scatter of strays lies 2-8 m past it.
+func test_the_grass_fades_at_its_edge():
+	await _hold_over(0, 0, 60.0)
+	var tufts: PackedVector3Array = _oasis().get_node("GrassRing").get_meta(&"tufts")
+	var centre := PlaceField.on_ground(_place, _terrain, 0, 0)
+	var axes: Array = _place.layout()["grass_ring"]["axes"]
+	var seed := hash(String(_place.id))
+	var bands := [0, 0]
+	var beyond := 0
+	for t in tufts:
+		var inside := _green_edge_of(t, centre)
+		if inside >= 0.0 and inside < 4.0:
+			bands[0] += 1
+		elif inside >= 4.0 and inside < 8.0:
+			bands[1] += 1
+		elif inside < -1.0:
+			beyond += 1
+			assert_gt(inside, -8.5, "a stray no more than 8 m out")
+	# The two bands' areas, round the outline.
+	var areas := [0.0, 0.0]
+	for k in 720:
+		var a := TAU * k / 720.0
+		var r := OasisLooks.green_reach(Vector2(float(axes[0]), float(axes[1])), a, seed)
+		areas[0] += 0.5 * (r * r - pow(r - 4.0, 2)) * TAU / 720.0
+		areas[1] += 0.5 * (pow(r - 4.0, 2) - pow(r - 8.0, 2)) * TAU / 720.0
+	var outer: float = bands[0] / areas[0]
+	var inner: float = bands[1] / areas[1]
+	gut.p("tufts a square metre: %.2f in the outer 4 m, %.2f in the 4 m within; %d strays past the edge" % [outer, inner, beyond])
+	assert_lt(outer, inner * 0.5, "the outer band is under half as thick")
+	assert_gt(outer, 0.0, "but not bare")
+	assert_gt(beyond, 8, "a scatter of strays past the edge")
+
+## Rework 2: a way up the ledge on its village side: stone steps, each a tread
+## at least 1.2 m deep (its middle +-0.6 m along the stair is the step's own
+## top, solid, with the ground under it), each rising no more than 0.7 m from
+## the ground at its foot, step to step, and onto the mesa's flat top.
+func test_the_ledge_can_be_climbed():
+	await _hold_over(-12.2, 70.0, 30.0)
+	var ledge := _oasis().get_node_or_null("Ledge")
+	assert_not_null(ledge, "the ledge is dressed")
+	if ledge == null:
+		return
+	var steps: Array = ledge.get_meta(&"steps", [])
+	assert_gt(steps.size(), 5, "a stair of stones")
+	if steps.is_empty():
+		return
+	var body := ledge.get_node("Stones")
+	var at: Array = _place.layout()["ledge"]["at"]
+	var top := _ground_y(float(at[0]), float(at[1]))
+	var first: Array = steps[0]
+	var before: Vector3 = (first[0] as Vector3) - (first[1] as Vector3) * 1.2
+	var last_y := _ground_y(before.x, -before.z)
+	var rises := []
+	for k in steps.size():
+		var s: Array = steps[k]
+		var mid: Vector3 = s[0]
+		var along: Vector3 = s[1]
+		for off in [-0.6, 0.0, 0.6]:
+			var p: Vector3 = mid + along * off
+			var hit := _ray(p + Vector3(0, 2.0, 0), p - Vector3(0, 2.0, 0))
+			assert_false(hit.is_empty(), "step %d is solid %.1f m along" % [k, off])
+			if not hit.is_empty():
+				assert_eq(hit["collider"], body, "step %d: its own stone" % k)
+				assert_almost_eq(_oasis().to_local(hit["position"]).y, mid.y, 0.03, "step %d's tread is flat" % k)
+			assert_lt(_ground_y(p.x, -p.z), mid.y - 0.01, "step %d: the ground is under its tread" % k)
+		rises.append(mid.y - last_y)
+		last_y = mid.y
+	var lastp: Array = steps[steps.size() - 1]
+	var onto: Vector3 = ledge.get_meta(&"landing", Vector3.ZERO)
+	var landing := _ground_y(onto.x, -onto.z)
+	var reach := Vector2(onto.x - (lastp[0] as Vector3).x, onto.z - (lastp[0] as Vector3).z).length()
+	assert_lte(reach, 2.6, "the last step is a stride from the top (%.2f m)" % reach)
+	rises.append(landing - last_y)
+	gut.p("the stair: %d steps, rises %s, the top %.2f m" % [steps.size(), str(rises.map(func(r): return snappedf(r, 0.01))), top])
+	for r in rises:
+		assert_gt(r, 0.0, "every step rises")
+		assert_lte(r, 0.7, "by no more than 0.7 m")
+	assert_almost_eq(landing, top, 0.05, "onto the mesa's flat top")
+	assert_eq(_stamp_named("ledge").kind, TerrainStamp.Kind.MESA)
+	assert_between(int(ledge.get_meta(&"boulders", 0)), 4, 16, "a few boulders fallen at its foot")
+	assert_gt(int(ledge.get_meta(&"talus", 0)), 20, "and a talus of smaller stones")

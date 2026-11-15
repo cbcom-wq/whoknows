@@ -134,6 +134,8 @@ func _build(place: PlaceDesign, body: SystemBody, node: Node3D) -> void:
 	if layout.has("pool"):
 		water_radius = _build_pool(place, terrain, layout["pool"], node)
 	_build_village(place, terrain, layout, node, water_radius)
+	if layout.has("ledge"):
+		_build_ledge(place, terrain, layout["ledge"], node)
 	_build_tracks(place, terrain, layout, node)
 	_build_items(place, terrain, layout, node)
 
@@ -180,8 +182,8 @@ func _build_village(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionar
 	kit.keep_arrays = true
 	var avoid: Array[Vector3] = []
 	var marks := []
-	var mark := func(kind: String, id: String, from: int, floor_y := NAN) -> void:
-		marks.append([kind, id, from, kit.vertex_count(InteriorKit.Batch.SOLID), floor_y])
+	var mark := func(kind: String, id: String, from: int, floor_y := NAN, more := {}) -> void:
+		marks.append([kind, id, from, kit.vertex_count(InteriorKit.Batch.SOLID), floor_y, more])
 	var palms: Array = layout.get("palms", [])
 	if not palms.is_empty():
 		var trunks := StaticBody3D.new()
@@ -255,6 +257,7 @@ func _build_village(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionar
 		var piece := {"kind": m[0], "id": m[1], "lowest": lowest}
 		if not is_nan(m[4]):
 			piece["floor"] = m[4]
+		piece.merge(m[5])
 		pieces.append(piece)
 	holder.set_meta(&"pieces", pieces)
 	if layout.has("grass_ring") and layout.has("pool"):
@@ -290,15 +293,51 @@ func _build_green(place: PlaceDesign, terrain: WorldTerrain, node: Node3D, centr
 		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	holder.set_meta(&"laid", laid)
 
+## The ledge's dressing (Rework 2): the stair up its village side and the rocks
+## at its foot (OasisLooks.ledge), on the ground its MESA stamp (the layout's
+## `stamp`) made. The stair runs from the layout's `stair.from` toward
+## `stair.to`; the rocks lie most toward the place's middle.
+func _build_ledge(place: PlaceDesign, terrain: WorldTerrain, ledge: Dictionary, node: Node3D) -> void:
+	var stamp: TerrainStamp = null
+	for s in terrain.stamps:
+		if String(s.id) == str(ledge.get("stamp", "ledge")):
+			stamp = s
+	if stamp == null:
+		return
+	var ground := ground_fn(place, terrain)
+	var height_of := func(east: float, north: float) -> float:
+		return (ground.call(east, north) as Vector3).y
+	var at: Array = ledge["at"]
+	var centre := Vector2(float(at[0]), float(at[1]))
+	var radius := terrain.radius
+	var foot_of := func(bearing: float) -> float:
+		var p := centre + Vector2(sin(bearing), cos(bearing)) * 10.0
+		return stamp.flat_radius(place.local_dir(p.x, p.y, radius)) + stamp.edge
+	var stair: Dictionary = ledge.get("stair", {})
+	var from: Array = stair["from"]
+	var to: Array = stair["to"]
+	var variety := float(ledge.get("variety", 0.37))
+	var top := float(height_of.call(centre.x, centre.y))
+	var steps := OasisLooks.ledge_stair(height_of, centre, Vector2(float(from[0]), float(from[1])),
+		Vector2(float(to[0]), float(to[1])), top, variety)
+	var facing := atan2(-centre.x, -centre.y)
+	var boulders := int(ledge.get("boulders", 9))
+	var rocks := OasisLooks.ledge_rocks(height_of, centre, foot_of, facing, steps["steps"], boulders,
+		int(ledge.get("talus", 60)), variety)
+	node.add_child(OasisLooks.ledge(steps, rocks, boulders, terrain.palette))
+
 ## The brick: the shells, the compounds' yard walls, the ring wall, its rubble
 ## and the shade sails, into the village's `kit`. The shells' and yards' solid
 ## parts are on one StaticBody3D "Brick", the ring wall's and its gate piers'
 ## on another, "Wall" (both on BodyProxy.LAYER). Each shell stands on its
-## compound's stamp (Rework 1, round 2: the layout's `stamp`): its walls start
-## SUNK under the lowest ground under its footprint, which the stamp keeps
-## level, and that ground is the floor it is built for. A box shell has a door
-## (BrickShell.DOOR) in the middle of its front, which its yaw turns onto a
-## lane. A wall's or a yard's foot follows the ground point to point.
+## compound's stamp (Rework 1, round 2: the layout's `stamp`): its foundation
+## (Rework 2) starts SUNK under the lowest ground under its footprint, which
+## the stamp keeps level, and its floor slab is BrickShell.FOUNDATION over that
+## ground (the frame it is built in; the meta's `slab`). A box shell has a door
+## (BrickShell.DOOR, or the layout's `door_width`) in the middle of its front,
+## which its yaw turns onto a lane, shut, with a threshold step before it; the
+## meta's `doors` are each [its middle at the floor, the way out, width] in the
+## place's frame. A wall's or a yard's foot follows the ground point to point.
 func _build_brick(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionary, node: Node3D,
 		kit: InteriorKit, mark: Callable, avoid: Array[Vector3]) -> void:
 	var shells: Array = layout.get("shells", [])
@@ -320,29 +359,37 @@ func _build_brick(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionary,
 		var centre := on_ground(place, terrain, east, north)
 		var turn := Basis(Vector3.UP, -deg_to_rad(yaw))
 		var foot := 0.0
+		var doors := []
+		var f := Transform3D.IDENTITY
 		if str(s["kind"]) == "round":
 			var radius := float(s["radius"])
 			var height := float(s.get("height", 3.0))
 			foot = lowest_ground(place, terrain, east, north, Vector2(radius, radius), yaw, true)
-			var f := Transform3D(turn, Vector3(centre.x, foot - BrickShell.SUNK, centre.z))
+			f = Transform3D(turn, Vector3(centre.x, foot + BrickShell.FOUNDATION, centre.z))
 			BrickShell.round_hut(kit, f, radius, height, variety)
 			add.call(BrickShell.round_hut_shapes(f, radius, height, variety))
+			doors = BrickShell.door_spots([], radius)
 			avoid.append(Vector3(centre.x, centre.z, radius + GRASS_MARGIN))
 		else:
 			var sz: Array = s["size"]
 			var size := Vector3(float(sz[0]), float(sz[1]), float(sz[2]))
 			foot = lowest_ground(place, terrain, east, north, Vector2(size.x, size.z) * 0.5, yaw, false)
-			var f := Transform3D(turn, Vector3(centre.x, foot - BrickShell.SUNK, centre.z))
+			f = Transform3D(turn, Vector3(centre.x, foot + BrickShell.FOUNDATION, centre.z))
 			if str(s["kind"]) == "crushed":
 				BrickShell.crushed(kit, f, size, variety)
 				add.call(BrickShell.crushed_shapes(f, size, variety))
+				doors = BrickShell.door_spots([], 0.0, size)
 			else:
-				var openings: Array = s.get("openings", [[Vector3(0.0, BrickShell.DOOR.y * 0.5,
-					-size.z * 0.5 + BrickShell.WALL * 0.5), BrickShell.DOOR.x, BrickShell.DOOR.y]])
+				var openings := BrickShell.openings_for(size, variety, float(s.get("door_width", BrickShell.DOOR.x)))
 				BrickShell.box(kit, f, size, openings, variety)
 				add.call(BrickShell.box_shapes(f, size, openings, variety))
+				doors = BrickShell.door_spots(openings)
 			avoid.append(Vector3(centre.x, centre.z, Vector2(size.x, size.z).length() * 0.5 + GRASS_MARGIN))
-		mark.call("shell", str(s["id"]), from, foot)
+		# Each door in the place's frame: [its middle at the floor, the way out, width].
+		var placed := []
+		for d: Array in doors:
+			placed.append([f * (d[0] as Vector3), (f.basis * (d[1] as Vector3)).normalized(), d[2]])
+		mark.call("shell", str(s["id"]), from, foot, {"slab": foot + BrickShell.FOUNDATION, "doors": placed})
 	var yards: Array = layout.get("yards", [])
 	for k in yards.size():
 		var from := kit.vertex_count(InteriorKit.Batch.SOLID)
@@ -355,9 +402,10 @@ func _build_brick(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionary,
 		var variety := 0.17 + 0.23 * k
 		BrickShell.wall(kit, points, height, variety)
 		add.call(BrickShell.wall_shapes(points, height, variety))
+		_keep_grass_off(points, avoid)
 		mark.call("yard", str(y.get("id", "yard_%d" % k)), from)
 	if wall.has("ring"):
-		_build_ring_wall(place, terrain, wall, node, kit, mark)
+		_build_ring_wall(place, terrain, wall, node, kit, mark, avoid)
 	var rubble: Array = layout.get("rubble", [])
 	for k in rubble.size():
 		var from := kit.vertex_count(InteriorKit.Batch.SOLID)
@@ -403,25 +451,34 @@ static func _solid_body(node: Node3D, body_name: String) -> StaticBody3D:
 	return body
 
 ## The ring wall (Rework 1): its runs between the gate and the breach
-## (ring_wall), their foot following the ground, and the gate's two piers,
-## thicker and taller, on the ground under them. All on one StaticBody3D "Wall".
+## (ring_wall), their foot following the ground, their courses stepping down
+## where they end at the breach (Rework 2), and the gate's two piers, thicker
+## and taller, on the ground under them, a wooden lintel beam across their
+## tops. All on one StaticBody3D "Wall".
 func _build_ring_wall(place: PlaceDesign, terrain: WorldTerrain, wall: Dictionary, node: Node3D,
-		kit: InteriorKit, mark: Callable) -> void:
+		kit: InteriorKit, mark: Callable, avoid: Array[Vector3]) -> void:
 	var body := _solid_body(node, "Wall")
 	var ring := ring_wall(wall)
 	var height := float(wall.get("height", 2.6))
 	var runs: Array = ring["runs"]
+	var breach: Array = ring.get("breach", [])
+	var at_breach := func(p: Vector2) -> bool:
+		return breach.any(func(q: Vector2) -> bool: return q.distance_to(p) < 0.01)
 	for k in runs.size():
 		var from := kit.vertex_count(InteriorKit.Batch.SOLID)
-		var points := wall_points(place, terrain, runs[k])
+		var run: PackedVector2Array = runs[k]
+		var points := wall_points(place, terrain, run)
 		var variety := 0.31 + 0.27 * k
-		BrickShell.wall(kit, points, height, variety)
-		for c in BrickShell.wall_shapes(points, height, variety):
+		var broken := [at_breach.call(run[0]), at_breach.call(run[run.size() - 1])]
+		BrickShell.wall(kit, points, height, variety, broken)
+		for c in BrickShell.wall_shapes(points, height, variety, broken):
 			body.add_child(c)
+		_keep_grass_off(points, avoid)
 		mark.call("wall", "wall_%d" % k, from)
 	var pier: Array = wall.get("gate", {}).get("pier", [1.2, 3.4])
 	var size := Vector3(float(pier[0]), float(pier[1]), float(pier[0]))
 	var piers: Array = ring["piers"]
+	var tops: Array[Vector3] = []
 	for k in piers.size():
 		var from := kit.vertex_count(InteriorKit.Batch.SOLID)
 		var at: Vector2 = piers[k][0]
@@ -434,7 +491,18 @@ func _build_ring_wall(place: PlaceDesign, terrain: WorldTerrain, wall: Dictionar
 		BrickShell.pier(kit, f, size + Vector3(0.0, BrickShell.SUNK, 0.0), 0.6 + 0.2 * k)
 		for c in BrickShell.pier_shapes(f, size + Vector3(0.0, BrickShell.SUNK, 0.0), 0.6 + 0.2 * k):
 			body.add_child(c)
+		tops.append(f * Vector3(0.0, size.y + BrickShell.SUNK - BrickShell.COPING.x, 0.0))
+		avoid.append(Vector3(centre.x, centre.z, size.x + GRASS_MARGIN))
 		mark.call("pier", "pier_%d" % k, from)
+	if tops.size() == 2:
+		var from := kit.vertex_count(InteriorKit.Batch.SOLID)
+		BrickShell.gate_beam(kit, tops[0], tops[1], size.x, 0.4)
+		mark.call("beam", "gate_beam", from)
+
+## Keeps the grass's strays off a wall standing on `points`.
+static func _keep_grass_off(points: PackedVector3Array, avoid: Array[Vector3]) -> void:
+	for p in points:
+		avoid.append(Vector3(p.x, p.z, WALL_STEP * 0.5 + BrickShell.RUN + GRASS_MARGIN))
 
 ## The ring wall of a layout's `wall` ({"ring": [[east, north]...], "gate":
 ## {"at", "width", "pier": [thickness, height]}, "breach": {"at", "width"}}),

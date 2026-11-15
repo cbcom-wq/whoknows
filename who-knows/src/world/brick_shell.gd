@@ -12,15 +12,23 @@ extends RefCounted
 ## BaseExterior builds its homes with it too.
 ##
 ## A shell's frame `f` stands at its walls' foot, its y up, its front (the
-## door's side) toward -z. The walls start SUNK under the floor a caller wants,
-## so no gap shows where they meet the ground.
+## door's side) toward -z. Since Rework 2 (the owner: "the huts are like built
+## into the sand? They don't have floors?") that foot is the shell's floor: the
+## walls stand on a foundation course FOUNDATION high, FOUNDATION_PROUD proud
+## of them all round, whose own foot is SUNK under the ground (FOUNDATION under
+## f), so no gap shows where it meets the ground; a floor slab fills the
+## inside at f; a threshold stone steps up before every door; and a whole
+## shell's door is shut (planks in its reveal, sometimes ajar onto a dark
+## inside) and its windows shuttered.
 ##
 ## Every shell has a twin with the same arguments less the kit, `<name>_shapes`,
 ## which gives its solid parts as box CollisionShape3Ds for the caller's one
 ## StaticBody3D (BodyProxy.LAYER outside). The twins follow the walls piece for
-## piece (each wall piece, column and run segment is one box; openings stay
-## open); a roof is one box (two crossed for the round hut), a fallen slab one
-## box; courses, lintels, copings, rubble, patches and sails have none.
+## piece (each wall piece, column and run segment is one box; a window stays
+## open, a shut door is one box in its doorway); a roof is one box (two crossed
+## for the round hut), a fallen slab one box, a foundation one box (one a
+## segment for the round hut, from its middle out), a threshold one box;
+## courses, lintels, copings, shutters, rubble, patches and sails have none.
 
 ## A shell's walls, and the broken wall's, m thick.
 const WALL := 0.45
@@ -88,6 +96,49 @@ const SAIL_LIFT := 0.5
 const SAIL_SAG := 0.3
 const SAIL_CELLS := 4
 const POLE := 0.07
+## What a building stands on (Rework 2): a course of stone FOUNDATION high over
+## the ground and FOUNDATION_PROUD proud of the walls, the floor slab on it at
+## its top (FLOOR_THICK of it shows above the ground inside a crushed hut).
+## Part C's call 9 puts a building's floor 0.15 m over the ground at its door;
+## here it is 0.3, with a threshold stone halfway, so the way in is two steps of
+## THRESHOLD_RISE, each walked over without a jump. The threshold reaches
+## THRESHOLD_DEEP out from the wall's face and THRESHOLD_WIDE past each jamb.
+const FOUNDATION := 0.3
+const FOUNDATION_PROUD := 0.1
+const FLOOR_THICK := 0.2
+const THRESHOLD_RISE := 0.15
+const THRESHOLD_DEEP := 0.5
+const THRESHOLD_WIDE := 0.3
+## A shut door: planks PLANK thick, set DOOR_SET in from the wall's outer face,
+## WOOD's shades; a door wider than DOUBLE is two leaves. Ajar, a leaf's free
+## edge stands AJAR (a hand's width) in, onto the dark inside.
+const PLANK := 0.07
+const DOOR_SET := 0.1
+const DOUBLE := 1.6
+const AJAR := 0.1
+## A window: width and height, its sill WINDOW_SILL over the floor (LOW_SILL
+## in a building under LOW_HEIGHT); an upper storey's, smaller. A box taller
+## than STOREY has two storeys, its upper floor at half its height.
+const WINDOW := Vector2(0.7, 0.75)
+const WINDOW_SILL := 1.05
+const LOW_SILL := 0.9
+const LOW_HEIGHT := 2.8
+const UPPER_WINDOW := Vector2(0.55, 0.6)
+const STOREY := 4.5
+## A shutter's leaf is SHUTTER thick.
+const SHUTTER := 0.05
+## By variety, the parapet's height (m) and the beams' spacing (m) lie within
+## these, so no two shells look alike.
+const PARAPET_RANGE := Vector2(0.26, 0.52)
+const VIGA_SPAN_RANGE := Vector2(0.95, 1.75)
+## Where the broken wall ends at a breach its courses step down: [how far from
+## the end each step reaches (m), its top as a share of the height]; the first
+## is a stub.
+const BREAK_STEPS := [[0.4, 0.25], [1.15, 0.52], [1.9, 0.7], [2.7, 0.86]]
+## The gate's lintel beam: its height and depth, and how far it runs out past
+## each pier.
+const BEAM := Vector2(0.32, 0.4)
+const BEAM_OUT := 0.35
 
 # --- the box ------------------------------------------------------------------
 
@@ -95,10 +146,12 @@ const POLE := 0.07
 ## walls, `openings` (each [centre in f, width, height]) left as holes with a
 ## chunky lintel over each, two proud courses, a bevelled coping and a flat
 ## roof of slabs PARAPET under the top. `variety` (0 to 1) shades the walls.
-static func box(kit: InteriorKit, f: Transform3D, size: Vector3, openings: Array, variety: float) -> void:
+static func box(kit: InteriorKit, f: Transform3D, size: Vector3, openings: Array, variety: float,
+		shut := true) -> void:
 	var dark := InteriorKit.solid(OasisPalette.BRICK_DARK)
 	var walls := _walls(size)
-	var roof_y := size.y - PARAPET
+	var roof_y := size.y - parapet(variety)
+	_box_footing(kit, f, size)
 	for i in walls.size():
 		var w: Transform3D = walls[i][0]
 		var length: float = walls[i][1]
@@ -114,6 +167,10 @@ static func box(kit: InteriorKit, f: Transform3D, size: Vector3, openings: Array
 		for h: Array in holes:
 			_reveal(kit, f * w, h, h[3], h[3] < size.y - LINTEL.x, variety, i)
 			_lintel(kit, f * w, h, size.y)
+			_fill(kit, f * w, h, shut, variety, i)
+		if i < 2 and size.y > STOREY:
+			# A two-storey house: a band of beams at its upper floor.
+			_vigas(kit, f * w, length - 2.0 * WALL, size.y * 0.5, holes, variety, i + 8)
 		var rim := length + (2.0 * COPING.y if i < 2 else -2.0 * COPING.y)
 		var drop := 0.0 if i < 2 else 0.005
 		var coping_top := size.y + COPING.x - 0.03 - drop
@@ -128,15 +185,26 @@ static func box(kit: InteriorKit, f: Transform3D, size: Vector3, openings: Array
 	for slab: Array in _roof_slabs(span, roof_y):
 		kit.bevel_box(InteriorKit.Batch.SOLID, f * (slab[0] as Transform3D), slab[1], 0.03, _roof(variety, int(slab[2])))
 
-## box's solid parts: each wall piece and the roof.
-static func box_shapes(f: Transform3D, size: Vector3, openings: Array, _variety: float) -> Array[CollisionShape3D]:
+## box's solid parts: each wall piece, the roof, the foundation (one box, its
+## top the floor), each threshold and, `shut`, each door's leaf.
+static func box_shapes(f: Transform3D, size: Vector3, openings: Array, variety: float,
+		shut := true) -> Array[CollisionShape3D]:
 	var out: Array[CollisionShape3D] = []
 	for wall: Array in _walls(size):
 		var w: Transform3D = wall[0]
-		for p: Array in _pieces(wall[1], size.y, _holes(w, wall[1], openings)):
+		var holes := _holes(w, wall[1], openings)
+		for p: Array in _pieces(wall[1], size.y, holes):
 			out.append(_shape(f * w * _span(p), _span_size(p, WALL)))
+		for h: Array in holes:
+			if _is_door(h):
+				out.append(_threshold_shape(f * w, h))
+				if shut:
+					out.append(_door_shape(f * w, h))
 	var span := Vector2(size.x - 2.0 * WALL, size.z - 2.0 * WALL)
-	out.append(_shape(f * InteriorKit.at(Vector3(0, size.y - PARAPET - SLAB * 0.5, 0)), Vector3(span.x, SLAB, span.y)))
+	out.append(_shape(f * InteriorKit.at(Vector3(0, size.y - parapet(variety) - SLAB * 0.5, 0)), Vector3(span.x, SLAB, span.y)))
+	var foot := FOUNDATION + SUNK
+	out.append(_shape(f * InteriorKit.at(Vector3(0, -foot * 0.5, 0)),
+		Vector3(size.x + 2.0 * FOUNDATION_PROUD, foot, size.z + 2.0 * FOUNDATION_PROUD)))
 	return out
 
 # --- the round hut --------------------------------------------------------------
@@ -144,13 +212,15 @@ static func box_shapes(f: Transform3D, size: Vector3, openings: Array, _variety:
 ## A round hut at `f`: HUT_SIDES chunky wall segments whose outer faces lie
 ## `radius` out, `height` to the parapet's top, a door in its front (-z), two
 ## courses, a coping and a flat roof.
-static func round_hut(kit: InteriorKit, f: Transform3D, radius: float, height: float, variety: float) -> void:
+static func round_hut(kit: InteriorKit, f: Transform3D, radius: float, height: float, variety: float,
+		shut := true) -> void:
 	var dark := InteriorKit.solid(OasisPalette.BRICK_DARK)
-	var roof_y := height - PARAPET
+	var roof_y := height - parapet(variety)
 	var side := _hut_side(radius)
+	_hut_footing(kit, f, radius)
 	for i in HUT_SIDES:
 		var w := _hut_wall(radius, i)
-		var holes := _hut_holes(i)
+		var holes := _hut_holes(i, height, variety)
 		var pieces := _pieces(side, height, holes)
 		for p: Array in pieces:
 			kit.bevel_box(InteriorKit.Batch.SOLID, f * w * _span(p), _span_size(p, WALL), BEVEL, _base())
@@ -160,12 +230,13 @@ static func round_hut(kit: InteriorKit, f: Transform3D, radius: float, height: f
 		for h: Array in holes:
 			_reveal(kit, f * w, h, h[3], h[3] < height - LINTEL.x, variety, i)
 			_lintel(kit, f * w, h, height)
+			_fill(kit, f * w, h, shut, variety, i)
 		var coping_top := height + COPING.x - 0.03
 		kit.bevel_box(InteriorKit.Batch.SOLID, f * w * InteriorKit.at(Vector3(0, coping_top - COPING.x * 0.5, 0)),
 			Vector3(side + 0.08, COPING.x, WALL + 2.0 * COPING.y), 0.03, dark)
-		# A beam out of every other segment, none over the door; the parapet
-		# steps up over every third, the door's first.
-		if i % 2 == 1:
+		# A beam out of every other segment, none over the door or a window;
+		# the parapet steps up over every third, the door's first.
+		if i % 2 == 1 and holes.is_empty():
 			_viga(kit, f * w, 0.0, roof_y, variety, i)
 		if i % 3 == 0:
 			_step(kit, f * w, 0.0, side * 0.6, STEP_UP, coping_top, variety, i)
@@ -177,17 +248,31 @@ static func round_hut(kit: InteriorKit, f: Transform3D, radius: float, height: f
 		ring.append(Vector3(sin(a) * corner, 0, cos(a) * corner))
 	_slab(kit, f, ring, roof_y - SLAB, roof_y, _roof(variety, 0))
 
-## round_hut's solid parts: each wall piece, and the roof as two crossed boxes.
-static func round_hut_shapes(f: Transform3D, radius: float, height: float, _variety: float) -> Array[CollisionShape3D]:
+## round_hut's solid parts: each wall piece, the roof as two crossed boxes,
+## the foundation as a box a segment (from the middle out to its face, its top
+## the floor), the threshold and, `shut`, the door's leaf.
+static func round_hut_shapes(f: Transform3D, radius: float, height: float, variety: float,
+		shut := true) -> Array[CollisionShape3D]:
 	var out: Array[CollisionShape3D] = []
 	var side := _hut_side(radius)
+	var outer := radius + FOUNDATION_PROUD
+	var foot := FOUNDATION + SUNK
 	for i in HUT_SIDES:
 		var w := _hut_wall(radius, i)
-		for p: Array in _pieces(side, height, _hut_holes(i)):
+		var holes := _hut_holes(i, height, variety)
+		for p: Array in _pieces(side, height, holes):
 			out.append(_shape(f * w * _span(p), _span_size(p, WALL)))
+		for h: Array in holes:
+			if _is_door(h):
+				out.append(_threshold_shape(f * w, h))
+				if shut:
+					out.append(_door_shape(f * w, h))
+		var turn := Basis(Vector3.UP, PI + TAU * i / HUT_SIDES)
+		out.append(_shape(f * Transform3D(turn, turn * Vector3(0, -foot * 0.5, outer * 0.5)),
+			Vector3(_hut_side(outer), foot, outer)))
 	var square := 2.0 * (radius - WALL) * cos(PI * 0.25)
 	for turn in [0.0, PI * 0.25]:
-		out.append(_shape(f * Transform3D(Basis(Vector3.UP, turn), Vector3(0, height - PARAPET - SLAB * 0.5, 0)),
+		out.append(_shape(f * Transform3D(Basis(Vector3.UP, turn), Vector3(0, height - parapet(variety) - SLAB * 0.5, 0)),
 			Vector3(square, SLAB, square)))
 	return out
 
@@ -199,20 +284,33 @@ static func _hut_wall(radius: float, i: int) -> Transform3D:
 	var turn := Basis(Vector3.UP, PI + TAU * i / HUT_SIDES)
 	return Transform3D(turn, turn * Vector3(0, 0, radius - WALL * 0.5))
 
-static func _hut_holes(i: int) -> Array:
-	return [[-DOOR.x * 0.5, DOOR.x * 0.5, 0.0, DOOR.y]] if i == 0 else []
+## Segment `i`'s openings, [u0, u1, y0, y1]: the door in segment 0, and by
+## `variety` a window in two of the side segments of a hut `height` high.
+static func _hut_holes(i: int, height: float, variety: float) -> Array:
+	if i == 0:
+		return [[-DOOR.x * 0.5, DOOR.x * 0.5, 0.0, DOOR.y]]
+	var first := 3 + int(_noise(variety, 2.0, 31.0) * 1.99)
+	if i == first or i == HUT_SIDES - first + (1 if _noise(variety, 3.0, 31.0) > 0.5 else 0):
+		var sill := WINDOW_SILL if height > LOW_HEIGHT else LOW_SILL
+		var tall := minf(WINDOW.y, height - parapet(variety) - SLAB - LINTEL.x - sill - 0.05)
+		if tall > 0.4:
+			return [[-WINDOW.x * 0.4, WINDOW.x * 0.4, sill, sill + tall]]
+	return []
 
 # --- the crushed hut ------------------------------------------------------------
 
 ## A hut of `size` crushed in from its +x side: the walls there broken down to
 ## stumps and falling away along the front and back toward it, the far wall
 ## standing nearly whole, no coping; the roof's slabs fallen in at angles, no
-## higher than FALLEN_TOP of its height; and rubble over the floor (taken to be
-## SUNK over `f`). A door stays in the front, at its whole end.
+## higher than FALLEN_TOP of its height; and rubble over the floor. Its
+## foundation and floor slab stand whole under it all (Rework 2), so what fell
+## lies on the floor, not on sand. A door stays in the front, at its whole
+## end, open, with its threshold.
 static func crushed(kit: InteriorKit, f: Transform3D, size: Vector3, variety: float) -> void:
 	var dark := InteriorKit.solid(OasisPalette.BRICK_DARK)
 	var walls := _walls(size)
 	var door := _crushed_door(size)
+	_box_footing(kit, f, size)
 	for i in walls.size():
 		var w: Transform3D = walls[i][0]
 		var length: float = walls[i][1]
@@ -235,28 +333,37 @@ static func crushed(kit: InteriorKit, f: Transform3D, size: Vector3, variety: fl
 			_reveal(kit, f * w, h, minf(jamb, h[3]), headed, variety, i)
 			if headed:
 				_lintel(kit, f * w, h, size.y)
+			if _is_door(h):
+				_threshold(kit, f * w, h)
 		# The beams still in the standing wall, over the far (whole) end.
 		if i < 2:
-			for v: Array in _viga_spots(length - 2.0 * WALL, size.y - PARAPET, holes, variety, i):
+			for v: Array in viga_spots(length - 2.0 * WALL, size.y - PARAPET, holes, variety, i):
 				if _column_height(i, w, length, size, v[0], variety) > size.y - PARAPET + 0.05:
 					_viga(kit, f * w, v[0], size.y - PARAPET, variety, int(v[1]))
 	for slab: Array in _fallen(size, variety):
 		kit.bevel_box(InteriorKit.Batch.SOLID, f * (slab[0] as Transform3D), slab[1], 0.03, _roof(variety, int(slab[2])))
 	var span := Vector2(size.x - 2.0 * WALL, size.z - 2.0 * WALL)
 	rubble(kit, f * InteriorKit.at(Vector3(span.x * 0.12, 0, 0)), span * Vector2(0.72, 0.8),
-		int(span.x * span.y * 0.35), variety, func(_x: float, _z: float) -> float: return SUNK)
+		int(span.x * span.y * 0.35), variety, func(_x: float, _z: float) -> float: return 0.0)
 
-## crushed's solid parts: each standing column of wall and each fallen slab.
+## crushed's solid parts: each standing column of wall, each fallen slab, the
+## foundation (its top the floor) and the threshold. Its door stays open.
 static func crushed_shapes(f: Transform3D, size: Vector3, variety: float) -> Array[CollisionShape3D]:
 	var out: Array[CollisionShape3D] = []
 	var walls := _walls(size)
 	for i in walls.size():
 		var w: Transform3D = walls[i][0]
 		var length: float = walls[i][1]
-		for p: Array in _crushed_pieces(i, w, length, size, _holes(w, length, [_crushed_door(size)]), variety):
+		var holes := _holes(w, length, [_crushed_door(size)])
+		for p: Array in _crushed_pieces(i, w, length, size, holes, variety):
 			out.append(_shape(f * w * _span(p), _span_size(p, WALL)))
+		for h: Array in holes:
+			out.append(_threshold_shape(f * w, h))
 	for slab: Array in _fallen(size, variety):
 		out.append(_shape(f * (slab[0] as Transform3D), slab[1]))
+	var foot := FOUNDATION + SUNK
+	out.append(_shape(f * InteriorKit.at(Vector3(0, -foot * 0.5, 0)),
+		Vector3(size.x + 2.0 * FOUNDATION_PROUD, foot, size.z + 2.0 * FOUNDATION_PROUD)))
 	return out
 
 static func _crushed_door(size: Vector3) -> Array:
@@ -332,7 +439,7 @@ static func _fallen(size: Vector3, variety: float) -> Array:
 			lo = minf(lo, y)
 			hi = maxf(hi, y)
 		var tries := 0
-		while hi - lo > top - SUNK - 0.04 and tries < 12:
+		while hi - lo > top - 0.04 and tries < 12:
 			tilt *= 0.8
 			roll *= 0.8
 			basis = Basis.from_euler(Vector3(roll, (c - 0.5) * 0.3, -tilt))
@@ -343,7 +450,7 @@ static func _fallen(size: Vector3, variety: float) -> Array:
 				lo = minf(lo, y)
 				hi = maxf(hi, y)
 			tries += 1
-		var at := Vector3(-span.x * 0.5 + width * (k + 0.5), SUNK + 0.04 - lo, (a - 0.5) * 0.5)
+		var at := Vector3(-span.x * 0.5 + width * (k + 0.5), 0.04 - lo, (a - 0.5) * 0.5)
 		out.append([Transform3D(basis, at), slab, k])
 	return out
 
@@ -362,20 +469,22 @@ static func _corners(size: Vector3) -> Array[Vector3]:
 ## the ground SUNK under it from point to point. Each segment's top is its own,
 ## from RAGGED to 1 of `height` over its lower end by `variety`, so the top is
 ## stepped and broken; its top edges are chamfered, and one proud course runs
-## BAND_AT over the ground.
-static func wall(kit: InteriorKit, points: PackedVector3Array, height: float, variety: float) -> void:
+## BAND_AT over the ground. It stands on a footing course as a shell's
+## foundation does (Rework 2). Where `broken` says its start or its end is a
+## breach ([start, end]), its courses step down there (BREAK_STEPS) to a stub.
+static func wall(kit: InteriorKit, points: PackedVector3Array, height: float, variety: float,
+		broken := [false, false]) -> void:
 	var dark := InteriorKit.solid(OasisPalette.BRICK_DARK)
-	for k in points.size() - 1:
-		var seg := _run_segment(points, k, height, variety)
-		if seg.is_empty():
-			continue
+	for seg: Array in _run_segments(points, height, variety, broken):
 		var a: Vector3 = seg[0]
 		var b: Vector3 = seg[1]
 		var top: float = seg[2]
 		var dir: Vector3 = seg[3]
+		var k: int = seg[4]
 		var side := dir.cross(Vector3.UP)
 		_prism(kit, a, b, top, side, _base())
 		_run_blocks(kit, a, b, top - CHAMFER, side, variety, k)
+		_footing(kit, a, b, side)
 		var ground := (a.y + b.y) * 0.5 + SUNK
 		if top - maxf(a.y, b.y) > BAND_AT + 0.4:
 			var slope := (b - a).normalized()
@@ -386,12 +495,10 @@ static func wall(kit: InteriorKit, points: PackedVector3Array, height: float, va
 				Vector3(a.distance_to(b) - 0.04, COURSE.x, RUN + 2.0 * COURSE.y), dark)
 
 ## wall's solid parts: a box a segment, from its lower foot to its top.
-static func wall_shapes(points: PackedVector3Array, height: float, variety: float) -> Array[CollisionShape3D]:
+static func wall_shapes(points: PackedVector3Array, height: float, variety: float,
+		broken := [false, false]) -> Array[CollisionShape3D]:
 	var out: Array[CollisionShape3D] = []
-	for k in points.size() - 1:
-		var seg := _run_segment(points, k, height, variety)
-		if seg.is_empty():
-			continue
+	for seg: Array in _run_segments(points, height, variety, broken):
 		var a: Vector3 = seg[0]
 		var b: Vector3 = seg[1]
 		var top: float = seg[2]
@@ -403,24 +510,90 @@ static func wall_shapes(points: PackedVector3Array, height: float, variety: floa
 		out.append(_shape(Transform3D(Basis(dir, Vector3.UP, dir.cross(Vector3.UP)), mid), Vector3(length, top - foot, RUN)))
 	return out
 
-## Segment `k` of a run: [its foot at the start and the end (SUNK under the
+## A run's segments: [its foot at the start and the end (SUNK under the
 ## ground, stretched BEND_OVERLAP where the run bends), its top, its
-## horizontal direction], or [] for a segment with no length.
-static func _run_segment(points: PackedVector3Array, k: int, height: float, variety: float) -> Array:
-	var a := points[k]
-	var b := points[k + 1]
-	var flat := Vector3(b.x - a.x, 0, b.z - a.z)
-	if flat.length() < 0.01:
-		return []
-	var dir := flat.normalized()
-	var top := minf(a.y, b.y) + height * lerpf(RAGGED, 1.0, _noise(variety, k, 5.3))
-	var start := a - Vector3(0, SUNK, 0)
-	var end := b - Vector3(0, SUNK, 0)
-	if k > 0 and _bends(points[k - 1], a, b):
-		start -= dir * BEND_OVERLAP
-	if k + 2 < points.size() and _bends(a, b, points[k + 2]):
-		end += dir * BEND_OVERLAP
-	return [start, end, top, dir]
+## horizontal direction, its index] each, segments with no length left out.
+## A broken end gets points at BREAK_STEPS' reaches from it, and each segment
+## there tops out at its step's share of `height`.
+static func _run_segments(points: PackedVector3Array, height: float, variety: float, broken: Array) -> Array:
+	var pts := points
+	for end in 2:
+		if bool(broken[end]):
+			for step: Array in BREAK_STEPS:
+				pts = _insert_at(pts, float(step[0]), end == 1)
+	var along := PackedFloat64Array([0.0])
+	for k in pts.size() - 1:
+		along.append(along[k] + Vector2(pts[k + 1].x - pts[k].x, pts[k + 1].z - pts[k].z).length())
+	var total := along[along.size() - 1]
+	var out := []
+	for k in pts.size() - 1:
+		var a := pts[k]
+		var b := pts[k + 1]
+		var flat := Vector3(b.x - a.x, 0, b.z - a.z)
+		if flat.length() < 0.01:
+			continue
+		var dir := flat.normalized()
+		var share := lerpf(RAGGED, 1.0, _noise(variety, k, 5.3))
+		var mid := (along[k] + along[k + 1]) * 0.5
+		for end in 2:
+			if not bool(broken[end]):
+				continue
+			var from_end := mid if end == 0 else total - mid
+			for step: Array in BREAK_STEPS:
+				if from_end < float(step[0]):
+					share = float(step[1]) + (_noise(variety, k, 6.1) - 0.5) * 0.06
+					break
+		var top := minf(a.y, b.y) + height * share
+		var start := a - Vector3(0, SUNK, 0)
+		var stop := b - Vector3(0, SUNK, 0)
+		if k > 0 and _bends(pts[k - 1], a, b):
+			start -= dir * BEND_OVERLAP
+		if k + 2 < pts.size() and _bends(a, b, pts[k + 2]):
+			stop += dir * BEND_OVERLAP
+		out.append([start, stop, top, dir, k])
+	return out
+
+## `points` with one more, `d` m along the run from its start (or its end),
+## on the line between its neighbours; unchanged if one lies within 5 cm.
+static func _insert_at(points: PackedVector3Array, d: float, from_end: bool) -> PackedVector3Array:
+	var pts := points.duplicate()
+	if from_end:
+		pts.reverse()
+	var acc := 0.0
+	for i in pts.size() - 1:
+		var length := Vector2(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z).length()
+		if acc + length > d:
+			if d - acc > 0.05 and acc + length - d > 0.05:
+				pts.insert(i + 1, pts[i].lerp(pts[i + 1], (d - acc) / length))
+			break
+		acc += length
+	if from_end:
+		pts.reverse()
+	return pts
+
+## The footing course under a run's segment from foot `a` to foot `b` (both
+## SUNK under the ground): FOUNDATION over the ground at each end, RUN +
+## 2 FOUNDATION_PROUD wide across `side`, its top edges chamfered, in
+## OasisPalette.FOUNDATION.
+static func _footing(kit: InteriorKit, a: Vector3, b: Vector3, side: Vector3) -> void:
+	var h := RUN * 0.5 + FOUNDATION_PROUD
+	var c := 0.04
+	var rise := FOUNDATION + SUNK
+	var colour := InteriorKit.solid(OasisPalette.FOUNDATION)
+	var profile := [Vector2(-h, 0), Vector2(-h, rise - c), Vector2(-h + c, rise), Vector2(h - c, rise),
+		Vector2(h, rise - c), Vector2(h, 0)]
+	var at_a := PackedVector3Array()
+	var at_b := PackedVector3Array()
+	for p: Vector2 in profile:
+		at_a.append(a + Vector3(0, p.y, 0) + side * p.x)
+		at_b.append(b + Vector3(0, p.y, 0) + side * p.x)
+	var normals := [-side, (Vector3.UP - side).normalized(), Vector3.UP, (Vector3.UP + side).normalized(), side]
+	for i in 5:
+		kit.quad(InteriorKit.Batch.SOLID, at_a[i], at_b[i], at_b[i + 1], at_a[i + 1], normals[i], colour)
+	var way := Vector3(b.x - a.x, 0, b.z - a.z).normalized()
+	for i in range(1, 5):
+		kit.tri(InteriorKit.Batch.SOLID, at_a[0], at_a[i], at_a[i + 1], -way, colour)
+		kit.tri(InteriorKit.Batch.SOLID, at_b[0], at_b[i], at_b[i + 1], way, colour)
 
 static func _bends(a: Vector3, b: Vector3, c: Vector3) -> bool:
 	var u := Vector2(b.x - a.x, b.z - a.z).normalized()
@@ -546,12 +719,17 @@ static func sail(kit: InteriorKit, f: Transform3D, size: Vector2, variety: float
 
 # --- the gate's piers ----------------------------------------------------------
 
-## A gate pier at `f` (its foot, x along the wall, z across it): a thick block
-## `size` high in the wall's adobe, its four faces laid in blocks, under a
+## A gate pier at `f` (its foot, SUNK under the ground; x along the wall, z
+## across it): a thick block `size` high in the wall's adobe, its four faces
+## laid in blocks, on a footing course as the wall's (Rework 2), under a
 ## bevelled coping COPING.x thick that stands COPING.y proud all round, the
 ## coping's top at `size.y`.
 static func pier(kit: InteriorKit, f: Transform3D, size: Vector3, variety: float) -> void:
 	var body := size.y - COPING.x
+	var rise := FOUNDATION + SUNK
+	kit.bevel_box(InteriorKit.Batch.SOLID, f * InteriorKit.at(Vector3(0, rise * 0.5, 0)),
+		Vector3(size.x + 2.0 * FOUNDATION_PROUD, rise, size.z + 2.0 * FOUNDATION_PROUD), 0.04,
+		InteriorKit.solid(OasisPalette.FOUNDATION))
 	kit.bevel_box(InteriorKit.Batch.SOLID, f * InteriorKit.at(Vector3(0, body * 0.5, 0)), Vector3(size.x, body, size.z),
 		BEVEL, _base())
 	for i in 4:
@@ -568,6 +746,202 @@ static func pier(kit: InteriorKit, f: Transform3D, size: Vector3, variety: float
 static func pier_shapes(f: Transform3D, size: Vector3, _variety: float) -> Array[CollisionShape3D]:
 	var out: Array[CollisionShape3D] = [_shape(f * InteriorKit.at(Vector3(0, size.y * 0.5, 0)), size)]
 	return out
+
+## The gate's lintel beam (Rework 2): a squared wooden log BEAM thick from pier
+## top `a` to pier top `b` (each the middle of a pier's top, under its
+## coping, in the kit's space), through both piers and BEAM_OUT past them
+## (`pier` thick), its top at their lower top.
+static func gate_beam(kit: InteriorKit, a: Vector3, b: Vector3, pier: float, variety: float) -> void:
+	var along := Vector3(b.x - a.x, 0, b.z - a.z)
+	var length := along.length() + pier + 2.0 * BEAM_OUT
+	var x := along.normalized()
+	var mid := (a + b) * 0.5
+	mid.y = minf(a.y, b.y) - BEAM.x * 0.5
+	var colour := InteriorKit.solid(SpacePalette.shade(OasisPalette.WOOD, int(_noise(variety, 1.0, 25.0) * 2.99)))
+	kit.bevel_box(InteriorKit.Batch.SOLID, Transform3D(Basis(x, Vector3.UP, x.cross(Vector3.UP)), mid),
+		Vector3(length, BEAM.x, BEAM.y), 0.04, colour)
+
+# --- foundations, floors, doors and shutters (Rework 2) -----------------------
+
+## The parapet's height over the roof of a shell of `variety`: within
+## PARAPET_RANGE.
+static func parapet(variety: float) -> float:
+	return lerpf(PARAPET_RANGE.x, PARAPET_RANGE.y, _noise(variety, 2.0, 26.0))
+
+## The openings of a box shell `size` by `variety`, each [centre in the
+## shell's frame, width, height]: a door DOOR.y high and `door_width` wide in
+## the front (-z), at its middle or, on a long front, off it; a window either
+## side of it where there is room, and one in a side wall, by variety; a
+## house over STOREY high an upper window over its door.
+static func openings_for(size: Vector3, variety: float, door_width := DOOR.x) -> Array:
+	var front := -size.z * 0.5 + WALL * 0.5
+	var inner := size.x * 0.5 - WALL
+	var slack := maxf(inner - door_width * 0.5 - 1.6, 0.0)
+	var door_u := (_noise(variety, 1.0, 27.0) - 0.5) * 2.0 * slack * 0.6 if size.x > 7.5 else 0.0
+	var out := [[Vector3(door_u, DOOR.y * 0.5, front), door_width, DOOR.y]]
+	var low := size.y <= LOW_HEIGHT
+	var sill := LOW_SILL if low else WINDOW_SILL
+	var tall := minf(WINDOW.y, size.y - parapet(variety) - SLAB - LINTEL.x - sill - 0.05)
+	if tall < 0.4:
+		return out
+	var wide := WINDOW.x * (0.8 if low else 1.0)
+	for side: float in [-1.0, 1.0]:
+		var jamb := door_u + side * (door_width * 0.5 + LINTEL.y)
+		var room := inner - absf(jamb)
+		if room > wide + 0.9 and _noise(variety, side, 28.0) > 0.25:
+			out.append([Vector3(jamb + side * room * 0.5, sill + tall * 0.5, front), wide, tall])
+	if size.z - 2.0 * WALL > wide + 1.2:
+		var x := size.x * 0.5 - WALL * 0.5
+		var on := 1.0 if _noise(variety, 3.0, 28.0) > 0.5 else -1.0
+		out.append([Vector3(on * x, sill + tall * 0.5, (_noise(variety, 4.0, 28.0) - 0.5) * 0.6), wide, tall])
+	if size.y > STOREY:
+		out.append([Vector3(door_u, size.y * 0.5 + 0.35 + UPPER_WINDOW.y * 0.5, front), UPPER_WINDOW.x, UPPER_WINDOW.y])
+	return out
+
+## Whether hole `h` ([u0, u1, y0, y1]) is a door: it starts at the floor.
+static func _is_door(h: Array) -> bool:
+	return float(h[2]) < 0.02
+
+## The doors of a shell in its own frame, each [the middle of the doorway (in
+## the wall's middle) at the floor, the unit way out, its width]: of a box
+## (its `openings`); of a round hut (`radius` over 0); or of a crushed hut
+## (`crushed_size` not zero).
+static func door_spots(openings: Array, radius := 0.0, crushed_size := Vector3.ZERO) -> Array:
+	if radius > 0.0:
+		return [[Vector3(0, 0, -(radius - WALL * 0.5)), Vector3.FORWARD, DOOR.x]]
+	var list := [_crushed_door(crushed_size)] if crushed_size != Vector3.ZERO else openings
+	var out := []
+	for o: Array in list:
+		var c: Vector3 = o[0]
+		if c.y - float(o[2]) * 0.5 > 0.02:
+			continue
+		var way := Vector3.RIGHT if c.x > 0.0 else Vector3.LEFT
+		if absf(c.z) >= absf(c.x):
+			way = Vector3.BACK if c.z > 0.0 else Vector3.FORWARD
+		out.append([Vector3(c.x, 0, c.z), way, float(o[1])])
+	return out
+
+## A box's (or a crushed hut's) foundation course and floor slab, under `f`.
+static func _box_footing(kit: InteriorKit, f: Transform3D, size: Vector3) -> void:
+	var stone := InteriorKit.solid(OasisPalette.FOUNDATION)
+	var rise := FOUNDATION + SUNK
+	var band := WALL + FOUNDATION_PROUD
+	var out := Vector2(size.x, size.z) + Vector2.ONE * 2.0 * FOUNDATION_PROUD
+	for z_side: float in [-1.0, 1.0]:
+		kit.bevel_box(InteriorKit.Batch.SOLID, f * InteriorKit.at(Vector3(0, -rise * 0.5, z_side * (out.y - band) * 0.5)),
+			Vector3(out.x, rise, band), 0.04, stone)
+	for x_side: float in [-1.0, 1.0]:
+		kit.bevel_box(InteriorKit.Batch.SOLID, f * InteriorKit.at(Vector3(x_side * (out.x - band) * 0.5, -rise * 0.5, 0)),
+			Vector3(band, rise, out.y - 2.0 * band + 0.02), 0.04, stone)
+	var inside := Vector2(size.x - 2.0 * WALL, size.z - 2.0 * WALL)
+	kit.box(InteriorKit.Batch.SOLID, f * InteriorKit.at(Vector3(0, -FLOOR_THICK * 0.5 - 0.004, 0)),
+		Vector3(inside.x + 0.02, FLOOR_THICK, inside.y + 0.02), InteriorKit.solid(OasisPalette.FLOOR))
+
+## A round hut's foundation course (a segment under each wall) and its floor
+## slab, under `f`.
+static func _hut_footing(kit: InteriorKit, f: Transform3D, radius: float) -> void:
+	var stone := InteriorKit.solid(OasisPalette.FOUNDATION)
+	var rise := FOUNDATION + SUNK
+	var band := WALL + FOUNDATION_PROUD
+	var outer := radius + FOUNDATION_PROUD
+	for i in HUT_SIDES:
+		var turn := Basis(Vector3.UP, PI + TAU * i / HUT_SIDES)
+		kit.bevel_box(InteriorKit.Batch.SOLID, f * Transform3D(turn, turn * Vector3(0, -rise * 0.5, outer - band * 0.5)),
+			Vector3(_hut_side(outer), rise, band), 0.04, stone)
+	var ring := PackedVector3Array()
+	var corner := (radius - WALL + 0.01) / cos(PI / HUT_SIDES)
+	for i in HUT_SIDES:
+		var a := PI + TAU * (i + 0.5) / HUT_SIDES
+		ring.append(Vector3(sin(a) * corner, 0, cos(a) * corner))
+	_slab(kit, f, ring, -FLOOR_THICK - 0.004, -0.004, InteriorKit.solid(OasisPalette.FLOOR))
+
+## Hole `h`'s threshold stone, in wall frame `w`: on the ground (FOUNDATION
+## under the floor) before the wall's face, THRESHOLD_RISE high, THRESHOLD_DEEP
+## out and THRESHOLD_WIDE past each jamb, in a light shade of the foundation.
+static func _threshold(kit: InteriorKit, w: Transform3D, h: Array) -> void:
+	var t := _threshold_frame(h)
+	kit.bevel_box(InteriorKit.Batch.SOLID, w * InteriorKit.at(t[0]), t[1], 0.04,
+		InteriorKit.solid(SpacePalette.shade(OasisPalette.FOUNDATION, 2)))
+
+static func _threshold_shape(w: Transform3D, h: Array) -> CollisionShape3D:
+	var t := _threshold_frame(h)
+	return _shape(w * InteriorKit.at(t[0]), t[1])
+
+## [middle, size] of hole `h`'s threshold in its wall's frame.
+static func _threshold_frame(h: Array) -> Array:
+	var rise := THRESHOLD_RISE + SUNK
+	var size := Vector3(float(h[1]) - float(h[0]) + 2.0 * THRESHOLD_WIDE, rise, THRESHOLD_DEEP)
+	return [Vector3((float(h[0]) + float(h[1])) * 0.5, -FOUNDATION - SUNK + rise * 0.5,
+		WALL * 0.5 + THRESHOLD_DEEP * 0.5 - 0.02), size]
+
+## A shut door's solid part, in wall frame `w`: its leaves closed, PLANK thick.
+static func _door_shape(w: Transform3D, h: Array) -> CollisionShape3D:
+	var z := WALL * 0.5 - DOOR_SET - PLANK * 0.5
+	return _shape(w * InteriorKit.at(Vector3((float(h[0]) + float(h[1])) * 0.5, float(h[3]) * 0.5, z)),
+		Vector3(float(h[1]) - float(h[0]), float(h[3]), PLANK))
+
+## What fills hole `h` in wall frame `w`: a door its threshold and, `shut`,
+## its plank leaves (one, or two if wider than DOUBLE), sometimes one ajar by
+## AJAR; a window its shutters, closed, one open or both half open. Behind
+## either, when shut, a dark backing at the wall's inner face, so a gap shows
+## a dark inside, never sand. By `variety` and `salt`.
+static func _fill(kit: InteriorKit, w: Transform3D, h: Array, shut: bool, variety: float, salt: int) -> void:
+	var u0 := float(h[0])
+	var u1 := float(h[1])
+	var y0 := float(h[2])
+	var y1 := float(h[3])
+	var door := _is_door(h)
+	if door:
+		_threshold(kit, w, h)
+	if not shut:
+		return
+	kit.box(InteriorKit.Batch.SOLID, w * InteriorKit.at(Vector3((u0 + u1) * 0.5, (y0 + y1) * 0.5, -WALL * 0.5 + 0.012)),
+		Vector3(u1 - u0 + 0.02, y1 - y0 + 0.02, 0.02), InteriorKit.solid(SpacePalette.shade(OasisPalette.REVEAL, 0)))
+	if door:
+		var leaves := 2 if u1 - u0 > DOUBLE else 1
+		var leaf := (u1 - u0) / leaves - 0.02
+		var ajar := -1
+		if _noise(variety, salt, 29.0) > 0.55:
+			ajar = int(_noise(variety, salt, 30.0) * leaves * 0.999)
+		var z := WALL * 0.5 - DOOR_SET - PLANK * 0.5
+		for k in leaves:
+			var s := 1.0 if k == 0 else -1.0
+			var hinge := Vector3(u0 + 0.01 if k == 0 else u1 - 0.01, 0.0, z)
+			var turn := s * asin(AJAR / leaf) if k == ajar else 0.0
+			_leaf(kit, w * Transform3D(Basis(Vector3.UP, turn), hinge), s, leaf, y1 - 0.02, PLANK, variety, salt * 4 + k, true)
+		return
+	var mode := _noise(variety, salt, 31.0)
+	var half := (u1 - u0) * 0.5 - 0.01
+	for k in 2:
+		var s := 1.0 if k == 0 else -1.0
+		var swing := 0.0
+		if mode > 0.75 or (mode > 0.4 and k == int(_noise(variety, salt, 32.0) * 1.999)):
+			swing = deg_to_rad(lerpf(55.0, 105.0, _noise(variety, salt, 33.0 + k)))
+		if swing == 0.0:
+			var hinge := Vector3(u0 + 0.005 if k == 0 else u1 - 0.005, y0 + 0.01, WALL * 0.5 - 0.04 - SHUTTER * 0.5)
+			_leaf(kit, w * InteriorKit.at(hinge), s, half, y1 - y0 - 0.02, SHUTTER, variety, salt * 8 + k, false)
+		else:
+			# Hung on the surround's outer corner and swung out toward the wall.
+			var hinge := Vector3(u0 - SURROUND.x if k == 0 else u1 + SURROUND.x, y0 + 0.01,
+				WALL * 0.5 + SURROUND.y + SHUTTER * 0.5)
+			_leaf(kit, w * Transform3D(Basis(Vector3.UP, s * swing), hinge), -s, half, y1 - y0 - 0.02, SHUTTER,
+				variety, salt * 8 + k, false)
+
+## One wooden leaf in frame `t` (its hinge edge at the origin, its foot at y
+## 0): `width` along `s` x, `tall` high, `thick` deep, of planks in WOOD's
+## shades (a door's three, a shutter's two) with two dark battens across.
+static func _leaf(kit: InteriorKit, t: Transform3D, s: float, width: float, tall: float, thick: float, variety: float,
+		salt: int, door: bool) -> void:
+	var planks := 3 if door else 2
+	var each := width / planks
+	for k in planks:
+		var colour := InteriorKit.solid(SpacePalette.shade(OasisPalette.WOOD, int(_noise(variety, salt * 3 + k, 34.0) * 2.99)))
+		kit.bevel_box(InteriorKit.Batch.SOLID, t * InteriorKit.at(Vector3(s * each * (k + 0.5), tall * 0.5, 0)),
+			Vector3(each - 0.012, tall, thick), 0.012, colour)
+	var dark := InteriorKit.solid(SpacePalette.shade(OasisPalette.WOOD, 0))
+	for y_share: float in ([0.2, 0.78] if door else [0.25, 0.75]):
+		kit.bevel_box(InteriorKit.Batch.SOLID, t * InteriorKit.at(Vector3(s * width * 0.5, tall * y_share, thick * 0.5 + 0.015)),
+			Vector3(width * 0.92, 0.1 if door else 0.07, 0.03), 0.01, dark)
 
 # --- shared ------------------------------------------------------------------
 
@@ -691,10 +1065,11 @@ static func _reveal(kit: InteriorKit, w: Transform3D, h: Array, jamb_top: float,
 				Vector3(SURROUND.x, top - foot, SURROUND.y), 0.02, _base())
 
 ## Where the beams poke out of a wall whose inside is `inner` long, their tops
-## just under a roof at `roof_y`: [u along the wall, a salt] each, about
-## VIGA_SPAN apart, none over an opening whose lintel reaches them.
-static func _viga_spots(inner: float, roof_y: float, holes: Array, _variety: float, salt: int) -> Array:
-	var count := maxi(2, roundi(inner / VIGA_SPAN))
+## just under a roof at `roof_y`: [u along the wall, a salt] each, a spacing
+## within VIGA_SPAN_RANGE (by `variety`) apart, none over an opening whose
+## lintel reaches them.
+static func viga_spots(inner: float, roof_y: float, holes: Array, variety: float, salt: int) -> Array:
+	var count := maxi(2, roundi(inner / lerpf(VIGA_SPAN_RANGE.x, VIGA_SPAN_RANGE.y, _noise(variety, 1.0, 24.0))))
 	var y := roof_y - SLAB - VIGA_RADIUS
 	var out := []
 	for k in count:
@@ -711,7 +1086,7 @@ static func _viga_spots(inner: float, roof_y: float, holes: Array, _variety: flo
 ## The beams of a wall frame `w` (see _viga_spots).
 static func _vigas(kit: InteriorKit, w: Transform3D, inner: float, roof_y: float, holes: Array, variety: float,
 		salt: int) -> void:
-	for v: Array in _viga_spots(inner, roof_y, holes, variety, salt):
+	for v: Array in viga_spots(inner, roof_y, holes, variety, salt):
 		_viga(kit, w, v[0], roof_y, variety, int(v[1]))
 
 ## One beam at `u` along wall frame `w`, under a roof at `roof_y`: a faceted log

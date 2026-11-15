@@ -34,6 +34,9 @@ extends "res://test/probes/desert_render.gd"
 ##            (village_wall), a shade sail by the gate (village_sail), the
 ##            sandstone ledge over the wall (village_ledge), the breach from
 ##            the pool's side (village_from_the_pool); the frame rate there.
+##            Rework 2 adds the gate from the pad, a lane, the grass's edge,
+##            the ledge from inside the village and its stair, and four doors
+##            close up (DOOR_VIEWS, DOOR_BACK m out, their foundations showing).
 ##   inside   Task 14's: inside a building (not built yet).
 ##   all      every set built so far.
 ##
@@ -110,6 +113,8 @@ const OASIS_SHEET := [
 	"village_wall", "village_sail", "village_ledge", "village_from_the_pool",
 	"village_pad_to_village", "village_pool_sunward", "village_pool_away", "village_lookout", "village_lookout_back",
 	"village_gardens", "village_gate_lane", "village_approach_150", "village_approach_40", "village_top_down",
+	"village_gate_from_pad", "village_lane", "village_grass_edge", "village_ledge_from_inside", "village_stair",
+	"village_door_home4", "village_door_store", "village_door_crushed", "village_door_hut",
 ]
 ## The village set's views: [name, where you stand, what you look at], each
 ## [east, north] m in the oasis's layout.
@@ -123,7 +128,19 @@ const VILLAGE_VIEWS := [
 	["village_ledge", [5.0, 62.0], [-12.2, 87.1]],
 	["village_from_the_pool", [14.0, -12.0], [46.4, -11.2]],
 	["village_gate_lane", [-36.0, -19.0], [0.0, 0.0]],
+	# Rework 2: the gate from the pad, a lane, the grass's edge, the ledge
+	# from inside the village and its stair.
+	["village_gate_from_pad", [-62.0, -31.0], [-42.17, -22.47]],
+	["village_lane", [5.5, 20.0], [5.0, 44.0]],
+	["village_grass_edge", [-28.0, -27.0], [-8.0, -8.0]],
+	["village_ledge_from_inside", [-14.0, 24.0], [-12.2, 80.0]],
+	["village_stair", [-17.5, 64.0], [-13.0, 77.0]],
 ]
+## Rework 2: close up, DOOR_BACK m out of a shell's door (the Village's meta
+## `pieces`), looking at it and its foundation: [name, the shell's id].
+const DOOR_VIEWS := [["village_door_home4", "home_4"], ["village_door_store", "store"],
+	["village_door_crushed", "hut_8"], ["village_door_hut", "hut_b"]]
+const DOOR_BACK := 3.0
 
 ## Coming in over the oasis along the tracks, seated: at each of these heights
 ## (m), this many heights back from the village's middle, along the tracks' line.
@@ -238,6 +255,7 @@ func _village_set() -> void:
 			await _reading("on foot by the crushed hut, looking at it")
 		elif view[0] == "village_tracks":
 			await _reading("on foot in the wall's gap, looking along the tracks")
+	await _door_views()
 	await _more_foot_views()
 	await _top_down()
 	await _set_downs()
@@ -250,6 +268,25 @@ func _foot_look(shot_name: String, stand: Array, look: Array, pitch := 0.0) -> v
 	_avatar.set_head_pitch(pitch)
 	await _seconds(0.5)
 	await _shot(shot_name)
+
+## Rework 2: DOOR_BACK m out of each DOOR_VIEWS shell's first door, looking
+## at it, a little down, so its threshold and its foundation show.
+func _door_views() -> void:
+	var places: PlaceField = _scene.get("places")
+	var node := places.loaded(PLACE_ID) if places != null else null
+	var village := node.get_node_or_null("Village") if node != null else null
+	if village == null:
+		print("village no Village loaded: no door views")
+		return
+	for view: Array in DOOR_VIEWS:
+		for piece: Dictionary in village.get_meta(&"pieces", []):
+			if piece["id"] != view[1] or (piece.get("doors", []) as Array).is_empty():
+				continue
+			var door: Array = piece["doors"][0]
+			var middle: Vector3 = door[0]
+			var out: Vector3 = door[1]
+			var stand := middle + out * DOOR_BACK
+			await _foot_look(view[0], [stand.x, -stand.z], [middle.x, -middle.z], deg_to_rad(-12.0))
 
 ## The rest of Task 11's views on foot.
 func _more_foot_views() -> void:
