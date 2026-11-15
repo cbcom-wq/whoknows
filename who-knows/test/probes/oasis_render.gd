@@ -26,7 +26,14 @@ extends "res://test/probes/desert_render.gd"
 ##            Focus 3: the depth and the speed must hold); then the heaviest
 ##            library ship (the Warden) brought down on the pad the same way
 ##            (Review Focus 1: tilt under MAX_TILT_DEG, no damage).
-##   village  Task 9's: the village outside (not built yet).
+##   village  Task 9's: the village outside, on foot with the eye 1.6 m over the
+##            ground (the starter brought down on the pad and stepped out of
+##            first): home 5 (village_home5), the crushed hut
+##            (village_crushed), the wall's gap from inside (village_gap), the
+##            tracks out of it (village_tracks), the wall's north run
+##            (village_wall), a shade sail (village_sail), the outcrop
+##            (village_outcrop), the hut and the wall from the pool's side
+##            (village_from_the_pool); the frame rate there.
 ##   inside   Task 14's: inside a building (not built yet).
 ##   all      every set built so far.
 ##
@@ -99,6 +106,20 @@ const OASIS_SHEET := [
 	"seated_300_lit", "seated_300_side", "starter_pad", "landed_seated",
 	"foot_pad_and_pool", "foot_pool_edge", "foot_pool_edge_back", "foot_in_pool",
 	"warden_pad",
+	"village_home5", "village_crushed", "village_gap", "village_tracks",
+	"village_wall", "village_sail", "village_outcrop", "village_from_the_pool",
+]
+## The village set's views: [name, where you stand, what you look at], each
+## [east, north] m in the oasis's layout.
+const VILLAGE_VIEWS := [
+	["village_home5", [-29.0, -25.0], [-20.0, -32.0]],
+	["village_crushed", [58.0, -18.0], [46.0, -28.0]],
+	["village_gap", [59.0, -6.0], [72.0, -12.0]],
+	["village_tracks", [70.5, -10.5], [110.0, 11.0]],
+	["village_wall", [46.0, 4.0], [66.0, 9.0]],
+	["village_sail", [-19.0, -8.0], [-27.0, -0.5]],
+	["village_outcrop", [-10.0, 25.0], [-19.5, 45.6]],
+	["village_from_the_pool", [14.0, -12.0], [50.0, -24.0]],
 ]
 
 ## The oasis, and the pad's and the pool's directions on the world.
@@ -156,9 +177,38 @@ func _run() -> void:
 func _pick_planet(system: SystemRecipe) -> SystemBody:
 	return system.body(WORLD_ID)
 
-## Later tasks put their views here.
+## The village outside, on foot (Task 9).
 func _village_set() -> void:
-	print("village not built yet (Task 9)")
+	if not _which == "all":
+		await _warp_in()
+		if not await _to_the_planet():
+			print("oasis   no world to come down on")
+			return
+		_terrain = WorldTerrain.new(_planet.recipe)
+		_starter.flight_computer.assist_enabled = true
+		_find_the_oasis()
+	if _avatar.mode != Avatar.Mode.FIELD:
+		await _aboard()
+		await _starter_on_the_pad()
+		if not _starter.landing.is_landed():
+			print("village the starter did not land: no views on foot")
+			return
+		_director.stand_now()
+		await _frames(3)
+		if not await _out_through(_starter.airlocks.values()[0], "", "foot"):
+			return
+	print("village on foot round the village, eye 1.6 m over the ground")
+	for view: Array in VILLAGE_VIEWS:
+		var at := _oasis.local_dir(float(view[1][0]), float(view[1][1]), _planet.radius)
+		var look := _oasis.local_dir(float(view[2][0]), float(view[2][1]), _planet.radius)
+		await _stand_far(at, _way_to(at, look))
+		_avatar.set_head_pitch(0.0)
+		await _seconds(0.5)
+		await _shot(view[0])
+		if view[0] == "village_crushed":
+			await _reading("on foot by the crushed hut, looking at it")
+		elif view[0] == "village_tracks":
+			await _reading("on foot in the wall's gap, looking along the tracks")
 
 func _inside_set() -> void:
 	print("inside  not built yet (Task 14)")

@@ -72,8 +72,8 @@ func test_the_oasis_is_placed() -> void:
 	assert_eq(_place.name, "OASIS")
 	assert_true(_place.beacon)
 	assert_eq(_place.heading, 0.0)
-	assert_eq(_terrain.stamps.size(), 5, "five stamps")
-	for id in [&"oasis_floor", &"pool_bank", &"pad", &"pool", &"garden_dry"]:
+	assert_eq(_terrain.stamps.size(), 6, "six stamps")
+	for id in [&"oasis_floor", &"pool_bank", &"pad", &"pool", &"garden_dry", &"hut_crushed"]:
 		assert_not_null(_stamp(id), str(id))
 	assert_eq(_system.design.problems(_system), PackedStringArray(), "the design is valid")
 

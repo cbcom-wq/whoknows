@@ -12,7 +12,7 @@ extends Node3D
 ## are children and never members. Where a place stands is a UniversePoint,
 ## so it survives a shift.
 ##
-## Later pieces (items, buildings, palms) are added in `_build`, which makes
+## Later pieces (items, buildings) are added in `_build`, which makes
 ## a place's pieces from its layout.
 
 ## A place within this far of the focus is loaded; beyond FREE_BEYOND it is
@@ -34,6 +34,11 @@ const PIPE_STEP := 1.5
 const GRASS_MARGIN := 0.5
 const PUMP_CLEAR := 1.2
 const PATH_CLEAR := 1.0
+## The broken wall's foot follows the ground, sampled about this often, m.
+const WALL_STEP := 2.0
+## A shell's footprint is sampled this often for the lowest ground under it,
+## where an unstamped shell's walls start (its plinth), m.
+const FOOT_STEP := 1.0
 
 var universe: Universe
 var system: SystemRecipe
@@ -108,6 +113,8 @@ func _build(place: PlaceDesign, body: SystemBody, node: Node3D) -> void:
 	if layout.has("pool"):
 		water_radius = _build_pool(place, terrain, layout["pool"], node)
 	_build_village(place, terrain, layout, node, water_radius)
+	_build_tracks(place, terrain, layout, node)
+	_build_outcrop(place, terrain, layout, node)
 
 ## The pool: its water, a flat faceted disc at its level, and the area that
 ## slows you in it. Returns the water's edge: how far from the pool's centre
@@ -133,18 +140,25 @@ func _build_pool(place: PlaceDesign, terrain: WorldTerrain, pool: Dictionary, no
 	return shore
 
 ## The green and the village outside: palms (trunks solid), the grass ring,
-## gardens, the pump and its pipe, and the path. Every solid is one kit's, every
-## tuft one MultiMesh's, and each piece stands on the ground of its layout
-## point (on_ground), never on a height of its own.
+## gardens, the pump and its pipe, the path, the brick shells (home 5 and the
+## crushed hut), the broken wall, its rubble and the shade sails. Every solid
+## is one kit's, every tuft one MultiMesh's, the palms' trunks one body's and
+## the brick's another's, and each piece stands on the ground of its layout
+## point (on_ground), never on a height of its own. Each piece's kind, id and
+## lowest vertex are kept as the holder's meta `pieces` (a headless test reads
+## them: a committed mesh reads back nothing without a renderer).
 func _build_village(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionary, node: Node3D,
 		water_radius: float) -> void:
-	var ground := func(east: float, north: float) -> Vector3:
-		return on_ground(place, terrain, east, north)
+	var ground := ground_fn(place, terrain)
 	var holder := Node3D.new()
 	holder.name = "Village"
 	node.add_child(holder)
 	var kit := OasisLooks.kit_under(holder)
+	kit.keep_arrays = true
 	var avoid: Array[Vector3] = []
+	var marks := []
+	var mark := func(kind: String, id: String, from: int) -> void:
+		marks.append([kind, id, from, kit.vertex_count(InteriorKit.Batch.SOLID)])
 	var palms: Array = layout.get("palms", [])
 	if not palms.is_empty():
 		var trunks := StaticBody3D.new()
@@ -153,33 +167,42 @@ func _build_village(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionar
 		trunks.collision_mask = 0
 		node.add_child(trunks)
 		for i in palms.size():
+			var from := kit.vertex_count(InteriorKit.Batch.SOLID)
 			var f := Transform3D(Basis.IDENTITY, ground.call(float(palms[i][0]), float(palms[i][1])))
 			var variety := float((i * 37 + 13) % 100) / 100.0
 			OasisLooks.palm(kit, f, variety)
 			trunks.add_child(OasisLooks.palm_collider(f, variety))
-	for g: Dictionary in layout.get("gardens", []):
+			mark.call("palm", "palm_%d" % i, from)
+	var gardens: Array = layout.get("gardens", [])
+	for i in gardens.size():
+		var g: Dictionary = gardens[i]
+		var from := kit.vertex_count(InteriorKit.Batch.SOLID)
 		var at: Array = g["at"]
 		var size: Array = g.get("size", [4.0, 3.0])
 		var f := Transform3D(Basis.IDENTITY, ground.call(float(at[0]), float(at[1])))
 		OasisLooks.garden(kit, f, Vector2(float(size[0]), float(size[1])), bool(g.get("dried", false)),
 			float(at[0] * 0.173 + at[1] * 0.291))
 		avoid.append(Vector3(f.origin.x, f.origin.z, Vector2(float(size[0]), float(size[1])).length() * 0.5 + GRASS_MARGIN))
+		mark.call("garden", "garden_%d" % i, from)
 	if layout.has("pump"):
+		var from := kit.vertex_count(InteriorKit.Batch.SOLID)
 		var pump: Dictionary = layout["pump"]
 		var at: Array = pump["at"]
 		var foot: Vector3 = ground.call(float(at[0]), float(at[1]))
 		OasisLooks.pump(kit, Transform3D(Basis.IDENTITY, foot))
 		avoid.append(Vector3(foot.x, foot.z, PUMP_CLEAR))
 		var end: Array = pump.get("pipe_to", at)
-		var from := foot + Vector3(0.0, 0.2, 0.0)
+		var pipe_from := foot + Vector3(0.0, 0.2, 0.0)
 		var steps := maxi(int(Vector2(float(end[0]) - float(at[0]), float(end[1]) - float(at[1])).length() / PIPE_STEP), 1)
 		for k in range(1, steps + 1):
 			var t := float(k) / steps
 			var to: Vector3 = ground.call(lerpf(float(at[0]), float(end[0]), t), lerpf(float(at[1]), float(end[1]), t))
 			to.y += 0.1
-			OasisLooks.pipe(kit, from, to)
-			from = to
+			OasisLooks.pipe(kit, pipe_from, to)
+			pipe_from = to
+		mark.call("pump", "pump", from)
 	if layout.has("path"):
+		var from := kit.vertex_count(InteriorKit.Batch.SOLID)
 		var path: Dictionary = layout["path"]
 		var stones := PackedVector3Array()
 		var points: Array = path["points"]
@@ -195,17 +218,182 @@ func _build_village(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionar
 		for stone in stones:
 			avoid.append(Vector3(stone.x, stone.z, PATH_CLEAR))
 		OasisLooks.path(kit, stones, float(path.get("width", 1.4)))
+		mark.call("path", "path", from)
+	_build_brick(place, terrain, layout, node, kit, mark, avoid)
 	kit.commit()
+	var positions := PackedVector3Array()
+	if kit.arrays.has(InteriorKit.Batch.SOLID):
+		positions = kit.arrays[InteriorKit.Batch.SOLID][Mesh.ARRAY_VERTEX]
+	var pieces := []
+	for m: Array in marks:
+		var lowest := INF
+		for v in range(m[2], mini(m[3], positions.size())):
+			lowest = minf(lowest, positions[v].y)
+		pieces.append({"kind": m[0], "id": m[1], "lowest": lowest})
+	holder.set_meta(&"pieces", pieces)
 	if layout.has("grass_ring") and layout.has("pool"):
 		var ring: Dictionary = layout["grass_ring"]
 		var axes: Array = ring.get("axes", [36, 26])
 		var at: Array = layout["pool"].get("at", [0, 0])
 		var centre: Vector3 = ground.call(float(at[0]), float(at[1]))
 		var floor_of := func(x: float, z: float) -> float:
-			return on_ground(place, terrain, x, -z).y
+			return (ground.call(x, -z) as Vector3).y
 		node.add_child(OasisLooks.grass_ring(Transform3D(Basis.IDENTITY, centre),
 			Vector2(float(axes[0]), float(axes[1])), water_radius, float(ring.get("inner", 1.5)),
 			hash(String(place.id)), floor_of, avoid))
+
+## The brick: the shells, the broken wall's runs, its rubble and the shade
+## sails, into the village's `kit`, their solid parts on one StaticBody3D
+## "Brick" (BodyProxy.LAYER). An unstamped shell's walls start at the lowest
+## ground under its footprint (its plinth: home 5, which straddles the pool
+## bank's blend); a stamped one finds that ground level (the crushed hut).
+## The wall's foot follows the ground point to point.
+func _build_brick(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionary, node: Node3D,
+		kit: InteriorKit, mark: Callable, avoid: Array[Vector3]) -> void:
+	var shells: Array = layout.get("shells", [])
+	var wall: Dictionary = layout.get("wall", {})
+	if shells.is_empty() and wall.is_empty() and not layout.has("rubble") and not layout.has("sails"):
+		return
+	var brick := StaticBody3D.new()
+	brick.name = "Brick"
+	brick.collision_layer = BodyProxy.LAYER
+	brick.collision_mask = 0
+	node.add_child(brick)
+	var add := func(shapes: Array[CollisionShape3D]) -> void:
+		for c in shapes:
+			brick.add_child(c)
+	for s: Dictionary in shells:
+		var from := kit.vertex_count(InteriorKit.Batch.SOLID)
+		var at: Array = s["at"]
+		var east := float(at[0])
+		var north := float(at[1])
+		var yaw := float(s.get("yaw", 0.0))
+		var variety := float(s.get("variety", 0.5))
+		var centre := on_ground(place, terrain, east, north)
+		var turn := Basis(Vector3.UP, -deg_to_rad(yaw))
+		if str(s["kind"]) == "round":
+			var radius := float(s["radius"])
+			var height := float(s.get("height", 3.0))
+			var foot := lowest_ground(place, terrain, east, north, Vector2(radius, radius), yaw, true)
+			var f := Transform3D(turn, Vector3(centre.x, foot - BrickShell.SUNK, centre.z))
+			BrickShell.round_hut(kit, f, radius, height, variety)
+			add.call(BrickShell.round_hut_shapes(f, radius, height, variety))
+			avoid.append(Vector3(centre.x, centre.z, radius + GRASS_MARGIN))
+		else:
+			var sz: Array = s["size"]
+			var size := Vector3(float(sz[0]), float(sz[1]), float(sz[2]))
+			var foot := lowest_ground(place, terrain, east, north, Vector2(size.x, size.z) * 0.5, yaw, false)
+			var f := Transform3D(turn, Vector3(centre.x, foot - BrickShell.SUNK, centre.z))
+			if str(s["kind"]) == "crushed":
+				BrickShell.crushed(kit, f, size, variety)
+				add.call(BrickShell.crushed_shapes(f, size, variety))
+			else:
+				var openings: Array = s.get("openings", [])
+				BrickShell.box(kit, f, size, openings, variety)
+				add.call(BrickShell.box_shapes(f, size, openings, variety))
+			avoid.append(Vector3(centre.x, centre.z, Vector2(size.x, size.z).length() * 0.5 + GRASS_MARGIN))
+		mark.call("shell", str(s["id"]), from)
+	var runs: Array = wall.get("runs", [])
+	for k in runs.size():
+		var from := kit.vertex_count(InteriorKit.Batch.SOLID)
+		var run: Array = runs[k]
+		var points := PackedVector3Array()
+		for j in run.size() - 1:
+			var a := Vector2(float(run[j][0]), float(run[j][1]))
+			var b := Vector2(float(run[j + 1][0]), float(run[j + 1][1]))
+			var n := maxi(1, roundi(a.distance_to(b) / WALL_STEP))
+			for i in n:
+				var p := a.lerp(b, float(i) / n)
+				points.append(on_ground(place, terrain, p.x, p.y))
+		var last: Array = run[run.size() - 1]
+		points.append(on_ground(place, terrain, float(last[0]), float(last[1])))
+		var height := float(wall.get("height", 2.6))
+		var variety := 0.31 + 0.27 * k
+		BrickShell.wall(kit, points, height, variety)
+		add.call(BrickShell.wall_shapes(points, height, variety))
+		mark.call("wall", "wall_%d" % k, from)
+	var rubble: Array = layout.get("rubble", [])
+	for k in rubble.size():
+		var from := kit.vertex_count(InteriorKit.Batch.SOLID)
+		var r: Dictionary = rubble[k]
+		var at: Array = r["at"]
+		var spread: Array = r.get("spread", [4, 4])
+		var f := Transform3D(Basis.IDENTITY, on_ground(place, terrain, float(at[0]), float(at[1])))
+		BrickShell.rubble(kit, f, Vector2(float(spread[0]), float(spread[1])), int(r.get("count", 30)), 0.43 + 0.1 * k,
+			_floor_in(place, terrain, f))
+		mark.call("rubble", "rubble_%d" % k, from)
+	var sails: Array = layout.get("sails", [])
+	for k in sails.size():
+		var from := kit.vertex_count(InteriorKit.Batch.SOLID)
+		var s: Dictionary = sails[k]
+		var at: Array = s["at"]
+		var sz: Array = s.get("size", [4.5, 3.5])
+		var size := Vector2(float(sz[0]), float(sz[1]))
+		var f := Transform3D(Basis(Vector3.UP, -deg_to_rad(float(s.get("yaw", 0.0)))),
+			on_ground(place, terrain, float(at[0]), float(at[1])))
+		BrickShell.sail(kit, f, size, 0.2 + 0.5 * k)
+		avoid.append(Vector3(f.origin.x, f.origin.z, size.length() * 0.5 + GRASS_MARGIN))
+		mark.call("sail", "sail_%d" % k, from)
+
+## The beast's tracks: one mesh a set, "Tracks_<id>", on the ground's own
+## triangles, in the place's frame.
+func _build_tracks(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionary, node: Node3D) -> void:
+	var on := ground_fn(place, terrain)
+	var floor_of := func(x: float, z: float) -> float:
+		return (on.call(x, -z) as Vector3).y
+	var sets: Array = layout.get("tracks", [])
+	for k in sets.size():
+		var t: Dictionary = sets[k]
+		var from: Array = t["from"]
+		var mesh := OasisLooks.tracks(Transform3D.IDENTITY, Vector2(float(from[0]), float(from[1])),
+			float(t["bearing"]), float(t["length"]), floor_of, 0.29 + 0.31 * k, terrain.palette,
+			float(t.get("fade_over", 0.0)))
+		mesh.name = "Tracks_%s" % str(t.get("id", k))
+		node.add_child(mesh)
+
+## The rock outcrop, its stones on the ground under each of them.
+func _build_outcrop(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionary, node: Node3D) -> void:
+	if not layout.has("outcrop"):
+		return
+	var o: Dictionary = layout["outcrop"]
+	var at: Array = o["at"]
+	var sz: Array = o.get("size", [50, 9, 18])
+	var f := Transform3D(Basis(Vector3.UP, -deg_to_rad(float(o.get("yaw", 0.0)))),
+		on_ground(place, terrain, float(at[0]), float(at[1])))
+	node.add_child(OasisLooks.outcrop(f, Vector3(float(sz[0]), float(sz[1]), float(sz[2])),
+		float(o.get("variety", 0.5)), _floor_in(place, terrain, f), terrain.palette))
+
+## The ground's height under (x, z) of the frame `f` (in the place's frame),
+## in f's own terms.
+static func _floor_in(place: PlaceDesign, terrain: WorldTerrain, f: Transform3D) -> Callable:
+	var on := ground_fn(place, terrain)
+	var back := f.affine_inverse()
+	return func(x: float, z: float) -> float:
+		var p := f * Vector3(x, 0.0, z)
+		return (back * (on.call(p.x, -p.z) as Vector3)).y
+
+## The lowest ground under a footprint at layout `east`, `north`: `half` its
+## half-size (east by north, before `yaw_deg` turns it clockwise), or a disc
+## of `half.x` when `round`, sampled every FOOT_STEP and along its edge.
+static func lowest_ground(place: PlaceDesign, terrain: WorldTerrain, east: float, north: float, half: Vector2,
+		yaw_deg: float, round: bool) -> float:
+	var on := ground_fn(place, terrain)
+	var turn := deg_to_rad(yaw_deg)
+	var lo := INF
+	var nx := maxi(2, ceili(2.0 * half.x / FOOT_STEP))
+	var ny := maxi(2, ceili(2.0 * half.y / FOOT_STEP))
+	for i in nx + 1:
+		for j in ny + 1:
+			var e := -half.x + 2.0 * half.x * i / nx
+			var n := -half.y + 2.0 * half.y * j / ny
+			if round and Vector2(e, n).length() > half.x:
+				continue
+			lo = minf(lo, (on.call(east + e * cos(turn) + n * sin(turn), north - e * sin(turn) + n * cos(turn)) as Vector3).y)
+	if round:
+		for k in 48:
+			var a := TAU * k / 48.0
+			lo = minf(lo, (on.call(east + half.x * sin(a), north + half.x * cos(a)) as Vector3).y)
+	return lo
 
 # --- the ground, pure ---------------------------------------------------------
 
@@ -215,6 +403,26 @@ func _build_village(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionar
 static func on_ground(place: PlaceDesign, terrain: WorldTerrain, east: float, north: float) -> Vector3:
 	var d := place.local_dir(east, north, terrain.radius)
 	return _in_frame(place, terrain, d * (terrain.radius + terrain.height_at(d)))
+
+## on_ground as a Callable(east, north) -> Vector3 for one place, with its frame
+## and origin worked out once: the same numbers to the bit, at about half the
+## cost (on_ground works the origin's height out again each call). For pieces
+## that sample the ground thousands of times: the tracks, the outcrop.
+static func ground_fn(place: PlaceDesign, terrain: WorldTerrain) -> Callable:
+	var d := place.dir()
+	var frame := place.frame()
+	var inverse := frame.inverse()
+	var origin := origin_of(place, terrain)
+	var radius := terrain.radius
+	return func(east: float, north: float) -> Vector3:
+		# PlaceDesign.local_dir, written out with the frame kept.
+		var offset := frame * Vector3(east, 0.0, -north)
+		var metres := offset.length()
+		var at := d
+		if not is_zero_approx(metres):
+			var angle := metres / radius
+			at = (d * cos(angle) + offset / metres * sin(angle)).normalized()
+		return inverse * (at * (radius + terrain.height_at(at)) - origin)
 
 ## The same point with any basin dug out of it: the level of the floor there
 ## (the stamps' FLATTENs), which a pool's water level is measured from.

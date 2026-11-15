@@ -31,3 +31,18 @@ const PATH := Color("b3a17f")
 const PUMP := Color("8d8168")
 const PUMP_DARK := Color("5c5144")
 const PIPE := Color("6b6254")
+
+## Mud brick (BrickShell): the homes, the crushed hut, the broken wall and its
+## rubble. A warm tan-ochre, a little darker and browner than the orange sand
+## (whose a14a1c renders about c88050 in the sun), so a wall reads apart from
+## the ground it stands on. BRICK_DARK is the proud courses, the bevelled
+## rims (copings) and the lintels. Tuned by the owner at Checkpoint B.
+const BRICK := Color("a8774f")
+const BRICK_DARK := Color("7a5538")
+## A shade sail: faded warm cloth on dark wooden poles.
+const SAIL := Color("cbb48e")
+const SAIL_POLE := Color("4e3a28")
+
+## The beast's tracks (OasisLooks.tracks): a darker, slightly cooler sand than
+## the desert's, fading toward the sand itself along their length.
+const TRACK := Color("8e6046")

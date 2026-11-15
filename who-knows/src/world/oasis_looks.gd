@@ -175,9 +175,10 @@ static func grass_ring(f: Transform3D, axes: Vector2, water_radius: float, inner
 	return inst
 
 ## A garden at `f`: a low raised bed of `size` (x and z, m) of soil with rows
-## of crops, green, or collapsed and dry when `dried`.
+## of crops, green, or collapsed and dry when `dried`. The bed's foot is 0.08 m
+## into the ground, so no gap shows under it.
 static func garden(kit: InteriorKit, f: Transform3D, size: Vector2, dried: bool, variety: float) -> void:
-	kit.bevel_box(InteriorKit.Batch.SOLID, f * InteriorKit.at(Vector3(0, 0.1, 0)),
+	kit.bevel_box(InteriorKit.Batch.SOLID, f * InteriorKit.at(Vector3(0, 0.12, 0)),
 		Vector3(size.x, 0.4, size.y), 0.08, InteriorKit.solid(OasisPalette.GARDEN_SOIL))
 	var crop := OasisPalette.CROP_DRY if dried else OasisPalette.CROP_GREEN
 	var rows := maxi(int((size.y - 0.4) / 0.6) + 1, 1)
@@ -220,3 +221,356 @@ static func path(kit: InteriorKit, points: PackedVector3Array, width: float) -> 
 		var colour := SpacePalette.shade(OasisPalette.PATH, int(n * 2.99))
 		kit.bevel_box(InteriorKit.Batch.SOLID, Transform3D(basis, points[i] + across + Vector3(0, 0.02, 0)),
 			stone, 0.025, InteriorKit.solid(colour))
+
+# --- the beast's tracks ---------------------------------------------------------
+
+## The tracks are tuned at Checkpoint B to read from the seat coming in: every
+## number that sets their size, gait and fade is here.
+##
+## A print: an oval PRINT_LENGTH long and PRINT_WIDTH wide (a little wider at
+## its toes), with three toe notches NOTCH_DEPTH of its radius deep in its
+## front, drawn as PRINT_SECTORS sectors of PRINT_RINGS quads out from its
+## middle, PRINT_PROUD over the ground.
+const PRINT_LENGTH := 2.4
+const PRINT_WIDTH := 1.4
+const NOTCH_DEPTH := 0.3
+const PRINT_SECTORS := 24
+const PRINT_RINGS := 2
+const PRINT_PROUD := 0.03
+## The beast's gait: four feet to a STRIDE; the front feet FRONT_GAUGE either
+## side of the line, the hind HIND_GAUGE (inside the front, so no two prints
+## lie on each other), each toed out by TOE_OUT radians.
+const STRIDE := 7.0
+const FRONT_GAUGE := 2.0
+const HIND_GAUGE := 0.55
+const TOE_OUT := 0.12
+## The first print this far along from where the tracks start, m.
+const TRACK_START := 1.5
+## Along the tracks the prints fade from OasisPalette.TRACK toward the sand,
+## TRACK_FADE of the way by the end; over the last third they thin out, to a
+## TRACK_THIN share kept at the very end.
+const TRACK_FADE := 0.8
+const TRACK_THIN := 0.3
+
+## [share of a stride, how far right of the line (m)] of each foot, in the
+## order they fall: front left, hind right, front right, hind left.
+const _FEET := [[0.0, -FRONT_GAUGE], [0.25, HIND_GAUGE], [0.5, FRONT_GAUGE], [0.75, -HIND_GAUGE]]
+
+## The beast's tracks in the frame `f` (its x east, its -z north): flat,
+## darker prints from `from` ([east, north] m in f) along `bearing_deg`
+## (clockwise from north) for `length` m, four feet to a stride. Each print's
+## vertices sit on the ground's own triangles: a print is quads, split as
+## TerrainChunkData splits its quads, each corner at `floor_of(x, z)` (the
+## ground's height in f's terms) and PRINT_PROUD over it. The colour fades
+## toward the sand of `palette` (a world palette, the desert's when none is
+## given: its `ground_low`, as the ground's own vertex colours carry it) and
+## the last third thins out. Both run over `fade_over` m (the tracks' own
+## length when 0): a short set off a long one fades at the long one's rate.
+## One mesh on the world's layer, no collision; each print's vertices (in f's
+## parent's terms) are kept as meta `prints`, which a headless test reads.
+static func tracks(f: Transform3D, from: Vector2, bearing_deg: float, length: float, floor_of: Callable,
+		variety: float, palette: Dictionary = {}, fade_over := 0.0) -> MeshInstance3D:
+	var land: Dictionary = palette if not palette.is_empty() else SpacePalette.WORLDS[SpacePalette.DESERT_PALETTE]
+	var sand: Color = land[&"ground_low"]
+	var bearing := deg_to_rad(bearing_deg)
+	var ahead := Vector3(sin(bearing), 0.0, -cos(bearing))
+	var right := Vector3(cos(bearing), 0.0, sin(bearing))
+	var start := Vector3(from.x, 0.0, -from.y)
+	var kit := InteriorKit.new(null)
+	var prints: Array[PackedVector3Array] = []
+	var strides := int((length - TRACK_START) / STRIDE) + 1
+	for s in strides:
+		for k in _FEET.size():
+			var along := TRACK_START + (s + float(_FEET[k][0])) * STRIDE
+			if along > length:
+				continue
+			var t := along / (fade_over if fade_over > 0.0 else length)
+			if t > 2.0 / 3.0 and _noise(variety, s, k + 20.0) > lerpf(1.0, TRACK_THIN, (t - 2.0 / 3.0) * 3.0):
+				continue
+			var lateral := float(_FEET[k][1])
+			var jitter := (_noise(variety, s, k + 40.0) - 0.5) * 0.4
+			var heading := bearing + TOE_OUT * signf(lateral) + (_noise(variety, s, k + 30.0) - 0.5) * 0.12
+			var colour := InteriorKit.solid(OasisPalette.TRACK).lerp(sand, t * TRACK_FADE)
+			prints.append(_print(kit, f, start + ahead * (along + jitter) + right * lateral, heading, floor_of, colour))
+	var inst := MeshInstance3D.new()
+	inst.name = "Tracks"
+	inst.mesh = kit.mesh(InteriorKit.Batch.SOLID)
+	inst.material_override = InteriorMaterials.props()
+	inst.layers = WORLD_LAYER
+	inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	inst.set_meta(&"prints", prints)
+	return inst
+
+## How far a print's edge is from its middle at angle `a` from its front.
+static func _print_reach(a: float, sector: int) -> float:
+	var along := PRINT_LENGTH * 0.5
+	var across := PRINT_WIDTH * 0.5 * (1.0 + 0.12 * cos(a))
+	var r := 1.0 / sqrt(pow(cos(a) / along, 2) + pow(sin(a) / across, 2))
+	# The toe notches: the front sector and the second either side of it.
+	if sector == 0 or sector == 2 or sector == PRINT_SECTORS - 2:
+		r *= 1.0 - NOTCH_DEPTH
+	return r
+
+## One print at `centre` (f's terms, its height ignored) facing `heading`;
+## returns its vertices in f's parent's terms.
+static func _print(kit: InteriorKit, f: Transform3D, centre: Vector3, heading: float, floor_of: Callable,
+		colour: Color) -> PackedVector3Array:
+	var fwd := Vector3(sin(heading), 0.0, -cos(heading))
+	var rt := Vector3(cos(heading), 0.0, sin(heading))
+	var on := func(p: Vector3) -> Vector3:
+		return f * Vector3(p.x, float(floor_of.call(p.x, p.z)) + PRINT_PROUD, p.z)
+	# rings[0] is the middle; ring r (1 to PRINT_RINGS) is r / PRINT_RINGS of the way out.
+	var rings: Array[PackedVector3Array] = [PackedVector3Array([on.call(centre)])]
+	var out := PackedVector3Array([rings[0][0]])
+	for r in range(1, PRINT_RINGS + 1):
+		var ring := PackedVector3Array()
+		for s in PRINT_SECTORS:
+			var a := TAU * s / PRINT_SECTORS
+			var p: Vector3 = on.call(centre + (fwd * cos(a) + rt * sin(a)) * _print_reach(a, s) * float(r) / PRINT_RINGS)
+			ring.append(p)
+			out.append(p)
+		rings.append(ring)
+	var up := f.basis.y.normalized()
+	for s in PRINT_SECTORS:
+		var n := (s + 1) % PRINT_SECTORS
+		_print_tri(kit, rings[0][0], rings[1][s], rings[1][n], up, colour)
+		for r in range(1, PRINT_RINGS):
+			# Quad i00-i10-i11-i01, split i00-i10-i11 and i00-i11-i01 as a chunk's.
+			var i00 := rings[r][s]
+			var i10 := rings[r][n]
+			var i01 := rings[r + 1][s]
+			var i11 := rings[r + 1][n]
+			_print_tri(kit, i00, i10, i11, up, colour)
+			_print_tri(kit, i00, i11, i01, up, colour)
+	return out
+
+static func _print_tri(kit: InteriorKit, a: Vector3, b: Vector3, c: Vector3, up: Vector3, colour: Color) -> void:
+	var n := (b - a).cross(c - a).normalized()
+	if n.dot(up) < 0.0:
+		n = -n
+	kit.tri(InteriorKit.Batch.SOLID, a, b, c, n, colour)
+
+# --- the outcrop ----------------------------------------------------------------
+
+## The outcrop's stones are RockMesh's at this detail (80 faces), drawn and
+## solid alike: a stone's collider is the hull of the very vertices drawn.
+const OUTCROP_DETAIL := 1
+## The big stones (6-12 m) of an outcrop 50 by 18 m: [x, z (m from its middle,
+## scaled to its size), diameter, stretch, yaw, its top over the ground]. The
+## first is the lookout, 8 m up; the others rise toward it from the west so
+## the steps can climb their south flanks to it.
+const OUTCROP_STONES := [
+	[7.0, -1.0, 12.0, Vector3(1.0, 1.25, 0.85), 0.3, 8.0],
+	[1.0, 0.0, 9.0, Vector3(1.0, 1.1, 0.95), 2.2, 6.8],
+	[-5.0, 0.5, 10.0, Vector3(1.05, 0.95, 0.9), 1.1, 5.6],
+	[-11.5, -0.5, 9.0, Vector3(1.0, 0.85, 1.0), 2.0, 4.3],
+	[-18.0, 1.0, 7.0, Vector3(0.95, 0.8, 1.1), 0.7, 3.0],
+	[-22.0, -2.5, 6.0, Vector3(1.0, 0.8, 1.0), 2.9, 2.2],
+	[16.0, -2.0, 10.0, Vector3(1.05, 0.9, 0.9), 2.6, 5.2],
+	[22.0, 2.0, 6.5, Vector3(1.0, 0.8, 1.0), 1.7, 3.0],
+	[2.0, -6.0, 7.0, Vector3(1.0, 0.9, 1.0), 0.4, 4.0],
+]
+## The steps: squashed stones STEP_DIAMETER across, STEP_SPAN apart from west
+## to east along the big stones' south flanks, each STEP_RISE at most over the
+## last (a jump peaks at 0.89 m), its top STEP_PROUD over the rock or ground
+## it rests on, to STEP_BELOW under the lookout's top.
+const STEP_DIAMETER := 2.0
+const STEP_SQUASH := 0.45
+const STEP_SPAN := 1.9
+const STEP_RISE := 0.6
+const STEP_PROUD := 0.5
+const STEP_BELOW := 0.3
+## The first step's top over the floor, and how far under the ground a big
+## stone's middle lies at least, m.
+const STEP_FIRST := 0.55
+const SUNK_MIDDLE := 0.3
+## A step with too little rock under it stands on a pillar stone this wide
+## (near the step's own width, so the two read as a stack, not a toadstool),
+## its top this far under the step's.
+const PILLAR_DIAMETER := 1.9
+const PILLAR_HIDDEN := 0.35
+## Two steps lie no more than this apart north to south.
+const STEP_SWAY := 1.5
+
+## A rock outcrop at `f` (on the ground, x along its length): big RockMesh
+## stones in the world's `boulder` shades (from `palette`, as GroundCover takes
+## them; the desert's when none is given), with smaller stones as steps up to
+## a lookout about 8 m up. `size` is its length, height and depth (the stones
+## are laid out for 50 x 9 x 18 m and scaled in x and z). `floor_of(x, z)` is
+## the ground's height in f's terms (f's plane when none is given). One Node3D
+## "Outcrop" holding one mesh and one StaticBody3D "Stones" on BodyProxy.LAYER,
+## a convex hull per stone, as solid as the ground's boulders.
+static func outcrop(f: Transform3D, size: Vector3, variety: float, floor_of := Callable(),
+		palette: Dictionary = {}) -> Node3D:
+	var land: Dictionary = palette if not palette.is_empty() else SpacePalette.WORLDS[SpacePalette.DESERT_PALETTE]
+	var base: Color = land[&"boulder"]
+	var node := Node3D.new()
+	node.name = "Outcrop"
+	node.transform = f
+	var body := StaticBody3D.new()
+	body.name = "Stones"
+	body.collision_layer = BodyProxy.LAYER
+	body.collision_mask = 0
+	node.add_child(body)
+	var kit := kit_under(node)
+	var tris: PackedInt32Array = RockMesh.sphere(OUTCROP_DETAIL)[1]
+	var dirs: PackedVector3Array = RockMesh.sphere(OUTCROP_DETAIL)[0]
+	var stones := outcrop_stones(size, variety, floor_of)
+	for i in stones.size():
+		var stone: Array = stones[i]
+		var shape: int = stone[0]
+		var place: Transform3D = stone[1]
+		var verts := RockMesh.cut_vertices(shape, OUTCROP_DETAIL)
+		var own := int(_noise(variety, i, 50.0) * 2.99)
+		for t in range(0, tris.size(), 3):
+			var a := place * verts[tris[t]]
+			var b := place * verts[tris[t + 1]]
+			var c := place * verts[tris[t + 2]]
+			var n := (b - a).cross(c - a).normalized()
+			if n.dot((a + b + c) / 3.0 - place.origin) < 0.0:
+				n = -n
+			# Each cut facet its own shade, so neighbouring planes read apart.
+			var facet := RockMesh.cut_index(shape, (dirs[tris[t]] + dirs[tris[t + 1]] + dirs[tris[t + 2]]).normalized())
+			var k := own if facet < 0 else (facet + own) % SpacePalette.SHADES.size()
+			kit.tri(InteriorKit.Batch.SOLID, a, b, c, n, SpacePalette.shade(base, k))
+		var hull := ConvexPolygonShape3D.new()
+		var points := PackedVector3Array()
+		for p in RockMesh.hull_points(shape, OUTCROP_DETAIL):
+			points.append(place.basis * p)
+		hull.points = points
+		var collider := CollisionShape3D.new()
+		collider.shape = hull
+		collider.position = place.origin
+		body.add_child(collider)
+	kit.commit()
+	return node
+
+## The outcrop's stones, in its own frame: [RockMesh shape, placement] each,
+## the big stones first, then the steps from the floor up. A big stone is
+## stretched up, if it must be, until its middle lies at least SUNK_MIDDLE
+## under the ground, so its flanks rise from the ground with no overhang and
+## a step can sit anywhere on them. Pure.
+static func outcrop_stones(size: Vector3, variety: float, floor_of := Callable()) -> Array:
+	var ground := func(x: float, z: float) -> float:
+		return float(floor_of.call(x, z)) if floor_of.is_valid() else 0.0
+	var scale := Vector2(size.x / 50.0, size.z / 18.0)
+	var stones := []
+	var surfaces := []
+	for i in OUTCROP_STONES.size():
+		var s: Array = OUTCROP_STONES[i]
+		var shape := RockMesh.Shape.BOULDER if i % 3 != 2 else RockMesh.Shape.SHARD
+		var turn := Basis(Vector3.UP, float(s[4]) + (variety - 0.5) * 0.6)
+		var stretch: Vector3 = (s[3] as Vector3) * float(s[2])
+		var rise := float(s[5])
+		var top := _top_of(shape, turn * Basis.from_scale(stretch))
+		if top.y < rise + SUNK_MIDDLE:
+			stretch.y *= (rise + SUNK_MIDDLE) / top.y
+		var basis := turn * Basis.from_scale(stretch)
+		top = _top_of(shape, basis)
+		var x := float(s[0]) * scale.x
+		var z := float(s[1]) * scale.y
+		var place := Transform3D(basis, Vector3(x, float(ground.call(x, z)) + rise - top.y, z))
+		stones.append([shape, place])
+		surfaces.append(_faces_of(shape, place))
+	var lookout := _top_of(stones[0][0], (stones[0][1] as Transform3D).basis) + (stones[0][1] as Transform3D).origin
+	var support := func(x: float, z: float) -> float:
+		var h := float(ground.call(x, z))
+		for faces: Array in surfaces:
+			h = maxf(h, _surface(faces, x, z))
+		return h
+	# Steps from the west, along the south flanks, to just under the lookout:
+	# the first on the floor at the south edge, each next STEP_RISE higher.
+	var target := lookout.y - STEP_BELOW
+	var x := lookout.x - (ceili((target - float(ground.call(lookout.x, lookout.z))) / STEP_RISE) + 1) * STEP_SPAN
+	var south := size.z * 0.5 - STEP_DIAMETER * 0.5
+	var at_z := south
+	var h := float(ground.call(x, south)) + STEP_FIRST
+	var k := 0
+	while k < 40:
+		var basis := Basis(Vector3.UP, _noise(variety, k, 60.0) * TAU) * Basis.from_scale(Vector3(1.0, STEP_SQUASH, 1.1) * STEP_DIAMETER)
+		var top := _top_of(RockMesh.Shape.BOULDER, basis)
+		if k > 0:
+			# Walk north from the south edge until the rock under this step's
+			# top is high enough for it to stand STEP_PROUD over it; failing
+			# that, onto the highest rock on the way.
+			var z := south
+			var found := NAN
+			var best_z := south
+			var best := -INF
+			while z > -size.z * 0.5 + 0.5:
+				var under_z := float(support.call(x, z))
+				if under_z > best:
+					best = under_z
+					best_z = z
+				if under_z >= h - STEP_PROUD:
+					found = z
+					break
+				z -= 0.1
+			at_z = clampf(best_z if is_nan(found) else found, at_z - STEP_SWAY, at_z + STEP_SWAY)
+		var under := float(support.call(x, at_z))
+		# Its top at (x, h, at_z): the stone's middle sits off it by the top's own offset.
+		stones.append([RockMesh.Shape.BOULDER, Transform3D(basis, Vector3(x - top.x, h - top.y, at_z - top.z))])
+		if h - under > STEP_PROUD + 0.25:
+			# Too little rock under it here: a pillar stone holds it up, its top
+			# hidden in the step.
+			var pillar := Basis(Vector3.UP, _noise(variety, k, 61.0) * TAU) * Basis.from_scale(Vector3(PILLAR_DIAMETER, 1.0, PILLAR_DIAMETER))
+			var rise := _top_of(RockMesh.Shape.BOULDER, pillar)
+			var low := _low_of(RockMesh.Shape.BOULDER, pillar)
+			var tall := (h - PILLAR_HIDDEN) - (under - SUNK_MIDDLE)
+			pillar = pillar * Basis.from_scale(Vector3(1.0, tall / (rise.y - low), 1.0))
+			rise = _top_of(RockMesh.Shape.BOULDER, pillar)
+			stones.append([RockMesh.Shape.BOULDER, Transform3D(pillar, Vector3(x - rise.x, h - PILLAR_HIDDEN - rise.y, at_z - rise.z))])
+		if h >= target - 0.01:
+			break
+		h = minf(h + STEP_RISE, target)
+		x += STEP_SPAN
+		k += 1
+	return stones
+
+## The lowest vertex height of `shape` turned and scaled by `basis`.
+static func _low_of(shape: int, basis: Basis) -> float:
+	var low := INF
+	for p in RockMesh.hull_points(shape, OUTCROP_DETAIL):
+		low = minf(low, (basis * p).y)
+	return low
+
+## The highest vertex of `shape` turned and scaled by `basis`.
+static func _top_of(shape: int, basis: Basis) -> Vector3:
+	var top := Vector3(0, -INF, 0)
+	for p in RockMesh.hull_points(shape, OUTCROP_DETAIL):
+		var q := basis * p
+		if q.y > top.y:
+			top = q
+	return top
+
+## A stone's upward faces, placed: [its middle and reach across (x, z, m),
+## three vertices a face].
+static func _faces_of(shape: int, place: Transform3D) -> Array:
+	var out := PackedVector3Array()
+	var tris: PackedInt32Array = RockMesh.sphere(OUTCROP_DETAIL)[1]
+	var verts := RockMesh.cut_vertices(shape, OUTCROP_DETAIL)
+	var reach := 0.0
+	for t in range(0, tris.size(), 3):
+		var a := place * verts[tris[t]]
+		var b := place * verts[tris[t + 1]]
+		var c := place * verts[tris[t + 2]]
+		for p in [a, b, c]:
+			reach = maxf(reach, Vector2(p.x - place.origin.x, p.z - place.origin.z).length())
+		if absf((b - a).cross(c - a).y) > 1e-6:
+			out.append_array(PackedVector3Array([a, b, c]))
+	return [Vector3(place.origin.x, reach, place.origin.z), out]
+
+## The height of the top of a stone's `faces` (from _faces_of) over (x, z),
+## or -INF off it.
+static func _surface(faces: Array, x: float, z: float) -> float:
+	var middle: Vector3 = faces[0]
+	if Vector2(x - middle.x, z - middle.z).length() > middle.y:
+		return -INF
+	var tris: PackedVector3Array = faces[1]
+	var best := -INF
+	var from := Vector3(x, 1000.0, z)
+	for t in range(0, tris.size(), 3):
+		var hit: Variant = Geometry3D.ray_intersects_triangle(from, Vector3.DOWN, tris[t], tris[t + 1], tris[t + 2])
+		if hit != null:
+			best = maxf(best, (hit as Vector3).y)
+	return best

@@ -350,6 +350,29 @@ func test_everything_outside_is_covered_beside_a_world():
 	surface.finish()
 	assert_eq(_uncovered(), [], "every chunk of ground shifts too")
 
+## The oasis loaded (desert world phase 3): the starter is held (frozen) on its
+## pad rather than flown down, as test_place_field holds it. The place is one
+## member; its pool, village, tracks and outcrop are its children.
+func test_everything_outside_is_covered_at_the_oasis():
+	var system: SystemRecipe = _root.system
+	var place: PlaceDesign = system.places()[0]
+	var body := system.body(place.body_id)
+	var terrain: WorldTerrain = _root.star_system.whereabouts.terrain_of(body)
+	var d := place.local_dir(-80.0, -40.0, body.radius)
+	_ship.exterior.freeze = true
+	_ship.exterior.linear_velocity = Vector3.ZERO
+	_ship.exterior.global_position = _universe.to_engine(body.point.plus(d * (body.radius + terrain.height_at(d) + 3.0)))
+	await wait_physics_frames(3)
+	var oasis: Node3D = _root.places.loaded(place.id)
+	assert_not_null(oasis, "the oasis is loaded")
+	if oasis != null:
+		assert_not_null(oasis.get_node_or_null("Outcrop"), "with its village")
+	var surface: WorldSurface = (_root.star_system.proxy(body.id) as BodyProxy).surface()
+	assert_not_null(surface)
+	if surface != null:
+		surface.finish()
+	assert_eq(_uncovered(), [], "the place, its pieces and the ground all shift")
+
 ## The pistol on a spacewalk: the bolt and its flashes are outside, so they
 ## are covered too.
 func test_a_shot_on_a_spacewalk_is_covered():

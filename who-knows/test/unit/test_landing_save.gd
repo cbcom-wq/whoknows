@@ -265,7 +265,7 @@ func test_a_ship_saved_where_the_floor_moved_settles():
 	assert_eq(_planet.id, &"p3", "the hop world is the desert world")
 	var surface: WorldSurface = (_root.star_system.proxy(_planet.id) as BodyProxy).surface()
 	var t := surface.terrain
-	assert_eq(t.stamps.size(), 5, "its terrain carries the oasis stamps")
+	assert_eq(t.stamps.size(), 6, "its terrain carries the oasis stamps")
 	var higher := _oasis_spot(t, OASIS_SPOT_DROP)
 	var lower := _oasis_spot(t, -OASIS_SPOT_DROP)
 	gut.p("old ground %.2f m over the floor at one spot, %.2f m at the other" % [higher[1], lower[1]])

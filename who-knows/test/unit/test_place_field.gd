@@ -107,6 +107,11 @@ func test_on_ground_is_in_the_places_frame_and_on_the_terrain():
 			pad_over_bank -= s.level
 	assert_almost_eq(pad.y, pad_over_bank - 0.18, 0.2, "the pad, over the pool's bank less the curve at 90 m")
 
+func test_ground_fn_is_on_ground_to_the_bit():
+	var fast := PlaceField.ground_fn(_place, _terrain)
+	for p: Vector2 in [Vector2.ZERO, Vector2(-80, -40), Vector2(46, -28), Vector2(414, 188), Vector2(-19.5, 45.6)]:
+		assert_eq(fast.call(p.x, p.y), PlaceField.on_ground(_place, _terrain, p.x, p.y), "at %s" % p)
+
 ## The layout points of `key` in oasis.json: arrays of [east, north].
 func _layout_points(key: String) -> Array:
 	return _place.layout().get(key, [])
@@ -167,3 +172,249 @@ func test_no_grass_grows_in_a_garden_bed():
 		var half := Vector2(float(g["size"][0]), float(g["size"][1])) * 0.5
 		for t in tufts:
 			assert_false(absf(t.x - at.x) < half.x and absf(t.z - at.z) < half.y, "a tuft in the bed at %s" % [g["at"]])
+
+# --- the village outside: shells, the wall, the tracks, the outcrop (Task 9) ---
+
+## The ground's height at layout point `east`, `north`, in the place's frame.
+func _ground_y(east: float, north: float) -> float:
+	return PlaceField.on_ground(_place, _terrain, east, north).y
+
+## The lowest ground under a rectangle `size` (east by north, m) at `at`,
+## turned `yaw` degrees clockwise, sampled every half metre.
+func _lowest_under_rect(at: Array, size: Vector2, yaw: float) -> float:
+	var lo := INF
+	var turn := deg_to_rad(yaw)
+	var nx := int(ceil(size.x / 0.5))
+	var ny := int(ceil(size.y / 0.5))
+	for i in nx + 1:
+		for j in ny + 1:
+			var e := -size.x * 0.5 + size.x * i / nx
+			var n := -size.y * 0.5 + size.y * j / ny
+			lo = minf(lo, _ground_y(float(at[0]) + e * cos(turn) + n * sin(turn),
+				float(at[1]) - e * sin(turn) + n * cos(turn)))
+	return lo
+
+func _lowest_under_disc(at: Array, radius: float) -> float:
+	var lo := _ground_y(float(at[0]), float(at[1]))
+	for ring in range(1, int(ceil(radius / 0.5)) + 1):
+		var r := minf(ring * 0.5, radius)
+		for k in 36:
+			var a := TAU * k / 36.0
+			lo = minf(lo, _ground_y(float(at[0]) + r * sin(a), float(at[1]) + r * cos(a)))
+	return lo
+
+## The lowest ground along a run of the wall, under both its faces.
+func _lowest_along(run: Array) -> float:
+	var lo := INF
+	for k in run.size() - 1:
+		var a := Vector2(float(run[k][0]), float(run[k][1]))
+		var b := Vector2(float(run[k + 1][0]), float(run[k + 1][1]))
+		var side := (b - a).normalized().orthogonal() * BrickShell.RUN * 0.5
+		var n := int(ceil(a.distance_to(b) / 0.5))
+		for j in n + 1:
+			var p := a.lerp(b, float(j) / n)
+			for q: Vector2 in [p + side, p - side]:
+				lo = minf(lo, _ground_y(q.x, q.y))
+	return lo
+
+func _pieces() -> Array:
+	return _oasis().get_node("Village").get_meta(&"pieces", [])
+
+## Each shell's, wall run's and garden's lowest point lies within 0.1 m of the
+## lowest ground under its footprint. On a stamped piece (the crushed hut, the
+## gardens) that ground is the stamp's level; on an unstamped one (home 5, on
+## the bank's blend; the wall) the piece starts at the lowest ground under it
+## (its plinth) or follows the ground down, so nowhere does a gap show.
+func test_every_piece_sits_on_the_ground():
+	await _hold_over(0, 0, 60.0)
+	var layout := _place.layout()
+	var lowest := {}
+	for p: Dictionary in _pieces():
+		lowest[p["id"]] = float(p["lowest"])
+	var checked := 0
+	for s: Dictionary in layout["shells"]:
+		var want := _lowest_under_disc(s["at"], float(s["radius"])) if s["kind"] == "round" \
+			else _lowest_under_rect(s["at"], Vector2(float(s["size"][0]), float(s["size"][2])), float(s.get("yaw", 0)))
+		assert_true(lowest.has(s["id"]), "shell %s was built" % s["id"])
+		assert_almost_eq(float(lowest.get(s["id"], INF)), want, 0.1, "shell %s sits on the ground" % s["id"])
+		checked += 1
+	var runs: Array = layout["wall"]["runs"]
+	for k in runs.size():
+		var id := "wall_%d" % k
+		assert_almost_eq(float(lowest.get(id, INF)), _lowest_along(runs[k]), 0.1, "%s follows the ground" % id)
+		checked += 1
+	var gardens: Array = layout["gardens"]
+	for k in gardens.size():
+		var g: Dictionary = gardens[k]
+		var id := "garden_%d" % k
+		var want := _lowest_under_rect(g["at"], Vector2(float(g["size"][0]), float(g["size"][1])), 0.0)
+		assert_almost_eq(float(lowest.get(id, INF)), want, 0.1, "%s sits on the ground" % id)
+		checked += 1
+	assert_eq(checked, 7, "two shells, two runs, three gardens")
+
+func _ray(from: Vector3, to: Vector3) -> Dictionary:
+	var query := PhysicsRayQueryParameters3D.create(_oasis().to_global(from), _oasis().to_global(to), BodyProxy.LAYER)
+	return _oasis().get_world_3d().direct_space_state.intersect_ray(query)
+
+## A point `height` m over the ground at layout [east, north].
+func _over(p: Vector2, height: float) -> Vector3:
+	return PlaceField.on_ground(_place, _terrain, p.x, p.y) + Vector3(0, height, 0)
+
+func test_the_wall_has_its_gap():
+	await _hold_over(0, 0, 60.0)
+	var wall: Dictionary = _place.layout()["wall"]
+	var runs: Array = wall["runs"]
+	var end_a: Array = runs[0][runs[0].size() - 1]
+	var end_b: Array = runs[1][0]
+	var a_end := Vector2(float(end_a[0]), float(end_a[1]))
+	var b_end := Vector2(float(end_b[0]), float(end_b[1]))
+	var gap := (a_end + b_end) * 0.5
+	var across := (b_end - a_end).normalized().orthogonal()
+	var at := _over(gap, 1.0)
+	var span := Vector3(across.x, 0, -across.y) * 5.0
+	var hit := _ray(at + span, at - span)
+	assert_true(hit.is_empty(), "nothing in the gap at 1 m: %s" % [hit.get("position")])
+	for run: Array in runs:
+		for k in run.size() - 1:
+			var a := Vector2(float(run[k][0]), float(run[k][1]))
+			var b := Vector2(float(run[k + 1][0]), float(run[k + 1][1]))
+			var side := (b - a).normalized().orthogonal()
+			var m := _over((a + b) * 0.5, 1.0)
+			var d := Vector3(side.x, 0, -side.y) * 3.0
+			var through := _ray(m + d, m - d)
+			assert_false(through.is_empty(), "the wall between %s and %s is solid" % [a, b])
+			if not through.is_empty():
+				assert_eq(through["collider"], _oasis().get_node("Brick"), "on the brick's body")
+
+## The tracks' prints: each print's vertices, in the place's frame.
+func _prints(id: String) -> Array:
+	var mesh := _oasis().get_node_or_null("Tracks_%s" % id) as MeshInstance3D
+	assert_not_null(mesh, "the %s tracks" % id)
+	if mesh == null:
+		return []
+	assert_eq(mesh.layers, OasisLooks.WORLD_LAYER, "on the world's layer")
+	return mesh.get_meta(&"prints", [])
+
+func _centre(print_vertices: PackedVector3Array) -> Vector3:
+	var c := Vector3.ZERO
+	for v in print_vertices:
+		c += v
+	return c / maxf(print_vertices.size(), 1)
+
+func test_the_tracks_lead_out_of_the_gap():
+	await _hold_over(0, 0, 60.0)
+	var gap_at: Array = _place.layout()["wall"]["gap"]
+	var gap := Vector2(float(gap_at[0]), float(gap_at[1]))
+	var prints := _prints("out")
+	assert_gt(prints.size(), 100, "a long line of prints")
+	if prints.is_empty():
+		return
+	var first := _centre(prints[0])
+	assert_lt(Vector2(first.x, -first.z).distance_to(gap), 6.0, "the first by the gap")
+	var far := 0.0
+	var mean := Vector2.ZERO
+	var off_ground := 0
+	for p: PackedVector3Array in prints:
+		var c := _centre(p)
+		var off := Vector2(c.x, -c.z) - gap
+		far = maxf(far, off.length())
+		mean += off
+		if off.length() > 20.0:
+			var bearing := fposmod(rad_to_deg(atan2(off.x, off.y)), 360.0)
+			assert_almost_eq(bearing, 60.0, 10.0, "a print %.0f m out bears 60" % off.length())
+		for v in p:
+			if absf(v.y - _ground_y(v.x, -v.z)) > 0.05:
+				off_ground += 1
+	assert_eq(off_ground, 0, "every print's vertices are on the ground under them")
+	mean /= prints.size()
+	assert_almost_eq(fposmod(rad_to_deg(atan2(mean.x, mean.y)), 360.0), 60.0, 10.0, "they bear 60 from the gap")
+	assert_between(far, 350.0, 400.0, "the last is 350-400 m out")
+	var hut: Dictionary = _place.layout()["shells"].filter(func(s): return s["kind"] == "crushed")[0]
+	var inward := _prints("in")
+	assert_gt(inward.size(), 4, "and a short set in to the crushed hut")
+	if not inward.is_empty():
+		var last := _centre(inward[inward.size() - 1])
+		var to_hut := Vector2(last.x, -last.z).distance_to(Vector2(float(hut["at"][0]), float(hut["at"][1])))
+		assert_lt(to_hut, 10.0, "ending at the hut")
+
+## Each stone's top (its highest point) in the place's frame.
+func _stone_tops() -> Array:
+	var outcrop := _oasis().get_node("Outcrop") as Node3D
+	var tops := []
+	for c in outcrop.find_children("*", "CollisionShape3D", true, false):
+		var shape := (c as CollisionShape3D).shape as ConvexPolygonShape3D
+		var to_place := _oasis().global_transform.affine_inverse() * (c as CollisionShape3D).global_transform
+		var top := Vector3(0, -INF, 0)
+		for p in shape.points:
+			var q := to_place * p
+			if q.y > top.y:
+				top = q
+		tops.append(top)
+	return tops
+
+## The stones' tops open to the sky (nothing lies over them, so you can stand
+## there) are the outcrop's tops; a step's top half under another stone is not.
+## From the floor (a top at most 0.7 m over the ground beside it), a chain of
+## them, each at most 0.7 m over the last and at most 2.5 m from it, reaches a
+## top at least 7 m over the ground under it.
+func test_the_outcrop_can_be_climbed():
+	await _hold_over(0, 0, 60.0)
+	var outcrop := _oasis().get_node("Outcrop") as Node3D
+	var body := outcrop.get_node("Stones") as StaticBody3D
+	assert_eq(body.collision_layer, BodyProxy.LAYER, "solid as the ground's boulders are")
+	var tops := []
+	for t: Vector3 in _stone_tops():
+		var down := _ray(t + Vector3(0, 3, 0), t - Vector3(0, 1, 0))
+		if not down.is_empty() and absf(_oasis().to_local(down["position"]).y - t.y) < 0.08:
+			tops.append(t)
+	assert_gt(tops.size(), 8, "big stones and steps, open to the sky")
+	var reached := {}
+	var queue := []
+	for i in tops.size():
+		var t: Vector3 = tops[i]
+		if t.y - _ground_y(t.x, -t.z) <= 0.7:
+			reached[i] = true
+			queue.append(i)
+	assert_false(queue.is_empty(), "a first step off the floor")
+	while not queue.is_empty():
+		var i: int = queue.pop_front()
+		for j in tops.size():
+			if reached.has(j):
+				continue
+			var a: Vector3 = tops[i]
+			var b: Vector3 = tops[j]
+			if b.y - a.y <= 0.7 and Vector2(a.x - b.x, a.z - b.z).length() <= 2.5:
+				reached[j] = true
+				queue.append(j)
+	var best := -INF
+	for i in reached:
+		var t: Vector3 = tops[i]
+		best = maxf(best, t.y - _ground_y(t.x, -t.z))
+	gut.p("%d tops open, %d reached, the highest %.2f m up" % [tops.size(), reached.size(), best])
+	assert_gt(best, 7.0, "a chain of tops reaches 7 m up")
+
+## Every item of call 7 this task builds has its piece (the enterable homes,
+## the workshop and the comms hut come with the buildings, later).
+func test_the_village_is_whole():
+	await _hold_over(0, 0, 60.0)
+	var count := {}
+	for p: Dictionary in _pieces():
+		var kind := str(p["kind"])
+		count[kind] = int(count.get(kind, 0)) + 1
+	assert_eq(count.get("palm", 0), 7, "seven palms")
+	assert_eq(count.get("garden", 0), 3, "three gardens")
+	assert_eq(count.get("pump", 0), 1, "the pump")
+	assert_eq(count.get("path", 0), 1, "the path")
+	assert_eq(count.get("shell", 0), 2, "home 5 and the crushed hut")
+	assert_eq(count.get("wall", 0), 2, "the wall's two runs")
+	assert_eq(count.get("rubble", 0), 1, "the rubble")
+	assert_eq(count.get("sail", 0), 2, "two shade sails")
+	var kinds := []
+	for s: Dictionary in _place.layout().get("shells", []):
+		kinds.append(s["kind"])
+	kinds.sort()
+	assert_eq(kinds, ["crushed", "round"], "home 5 is round, and the hut crushed")
+	assert_not_null(_oasis().get_node_or_null("Tracks_out"), "the tracks out")
+	assert_not_null(_oasis().get_node_or_null("Tracks_in"), "the tracks in")
+	assert_not_null(_oasis().get_node_or_null("Outcrop"), "the outcrop")
+	assert_not_null(_oasis().get_node_or_null("Brick"), "the brick is solid")
