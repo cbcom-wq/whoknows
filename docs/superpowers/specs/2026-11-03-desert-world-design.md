@@ -259,6 +259,83 @@ this is the land it lives in).
 >   - **The gate's one-time hitch.** A hull restored or woken with nothing built has up to ~16
 >     cells built at once on the main thread (~2.5 ms each).
 
+> **Status, 2026-11-15: phase 3 Parts A and B are built** (branch `desert-oasis`, merged as
+> `c49b72f`); **Part C is next.** Parts A and B are the authored world, WADIS's oasis and its walled
+> village outside. Part C (buildings you can enter, the doorway airlock, things to find inside, the
+> log) is not built: §8.4 to §8.7 stand as designed, and nothing here is a rule for them yet. The
+> plan is `docs/superpowers/plans/2026-11-14-desert-world-p3-oasis.md`; the style guide (§2.6,
+> §3.9, §5), CLAUDE.md and the skills record Parts A and B.
+>
+> **Differences as built:**
+> - **The world is `p3` of system 1337, named WADIS** (the owner, Checkpoint A, 2026-11-14). Its
+>   gravity is the seed's 5.28 m/s², unchanged. The design is `data/systems/kesdra.json` (JSON,
+>   keyed by `"seed"`; `SystemDesign`), the oasis's layout is `data/places/oasis.json`
+>   (`PlaceDesign`). The tweak pins `archetype` DUNES, `palette` desert and `atmosphere` THICK at
+>   the values `p3` already rolls. The star systems spec's step 5 is built at the tweak and stamp
+>   depths.
+> - **Stamps** (`TerrainStamp`, kinds FLATTEN, BASIN and MESA) live only in `WorldTerrain.height_at`
+>   and `ground_at`. They nest or keep apart, apply in file order, and clear the ground cover
+>   within their flat radius plus `TerrainStamp.CLEAR_MARGIN` (2 m). A FLATTEN has a `keep` (0 to 1,
+>   added at Checkpoint A): the share of the ground's own roll it keeps. A world with no stamps,
+>   and `p3` beyond their reach, keep their ground bit for bit.
+> - **Where the oasis is:** latitude -2.16, longitude -171.97, the sun 29.03° up, found by a probe
+>   (283 of 720 candidates qualified) and rounded in the data.
+> - **The ground, as the owner approved it at Checkpoint A** ("more terrain variation", then
+>   "Start B" with the result): the oasis floor is a FLATTEN of radius 120 m, blend 150 m, `keep`
+>   0.35 (about +-3 m of roll against 9 m dunes outside); the pad is r 26 m, raised 0.15 m, in a
+>   sandstone `a0642c` (the first pale grey-lilac read as ice); the pool is a BASIN r 17 m, 1.3 m
+>   deep, flat floor to 9 m, wadeable. The water is `OasisPalette.WATER` `3f7664`, a green-blue
+>   (it was `4f827c`, "icy").
+> - **The beacon** shows only inside `p3`'s well, so it is not listed at the warp's drop-out (123.2
+>   km from the centre, the well 109.2 km). The owner at Checkpoint A: it stays inside the well. A
+>   warp to `p3` arrives over the oasis, turned toward your side by at most 75°
+>   (`WarpPlan.ARRIVE_MAX`); the test lands it 28.9° from the entry side.
+> - **The village was reworked after Checkpoint B.** The owner rejected the first one (huts built
+>   into the sand with no floors, too few buildings, a wall that did not surround them, grass that
+>   ended abruptly, a rock outcrop out of place). As built now:
+>   - 12 buildings in 5 compounds round the pool, each compound on one FLATTEN nested in
+>     `pool_bank` (r 54.3 m, edge 4.2, `keep` 0.2), with a level `pool_shore` (r 17.4 m,
+>     raised -0.05) so the green stays at least 0.1 m over the water;
+>   - a ring wall 2.6 m high, 15 corners at 45.5 to 49 m, with a gate (4.5 m clear, piers 1.6 m
+>     thick and 4.0 m high, a wooden beam) facing the pad and a breach 8.5 m wide in the east,
+>     rubble each side; yard walls 1.8 m round the compounds;
+>   - mud-brick shells (`BrickShell`) on a 0.3 m foundation, with a floor slab, a 0.15 m stone
+>     threshold at every door, shut plank doors and shuttered windows; a hut crushed in at the
+>     breach; the ledge, a sandstone shelf north outside the wall (a MESA stamp, elliptical, 6 m
+>     high, with a stair cut into its face), which replaced the stacked-rock outcrop;
+>   - palms, a green ring of grass that dries to straw at its edge with strays past it, gardens,
+>     a pump, a path of flat stones, shade sails, and the beast's tracks (1.5 times the first
+>     size so they read from the seat: a 3.6 m print, a 10.5 m stride, 375 m out and 12.5 m in).
+>   The owner did not answer the last re-show; the owner said "Let's merge to main and push for now". The
+>   rework is rules only as far as it was merged without objection.
+> - **Two colour spaces.** The oasis kit's colours (`OasisPalette`, grass tufts included) are
+>   linearised through `InteriorKit.solid`. The desert's cover grass and ground colours are used
+>   raw-as-linear, so they render lighter and more saturated than their hex: the phase 2 look was
+>   tuned that way and stays.
+> - **Things lying outside** carry string ids in the layout (a crate, a canister). A new optional
+>   save part `"places"` keeps what is taken, so taken stays taken. A save from before phase 3
+>   loads, with the oasis fresh in it, and there is no `FORMAT` bump.
+>
+> **Measured** (windowed 1280 x 720, GTX 960, `oasis_render.gd`): seated at the starter's helm
+> landed on the pad 136 fps (the worst view), on foot in the village by the pool 221, by the
+> crushed hut 181, in the wall's gap 218. `landing_play` on `p3` (Checkpoint B): 148 seated landed. The starter
+> and the Warden land on the pad at tilt 0.0° with no damage; across the floor's blend at 8.6° and
+> onto the crushed hut at 16.4°, no refusal and no damage (the tilt limit is phase 0's; the owner
+> gave no new rule). Wading: 2.2 m/s against 4.0 dry (55%), and a forced floating-origin shift
+> while wading keeps the depth.
+>
+> **Open (Part C, not built yet):**
+> - the buildings you can enter as bases on a world, and the doorway airlock (no cycle, no
+>   pressure) that goes with them; the four enterable shells (`workshop`, `comms`, `home_3`,
+>   `home_4`) stand as plain brick shells flagged `"enterable"`;
+> - abandoned interiors, things to find inside, the log, and wind faintly through the walls
+>   (§6.4's deferred line); Task 17's numbers and Checkpoint C. An enterable building's floor will
+>   sit 0.3 m over the ground at the door, on its foundation, with the 0.15 m threshold as the
+>   middle step (the controller's ruling, not the plan's first 0.15 m);
+> - the beast's design is next after phase 3;
+> - the low, fast flight fps follow-up (phase 2's list above) is its own branch;
+> - the full suite has not been run on this branch.
+
 ---
 
 ## 1. Why

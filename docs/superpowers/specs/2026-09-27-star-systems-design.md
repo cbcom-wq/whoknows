@@ -398,7 +398,7 @@ one: every step is flyable by itself.
 | 2 | **Planetfall,** built against the bodies of step 1 (Planetfall §20, amended) | Land on any of them |
 | 3 | **Warp** (replaces cruise; `2026-09-28-warp-design.md`) | Jump between the star, planets and belt clusters in about 30 s |
 | 4 | **Regions:** dust lanes and gas clouds first, then plasma zones | The space between has places in it |
-| 5 | **Authoring:** `SystemDesign`, tweaks and stamps, `SystemValidator`, the overview scene | The owner's 3 planets and 4 moons |
+| 5 | **Authoring:** `SystemDesign`, tweaks and stamps, `SystemValidator`, the overview scene. **Built at the tweak and stamp depths** (desert world phase 3, Parts A and B, merged 2026-11-15; `SystemDesign` validates itself with `problems()` in place of a separate `SystemValidator`): JSON in `data/systems/<star name, lower case>.json`, keyed inside by `"seed"`, with a `bodies` section per body id holding a `tweak` (name, archetype, palette, atmosphere), `places` and `stamps`; the first design is `kesdra.json`, whose `p3` is WADIS. The overview scene and the hand-built depth are not built | The owner's 3 planets and 4 moons |
 | 6 | **Galaxy and jumps:** `GalaxyRecipe`, the JUMP page, the jump sequence, saving per system | Travel between stars |
 | 7 | **Movers:** comets on the clock, then the moving frame that lets you land on one | Something moves in the sky, and you can land on it |
 

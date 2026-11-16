@@ -32,7 +32,7 @@
 
 ## Calls made in this plan (mine; the owner can change any)
 
-1. **The desert world is `p3`** (DRANAXNAX-50): 54.6 km across, thick air, already a desert, gravity **5.28 m/s²** (the spec's "about 5"), and the nearest planet to the entry (1,312 km). It is phase 2's probe desert. The tweak pins `archetype` DUNES, `palette` desert and `atmosphere` THICK at the values it already rolls, so it stays a desert if a generator changes. Its gravity, size and name stay the seed's. **The name is the owner's to give** (spec §14.9); until then it is DRANAXNAX-50.
+1. **The desert world is `p3`** (DRANAXNAX-50): 54.6 km across, thick air, already a desert, gravity **5.28 m/s²** (the spec's "about 5"), and the nearest planet to the entry (1,312 km). It is phase 2's probe desert. The tweak pins `archetype` DUNES, `palette` desert and `atmosphere` THICK at the values it already rolls, so it stays a desert if a generator changes. Its gravity, size and name stay the seed's. **The owner named it WADIS** at Checkpoint A (2026-11-14, spec §14.9).
 2. **Designs are JSON**: `data/systems/<star name, lower case>.json`, keyed inside by `"seed"`, beside the ship library's JSON. Place layouts go in `data/places/<id>.json`, and logs in `data/logs/<id>.json`. JSON has no `.tres` comment trap.
 3. **Latitude and longitude** on a world are in the universe's axes, since worlds never turn: north is +y, longitude 0 is +x, east is toward −z at longitude 0. `dir = (cos φ cos λ, sin φ, −cos φ sin λ)`. A place's frame has x east, y up and z south, so layout `[east, north]` metres are `Vector3(e, h, −n)`. Its `heading` turns the layout clockwise about up.
 4. **Stamps nest or keep apart:** two stamps on a body either don't touch (with their blend edges) or one lies wholly inside the other's flat part. They apply in file order, outer first. A FLATTEN with no `level` takes the mean of the ground already stamped under its flat part (37 samples). Every stamp clears ground cover within its flat radius plus `TerrainStamp.CLEAR_MARGIN` (2 m).
@@ -41,7 +41,7 @@
 6. **Where the oasis is:** found in Task 4 by a probe. It scans the circle of points where the sun stands **30°** up, keeps those whose 400 m disc has no mesa, tower or talus and which lie off the wind axis's poles, and takes the one nearest the side you come from out of the entry. The latitude and longitude are rounded to 0.01° in the data. The test holds the sun between 25° and 35°.
 7. **The layout** follows `oasis-layout.html`, read at 0.3 m to a pixel, with the pool at the origin and north up, as reworked at Checkpoint B (below). The pad grew to fit the Warden, so it moved west. All positions are `[east, north]` m; sizes are [across, high, deep] m; a yaw ψ turns a shell's front (its door) to face bearing ψ:
    - pad (−80, −40); a path from the pad's edge (−56.8, −28.4) through the gate (−42.2, −22.5) to (−15.2, −7.6) by the pool, flat stones the last stretch;
-   - pool (0, 0) on its bank (FLATTEN r 54.3, edge 4.2, keep 0: the whole village inside the wall is level, and no ground in the green ring lies below the water + 0.1 m), with a green ring out to 36 × 26 m;
+   - pool (0, 0) on its bank (FLATTEN r 54.3, edge 4.2, keep 0.2: the town floor keeps a gentle roll, with the level `pool_shore` round the water so no ground in the green ring lies below the water + 0.1 m), with a green ring out to 36 × 26 m;
    - ten palms: (−20.4, 12), (−24, −3), (−15, −16.5), (18, 9.6), (23.4, 0.6), (0, 21.6), (9, −17.4), (−33, 27), (3, −41) and (−30.5, −32.5);
    - twelve buildings in five compounds round the pool, each compound on one FLATTEN (the cluster plus an apron, edge 1.0) nested in the bank's flat part, buildings within a compound 0.3–2 m apart, and 3 m or more between compounds. Yard walls 1.8 m high (`yards`, built with `BrickShell.wall`) close each compound's sides, so a lane's sides are walls rather than sand:
 
@@ -50,7 +50,7 @@
      | north (`court_north`, (0.7, 38.0), 14.0) | `workshop` | box, enterable (Part C) | (0.5, 31.4) | 10.8 × 3.4 × 6.4 | −179 |
      | | `house_b` | box, two storeys | (−8.0, 38.5) | 7.5 × 5.6 × 6.0 | −179 |
      | | `hut_b` | round | (9.8, 35.9) | r 3.6 | −165 |
-     | east (`court_east`, (29.0, 26.4), 11.9) | `store` | box, long and low | (28.2, 31.3) | 11.0 × 2.4 × 4.6 | −138 |
+     | east (`court_east`, (29.0, 26.4), 11.9) | `store` | box, long and low | (28.2, 31.3) | 11.0 × 2.9 × 4.6, 2.4 m double door | −138 |
      | | `house_a` | box | (31.9, 20.7) | 8.0 × 3.0 × 5.5 | −123 |
      | crushed (`court_crushed`, (26.5, −25.7), 8.6) | `hut_8` | crushed | (30.2, −24.4) | 7.0 × 3.2 × 5.5 | 70 |
      | | `hut_9` | crushed | (23.8, −27.8) | 6.5 × 3.0 × 5.0 | 95 |
@@ -61,8 +61,8 @@
      | | `house_d` | box | (−37.7, 18.4) | 7.0 × 3.0 × 5.0 | 116 |
 
      Each shell names its compound's stamp (`"stamp"`). The four Part C buildings stand as plain brick shells with `"enterable": true` until Task 13 makes them bases on the same ground; their doors open on a lane;
-   - a ring wall 2.6 m high hugging the village, 15 corners at 45.5–49 m (mean 46.9), with four buildings backing onto it; its gate (4.5 m clear between two piers 1.2 m thick and 3.4 m high) at (−42.2, −22.5), facing the pad; its breach, 8.5 m wide, at (46.4, −11.2) in the east (bearing 103.5), with rubble inside at (42.6, −10.1) and outside at (50.8, −12.3);
-   - the tracks out from (62.0, −2.2), past the bank's lip (no print lies across a stamp's lip), bearing **60°** for **375 m**, and in from (42.3, −9.3) at bearing 231 for 14.5 m to the crushed huts;
+   - a ring wall 2.6 m high hugging the village, 15 corners at 45.5–49 m (mean 46.9), with four buildings backing onto it; its gate (4.5 m clear between two piers 1.6 m thick and 4.0 m high) at (−42.2, −22.5), facing the pad; its breach, 8.5 m wide, at (46.4, −11.2) in the east (bearing 103.5), with rubble inside at (42.6, −10.1) and outside at (50.8, −12.3);
+   - the tracks out from (62.0, −2.2), past the bank's lip (no print lies across a stamp's lip), bearing **60°** for **375 m**, and in from (42.7, −10.0) at bearing 215 for 12.5 m to the crushed huts;
    - the ledge, a MESA at (−12.2, 87.1) north outside the wall: a long shelf, its flat top an ellipse 40 × 16 m (radius 20, `stretch` 2.5) with its long axis at `heading` 82°, its edge wandering by `wobble` 0.08, 6 m over the floor, falling over a 5.5 m edge (about 47°, rock by the slope rule), ground `ground_high`;
    - gardens on their own stamps (r 3.5, edge 1.2) at (−42.1, −5.9), (−20.4, 36.1) and (44.5, 1.6), the last dried and nearest the breach;
    - the pump at (17, 1.2);
@@ -73,7 +73,7 @@
 
    Rework 1, round 2, 2026-11-15: the buildings read as scattered houses in open sand, the wall stood far off, hollows in the green lay under the water and the ledge was a round plug. The twelve buildings were grouped into five compounds, each on one FLATTEN, with yard walls between them (house_c went and house_d came, so twelve still stand); the ring wall came in from 52–57.5 m to a mean of 46.9 m; the bank grew to r 54.3 with keep 0, so nothing in the green lies below the water + 0.1 m (test_place_field holds it); and MESA gained an elliptical, wobbled footprint (`stretch`, `heading`, `wobble`) for a long ledge. Round stamps are unchanged bit for bit.
 8. **The beacon reads `OASIS`** and shows inside `p3`'s well (spec §8.2), kind `&"beacon"`. A warp to `p3` arrives over the oasis, turned toward your side of the world by at most **75°** and never past the limb seen from where you start (5° spare), so it never routes through the world.
-9. **Buildings are base sites with building module kinds:** `home_a` and `home_b` (3 × 2 cells), `workshop` (4 × 3) and `comms` (3 × 2), each with one storey of rooms and a roof storey of grav plating. Homes look like **mud brick** (a new `brick` look in `BaseExterior`, with a cloth sail). The workshop and comms hut are **prefabs**: today's drum shell in a weathered plate, patched with brick. Their legs are none, and each floor sits **0.15 m** over the ground at the door, so no ramp is built.
+9. **Buildings are base sites with building module kinds:** `home_a` and `home_b` (3 × 2 cells), `workshop` (4 × 3) and `comms` (3 × 2), each with one storey of rooms and a roof storey of grav plating. Homes look like **mud brick** (a new `brick` look in `BaseExterior`, with a cloth sail). The workshop and comms hut are **prefabs**: today's drum shell in a weathered plate, patched with brick. Their legs are none, and each floor sits **0.3 m** over the ground at the door, on its foundation, with a 0.15 m threshold as the middle step (two steps of 0.15 m), so no ramp is built (the controller's ruling at the Checkpoint B rework; it was 0.15 m).
 10. **The door is the airlock in doorway mode:** both hatches open, no cycle, no pressure, no panels, no steam. The threshold code hands you over as the outer hatch does today. It applies to every airlock of a base on a world.
 11. **Outside items** carry string ids in the layout. `PlaceField` keeps the taken ids per place and saves them in a new save part, `"places"`. **Inside items** go into each building's `BaseSite.items` when the site is first made, so they save and stay taken as any base's items do.
 12. **The tracks are flat, darker prints**, laid on the ground's own triangles: each an oval **2.4 m** long with three toe notches, a 7 m stride, four feet. They fade along the 400 m into the dunes. Their size is tuned at Checkpoint B to read from the seat coming in.
@@ -613,14 +613,14 @@ These are the five most likely to bite a player that the spec implies and no tas
   - id `<place>.<building>` (e.g. `&"oasis.home_3"`), the system seed, `world` the body id;
   - one module of its kind at cell zero with no legs;
   - `turn` the place's frame turned by the building's `yaw`;
-  - `at` such that its airlock's outer hatch floor stands `SILL` (0.15 m) over the ground at the door;
+  - `at` such that its airlock's outer hatch floor stands `SILL` (0.3 m) over the ground at the door (the foundation, with the 0.15 m threshold as the middle step);
   - `items` from the layout (Task 15).
 - Produces: `oasis.json` `buildings`: `home_3` (`home_a`, (−37.8, 9.4), yaw 104), `home_4` (`home_b`, (−7.4, −32.2), yaw 13), `workshop` (`workshop`, (0.5, 31.4), yaw −179) and `comms` (`comms`, (2.3, −32.9), yaw −4), each door facing a lane (Rework at Checkpoint B, 2026-11-14, round 2 on 2026-11-15: call 7's new places). Each replaces the plain `"enterable": true` brick shell of the same id in `shells` and stands on that shell's compound stamp in kesdra.json (`"stamp"`), which is level with the pool's bank; its footprint is the shell's (the workshop's prefab drum about 10.6 × 6.1 m, the comms hut's about 7.8 × 4.1 m); the shell is removed when the site is made. The builder may turn a door to face the village if the renders say so.
 - Produces: `WindSound.Ear.WALLS`, appended, on the Ship bus at `WALLS_DB` below HULL (start −14 dB, by ear): you in PLATING inside a base that is `on_world()`.
 
 - [ ] **Step 1: Write the failing tests.** In `test_buildings.gd` (the flight scene, the starter on the pad, the focus at the oasis, `bases.check_sleep()` run):
   - `test_four_buildings_wake_at_the_oasis`: `oasis.home_3`, `home_4`, `workshop` and `comms` are awake bases, none in `Fleet`.
-  - `test_buildings_stand_on_the_ground`: each door's outer hatch floor is 0.10–0.20 m over the ground, and no ramp was built.
+  - `test_buildings_stand_on_the_ground`: each door's outer hatch floor is 0.25–0.35 m over the ground (SILL 0.3 m), and no ramp was built.
   - `test_walk_in_and_out`: the avatar in FIELD walks through home 3's door and is in PLATING in its interior, then walks out and is in FIELD on the ground at the door. It is never in SUIT, and never asked for a charge.
   - `test_gravity_and_light_inside`: inside, the avatar stands (plating gravity) and at least one practical is lit. If plating or lights need a store a base doesn't have, give the building the least that makes them work, and say so in the report.
   - `test_a_building_sleeps_and_wakes`: the focus 21 km off sleeps them; back, they wake with the same contents.

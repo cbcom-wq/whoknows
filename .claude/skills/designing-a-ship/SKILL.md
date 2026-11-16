@@ -294,6 +294,8 @@ z -1  H    Qk12 D    D    Qm   Qk8  H
   damage. The starter and the Warden land on the densest talus tilted 8.6° and 7.8°, undamaged.
   `building-a-ship`'s checklist has the landing to run (`desert_render.gd -- <out> cover`): read
   its word, its damage and the stones inside the hull's colliders (none).
+- **Fits the oasis pad:** half-diagonal at most 21 m (the pad on WADIS is 26 m round, less
+  5 m), or the pad grows with the ship: `test_every_library_ship_fits_the_pad` fails otherwise.
 - **Size:** 400 blocks at most. A 400-block ship builds in about 1.2 s when it spawns, a freeze the
   owner accepted for now; its rules take 0.3 s; it holds 121 fps in the worst view, just over the
   120 floor, so **a big ship costs frames**: keep it no bigger than the brief needs.

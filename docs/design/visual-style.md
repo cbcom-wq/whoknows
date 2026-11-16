@@ -3,7 +3,8 @@
 **Status:** Living document. Owner-approved 2026-09-23, after the ship interior redesign; extended
 2026-09-24 for the cockpit pod and portal windows (owner-approved design, `docs/superpowers/specs/2026-09-23-cockpit-pod-design.md`),
 and for the airlock, its sound and the first spacewalk (owner-approved design, `docs/superpowers/specs/2026-09-24-airlock-design.md`);
-extended 2026-09-28 for the ship's exterior (owner-approved design, `docs/superpowers/specs/2026-09-28-ship-exterior-design.md`).
+extended 2026-09-28 for the ship's exterior (owner-approved design, `docs/superpowers/specs/2026-09-28-ship-exterior-design.md`);
+extended 2026-11-15 for the oasis on the desert world, Parts A and B (§3.9; `docs/superpowers/specs/2026-11-03-desert-world-design.md`).
 **Authority:** This is the standing rulebook for how the game looks, and interiors most of all.
 Feature specs apply these rules; they do not override them. **To change a rule, get the owner's
 approval first and update this document in the same change.** Code, a spec and this guide
@@ -51,7 +52,14 @@ If a new piece of work doesn't fit that paragraph, it's wrong, however good it l
   **no rim light**: on a surface seen edge-on it blows out the whole ceiling. Props get a faint rim
   (0.15) so chunky shapes stay distinct from each other in dim light.
 - **Every colour comes from `InteriorPalette`.** No colour literals anywhere else; a test enforces
-  this (§5).
+  this (§5). Outside the ship the palettes are `HullPalette` on the hull, `SpacePalette` for rocks
+  and worlds, and `OasisPalette` for the oasis's outside (palms, water, grass, brick, paths).
+- **Two colour spaces outside.** The oasis kit's colours are linearised through `InteriorKit.solid`,
+  the oasis grass tufts included, so a hex in `OasisPalette` renders as its hex. The terrain family
+  (`SpacePalette`'s ground, rock and the desert's cover grass) is used raw as linear, so it renders
+  lighter and more saturated than its hex (§3.9: a14a1c reads about c88050 in the sun); the phase 2
+  look was tuned that way. Never mix them by eye: pick a new oasis colour as the colour you want
+  to see, a new terrain colour as a darker, deeper one.
 - **Warm neutrals dominate:** cream `TRIM`, beige `WALL`, taupe `WALL_LOW`, one terracotta `BELT`
   stripe round every wall. **Accents** (`AMBER`, `SKY`, `CORAL`, `LAVENDER`) belong on screens,
   buttons and indicators. They are not surface colours.
@@ -183,6 +191,21 @@ that brought it there, each measured:
   that cost `main` its 73).
 
 Cutting the grass's reach and the sand's count measured no gain, so neither was cut.
+
+The oasis (desert world phase 3, Parts A and B, 2026-11-14 to 11-15, windowed 1280 × 720 on the GTX
+960, `oasis_render.gd`'s own runs). The stamps, palms, green ring, water, brick village and ledge
+added no shader. On `p3` (WADIS), after the village's rework:
+- seated at the starter's helm landed on the pad, nosed at the pool: **136 fps**, the worst view
+  (141 on the bare oasis, 153 after Checkpoint B's tune);
+- on foot in the village by the pool, looking at the breach: 221; by the crushed hut: 181; in the
+  wall's gap, looking along the tracks: 218;
+- `landing_play` there: 148 seated landed, 235 beside the starter, 196 at the ramp's foot
+  (Checkpoint B);
+- the starter and the Warden landed on the pad from 150 m: tilt 0.0°, no damage. Across the floor's
+  blend: 8.6°. Onto the crushed hut: 16.4°, no damage, no refusal (the tilt limit is phase 0's);
+- wading 1 m deep: 2.2 m/s against 4.0 dry, and a forced floating-origin shift keeps the depth.
+The cost to watch there is the canopy's second render of the whole village. The buildings' interiors
+(Part C) have no numbers yet.
 
 Measure after any change that adds lights, pieces, windows, particles or post-processing.
 
@@ -529,7 +552,8 @@ Phase 1 of the desert world, "air" (`docs/superpowers/specs/2026-11-03-desert-wo
 2026-11-07** ("phase 1 looks good"): the sky pairs, the halo's size, the rim, the entry glow,
 `HOLD_SHOW` 0, `HEARD_OUTSIDE` / `OUTSIDE_DB` and the wind levels keep their values, and this
 section and §3.8's exception are rules. *The desert* and *Ground cover* below are phase 2's.
-Palms and brick come with phase 3, and will join this section.
+*Palms and the oasis* and *Brick* are phase 3's, Parts A and B (the outside; Part C's interiors
+will add to them).
 
 - **No exterior shader: engine materials only.** `Environment`, `ProceduralSkyMaterial`,
   `StandardMaterial3D` and particles. The interior's three shaders stay the budget (§2.5); a
@@ -649,6 +673,81 @@ Those are rules.
 - **Every cover block is a member of `Universe.EXTERIOR_SPACE`,** placed from its
   `UniversePoint`.
 
+#### Palms and the oasis
+
+Desert world phase 3, Parts A and B (desert world spec §8.3, as built; `PlaceField`,
+`OasisLooks`, `OasisPalette`). **What is a rule:** what the owner approved at Checkpoint A
+(2026-11-14: the oasis floor keeping some of the dunes' roll, the sandstone pad, the green-blue
+water, the world's name WADIS), and the reworked village the owner merged to `main` on 2026-11-15
+without objection. The numbers beyond those are the builder's, tuned from renders.
+
+- **A place is data and one node.** `data/places/oasis.json` is the layout, `[east, north]` metres
+  from the pool, read by `PlaceDesign`; `PlaceField` builds it near the focus as one node in
+  `Universe.EXTERIOR_SPACE`, its pieces children, and frees it far off. Every piece sits on the
+  ground `WorldTerrain.height_at` gives, on a stamp's flat ground where it needs one, never on
+  numbers of its own.
+- **The ground is stamped and stays one ground** (`TerrainStamp`: FLATTEN, BASIN, MESA, in
+  `data/systems/kesdra.json`). The floor is 120 m round with a 150 m blend and keeps 0.35 of the
+  dunes' roll, so it is gently rolling and never a scar. Every piece that needs a level footing
+  has a FLATTEN of its own, nested inside the town floor (`pool_bank`, `keep` 0.2) or apart from
+  the others; `pool_shore` holds the ground round the water level so the green lies at least 0.1 m
+  over it. The pad is a warm sandstone (`a0642c`, ground `pad`) and the wet ground round the pool
+  `damp`, both keys of the desert palette in `SpacePalette`.
+- **Water is one flat, faceted, opaque disc** at the water level (`OasisLooks.water`,
+  `OasisPalette.WATER` `3f7664`, a green-blue, never icy or pool blue) and an `Area3D`
+  (`PoolWater`) that slows you as you wade: `Avatar.wade_factor` is 1 on dry ground and
+  `WADE_SPEED` 0.55 at `WADE_DEEP` 1 m. No swimming; it is never deeper than you can stand.
+- **Palms are built from a kit and a frame** (`OasisLooks.palm(kit, f, variety)`): a trunk of
+  seven tilted drums and seven fronds, `PALM_FROND` 5f7a35 with a dry straw for some, hand-placed
+  round the pool. A palm has a capsule collider (`palm_collider`).
+- **The green ring** is a flat, faceted carpet (`OasisLooks.green_patch`, `GREEN_PATCH`) laid on
+  the ground's own triangles, with grass tufts on it. From the air it reads as one green field,
+  not speckles. The tufts fade out by visibility range (`TUFT_REACH` 85 m, `TUFT_FADE` 20 m, in
+  12 m tiles), so far off only the carpet shows. Its edge dries over `GREEN_FADE` 4.5 m, green to
+  olive (`GRASS_OLIVE`) to straw (`GRASS_DRY_EDGE`), with tufts thinning and strays past it: the
+  owner's "the grass just ends abruptly" is why. **Colour space:** these colours are linearised
+  (§2.2); the desert's own cover grass keeps its raw-as-linear straw.
+- **Gardens, the pump, the pipe and the path** (`garden`, `pump`, `pipe`, `path`): gardens on soil
+  `GARDEN_SOIL` with `CROP_GREEN` rows, one dried to `CROP_DRY`; the path is flat stones in a warm
+  sandstone grey `PATH`.
+- **The ledge is a mesa, not a pile of rocks** (the owner called the first outcrop a weird rock
+  wall): a MESA stamp, elliptical and wobbled, 6 m over the floor, in the world's own `ground_high`
+  and rock by the slope rule. A stair of 9 stones is cut into its face (`ledge_stair`), with
+  boulders and a talus of small stones at its foot in the world's `boulder` shades (`ledge_rocks`).
+  It is climbable: no rise over 0.62 m.
+- **The beast's tracks** (`OasisLooks.tracks`) are flat, darker prints laid on the ground's
+  triangles in `TRACK`: a 3.6 m oval with three toe notches, a 10.5 m stride, fading into the dunes
+  over 400 m. They were scaled up 1.5 times at Checkpoint B, when the smaller prints did not read from the seat.
+- **No shader.** Meshes from the kit, `StandardMaterial3D`, a MultiMesh for tufts. The interior's
+  three shaders stay the budget.
+- **Every piece is in the place's node,** so the floating origin carries it
+  (`test_floating_origin_scene.gd` passes with the oasis loaded and a ship landed on the pad).
+
+#### Brick
+
+The oasis's buildings and walls (`BrickShell`, `src/world/brick_shell.gd`; the owner merged the
+reworked village on 2026-11-15, after rejecting the first at Checkpoint B for huts "built into the
+sand" with "no floors").
+
+- **Adobe, from big blocks.** Sun-baked mud brick, lighter and warmer than the sand
+  (`OasisPalette.BRICK` d29a6c, `BRICK_DARK` aa7850 for proud courses, copings and a quarter of
+  the rubble), each block a shade of it, so a wall reads apart from the ground without going
+  dark. Wooden roof beams (vigas, `WOOD`) poke out under a stepped parapet; doorways and windows
+  are deep and dark (`REVEAL`) under wooden lintels. It was dark and uniform at first, and the
+  owner asked for lighter.
+- **A building stands on something.** A foundation course (`FOUNDATION`) 0.3 m high and 0.1 m
+  proud of the walls, its foot sunk under the ground, with a floor slab at its top (`FLOOR`), a
+  0.15 m stone threshold before every door, shut plank doors and shuttered windows. The ground
+  meets a footing, never a wall. Walls, yard walls and the ring wall's gate piers have a footing
+  course too.
+- **Built from a kit, a frame and a variety alone** (like every reusable prop): `BrickShell`
+  never sees a grid or a place, and each shape has a `_shapes` twin that gives its collision.
+  Colours come from `OasisPalette`; `test_visual_style_rules.gd` keeps it off the grid (§5).
+- **Not built yet (Part C):** the skin of the enterable buildings on `BaseExterior` (a brick copy
+  of the hull's livery material) and the prefabs' weathered plate (today's drum shell, patched
+  with brick), both with other parameter values of the same livery, never a new shader. Until
+  then the four enterable buildings are plain `BrickShell` boxes flagged `"enterable"`.
+
 ## 4. Adding something new
 
 **A new prop:**
@@ -706,6 +805,11 @@ shader.
   cooler light, damage, missing panels. They must differ from the player's ship **by more than
   brightness alone**.
 - Palette variants belong beside `InteriorPalette`, as data, not as literals in props.
+- **Abandoned (Part C, not built yet; the plan's intent, not a rule):** a place left, not gone cold.
+  About half the room props knocked over, sand drifted along the walls and in from the door, a
+  third of the practicals dead and a third flickering, the inner door jammed part open, a warm
+  daylight spot at the doorway, and the wind heard faintly through the walls. It differs from a
+  derelict by being warm and dry, not cold and failing. Part C's checkpoint settles it.
 
 ---
 
@@ -717,7 +821,10 @@ shader.
   world-air code (`air_mood.gd`, `star_halo.gd`, `limb_glow.gd` and `entry_glow.gd` are in `PAINTING_FILES`),
   or ground-cover code (`ground_cover.gd`, `cover_field.gd` and `blowing_sand.gd`, phase 2) other
   than the palettes (`InteriorPalette`, `HullPalette` for the hull's outside, `SpacePalette` for
-  rocks and skitters; `InteriorKit` is exempt: it packs data into vertex colours). The hull's
+  rocks, worlds and skitters, `OasisPalette` for the oasis's outside; `InteriorKit` is exempt: it
+  packs data into vertex colours). The oasis's painting files, `place_field.gd`, `oasis_looks.gd`
+  and `brick_shell.gd` (phase 3), are in `PAINTING_FILES`; `oasis_palette.gd` is the palette and is
+  not. `brick_shell.gd` is also a reusable file, held off the grid. The hull's
   files are `hull_props.gd`, `hull_materials.gd`, `hull_layout.gd` and `hull_dressing.gd`, and
   the lights' are `ship_lights.gd` and `lights_panel.gd`;
 - `interior_props.gd`, `interior_kit.gd`, `sliding_door.gd`, `toilet_lid.gd`, `item_looks.gd`, `item.gd`,

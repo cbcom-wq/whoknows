@@ -12,7 +12,8 @@ back toward realism, procedural surface detail, dark blue sci-fi or bright light
 guide records why each was rejected.
 
 - **Colours come only from the palettes:** `InteriorPalette` inside, `HullPalette` on the hull,
-  `SpacePalette` for rocks in space. Props build from `(kit, frame, variety)` and never
+  `SpacePalette` for rocks and worlds, `OasisPalette` for the oasis's outside (palms, water, brick).
+  Props build from `(kit, frame, variety)` and never
   see the grid. The interior shader budget is three. `test_visual_style_rules.gd` enforces all
   three rules. If it fails, fix the code, not the test.
 - **Verify visual work by rendering the real scene** at eye height (1.6 m) and showing the owner.
