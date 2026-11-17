@@ -246,13 +246,14 @@ func route(from: Vector2, to: Vector2) -> PackedVector2Array:
 	for k in range(1, cells.size() - 1):
 		raw.append(cell_middle(cells[k]))
 	raw.append(end)
-	# Pulled tight: from each point, on to the farthest one in a clear line.
+	# Pulled tight: from each point on as far along the cells as a clear line goes
+	# (the first blocked one ends the leg, so it costs a line a cell, not every pair).
 	var out := PackedVector2Array([from]) if start == from else PackedVector2Array([from, start])
 	var i := 0
 	while i < raw.size() - 1:
-		var j := raw.size() - 1
-		while j > i + 1 and not clear_line(raw[i], raw[j]):
-			j -= 1
+		var j := i + 1
+		while j + 1 < raw.size() and clear_line(raw[i], raw[j + 1]):
+			j += 1
 		out.append(raw[j])
 		i = j
 	return out
