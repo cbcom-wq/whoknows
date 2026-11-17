@@ -72,7 +72,7 @@ That probe lands at the oasis and walks out of the airlock:
 
 It writes eye-height shots and runs of frames (`oasis_seq_walk_NN.png`, `oasis_seq_run_NN.png`).
 The first run of the static models, on 2026-11-15, gave 183 fps with all five in view, against
-a floor of 120.
+the floor of the time, 120 (it is 80 since 2026-11-16).
 
 **Where they stand (2026-11-16).** The owner wants to keep these models. They still need:
 - **Women's faces:** more feminine, closer to the concept art of the Wadee woman in her wraps.

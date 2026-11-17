@@ -87,9 +87,13 @@ locomotor, the senses, the needs, how it is found, what can be done to it.
     `--disable-autoexec`.
 - **Show motion as motion:** a run of frames from the game made into a GIF, and a Blender sheet of
   each clip (one row per moment). A still cannot show a walk.
-- **Measure a crowd:** take the frame rate with as many in view as the design wants. 25 Wadees in
-  view ran at 80 fps on the GTX 960, against a floor of 120, so the design has to plan lighter
-  versions for distance.
+- **Measure a crowd:** take the frame rate with as many in view as the design wants, then take
+  one thing away at a time to see where the time goes (`wadee_render.gd` `_breakdown`). 25
+  Wadees in view ran at 74–80 fps on the GTX 960, against the floor of 80. The scene alone was 157 (6.4 ms),
+  leaving them about 6 ms, which 25 just fit. The cost was draw calls (13 meshes and 18 materials each, drawn again
+  into every shadow map), motions on the CPU and the probe's steering, not triangles. So a
+  people meant for crowds is designed as one mesh with few materials, shadows only near, and
+  motions updated less often when far.
 
 ## Mistakes already made (don't repeat)
 

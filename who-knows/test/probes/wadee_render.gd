@@ -82,6 +82,8 @@ class Walker extends Node:
 		model.transform = Transform3D(Basis(Vector3.UP, atan2(d.x, d.z)), at)
 
 var _walkers: Array[Walker] = []
+## Every Wadee in the scene (walkers, talkers and the crowd), for the breakdown.
+var _all: Array[Walker] = []
 
 func _run() -> void:
 	await _frames(3)
@@ -157,6 +159,7 @@ func _run() -> void:
 	var line := "fps     %.0f on foot by the pool with %d Wadees moving, over 5 s %s" % [fps, WALKERS.size() + TALKERS.size() + CROWD, _ms()]
 	print(line)
 	_readings.append(line)
+	await _breakdown()
 	_let_go()
 	for l in _readings:
 		print("        %s" % l)
@@ -173,7 +176,68 @@ func _wadee(tag: String, node: Node3D, ground: Callable) -> Walker:
 	var skeleton: Skeleton3D = model.find_children("*", "Skeleton3D", true, false)[0]
 	walker.scale_to_lib = skeleton.get_bone_global_rest(skeleton.find_bone("Hips")).origin.y / LIB_HIPS
 	node.add_child(walker)
+	_all.append(walker)
 	return walker
+
+## Where the crowd's frame time goes, from the crowd view: the same view with one
+## thing taken away at a time. Shadows and Godot's own lighter versions (LODs) are
+## tried alone and put back; then the probe's steering, the motions and the Wadees
+## themselves go one after another.
+func _breakdown() -> void:
+	await _part("all %d as they are" % _all.size())
+	var t0 := Time.get_ticks_usec()
+	for i in 1000:
+		_all[0].ground.call(-8.6 + i * 0.001, 24.0)
+	var line := "cost    the ground under a point: %.1f us a call; the probe asks 2 a frame for each walker" % ((Time.get_ticks_usec() - t0) / 1000.0)
+	print(line)
+	_readings.append(line)
+	var meshes: Array[MeshInstance3D] = []
+	for w in _all:
+		for m in w.model.find_children("*", "MeshInstance3D", true, false):
+			meshes.append(m)
+	line = "cost    %d mesh instances, %d surfaces in all" % [meshes.size(), meshes.reduce(func(n, m): return n + m.mesh.get_surface_count(), 0)]
+	print(line)
+	_readings.append(line)
+	for m in meshes:
+		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	await _part("no shadows from the Wadees")
+	for m in meshes:
+		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	var vp := root.get_viewport()
+	var lod := vp.mesh_lod_threshold
+	vp.mesh_lod_threshold = 6.0
+	await _part("LOD threshold 6 px (default %.0f)" % lod)
+	vp.mesh_lod_threshold = lod
+	for w in _all:
+		w.speed = 0.0
+	await _part("steering stopped, motions playing")
+	for w in _all:
+		w.player.pause()
+	await _part("and the motions paused")
+	for w in _all:
+		w.model.visible = false
+	await _part("and the Wadees hidden")
+
+## One breakdown reading: frames a second, the renderer's times, the main
+## thread's process time, and what was drawn (in view, and into shadows).
+func _part(label: String) -> void:
+	await _seconds(0.5)
+	var fps := await _fps(4.0)
+	var process := 0.0
+	for k in 30:
+		await process_frame
+		process += Performance.get_monitor(Performance.TIME_PROCESS)
+	var vp := root.get_viewport_rid()
+	var info := func(type: int, what: int) -> int:
+		return RenderingServer.viewport_get_render_info(vp, type, what)
+	var line := "part    %.0f fps, %s %s, process %.1f ms; drawn %d calls %.2f M tris, shadows %d calls %.2f M tris" % [
+		fps, label, _ms(), process / 30.0 * 1000.0,
+		info.call(RenderingServer.VIEWPORT_RENDER_INFO_TYPE_VISIBLE, RenderingServer.VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME),
+		info.call(RenderingServer.VIEWPORT_RENDER_INFO_TYPE_VISIBLE, RenderingServer.VIEWPORT_RENDER_INFO_PRIMITIVES_IN_FRAME) / 1e6,
+		info.call(RenderingServer.VIEWPORT_RENDER_INFO_TYPE_SHADOW, RenderingServer.VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME),
+		info.call(RenderingServer.VIEWPORT_RENDER_INFO_TYPE_SHADOW, RenderingServer.VIEWPORT_RENDER_INFO_PRIMITIVES_IN_FRAME) / 1e6]
+	print(line)
+	_readings.append(line)
 
 ## SEQ_FRAMES frames, SEQ_GAP s apart, from where you stand: oasis_<name>_NN.png.
 func _sequence(seq_name: String) -> void:

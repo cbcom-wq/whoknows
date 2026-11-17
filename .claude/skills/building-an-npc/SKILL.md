@@ -302,5 +302,5 @@ Do these in order. Each names the check that proves it.
   - `GroundWalker` for a world's ground;
   - blending between clips by speed;
   - finger bones (nothing grips a spear);
-  - lighter versions for distance. A model is 55–65k triangles, and 25 in view ran at 80 fps,
-    against a floor of 120.
+  - lighter versions for distance. A model is 55–65k triangles, and 25 in view ran at 74–80 fps,
+    just under the floor of 80 (120 until 2026-11-16).

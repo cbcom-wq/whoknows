@@ -413,10 +413,21 @@ Delver kept 1.1-1.2 m/s on every leg, arrived on all five and never stalled for 
   - hair: `Head`, `Neck`, `UpperChest` and `Chest` only;
   - clothes: the trunk's skin, with 40% of any leg pull given to the hips, then smoothed;
   - jewellery: a ring round an arm follows the arm, and everything else follows the trunk.
-- **Frame rate (GTX 960, the target PC, 2026-11-16, on foot by the pool, floor 120):**
+- **Frame rate (GTX 960, the target PC, 2026-11-16, on foot by the pool, floor 80, 120 until that day):**
   - five standing: 183 fps;
   - five moving: 153–164 fps;
   - 25 moving, all in view: 80 fps.
+  - **Where the 25's time goes** (`wadee_render.gd` `_breakdown`, one thing taken away at a time;
+    74 fps = 13.5 ms a frame in that run):
+    - the scene alone in that view: 157 fps, 6.4 ms. Under the 12.5 ms floor (80 fps) that leaves about
+      6 ms for every Wadee: 25 just fit once a real walker replaces the probe's steering;
+    - the probe's own steering: 1.6 ms (the ground under a point costs 23 µs in GDScript, asked
+      twice a frame for each walker);
+    - the motions (25 `AnimationPlayer`s and skeletons, on the CPU): 2.4 ms;
+    - drawing them still: 3.2 ms, of which their shadows are 2.3 ms;
+    - **draw calls are the cost, not triangles.** A Wadee is 13 meshes and 18 surfaces, so 25 make
+      455 draws in view and about 1,800 more into the shadow maps. Godot's LODs at a 6 px
+      threshold cut the triangles by a quarter and won 2 fps.
 
 ## Testing patterns
 
