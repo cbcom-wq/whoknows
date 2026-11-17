@@ -369,6 +369,55 @@ Delver kept 1.1-1.2 m/s on every leg, arrived on all five and never stalled for 
   quads) shown on `leap`, `lunge` and `bite`; wears `ItemLooks.glint` on `BEAT` 1.6 s, set by `set_group_seed`
   through `Glint.clock_phase` so a nest flashes together; at most 120 triangles.
 
+## People made in Blender (the Wadees, a spike: `tools/blender/README.md`)
+
+- **Files:** `tools/blender/wadee_base.py` (the models), `wadee_rig.py` (skeleton, weights,
+  motions), `wkit.py` (mesh helpers); `who-knows/assets/wadee/wadee_<a|b|c|m|n>.glb` (a, b and c are
+  women, m and n men); the probe `who-knows/test/probes/wadee_render.gd`.
+- **Sources (CC0, downloaded, not in the repo):**
+  - Blender's *Human Base Meshes* v1.4.1, at `D:/git/blender_base_assets/hbm/`. It has no rig and
+    no motions.
+  - Quaternius's *Universal Animation Library* 1 and 2, Standard, at
+    `D:/git/blender_base_assets/ual/`, taken from OpenGameArt. Pack 1's Godot GLB has the
+    53-bone T-pose rig and 45 clips.
+  - Open them with `--disable-autoexec`. Nothing is ever paid for (the owner's rule).
+- **A model:**
+  - 1.745 m, times its variant's scale (1.0, 1.03, 0.97, 1.055 or 1.04);
+  - arms lowered 9° (women) or 12° (men) from the A-pose;
+  - 55–65k triangles (the body is 40k), about 2.3 MB as a rigged GLB;
+  - it faces +Z in Godot, so turn it with `Basis(Vector3.UP, atan2(d.x, d.z))`.
+- **Skeleton:** 23 bones, `Hips` down from `Root` (`Root` does not deform and is not exported):
+  `Spine`, `Chest`, `UpperChest`, `Neck`, `Head`; `Left`/`Right` + `Shoulder`, `UpperArm`, `LowerArm`,
+  `Hand`, `UpperLeg`, `LowerLeg`, `Foot`, `Toes`. No fingers. The hips' rest height is 0.874 m on
+  a 1.745 m body.
+- **Clips (Godot's names):**
+
+  | Clip | Length | Pace |
+  |---|---|---|
+  | `Idle` | 2.5 s | |
+  | `Idle_Talking` | 2.9 s | |
+  | `Walk` | 1.33 s | 1.05 m/s |
+  | `Walk_Formal` | 1.33 s | 1.05 m/s |
+  | `Jog_Fwd` (a fast run) | 0.92 s | about 5.9 m/s |
+  | `Sprint` | 0.67 s | about 8.8 m/s |
+
+  - The pace is the library's body's, with its hips 0.917 m up. Move a Wadee at that pace times
+    its own hip height over 0.917 (`skeleton.get_bone_global_rest(find_bone("Hips")).origin.y`),
+    so its feet do not slide.
+  - The clips import looped, at 30 fps.
+- **Copying a motion:** each bone turns in the world as the library's bone does. The turn is
+  measured from a reference pose: the library's figure with each bone swung to point where ours
+  points at rest, which brings the T-pose arms down. The hips' movement is scaled by hip height.
+- **Weights:**
+  - eyes, lashes and brows: `Head`;
+  - hair: `Head`, `Neck`, `UpperChest` and `Chest` only;
+  - clothes: the trunk's skin, with 40% of any leg pull given to the hips, then smoothed;
+  - jewellery: a ring round an arm follows the arm, and everything else follows the trunk.
+- **Frame rate (GTX 960, the target PC, 2026-11-16, on foot by the pool, floor 120):**
+  - five standing: 183 fps;
+  - five moving: 153–164 fps;
+  - 25 moving, all in view: 80 fps.
+
 ## Testing patterns
 
 - **A behaviour:** build an `NpcContext` by hand (`memory = NpcMemory.new()`, `needs`, `record`,
@@ -394,9 +443,10 @@ Delver kept 1.1-1.2 m/s on every leg, arrived on all five and never stalled for 
 
 ## Worlds (desert world phases 0–3; `docs/superpowers/specs/2026-11-03-desert-world-design.md` §5–§8)
 
-**Nothing lives on a world yet.** No NPC, creature or droid stands on one. The first world
-creature is the beast, in its own design (desert world spec §5.7); what follows is what it, and
-any fauna after it, must respect.
+**Nothing lives on a world yet.** No NPC, creature or droid stands on one. The Wadees, WADIS's
+people, exist only as models walked by a probe (§ *People made in Blender*). The first world
+creature is the beast, in its own design (desert world spec §5.7). What follows is what it, the
+Wadees and any fauna after them must respect.
 
 - **`WorldGravity` exists** (`src/world/world_gravity.gd`): `at(p)`, `up_at(p)`, `altitude_at(p)`,
   `surface_gravity_at(p)`, `on_world_at(p)` and `body_at(p)`. **Anything outside, on a world, must

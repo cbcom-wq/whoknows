@@ -1,6 +1,6 @@
 ---
 name: building-an-npc
-description: Use when adding or changing an NPC in the who-knows Godot project - a new creature, droid, crew member, wingman or world fauna; a new behaviour, need, sense, stimulus, locomotor, look, population or site; or wiring NPCs into a new space (another ship, a wreck, a world). Also when an NPC pops into view, is left behind by the floating origin, falls through or floats off a rock, snags on a doorway or edge, settles at 45° in a corner, dithers between behaviours, never reacts (or never stops reacting), won't step aside, walks through a shut door, reads as the wrong thing in renders, or blows the frame budget.
+description: Use when adding or changing an NPC in the who-knows Godot project - a new creature, droid, crew member, wingman, world fauna or person (townsfolk like the Wadees); a new behaviour, need, sense, stimulus, locomotor, look, population or site; a skeleton, rig or animation clip; or wiring NPCs into a new space (another ship, a wreck, a world). Also when an NPC pops into view, is left behind by the floating origin, falls through or floats off a rock, snags on a doorway or edge, settles at 45° in a corner, dithers between behaviours, never reacts (or never stops reacting), won't step aside, walks through a shut door, reads as the wrong thing in renders, or blows the frame budget.
 ---
 
 # Building an NPC
@@ -112,6 +112,9 @@ Do these in order. Each names the check that proves it.
    `test_visual_style_rules.gd`. Outside: distance fade reversed (min = `fade.y`, max =
    `fade.x`), render layer 1. Inside: the interior kit, layer 2, glow batch, no light of its own.
    Proof: `test_npc_looks.gd`-style tests (triangle budget, palette, layer, fade, parts move).
+   **A person** (anything with a face seen close up) is not built from primitives: it is a model
+   made in Blender from base meshes, with a skeleton and motions (§ *Recipes*). Its look is
+   designed with the `designing-an-npc` skill first.
 8. **Health:** `max_health` in the species (the catalogue test checks it is above 0), and
    whether it dies (`knocked_out_for` 0) or is knocked out and gets up. A creature that fights
    back lists a reflex like `defend` and asks the body for the bite with an intent action; the
@@ -202,6 +205,14 @@ Do these in order. Each names the check that proves it.
 - **An interaction** (only when the owner asks): a class with `can`, `prompt`, `run`; its id in
   `species.interactions`; route it in `Npc.interact`/`prompt_text`/`can_interact`; add `npcs`
   (128) to the `Interactor`'s mask.
+- **A person (a made, skinned look):** as the Wadees. `tools/blender/wadee_base.py` builds the
+  bodies, faces, hair and clothes from Blender's CC0 base meshes. `tools/blender/wadee_rig.py`
+  adds a 23-bone skeleton (Godot humanoid names) and copies CC0 motions onto it. Both are re-run
+  from the command line, and `tools/blender/README.md` says how. The GLB goes in
+  `assets/<kind>/`. Play a clip by Godot's name for it, and move the body at the clip's pace
+  (`reference.md` § *People made in Blender*). Prove it in the real scene with a probe like
+  `test/probes/wadee_render.gd`: eye-height shots, runs of frames for the motion, and the frame
+  rate with the real number in view.
 - **A new space:** a director and a bus beside it; bus `setup(space_root, universe_or_null)`. The
   bus lookup picks the deepest `space_root`, so an interior's bus beats the exterior's for
   anything aboard. Outside, every NPC joins `Universe.EXTERIOR_SPACE` itself (`Npc.setup` does
@@ -259,6 +270,15 @@ Do these in order. Each names the check that proves it.
 | A hull far off a rock in a scene test | A dev Delver sent under 20-70 m was demoted about 14 s into the burrow with the hull 400 m above the rock (cause not pinned: its live radius 250 plus `DEMOTE_MARGIN` 100 is short of that from the hull alone) | Keep the hull within 120 m of the rock in a scene test of anything that travels: `test_delver_pay.gd` |
 | Adding a body to the world, then placing it | `NpcDirector.promote` added the NPC at the holder's origin and `setup` moved it to its site. Outside, the floating origin keeps *your ship* at that origin: for a step the skitter overlapped your hull, then jumped a kilometre to its site in one step. Your hull reported a touch by creatures ~1 km off and, once, flew off at ~9,900 m/s and broke up (the T6 crash; found by T16's duel probe through `test_ship_pilot`) | Set the transform before `add_child` (`promote` does: `holder.global_transform.affine_inverse() * site.frame() * pose`); any CharacterBody you move far, place before it joins or disable its shape across the move. `test_a_promoted_npc_never_touches_a_hull_at_the_origin` |
 | A hand-over that reads the intent that caused it | A burrow ask is still the intent after the burrower hands back (the mind thinks 5 times a second): the crawler sent it straight down again; and off a rock crawler and burrower would swap every tick | The burrower clears a spent `&"burrow"` intent as it hands back; `SurfaceCrawler.burrow_asked` needs a `RockSite`, the locomotor and a `move_to`; `test_burrower.gd` |
+| A person's face built from code shapes | The first Wadees (ellipsoids, tubes and remeshing) were rejected: the chin too weak and rounded, "eyes look pasted on, little contour" | Start from a sculpted base mesh (Blender's Human Base Meshes, CC0) and change it in code (`wadee_base.py`) |
+| Decimating a body with a vertex group to spare the face | Unweighted vertices are fully protected, so the rest collapsed and the bodies became sticks | Decimate the whole body evenly (`BODY_TRIS` 40000) |
+| Re-importing a GLB to rig it without merging | glTF splits vertices along material edges, so the lips came back as an island of their own, cut off from the face's weights | `import_scene.gltf(..., merge_vertices=True)`, and give any unweighted vertex its nearest weighted neighbour's weights |
+| Clothes and jewellery taking the weights of the nearest skin | The hand hangs beside the belt and skirt: a belt coin went with the hand and stuck out as a spike, and a skirt flap went with the chest | Take weights from the body without its arms (the "trunk"). An island follows the arm only if it is a ring whose middle lies on an arm bone (within 0.035 m) |
+| Cloth weighted vertex by vertex | A long skirt tore between the legs at every stride, where neighbours flipped from one thigh to the other | Smooth the weights along the cloth (30 passes for a skirt, 8 for a top), and give 40% of any leg pull to the hips. A running stride still stretches a long skirt: that needs skirt bones or cloth |
+| Calling a clip by the library's name | `Walk_Loop` was "not found": Godot drops the `_Loop` ending on import and loops the clip | Play `Walk`, `Idle`, `Jog_Fwd`; the probe prints the list (`AnimationPlayer.get_animation_list()`) |
+| Blaming the copy for a strange motion | The run looked like a crouch with legs split under the long skirts. Hips and feet, compared frame by frame with the library's own figure, matched within a few centimetres: the library's `Jog_Fwd` is a fast run, about 5.9 m/s | Render the library's figure in the same clip, compare numbers frame by frame, then judge the copy |
+| A probe's view not looked at | Two stand points (north 33 and 37) were inside the north court's houses, so the 25-Wadee reading (98 fps) was taken facing a wall. With all 25 in view it was 80 | Look at every shot before trusting the reading taken there; stand on open ground (the east bank) |
+| Blender's default scene in a render script | `--factory-startup` keeps the default 2 m cube, which hid the figure in every frame | Remove or hide `Cube` (and the library's `Icosphere`) before rendering |
 
 ## Not built yet (plan for it; don't assume it works)
 
@@ -277,3 +297,10 @@ Do these in order. Each names the check that proves it.
   `NpcRecord`, and a hostile carries no crew (hostile ships spec, call I).
 - **The frame budget on the target PC.** Measured 1.2 ms for 32 + the droid on a shared 2.1 GHz
   Xeon; unmeasured on the GTX 960 machine.
+- **People as NPCs.** The Wadees are models with motions only, moved by a probe. Not built yet:
+  - a species, look id or population for them;
+  - `GroundWalker` for a world's ground;
+  - blending between clips by speed;
+  - finger bones (nothing grips a spear);
+  - lighter versions for distance. A model is 55–65k triangles, and 25 in view ran at 80 fps,
+    against a floor of 120.
