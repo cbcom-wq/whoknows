@@ -23,7 +23,7 @@ const POWER_HEADROOM := 1.1
 const LIFT_MARGIN := 1.3
 ## The most blocks a ship may have (ship designer spec §2.6, §9): the owner's
 ## first limit was 600, "and see how that goes"; at 600 the worst view fell to
-## 116 fps, under the 120 floor, so the owner lowered it to 400 (2026-10-09).
+## 116 fps, under the floor of the time (120), so the owner lowered it to 400 (2026-10-09).
 const MOST_BLOCKS := 400
 ## Landing legs a ship must stand on: LandingLegs.plan places one per quadrant
 ## (desert world spec, phase 0 Task 15), and a ship that fits fewer would rest

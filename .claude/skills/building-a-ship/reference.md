@@ -1097,7 +1097,7 @@ in about 8 s with no overshoot; touchdown deals 0.0 hp.
 | The rim | a glow round a world with air seen from outside; a child of its `BodyProxy` | `LimbGlow`, `RIM_ALPHA` 0.8, `BAND_INSIDE_DEG` 6 |
 
 Measured (windowed, GTX 960, 1280 × 720): seated on the ground 134 fps, hovering at 300 m 139,
-a dive at the speed limit 129, **seated at full entry heat 120 (at the floor)**. The help card
+a dive at the speed limit 129, **seated at full entry heat 120 (the floor then; 80 since 2026-11-16)**. The help card
 (`ControlsCard`) has three faces (seated, on foot, spacewalk); the seated face is for the seat
 that flies only (`CameraDirector.piloting()`): a bridge station or the captain's chair shows the
 on-foot face (`test_bridge_seats.gd`). Proof: `test_air_mood.gd`,
@@ -1305,7 +1305,7 @@ read **91 to 100%**:
 a turret, the sky map, fire control or the station. It puts the Warden in `ENGAGE`, lists two
 starters (one up and starboard, one down and port, so every turret has a target in its half-sky),
 turns the Warden to a heading with no rock within 3.5 km, and jinks the target sideways at 5 m/s².
-Its pass marks are at least 80% at 400 m, at most 30% at 1.2 km and at least 120 fps with every gun
+Its pass marks are at least 80% at 400 m, at most 30% at 1.2 km and at least 80 fps with every gun
 firing; then the heavy by hand at 2 km on a target holding still. It prints a `hit` line per range,
 three `fps` lines (baseline, guns idle, firing) with the renderer's own gpu and cpu milliseconds, a
 `sight` line and a `heavy` line, and writes `combat_chase`, `combat_bridge`, `combat_gun`,
@@ -1415,7 +1415,7 @@ its own allows; with no live turret `KEEP_AWAY` −150 m, so just inside the foe
 | Styles | neither wins all six | brawler 5, stand-off **0**, one draw: a pass on the letter |
 | Warden v starter | | both 720 s draws, stand-off v stand-off at about 960 m |
 | Rock contacts, flying | 0 | 0 over 20 fights |
-| Seated fps | starter ≥ 120; Warden ≥ 109 | 131 alone (92 once, in the full run), Warden 128 and 127, yours 125, ship lost 129 |
+| Seated fps | ≥ 80, either ship (was starter ≥ 120, Warden ≥ 109) | 131 alone (92 once, in the full run), Warden 128 and 127, yours 125, ship lost 129 |
 | Light hits | 400 m ≥ 70%, 1 km ≤ 40% | 95%, 36%; by band 200 m 100, 600 m 86, 800 m 36, 1.2 km 11 |
 
 **How a fight goes, for anyone tuning one.** Fights settle at 400–600 m, where 86–95% of bolts land

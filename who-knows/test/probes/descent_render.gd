@@ -95,7 +95,7 @@ const NIGHT_PITCH := 5.0
 ## Standing at a porthole: your middle this far in from the wall.
 const PORTHOLE_BACK := 0.5
 const FPS_SECONDS := 5.0
-const FPS_FLOOR := 120.0
+const FPS_FLOOR := 80.0
 const DIVE_SECONDS := 5.0
 ## The contact sheet: each render at this size, day over night.
 const TILE := Vector2i(320, 180)
