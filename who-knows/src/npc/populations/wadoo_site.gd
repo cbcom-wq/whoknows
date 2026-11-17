@@ -346,8 +346,11 @@ func _make_spots() -> void:
 		var m: Dictionary = layout["memorial"]
 		var c := WadooPaths._v2(m["at"])
 		var r := float(m.get("radius", 2.4)) + MEMORIAL_OUT
-		for k in 6:
-			_add(&"memorial", "memorial:%d" % k, c + Vector2.from_angle(TAU * k / 6.0 + 0.3) * r, c, &"kneel")
+		var stones := int(m.get("stones", 6))
+		for k in stones:
+			# before stone k (OasisLooks.memorial_dir), beside its lamp
+			var d := OasisLooks.memorial_dir(k, stones)
+			_add(&"memorial", "memorial:%d" % k, c + Vector2(d.x, -d.z) * r, c, &"kneel")
 	var benches: Array = layout.get("benches", [])
 	for b in benches.size():
 		var bench: Dictionary = benches[b]

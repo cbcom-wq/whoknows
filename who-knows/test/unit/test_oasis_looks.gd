@@ -254,3 +254,48 @@ func test_the_tracks_are_big_enough_to_read_from_the_seat():
 		assert_between(t, -0.02, OasisLooks.TRACK_FADE + 0.02)
 		# (A mesh keeps its vertex colours in 8 bits.)
 		assert_almost_eq(c.g, lerpf(track.g, sand.g, t), 0.008, "TRACK toward the sand")
+
+## The memorial (Wadoo spec §4): its stones stand round the ring where WadooSite
+## kneels its mourners, a lamp of sunglass glows before each, all in palette colours.
+func test_the_memorial_stands_round_its_ring():
+	OasisLooks.memorial(_kit, Transform3D.IDENTITY, 2.4, 6, 0.61)
+	var solid := _solid()
+	var colours: PackedColorArray = solid[1]
+	assert_gt(_count_of(colours, OasisPalette.MEMORIAL_STONE), 0, "stone")
+	assert_gt(_count_of(colours, OasisPalette.BRONZE), 0, "bronze lamp stems")
+	var strays := 0
+	for v in colours:
+		var found := false
+		for c in [OasisPalette.MEMORIAL_STONE, OasisPalette.BRONZE]:
+			for k in SpacePalette.SHADES.size():
+				if _same(v, InteriorKit.solid(SpacePalette.shade(c, k))):
+					found = true
+		if not found:
+			strays += 1
+	assert_eq(strays, 0, "only the palette's stone and bronze")
+	var glow: Array = _kit.arrays.get(InteriorKit.Batch.GLOW, [])
+	assert_false(glow.is_empty(), "the lamps glow")
+	var vertices: PackedVector3Array = solid[0]
+	var tall := 0.0
+	for k in 6:
+		var d := OasisLooks.memorial_dir(k, 6)
+		var top := -INF
+		for v in vertices:
+			if Vector2(v.x - d.x * 2.4, v.z - d.z * 2.4).length() < 0.25:
+				top = maxf(top, v.y)
+		assert_gt(top, 0.9, "stone %d stands on the ring" % k)
+		tall = maxf(tall, top)
+	assert_lt(tall, 2.1, "no taller than a person and a half")
+	assert_eq(OasisLooks.memorial_shapes(Transform3D.IDENTITY, 2.4, 6).size(), 7)
+
+## A bench: its seat BENCH_SEAT high, a plank of wood on stone.
+func test_a_bench_is_a_seat_high():
+	BrickShell.bench(_kit, Transform3D.IDENTITY, 2.4, 0.3)
+	var solid := _solid()
+	assert_almost_eq(_top(solid[0]), BrickShell.BENCH_SEAT, 0.01)
+	assert_gt(_count_of(solid[1], OasisPalette.WOOD), 0)
+	assert_gt(_count_of(solid[1], OasisPalette.FOUNDATION), 0)
+	var shapes := BrickShell.bench_shapes(Transform3D.IDENTITY, 2.4)
+	assert_eq(shapes.size(), 1)
+	for s in shapes:
+		s.free()

@@ -443,6 +443,30 @@ func _build_brick(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionary,
 		BrickShell.sail(kit, f, size, 0.2 + 0.5 * k)
 		avoid.append(Vector3(f.origin.x, f.origin.z, size.length() * 0.5 + GRASS_MARGIN))
 		mark.call("sail", "sail_%d" % k, from)
+	# Under each sail two benches face each other (Wadoo spec §5: rest in the shade).
+	var benches: Array = layout.get("benches", [])
+	for k in benches.size():
+		var from := kit.vertex_count(InteriorKit.Batch.SOLID)
+		var b: Dictionary = benches[k]
+		var at: Array = b["at"]
+		var length := float(b.get("length", 2.4))
+		var f := Transform3D(Basis(Vector3.UP, -deg_to_rad(float(b.get("yaw", 0.0)))),
+			on_ground(place, terrain, float(at[0]), float(at[1])))
+		BrickShell.bench(kit, f, length, fposmod(0.3 + 0.37 * k, 1.0))
+		add.call(BrickShell.bench_shapes(f, length))
+		mark.call("bench", "bench_%d" % k, from)
+	# The memorial to those the beast killed (Wadoo spec §4).
+	if layout.has("memorial"):
+		var from := kit.vertex_count(InteriorKit.Batch.SOLID)
+		var m: Dictionary = layout["memorial"]
+		var at: Array = m["at"]
+		var radius := float(m.get("radius", 2.4))
+		var stones := int(m.get("stones", 6))
+		var f := Transform3D(Basis.IDENTITY, on_ground(place, terrain, float(at[0]), float(at[1])))
+		OasisLooks.memorial(kit, f, radius, stones, 0.61)
+		add.call(OasisLooks.memorial_shapes(f, radius, stones))
+		avoid.append(Vector3(f.origin.x, f.origin.z, radius + 0.8))
+		mark.call("memorial", "memorial", from)
 
 ## The ground under a wall's line `run` ([east, north] m), in the place's
 ## frame, about every WALL_STEP: where its foot goes.

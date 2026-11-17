@@ -416,6 +416,18 @@ func test_every_piece_sits_on_the_ground():
 			else _lowest_under_rect(s["at"], Vector2(float(s["size"][0]), float(s["size"][2])), float(s.get("yaw", 0)))
 		assert_almost_eq(under, level, 0.02, "%s: the ground under all of it is level" % id)
 		checked += 1
+	for b: Dictionary in layout.get("benches", []):
+		var id := "bench_%d" % layout["benches"].find(b)
+		var lowest := float(by_id.get(id, {}).get("lowest", INF))
+		assert_lt(lowest, _ground_y(float(b["at"][0]), float(b["at"][1])) - 0.05, "%s's feet are in the ground" % id)
+		assert_gt(lowest, _ground_y(float(b["at"][0]), float(b["at"][1])) - 0.4, "%s is not buried" % id)
+		checked += 1
+	if layout.has("memorial"):
+		var m: Array = layout["memorial"]["at"]
+		var lowest := float(by_id.get("memorial", {}).get("lowest", INF))
+		assert_lt(lowest, _ground_y(float(m[0]), float(m[1])), "the memorial's stones stand in the ground")
+		assert_gt(lowest, _ground_y(float(m[0]), float(m[1])) - 0.6, "not sunk")
+		checked += 1
 	var runs: Array = _ring()["runs"]
 	for k in runs.size():
 		var id := "wall_%d" % k
@@ -438,7 +450,8 @@ func test_every_piece_sits_on_the_ground():
 		var under := _lowest_under_rect(g["at"], Vector2(float(g["size"][0]), float(g["size"][1])), 0.0)
 		assert_almost_eq(under, level, 0.02, "%s: the ground under it is level" % id)
 		checked += 1
-	assert_eq(checked, 17 + yards.size(), "twelve shells, two runs, three gardens and the yards")
+	assert_eq(checked, 17 + yards.size() + layout.get("benches", []).size() + 1,
+		"twelve shells, two runs, three gardens, the yards, the benches and the memorial")
 	assert_gt(yards.size(), 4, "yard walls between the compounds' buildings")
 
 func _ray(from: Vector3, to: Vector3, exclude: Array[RID] = []) -> Dictionary:
@@ -898,6 +911,8 @@ func test_the_village_is_whole():
 	assert_eq(count.get("pier", 0), 2, "the gate's two piers")
 	assert_eq(count.get("rubble", 0), 2, "rubble in and out of the breach")
 	assert_between(int(count.get("sail", 0)), 2, 3, "two or three shade sails")
+	assert_eq(count.get("bench", 0), 2 * int(count.get("sail", 0)), "two benches under each sail")
+	assert_eq(count.get("memorial", 0), 1, "the memorial")
 	assert_not_null(_oasis().get_node_or_null("Tracks_out"), "the tracks out")
 	assert_not_null(_oasis().get_node_or_null("Tracks_in"), "the tracks in")
 	assert_null(_oasis().get_node_or_null("Outcrop"), "no outcrop: the ledge is ground")

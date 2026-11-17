@@ -409,6 +409,80 @@ static func garden(kit: InteriorKit, f: Transform3D, size: Vector2, dried: bool,
 			kit.bevel_box(InteriorKit.Batch.SOLID, f * InteriorKit.at(at), Vector3(0.3, h, 0.3), 0.06,
 				InteriorKit.solid(SpacePalette.shade(crop, int(n * 2.99))))
 
+# --- the memorial ---------------------------------------------------------------
+
+## The memorial (Wadoo spec §4): its stones stand round a ring, stone k at
+## MEMORIAL_TURN + TAU k / stones from east toward north, where WadooSite puts a
+## mourner's kneeling spot; each is MEMORIAL_STONE (wide, tall, thick, its height
+## give or take a fifth) and leans back a little; a lamp stands LAMP_OUT outside it
+## and LAMP_ASIDE to its side, so a mourner kneels before the stone beside it.
+const MEMORIAL_TURN := 0.3
+const MEMORIAL_STONE := Vector3(0.62, 1.5, 0.3)
+const MEMORIAL_SINK := 0.2
+const CAIRN_ROCKS := 7
+const LAMP_OUT := 0.45
+const LAMP_ASIDE := 0.42
+const LAMP_HEIGHT := 0.42
+const LAMP_GLASS := 0.15
+
+## The way from the memorial's middle to stone `k` of `stones`, in the place's
+## frame (x east, z -north).
+static func memorial_dir(k: int, stones: int) -> Vector3:
+	var a := MEMORIAL_TURN + TAU * k / stones
+	return Vector3(cos(a), 0.0, -sin(a))
+
+## The memorial at `f` (its middle on the ground): `stones` standing stones on a
+## ring of `radius`, a low cairn in the middle, a sunglass lamp before each stone.
+static func memorial(kit: InteriorKit, f: Transform3D, radius: float, stones: int, variety: float) -> void:
+	var bronze := InteriorKit.solid(OasisPalette.BRONZE)
+	var glass := InteriorKit.lit(OasisPalette.SUNGLASS, InteriorMaterials.GLOW_ENERGY)
+	for i in CAIRN_ROCKS:
+		var n := _noise(variety, i, 31.0)
+		var top := i >= CAIRN_ROCKS - 2
+		var a := TAU * i / (CAIRN_ROCKS - 2) + n
+		var at := Vector3(0.0, 0.5, 0.0) if i == CAIRN_ROCKS - 1 else (
+			Vector3(cos(a) * 0.18, 0.32, -sin(a) * 0.18) if top else Vector3(cos(a) * 0.42, 0.1, -sin(a) * 0.42))
+		var size := Vector3(0.42, 0.3, 0.38) * (0.8 + 0.4 * n)
+		kit.bevel_box(InteriorKit.Batch.SOLID, f * Transform3D(Basis(Vector3.UP, n * TAU), at), size, 0.08,
+			InteriorKit.solid(SpacePalette.shade(OasisPalette.MEMORIAL_STONE, int(n * 2.99))))
+	for k in stones:
+		var d := memorial_dir(k, stones)
+		var n := _noise(variety, k, 41.0)
+		var size := Vector3(MEMORIAL_STONE.x, MEMORIAL_STONE.y * (0.8 + 0.4 * n), MEMORIAL_STONE.z)
+		var face := Basis.looking_at(-d, Vector3.UP)
+		var lean := Basis(face.x, -0.05 - 0.07 * n)
+		var at := d * radius
+		kit.bevel_box(InteriorKit.Batch.SOLID,
+			f * Transform3D(lean * face, at + Vector3(0.0, size.y * 0.5 - MEMORIAL_SINK, 0.0)), size, 0.08,
+			InteriorKit.solid(SpacePalette.shade(OasisPalette.MEMORIAL_STONE, int(n * 2.99))))
+		var foot := at + d * LAMP_OUT + face.x * LAMP_ASIDE
+		kit.tube_between(InteriorKit.Batch.SOLID, f * (foot - Vector3(0.0, 0.1, 0.0)),
+			f * (foot + Vector3(0.0, LAMP_HEIGHT, 0.0)), 0.025, bronze)
+		kit.bevel_box(InteriorKit.Batch.SOLID, f * InteriorKit.at(foot + Vector3(0.0, LAMP_HEIGHT, 0.0)),
+			Vector3(0.14, 0.05, 0.14), 0.015, bronze)
+		kit.bevel_box(InteriorKit.Batch.GLOW, f * Transform3D(Basis(Vector3(1, 0, 1).normalized(), PI * 0.25),
+			foot + Vector3(0.0, LAMP_HEIGHT + LAMP_GLASS * 0.6, 0.0)), Vector3.ONE * LAMP_GLASS, 0.03, glass)
+
+## The memorial's colliders: each stone, and the cairn.
+static func memorial_shapes(f: Transform3D, radius: float, stones: int) -> Array[CollisionShape3D]:
+	var out: Array[CollisionShape3D] = []
+	for k in stones:
+		var d := memorial_dir(k, stones)
+		var c := CollisionShape3D.new()
+		var box := BoxShape3D.new()
+		box.size = MEMORIAL_STONE
+		c.shape = box
+		c.transform = f * Transform3D(Basis.looking_at(-d, Vector3.UP), d * radius + Vector3(0.0, MEMORIAL_STONE.y * 0.5 - MEMORIAL_SINK, 0.0))
+		out.append(c)
+	var cairn := CollisionShape3D.new()
+	var cyl := CylinderShape3D.new()
+	cyl.radius = 0.6
+	cyl.height = 0.7
+	cairn.shape = cyl
+	cairn.transform = f * InteriorKit.at(Vector3(0.0, 0.25, 0.0))
+	out.append(cairn)
+	return out
+
 ## A hand pump at `f`: a squat base, a column with a cap, a spout and a handle.
 static func pump(kit: InteriorKit, f: Transform3D) -> void:
 	var body := InteriorKit.solid(OasisPalette.PUMP)

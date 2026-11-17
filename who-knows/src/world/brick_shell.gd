@@ -100,6 +100,11 @@ const POLE := 0.07
 ## length from the layout, this deep and its seat this high, m. Sitters face its +z.
 const BENCH_DEPTH := 0.45
 const BENCH_SEAT := 0.45
+const BENCH_PLANK := 0.07
+## The bench's stone feet: this wide, this far in from its ends, sunk this far.
+const BENCH_FOOT := 0.34
+const BENCH_FOOT_IN := 0.3
+const BENCH_SINK := 0.1
 ## What a building stands on (Rework 2): a course of stone FOUNDATION high over
 ## the ground and FOUNDATION_PROUD proud of the walls, the floor slab on it at
 ## its top (FLOOR_THICK of it shows above the ground inside a crushed hut).
@@ -720,6 +725,25 @@ static func sail(kit: InteriorKit, f: Transform3D, size: Vector2, variety: float
 					n = -n
 				kit.tri(InteriorKit.Batch.SOLID, p0, p1, p2, n, colour)
 				kit.tri(InteriorKit.Batch.SOLID, p0, p1, p2, -n, colour)
+
+## A bench at `f` (its middle on the ground, sitters facing its +z): a wooden
+## plank BENCH_SEAT high on two blocks of the foundation's stone, `length` long.
+static func bench(kit: InteriorKit, f: Transform3D, length: float, variety: float) -> void:
+	var stone := InteriorKit.solid(SpacePalette.shade(OasisPalette.FOUNDATION, int(clampf(variety, 0.0, 1.0) * 2.99)))
+	var foot := BENCH_SEAT - BENCH_PLANK + BENCH_SINK
+	for side: float in [-1.0, 1.0]:
+		kit.bevel_box(InteriorKit.Batch.SOLID,
+			f * InteriorKit.at(Vector3(side * (length * 0.5 - BENCH_FOOT_IN), foot * 0.5 - BENCH_SINK, 0.0)),
+			Vector3(BENCH_FOOT, foot, BENCH_DEPTH * 0.85), 0.04, stone)
+	kit.bevel_box(InteriorKit.Batch.SOLID, f * InteriorKit.at(Vector3(0.0, BENCH_SEAT - BENCH_PLANK * 0.5, 0.0)),
+		Vector3(length, BENCH_PLANK, BENCH_DEPTH), 0.02, InteriorKit.solid(OasisPalette.WOOD))
+
+## The bench's collider: one box, from its feet to its seat.
+static func bench_shapes(f: Transform3D, length: float) -> Array[CollisionShape3D]:
+	var out: Array[CollisionShape3D] = []
+	out.append(_shape(f * InteriorKit.at(Vector3(0.0, (BENCH_SEAT - BENCH_SINK) * 0.5, 0.0)),
+		Vector3(length, BENCH_SEAT + BENCH_SINK, BENCH_DEPTH)))
+	return out
 
 # --- the gate's piers ----------------------------------------------------------
 
