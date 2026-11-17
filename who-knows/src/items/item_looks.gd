@@ -18,12 +18,14 @@ const LOOKS: Array[StringName] = [&"plasma_pistol", &"mug", &"canister", &"crate
 	&"toolbox", &"spare_helmet", &"power_cell", &"o2_tank", &"spanner", &"spare_module", &"medkit",
 	&"ration_tin", &"rock_sample", &"hand_lamp", &"flare", &"datapad",
 	&"rock_chunk", &"ice_chunk", &"scrap_plate", &"wire_coil", &"broken_module", &"quantum_shard",
-	&"limpet_husk", &"crystal_grit", &"repair_torch", &"package_hub", &"package_drill", &"package_store", &"hose_nozzle"]
+	&"limpet_husk", &"crystal_grit", &"repair_torch", &"package_hub", &"package_drill", &"package_store", &"hose_nozzle",
+	&"sun_cell", &"armlet", &"sun_lily"]
 ## Salvage (quantum energy spec §10.5): the looks that glint outside.
 ## The Limpet's husk glints too (rock creatures spec §6.4): it is salvage. So
 ## does the Delver's crystal grit (§5.4).
+## Lio's armlet glints where it fell outside the breach (Wadoo spec §7).
 const GLINTS: Array[StringName] = [&"rock_chunk", &"ice_chunk", &"scrap_plate", &"wire_coil",
-	&"broken_module", &"quantum_shard", &"limpet_husk", &"crystal_grit"]
+	&"broken_module", &"quantum_shard", &"limpet_husk", &"crystal_grit", &"armlet"]
 
 ## Head room a module package leaves above its case for the carrying handle.
 const PACKAGE_HANDLE_ROOM := 0.08
@@ -110,6 +112,12 @@ static func build(kit: InteriorKit, look: StringName, size: Vector3, variety: fl
 			limpet_husk(kit, size)
 		&"crystal_grit":
 			crystal_grit(kit, size)
+		&"sun_cell":
+			sun_cell(kit, size)
+		&"armlet":
+			armlet(kit, size)
+		&"sun_lily":
+			sun_lily(kit, size)
 		&"package_hub":
 			package(kit, size, InteriorPalette.MODULE_COLOURS[&"hub"])
 		&"package_drill":
@@ -604,6 +612,44 @@ static func _torus(kit: InteriorKit, k: Transform3D, ring: float, tube: float, s
 			var mid: float = (b[0] + b[1]) * 0.5
 			var n := (k.basis * (mid_out * cos(mid) + Vector3.UP * sin(mid))).normalized()
 			kit.quad(SOLID, p[0], p[1], p[2], p[3], n, colour)
+
+# --- the Wadees' things (Wadoo spec §7): their own colours, WadeePalette --------
+
+## A sun cell for Halla's pump: a column of glowing sunglass in a bronze cage, two
+## caps, four bars and a loop on top to lift it by. Designed at 0.2 x 0.28 x 0.2.
+static func sun_cell(kit: InteriorKit, size: Vector3) -> void:
+	var k := _scale(size, Vector3(0.2, 0.28, 0.2))
+	var bronze := _c(WadeePalette.BRONZE)
+	kit.tube_x(GLOW, k * Transform3D(_ALONG_Y, Vector3(0, -0.01, 0)), 0.068, 0.19, _lit(WadeePalette.SUNGLASS, 1.6))
+	for y in [-0.11, 0.09]:
+		kit.tube_x(SOLID, k * Transform3D(_ALONG_Y, Vector3(0, y, 0)), 0.09, 0.03, bronze)
+	for i in 4:
+		var d := Vector3(cos(TAU * (i + 0.5) / 4.0), 0, sin(TAU * (i + 0.5) / 4.0)) * 0.08
+		kit.tube_between(SOLID, k * (d + Vector3(0, -0.1, 0)), k * (d + Vector3(0, 0.1, 0)), 0.009, bronze)
+	_torus(kit, k * Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0, 0.11, 0)), 0.022, 0.006, 10, 4, bronze)
+
+## Lio's armlet: a bronze band with a water stone (turquoise) set on its outside.
+## Designed at 0.1 x 0.04 x 0.1.
+static func armlet(kit: InteriorKit, size: Vector3) -> void:
+	var k := _scale(size, Vector3(0.1, 0.04, 0.1))
+	_torus(kit, k, 0.036, 0.01, 14, 4, _c(WadeePalette.BRONZE))
+	kit.bevel_box(SOLID, k * _at(Vector3(0.042, 0, 0)), Vector3(0.014, 0.024, 0.024), 0.005, _c(WadeePalette.TURQUOISE))
+
+## A sun-lily: a green stem with two leaves and six pale petals round a glowing
+## heart. Designed at 0.14 x 0.32 x 0.14.
+static func sun_lily(kit: InteriorKit, size: Vector3) -> void:
+	var k := _scale(size, Vector3(0.14, 0.32, 0.14))
+	var green := _c(OasisPalette.CROP_GREEN)
+	kit.tube_between(SOLID, k * Vector3(0, -0.16, 0), k * Vector3(0, 0.07, 0), 0.008, green)
+	for side in [-1.0, 1.0]:
+		var leaf := Basis(Vector3.BACK, side * 0.6)
+		kit.bevel_box(SOLID, k * Transform3D(leaf, Vector3(side * 0.03, -0.08, 0)), Vector3(0.016, 0.1, 0.006), 0.003, green)
+	for i in 6:
+		var turn := TAU * i / 6.0
+		var b := Basis(Vector3.UP, turn) * Basis(Vector3.BACK, -0.75)
+		var at := Vector3(cos(-turn), 0, sin(-turn)) * 0.03 + Vector3(0, 0.1, 0)
+		kit.bevel_box(SOLID, k * Transform3D(b, at), Vector3(0.016, 0.07, 0.03), 0.006, _c(WadeePalette.LILY))
+	kit.bevel_box(GLOW, k * _at(Vector3(0, 0.08, 0)), Vector3(0.026, 0.03, 0.026), 0.008, _lit(WadeePalette.SUNGLASS, 1.4))
 
 ## A salvage item's glint (spec §10.4), a child of its look: a warm diamond
 ## flashing for GLINT_FLASH every 2-4 s, as if the item caught the sun. An

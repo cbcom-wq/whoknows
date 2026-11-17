@@ -18,6 +18,9 @@ var avatar: Node3D
 ## on_talk): handed to the site.
 var state: WadooState
 var on_talk: Callable
+## You, and taking a gift from your hands (WadooSite.you, on_give).
+var you: Callable
+var on_give: Callable
 var site: WadooSite
 var _records: Array[NpcRecord] = []
 
@@ -40,6 +43,8 @@ func records(director: NpcDirector) -> Array:
 	site.avatar = avatar
 	site.state = state
 	site.on_talk = on_talk
+	site.you = you
+	site.on_give = on_give
 	if _records.is_empty():
 		_records = WadooCast.records(site.layout)
 	for r in _records:

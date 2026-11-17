@@ -59,9 +59,22 @@ var director: NpcDirector
 var avatar: Node3D
 ## What the village knows of you (saved by the flight scene), and who shows what
 ## is said: the scene's Callable (npc, person, said) -> void. Without both, no one
-## talks (as in tests of walking).
-var state: WadooState
+## talks (as in tests of walking). Once the sun pump is fitted Halla's dry
+## garden is a garden again: its spots are remade as the state changes.
+var state: WadooState:
+	set(value):
+		if state != null and state.changed.is_connected(_on_state_changed):
+			state.changed.disconnect(_on_state_changed)
+		state = value
+		if state != null:
+			state.changed.connect(_on_state_changed)
+		_make_spots()
 var on_talk: Callable
+## What you are to them now (§7): {holding: the kind of item in your hands or "",
+## hurt: whether you have lost health}, from the flight scene; unset, nothing.
+var you: Callable
+## Takes the item of a kind out of your hands when you give it (true if it did).
+var on_give: Callable
 ## Who is talking with you now (a record id), or &"".
 var talking: StringName = &""
 
@@ -77,6 +90,8 @@ var _near := {}    # Npc -> Vector2, this physics frame's
 ## The open shells' rooms (PlaceField's meta "rooms" on the place's node):
 ## [{id, room, frame, inv, half, door_x, door_half}]; null until asked.
 var _rooms: Variant = null
+## Whether the spots were made with the dry garden green (the pump fitted).
+var _green := false
 
 func _init(p_node: Node3D, p_layout: Dictionary, p_pool_radius: float, p_ground: Callable,
 		p_centre := Vector3(0.0, -1.0e9, 0.0), place_id := &"oasis") -> void:
@@ -227,9 +242,18 @@ func _town(npc: Npc) -> Array:
 
 # --- who they are -------------------------------------------------------------
 
+## Who `record` is (WadooCast.person), wearing what they were given once it is
+## given (`wears`: Lio's armlet).
 func person(record: NpcRecord) -> Dictionary:
 	var n := WadooCast.index_of(record.id)
-	return WadooCast.person(n) if n >= 0 else {}
+	if n < 0:
+		return {}
+	var p := WadooCast.person(n)
+	var takes: Array = p.get("takes", [])
+	if not takes.is_empty() and state != null and state.did(StringName(takes[1])):
+		p = p.duplicate()
+		p["wears"] = [StringName(takes[0])]
+	return p
 
 func group_seed(record: NpcRecord) -> int:
 	return record.seed
@@ -395,14 +419,19 @@ func door_of(home: String) -> Dictionary:
 	var d: Dictionary = list[0]
 	return {"at": ground(d["at"]), "door": ground(d["door"]), "out": d["out"]}
 
+func _on_state_changed() -> void:
+	if _green != (state != null and state.did(&"pump")):
+		_make_spots()
+
 func _make_spots() -> void:
 	_spots.clear()
+	_green = state != null and state.did(&"pump")
 	var pool_at := WadooPaths._v2(layout.get("pool", {}).get("at", [0, 0]))
 	for g: Dictionary in layout.get("gardens", []):
 		var c := WadooPaths._v2(g["at"])
 		var size: Array = g.get("size", [4.0, 3.0])
 		var half := Vector2(float(size[0]), float(size[1])) * 0.5
-		var dried := bool(g.get("dried", false))
+		var dried := bool(g.get("dried", false)) and not _green
 		var kind := &"dry" if dried else &"garden"
 		var sides := [Vector2(half.x + GARDEN_OUT, 0.0), Vector2(-half.x - GARDEN_OUT, 0.0),
 			Vector2(0.0, half.y + GARDEN_OUT), Vector2(0.0, -half.y - GARDEN_OUT)]
@@ -574,13 +603,42 @@ func talk_name(npc: Npc) -> String:
 	var title := str(p.get("title", ""))
 	return title if title != "" else str(p.get("name", ""))
 
+## Give the armlet to Lio, Ask Wenna to heal you, or Talk to them.
+func talk_prompt(npc: Npc) -> String:
+	var name := talk_name(npc)
+	var gift := gift_of(npc)
+	if not gift.is_empty():
+		return "Give %s to %s" % [gift[2], name]
+	if bool(person(npc.record).get("heals", false)) and bool(you_now().get("hurt", false)):
+		return "Ask %s to heal you" % name
+	return "Talk to %s" % name
+
+## What `npc` would take from your hands now (WadooCast `takes`: [kind, task,
+## what it is called]), or [] if you hold nothing they want or the task is done.
+func gift_of(npc: Npc) -> Array:
+	var takes: Array = person(npc.record).get("takes", [])
+	if takes.is_empty() or state == null or state.did(StringName(takes[1])):
+		return []
+	return takes if str(you_now().get("holding", "")) == str(takes[0]) else []
+
+## You as `you` says now, or {}.
+func you_now() -> Dictionary:
+	return you.call() if you.is_valid() else {}
+
 ## You speak to `npc`: the line their state and yours call for (WadooLines), shown
-## by the scene; they stop and face you until end_talk.
+## by the scene; they stop and face you until end_talk. Holding what they want,
+## you give it first, and the task it was is done.
 func talk(npc: Npc, _actor: Node) -> void:
 	if not can_talk(npc):
 		return
 	var p := person(npc.record)
-	var said := WadooLines.shared().pick(p, state, npc.record.id)
+	var gift := gift_of(npc)
+	if not gift.is_empty() and on_give.is_valid() and bool(on_give.call(StringName(gift[0]))):
+		state.do_task(StringName(gift[1]))
+		# they put it on
+		if npc.look != null and npc.look.has_method(&"wear"):
+			npc.look.call(&"wear", StringName(gift[0]))
+	var said := WadooLines.shared().pick(p, state, npc.record.id, you_now())
 	if said.is_empty():
 		return
 	talking = npc.record.id

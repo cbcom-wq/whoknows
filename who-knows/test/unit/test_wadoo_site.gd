@@ -164,3 +164,33 @@ func test_up_is_away_from_the_middle():
 		func(e: float, n: float) -> Vector3: return Vector3(e, 0.0, -n), Vector3(0.0, -1000.0, 0.0))
 	assert_almost_eq(curved.up_at(Vector3(0, 0, 0)).dot(Vector3.UP), 1.0, 0.0001)
 	assert_gt(curved.up_at(Vector3(100, 0, 0)).x, 0.09, "tilted away 100 m east")
+
+## Wadoo spec §7: once the sun pump is fitted Halla's dry garden is a garden again
+## (its spots are garden spots, worked as the others are).
+func test_the_dry_garden_is_a_garden_once_the_pump_works():
+	var state := WadooState.new()
+	_site.state = state
+	assert_eq(_site.spots(&"dry").size(), 4, "Halla grieves at the dead garden")
+	var gardens := _site.spots(&"garden").size()
+	state.do_task(&"armlet")
+	assert_eq(_site.spots(&"dry").size(), 4, "only the pump greens it")
+	state.do_task(&"pump")
+	assert_eq(_site.spots(&"dry").size(), 0)
+	assert_eq(_site.spots(&"garden").size(), gardens + 4, "she tends it")
+	assert_false(_site.spot(&"garden", "garden_dry:0").is_empty())
+	_site.state = WadooState.from_dict(state.to_dict())
+	assert_eq(_site.spots(&"dry").size(), 0, "a loaded state too")
+
+## Wadoo spec §7: a gift given is worn (Lio's armlet), and she wakes wearing it.
+func test_lio_wears_her_armlet_once_given():
+	var state := WadooState.new()
+	_site.state = state
+	var n := -1
+	for i in WadooCast.count():
+		if WadooCast.PEOPLE[i]["name"] == "Lio":
+			n = i
+	var record := WadooCast.record(n, _layout)
+	assert_false(_site.person(record).has("wears"))
+	state.do_task(&"armlet")
+	assert_eq(_site.person(record)["wears"], [&"armlet"])
+	assert_false(WadooCast.person(n).has("wears"), "the cast itself is untouched")

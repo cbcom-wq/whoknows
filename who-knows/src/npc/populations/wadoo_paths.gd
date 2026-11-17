@@ -111,6 +111,10 @@ func _build(layout: Dictionary, pool_radius: float) -> void:
 		_solid_box(_v2(g["at"]), Vector2(float(size[0]), float(size[1])) * 0.5, 0.0, BED_CLEAR)
 	if layout.has("pump"):
 		_solid_disc(_v2(layout["pump"]["at"]), PUMP_CLEAR)
+	if layout.has("sun_pump"):
+		_solid_disc(_v2(layout["sun_pump"]["at"]), PUMP_CLEAR)
+	for made: Variant in layout.get("makes", {}).values():
+		_solid_disc(_v2((made as Dictionary)["at"]), ITEM_CLEAR)
 	for s: Dictionary in layout.get("sails", []):
 		var sz: Array = s.get("size", [4.5, 3.5])
 		var yaw := float(s.get("yaw", 0.0))

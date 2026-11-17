@@ -236,6 +236,13 @@ Do these in order. Each names the check that proves it.
   (`reference.md` § *People made in Blender*). Prove it in the real scene with a probe like
   `test/probes/wadee_render.gd`: eye-height shots, runs of frames for the motion, and the frame
   rate with the real number in view.
+- **A thing to do with people** (Wadoo stage 3: a gift, a part to fit, something to lay): the item
+  (`never_made` if only people make it); a place piece in group `interactable` that answers what you
+  hold (`Grasp.kind_in`) and emits a signal; the flight scene answers it (`_give_held` takes the item
+  from your hands, then the task is done) and draws the piece from the saved state at once on
+  `place_built`. A gift to a person is the cast's `takes` and the site's `talk_prompt`. What people
+  make again goes in the layout's `makes` and is laid by `PlaceField.lay` when none is about
+  (`_restock`); the place's own `items` are made once and never again.
 - **A new space:** a director and a bus beside it; bus `setup(space_root, universe_or_null)`. The
   bus lookup picks the deepest `space_root`, so an interior's bus beats the exterior's for
   anything aboard. Outside, every NPC joins `Universe.EXTERIOR_SPACE` itself (`Npc.setup` does
@@ -315,6 +322,8 @@ Do these in order. Each names the check that proves it.
 | A wall cut into pieces across, not along | `BrickShell._pieces` cut a wall at every hole's sides and stacked the pieces under each hole: a window over a door made a "below the window" piece down across the doorway, so a brick pier stood in the queen's door | Each upright strip between cuts leaves every hole over it open (`test_a_window_over_a_door_leaves_the_doorway_open`); look into a doorway from both sides in the real scene |
 | A room lit like the street | Four lamps at 1.6 lit the hall's pale walls as bright as the desert outside; a `ReflectionProbe` for the sky's light barely changed it | Light a room with few, weak lamps (`WadooRooms.LAMP_ENERGY` 0.8) and look at it at eye height before and after |
 | Weather through walls | The desert's sand streaks are particles round you: they blew through the hall as if it were open ground | `BlowingSand.sheltered` (the flight scene's `_indoors`, from `WadooSite.room_at`) stops the sand while you are in a room; anything weather-like needs the same |
+| A probe that stands you beside a walking NPC | `wadoo_play.gd` put you 1.8 m from Lio as she walked to work; nothing told her to stop, she was 3 m off before the Interactor looked, the armlet stayed in your hands, and full hands then found neither the lily nor the memorial | Walk up as a player does (`wadoo_play.gd` `_walk_up`: steps at 1.7 m/s toward where they are now), so `give_way` and `greet` stop them; read a later failure as maybe caused by an earlier one |
+| Running a list of tests with `-gtest=a,b` | The `.gutconfig.json` dirs still ran: the whole suite, 48 minutes | One `-gselect=<file>.gd` per run |
 | Blender's default scene in a render script | `--factory-startup` keeps the default 2 m cube, which hid the figure in every frame | Remove or hide `Cube` (and the library's `Icosphere`) before rendering |
 
 ## Not built yet (plan for it; don't assume it works)

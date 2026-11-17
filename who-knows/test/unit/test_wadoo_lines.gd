@@ -95,7 +95,7 @@ func test_a_name_beats_a_trait_beats_a_role() -> void:
 	# Lio's own line: her mother's armlet; once found, her thanks
 	assert_string_contains(_say("Lio", s)["pages"][0], "armlet")
 	s.do_task(&"armlet")
-	assert_string_contains(_say("Lio", s)["pages"][0], "wear it")
+	assert_string_contains(" ".join(_say("Lio", s)["pages"]), "wear it")
 
 func test_a_speaker_goes_through_equal_lines_in_turn() -> void:
 	var s := WadooState.new()

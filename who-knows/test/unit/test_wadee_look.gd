@@ -99,3 +99,27 @@ func test_sits_down_once_and_stays_seated():
 	look.act(&"rise")
 	look._process(0.05)
 	assert_eq(look.clip, &"Sitting_Exit")
+
+## Wadoo spec §7: Lio wears her armlet once given: on the left forearm near the
+## wrist, put on at once (wear) and again whenever she wakes (`wears`).
+func test_wears_the_armlet_on_the_left_forearm():
+	var look := _make({"model": "a", "seed": 3, "role": &"villager"})
+	var skel := look.skeleton()
+	assert_eq(skel.find_children("Armlet", "BoneAttachment3D", false, false).size(), 0, "not until given")
+	look.wear(&"armlet")
+	look.wear(&"armlet")
+	var on := skel.find_children("Armlet", "BoneAttachment3D", false, false)
+	assert_eq(on.size(), 1, "once")
+	assert_eq((on[0] as BoneAttachment3D).bone_name, "LeftLowerArm")
+	var ring := on[0].get_node("Ring") as Node3D
+	var lower := skel.get_bone_global_rest(skel.find_bone("LeftLowerArm"))
+	var wrist := skel.get_bone_global_rest(skel.find_bone("LeftHand")).origin
+	var p := lower * ring.position
+	assert_lt(p.distance_to(wrist), p.distance_to(lower.origin) * 0.5, "near the wrist")
+	assert_gt(ring.find_children("*", "MeshInstance3D", true, false).size(), 0, "drawn")
+	var n := skel.get_child_count()
+	look.wear(&"crown")
+	assert_eq(skel.get_child_count(), n, "anything else is not drawn")
+	var again := _make({"model": "a", "seed": 3, "role": &"villager", "wears": [&"armlet"]})
+	assert_eq(again.skeleton().find_children("Armlet", "BoneAttachment3D", false, false).size(), 1,
+		"worn when she wakes")

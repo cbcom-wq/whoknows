@@ -26,6 +26,9 @@ var tasks := {}
 var met_queen := false
 var hunt: StringName = HUNT_NONE
 var hostile := false
+## Daro has made a sun cell for Halla's pump (§7); he sets one out by his door
+## whenever none is about (the flight scene's make_cell).
+var cell_made := false
 ## How many times each speaker (a record id) has spoken to you.
 var heard := {}
 
@@ -78,6 +81,12 @@ func answer_hunt(answer: StringName) -> void:
 	hunt = answer
 	changed.emit()
 
+## Daro made the sun cell (§7).
+func make_cell() -> void:
+	if not cell_made:
+		cell_made = true
+		changed.emit()
+
 ## One counted wound (§9): the village is hostile for good.
 func turn_hostile() -> void:
 	if not hostile:
@@ -85,7 +94,8 @@ func turn_hostile() -> void:
 		changed.emit()
 
 ## Does what a line's `then` names, if it is the village's own: "meet_queen",
-## "hunt_accepted", "hunt_later". False for anything else (the scene's to do).
+## "hunt_accepted", "hunt_later", "make_cell". False for anything else (the
+## scene's to do).
 func apply(then: String) -> bool:
 	match then:
 		"meet_queen":
@@ -94,6 +104,8 @@ func apply(then: String) -> bool:
 			answer_hunt(HUNT_ACCEPTED)
 		"hunt_later":
 			answer_hunt(HUNT_LATER)
+		"make_cell":
+			make_cell()
 		_:
 			return false
 	return true
@@ -107,7 +119,8 @@ func heard_from(speaker: StringName) -> int:
 ## The facts lines are chosen by (WadooLines), as plain values.
 func facts() -> Dictionary:
 	var f := {"regard": regard, "met_queen": met_queen, "hunt": String(hunt), "hostile": hostile,
-		"door": door_open(), "tasks_done": tasks_done(), "lilies": int(tasks.get(&"lilies", 0))}
+		"door": door_open(), "tasks_done": tasks_done(), "lilies": int(tasks.get(&"lilies", 0)),
+		"cell_made": cell_made}
 	for t in TASKS:
 		f["task:%s" % t] = did(t)
 	return f
@@ -120,7 +133,7 @@ func to_dict() -> Dictionary:
 	for k: StringName in heard:
 		h[String(k)] = heard[k]
 	return {"regard": regard, "tasks": t, "met_queen": met_queen, "hunt": String(hunt), "hostile": hostile,
-		"heard": h}
+		"cell_made": cell_made, "heard": h}
 
 static func from_dict(d: Dictionary) -> WadooState:
 	var s := WadooState.new()
@@ -133,6 +146,7 @@ static func from_dict(d: Dictionary) -> WadooState:
 	var h := StringName(str(d.get("hunt", "")))
 	s.hunt = h if h in [HUNT_NONE, HUNT_LATER, HUNT_ACCEPTED] else HUNT_NONE
 	s.hostile = bool(d.get("hostile", false))
+	s.cell_made = bool(d.get("cell_made", false))
 	var heard_d: Dictionary = d.get("heard", {})
 	for k: String in heard_d:
 		s.heard[StringName(k)] = int(heard_d[k])

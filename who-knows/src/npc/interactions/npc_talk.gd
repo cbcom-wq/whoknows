@@ -12,7 +12,7 @@ static func can(npc: Npc, _actor: Node) -> bool:
 	return not npc.down and npc.site.can_talk(npc)
 
 static func prompt(npc: Npc) -> String:
-	return "Talk to %s" % npc.site.talk_name(npc)
+	return npc.site.talk_prompt(npc)
 
 static func run(npc: Npc, actor: Node) -> void:
 	npc.site.talk(npc, actor)

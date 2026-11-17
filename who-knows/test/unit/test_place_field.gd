@@ -931,6 +931,34 @@ func test_the_village_is_whole():
 	var canister: Vector2 = items.get("canister_path", Vector2.INF)
 	assert_lt(canister.length(), gate_mid.length(), "the canister is inside the gate")
 	assert_lt(canister.distance_to(gate_mid), 10.0, "near it")
+	# Wadoo spec §7: Halla's sun pump by her dry garden, the memorial's lilies,
+	# and Lio's armlet outside the breach, among the rubble.
+	var pump := _oasis().get_node_or_null(SunPump.NAME) as SunPump
+	assert_not_null(pump, "the sun pump")
+	var dry := Vector2.INF
+	for g: Dictionary in _place.layout()["gardens"]:
+		if g["id"] == "garden_dry":
+			dry = _at_of(g)
+	var pump_at := _at_of(_place.layout()["sun_pump"])
+	assert_lt(pump_at.distance_to(dry), 5.0, "beside the dry garden")
+	assert_almost_eq(pump.position.y, _ground_y(pump_at.x, pump_at.y), 0.01, "on the ground")
+	assert_not_null(_oasis().get_node_or_null(MemorialLilies.NAME), "the memorial's lilies")
+	var armlet: Vector2 = items.get("armlet_breach", Vector2.INF)
+	var breach := _opening("breach")
+	assert_gt(armlet.length(), breach.length() + 3.0, "the armlet lies outside the breach")
+	assert_lt(armlet.distance_to(breach), 12.0, "not far out")
+	var works := Vector2.INF
+	for s: Dictionary in _place.layout()["shells"]:
+		if s["id"] == "workshop":
+			works = _at_of(s)
+	var makes: Dictionary = _place.layout()["makes"]
+	assert_lt(_at_of(makes["sun_cell"]).distance_to(works), 5.0, "Daro sets a cell out by the Glassworks")
+	var bed: Dictionary = _place.layout()["gardens"][1]
+	assert_eq(bed["id"], "garden_1")
+	var off := _at_of(makes["sun_lily"]) - _at_of(bed)
+	var edge := Vector2(maxf(absf(off.x) - float(bed["size"][0]) * 0.5, 0.0),
+		maxf(absf(off.y) - float(bed["size"][1]) * 0.5, 0.0)).length()
+	assert_between(edge, 0.1, 1.0, "a sun-lily grows at the edge of garden_1")
 
 # --- Rework 2: floors, doors, the grass's edge, the ledge -------------------------
 

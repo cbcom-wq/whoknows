@@ -39,6 +39,11 @@ const LOD_EVERY := 0.5
 ## The staff across the back: where it hangs in the model's own space (facing +z).
 const STAFF_AT := Vector3(0.0, 1.02, -0.18)
 const STAFF_LEAN := 0.56
+## A worn armlet (Lio's, once given; Wadoo spec §7): on the left forearm, this
+## far from the elbow to the wrist, drawn this size (ItemLooks.armlet), a little
+## wider than the item so the wrist never shows through it.
+const ARMLET_ALONG := 0.8
+const ARMLET_SIZE := Vector3(0.11, 0.04, 0.11)
 
 static var _scenes := {}
 static var _surface: ImageTexture
@@ -52,6 +57,8 @@ var clip: StringName = &""
 var mesh: MeshInstance3D
 var player: AnimationPlayer
 var staff: Node3D
+## What they wear besides their clothes and staff: a gift given (`wears`).
+var worn: Array[StringName] = []
 ## The model's hips over the ground at rest, m (sets its pace).
 var hips := LIB_HIPS
 var _body: Node3D
@@ -66,14 +73,49 @@ func build(variety: float, fade: Vector2) -> void:
 	_fade = fade
 	model = MODELS[clampi(int(variety * MODELS.size()), 0, MODELS.size() - 1)]
 
-## Becomes `person` ({model, seed, role, staff}); a look not told stays its variety's model.
+## Becomes `person` ({model, seed, role, staff, wears}); a look not told stays
+## its variety's model.
 func set_person(person: Dictionary) -> void:
 	model = str(person.get("model", model))
 	seed = int(person.get("seed", seed))
 	role = StringName(person.get("role", role))
+	worn.clear()
+	for kind: Variant in person.get("wears", []):
+		worn.append(StringName(kind))
 	_load()
 	if bool(person.get("staff", false)):
 		_add_staff()
+	for kind in worn:
+		_add_worn(kind)
+
+## Puts `kind` on now (a gift just given): only the armlet is drawn.
+func wear(kind: StringName) -> void:
+	if worn.has(kind):
+		return
+	worn.append(kind)
+	_add_worn(kind)
+
+func _add_worn(kind: StringName) -> void:
+	var skel := skeleton()
+	if kind != &"armlet" or skel == null or skel.find_bone("LeftLowerArm") < 0 or skel.find_bone("LeftHand") < 0:
+		return
+	var lower := skel.get_bone_global_rest(skel.find_bone("LeftLowerArm"))
+	# the wrist in the forearm's own frame: the armlet's axis runs along the arm
+	var wrist := lower.affine_inverse() * skel.get_bone_global_rest(skel.find_bone("LeftHand")).origin
+	var at := BoneAttachment3D.new()
+	at.name = "Armlet"
+	at.bone_name = "LeftLowerArm"
+	skel.add_child(at)
+	var ring := Node3D.new()
+	ring.name = "Ring"
+	ring.transform = Transform3D(Basis(Quaternion(Vector3.UP, wrist.normalized())), wrist * ARMLET_ALONG)
+	at.add_child(ring)
+	var kit := OasisLooks.kit_under(ring)
+	ItemLooks.armlet(kit, ARMLET_SIZE)
+	for m in kit.commit():
+		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		if _fade.y > 0.0:
+			m.visibility_range_end = _fade.y
 
 func _ready() -> void:
 	if _body == null:

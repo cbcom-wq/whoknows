@@ -68,6 +68,9 @@ const ROOM := {
 ## warm practical lights).
 const LAMP := Color("ffc06a")
 
+## A sun-lily's petals (ItemLooks.sun_lily): pale gold, as the sun at its edge.
+const LILY := Color("f0dca0")
+
 ## Roughness and metal per slot (surface()).
 const ROUGH_SKIN := 0.55
 const ROUGH_CLOTH := 0.9

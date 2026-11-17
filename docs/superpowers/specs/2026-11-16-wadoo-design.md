@@ -404,3 +404,52 @@ Each stage is committed on branch `wadoo`, rendered at eye height and shown to t
   - her audience runs through the Interactor and the keys, and the hunt is accepted;
   - 4 of 4 Sunguard reach the breach in 61 s;
   - the feet of 24 Wadees are 0.001 m from the ground on average, 0.006 at worst.
+
+### Stage 3: things to do (2026-11-17, branch `wadoo`)
+
+- **Three new items** (`data/items/`): the sun cell (2.5 kg, carried in both hands: gold glass in a
+  bronze cage, with a loop to lift it), Lio's bronze armlet with its water stone, and the sun-lily.
+  Only the Wadees make them: each is `never_made`, worth its value if converted but never in the
+  machine's list (`QuantumValues.makeable`). The armlet glints like salvage, so you find it by the
+  flash.
+- **The pump.** Halla's dry garden now has its own pump beside it, a piece of its own (`SunPump`,
+  the layout's `sun_pump`): a round stone well head, a bronze frame with an empty cage, a rod over the
+  well, and a short stone channel to the bed. The old pump by the pool is the town's and stays as it
+  was.
+  - Talk to Daro and he sets a sun cell by the Glassworks door (the layout's `makes`). If it is lost
+    before the pump has it, he sets out another (`_restock`): you cannot get stuck.
+  - Holding it, **[F] Fit the sun cell**: the cell glows in the cage, the rod nods, water shows in the
+    channel, and over a minute the green rises over the dry crops. The green is drawn over the dry
+    rows, a little wider, rather than the bed being rebuilt.
+  - Once fitted, Halla's dry garden is a garden again: she and the others tend it (its spots turn
+    from `dry` to `garden`), and Halla's lines change. The pump does not thump: the town has no
+    sounds yet.
+- **The armlet** lies 10 m out past the breach, beyond the rubble, toward the beast's tracks (first
+  put among the rubble, where a block hid it and its glint). Holding it, **[F] Give the
+  armlet to Lio** (the cast's `takes`): she takes it, thanks you, and wears it on her left forearm
+  from then on, as she wakes too (`WadeeLook.wear`).
+- **The lilies.** A sun-lily grows at the edge of `garden_1` (the north garden), one at a time: 30 s
+  after none is about, another opens. Holding one, look at a stone or the cairn: **[F] Lay the lily**
+  (`MemorialLilies`). It lies before the next bare stone, between the stone and where a mourner
+  kneels, its head to the stone, up to six. The mourners' lines change.
+- **Wenna** heals. Hurt, **[F] Ask Wenna to heal you**: she says two pages and your health is full.
+- **Talking knows what you hold** and whether you are hurt (`WadooSite.you`): Halla sees Daro's cell in
+  your hands, Daro does not make a second while you carry one. The prompt says what F will do.
+- **The tasks** each raise regard by one; the first opens the queen's door. With all three done,
+  regard is 3.
+- **Talking to someone walking by** needs you to walk up to them: as you come, they give way and turn
+  to you (`give_way`), or stop to greet you (`greet`). The probe first stood you beside Lio at once;
+  nothing stopped her, she was 3 m off before you spoke, and the armlet stayed in your hands, so the
+  lily and the memorial (full hands) failed after it. It now walks up at 1.7 m/s.
+- **Proved:** `wadoo_play.gd -- <out> things` lands and plays stage 3 through the Interactor, as a
+  player (all checks passed in each of two runs, the numbers from both):
+  - Daro, walked up to (1.89 to 1.90 m), sets the cell by the Glassworks door; F picks it up; F at
+    the pump fits it, and the cell glows, the rod nods and the water runs;
+  - the armlet is found past the breach by its glint, picked up, and given to Lio (walked up to,
+    1.84 to 2.01 m), who wears it;
+  - a sun-lily is picked by the north garden and laid before the first stone;
+  - at half health, Wenna heals you to full;
+  - a minute after the fitting the dry garden is green, regard is 3 and the queen's door is open;
+  - the feet of 25 Wadees are 0.002 to 0.003 m from the ground on average, 0.019 at worst.
+- **Small, and found by its flash:** the armlet is 11 cm across, bronze on sand. From 6 m it is a
+  few pixels and the crosshair hides it if you look straight at it; its glint is what you see.

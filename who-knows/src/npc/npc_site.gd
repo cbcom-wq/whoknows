@@ -67,6 +67,11 @@ func can_talk(_npc: Npc) -> bool:
 func talk_name(_npc: Npc) -> String:
 	return ""
 
+## What [F] says over `npc`: "Talk to <name>" unless the site has something
+## else to offer (a gift to give, a wound to see to).
+func talk_prompt(npc: Npc) -> String:
+	return "Talk to %s" % talk_name(npc)
+
 ## You speak to `npc`: the site decides what is said and who shows it.
 func talk(_npc: Npc, _actor: Node) -> void:
 	pass

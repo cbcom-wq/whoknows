@@ -551,6 +551,49 @@ The first NPCs on a world. Everything is in the oasis place's frame (x east, z -
   jambs, at least 0.375 m either side of the middle), and the room's `col_` boxes solid again with
   `ROOM_SOLID_CLEAR` 0.25 m; `rooms` lists them. No sand blows while you stand in a room
   (`flight_test._indoors()` from `WadooSite.room_at`, set as `BlowingSand.sheltered`).
+- **Things to do** (stage 3, §7; `test_wadoo_things.gd`, `test_placed_items.gd`, `test_wadoo_talk.gd`,
+  `test_wadoo_site.gd`, `test_wadee_look.gd`):
+  - **Items** `sun_cell` (2.5 kg, carried in both hands), `armlet`, `sun_lily` (`data/items/`), each
+    `never_made` (`ItemDefinition.never_made`: worth its value if converted, never in
+    `QuantumValues.makeable`); drawn by `ItemLooks.sun_cell` / `armlet` / `sun_lily` in `WadeePalette`
+    colours (`LILY`); the armlet is in `GLINTS`. `Grasp.kind_in(actor)` is the kind in anything's
+    hands, or `&""`.
+  - **`SunPump`** (`src/world/sun_pump.gd`, `NAME` `"SunPump"`): built by `PlaceField._build_village`
+    from the layout's `sun_pump` `{at, garden, channel_to}`; a `StaticBody3D` on `BodyProxy.LAYER`
+    (a cylinder `RADIUS` 0.52, `HEIGHT` 1.8), interactable "Fit the sun cell" while broken and you
+    hold a cell; `fitted(actor)`; `set_working(on, at_once)` shows the cell in its cage, the water in
+    the channel and the green, nods the rod (`NOD` 0.2 rad, once every `NOD_EVERY` 1.6 s; broken it
+    hangs at `REST_TILT`), and grows the green (`OasisLooks.crops`, 0.03 m wider than the dry ones, on
+    the bed's top `OasisLooks.BED_TOP` 0.28) from `GROW_FROM` 0.05 of its height over `GROW_TIME` 60 s,
+    or whole `at_once`. It processes only while working. Its garden's variety is the village's
+    (`at.x * 0.173 + at.y * 0.291`), so the green rows stand over the dry ones.
+  - **`MemorialLilies`** (`src/world/memorial_lilies.gd`, `NAME`): an `Area3D` on layer 16 (exterior
+    props) over each stone (`MARGIN` 0.12 larger) and the cairn; "Lay the lily" while you hold one and a
+    stone is bare; `laid(actor)`; `set_count(n)` shows one lily before each of the first n stones,
+    `OUT` 0.4 m outside its stone, `ASIDE` -0.15 m (away from its lamp), its head toward the stone,
+    `LIE` 0.05 m up; `foot_of(middle, radius, k, stones)` for the ground under it.
+  - **`PlaceField.lay(place_id, item_id, kind, at, yaw)`** lays an item as the layout's are (frozen,
+    a child of the place, gone with it, taken once held); `lying(place_id, kind)` counts the untaken.
+    The layout's `makes` `{kind: {at, yaw}}` is where the cell and the lily are made; `WadooPaths`
+    keeps those and the sun pump solid.
+  - **The site:** `you` (Callable -> `{holding, hurt}`) and `on_give` (Callable(kind) -> bool), set by
+    `WadooSource` from the flight scene. `talk_prompt(npc)` ("Give the armlet to Lio", "Ask Wenna to
+    heal you", else "Talk to <name>"; `NpcSite.talk_prompt` is the default, `NpcTalk.prompt` asks it);
+    `gift_of(npc)` from the cast's `takes` `[kind, task, label]`; `heals`. Giving takes it from your
+    hands, does the task and calls `look.wear(kind)`. `person(record)` adds `wears` once a gift's task
+    is done. Setting `state` connects `changed`: the dry garden's spots are garden spots once the
+    pump is done. `WadooLines.pick(person, state, speaker, you)` merges your facts over the state's
+    (`cell_made`, `holding`, `hurt`); a fact missing is false.
+  - **`WadeeLook.wear(kind)`** / `worn`: the armlet on a `BoneAttachment3D` "Armlet" on `LeftLowerArm`,
+    `ARMLET_ALONG` 0.8 of the way to the wrist, `ARMLET_SIZE` (0.11, 0.04, 0.11); `set_person` puts on
+    `wears` after every `_load`.
+  - **The flight scene:** `_you_to_wadoo`, `_give_held(kind)` (consumes the held item), `_on_pump_fitted`,
+    `_on_lily_laid`, `_wadoo_effect` ("heal" heals you fully; "make_cell" is `WadooState.apply`'s),
+    `_sync_hall(at_once)` (the door, the pump working from `did(&"pump")`, the lilies' count, then
+    `_restock(0)`), `_restock(elapsed)` every `RESTOCK_EVERY` 2 s: a cell while `cell_made`, the pump
+    wants one and none is about; a lily `LILY_REGROW` 30 s after none is about (at once as the place is
+    built) while a stone is bare; nothing once hostile. `_out(kind)` counts held, lying and strays
+    within `TOWN_REACH` 150 m; `_make(kind)` names it `<kind>_<n>`, the first n not taken.
 
 ## Testing patterns
 

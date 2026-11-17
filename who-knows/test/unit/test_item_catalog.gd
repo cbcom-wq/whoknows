@@ -172,8 +172,9 @@ func test_the_salvage_set_stows_and_sits_in_the_hand_as_authored():
 ## The sixteen aboard, the six salvage kinds, the repair torch (health and
 ## damage spec §8.1), the three module packages (habitat modules spec §4.1)
 ## and the hose's nozzle (quantum energy spec §11.1).
-func test_the_catalogue_has_29_kinds():
-	assert_eq(_cat.ids().size(), 29)
+## 29, and the Wadees' three (Wadoo spec §7): the sun cell, the armlet, the sun-lily.
+func test_the_catalogue_has_32_kinds():
+	assert_eq(_cat.ids().size(), 32)
 
 func test_the_hose_nozzle():
 	var n := _cat.get_def(&"hose_nozzle")

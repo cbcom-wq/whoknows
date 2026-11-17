@@ -14,9 +14,16 @@ extends "res://test/probes/oasis_render.gd"
 ## think well of you (one task, set here) and the door swings open as Oru steps
 ## aside; the queen on her throne seen from the door, rising to receive you inside;
 ## her audience page by page, the hunt taken up with the 1 key; and the Sunguard
-## gathered at the breach. Run WITHOUT --headless, from who-knows:
+## gathered at the breach.
 ##
-##   godot --path . --resolution 1280x720 --script res://test/probes/wadoo_play.gd -- <abs out dir> [hall]
+## Stage 3 (§7), alone with "things" after the out dir: Halla's pump stands broken;
+## you talk to Daro and he sets a sun cell out by the Glassworks; you take it and
+## fit it, and the dry garden grows green; you find Lio's armlet past the breach
+## and give it to her, and she wears it; you pick a sun-lily by garden_1 and lay
+## it at the memorial; hurt, you ask Wenna to heal you. Each through the
+## Interactor, as a player would. Run WITHOUT --headless, from who-knows:
+##
+##   godot --path . --resolution 1280x720 --script res://test/probes/wadoo_play.gd -- <abs out dir> [hall|things]
 
 ## How long to wait for the town to wake, and to let it live before looking, s.
 const WAKE_WAIT := 60.0
@@ -105,6 +112,14 @@ func _run() -> void:
 		return
 	# Stand in the middle of town while it lives: they greet you and go about their day.
 	await _foot_look("wadoo_waking", [14.0, 13.0], [-6.0, 0.0], deg_to_rad(-3.0))
+	if "things" in OS.get_cmdline_user_args():
+		await _things()
+		_feet()
+		_census("at the end")
+		_let_go()
+		print("wadoo   %s" % ("ALL OK" if _fails == 0 else "%d FAILED" % _fails))
+		quit(0 if _fails == 0 else 1)
+		return
 	if "hall" in OS.get_cmdline_user_args():
 		await _hall()
 		_feet()
@@ -354,6 +369,207 @@ func _hall() -> void:
 	var stand := at0 + (WadooSite.flat(g0["face"]) - at0).normalized() * 7.0
 	await _site_look("wadoo_gather", stand, g0["at"] + Vector3(0.0, 1.0, 0.0))
 	_who_is_near("wadoo_gather", at0)
+
+## Stage 3 (§7): the things to do, played through.
+func _things() -> void:
+	var site := _wadoo.site
+	var state: WadooState = _scene.get("wadoo_state")
+	var node := site.node
+	var pump := node.find_child(SunPump.NAME, false, false) as SunPump
+	var lilies := node.find_child(MemorialLilies.NAME, false, false) as MemorialLilies
+	_check(pump != null and not pump.working, "Halla's pump stands broken by the dry garden")
+	_check(lilies != null and lilies.count == 0, "the memorial has no flowers")
+	if pump == null or lilies == null:
+		return
+	var pump_at := WadooSite.flat(pump.position)
+	var bed := pump_at + Vector2(1.9, -3.0)
+	await _site_look("wadoo_pump_broken", pump_at + Vector2(-2.6, 1.6), pump.position + Vector3(0.9, 0.6, 1.4))
+	# Daro sets a sun cell out by the Glassworks.
+	await _talk_to("Daro", "wadoo_talk_daro")
+	_check(state.cell_made, "Daro makes a sun cell")
+	var cell := _lying_item(node, &"sun_cell")
+	_check(cell != null, "it lies by the Glassworks")
+	if cell == null:
+		return
+	await _take(cell, "wadoo_cell_lying")
+	# Fit it to Halla's pump.
+	await _site_look("", pump_at + Vector2(-1.3, 0.9), pump.position + Vector3(0.0, OasisLooks.SUN_CAGE, 0.0))
+	await _frames(4)
+	var aimed: Node = _avatar.interactor.current()
+	print("things  at the pump the Interactor finds %s: '%s'" % [aimed.name if aimed != null else "nothing", pump.prompt_text()])
+	_check(aimed == pump, "facing the pump, F fits the cell")
+	await _press_action(&"interact")
+	await _frames(3)
+	_check(pump.working and state.did(&"pump") and Grasp.kind_in(_avatar) == &"", "fitted: the pump draws")
+	var fitted_at := Time.get_ticks_msec()
+	await _seconds(1.0)
+	await _site_look("wadoo_pump_working", pump_at + Vector2(-2.6, 1.6), pump.position + Vector3(0.9, 0.6, 1.4))
+	# Lio's armlet, past the breach, among the rubble.
+	var armlet := _lying_item(node, &"armlet")
+	_check(armlet != null, "Lio's armlet lies past the breach")
+	if armlet != null:
+		var at := WadooSite.flat(armlet.position)
+		# found by its glint: shot as it flashes, from 6 m and then from 2 m, the
+		# eye on the sand a little past it so the crosshair does not hide it
+		var back := (_v2([46.43, -11.15]) - at).normalized()
+		var past := armlet.position + Vector3(-back.x, 0.0, back.y)
+		var glints := armlet.find_children("Glint", "", true, false)
+		_check(not glints.is_empty(), "the armlet glints")
+		for shot: Array in [["wadoo_armlet", 6.0, 1.0], ["wadoo_armlet_close", 2.0, 0.5]]:
+			await _site_look("", at + back * float(shot[1]), armlet.position.lerp(past, float(shot[2])))
+			if not glints.is_empty():
+				await _until(func() -> bool: return (glints[0] as Node3D).visible, 5.0)
+			await _shot(shot[0])
+		await _take(armlet, "")
+		await _talk_to("Lio", "wadoo_give_armlet")
+		var lio := _person("Lio")
+		_check(state.did(&"armlet") and Grasp.kind_in(_avatar) == &"", "Lio takes her armlet")
+		_check(lio != null and (lio.look as WadeeLook).worn.has(&"armlet"), "and wears it")
+		if lio != null:
+			# from her left, where she wears it
+			var frame := site.frame()
+			var ahead := frame.basis.inverse() * -lio.global_basis.z
+			var left := Vector3.UP.cross(Vector3(ahead.x, 0.0, ahead.z).normalized())
+			await _site_look("wadoo_lio_armlet", WadooSite.flat(lio.local_position() + left * 1.4 + Vector3(ahead.x, 0.0, ahead.z).normalized() * 0.6),
+				lio.local_position() + Vector3(0.0, 1.0, 0.0))
+	# A sun-lily from the edge of garden_1, laid at the memorial.
+	var lily := _lying_item(node, &"sun_lily")
+	_check(lily != null, "a sun-lily grows by garden_1")
+	if lily != null:
+		await _take(lily, "wadoo_lily_growing")
+		var middle := WadooSite.flat(lilies.position)
+		var d := OasisLooks.memorial_dir(0, lilies.stones)
+		var stone := middle + Vector2(d.x, -d.z) * 2.4
+		await _site_look("", middle + Vector2(d.x, -d.z) * 4.2, site.ground(stone) + Vector3(0.0, 0.6, 0.0))
+		await _frames(4)
+		var at_m: Node = _avatar.interactor.current()
+		print("things  at the memorial the Interactor finds %s: '%s'" % [at_m.name if at_m != null else "nothing", lilies.prompt_text()])
+		_check(at_m == lilies, "facing a stone, F lays the lily")
+		await _press_action(&"interact")
+		await _frames(3)
+		_check(lilies.count == 1 and int(state.tasks[&"lilies"]) == 1, "the lily lies before the stone")
+		await _site_look("wadoo_lily_laid", middle + Vector2(d.x, -d.z) * 4.6 + Vector2(-d.z, -d.x) * 1.2,
+			site.ground(stone) + Vector3(0.0, 0.2, 0.0))
+	# Hurt, Wenna heals you.
+	_avatar.health.take(_avatar.health.max * 0.5)
+	await _talk_to("Wenna", "wadoo_wenna_heals")
+	print("things  health %.0f of %.0f after Wenna" % [_avatar.health.current, _avatar.health.max])
+	_check(_avatar.health.current == _avatar.health.max, "Wenna mends you")
+	# The garden, green.
+	var left := SunPump.GROW_TIME + 2.0 - (Time.get_ticks_msec() - fitted_at) / 1000.0
+	if left > 0.0:
+		await _seconds(left)
+	print("things  the garden %.0f%% grown; regard %d, the door %s" % [pump.grown * 100.0, state.regard,
+		"open" if state.door_open() else "shut"])
+	_check(pump.grown >= 1.0, "the dry garden is green")
+	_check(state.regard == 3 and state.door_open(), "all three done: the town thinks well of you")
+	await _site_look("wadoo_garden_green", bed + Vector2(-3.2, 3.6), site.ground(bed) + Vector3(0.0, 0.3, 0.0))
+	_who_is_near("wadoo_garden_green", bed)
+
+## The item of `kind` lying in the town (a child of its node), or null.
+func _lying_item(node: Node3D, kind: StringName) -> Item:
+	for c in node.get_children():
+		if c is Item and (c as Item).definition.id == kind:
+			return c
+	return null
+
+## The way from `npc` toward the pool, on the ground.
+func _toward_pool(npc: Npc) -> Vector2:
+	var at := WadooSite.flat(npc.local_position())
+	return (-at).normalized() if at.length() > 0.1 else Vector2.RIGHT
+
+## You stand 1.2 m from `item` and look at it; F takes it.
+func _take(item: Item, shot_name: String) -> void:
+	var at := WadooSite.flat(item.position)
+	var from := at + (-at).normalized() * 1.2
+	await _site_look(shot_name, from, item.position)
+	await _frames(4)
+	var aimed: Node = _avatar.interactor.current()
+	print("things  the Interactor finds %s: '%s'" % [aimed.name if aimed != null else "nothing", item.prompt_text()])
+	_check(aimed == item, "facing the %s, F takes it" % item.definition.display_name)
+	await _press_action(&"interact")
+	await _frames(3)
+	_check(_avatar.grasp.item == item, "you hold the %s" % item.definition.display_name)
+
+## You walk up to `who` as a player does, face them and press F; the panel's
+## pages are read and turned to the end.
+func _talk_to(who: String, shot_name: String) -> void:
+	var npc := _person(who)
+	_check(npc != null, "%s is awake" % who)
+	if npc == null:
+		return
+	var aimed: Node = null
+	for attempt in 3:
+		await _walk_up(npc)
+		await _frames(4)
+		aimed = _avatar.interactor.current()
+		if aimed == npc:
+			break
+		_ray_report("facing %s, try %d" % [who, attempt + 1], npc)
+	print("things  the Interactor finds %s: '%s'" % [aimed.name if aimed != null else "nothing", npc.prompt_text()])
+	_check(aimed == npc, "facing %s, F speaks to them" % who)
+	await _press_action(&"interact")
+	await _frames(3)
+	var dialog: DialogPanel = _scene.get("dialog")
+	_check(dialog.is_open(), "%s's panel opens" % who)
+	var page := 1
+	while dialog.is_open() and page < 10:
+		print("things  %s %d: %s" % [who, page, dialog.text_label.text])
+		if page == 1 and shot_name != "":
+			# they turn to you first (converse)
+			await _seconds(1.2)
+			await _shot(shot_name)
+		dialog.next()
+		await _frames(2)
+		page += 1
+	_check(not dialog.is_open(), "the panel shuts")
+	await _frames(3)
+
+## How far off you start walking up to someone, how near you stop, and your
+## pace: a step of WALK_STEP m every WALK_EVERY s (1.7 m/s).
+const WALK_FROM := 5.0
+const WALK_TO := 1.9
+const WALK_STEP := 0.25
+const WALK_EVERY := 0.15
+
+## You walk up to `npc` as a player would: from WALK_FROM m off, on open ground in
+## a clear line to them, step by step toward wherever they are now, looking at
+## them, until WALK_TO m off. A Wadee walking somewhere gives way and turns to you
+## as you come (give_way); one you have not met lately stops to greet you.
+func _walk_up(npc: Npc) -> void:
+	var site := _wadoo.site
+	var at := WadooSite.flat(npc.local_position())
+	var me := at + _toward_pool(npc) * WALK_FROM
+	for k in 16:
+		var from := at + _toward_pool(npc).rotated(TAU * k / 16.0) * WALK_FROM
+		if site.open(from) and site.paths.clear_line(from, at):
+			me = from
+			break
+	for step in 60:
+		var them := WadooSite.flat(npc.local_position())
+		var gap := me.distance_to(them)
+		if gap <= WALK_TO + 0.01:
+			break
+		me = me.move_toward(them, minf(WALK_STEP, gap - WALK_TO))
+		await _stand(me, npc.local_position() + Vector3(0.0, 1.2, 0.0))
+		await _seconds(WALK_EVERY)
+	print("things  walked up to %s: %.2f m off" % [WadooCast.person(WadooCast.index_of(npc.record.id))["name"],
+		me.distance_to(WadooSite.flat(npc.local_position()))])
+
+## You stand at [east, north] `stand` on the town's ground looking at the site-local
+## point `look`, at once (a step of a walk; _site_look settles and shoots).
+func _stand(stand: Vector2, look: Vector3) -> void:
+	var site := _wadoo.site
+	var frame := site.frame()
+	var pos := frame * (site.ground(stand) + Vector3(0.0, 0.05, 0.0))
+	var up := _up(pos)
+	var way := frame * look - pos
+	_avatar.place(Transform3D(_level(up, way), pos))
+	_moved()
+	await _frames(1)
+	_face(way)
+	var to := frame * look - (pos + up * 1.6)
+	_avatar.set_head_pitch(atan2(to.dot(up), (to - up * to.dot(up)).length()))
 
 ## Where the eye is and what the Interactor's ray meets first, beside `npc`.
 func _ray_report(what: String, npc: Npc) -> void:

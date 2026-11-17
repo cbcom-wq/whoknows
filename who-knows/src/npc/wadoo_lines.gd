@@ -41,8 +41,9 @@ static func from_file(path: String) -> WadooLines:
 ## What `person` (WadooCast.person) says now: {pages: Array[String], choice: {} or
 ## {ask, answers: [{say, then, reply}]}, then: String}, with {name} and {deeds}
 ## filled in; counts it as heard. {} if they have nothing to say.
-func pick(person: Dictionary, state: WadooState, speaker: StringName) -> Dictionary:
+func pick(person: Dictionary, state: WadooState, speaker: StringName, you := {}) -> Dictionary:
 	var facts := state.facts()
+	facts.merge(you, true)
 	var best: Array = []
 	var best_rank := -1
 	for line: Dictionary in lines:
@@ -95,7 +96,8 @@ static func holds(when: Dictionary, facts: Dictionary) -> bool:
 
 static func _same(have: Variant, want: Variant) -> bool:
 	if want is bool:
-		return bool(have) == want
+		# a fact no one gave (you, not hurt) is false
+		return (have is bool and have) == want
 	if want is float or want is int:
 		return float(have) == float(want)
 	return str(have) == str(want)

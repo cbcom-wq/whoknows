@@ -173,3 +173,65 @@ func test_the_state_does_the_lines_then() -> void:
 	_state.apply("hunt_later")
 	assert_eq(_state.hunt, WadooState.HUNT_ACCEPTED, "taken up is taken up")
 	assert_false(_state.apply("give_sun_cell"), "not the village's to do")
+
+## Stage 3 (§7): holding what someone wants, [F] gives it; Wenna sees to you
+## when you are hurt; Daro sets out a sun cell until the pump is mended.
+func test_lio_takes_her_armlet_from_your_hands() -> void:
+	var lio := _npc(_index("Lio"))
+	var held := {"holding": "", "hurt": false}
+	var given := []
+	_site.you = func() -> Dictionary: return held
+	_site.on_give = func(kind: StringName) -> bool:
+		given.append(kind)
+		held["holding"] = ""
+		return true
+	assert_eq(lio.prompt_text(), "Talk to Lio")
+	held["holding"] = "sun_cell"
+	assert_eq(lio.prompt_text(), "Talk to Lio", "not what she wants")
+	held["holding"] = "armlet"
+	assert_eq(lio.prompt_text(), "Give the armlet to Lio")
+	lio.interact(null)
+	assert_eq(given, [&"armlet"], "taken from your hands")
+	assert_true(_state.did(&"armlet"))
+	assert_eq(_state.regard, 1, "the town thinks better of you")
+	assert_string_contains(_told[-1][2]["pages"][0], "armlet", "she thanks you")
+	_site.end_talk()
+	held["holding"] = "armlet"
+	assert_eq(lio.prompt_text(), "Talk to Lio", "done: she takes no more")
+
+func test_wenna_heals_you_when_you_are_hurt() -> void:
+	var wenna := _npc(_index("Wenna"))
+	var me := {"hurt": false}
+	_site.you = func() -> Dictionary: return me
+	assert_eq(wenna.prompt_text(), "Talk to Wenna")
+	wenna.interact(null)
+	assert_eq(_told[-1][2]["then"], "", "nothing to mend")
+	_site.end_talk()
+	me["hurt"] = true
+	assert_eq(wenna.prompt_text(), "Ask Wenna to heal you")
+	wenna.interact(null)
+	assert_eq(_told[-1][2]["then"], "heal")
+	assert_eq(_npc(_index("Halla")).prompt_text(), "Talk to Halla", "only Wenna heals")
+
+func test_daro_sets_out_a_cell_until_the_pump_is_mended() -> void:
+	var daro := _npc(_index("Daro"))
+	daro.interact(null)
+	assert_eq(_told[-1][2]["then"], "make_cell")
+	_site.end_talk()
+	_state.make_cell()
+	daro.interact(null)
+	assert_eq(_told[-1][2]["then"], "make_cell", "again, in case it was lost")
+	_site.end_talk()
+	_site.you = func() -> Dictionary: return {"holding": "sun_cell"}
+	daro.interact(null)
+	assert_eq(_told[-1][2]["then"], "", "you are carrying it")
+	_site.end_talk()
+	var halla := _npc(_index("Halla"))
+	halla.interact(null)
+	assert_string_contains(_told[-1][2]["pages"][0], "cell", "Halla sees it in your hands")
+	_site.end_talk()
+	_state.do_task(&"pump")
+	daro.interact(null)
+	assert_eq(_told[-1][2]["then"], "")
+	var back := WadooState.from_dict(_state.to_dict())
+	assert_true(back.cell_made, "saved")

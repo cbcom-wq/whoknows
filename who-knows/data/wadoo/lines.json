@@ -18,7 +18,7 @@
   {"who": "#shy", "when": {"max:regard": 0}, "pages": ["...Oh. Hello. You are very tall in that suit."]},
   {"who": "#shy", "when": {"min:regard": 1}, "pages": ["Halla says you are kind. I believe Halla."]},
 
-  {"who": "#grief", "when": {"max:lilies": 0}, "pages": ["We have no flowers left to lay for them. The sun-lilies at the edge of the west garden open one at a time, and we cannot wait for them."]},
+  {"who": "#grief", "when": {"max:lilies": 0}, "pages": ["We have no flowers left to lay for them. The sun-lilies at the edge of the north garden open one at a time, and we cannot wait for them."]},
   {"who": "#grief", "when": {"min:lilies": 1}, "pages": ["There is a lily at the stones. Was it you? Thank you."]},
 
   {"who": "@sunguard", "when": {"max:regard": 0}, "pages": ["Keep your hands where I can see them, sky-walker."]},
@@ -38,12 +38,16 @@
   {"who": "Nadi", "when": {}, "pages": ["The pool is the heart of Wadoo. I watch it as you would watch your own heart."]},
 
   {"who": "Halla", "when": {"task:pump": false}, "pages": ["The beast trod on the pump's sun cell, and my garden died of thirst.", "Daro has a new cell cooling at the Glassworks. These old knees will not carry it, and his hands are full."]},
+  {"who": "Halla", "when": {"task:pump": false, "holding": "sun_cell"}, "pages": ["Daro's cell! Oh, look at it shine.", "The pump is there, by my dry bed: the stone well with the bronze frame. Set the cell in the cage at the top."]},
   {"who": "Halla", "when": {"task:pump": true}, "pages": ["Hear it? The pump! Look at the beans drink. You have a good back, sky-walker."]},
-  {"who": "Daro", "when": {"task:pump": false}, "pages": ["Sand, sun and patience: that is all glass is. A new cell for Halla's pump is cooling on my bench. Someone has to carry it."]},
+  {"who": "Daro", "when": {"task:pump": false, "cell_made": false}, "pages": ["Sand, sun and patience: that is all glass is. Halla's pump needs a new cell, and this one is ready.", "I have set it by the Glassworks door. Carry it to her pump, at the dry garden by the east wall. Mind the cage: the glass holds a whole day of sun."], "then": "make_cell"},
+  {"who": "Daro", "when": {"task:pump": false, "cell_made": true}, "pages": ["The cell is by the Glassworks door. Halla's pump is at the dry garden, by the east wall."], "then": "make_cell"},
+  {"who": "Daro", "when": {"task:pump": false, "cell_made": true, "holding": "sun_cell"}, "pages": ["Two hands. Good. The pump is at Halla's dry garden, by the east wall."]},
   {"who": "Daro", "when": {"task:pump": true}, "pages": ["That cell will outlast me. Good work deserves good work."]},
   {"who": "Lio", "when": {"task:armlet": false}, "pages": ["My mother Ruma's armlet: bronze, with a water stone. I lost it when we ran.", "It is out past the breach, where the tracks are. I cannot go out there. Not yet."]},
-  {"who": "Lio", "when": {"task:armlet": true}, "pages": ["I wear it every day now. She would have liked you."]},
+  {"who": "Lio", "when": {"task:armlet": true}, "pages": ["Her armlet. You went out there for it.", "I will wear it every day. She would have liked you."]},
   {"who": "Wenna", "when": {}, "pages": ["If you are hurt, come to me. Water and a little sun mend most things."]},
+  {"who": "Wenna", "when": {"hurt": true}, "pages": ["Sit. Let me see you.", "There: water from the deep pool, and a little sun. You will mend."], "then": "heal"},
   {"who": "Dessa", "when": {}, "pages": ["My sister Inka made the lamps at the stones. Now they burn for her."]},
   {"who": "Kaya", "when": {}, "pages": ["Mada and I were to plant the east beds together this season. I plant them alone."]},
   {"who": "Tova", "when": {}, "pages": ["My brother Orin ran toward it. He always ran toward things."]},

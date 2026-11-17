@@ -91,6 +91,17 @@ var _head: Node3D
 var _releasing: Array = []   # [Item, seconds left]
 var _prompt := ""
 
+## The kind (ItemDefinition.id) of what `actor` (anything with a `grasp`) holds,
+## or &"" with empty hands: what the Wadees and their things answer to (Wadoo
+## spec §7: a sun cell for the pump, a gift to give).
+static func kind_in(actor: Object) -> StringName:
+	if actor == null or not (&"grasp" in actor):
+		return &""
+	var g: Grasp = actor.get(&"grasp")
+	if g == null or g.item == null or not is_instance_valid(g.item) or g.item.definition == null:
+		return &""
+	return g.item.definition.id
+
 func bind(body: CharacterBody3D, head: Node3D, wield: Node3D = null, carry: Node3D = null) -> void:
 	_body = body
 	_head = head

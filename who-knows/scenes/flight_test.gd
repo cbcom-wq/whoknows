@@ -992,15 +992,28 @@ func _wire_npcs() -> void:
 	wadoo.avatar = _avatar
 	wadoo.state = wadoo_state
 	wadoo.on_talk = _talk_with
+	wadoo.you = _you_to_wadoo
+	wadoo.on_give = _give_held
 	exterior_npcs.sources = [life, dev, wadoo]
 	star_system.sand.sheltered = _indoors
 	dialog = DialogPanel.new()
 	dialog.name = "Dialog"
 	add_child(dialog)
 	dialog.finished.connect(_talk_done)
-	# the queen's hall's door opens once they think well of you (Wadoo spec §8)
-	places.place_built.connect(func(_id: StringName, _node: Node3D) -> void: _sync_hall(true))
+	# the queen's hall's door opens once they think well of you (Wadoo spec §8);
+	# the pump works once fitted, the lilies lie where they were laid, and what
+	# the Wadees make is made again when none is about (§7)
+	places.place_built.connect(func(id: StringName, _node: Node3D) -> void:
+		if id == WadooSource.PLACE:
+			_lily_wait = LILY_REGROW
+		_sync_hall(true))
 	wadoo_state.changed.connect(_sync_hall)
+	var restock := Timer.new()
+	restock.name = "WadooRestock"
+	restock.wait_time = RESTOCK_EVERY
+	restock.autostart = true
+	restock.timeout.connect(func() -> void: _restock(RESTOCK_EVERY))
+	add_child(restock)
 	exterior_npcs.ledger = npc_ledger
 	add_child(exterior_npcs)
 	npc_debug = NpcDebug.new()
@@ -1040,8 +1053,11 @@ func _talk_done(answer: int) -> void:
 	if _avatar.downed == null:
 		_avatar.set_control_enabled(true)
 
-## The queen's hall's door, open or shut by what Wadoo thinks of you
-## (WadooState.door_open): at once when the oasis is built, swung otherwise.
+## The town's pieces as WadooState has them: the queen's hall's door open or
+## shut (WadooState.door_open), the sun pump working once fitted, the lilies
+## laid at the memorial (Wadoo spec §7, §8): at once when the oasis is built
+## (the garden already green), swung and grown otherwise. Then what the Wadees
+## make is made again if none is about (_restock).
 func _sync_hall(at_once := false) -> void:
 	var node := places.loaded(WadooSource.PLACE) if places != null else null
 	if node == null:
@@ -1049,11 +1065,106 @@ func _sync_hall(at_once := false) -> void:
 	var door := node.find_child(WadooDoor.NAME, false, false) as WadooDoor
 	if door != null:
 		door.set_open(wadoo_state.door_open(), at_once)
+	var pump := node.find_child(SunPump.NAME, false, false) as SunPump
+	if pump != null:
+		if not pump.fitted.is_connected(_on_pump_fitted):
+			pump.fitted.connect(_on_pump_fitted)
+		if pump.working != wadoo_state.did(&"pump"):
+			pump.set_working(wadoo_state.did(&"pump"), at_once)
+	var lilies := node.find_child(MemorialLilies.NAME, false, false) as MemorialLilies
+	if lilies != null:
+		if not lilies.laid.is_connected(_on_lily_laid):
+			lilies.laid.connect(_on_lily_laid)
+		lilies.set_count(int(wadoo_state.tasks.get(&"lilies", 0)))
+	_restock(0.0)
 
-## A line's `then`: the village's own (WadooState.apply), or nothing.
+## A line's `then`: the village's own (WadooState.apply), or the scene's:
+## "heal", Wenna sees to your wounds (Wadoo spec §7).
 func _wadoo_effect(then: String) -> void:
-	if then != "":
-		wadoo_state.apply(then)
+	if then == "" or wadoo_state.apply(then):
+		return
+	match then:
+		"heal":
+			if _avatar.health != null:
+				_avatar.health.heal(_avatar.health.max)
+		_:
+			push_warning("Wadoo: no such effect %s" % then)
+
+## What Wadoo sees of you (WadooSite.you): what you hold, and whether you are hurt.
+func _you_to_wadoo() -> Dictionary:
+	return {"holding": String(Grasp.kind_in(_avatar)),
+		"hurt": _avatar.health != null and _avatar.health.current < _avatar.health.max}
+
+## Takes the item of `kind` out of your hands and uses it up (a gift given, a
+## cell fitted, a lily laid): true if you held one.
+func _give_held(kind: StringName) -> bool:
+	if Grasp.kind_in(_avatar) != kind:
+		return false
+	Item.consume(_avatar.grasp.item, true)
+	return true
+
+## You fit the sun cell you hold into Halla's pump (Wadoo spec §7).
+func _on_pump_fitted(_actor: Node) -> void:
+	if _give_held(SunPump.CELL):
+		wadoo_state.do_task(&"pump")
+
+## You lay the sun-lily you hold at the memorial (Wadoo spec §7).
+func _on_lily_laid(_actor: Node) -> void:
+	if _give_held(MemorialLilies.LILY):
+		wadoo_state.do_task(&"lilies")
+
+## How often what the Wadees make is looked to, s; a sun-lily grows again this
+## long after the last was picked; things of theirs this near the town count as
+## about (strays: dropped or thrown), m.
+const RESTOCK_EVERY := 2.0
+const LILY_REGROW := 30.0
+const TOWN_REACH := 150.0
+## How long no sun-lily has been about, s.
+var _lily_wait := 0.0
+
+## What the Wadees make, made again when none is about (Wadoo spec §7), never
+## once the village is hostile: Daro's sun cell by the Glassworks door while the
+## pump still wants one, once he has made it (WadooState.cell_made); a sun-lily
+## at the edge of garden_1 while a memorial stone is bare, LILY_REGROW s after
+## none was about. Where: the layout's `makes`.
+func _restock(elapsed: float) -> void:
+	var node := places.loaded(WadooSource.PLACE) if places != null else null
+	if node == null or wadoo_state.hostile:
+		return
+	if wadoo_state.cell_made and not wadoo_state.did(&"pump") and _out(SunPump.CELL) == 0:
+		_make(SunPump.CELL)
+	if int(wadoo_state.tasks.get(&"lilies", 0)) >= WadooState.LILIES_MAX or _out(MemorialLilies.LILY) > 0:
+		_lily_wait = 0.0
+		return
+	_lily_wait += elapsed
+	if _lily_wait >= LILY_REGROW:
+		_make(MemorialLilies.LILY)
+		_lily_wait = 0.0
+
+## How many of `kind` are about: in your hands, lying in the town, or strays
+## near it.
+func _out(kind: StringName) -> int:
+	var n := places.lying(WadooSource.PLACE, kind)
+	if Grasp.kind_in(_avatar) == kind:
+		n += 1
+	var node := places.loaded(WadooSource.PLACE)
+	if strays != null and node != null:
+		n += strays.count_of(kind, node.global_position, TOWN_REACH)
+	return n
+
+## Lays a new `kind` where the layout's `makes` says, called `<kind>_<n>` for the
+## first n not yet taken.
+func _make(kind: StringName) -> void:
+	var makes: Dictionary = places.design(WadooSource.PLACE).layout().get("makes", {})
+	var spot: Dictionary = makes.get(String(kind), {})
+	if spot.is_empty():
+		return
+	var n := 0
+	while places.is_taken(WadooSource.PLACE, "%s_%d" % [kind, n]):
+		n += 1
+	var at: Array = spot["at"]
+	places.lay(WadooSource.PLACE, "%s_%d" % [kind, n], kind, Vector2(float(at[0]), float(at[1])),
+		float(spot.get("yaw", 0.0)))
 
 ## Drops `count` of the item `kind` as strays round `at`, which is on a surface
 ## with the normal `up`: each 0.15 m up it, 0.3 m apart on a ring about `at`, at
