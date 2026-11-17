@@ -45,6 +45,10 @@ static func build(look: StringName, variety: float, inside: bool, tint := SpaceP
 			var delver := DelverLook.new()
 			delver.build(variety, tint, fade)
 			return delver
+		&"wadee":
+			var wadee := WadeeLook.new()
+			wadee.build(variety, fade)
+			return wadee
 		_:
 			return placeholder(inside)
 

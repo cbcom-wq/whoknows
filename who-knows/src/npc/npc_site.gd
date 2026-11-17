@@ -53,3 +53,8 @@ func sip_source(_npc: Npc, _dt: float) -> float:
 ## record's own.
 func group_seed(record: NpcRecord) -> int:
 	return record.seed
+
+## Who `record` is, for a look that draws people (WadeeLook.set_person): {model,
+## seed, role, staff}. A site of creatures gives nothing.
+func person(_record: NpcRecord) -> Dictionary:
+	return {}

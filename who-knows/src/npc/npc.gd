@@ -524,6 +524,9 @@ func _build_look() -> void:
 	# flashes on one beat): only a look that has such a thing is told.
 	if look.has_method(&"set_group_seed"):
 		look.call(&"set_group_seed", site.group_seed(record))
+	# A person is told who they are (Wadoo spec §11): their model, colours, gear.
+	if look.has_method(&"set_person"):
+		look.call(&"set_person", site.person(record))
 	var built := NpcLooks.built_size(species.look)
 	_look_scale = species.size / built if built > 0.0 else 1.0
 	look.scale = Vector3.ONE * _look_scale
