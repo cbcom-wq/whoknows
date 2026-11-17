@@ -83,3 +83,19 @@ func test_shadow_lod():
 	cam.global_position = look.global_position + Vector3(0, 1.6, 8.0)
 	look._lod()
 	assert_eq(look.mesh.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_ON)
+
+func test_sits_down_once_and_stays_seated():
+	var look := _make({"model": "a", "seed": 2, "role": &"villager"})
+	look.act(&"sit")
+	for k in 40:
+		look._process(0.05)
+	assert_eq(look.clip, &"Sitting_Idle", "sat down, then sits")
+	look.act(&"sit_talk")
+	look._process(0.05)
+	assert_eq(look.clip, &"Sitting_Talking", "talks seated, without standing up")
+	look.act(&"sit")
+	look._process(0.05)
+	assert_eq(look.clip, &"Sitting_Idle")
+	look.act(&"rise")
+	look._process(0.05)
+	assert_eq(look.clip, &"Sitting_Exit")

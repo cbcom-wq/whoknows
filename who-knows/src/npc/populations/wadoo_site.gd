@@ -54,6 +54,7 @@ var _claims := {}  # spot key -> who (a record id)
 var _held := {}    # who -> spot key
 var _pairs := {}   # who -> {partner, at, face}
 var _hidden := {}  # who -> true
+var _state := {}   # who -> &"seated"
 var _heights := {}  # Vector2i -> Vector3
 var _near_frame := -1
 var _near := {}    # Npc -> Vector2, this physics frame's
@@ -167,6 +168,11 @@ func group_seed(record: NpcRecord) -> int:
 ## before her hall, anyone else somewhere their day takes them, by seed and the
 ## hour, a little off it so no two wake on one spot.
 func start_pose(record: NpcRecord, time: float) -> Transform3D:
+	# asked only of those not live: whatever they held or were doing is over
+	release(record.id)
+	end_pair(record.id)
+	_hidden.erase(record.id)
+	_state.erase(record.id)
 	var n := WadooCast.index_of(record.id)
 	var who := WadooCast.person(n) if n >= 0 else {}
 	var p := flat(record.home)
@@ -212,6 +218,11 @@ func fill(ctx: NpcContext, npc: Npc) -> void:
 	ctx.extra[&"town"] = self
 	ctx.extra[&"person"] = person(npc.record)
 	ctx.extra[&"pair"] = pair_of(npc.record.id)
+	ctx.extra[&"state"] = _state.get(npc.record.id, &"")
+	if _hidden.has(npc.record.id):
+		# indoors: they neither see you nor step aside for you
+		ctx.extra[&"indoors"] = true
+		ctx.player = null
 	var here := flat(ctx.position)
 	var nearby: Array[Vector3] = []
 	for k in 8:
@@ -224,6 +235,7 @@ func died(npc: Npc) -> void:
 	release(npc.record.id)
 	end_pair(npc.record.id)
 	_hidden.erase(npc.record.id)
+	_state.erase(npc.record.id)
 
 # --- spots --------------------------------------------------------------------
 
@@ -385,12 +397,15 @@ func pair_of(who: StringName) -> Dictionary:
 		return {}
 	return p
 
-## Finds `npc` someone to talk with: the nearest live villager who wants company,
-## is not talking or indoors; meets them halfway. The pair, or {}.
-func ask_pair(npc: Npc) -> Dictionary:
-	var me := npc.record.id
+## Finds `who` someone to talk with: the nearest live villager who wants company,
+## is not talking, sitting or indoors; meets them halfway. The pair, or {}.
+func ask_pair(who: StringName) -> Dictionary:
+	var me := who
 	if _pairs.has(me):
 		return pair_of(me)
+	var npc: Npc = director.live.get(who) if director != null else null
+	if npc == null:
+		return {}
 	var here := flat(npc.local_position())
 	var best: Npc = null
 	var best_d := PAIR_REACH
@@ -398,7 +413,8 @@ func ask_pair(npc: Npc) -> Dictionary:
 		if other == npc or not is_instance_valid(other) or other.record == null:
 			continue
 		var them := other.record.id
-		if _pairs.has(them) or _hidden.has(them) or other.down or other.species.id != &"wadee_villager":
+		if _pairs.has(them) or _hidden.has(them) or _state.has(them) or other.down \
+				or other.species.id != &"wadee_villager":
 			continue
 		if other.brain == null or float(other.brain.needs.get(&"company", 0.0)) < PAIR_WANTS:
 			continue
@@ -432,15 +448,26 @@ func end_pair(who: StringName) -> void:
 
 # --- indoors ------------------------------------------------------------------
 
-## Indoors (out of sight, not solid) or out again.
-func hide(npc: Npc, on: bool) -> void:
+## `who` indoors (out of sight, not solid) or out again.
+func hide(who: StringName, on: bool) -> void:
 	if on:
-		_hidden[npc.record.id] = true
+		_hidden[who] = true
 	else:
-		_hidden.erase(npc.record.id)
+		_hidden.erase(who)
+	var npc: Npc = director.live.get(who) if director != null else null
+	if npc == null:
+		return
 	if npc.look != null:
 		npc.look.visible = not on
 	npc.set_solid(not on)
+
+## How `who` is placed, for what others may ask of them: &"seated", or &"" for
+## nothing special.
+func mark(who: StringName, state: StringName) -> void:
+	if state == &"":
+		_state.erase(who)
+	else:
+		_state[who] = state
 
 func hidden(who: StringName) -> bool:
 	return _hidden.has(who)

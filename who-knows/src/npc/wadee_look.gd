@@ -28,6 +28,9 @@ const CARRY_PACE := 0.67
 const JOG_PACE := 5.9
 const LIB_HIPS := 0.917
 const BLEND := 0.3
+## Clips of sitting: from one to another it stays seated; from anything else it
+## sits down first (Sitting_Enter).
+const SEATED := [&"Sitting_Enter", &"Sitting_Idle", &"Sitting_Talking"]
 ## Level of detail, by the distance to the camera drawing it, m.
 const SHADOW_WITHIN := 25.0
 const FULL_RATE_WITHIN := 30.0
@@ -57,6 +60,7 @@ var _lod_left := 0.0
 var _near := true
 var _step_left := 0.0
 var _pending := 0.0
+var _after_sit: StringName = &"Sitting_Idle"
 
 func build(variety: float, fade: Vector2) -> void:
 	_fade = fade
@@ -206,7 +210,12 @@ func _choose(at_once: bool) -> void:
 	elif action != &"dead" and s > WALK_OVER:
 		want = &"Walk_Carry" if action == &"carry" else &"Walk"
 		pace = CARRY_PACE if action == &"carry" else WALK_PACE
-	if want == &"Sitting_Idle" and clip != &"Sitting_Idle":
+	if want in SEATED and clip == &"Sitting_Enter" and player.is_playing():
+		# sitting down: the clip queued after it follows by itself
+		_after_sit = want
+		return
+	if (want == &"Sitting_Idle" or want == &"Sitting_Talking") and not clip in SEATED:
+		_after_sit = want
 		want = &"Sitting_Enter"
 	if not player.has_animation(want):
 		want = &"Idle"
@@ -216,4 +225,4 @@ func _choose(at_once: bool) -> void:
 	clip = want
 	player.play(clip, 0.0 if at_once else BLEND)
 	if clip == &"Sitting_Enter":
-		player.queue(&"Sitting_Idle")
+		player.queue(_after_sit)

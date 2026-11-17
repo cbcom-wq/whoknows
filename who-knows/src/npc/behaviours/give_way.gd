@@ -21,7 +21,8 @@ func _init() -> void:
 	min_time = 1.5
 
 func score(ctx: NpcContext) -> float:
-	if ctx.player == null:
+	# someone seated (a Wadee on a bench) stays put
+	if ctx.player == null or ctx.extra.get(&"state", &"") == &"seated":
 		_last_distance = INF
 		_closing = false
 		return 0.0
