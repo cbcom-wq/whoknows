@@ -33,6 +33,12 @@ extends GPUParticles3D
 ## colour is the desert palette's `streak`; the fade over a streak's life is
 ## its alpha only. No shader (§3.9).
 
+## Whether the focus is under a roof (a Wadee room, Wadoo spec §10): no sand
+## blows while it is, and those blowing fade out. Set by the flight scene;
+## unset, nowhere is. The streaks are not stopped by walls, and blew through
+## the queen's hall.
+var sheltered: Callable
+
 ## No sand in air thinner than this.
 const SAND_AIR := 0.3
 ## At SAND_AIR the sand blows at this share of its full strength, rising to
@@ -119,6 +125,8 @@ func tick() -> void:
 			# wind's way spins round the pole (WorldTerrain.pole_fade).
 			ratio = strength(true, over.air, over.altitude) \
 				* WorldTerrain.pole_fade(over.up.dot(terrain.wind_axis))
+	if ratio > 0.0 and sheltered.is_valid() and sheltered.call():
+		ratio = 0.0
 	if ratio <= 0.0:
 		if emitting or amount_ratio != 0.0:
 			amount_ratio = 0.0

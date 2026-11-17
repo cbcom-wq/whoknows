@@ -97,3 +97,18 @@ static func person(n: int) -> Dictionary:
 	p["grief"] = p.get("grief", false)
 	p["shy"] = p.get("shy", false)
 	return p
+
+## Where `person` stands when the Sunguard gather at the breach (gather.gd): 0 for
+## the first of them in PEOPLE (Kesh, their captain), and on; -1 for the queen's
+## door warden, who stays at her door, and for anyone not of the Sunguard.
+static func gather_slot(person: Dictionary) -> int:
+	if person.get("role", &"") != &"sunguard" or str(person.get("post", "")) == "queen_door":
+		return -1
+	var slot := 0
+	for p: Dictionary in PEOPLE:
+		if p["role"] != &"sunguard" or str(p.get("post", "")) == "queen_door":
+			continue
+		if p["name"] == person.get("name", ""):
+			return slot
+		slot += 1
+	return -1

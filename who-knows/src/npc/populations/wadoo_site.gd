@@ -12,7 +12,10 @@ extends NpcSite
 ## (east, north) -> Vector3, as PlaceField.ground_fn gives, cached on a 1 m grid.
 
 const SPOT_KINDS: Array[StringName] = [&"garden", &"dry", &"pump", &"glass", &"breach", &"memorial",
-	&"shade", &"bank", &"wash", &"post", &"court"]
+	&"shade", &"bank", &"wash", &"post", &"court", &"gather"]
+## Where the Sunguard gather at the breach once you take up the hunt: [in from the
+## breach, to the side] m, Kesh first.
+const GATHER := [Vector2(2.0, 0.0), Vector2(3.2, 1.4), Vector2(3.2, -1.4), Vector2(4.3, 2.6), Vector2(4.3, -2.6)]
 ## How far out from what is worked a worker stands, m.
 const GARDEN_OUT := 0.7
 const PUMP_OUT := 1.5
@@ -31,6 +34,12 @@ const PAIR_APART := 1.1
 ## Others counted near, m.
 const NEAR := 3.0
 const GROUND_CELL := 1.0
+## Before an open shell's door the ground rises to its floor over this, m.
+const RAMP := 1.2
+## The ramp is this much wider than the door, each side, m.
+const RAMP_SIDE := 0.3
+## A Sunguard this near their post, m, holds it (`holds_ground`).
+const HOLDS := 0.6
 const GRAVITY := 9.8
 
 ## The paths of each place's layout, built once (a grid of a few hundred thousand
@@ -48,6 +57,13 @@ var centre := Vector3(0.0, -1.0e9, 0.0)
 var director: NpcDirector
 ## You, when you are near: they keep a little room from you too.
 var avatar: Node3D
+## What the village knows of you (saved by the flight scene), and who shows what
+## is said: the scene's Callable (npc, person, said) -> void. Without both, no one
+## talks (as in tests of walking).
+var state: WadooState
+var on_talk: Callable
+## Who is talking with you now (a record id), or &"".
+var talking: StringName = &""
 
 var _spots := {}   # kind -> Array[Dictionary]
 var _claims := {}  # spot key -> who (a record id)
@@ -58,6 +74,9 @@ var _state := {}   # who -> &"seated"
 var _heights := {}  # Vector2i -> Vector3
 var _near_frame := -1
 var _near := {}    # Npc -> Vector2, this physics frame's
+## The open shells' rooms (PlaceField's meta "rooms" on the place's node):
+## [{id, room, frame, inv, half, door_x, door_half}]; null until asked.
+var _rooms: Variant = null
 
 func _init(p_node: Node3D, p_layout: Dictionary, p_pool_radius: float, p_ground: Callable,
 		p_centre := Vector3(0.0, -1.0e9, 0.0), place_id := &"oasis") -> void:
@@ -86,9 +105,60 @@ func gravity(local: Vector3) -> Vector3:
 func up_at(local: Vector3) -> Vector3:
 	return (local - centre).normalized()
 
-## The ground at [east, north] `p`, site-local: bilinear between the corners of
-## its GROUND_CELL square.
+## The ground at [east, north] `p`, site-local: a room's floor (its dais raised)
+## inside an open shell, a ramp up to it before its door, else bilinear between
+## the corners of its GROUND_CELL square.
 func ground(p: Vector2) -> Vector3:
+	for r: Dictionary in rooms():
+		var f: Transform3D = r["frame"]
+		var l: Vector3 = r["inv"] * Vector3(p.x, f.origin.y, -p.y)
+		var half: Vector2 = r["half"]
+		if absf(l.x) <= half.x and absf(l.z) <= half.y:
+			return f * Vector3(l.x, WadooRooms.raised(r["room"], Vector2(l.x, l.z)), l.z)
+		if absf(l.x - float(r["door_x"])) <= float(r["door_half"]) and l.z < -half.y and l.z >= -half.y - RAMP:
+			return (f * Vector3(l.x, 0.0, l.z)).lerp(_terrain(p), (-half.y - l.z) / RAMP)
+	return _terrain(p)
+
+## The id of the open shell whose walls hold [east, north] `p`, "" outside.
+func room_at(p: Vector2) -> String:
+	for r: Dictionary in rooms():
+		var f: Transform3D = r["frame"]
+		var l: Vector3 = r["inv"] * Vector3(p.x, f.origin.y, -p.y)
+		var half: Vector2 = r["half"]
+		if absf(l.x) <= half.x and absf(l.z) <= half.y:
+			return str(r["id"])
+	return ""
+
+## The open shells' rooms, from the place's node: [{id, room, frame, inv, half
+## (the shell's outer half size, x by z), door_x (its door's middle, x in its
+## frame), door_half}].
+func rooms() -> Array:
+	if _rooms != null:
+		return _rooms
+	_rooms = []
+	var meta: Dictionary = node.get_meta(&"rooms", {}) if is_instance_valid(node) else {}
+	for shell_id: String in meta:
+		var r: Dictionary = meta[shell_id]
+		var f: Transform3D = r["frame"]
+		var size: Vector3 = r["size"]
+		var door_x := 0.0
+		var door_half := BrickShell.DOOR.x * 0.5 + RAMP_SIDE
+		var list: Array = paths.doors.get(shell_id, [])
+		if not list.is_empty():
+			var d: Vector2 = list[0]["door"]
+			door_x = (f.affine_inverse() * Vector3(d.x, f.origin.y, -d.y)).x
+		_rooms.append({"id": shell_id, "room": StringName(r["room"]), "frame": f, "inv": f.affine_inverse(),
+			"half": Vector2(size.x, size.z) * 0.5, "door_x": door_x, "door_half": door_half})
+	return _rooms
+
+## The room of the open shell `shell_id`, or {}.
+func room_of(shell_id: String) -> Dictionary:
+	for r: Dictionary in rooms():
+		if r["id"] == shell_id:
+			return r
+	return {}
+
+func _terrain(p: Vector2) -> Vector3:
 	var g := p / GROUND_CELL
 	var c := Vector2i(floori(g.x), floori(g.y))
 	var t := g - Vector2(c)
@@ -181,14 +251,20 @@ func start_pose(record: NpcRecord, time: float) -> Transform3D:
 	rng.seed = record.seed + int(time / 60.0)
 	match who.get("role", &"villager"):
 		&"sunguard":
-			var post := spot(&"post", "post:%s" % who.get("post", "gate"))
+			var post := post_of(str(who.get("post", "gate")))
+			if state != null and state.hunt == WadooState.HUNT_ACCEPTED and not state.hostile:
+				var slot := spot(&"gather", "gather:%d" % WadooCast.gather_slot(who))
+				if not slot.is_empty():
+					post = slot
 			if post.is_empty():
 				post = spot(&"post", "post:%s:0" % who.get("post", "gate"))
 			if not post.is_empty():
 				p = flat(post["at"])
 				face_at = flat(post["face"])
 		&"queen":
-			var court := spot(&"court", "court:queen")
+			var court := spot(&"court", "court:throne")
+			if court.is_empty():
+				court = spot(&"court", "court:queen")
 			if not court.is_empty():
 				p = flat(court["at"])
 				face_at = flat(court["face"])
@@ -219,19 +295,30 @@ func fill(ctx: NpcContext, npc: Npc) -> void:
 	ctx.extra[&"person"] = person(npc.record)
 	ctx.extra[&"pair"] = pair_of(npc.record.id)
 	ctx.extra[&"state"] = _state.get(npc.record.id, &"")
+	ctx.extra[&"talking"] = talking != &"" and talking == npc.record.id
+	ctx.extra[&"village"] = state
 	if _hidden.has(npc.record.id):
 		# indoors: they neither see you nor step aside for you
 		ctx.extra[&"indoors"] = true
 		ctx.player = null
 	var here := flat(ctx.position)
+	# a Sunguard standing at their post holds it: they never step aside (Oru
+	# stepped back from you through the queen's shut door)
+	var post := str(ctx.extra[&"person"].get("post", ""))
+	var held := post_of(post) if post != "" else {}
+	ctx.extra[&"holds_ground"] = not held.is_empty() and here.distance_to(flat(held["at"])) < HOLDS
+	# where to step aside to: open ground 2 m off, never into a building they are not in
+	var room := room_at(here)
 	var nearby: Array[Vector3] = []
 	for k in 8:
 		var p := here + Vector2.from_angle(TAU * k / 8.0) * 2.0
-		if paths.is_open(p) and paths.clear_line(here, p):
+		if paths.is_open(p) and paths.clear_line(here, p) and room_at(p) == room:
 			nearby.append(ground(p))
 	ctx.extra[&"nearby"] = nearby
 
 func died(npc: Npc) -> void:
+	if talking == npc.record.id:
+		talking = &""
 	release(npc.record.id)
 	end_pair(npc.record.id)
 	_hidden.erase(npc.record.id)
@@ -290,6 +377,15 @@ func take_spot(kind: StringName, who: StringName, near: Vector3, salt: int) -> D
 		claim(best["key"], who)
 	return best
 
+## The spot of the post `post`, {} if none: the queen's door's is before it while
+## it is shut and beside it once open (WadooState.door_open).
+func post_of(post: String) -> Dictionary:
+	if post == "queen_door" and state != null and not state.door_open():
+		var shut := spot(&"post", "post:queen_door:shut")
+		if not shut.is_empty():
+			return shut
+	return spot(&"post", "post:%s" % post)
+
 ## The door of the shell `home`: {at (where to stand, outside), door (its middle),
 ## out}, site-local; {} if it has none.
 func door_of(home: String) -> Dictionary:
@@ -339,6 +435,9 @@ func _make_spots() -> void:
 		_add(&"post", "post:breach", b + inward * 5.0 + side * 3.5, b + side * 3.5, &"watch")
 		_add(&"post", "post:breach_walk:0", b + inward * 2.2 + side * 4.5, b, &"watch")
 		_add(&"post", "post:breach_walk:1", b + inward * 2.2 - side * 4.5, b, &"watch")
+		for k2 in GATHER.size():
+			var gat: Vector2 = b + inward * GATHER[k2].x + side * GATHER[k2].y
+			_add(&"gather", "gather:%d" % k2, gat, gat - inward * 8.0, &"watch")
 	if paths.gate != Vector2.ZERO:
 		var inward := (pool_at - paths.gate).normalized()
 		_add(&"post", "post:gate", paths.gate + inward * 3.0, paths.gate, &"watch")
@@ -378,7 +477,20 @@ func _make_spots() -> void:
 		var side := Vector2(out.y, -out.x)
 		var at := flat(hall["at"])
 		_add(&"post", "post:queen_door", at + side * 1.3, at + side * 1.3 + out * 3.0, &"watch")
-		_add(&"court", "court:queen", at + out * 1.2, at + out * 6.0, &"")
+		_add(&"post", "post:queen_door:shut", at, at + out * 3.0, &"watch")
+		var hall_room := room_of("house_b")
+		if hall_room.is_empty():
+			_add(&"court", "court:queen", at + out * 1.2, at + out * 6.0, &"")
+		else:
+			# inside: she sits on her throne and stands before it, looking down her hall
+			var f: Transform3D = hall_room["frame"]
+			var door := flat(hall["door"])
+			var stand: Variant = WadooRooms.mark(hall_room["room"], "stand")
+			var sit: Variant = WadooRooms.mark(hall_room["room"], "sit")
+			if stand != null:
+				_add(&"court", "court:queen", flat(f * (stand as Transform3D).origin), door, &"", false)
+			if sit != null:
+				_add(&"court", "court:throne", flat(f * (sit as Transform3D).origin), door, &"sit", false)
 
 ## A spot of `kind`, its point snapped to open ground unless `snap` is false (a
 ## seat is reached by the last stretch).
@@ -448,6 +560,35 @@ func end_pair(who: StringName) -> void:
 	_pairs.erase(who)
 	if not p.is_empty() and _pairs.has(p["partner"]) and _pairs[p["partner"]]["partner"] == who:
 		_pairs.erase(p["partner"])
+
+# --- talking with you --------------------------------------------------------
+
+## Whether `npc` will talk to you now: the village is wired to a panel, they are
+## out of doors, and no one else is talking with you.
+func can_talk(npc: Npc) -> bool:
+	return state != null and on_talk.is_valid() and not _hidden.has(npc.record.id) 		and (talking == &"" or talking == npc.record.id)
+
+## Their title if they have one (Queen Imsa), else their name.
+func talk_name(npc: Npc) -> String:
+	var p := person(npc.record)
+	var title := str(p.get("title", ""))
+	return title if title != "" else str(p.get("name", ""))
+
+## You speak to `npc`: the line their state and yours call for (WadooLines), shown
+## by the scene; they stop and face you until end_talk.
+func talk(npc: Npc, _actor: Node) -> void:
+	if not can_talk(npc):
+		return
+	var p := person(npc.record)
+	var said := WadooLines.shared().pick(p, state, npc.record.id)
+	if said.is_empty():
+		return
+	talking = npc.record.id
+	end_pair(npc.record.id)
+	on_talk.call(npc, p, said)
+
+func end_talk() -> void:
+	talking = &""
 
 # --- indoors ------------------------------------------------------------------
 

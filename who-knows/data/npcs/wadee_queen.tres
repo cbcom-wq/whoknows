@@ -43,11 +43,11 @@ need_start = {
 &"thirst": Vector2(0, 0.6),
 &"work": Vector2(0.2, 0.9)
 }
-behaviours = Array[StringName]([&"hold_court", &"greet"])
+behaviours = Array[StringName]([&"hold_court", &"converse", &"greet"])
 behaviour_weights = {}
 fear_of_player = 0.0
 curiosity_about_player = 0.3
 population = &"wadoo"
 live_radius = 400.0
 fade = Vector2(330, 380)
-interactions = Array[StringName]([])
+interactions = Array[StringName]([&"talk"])

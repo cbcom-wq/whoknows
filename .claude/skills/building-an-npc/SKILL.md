@@ -42,9 +42,11 @@ Worked examples, inside and outside. Read the one nearest to what you are making
   `quantum_shard`.
 - **The Wadees** (on a world, 25 people in the oasis town Wadoo): `data/npcs/wadee_{villager,sunguard,queen}.tres`,
   `WadooCast` (a fixed cast, not a seeded herd) + `WadooSite` + `WadooSource` + `WadooPaths`,
-  `GroundWalker`, `behaviours/{work,rest_shade,talk_pair,drink,mourn,go_home,keep_post,hold_court,greet}.gd`
-  on `WadooErrand`, `WadeeLook` (Blender-made models, one mesh each, coloured by `WadeePalette`). Read
-  it for anything that walks a world or is a person; `docs/superpowers/specs/2026-11-16-wadoo-design.md`.
+  `GroundWalker`, `behaviours/{work,rest_shade,talk_pair,drink,mourn,go_home,keep_post,hold_court,greet,
+  converse,gather}.gd` on `WadooErrand`, `WadeeLook` (Blender-made models, one mesh each, coloured by
+  `WadeePalette`). You talk to them (`NpcTalk`, `DialogPanel`, `data/wadoo/lines.json`), and the queen
+  lives in a room inside her brick shell (`WadooRooms`, `WadooDoor`). Read it for anything that walks
+  a world, is a person, speaks or lives indoors; `docs/superpowers/specs/2026-11-16-wadoo-design.md`.
 
 **Read first:** `CLAUDE.md` (style guide binding; floating origin; no `#` in `.tscn`/`.tres`),
 `docs/superpowers/specs/2026-09-26-npc-foundation-design.md` (§2 the layers, §21 *As built*: why
@@ -70,8 +72,8 @@ Answer these, in the spec or the task, before writing code. Each answer picks ex
 6. **What does it look and sound like?** Palette of its space; silent outside.
 7. **How does the player find it?** If it is small or rare, give it a sensor source (as
    `LifeContacts`): a ping far off, a region close by, then the player looks (§ *Recipes*).
-8. **What can the player do to it?** Nothing yet unless asked: the interaction seam exists
-   (`species.interactions`, empty).
+8. **What can the player do to it?** Nothing unless asked. Talking exists (`NpcTalk`, the Wadees);
+   anything else is a new interaction on the same seam (§ *Recipes*).
 
 ## Checklist
 
@@ -209,8 +211,23 @@ Do these in order. Each names the check that proves it.
   spread); `_ship.sensors.add_source(...)` in `flight_test.gd`; a colour in `HudPalette.for_kind`.
   `ContactMarker` draws it with no change.
 - **An interaction** (only when the owner asks): a class with `can`, `prompt`, `run`; its id in
-  `species.interactions`; route it in `Npc.interact`/`prompt_text`/`can_interact`; add `npcs`
-  (128) to the `Interactor`'s mask.
+  `species.interactions` (`Npc.setup` then puts the body in group `interactable`); route it in
+  `Npc.interact`/`prompt_text`/`can_interact`. `Npc.LAYER` is in the `Interactor`'s `SUIT_MASK`
+  (outside, on foot or on a spacewalk) already; aboard (`MASK`) it is not, so add it for crew.
+  The worked one is `NpcTalk`: it asks the **site** (`can_talk`, `talk_name`, `talk`), and the site
+  calls a Callable the flight scene set (`on_talk`), which shows the panel and freezes you. Keep it
+  that way: `src/npc` never reaches for the UI or the scene.
+- **Talking:** lines are data (`data/wadoo/lines.json`, read by `WadooLines`), picked by the site
+  from the village's state (`WadooState`, saved as its own part); `DialogPanel` shows pages and one
+  choice and says only which answer was picked; the scene applies each `then`. A `converse` reflex
+  (`ctx.extra.talking`) turns the speaker to you; seated, they talk where they sit.
+- **A room inside a place's building:** a Blender room model (`tools/blender/wadoo_rooms.py`, export
+  to `assets/<kind>/<room>.glb`, then `--import`) placed in an open shell's frame by `PlaceField`
+  (`"open": true, "room": "<room>"` on the shell). Empties carry the meaning: `lamp_<n>`, `col_<name>`
+  (solid, walked round), `floor_<name>` (stood on), and marks (`WadooRooms.mark`). Walkers need three
+  things from it: the grid opened inside and through the doorway and the furniture solid again
+  (`WadooPaths._open_room`), the floor's height (`WadooSite.ground` from the node's meta `rooms`, plus
+  `WadooRooms.RAISED`), and spots at its marks.
 - **A person (a made, skinned look):** as the Wadees. `tools/blender/wadee_base.py` builds the
   bodies, faces, hair and clothes from Blender's CC0 base meshes. `tools/blender/wadee_rig.py`
   adds a 23-bone skeleton (Godot humanoid names) and copies CC0 motions onto it. Both are re-run
@@ -289,6 +306,15 @@ Do these in order. Each names the check that proves it.
 | Sitting straight from a walk | The mind asked for `sit` and the look cut from `Walk` to `Sitting_Idle`: a Wadee popped onto the bench, and a second think cut `Sitting_Enter` short | `WadeeLook` plays `Sitting_Enter` from any non-seated clip and holds the seated clip asked for until it ends (`SEATED`, `_after_sit`); `test_sits_down_once_and_stays_seated` |
 | A director too small for a town | The exterior `max_live` was 32, shared with rock herds: a full town and one herd would have left Wadees asleep in the middle of the street | `max_live` 40; count every population that can be awake in one place |
 | A probe's spot view on the spot's facing side | The Glassworks' spots face its door, so standing "in front" put the camera inside the workshop | Look at every shot; a negative distance in `wadoo_play.gd` `SPOT_VIEWS` stands behind the spot |
+| A person's trait outranking their own lines | The queen grieves (`#grief`, rank 20 + its conditions) and her lines were under the role `@queen` (10): she greeted you as a mourner | A named person's lines go under their name (rank 100); give equal-rank lines that must not cycle a condition that tells them apart (`met_queen` on the hunt lines) |
+| A room's empty added and the model not re-exported | `WadooRooms.mark(&"hall", "sit")` was null: the script had the new empty, the GLB did not | After any change to `wadoo_rooms.py`, export again, copy the GLB in and `--import`; `test_wadoo_hall.gd` reads every mark |
+| A dais the walkers stand on but you fall through | The dais was only drawn: the queen's feet were 0.3 m over the slab a ray met, and you would have walked into it | Boxes you stand on are `floor_` empties: solid to you, never in the walkers' grid; their height is `WadooRooms.RAISED` |
+| A probe standing you on the terrain inside a building | `_stand_far` puts you on the terrain's height, under a building's floor slab | `wadoo_play.gd` `_site_look` stands you on `WadooSite.ground` (the room's floor) |
+| A test that a ray down meets the floor, in a furnished room | `test_every_shell_has_a_floor` met the hall's basin, a body of the room's own, and called it no floor | Count a room's bodies (a `Room_*` parent) as something met; the lowest ray still finds the floor |
+| A guard who gives way | You walked up to Oru to talk, `give_way` stepped him back from you through the queen's doorway (open on the grid, door shut or not) into the leaf, and the Interactor met the door, not him | A Sunguard at their post holds it (`ctx.extra.holds_ground`); step-aside spots (`nearby`) never lie in a room the walker is not in (`WadooSite.room_at`) |
+| A wall cut into pieces across, not along | `BrickShell._pieces` cut a wall at every hole's sides and stacked the pieces under each hole: a window over a door made a "below the window" piece down across the doorway, so a brick pier stood in the queen's door | Each upright strip between cuts leaves every hole over it open (`test_a_window_over_a_door_leaves_the_doorway_open`); look into a doorway from both sides in the real scene |
+| A room lit like the street | Four lamps at 1.6 lit the hall's pale walls as bright as the desert outside; a `ReflectionProbe` for the sky's light barely changed it | Light a room with few, weak lamps (`WadooRooms.LAMP_ENERGY` 0.8) and look at it at eye height before and after |
+| Weather through walls | The desert's sand streaks are particles round you: they blew through the hall as if it were open ground | `BlowingSand.sheltered` (the flight scene's `_indoors`, from `WadooSite.room_at`) stops the sand while you are in a room; anything weather-like needs the same |
 | Blender's default scene in a render script | `--factory-startup` keeps the default 2 m cube, which hid the figure in every frame | Remove or hide `Cube` (and the library's `Icosphere`) before rendering |
 
 ## Not built yet (plan for it; don't assume it works)
@@ -301,7 +327,7 @@ Do these in order. Each names the check that proves it.
   aside (`give_way`) and tries again, and a player standing still in a doorway blocks it.
   `GroundWalker` only eases off a neighbour within `PERSONAL` 0.6 m, onto open ground.
 - **Ladders and upper storeys for walkers.** `DeckPaths` joins one storey only.
-- **Interactions** beyond the seam; the hose; carrying an NPC.
+- **Interactions** beyond talking; the hose; carrying an NPC.
 - **Sound outside** (never, by the style guide) and **sensors** (`LifeContacts` for the bridge
   computer).
 - **Hunters and combat** beyond `defend` (which only bites back), and
@@ -310,9 +336,12 @@ Do these in order. Each names the check that proves it.
 - **The frame budget on the target PC.** Measured 1.2 ms for 32 + the droid on a shared 2.1 GHz
   Xeon; unmeasured on the GTX 960 machine.
 - **People, beyond Wadoo's first stage.** The Wadees live in Wadoo (§ *worked examples*), but:
-  - talking, things to do, the queen's audience, harm and fighting are later stages of the Wadoo
-    spec;
+  - things to do, harm and fighting are later stages of the Wadoo spec (talking and the queen's
+    audience are built);
   - finger bones (nothing grips a spear; the Sunguard's staff hangs on the back);
   - lighter meshes for distance: a model is 55–65k triangles; the town still runs at 132 fps
     (GTX 960) because a Wadee is one draw call and far motions step at 15 Hz;
-  - indoors: a Wadee who goes home is hidden, not inside a room.
+  - indoors: the queen's hall is a room; a Wadee who goes home is still hidden, not inside one;
+  - doors in the walkers' grid are always open: the grid is built once per layout, so a walker
+    could route through the hall's shut door (none does: the queen lives inside and nobody else
+    goes there).

@@ -108,6 +108,11 @@ var exterior_npcs: NpcDirector
 var rock_life: RockLifeSource
 ## The exterior director's source of Wadoo's people (Wadoo spec §4, §12).
 var wadoo: WadooSource
+## What Wadoo knows of you (Wadoo spec §6), saved as the part "wadoo".
+var wadoo_state := WadooState.new()
+## The panel you talk to a Wadee in, and who you are talking with: {npc, said}.
+var dialog: DialogPanel
+var _talking := {}
 ## What F10 made, one per director (rock creatures spec §7.2): the exterior's
 ## and each ship's.
 var dev_creatures := {}
@@ -184,6 +189,7 @@ func _ready() -> void:
 	if resumed:
 		_starter.launch_blueprint = Ship.launch_of(starter_part)
 		npc_ledger.from_dict(saved.get("npcs", {}))
+		wadoo_state = WadooState.from_dict(saved.get("wadoo", {}))
 	var chosen := {} if resumed else _starter_file()
 	if not resumed and starter_ship != String(ShipLibrary.STARTER):
 		_starter.launch_blueprint = ShipBlueprint.from_grid(chosen["grid"], chosen["name"])
@@ -984,13 +990,70 @@ func _wire_npcs() -> void:
 	# Wadoo's people, while the oasis is loaded and you are near it.
 	wadoo = WadooSource.new(places)
 	wadoo.avatar = _avatar
+	wadoo.state = wadoo_state
+	wadoo.on_talk = _talk_with
 	exterior_npcs.sources = [life, dev, wadoo]
+	star_system.sand.sheltered = _indoors
+	dialog = DialogPanel.new()
+	dialog.name = "Dialog"
+	add_child(dialog)
+	dialog.finished.connect(_talk_done)
+	# the queen's hall's door opens once they think well of you (Wadoo spec §8)
+	places.place_built.connect(func(_id: StringName, _node: Node3D) -> void: _sync_hall(true))
+	wadoo_state.changed.connect(_sync_hall)
 	exterior_npcs.ledger = npc_ledger
 	add_child(exterior_npcs)
 	npc_debug = NpcDebug.new()
 	npc_debug.name = "NpcDebug"
 	add_child(npc_debug)
 	npc_debug.directors.append(exterior_npcs)
+
+## Whether you stand inside a Wadee room (Wadoo spec §10): no sand blows there.
+func _indoors() -> bool:
+	var site: WadooSite = wadoo.site if wadoo != null else null
+	if site == null or not site.alive() or not _avatar.is_outside():
+		return false
+	return site.room_at(WadooSite.flat(site.frame().affine_inverse() * _avatar.global_position)) != ""
+
+## You speak to a Wadee (Wadoo spec §6): you stand still, the panel shows what
+## they say, and they face you until it shuts (WadooSite.talk, through
+## WadooSource.on_talk).
+func _talk_with(npc: Npc, person: Dictionary, said: Dictionary) -> void:
+	if dialog == null or dialog.is_open():
+		return
+	_talking = {"npc": npc, "said": said}
+	_avatar.set_control_enabled(false)
+	_avatar.set_at_station(true)
+	dialog.open(str(person.get("title", person.get("name", ""))), said.get("pages", []), said.get("choice", {}))
+
+## The panel shut: what was said, and the answer picked, take effect.
+func _talk_done(answer: int) -> void:
+	var said: Dictionary = _talking.get("said", {})
+	_talking = {}
+	_wadoo_effect(str(said.get("then", "")))
+	var answers: Array = (said.get("choice", {}) as Dictionary).get("answers", [])
+	if answer >= 0 and answer < answers.size():
+		_wadoo_effect(str((answers[answer] as Dictionary).get("then", "")))
+	if wadoo != null and wadoo.site != null:
+		wadoo.site.end_talk()
+	_avatar.set_at_station(false)
+	if _avatar.downed == null:
+		_avatar.set_control_enabled(true)
+
+## The queen's hall's door, open or shut by what Wadoo thinks of you
+## (WadooState.door_open): at once when the oasis is built, swung otherwise.
+func _sync_hall(at_once := false) -> void:
+	var node := places.loaded(WadooSource.PLACE) if places != null else null
+	if node == null:
+		return
+	var door := node.find_child(WadooDoor.NAME, false, false) as WadooDoor
+	if door != null:
+		door.set_open(wadoo_state.door_open(), at_once)
+
+## A line's `then`: the village's own (WadooState.apply), or nothing.
+func _wadoo_effect(then: String) -> void:
+	if then != "":
+		wadoo_state.apply(then)
 
 ## Drops `count` of the item `kind` as strays round `at`, which is on a surface
 ## with the normal `up`: each 0.15 m up it, 0.3 m apart on a ring about `at`, at
@@ -1612,6 +1675,7 @@ func _wire_saving() -> void:
 	save_gate.add_source(_fleet_busy)
 	save_gate.add_source(_avatar.busy)
 	save_gate.add_source(func() -> String: return bases.busy())
+	save_gate.add_source(func() -> String: return "talking" if dialog != null and dialog.is_open() else "")
 	save_gate.settle()
 	_saved_tag = SavedTag.new()
 	_saved_tag.name = "SavedTag"
@@ -1712,6 +1776,7 @@ func capture() -> Dictionary:
 		"strays": strays.to_dict(),
 		"places": places.to_dict(),
 		"npcs": _capture_npcs(),
+		"wadoo": wadoo_state.to_dict(),
 		"bases": bases.to_dict(),
 		"home": {"base": String(home.name)} if home is Base else {},
 	}

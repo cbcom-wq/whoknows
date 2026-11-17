@@ -58,3 +58,15 @@ func group_seed(record: NpcRecord) -> int:
 ## seed, role, staff}. A site of creatures gives nothing.
 func person(_record: NpcRecord) -> Dictionary:
 	return {}
+
+## Talking (NpcTalk, the &"talk" interaction): whether `npc` will talk to you now.
+func can_talk(_npc: Npc) -> bool:
+	return false
+
+## The name `npc` is called by in the prompt ("Talk to <name>").
+func talk_name(_npc: Npc) -> String:
+	return ""
+
+## You speak to `npc`: the site decides what is said and who shows it.
+func talk(_npc: Npc, _actor: Node) -> void:
+	pass

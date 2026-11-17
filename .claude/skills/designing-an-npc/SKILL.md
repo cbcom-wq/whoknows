@@ -102,6 +102,25 @@ locomotor, the senses, the needs, how it is found, what can be done to it.
   carrying, drinking, arms-folded and nodding clips came from the library's second pack; ask for
   a second pack before inventing a motion.
 
+## Speech and their places
+
+- **Write what they say as data**, never in code: one file of lines (`data/wadoo/lines.json`), each
+  with a speaker and the facts it needs. Design the speakers in ranks: a named person over a
+  trait (grief, shyness) over a role over anyone, so a crowd has something to say and the people
+  who matter say their own. Give a person with a trait their own lines under their name, or the
+  trait's will win (the queen mourns too).
+- **Design the state the lines read** at the same time (`WadooState`: regard, tasks, the queen met,
+  the hunt, hostility) and say how it is saved. A save without it is a stranger.
+- **A conversation ends in at most one choice**, and each answer says what it changes (`then`). The
+  panel shows only text; what an answer does belongs to the game.
+- **A building they live in is a room model** made in Blender like the people (`tools/blender/
+  wadoo_rooms.py`): painted by material name from the people's palette, with empties for lamps,
+  boxes walked round (`col_`), floors stood on (`floor_`) and the marks where someone stands or
+  sits. Decide where the important person stands to receive the player, and where they sit
+  otherwise, before modelling; both are marks.
+- **A door that matters is a thing in the world**: a leaf that swings and is solid while shut, with
+  a guard who stands before it until the state lets you in. Not an invisible wall.
+
 ## Mistakes already made (don't repeat)
 
 | Mistake | What happened | Do instead |
@@ -109,4 +128,5 @@ locomotor, the senses, the needs, how it is found, what can be done to it.
 | A person's look built from code shapes | Rejected: the chin too weak and rounded, "eyes look pasted on, little contour" | Start from a sculpted CC0 base mesh (Blender's *Human Base Meshes*) |
 | Showing faces without the concept art beside them | The owner kept the models but wants the women's faces "more feminine like in the concept image" | Compare with the concept side by side, and say what differs, before asking |
 | Straps that end in the air | The men's chest sash did not go over the shoulder | Check every strap from the front, the back and the side |
+| A person's pronoun guessed from the name | The design said Oru "he"; code and tests written later called Oru "her" | The cast's model tag says who is a man or a woman (`tools/blender/README.md`: `s` a woman, `t` a man of the Sunguard); write it in the cast and use it |
 | A scripted "name your own price" download | itch.io's free route needs a key its page script makes, and after a few scripted tries it answered HTTP 429 | Look for the author's own upload of the same free pack on OpenGameArt, which has direct links |

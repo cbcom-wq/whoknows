@@ -14,6 +14,10 @@ const NEAR_ENOUGH := 1500.0
 var places: PlaceField
 ## You: they keep a little room from you.
 var avatar: Node3D
+## What the village knows of you, and who shows what they say (WadooSite.state,
+## on_talk): handed to the site.
+var state: WadooState
+var on_talk: Callable
 var site: WadooSite
 var _records: Array[NpcRecord] = []
 
@@ -34,6 +38,8 @@ func records(director: NpcDirector) -> Array:
 			return out
 	site.director = director
 	site.avatar = avatar
+	site.state = state
+	site.on_talk = on_talk
 	if _records.is_empty():
 		_records = WadooCast.records(site.layout)
 	for r in _records:

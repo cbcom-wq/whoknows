@@ -12,6 +12,8 @@ extends CharacterBody3D
 ## under the interior, which never moves at all.
 
 const LAYER := 128
+## The Interactor's group: a species with interactions joins it on setup.
+const INTERACTABLE := &"interactable"
 ## The hull, the avatar, items and rocks.
 const MASK_OUTSIDE := 1 | 4 | 32 | 64
 ## The interior's geometry, the avatar and items.
@@ -125,6 +127,11 @@ func setup(p_record: NpcRecord, p_species: NpcSpecies, p_site: NpcSite, p_inside
 	else:
 		add_to_group(Universe.EXTERIOR_SPACE)
 	_fit_body()
+	if species.interactions.is_empty():
+		if is_in_group(INTERACTABLE):
+			remove_from_group(INTERACTABLE)
+	else:
+		add_to_group(INTERACTABLE)
 	if active != null:
 		active.exit(self)
 	active = null
@@ -472,16 +479,23 @@ func shove(impulse: Vector3) -> void:
 		velocity += dv
 
 ## The interaction seam (spec §12.4): the Interactor's contract, routed to
-## the species' interactions. There are none in this build, so nothing is
-## offered, and the node is not in group "interactable".
-func can_interact(_actor: Node) -> bool:
-	return species != null and not species.interactions.is_empty()
+## the species' interactions. The one there is: &"talk" (NpcTalk, the Wadees).
+## A species with none is not in group "interactable".
+func can_interact(actor: Node) -> bool:
+	if species == null or site == null or is_dead():
+		return false
+	if species.interactions.has(NpcTalk.ID):
+		return NpcTalk.can(self, actor)
+	return false
 
 func prompt_text() -> String:
+	if species != null and species.interactions.has(NpcTalk.ID):
+		return NpcTalk.prompt(self)
 	return ""
 
-func interact(_actor: Node) -> void:
-	pass
+func interact(actor: Node) -> void:
+	if can_interact(actor) and species.interactions.has(NpcTalk.ID):
+		NpcTalk.run(self, actor)
 
 ## Sizes the collider to the species: upright if it is about as tall as it is
 ## long, lying along z if it is longer.

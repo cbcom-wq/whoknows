@@ -55,6 +55,19 @@ const TURQUOISE := Color("3fb3a6")
 ## Sunglass: sand made glass and filled with sun.
 const SUNGLASS := Color("ffc94a")
 
+## The Wadees' rooms (WadooRooms, tools/blender/wadoo_rooms.py), by the room
+## model's material names: pale stone, dark wood, their cloths and metals, the
+## basin's water, and the woven map's sand, dunes and red thread.
+const ROOM := {
+	"stone": Color("c9b79a"), "stone_dark": Color("9e8d73"), "wood": Color("5a3a24"), "bronze": BRONZE,
+	"sunglass": SUNGLASS, "royal": ROYAL, "teal": Color("2f6b6e"), "rust": Color("8e4a2b"), "cream": Color("e4d3b6"),
+	"saffron": Color("d0a24a"), "turquoise": TURQUOISE, "water": Color("3f7664"), "map_sand": Color("d8b98a"),
+	"map_dune": Color("a8805a"), "map_red": Color("a52a22"), "clay": Color("a8653f"),
+}
+## A room's sunglass lamps: their light, as a lamp's glow (InteriorPalette's rule:
+## warm practical lights).
+const LAMP := Color("ffc06a")
+
 ## Roughness and metal per slot (surface()).
 const ROUGH_SKIN := 0.55
 const ROUGH_CLOTH := 0.9

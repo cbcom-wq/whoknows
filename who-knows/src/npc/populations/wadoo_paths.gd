@@ -28,6 +28,12 @@ const PALM_CLEAR := 0.55
 const ITEM_CLEAR := 0.6
 const MEMORIAL_CLEAR := 0.5
 const BENCH_CLEAR := 0.2
+## An open shell with a room (the queen's hall): its inside is open this far in
+## from its walls, its doorway this far in from its jambs, and the room's solid
+## pieces (WadooRooms.solids) are kept this far off.
+const ROOM_CLEAR := 0.3
+const DOORWAY_CLEAR := 0.25
+const ROOM_SOLID_CLEAR := 0.25
 ## Where a door's spot stands: this far out from the door's middle.
 const DOOR_OUT := 1.0
 ## Line of sight is tested every this far along a leg, m.
@@ -41,6 +47,8 @@ var ring := PackedVector2Array()
 ## The gate's and the breach's middles, [east, north].
 var gate := Vector2.ZERO
 var breach := Vector2.ZERO
+## The open shells with rooms: [{at, size, yaw, room}].
+var rooms := []
 
 ## The paths of `layout` (a place's layout), whose pool's water reaches
 ## `pool_radius` m from its middle.
@@ -139,6 +147,8 @@ func _shell(s: Dictionary) -> void:
 		else:
 			spots = BrickShell.door_spots(BrickShell.openings_for(size, variety,
 				float(s.get("door_width", BrickShell.DOOR.x))))
+			if bool(s.get("open", false)) and s.has("room"):
+				_open_room(at, size, yaw, spots, StringName(str(s["room"])))
 	var list := []
 	for d: Array in spots:
 		var c: Vector3 = d[0]
@@ -147,6 +157,35 @@ func _shell(s: Dictionary) -> void:
 		list.append({"at": spot, "out": local_to_place(Vector2(way.x, way.z), yaw).normalized(),
 			"door": at + local_to_place(Vector2(c.x, c.z), yaw)})
 	doors[str(s["id"])] = list
+
+## The inside of an open shell (its room) walkable: the floor clear of the walls,
+## its doorway, and the room's pieces solid again.
+func _open_room(at: Vector2, size: Vector3, yaw: float, spots: Array, room: StringName) -> void:
+	var inner := Vector2(size.x, size.z) * 0.5 - Vector2.ONE * (BrickShell.WALL + ROOM_CLEAR)
+	_set_box(at, inner, yaw, false)
+	for d: Array in spots:
+		# from just inside the wall to past the shell's margin outside, a door wide
+		var c: Vector3 = d[0]
+		var way: Vector3 = d[1]
+		var inside := BrickShell.WALL * 0.5 + ROOM_CLEAR + CELL
+		var outside := BrickShell.WALL * 0.5 + SHELL_CLEAR + CELL
+		var mid := Vector2(c.x, c.z) + Vector2(way.x, way.z) * (outside - inside) * 0.5
+		var across := maxf(float(d[2]) * 0.5 - DOORWAY_CLEAR, CELL * 0.75)
+		var half := Vector2(across, (inside + outside) * 0.5)
+		if absf(way.x) > 0.5:
+			half = Vector2(half.y, half.x)
+		_set_box(at + local_to_place(mid, yaw), half, yaw, false)
+	for sol: Array in WadooRooms.solids(room):
+		_solid_box(at + local_to_place(sol[0], yaw), sol[1], yaw, ROOM_SOLID_CLEAR)
+	rooms.append({"at": at, "size": size, "yaw": yaw, "room": room})
+
+## Sets every cell of a box of half-size `half` (its own x by z) at `c`, turned
+## by `yaw_deg`, solid or open.
+func _set_box(c: Vector2, half: Vector2, yaw_deg: float, solid: bool) -> void:
+	for cell in _cells_near(c, Vector2.ONE * half.length()):
+		var l := place_to_local(cell_middle(cell) - c, yaw_deg)
+		if absf(l.x) <= half.x and absf(l.y) <= half.y:
+			_grid.set_point_solid(cell, solid)
 
 ## A point `local` (x, z in a piece's own frame) turned by the piece's `yaw_deg`
 ## as PlaceField turns it, as [east, north] from the piece's middle.

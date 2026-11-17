@@ -344,3 +344,63 @@ Each stage is committed on branch `wadoo`, rendered at eye height and shown to t
   average, 0.014 at worst. Stopping their minds, bodies and motions gave 165 fps and hiding them 173:
   the town costs about 1.3 ms of physics plus its motions. The census after a minute: 5 on post, 11 at
   work, 3 resting, 2 mourning, 3 talking, the queen at court.
+
+### Stage 2: talking and the queen (2026-11-17, branch `wadoo`)
+
+- **Talking** is an interaction, `NpcTalk` (`talk`), in all three species: look at a Wadee within
+  2.5 m, **[F] Talk to Halla** (the queen's prompt is "Talk to Queen Imsa"). The flight scene holds
+  you still while the panel is open, and the Wadee turns to you (`converse`, `Idle_Talking`, or
+  `Sitting_Talking` on a bench). `DialogPanel` turns pages with F, Space or Enter, answers with 1
+  or 2, and Esc leaves.
+- **The lines** are 54 entries in `data/wadoo/lines.json`. A line is picked by who it is for and
+  what is true: a name outranks a trait (`#grief`, `#shy`), a trait a role, a role anyone, and
+  among equals the one with more conditions wins; ties take turns. `{deeds}` names the tasks you
+  have done. A person's own lines go under their name: the queen grieves, and while her lines were
+  under her role she greeted you as a mourner.
+- **`WadooState`** is saved as the part `"wadoo"`: regard 0 to 3, the three tasks (the lilies up
+  to six), whether you met the queen, the hunt (`later` or `accepted`, which sticks) and hostility.
+  The door opens at regard 1 unless the town is hostile. Until stage 3, a task is done only by a
+  test or the probe.
+- **Oru** stands 1 m before the queen's door while it is shut to you, and 1.3 m to its side once
+  it opens. A Sunguard at their post holds it: `give_way` stepped Oru back from you through the
+  doorway, which is open on the walking grid whether the door is shut or not. No one steps aside
+  into a building they are not in.
+- **The hall** is `house_b`, opened (`"open": true, "room": "hall"` in `oasis.json`). Its room is
+  a Blender model (`tools/blender/wadoo_rooms.py`, `assets/wadoo/hall.glb`) fitted inside the brick
+  shell, painted from `WadeePalette.ROOM`:
+  - a dais 0.3 m high across the back, with a 0.15 m step;
+  - the throne, teal and bronze, under a teal cloth;
+  - a basin of water in the middle and a rug before it;
+  - four sunglass lamps on bronze stands (`OmniLight3D`, no shadows), banners on the side walls;
+  - the Sunguard's staff rack, jars and cushions;
+  - the woven map of the dunes, with the village, its breach and the beast's path in red.
+
+  Its lamps are at half the strength first tried (`LAMP_ENERGY` 0.8): at 1.6 the four of them lit
+  the pale walls as bright as the street. A `ReflectionProbe` meant to keep the sky's light out
+  barely changed the walls, since the lamps lit them, so it went. The desert's blowing sand passed
+  through the walls, so no sand blows while you are in a room (`BlowingSand.sheltered`,
+  `flight_test._indoors`).
+
+  Collision is simple boxes: `col_` empties for the furniture, `floor_` empties for the dais and
+  its step. The walking grid opens inside the room and through its doorway, and the furniture is
+  solid again; the walkers' feet follow the floor, the dais and a 1.2 m ramp at the door.
+- **The door** (`WadooDoor`) is a plank leaf with bronze studs. It swings into the hall over 1.4 s
+  when the town comes to think well of you, and it is already open when you land with regard.
+- **The queen** sits on her throne. She rises as you come within 4.5 m and faces you, and sits
+  again once you are 7 m off. Her audience is four pages (her greeting, the night of the beast, the
+  six lost, why a ship cannot hunt it), then "Will you hunt it with my Sunguard, on foot?" *Not
+  yet* leaves the question for next time. *I'll hunt with you* sends Kesh, Tarro, Seli and Nadi to
+  the breach (`gather`). Oru keeps her door. The sun-rod is given in stage 4, with the weapon.
+- **Found on the way:** `BrickShell._pieces` cut a wall at every hole's sides and stacked pieces
+  under each hole, so a window over a door built a piece of brick down across the doorway. This
+  bricked up the doorway of every two-storey house with a window over its door. It showed first in
+  the open hall, as the one doorway anyone walks through. A wall is now cut into upright strips,
+  and each strip leaves every hole over it open.
+- **Proved:** `wadoo_play.gd -- <out> hall` lands and walks to the hall:
+  - Oru waits 0.01 m from his place before the shut door and holds it as you walk up;
+  - the Interactor finds him from 1.8 m, F opens his panel, and Esc shuts it;
+  - with regard 1 the door swings to 96 degrees and Oru steps aside;
+  - the queen sits on her throne, and rises as you come in;
+  - her audience runs through the Interactor and the keys, and the hunt is accepted;
+  - 4 of 4 Sunguard reach the breach in 61 s;
+  - the feet of 24 Wadees are 0.001 m from the ground on average, 0.006 at worst.

@@ -943,11 +943,15 @@ func _shell_pieces() -> Dictionary:
 	return out
 
 ## The height a ray straight down from `from_height` m over the ground at
-## layout point `p` meets the Brick body at (in the place's frame), or NAN.
+## layout point `p` meets the Brick body, or a room's furniture in an open shell
+## (WadooRooms, the hall's basin), at (in the place's frame), or NAN.
 func _brick_down(p: Vector2, from_height: float) -> float:
 	var top := _over(p, from_height)
 	var hit := _ray(top, top - Vector3(0, from_height + 2.0, 0))
-	if hit.is_empty() or hit["collider"] != _oasis().get_node("Brick"):
+	if hit.is_empty():
+		return NAN
+	var by: Node = hit["collider"]
+	if by != _oasis().get_node("Brick") and not by.get_parent().name.begins_with("Room_"):
 		return NAN
 	return _oasis().to_local(hit["position"]).y
 
@@ -1001,7 +1005,8 @@ func test_a_threshold_is_a_step():
 	assert_eq(checked, 12, "a door in every shell")
 
 ## Rework 2: a whole shell's door is shut (a ray through its middle meets its
-## collider); a crushed hut stays open where its walls broke.
+## collider; an open shell's, the door's leaf, WadooDoor); a crushed hut stays
+## open where its walls broke.
 func test_shell_doors_are_shut():
 	await _hold_over(0, 0, 60.0)
 	var pieces := _shell_pieces()
@@ -1026,7 +1031,12 @@ func test_shell_doors_are_shut():
 		for d: Array in doors:
 			var middle: Vector3 = (d[0] as Vector3) + Vector3(0, 1.0, 0)
 			var out: Vector3 = d[1]
-			assert_true(_meets(middle + out * 1.0, middle - out * 1.0, brick), "%s's door is shut" % id)
+			var shut: Node = brick
+			if bool(s.get("open", false)):
+				var door := _oasis().find_child(WadooDoor.NAME, false, false) as WadooDoor
+				assert_not_null(door, "%s has its door" % id)
+				shut = door.body if door != null else brick
+			assert_true(_meets(middle + out * 1.0, middle - out * 1.0, shut), "%s's door is shut" % id)
 
 ## How far inside the green's outline (its tufts' and its patch's, round the
 ## pool's middle on the ground) `at` is, m: under 0 past it.

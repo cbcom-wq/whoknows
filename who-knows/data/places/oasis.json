@@ -10,7 +10,7 @@
  "pump": {"at": [17, 1.2], "pipe_to": [12.4, 0.6]},
  "path": {"points": [[-56.8, -28.4], [-42.17, -22.47], [-15.2, -7.6]], "width": 1.4},
  "shells": [{"id": "workshop", "kind": "box", "at": [0.5, 31.4], "size": [10.8, 3.4, 6.4], "yaw": -179, "variety": 0.87, "stamp": "court_north", "enterable": true},
-  {"id": "house_b", "kind": "box", "at": [-8.0, 38.5], "size": [7.5, 5.6, 6.0], "yaw": -179, "variety": 0.98, "stamp": "court_north"},
+  {"id": "house_b", "kind": "box", "at": [-8.0, 38.5], "size": [7.5, 5.6, 6.0], "yaw": -179, "variety": 0.98, "stamp": "court_north", "open": true, "room": "hall"},
   {"id": "hut_b", "kind": "round", "at": [9.8, 35.9], "radius": 3.6, "height": 2.8, "yaw": -165, "variety": 0.09, "stamp": "court_north"},
   {"id": "store", "kind": "box", "at": [28.2, 31.3], "size": [11.0, 2.9, 4.6], "yaw": -138, "variety": 0.46, "stamp": "court_east", "door_width": 2.4},
   {"id": "house_a", "kind": "box", "at": [31.9, 20.7], "size": [8.0, 3.0, 5.5], "yaw": -123, "variety": 0.61, "stamp": "court_east"},

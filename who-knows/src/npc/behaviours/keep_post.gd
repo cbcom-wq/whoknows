@@ -2,7 +2,8 @@ extends Behaviour
 
 ## A Sunguard keeps their post (Wadoo spec §4, §5): stands at it, arms folded,
 ## facing what they guard, and now and then looks about. Kesh walks the breach
-## from one end to the other instead.
+## from one end to the other instead; Oru stands before the queen's door while it
+## is shut to you and beside it once it is open (WadooSite.post_of).
 
 const WALK := 0.45
 const ARRIVED := 0.3
@@ -22,7 +23,7 @@ func score(ctx: NpcContext) -> float:
 func think(ctx: NpcContext) -> Intent:
 	var town := ctx.extra.get(&"town") as WadooSite
 	var post := str(WadooErrand.person(ctx).get("post", ""))
-	var spot := town.spot(&"post", "post:%s" % post)
+	var spot := town.post_of(post)
 	if spot.is_empty():
 		var end := int(ctx.time / LEG) % 2
 		spot = town.spot(&"post", "post:%s:%d" % [post, end])

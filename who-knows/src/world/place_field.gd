@@ -17,6 +17,10 @@ extends Node3D
 
 ## A place within this far of the focus is loaded; beyond FREE_BEYOND it is
 ## freed (so a place at the edge does not load and free each tick), m.
+## A place was built (its node is new): what lives on it, or opens in it, may
+## set itself up (the flight scene opens the queen's hall door from WadooState).
+signal place_built(id: StringName, node: Node3D)
+
 const LOAD_WITHIN := 8000.0
 const FREE_BEYOND := 10000.0
 
@@ -126,6 +130,7 @@ func _load(place: PlaceDesign, body: SystemBody) -> void:
 	node.add_to_group(Universe.EXTERIOR_SPACE)
 	_loaded[place.id] = node
 	_build(place, body, node)
+	place_built.emit(place.id, node)
 
 func _free(id: StringName) -> void:
 	var node: Node3D = _loaded[id]
@@ -364,6 +369,9 @@ func _build_brick(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionary,
 	var add := func(shapes: Array[CollisionShape3D]) -> void:
 		for c in shapes:
 			brick.add_child(c)
+	# Open shells with a room inside (Wadoo spec §8, §10), by shell id, for those
+	# who walk them (WadooSite): {room, frame, size}.
+	var rooms := {}
 	for s: Dictionary in shells:
 		var from := kit.vertex_count(InteriorKit.Batch.SOLID)
 		var at: Array = s["at"]
@@ -396,15 +404,28 @@ func _build_brick(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionary,
 				doors = BrickShell.door_spots([], 0.0, size)
 			else:
 				var openings := BrickShell.openings_for(size, variety, float(s.get("door_width", BrickShell.DOOR.x)))
-				BrickShell.box(kit, f, size, openings, variety)
-				add.call(BrickShell.box_shapes(f, size, openings, variety))
+				var open := bool(s.get("open", false))
+				BrickShell.box(kit, f, size, openings, variety, not open)
+				add.call(BrickShell.box_shapes(f, size, openings, variety, not open))
 				doors = BrickShell.door_spots(openings)
+				if open and s.has("room"):
+					var room := StringName(str(s["room"]))
+					WadooRooms.build(room, node, f)
+					rooms[str(s["id"])] = {"room": room, "frame": f, "size": size}
+					if not doors.is_empty():
+						var d: Array = doors[0]
+						var c: Vector3 = d[0]
+						var width := float(d[2])
+						var door := WadooDoor.make(width - 0.02, BrickShell.DOOR.y - 0.02, variety)
+						node.add_child(door)
+						door.transform = f * Transform3D(Basis.IDENTITY, Vector3(c.x - width * 0.5 + 0.01, 0.0, c.z + 0.1))
 			avoid.append(Vector3(centre.x, centre.z, Vector2(size.x, size.z).length() * 0.5 + GRASS_MARGIN))
 		# Each door in the place's frame: [its middle at the floor, the way out, width].
 		var placed := []
 		for d: Array in doors:
 			placed.append([f * (d[0] as Vector3), (f.basis * (d[1] as Vector3)).normalized(), d[2]])
 		mark.call("shell", str(s["id"]), from, foot, {"slab": foot + BrickShell.FOUNDATION, "doors": placed})
+	node.set_meta(&"rooms", rooms)
 	var yards: Array = layout.get("yards", [])
 	for k in yards.size():
 		var from := kit.vertex_count(InteriorKit.Batch.SOLID)

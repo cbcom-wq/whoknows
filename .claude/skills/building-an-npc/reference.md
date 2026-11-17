@@ -469,15 +469,32 @@ The first NPCs on a world. Everything is in the oasis place's frame (x east, z -
   exists; `up_at` away from the world's centre; `ground(p)` bilinear on a 1 m grid cached from
   `PlaceField.ground_fn`; `route` is the paths' plus a last stretch (`LAST_STRETCH` 1.2 m) onto a spot
   the grid's margins leave out (a bench seat). **Spots** by kind (`SPOT_KINDS`: garden, dry, pump,
-  glass, breach, memorial, shade, bank, wash, post, court), each `{at, face, action, key}`:
+  glass, breach, memorial, shade, bank, wash, post, court, gather), each `{at, face, action, key}`:
   `spots(kind)`, `spot(kind, key)`, `take_spot(kind, who, near, salt)` (claims; one claim per person:
   a new claim drops the old), `claim`, `release(who)`, `holder_of`. `door_of(home)` -> `{at, door, out}`.
   **Pairs:** `ask_pair(who)` (needs company >= `PAIR_WANTS` 0.45 in both, within `PAIR_REACH` 20 m;
   they meet halfway, `PAIR_APART` 1.1 m), `pair_of`, `end_pair`. **State:** `mark(who, state)`
   (`&"seated"` and the like), `hide(who, on)` (indoors: look hidden, not solid), `hidden(who)`.
-  `start_pose` wakes the Sunguard at their posts, the queen at `court:queen` and villagers at a
-  seeded choice of their door, a job spot or the bank. `fill` puts `town`, `person`, `pair`, `state`,
-  `indoors` and `nearby` (8 open points 2 m round) in `ctx.extra`; indoors, `ctx.player` is null.
+  `start_pose` wakes the Sunguard at their posts (at their `gather` spot once the hunt is taken
+  up), the queen on her throne (`court:throne`, else `court:queen`) and villagers at a seeded choice
+  of their door, a job spot or the bank. `fill` puts `town`, `person`, `pair`, `state`, `indoors`,
+  `talking`, `village` (the `WadooState`) and `nearby` (8 open points 2 m round) in `ctx.extra`;
+  indoors, `ctx.player` is null. `post_of(post)`: Oru's `queen_door` is `post:queen_door:shut` (on
+  the door's spot) until `state.door_open()`, then `post:queen_door` (1.3 m aside).
+  **Rooms:** `rooms()` (from the place node's meta `rooms`, set by `PlaceField._build_brick`:
+  `{shell id: {room, frame, size}}`), `room_of(shell_id)`; `ground(p)` inside a room is its floor
+  plus `WadooRooms.raised`, and before its door a ramp (`RAMP` 1.2 m, `RAMP_SIDE` 0.3 m past each
+  jamb) up from the terrain. `court:queen` and `court:throne` come from the hall's `stand` and `sit`
+  marks, facing the door. `room_at(p)` is the id of the open shell whose walls hold `p` ("" outside).
+  `fill` sets `ctx.extra.nearby` (open ground 2 m off, with a clear line, and never in a room the
+  walker is not in: a building's doorway is open on the grid whether its door is shut or not) and
+  `holds_ground` (a Sunguard within `HOLDS` 0.6 m of `post_of` their post; `give_way` scores 0 then).
+  **Talking:** `state` (a `WadooState`) and `on_talk` (Callable `(npc, person, said)`) are set by
+  `WadooSource` from the flight scene; `can_talk(npc)` needs both, the person not indoors and nobody
+  else talking (`talking`, a record id); `talk_name` is the title or the name; `talk(npc, actor)`
+  picks the line (`WadooLines.pick`), sets `talking`, ends any pair and calls `on_talk`;
+  `end_talk()`. `GATHER`: five spots [in from the breach, to the side] m: (2, 0), (3.2, ±1.4),
+  (4.3, ±2.6), facing out through it.
 - **`WadooSource`** (`wadoo_source.gd`): offers the 25 records only while an anchor is within
   `NEAR_ENOUGH` 1500 m of the oasis and its node exists; builds the site then (`places.design`,
   `terrain_of_place`, the node's meta `water_radius`). Wired in `flight_test.gd` as `wadoo`
@@ -495,6 +512,45 @@ The first NPCs on a world. Everything is in the oasis place's frame (x east, z -
 - **Place pieces:** benches (`BrickShell.bench`, two under each sail, `data/places/oasis.json`
   `benches`) and the memorial (`OasisLooks.memorial`, six stones on a 2.4 m ring with sunglass lamps;
   `memorial_dir(k, stones)` is where a mourner kneels).
+- **Talking** (`test_wadoo_talk.gd`, `test_wadoo_lines.gd`): `NpcTalk` (`ID` `&"talk"`, in all three
+  species' `interactions`; `can`, `prompt` "Talk to <name>", `run`). `WadooLines` (`shared()`,
+  `pick(person, state, speaker)` -> `{pages, choice, then}`): `who` is a name (`RANK_NAME` 100), a
+  trait `#grief`/`#shy` (20), a role `@villager`/`@sunguard` (10) or `*` (0); `when` holds exact
+  facts or `min:`/`max:` bounds, and a line without `hostile` needs it false; the highest rank plus
+  count of conditions wins, ties cycled by `WadooState.heard_from`. `{deeds}` in a page names the
+  tasks done (`DEEDS`). `WadooState` (`src/world/wadoo_state.gd`, saved as the part `"wadoo"`):
+  `regard` 0-`REGARD_MAX` 3, `tasks` (`pump`, `armlet`, `lilies` up to `LILIES_MAX` 6), `met_queen`,
+  `hunt` (`""`, `later`, `accepted`: accepted sticks), `hostile`; `do_task`, `door_open()` (regard
+  >= 1 and not hostile), `apply(then)` (true for `meet_queen`, `hunt_accepted`, `hunt_later`),
+  `facts()`, signal `changed`. `DialogPanel` (`src/ui/dialog_panel.gd`, layer 3, `WIDTH` 760, `LIFT`
+  150): `open(speaker, pages, choice)`, `next()`, `pick(i)`, `close()`, signal `finished(answer)`;
+  F/Space/Enter next, 1/2 answer, Esc leave. `flight_test._talk_with` freezes you
+  (`set_control_enabled(false)`, `set_at_station(true)`); `_talk_done` applies each `then`
+  (`_wadoo_effect`) and lets you go.
+- **Behaviours of stage 2:** `converse` (a reflex at 0.85 while `ctx.extra.talking`; `talk` facing
+  you, `sit_talk` if seated; `min_time` 0.5); `gather` (0.9 once the hunt is accepted and not
+  hostile, for the Sunguard with a `WadooCast.gather_slot` >= 0: Kesh 0, then the others in cast
+  order, Oru never; walk 0.8, `watch` facing out); `hold_court` (the queen: sits on her throne,
+  rises (`RISE` 1.4 s, `rise`) when you come within `RISE_NEAR` 4.5 m of her stand and sits again
+  past `SIT_AGAIN` 7 m; with no throne she stands at `court:queen` looking about).
+- **The hall** (`test_wadoo_hall.gd`): `house_b` is `"open": true, "room": "hall"`. `PlaceField`
+  builds an open shell with no door leaves (`BrickShell.box(..., shut = false)`), the room
+  (`WadooRooms.build(room, node, f)`, `f` the shell's frame: the floor's middle, the door toward
+  -z), a `WadooDoor` in its doorway, and the meta `rooms`; it emits `place_built(id, node)` when a
+  place is built. `WadooRooms`: `SCENES` (`&"hall"` -> `res://assets/wadoo/hall.glb`), `build`,
+  `paint` (layer `OasisLooks.WORLD_LAYER`; each surface by its material's name from
+  `WadeePalette.ROOM`), `material(key)`, `mark(room, name)`, `raised(room, local)` (`RAISED`: the
+  dais 0.3 m from z 1.25 to the back wall, x +-2.2; its step 0.15 from z 1.0, x +-1.2), `solids(room)`
+  (the `col_` boxes); lamps are `OmniLight3D` `LAMP_ENERGY` 0.8, `LAMP_RANGE` 5.5, no shadow,
+  `WadeePalette.LAMP`. The room's inside is x +-3.3, z +-2.55, ceiling 4.94. `WadooDoor` (`NAME`
+  `"HallDoor"`, `make(width, tall, variety)`, `set_open(on, at_once)`): a plank leaf
+  (`BrickShell.door_leaf`) with bronze studs, solid on `BodyProxy.LAYER`, swinging in `SWING` 96
+  degrees over `SWING_TIME` 1.4 s. `flight_test._sync_hall` opens it to `wadoo_state.door_open()` on
+  `WadooState.changed` and at once on `place_built`. `WadooPaths`: an open shell with a room has its
+  inside open `ROOM_CLEAR` 0.3 m in from the walls, its doorway open (`DOORWAY_CLEAR` 0.25 m from the
+  jambs, at least 0.375 m either side of the middle), and the room's `col_` boxes solid again with
+  `ROOM_SOLID_CLEAR` 0.25 m; `rooms` lists them. No sand blows while you stand in a room
+  (`flight_test._indoors()` from `WadooSite.room_at`, set as `BlowingSand.sheltered`).
 
 ## Testing patterns
 
