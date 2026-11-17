@@ -373,6 +373,36 @@ func test_everything_outside_is_covered_at_the_oasis():
 		surface.finish()
 	assert_eq(_uncovered(), [], "the place, its pieces and the ground all shift")
 
+## Wadoo's people awake (Wadoo spec §12): each joins the exterior itself, their
+## looks are its children, and a shift leaves them where they were in the town.
+func test_everything_outside_is_covered_with_wadoo_awake():
+	var system: SystemRecipe = _root.system
+	var place: PlaceDesign = system.places()[0]
+	var body := system.body(place.body_id)
+	var terrain: WorldTerrain = _root.star_system.whereabouts.terrain_of(body)
+	var d := place.local_dir(-80.0, -40.0, body.radius)
+	_ship.exterior.freeze = true
+	_ship.exterior.linear_velocity = Vector3.ZERO
+	_ship.exterior.global_position = _universe.to_engine(body.point.plus(d * (body.radius + terrain.height_at(d) + 3.0)))
+	var npcs: NpcDirector = _root.exterior_npcs
+	for i in 20:
+		await wait_physics_frames(3)
+		npcs.review()
+		if npcs.live.size() >= WadooCast.count():
+			break
+	var town: Array[Npc] = []
+	for npc: Npc in npcs.live_npcs():
+		if npc.record.site == WadooCast.SITE:
+			town.append(npc)
+	assert_eq(town.size(), WadooCast.count(), "all of Wadoo is awake")
+	assert_eq(_uncovered(), [], "they and their looks shift too")
+	if town.is_empty():
+		return
+	var before := town[0].local_position()
+	_universe.shift(Vector3(Universe.STEP, 0.0, 0.0))
+	await wait_physics_frames(1)
+	assert_lt(town[0].local_position().distance_to(before), 0.05, "a shift leaves them where they were in the town")
+
 ## The pistol on a spacewalk: the bolt and its flashes are outside, so they
 ## are covered too.
 func test_a_shot_on_a_spacewalk_is_covered():

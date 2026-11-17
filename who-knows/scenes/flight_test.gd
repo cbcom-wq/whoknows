@@ -106,6 +106,8 @@ var npc_bus: StimulusBus
 var exterior_npcs: NpcDirector
 ## The exterior director's source of rock creatures, kept for the dev spawner.
 var rock_life: RockLifeSource
+## The exterior director's source of Wadoo's people (Wadoo spec §4, §12).
+var wadoo: WadooSource
 ## What F10 made, one per director (rock creatures spec §7.2): the exterior's
 ## and each ship's.
 var dev_creatures := {}
@@ -957,7 +959,8 @@ func _wire_npcs() -> void:
 	exterior_npcs = NpcDirector.new()
 	exterior_npcs.name = "NpcDirector"
 	exterior_npcs.rule = NpcDirector.Rule.BY_DISTANCE
-	exterior_npcs.max_live = 32
+	# The rocks' creatures near you, or Wadoo's twenty-five and a few more.
+	exterior_npcs.max_live = 40
 	exterior_npcs.holder = holder
 	exterior_npcs.catalog = _starter.npc_director.catalog
 	exterior_npcs.bus = npc_bus
@@ -978,7 +981,10 @@ func _wire_npcs() -> void:
 	DevCreatures.restart()
 	var dev := DevCreatures.new()
 	dev_creatures[exterior_npcs] = dev
-	exterior_npcs.sources = [life, dev]
+	# Wadoo's people, while the oasis is loaded and you are near it.
+	wadoo = WadooSource.new(places)
+	wadoo.avatar = _avatar
+	exterior_npcs.sources = [life, dev, wadoo]
 	exterior_npcs.ledger = npc_ledger
 	add_child(exterior_npcs)
 	npc_debug = NpcDebug.new()
