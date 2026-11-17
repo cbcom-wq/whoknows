@@ -451,5 +451,7 @@ Each stage is committed on branch `wadoo`, rendered at eye height and shown to t
   - at half health, Wenna heals you to full;
   - a minute after the fitting the dry garden is green, regard is 3 and the queen's door is open;
   - the feet of 25 Wadees are 0.002 to 0.003 m from the ground on average, 0.019 at worst.
-- **Small, and found by its flash:** the armlet is 11 cm across, bronze on sand. From 6 m it is a
-  few pixels and the crosshair hides it if you look straight at it; its glint is what you see.
+- **Small:** the armlet is 11 cm across, bronze on sand. At 2 m it reads as a ring
+  (`oasis_wadoo_armlet_close`). At 6 m it is a few pixels and its turquoise stone. Look straight
+  at it and the crosshair hides it. Its glint (the salvage glint, 0.15 s every 2 to 4 s) was not
+  caught in either still, so whether it shows on bright sand is not proved yet.
