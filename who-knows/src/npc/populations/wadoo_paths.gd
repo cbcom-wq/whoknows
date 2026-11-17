@@ -9,7 +9,7 @@ extends RefCounted
 ##
 ## Solid: outside the ring wall (but near its gate and its breach), the wall and
 ## its piers, the yards' walls, the shells, the pool, the garden beds, the
-## pump, the sails' poles, the palms, the items and the memorial, each with a
+## pump, the sails' poles and benches, the palms, the items and the memorial, each with a
 ## margin a body needs to pass it.
 
 const CELL := 0.5
@@ -27,6 +27,7 @@ const POLE_CLEAR := 0.4
 const PALM_CLEAR := 0.55
 const ITEM_CLEAR := 0.6
 const MEMORIAL_CLEAR := 0.5
+const BENCH_CLEAR := 0.2
 ## Where a door's spot stands: this far out from the door's middle.
 const DOOR_OUT := 1.0
 ## Line of sight is tested every this far along a leg, m.
@@ -112,6 +113,9 @@ func _build(layout: Dictionary, pool_radius: float) -> void:
 		_solid_disc(_v2(p), PALM_CLEAR)
 	for it: Dictionary in layout.get("items", []):
 		_solid_disc(_v2(it["at"]), ITEM_CLEAR)
+	for bench: Dictionary in layout.get("benches", []):
+		_solid_box(_v2(bench["at"]), Vector2(float(bench.get("length", 2.4)), BrickShell.BENCH_DEPTH) * 0.5,
+			float(bench.get("yaw", 0.0)), BENCH_CLEAR)
 	if layout.has("memorial"):
 		var m: Dictionary = layout["memorial"]
 		_solid_disc(_v2(m["at"]), float(m.get("radius", 2.4)) + MEMORIAL_CLEAR)

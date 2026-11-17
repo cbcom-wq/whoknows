@@ -100,6 +100,19 @@ func loaded(id: StringName) -> Node3D:
 	var node: Node3D = _loaded.get(id)
 	return node if is_instance_valid(node) else null
 
+## The design of the place `id`, or null.
+func design(id: StringName) -> PlaceDesign:
+	for p in _places:
+		if p.id == id:
+			return p
+	return null
+
+## The terrain of the world the place `id` is on, or null.
+func terrain_of_place(id: StringName) -> WorldTerrain:
+	var p := design(id)
+	var body := system.body(p.body_id) if p != null else null
+	return whereabouts.terrain_of(body) if body != null else null
+
 func _point_of(place: PlaceDesign, body: SystemBody) -> UniversePoint:
 	if not _points.has(place.id):
 		_points[place.id] = ground_point(place, body, whereabouts.terrain_of(body))
@@ -133,6 +146,8 @@ func _build(place: PlaceDesign, body: SystemBody, node: Node3D) -> void:
 	var water_radius := 0.0
 	if layout.has("pool"):
 		water_radius = _build_pool(place, terrain, layout["pool"], node)
+	# the water's edge, for those who walk the place (WadooSite)
+	node.set_meta(&"water_radius", water_radius)
 	_build_village(place, terrain, layout, node, water_radius)
 	if layout.has("ledge"):
 		_build_ledge(place, terrain, layout["ledge"], node)

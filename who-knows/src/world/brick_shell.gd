@@ -96,6 +96,10 @@ const SAIL_LIFT := 0.5
 const SAIL_SAG := 0.3
 const SAIL_CELLS := 4
 const POLE := 0.07
+## A bench under a sail (Wadoo spec §5): a plank seat on two stone blocks, its
+## length from the layout, this deep and its seat this high, m. Sitters face its +z.
+const BENCH_DEPTH := 0.45
+const BENCH_SEAT := 0.45
 ## What a building stands on (Rework 2): a course of stone FOUNDATION high over
 ## the ground and FOUNDATION_PROUD proud of the walls, the floor slab on it at
 ## its top (FLOOR_THICK of it shows above the ground inside a crushed hut).
