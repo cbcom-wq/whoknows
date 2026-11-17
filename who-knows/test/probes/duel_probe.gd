@@ -541,7 +541,7 @@ static func _fps_of(frames: Array) -> Dictionary:
 	for us: int in frames:
 		total += us
 		worst = maxi(worst, us)
-		if us > 1e6 / 120.0:
+		if us > 1e6 / 80.0:
 			slow += 1
 		second += us
 		in_second += 1
@@ -552,7 +552,7 @@ static func _fps_of(frames: Array) -> Dictionary:
 	var mean := frames.size() * 1e6 / maxf(total, 1.0)
 	if slowest_second == INF:
 		slowest_second = mean
-	return {"min": slowest_second, "mean": mean, "text": "fps %.0f %.0f (min of each second, mean; worst frame %.0f; %.0f%% of %d frames under 120)" % [
+	return {"min": slowest_second, "mean": mean, "text": "fps %.0f %.0f (min of each second, mean; worst frame %.0f; %.0f%% of %d frames under 80)" % [
 		slowest_second, mean, 1e6 / maxf(worst, 1.0), 100.0 * slow / maxf(frames.size(), 1.0), frames.size()]}
 
 ## After the lost fight: frames of the screen, and its end.
@@ -849,7 +849,7 @@ func _table() -> void:
 		_results.size(), "PASS" if rocks == 0 else "MISS", adrift])
 	for key: String in _fps_lines:
 		var fps: Dictionary = _fps_lines[key]
-		var floor_fps := 109.0 if key.begins_with("warden") else 120.0
+		var floor_fps := 80.0
 		print("  seated fps %s: min %.0f mean %.0f: %s (mean at least %.0f)" % [key, fps["min"], fps["mean"],
 			"PASS" if fps["mean"] >= floor_fps else "MISS", floor_fps])
 	for band: int in [400, 1000]:

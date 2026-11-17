@@ -44,7 +44,7 @@ by the agent; at most 400 blocks (`docs/superpowers/specs/2026-10-09-ship-design
 **To send it,** make its worktree first (`git worktree add ../whoknows-design-<n> -b design-<n>
 main`), then dispatch `ship-designer` with the brief and that path; it works there by
 `Set-Location`, never in your checkout, and renames the branch `ship-<id>`. Several can run at once
-in separate worktrees, but their probes then share the GPU: a reading under 120 fps is re-run
+in separate worktrees, but their probes then share the GPU: a reading under 80 fps is re-run
 alone. A session started before `.claude/agents/ship-designer.md` existed does not know the agent
 type; send a general-purpose Opus agent told to follow that file instead.
 

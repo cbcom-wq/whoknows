@@ -777,7 +777,7 @@ func _second_ship() -> Ship:
 	await _shot("up_the_ramp")
 	var fps := await _fps(3.0)
 	var eye := (_avatar.camera.global_position - _avatar.global_position).dot(_avatar.up)
-	_check(fps >= 120.0, "7 fps %.0f at the foot of the ramp looking up it, eye %.2f m (at least 120) %s" % [fps, eye, _ms()])
+	_check(fps >= 80.0, "7 fps %.0f at the foot of the ramp looking up it, eye %.2f m (at least 80) %s" % [fps, eye, _ms()])
 	# Up the ramp on your feet to the shut hatch.
 	var front := func() -> Vector3: return lock.alcove.outer_hatch.global_position + (out.call() as Vector3) * 0.45
 	t0 = Time.get_ticks_msec()

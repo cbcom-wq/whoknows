@@ -100,8 +100,10 @@ readouts are built from them.
 
 ### 2.6 Performance budget
 
-The interior must hold **at least 120 fps at 1280 × 720 on the reference GPU (GTX 960)** with the
-canopy view rendering. The canopy view renders the outside a second time, at full screen, whenever
+Every view in the game must hold **at least 80 fps at 1280 × 720 on the reference GPU (GTX 960)**,
+the interior with the canopy view rendering. The floor was 120 until 2026-11-16, when the owner
+lowered it to 80: the card plays far heavier games well, and a town of people (the Wadees, 25 in
+view at 74–80 fps) could not fit under 120. The readings below were taken against 120. The canopy view renders the outside a second time, at full screen, whenever
 the viewer is inside the ship. With portal windows, the cockpit pod and five furnished rooms it
 measured 148–218 fps (2026-09-24); the seat in the pod, mostly glass, is the cheapest view.
 Looking down the corridor with the hands in view it measured 143 fps, and 125–126 fps with eight

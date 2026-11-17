@@ -300,7 +300,7 @@ Do these in order. Each one names the check that proves it.
 10. **Render and show the owner:** eye-height (1.6 m) views of the bridge, the seated view, the
    corridor, each room and the exterior, plus an outside view with each RCS axis firing (every
    block's puffs should show). Cycle the airlock both ways, look out of the windows, and hold
-   ≥120 fps at 1280×720. **Look out of every seat's glass at your own ship:** the hull beyond the
+   ≥80 fps at 1280×720. **Look out of every seat's glass at your own ship:** the hull beyond the
    cabin shows (the bow under a turret, the flanks past a band), and nothing of it blocks the
    glass. **The hull views** (the probe writes them): two quarters (bow port,
    stern starboard), the profile, above and below, fill-lit to judge the shape and **dark with the floods, the forward
@@ -454,7 +454,7 @@ thrust.
 | A hull moved by something new, with its flight computer still steering | The arriving ship's RCS puffed all the way in, a dotted trail along its line | Anything that flies a hull for it rests the flight computer, as the warp and `WarpArrival` do (`FlightComputer._physics_process`) |
 | One quantum core for a big ship | A 600-block draft drew 92.8 MW against 36 made: the starter already draws 31.3 of its core's 36 | Count power while drawing; a second `quantum_core` beside the corridor (the plant runs any number); grav plating sparingly (1.5 MW each) |
 | RCS only at the bow of a long ship | A 43-row stretched starter turned 0.06 / 0.03 / 0.42 rad/s²: inertia grows with length squared | Rcs pairs at both ends; the lever arm is free authority |
-| 600 blocks | Probed, the worst view fell to 116 fps (109 with a second ship), under the 120 floor | `ShipRules.MOST_BLOCKS` is 400, which holds 121; a big ship costs frames |
+| 600 blocks | Probed, the worst view fell to 116 fps (109 with a second ship), under the floor of the time, 120 | `ShipRules.MOST_BLOCKS` is 400, which holds 121; a big ship costs frames |
 | Quitting a probe with its scene made but not in the tree | `--ship nope` printed its error, then the engine crashed on the way out (exit -1073741819, not 1) | Check arguments before `instantiate()`, as `ship_probe.gd` does |
 | Stand spots in a raised seat's frame | Standing from the captain's chair put you at dais height on the ramp's edge, to drop 0.25 m to the floor | A raised seat has its own `stand_spots()` (`CaptainChair.DAIS_STAND_SPOTS`): on the floor, past the ramp by the avatar's radius |
 | Freeing a seat on every rebuild | A block hit rebuilds the interior; freeing the crew seats freed the camera on the seat's eye under you | `Ship._place_seat` keeps a seat by cell and moves it; a seat whose chair is gone stands you up first (`stand_now`) |
@@ -572,7 +572,7 @@ thrust.
   a 150 m length. See the ship exterior spec §6.4 and the Task 13 report.
 - **Asteroid tunnels.** None exist; the forward lights (220 m, shadowed) are sized for them.
 - **Weapons beyond the turrets** (ship weapons spec §14): no shields, no fixed guns for a
-  fighter, no missiles, no NPC gunner. Its known edges, and the 120 fps floor, are in `reference.md` *Weapons*.
+  fighter, no missiles, no NPC gunner. Its known edges, and the frame rates measured against the floor of the time (120 fps), are in `reference.md` *Weapons*.
 - **Hostiles beyond the dev key** (hostile ships spec §14): only F6's Shift+1–9 brings one in, and
   Destroy is the only objective. No *disable*, looting, boarding a live enemy, wrecks, or factions
   beyond `Sides.CREW` and `Sides.HOSTILE`; nobody flees or surrenders. Stand-off won none of its
