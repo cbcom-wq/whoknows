@@ -1,26 +1,35 @@
-# The Wadees' skeletons and motions. Reads the five models wadee_base.py wrote, puts a skeleton in
+# The Wadees' skeletons and motions. Reads the models wadee_base.py wrote, puts a skeleton in
 # each (bones placed from the body's own shape, named as Godot's humanoid profile), weights the
-# skin to it, lets clothes, hair and jewellery follow the skin under them, and copies motions from
-# Quaternius's Universal Animation Library (CC0) onto it. Writes wadee_<tag>.glb with the clips.
-#   blender -b --factory-startup --disable-autoexec --python wadee_rig.py -- <UAL glb> <in dir> <out dir> [render] [a m ...]
+# skin to it, lets clothes, hair and jewellery follow the skin under them, copies motions from
+# Quaternius's Universal Animation Libraries 1 and 2 (CC0) onto it, and joins every part into one
+# mesh with one material whose colours are slots of a 16 x 1 palette (SLOTS), so the game draws a
+# Wadee in one call and colours each person from WadeePalette. Writes wadee_<tag>.glb with the
+# clips, and sunstaff.glb (the Sunguard's staff).
+#   blender -b --factory-startup --disable-autoexec --python wadee_rig.py -- <UAL1 glb> <UAL2 glb> <in dir> <out dir> [render] [a m ...]
 import bpy, math, sys, os
 from mathutils import Vector, Matrix
 from mathutils.bvhtree import BVHTree
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from wkit import srgb, mat  # noqa
+from wkit import srgb, mat, tube, ellipsoid, obj_from  # noqa
 import bmesh
 
 ARGS = sys.argv[sys.argv.index("--") + 1:]
-UAL, IN, OUT = ARGS[0], ARGS[1], ARGS[2]
+UAL, UAL2, IN, OUT = ARGS[0], ARGS[1], ARGS[2], ARGS[3]
 RENDER = "render" in ARGS
-TAGS = [a for a in ARGS[3:] if len(a) == 1] or ["a", "b", "c", "m", "n"]
+TAGS = [a for a in ARGS[4:] if len(a) == 1] or ["a", "b", "c", "m", "n", "q", "s", "t"]
 os.makedirs(OUT, exist_ok=True)
 FPS = 24  # the library's clips import at the scene's rate; they go out at the same one
 
-# The clips each Wadee gets, by the library's names (kept, so a clip can be traced back).
-CLIPS = ["Idle_Loop", "Idle_Talking_Loop", "Walk_Loop", "Walk_Formal_Loop", "Jog_Fwd_Loop", "Sprint_Loop"]
+# The clips each Wadee gets, by the libraries' names (kept, so a clip can be traced back). Godot
+# drops "_Loop" and loops those; the game loops the others it holds (WadeeLook).
+CLIPS1 = ["Idle_Loop", "Idle_Talking_Loop", "Walk_Loop", "Walk_Formal_Loop", "Jog_Fwd_Loop", "Sprint_Loop",
+          "Sitting_Enter", "Sitting_Idle_Loop", "Sitting_Exit", "Sitting_Talking_Loop", "Fixing_Kneeling",
+          "Interact", "PickUp_Table", "Hit_Chest", "Hit_Head", "Death01", "Roll", "Spell_Simple_Shoot",
+          "Spell_Simple_Idle_Loop", "Crouch_Idle_Loop", "Crouch_Fwd_Loop"]
+CLIPS2 = ["Farm_Watering", "Farm_Harvest", "Farm_PlantSeed", "Walk_Carry_Loop", "Consume",
+          "Idle_FoldArms_Loop", "Yes", "Hit_Knockback"]
 
-# Ours (Godot's humanoid profile), the library's, the parent.
+# Ours (Godot's humanoid profile), library 1's, the parent.
 BONES = [("Root", "root", None), ("Hips", "DEF-hips", "Root"), ("Spine", "DEF-spine.001", "Hips"),
          ("Chest", "DEF-spine.002", "Spine"), ("UpperChest", "DEF-spine.003", "Chest"),
          ("Neck", "DEF-neck", "UpperChest"), ("Head", "DEF-head", "Neck")]
@@ -33,9 +42,23 @@ for side, sfx in (("Left", ".L"), ("Right", ".R")):
               (side + "LowerLeg", "DEF-shin" + sfx, side + "UpperLeg"),
               (side + "Foot", "DEF-foot" + sfx, side + "LowerLeg"),
               (side + "Toes", "DEF-toe" + sfx, side + "Foot")]
+NAMES1 = {n: s_ for n, s_, _ in BONES}
+# Library 2's bones are named as Unreal's mannequin.
+NAMES2 = {"Root": "root", "Hips": "pelvis", "Spine": "spine_01", "Chest": "spine_02", "UpperChest": "spine_03",
+          "Neck": "neck_01", "Head": "Head"}
+for side, sfx in (("Left", "_l"), ("Right", "_r")):
+    for ours, theirs in (("Shoulder", "clavicle"), ("UpperArm", "upperarm"), ("LowerArm", "lowerarm"),
+                         ("Hand", "hand"), ("UpperLeg", "thigh"), ("LowerLeg", "calf"), ("Foot", "foot"),
+                         ("Toes", "ball")):
+        NAMES2[side + ours] = theirs + sfx
 ARM_BONES = {s + b for s in ("Left", "Right") for b in ("UpperArm", "LowerArm", "Hand")}
 LEG_BONES = {s + b for s in ("Left", "Right") for b in ("UpperLeg", "LowerLeg")}
 HAIR_BONES = {"Head", "Neck", "UpperChest", "Chest"}
+
+# The palette: a Wadee's material is one 16 x 1 texture, and each part's UVs point at its slot's
+# texel. Material names from wadee_base.py (before any "_<tag>") give the slot.
+SLOTS = ["skin", "lips", "hair", "brow", "eye_white", "iris", "pupil", "lash", "cloth1", "cloth2", "cloth3",
+         "leather", "bronze", "turquoise", "sunglass", "cape"]
 
 sc = bpy.context.scene
 sc.render.fps = FPS
@@ -58,41 +81,62 @@ def use_action(obj, act):
         obj.animation_data.action_slot = act.slots[0]
 
 
-# ---- the library: its rest, and every clip sampled once (world rotations, the hips' place)
-src_objs = import_glb(UAL)
-src = next(o for o in src_objs if o.type == "ARMATURE")
-src_mesh = next(o for o in src_objs if o.type == "MESH" and o.name.startswith("Mannequin"))
-for o in src_objs:
-    o.hide_render = True
-SW = src.matrix_world.copy()
-H_SRC = max((src_mesh.matrix_world @ v.co).z for v in src_mesh.data.vertices)
-S_REST = {s: SW @ src.data.bones[s].matrix_local for _, s, _ in BONES}
-S_HIPS0 = S_REST["DEF-hips"].translation.copy()
-samples = {}
-for clip in CLIPS:
-    act = bpy.data.actions[clip]
-    use_action(src, act)
-    f0, f1 = act.frame_range
-    frames = [f0 + i for i in range(int(f1 - f0) + 1)]
-    if f1 - frames[-1] > 1e-3:
-        frames.append(f1)
-    rows = []
-    for f in frames:
-        sc.frame_set(int(f), subframe=f - int(f))
-        rows.append((f - f0, {s: (SW @ src.pose.bones[s].matrix).copy() for _, s, _ in BONES}))
-    samples[clip] = rows
-    # walking pace: how fast a planted foot slides back under the in-place body
-    speeds = []
-    for sfx in (".L", ".R"):
-        ys = [(t, r["DEF-toe" + sfx].translation) for t, r in rows]
-        zmin = min(p.z for _, p in ys)
-        for (t0, p0), (t1, p1) in zip(ys, ys[1:]):
-            if p0.z < zmin + 0.01 and p1.z < zmin + 0.01 and t1 > t0:
-                speeds.append((p1.y - p0.y) / ((t1 - t0) / FPS))
-    speeds.sort()
-    pace = speeds[len(speeds) // 2] if speeds else 0.0
-    print("WADEE clip %-18s %5.2f s  planted foot %.2f m/s (library body, %.2f m)" % (clip, (f1 - f0) / FPS, pace, H_SRC))
-use_action(src, None)
+class Source:
+    """A motion library: its rest (world matrices by our bone names), its height, and every clip
+    it has of `clips`, sampled once (world matrices by our names, per frame)."""
+
+    def __init__(self, path, names, clips):
+        objs = import_glb(path)
+        arm = next(o for o in objs if o.type == "ARMATURE")
+        mesh = next(o for o in objs if o.type == "MESH" and o.name.startswith("Mannequin"))
+        for o in objs:
+            o.hide_render = True
+        self.arm, self.names = arm, names
+        SW = arm.matrix_world.copy()
+        rest = {n: SW @ arm.data.bones[t].matrix_local for n, t in names.items()}
+        # facing -y as ours; a library facing +y is turned about z
+        if (rest["LeftToes"].translation - rest["LeftFoot"].translation).y > 0:
+            SW = Matrix.Rotation(math.pi, 4, "Z") @ SW
+            rest = {n: SW @ arm.data.bones[t].matrix_local for n, t in names.items()}
+            print("WADEE %s faces +y: turned" % os.path.basename(path))
+        self.SW = SW
+        self.rest = rest
+        self.H = max((mesh.matrix_world @ v.co).z for v in mesh.data.vertices)
+        self.hips0 = rest["Hips"].translation.copy()
+        self.samples = {}
+        for clip in clips:
+            act = bpy.data.actions.get(clip)
+            if act is None:
+                print("WADEE clip %s: not in %s, skipped" % (clip, os.path.basename(path)))
+                continue
+            use_action(arm, act)
+            f0, f1 = act.frame_range
+            frames = [f0 + i for i in range(int(f1 - f0) + 1)]
+            if f1 - frames[-1] > 1e-3:
+                frames.append(f1)
+            rows = []
+            for f in frames:
+                sc.frame_set(int(f), subframe=f - int(f))
+                rows.append((f - f0, {n: (SW @ arm.pose.bones[t].matrix).copy() for n, t in names.items()}))
+            self.samples[clip] = rows
+            speeds = []
+            for side in ("Left", "Right"):
+                ys = [(t, r[side + "Toes"].translation) for t, r in rows]
+                zmin = min(p.z for _, p in ys)
+                for (t0, p0), (t1, p1) in zip(ys, ys[1:]):
+                    if p0.z < zmin + 0.01 and p1.z < zmin + 0.01 and t1 > t0:
+                        speeds.append((p1.y - p0.y) / ((t1 - t0) / FPS))
+            speeds.sort()
+            pace = speeds[len(speeds) // 2] if speeds else 0.0
+            print("WADEE clip %-24s %5.2f s  planted foot %.2f m/s (library body %.2f m, hips %.3f)" % (
+                clip, (f1 - f0) / FPS, pace, self.H, self.hips0.z))
+        use_action(arm, None)
+
+
+SRC1 = Source(UAL, NAMES1, CLIPS1)
+SRC2 = Source(UAL2, NAMES2, CLIPS2)
+SOURCES = [SRC1, SRC2]
+H_SRC = SRC1.H
 
 
 def bbox_mid(ps):
@@ -109,14 +153,13 @@ def landmarks(vs):
     def sl(z, tol, keep):
         return [p for p in vs if abs(p.z - z) < tol and keep(p)]
 
-    def ratio(sname):
-        return S_REST[sname].translation.z / H_SRC
+    def ratio(name):
+        return SRC1.rest[name].translation.z / H_SRC
 
     J = {}
     # trunk: the middle of each slice, a little toward the back
-    for name, sname, back in (("Hips", "DEF-hips", 0.1), ("Spine", "DEF-spine.001", 0.1), ("Chest", "DEF-spine.002", 0.1),
-                              ("UpperChest", "DEF-spine.003", 0.1), ("Neck", "DEF-neck", 0.0), ("Head", "DEF-head", 0.0)):
-        z = ratio(sname) * Hs
+    for name, back in (("Hips", 0.1), ("Spine", 0.1), ("Chest", 0.1), ("UpperChest", 0.1), ("Neck", 0.0), ("Head", 0.0)):
+        z = ratio(name) * Hs
         half = 0.07 * kw if name in ("Neck", "Head") else 0.15 * kw
         ps = sl(z, 0.008 * kw, lambda p: abs(p.x) < half)
         y0, y1 = min(p.y for p in ps), max(p.y for p in ps)
@@ -127,9 +170,9 @@ def landmarks(vs):
         def leg(z):
             return bbox_mid(sl(z, 0.008 * kw, lambda p: 0.0 < s * p.x < 0.19 * kw))
         hip = leg(0.43 * Hs)
-        J[side + "UpperLeg"] = Vector((hip.x, hip.y, ratio("DEF-thigh.L") * Hs))
-        J[side + "LowerLeg"] = leg(ratio("DEF-shin.L") * Hs)
-        J[side + "Foot"] = leg(ratio("DEF-foot.L") * Hs)
+        J[side + "UpperLeg"] = Vector((hip.x, hip.y, ratio("LeftUpperLeg") * Hs))
+        J[side + "LowerLeg"] = leg(ratio("LeftLowerLeg") * Hs)
+        J[side + "Foot"] = leg(ratio("LeftFoot") * Hs)
         foot = [p for p in vs if p.z < 0.035 * kw and s * p.x > 0]
         yf, yb = min(p.y for p in foot), max(p.y for p in foot)
         ball_y = yb + 0.72 * (yf - yb)
@@ -137,7 +180,7 @@ def landmarks(vs):
         J[side + "Toes"] = Vector(((min(p.x for p in ball) + max(p.x for p in ball)) / 2, ball_y, 0.022 * kw))
         J[side + "ToesTip"] = Vector((J[side + "Toes"].x, yf, 0.015 * kw))
         # arms: the shoulder joint sits inside the deltoid; the hand is what hangs out past the hips
-        zj = ratio("DEF-upper_arm.L") * Hs
+        zj = ratio("LeftUpperArm") * Hs
         top = sl(zj, 0.01 * kw, lambda p: s * p.x > 0)
         outer = max(s * p.x for p in top)
         hand = [p for p in vs if s * p.x > 0.2 * kw and 0.28 * Hs < p.z < 0.6 * Hs]
@@ -167,9 +210,9 @@ def landmarks(vs):
         J[side + "UpperArm"], J[side + "LowerArm"], J[side + "Hand"] = joint, elbow, wrist
         J[side + "HandTip"] = wrist.lerp(tip, 0.55)
         uc = J["UpperChest"]
-        neck_base = sl(ratio("DEF-shoulder.L") * Hs, 0.008 * kw, lambda p: abs(p.x) < 0.06 * kw)
+        neck_base = sl(ratio("LeftShoulder") * Hs, 0.008 * kw, lambda p: abs(p.x) < 0.06 * kw)
         y0 = min(p.y for p in neck_base)
-        J[side + "Shoulder"] = Vector((s * 0.02 * kw, y0 + 0.35 * (uc.y - y0) * 2, ratio("DEF-shoulder.L") * Hs))
+        J[side + "Shoulder"] = Vector((s * 0.02 * kw, y0 + 0.35 * (uc.y - y0) * 2, ratio("LeftShoulder") * Hs))
     return J, Hs
 
 
@@ -188,6 +231,14 @@ def tail_of(name, J):
     if name == "Hips":
         return J["Spine"]
     return J[kids[0]]
+
+
+def slot_of(name):
+    base = name.split(".")[0]
+    for k, slot in enumerate(SLOTS):
+        if base == slot or base.startswith(slot + "_"):
+            return k
+    raise ValueError("WADEE no palette slot for material %s" % name)
 
 
 def rig(tag):
@@ -322,7 +373,7 @@ def rig(tag):
             wl = [{g: x for g, x in skin_at(v.co, "trunk").items() if g in HAIR_BONES} or {"Head": 1.0}
                   for v in me.vertices]
             wl = smooth(me, wl, 4)
-        elif kind in ("top", "trim", "chest", "sash", "skirt"):
+        elif kind in ("top", "trim", "chest", "sash", "skirt", "cape", "clasp"):
             wl = []
             for v in me.vertices:
                 w = skin_at(v.co, "trunk")
@@ -332,7 +383,7 @@ def rig(tag):
                     w["Hips"] = w.get("Hips", 0.0) + legs * 0.4
                 wl.append(w)
             # smoothed along the cloth, so it stretches between the legs instead of tearing
-            wl = smooth(me, wl, 30 if kind == "skirt" else 8)
+            wl = smooth(me, wl, 40 if kind == "cape" else 30 if kind == "skirt" else 8)
         else:
             # jewellery and leather: a ring round an arm (its middle on the arm's bone) follows the
             # arm; a coin, a bead, a belt or a sandal follows the trunk and legs
@@ -360,48 +411,51 @@ def rig(tag):
     # the motions: each bone turns in the world as the library's bone does, measured from a pose of
     # the library's body matched to ours (its arms brought down to where ours hang)
     TB = {n: ad.bones[n].matrix_local.copy() for n, _, _ in BONES}
-    ref = {}
-    for name, sname, parent in BONES:
-        rest_s = S_REST[sname].to_3x3().normalized()
-        if parent:
-            psn = next(s for n, s, _ in BONES if n == parent)
-            cur = ref[parent] @ S_REST[psn].to_3x3().normalized().inverted() @ rest_s
-        else:
-            cur = rest_s
-        swing = cur.col[1].rotation_difference(TB[name].col[1].xyz.normalized()).to_matrix()
-        ref[name] = swing @ cur
-    C = {n: ref[n].inverted() @ TB[n].to_3x3().normalized() for n, _, _ in BONES}
-    lift = TB["Hips"].translation.z / S_HIPS0.z
+
+    def matched(src):
+        ref = {}
+        for name, _, parent in BONES:
+            rest_s = src.rest[name].to_3x3().normalized()
+            if parent:
+                cur = ref[parent] @ src.rest[parent].to_3x3().normalized().inverted() @ rest_s
+            else:
+                cur = rest_s
+            swing = cur.col[1].rotation_difference(TB[name].col[1].xyz.normalized()).to_matrix()
+            ref[name] = swing @ cur
+        corr = {n: ref[n].inverted() @ TB[n].to_3x3().normalized() for n, _, _ in BONES}
+        return corr, TB["Hips"].translation.z / src.hips0.z
     for pb in arm.pose.bones:
         pb.rotation_mode = "QUATERNION"
     acts = []
-    for clip in CLIPS:
-        act = bpy.data.actions.new("%s_%s" % (clip, tag))
-        use_action(arm, act)
-        last = {}
-        for t, row in samples[clip]:
-            M = {}
-            for name, sname, parent in BONES:
-                B = TB[name]
-                pb = arm.pose.bones[name]
-                if parent is None:
-                    M[name] = B
-                    continue
-                chain = M[parent] @ TB[parent].inverted() @ B
-                R = row[sname].to_3x3().normalized() @ C[name]
-                pos = B.translation + (row[sname].translation - S_HIPS0) * lift if name == "Hips" else chain.translation
-                M[name] = Matrix.Translation(pos) @ R.to_4x4()
-                basis = chain.inverted() @ M[name]
-                q = basis.to_quaternion()
-                if name in last:
-                    q.make_compatible(last[name])
-                last[name] = q
-                pb.rotation_quaternion = q
-                pb.keyframe_insert("rotation_quaternion", frame=t, group=name)
-                if name == "Hips":
-                    pb.location = basis.translation
-                    pb.keyframe_insert("location", frame=t, group=name)
-        acts.append((clip, act))
+    for src in SOURCES:
+        C, lift = matched(src)
+        for clip, rows in src.samples.items():
+            act = bpy.data.actions.new("%s_%s" % (clip, tag))
+            use_action(arm, act)
+            last = {}
+            for t, row in rows:
+                M = {}
+                for name, _, parent in BONES:
+                    B = TB[name]
+                    pb = arm.pose.bones[name]
+                    if parent is None:
+                        M[name] = B
+                        continue
+                    chain = M[parent] @ TB[parent].inverted() @ B
+                    R = row[name].to_3x3().normalized() @ C[name]
+                    pos = B.translation + (row[name].translation - src.hips0) * lift if name == "Hips" else chain.translation
+                    M[name] = Matrix.Translation(pos) @ R.to_4x4()
+                    basis = chain.inverted() @ M[name]
+                    q = basis.to_quaternion()
+                    if name in last:
+                        q.make_compatible(last[name])
+                    last[name] = q
+                    pb.rotation_quaternion = q
+                    pb.keyframe_insert("rotation_quaternion", frame=t, group=name)
+                    if name == "Hips":
+                        pb.location = basis.translation
+                        pb.keyframe_insert("location", frame=t, group=name)
+            acts.append((clip, act))
     use_action(arm, None)
     for clip, act in acts:
         tr = arm.animation_data.nla_tracks.new()
@@ -412,6 +466,48 @@ def rig(tag):
     for pb in arm.pose.bones:
         pb.rotation_quaternion = (1, 0, 0, 0)
         pb.location = (0, 0, 0)
+
+    # one mesh, one material: each part's faces point at their material's slot of the palette
+    image = bpy.data.images.new("palette_" + tag, len(SLOTS), 1, alpha=True)
+    px = [0.0] * (4 * len(SLOTS))
+    for o in parts:
+        for m in o.data.materials:
+            k = slot_of(m.name)
+            node = m.node_tree.nodes.get("Principled BSDF") if m.node_tree else None
+            if node is not None:
+                px[4 * k:4 * k + 4] = list(node.inputs["Base Color"].default_value)
+    image.pixels = px
+    image.pack()
+    pal = bpy.data.materials.new("wadee_palette")
+    pal.use_nodes = True
+    bsdf = pal.node_tree.nodes.get("Principled BSDF")
+    tex = pal.node_tree.nodes.new("ShaderNodeTexImage")
+    tex.image = image
+    tex.interpolation = "Closest"
+    pal.node_tree.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+    bsdf.inputs["Roughness"].default_value = 0.65
+    for o in parts:
+        me = o.data
+        slots = [slot_of(m.name) if m else 0 for m in me.materials]
+        while me.uv_layers:
+            me.uv_layers.remove(me.uv_layers[0])
+        uv = me.uv_layers.new(name="UVMap")
+        for poly in me.polygons:
+            u = (slots[poly.material_index] + 0.5) / len(SLOTS)
+            for li in poly.loop_indices:
+                uv.data[li].uv = (u, 0.5)
+            poly.material_index = 0
+        me.materials.clear()
+        me.materials.append(pal)
+    bpy.ops.object.select_all(action="DESELECT")
+    for o in parts:
+        o.select_set(True)
+    bpy.context.view_layer.objects.active = body
+    bpy.ops.object.join()
+    body.name = "wadee_mesh_" + tag
+    parts = [body]
+    print("WADEE %s one mesh: %d triangles, %d groups" % (
+        tag, sum(len(pg.vertices) - 2 for pg in body.data.polygons), len(body.vertex_groups)))
 
     bpy.ops.object.select_all(action="DESELECT")
     arm.select_set(True)
@@ -425,6 +521,39 @@ def rig(tag):
 
 
 rigged = [rig(t) for t in TAGS]
+
+
+def sunstaff():
+    """The Sunguard's sunstaff, 1.5 m: a bronze shaft along +z (Godot's +y), its grip at the origin,
+    a sunglass orb in a bronze cage at the top. Writes sunstaff.glb."""
+    coll = bpy.data.collections.new("sunstaff")
+    sc.collection.children.link(coll)
+    bronze = mat("staff_bronze", "#b5803e", 0.35, 0.8)
+    glass = mat("sunglass", "#ffc94a", 0.2)
+    node = glass.node_tree.nodes.get("Principled BSDF")
+    node.inputs["Emission Color"].default_value = srgb("#ffb627")
+    node.inputs["Emission Strength"].default_value = 3.0
+    bb, bg = bmesh.new(), bmesh.new()
+    tube(bb, [((0, 0, -0.50), 0.016, 0.016), ((0, 0, -0.46), 0.013, 0.013), ((0, 0, 0.80), 0.012, 0.012),
+              ((0, 0, 0.90), 0.016, 0.016), ((0, 0, 0.93), 0.022, 0.022)], segs=12)
+    for z in (-0.06, 0.0, 0.06, 0.62, 0.66):
+        tube(bb, [((0, 0, z - 0.008), 0.016, 0.016), ((0, 0, z + 0.008), 0.016, 0.016)], segs=12)
+    for k in range(4):
+        a = math.pi / 2 * k + math.pi / 4
+        rib = [((math.cos(a) * r, math.sin(a) * r, z), 0.005, 0.005)
+               for r, z in ((0.020, 0.93), (0.050, 0.98), (0.058, 1.03), (0.045, 1.08), (0.010, 1.11))]
+        tube(bb, rib, segs=6)
+    ellipsoid(bg, (0, 0, 1.03), (0.040, 0.040, 0.052), segs=16, rings=10)
+    parts = [obj_from(bb, "staff_bronze", bronze, coll), obj_from(bg, "staff_glass", glass, coll)]
+    bpy.ops.object.select_all(action="DESELECT")
+    for o in parts:
+        o.select_set(True)
+    path = os.path.join(OUT, "sunstaff.glb")
+    bpy.ops.export_scene.gltf(filepath=path, export_format="GLB", use_selection=True, export_apply=True)
+    print("WADEE wrote", path)
+
+
+sunstaff()
 
 if RENDER:
     import numpy as np
@@ -481,13 +610,17 @@ if RENDER:
     for i, (arm, parts, acts) in enumerate(rigged):
         arm.location = (i * 1.0 - (len(rigged) - 1) * 0.5, 0, 0)
         arm.animation_data.use_nla = False
-    for clip, n, view in (("Walk_Loop", 6, "side"), ("Jog_Fwd_Loop", 4, "side"), ("Idle_Loop", 2, "front"),
-                          ("Idle_Talking_Loop", 2, "front")):
+    for clip, n, view in (("Walk_Loop", 4, "side"), ("Farm_Watering", 3, "side"), ("Farm_Harvest", 3, "side"),
+                          ("Sitting_Idle_Loop", 2, "side"), ("Fixing_Kneeling", 3, "side"), ("Consume", 3, "front"),
+                          ("Idle_FoldArms_Loop", 2, "front"), ("Walk_Carry_Loop", 3, "side"), ("Yes", 2, "front"),
+                          ("Spell_Simple_Shoot", 3, "front"), ("Death01", 3, "side")):
         paths = []
         for k in range(n):
             for arm, parts, acts in rigged:
                 arm.rotation_euler = (0, 0, math.radians(90) if view == "side" else 0)
-                act = dict(acts)[clip]
+                act = dict(acts).get(clip)
+                if act is None:
+                    continue
                 use_action(arm, act)
                 f0, f1 = act.frame_range
             sc.frame_set(int(f0 + (f1 - f0) * k / n))

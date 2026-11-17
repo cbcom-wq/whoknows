@@ -2,8 +2,8 @@
 
 ## The Wadees (`wadee_base.py`, `wadee_rig.py`, `wkit.py`)
 
-`wadee_base.py` builds the five Wadee models, the people of WADIS's oasis town Wadoo, and
-writes them as glTF to `who-knows/assets/wadee/wadee_<a|b|c|m|n>.glb`. It does the whole
+`wadee_base.py` builds the eight Wadee models, the people of WADIS's oasis town Wadoo, and
+writes them as `.blend` files into a static folder for `wadee_rig.py`. It does the whole
 job in code, so it can be re-run after any change. `a`, `b` and `c` are women and `m` and `n`
 are men. Each has its own skin, hair, height and outfit colours (`VARIANTS` at the bottom of
 the script).
@@ -25,7 +25,7 @@ of its own. The script reads `human_base_meshes_bundle.blend` from that folder.
 Colours are the Wadee outfit set: cream, rust, teal, leather, bronze and turquoise.
 `wkit.py` holds the shared mesh helpers (tubes, ellipsoids, raycast projection, baking).
 
-**Skeleton and motions (`wadee_rig.py`).** The second step reads the five models
+**Skeleton and motions (`wadee_rig.py`).** The second step reads the eight models
 `wadee_base.py` wrote:
 - **Skeleton:** each model gets 23 bones, named as Godot's humanoid profile (`Hips`, `Spine`,
   `Chest`, `UpperChest`, `Neck`, `Head`, then `Left`/`Right` `Shoulder`, `UpperArm`, `LowerArm`,
@@ -44,20 +44,36 @@ Colours are the Wadee outfit set: cream, rust, teal, leather, bronze and turquoi
   library's bone does. The turn is measured from a pose of the library's body that matches ours,
   with its T-pose arms brought down to where ours hang. The hips' movement is scaled by hip
   height.
-- **Clips:** `Idle`, `Idle_Talking`, `Walk`, `Walk_Formal`, `Jog_Fwd` (a fast run) and `Sprint`.
-  Godot drops the library's `_Loop` from each name and loops the clip.
-- **Pace:** to keep the feet from sliding, move a Wadee at the library's pace times its hip
-  height over 0.917 m. The library's pace is 1.05 m/s walking and about 5.9 m/s on `Jog_Fwd`.
+- **Clips**, from two libraries. Library 1 (bones `DEF-*`): `Idle`, `Idle_Talking`, `Walk`,
+  `Walk_Formal`, `Jog_Fwd`, `Sprint`, `Sitting_Enter`, `Sitting_Idle`, `Sitting_Exit`,
+  `Sitting_Talking`, `Fixing_Kneeling`, `Interact`, `PickUp_Table`, `Hit_Chest`, `Hit_Head`,
+  `Death01`, `Roll`, `Spell_Simple_Shoot`, `Spell_Simple_Idle`, `Crouch_Idle`, `Crouch_Fwd`.
+  Library 2 (*Universal Animation Library 2*, CC0; its bones are named as Unreal's mannequin, so
+  it has its own map, `NAMES2`): `Farm_Watering`, `Farm_Harvest`, `Farm_PlantSeed`,
+  `Walk_Carry`, `Consume`, `Idle_FoldArms`, `Yes`, `Hit_Knockback`. Godot drops the library's
+  `_Loop` from a name and loops that clip; `WadeeLook` loops the others it holds (`HELD`).
+- **One mesh, one material:** after weighting, every part's faces get UVs at the texel of their
+  material's slot in a 16 x 1 palette (`SLOTS`: skin, lips, hair, brow, eye white, iris, pupil,
+  lash, cloth 1-3, leather, bronze, turquoise, sunglass, cape), and the parts are joined. The
+  game colours each person from `WadeePalette` (`src/npc/wadee_palette.gd`), so a Wadee is one
+  draw call and five bodies dress as many people.
+- **Variants** (`VARIANTS` in `wadee_base.py`): `a`, `b`, `c` women and `m`, `n` men, the
+  villagers; `q` the queen (a diadem of bronze and turquoise, a collar, more rings and a long
+  cape); `s` and `t`, a woman and a man of the Sunguard (a leather harness crossing chest and
+  back, and leather arm guards). Clothes take materials by role (`cloth1` top, `cloth2` skirt,
+  `cloth3` trim), and the men's chest sash runs over the shoulder.
+- **The sunstaff** (`sunstaff.glb`): a 1.5 m bronze staff with a sunglass orb in a bronze cage,
+  its grip at the origin, along +y. The Sunguard carry it across the back (`WadeeLook`).
 
 **Rebuild**, from this folder. Use `--disable-autoexec`, since the bundle and the library are
 downloaded files:
 
 ```
 "C:/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b --factory-startup --disable-autoexec --python wadee_base.py -- <path to human_base_meshes_bundle.blend> <static dir> render
-"C:/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b --factory-startup --disable-autoexec --python wadee_rig.py -- <path to AnimationLibrary_Godot_Standard.glb> <static dir> ../../who-knows/assets/wadee [render]
+"C:/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b --factory-startup --disable-autoexec --python wadee_rig.py -- <path to AnimationLibrary_Godot_Standard.glb> <path to UAL2_Standard.glb> <static dir> <rig dir> [render]
 ```
 
-`wadee_rig.py` writes the rigged models into the game. With `render` it also writes test
+`wadee_rig.py` writes the rigged models and the staff into `<rig dir>`; copy the `.glb` files into `../../who-knows/assets/wadee` (the test sheets stay out of the game). With `render` it also writes test
 sheets of each clip, one row per moment, as `blender_<clip>.png`. Name a few tags (`a m`) to
 rig only those. Then import them (`godot --headless --path . --import` from `who-knows`) and
 look at them in the game. Run this windowed, not headless:
@@ -76,18 +92,16 @@ the floor of the time, 120 (it is 80 since 2026-11-16).
 
 **Where they stand (2026-11-16).** The owner wants to keep these models. They still need:
 - **Women's faces:** more feminine, closer to the concept art of the Wadee woman in her wraps.
-- **Clothes that connect:** the men's chest sash should run all the way over the shoulder,
-  and every strap, sash and band should meet the body or the garment it hangs from.
+- **Clothes that connect:** done for the men's sash (2026-11-16); the harness's shoulder
+  pieces read as flat plates.
 - **Hair:** the scalp is a smooth shell and the long hair is made of tubes. Hair cards or a
   sculpted hair mesh would read better.
 - **Lips:** the corners are slightly ragged up close, because the lips are coloured per face.
-- **Weight:** each model is 55–65k triangles. That is fine for a few, but a town of 20–25
-  needs lighter versions for distance.
+- **Weight:** each model is 60-70k triangles in one mesh; Godot makes its LODs on import.
 
 **Movement still to do:**
-- **Not in the game yet:** no locomotor walks them over the world's ground (the NPC
-  foundation's `GroundWalker`), and nothing blends between clips by speed. The probe steers
-  its walkers round circles.
+- **In the game** since Wadoo stage 1: `GroundWalker` walks them over the ground and
+  `WadeeLook` picks and paces the clips by speed and action.
 - **Fingers:** there are no finger bones, and nothing grips a spear.
 - **Long skirts:** they stretch between the legs when running. That needs skirt bones or cloth.
 - **Small faults:** a man's anklet hangs low, and the women's tops gap a little at the armpit

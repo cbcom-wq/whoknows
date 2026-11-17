@@ -119,8 +119,12 @@ def extents_at(tree, z, cy=0.0):
     return ex
 
 
-def build(tag, ox, sex, skin_hex, hair_hex, scale, outfit, seed):
+def build(tag, ox, sex, skin_hex, hair_hex, scale, outfit, seed, kind=""):
+    """kind: "" a villager, "queen" (crown, cape, more jewellery) or "guard" (the Sunguard: harness
+    and arm guards). Clothes take materials by role (cloth1 top, cloth2 skirt, cloth3 trim), so
+    the game can colour each person from its palette (wadee_rig.py SLOTS)."""
     male = sex == "m"
+    queen, guard = kind == "queen", kind == "guard"
     M = 1.0 if male else 0.0
     rnd = random.Random(seed)
     coll = bpy.data.collections.new("wadee_" + tag)
@@ -366,7 +370,35 @@ def build(tag, ox, sex, skin_hex, hair_hex, scale, outfit, seed):
         tube(bm_, pts_, segs=8, loop=True)
 
     top_c, skirt_c, trim_c = outfit
+    cloth = {top_c: mat("cloth1_" + tag, CLOTH_HEX[top_c], 0.9), skirt_c: mat("cloth2_" + tag, CLOTH_HEX[skirt_c], 0.9),
+             trim_c: mat("cloth3_" + tag, CLOTH_HEX[trim_c], 0.9), "leather": cloth["leather"]}
     bb, bt = bmesh.new(), bmesh.new()
+
+    def over_shoulder(x, y_from, y_to, lift, n=9):
+        """Points over the top of the shoulder at x, from y_from to y_to (both ends left out): rays
+        down onto the body, so a strap runs over the shoulder instead of through it."""
+        pts_ = []
+        for k in range(1, n - 1):
+            y = y_from + (y_to - y_from) * k / (n - 1)
+            loc, nn, _, _ = tb.ray_cast(Vector((x, y, 2.3)), Vector((0, 0, -1)))
+            if loc is not None:
+                pts_.append((loc + nn * lift, nn))
+        return pts_
+
+    def strap(side, z_hi, z_lo, off, x_hi=0.150, x_lo=0.135):
+        """A band from one shoulder across the chest to the other hip and back up the back, over the
+        shoulder: side 1 starts at the right shoulder (-x), -1 at the left."""
+        pts_ = []
+        for k in range(14):
+            t = k / 13
+            x, z = -side * x_hi + side * (x_hi + x_lo) * t, z_hi - (z_hi - z_lo) * t
+            pts_.append(radialn(tt, -math.pi / 2 + math.asin(max(-1, min(1, x / 0.19))), z, off))
+        for k in range(14):
+            t = k / 13
+            x, z = side * x_lo - side * (x_hi + x_lo) * t, z_lo + (z_hi - z_lo) * t
+            pts_.append(radialn(tt, math.pi / 2 - math.asin(max(-1, min(1, x / 0.19))), z, off))
+        pts_ += over_shoulder(-side * (x_hi - 0.01), pts_[-1][0].y, pts_[0][0].y, off)
+        return pts_
 
     def fit_rings(rings):
         dense = []
@@ -393,18 +425,12 @@ def build(tag, ox, sex, skin_hex, hair_hex, scale, outfit, seed):
         return out
 
     if male:
-        loop_pts = []
-        for k in range(14):
-            t = k / 13
-            x, z = -0.150 + 0.285 * t, 1.43 - 0.41 * t
-            loop_pts.append(radialn(tt, -math.pi / 2 + math.asin(max(-1, min(1, x / 0.19))), z, 0.008))
-        for k in range(14):
-            t = k / 13
-            x, z = 0.135 - 0.285 * t, 1.02 + 0.41 * t
-            loop_pts.append(radialn(tt, math.pi / 2 - math.asin(max(-1, min(1, x / 0.19))), z, 0.008))
+        loop_pts = strap(1, 1.43, 1.02, 0.008)
         bm = bmesh.new()
-        tube(bm, [(q, 0.003, 0.036) for q, nn in loop_pts], segs=8, loop=True, ref=lambda i: loop_pts[i][1])
-        parts.append(obj_from(bm, "chest_sash_" + tag, cloth[top_c], coll))
+        if not guard:
+            tube(bm, [(q, 0.003, 0.036) for q, nn in loop_pts], segs=8, loop=True, ref=lambda i: loop_pts[i][1])
+        if not guard:
+            parts.append(obj_from(bm, "chest_sash_" + tag, cloth[top_c], coll))
         skirt_rings = fit_rings([((0, 0.0, 0.995), 0.152, 0.110), ((0, 0.004, 0.930), 0.166, 0.122),
                                  ((0, 0.006, 0.860), 0.174, 0.126), ((0, 0.006, 0.700), 0.186, 0.138),
                                  ((0, 0.006, 0.520), 0.198, 0.150), ((0, 0.006, 0.420), 0.204, 0.155),
@@ -490,7 +516,18 @@ def build(tag, ox, sex, skin_hex, hair_hex, scale, outfit, seed):
         up = arm_at(s, 0.68 * H)
         if up:
             hug_ring(bb, up[0], up[1], 0.004, 0.005)
-        for zz in ((0.51 * H,) if male else (0.515 * H, 0.505 * H)):
+        if guard:
+            # arm guards: a sleeve of leather from the wrist most of the way to the elbow
+            for k in range(6):
+                wr = arm_at(s, 0.515 * H + 0.014 * k)
+                if wr:
+                    hug_ring(bleather, wr[0], wr[1], 0.005, 0.0085)
+        if queen:
+            for zz in (0.655 * H, 0.70 * H):
+                up = arm_at(s, zz)
+                if up:
+                    hug_ring(bb, up[0], up[1], 0.004, 0.0045)
+        for zz in (() if guard else (0.51 * H,) if male else (0.515 * H, 0.505 * H)):
             wr = arm_at(s, zz)
             if not wr:
                 continue
@@ -512,6 +549,35 @@ def build(tag, ox, sex, skin_hex, hair_hex, scale, outfit, seed):
         fw = max(0.0, -math.sin(a)) ** 2
         pts.append(radial(tb, a, 1.452 - 0.055 * fw, 0.004))
     tube(bb, [(q, 0.0032, 0.0032) for q in pts], segs=6, loop=True)
+    if queen:
+        # a collar of three rings, beads of water stone on the lowest, and a diadem
+        for ring_k, (dz, r_) in enumerate(((-0.022, 0.0036), (-0.042, 0.004))):
+            pts = []
+            for k in range(32):
+                a = 2 * math.pi * k / 32
+                fw = max(0.0, -math.sin(a)) ** 2
+                pts.append(radial(tb, a, 1.452 + dz - (0.055 + 0.02 * ring_k) * fw, 0.005))
+            tube(bb, [(q, r_, r_) for q in pts], segs=6, loop=True)
+        for k in range(9):
+            a = math.radians(-90 + (k - 4) * 13)
+            fw = max(0.0, -math.sin(a)) ** 2
+            q = radial(tb, a, 1.452 - 0.042 - 0.075 * fw - 0.012, 0.009)
+            ellipsoid(bt, q, (0.006, 0.006, 0.008), segs=8, rings=6)
+        zc = cz + 0.42 * rz
+        kz = math.sqrt(1 - 0.42 ** 2)
+        band = []
+        for k in range(40):
+            a = 2 * math.pi * k / 40
+            band.append((Vector((math.cos(a) * (kz * rx + 0.016), cy + math.sin(a) * (kz * ry + 0.016), zc)), 0.004, 0.009))
+        tube(bb, band, segs=8, loop=True)
+        for k in range(9):
+            a = math.radians(-90 + (k - 4) * 15)
+            base_ = Vector((math.cos(a) * (kz * rx + 0.017), cy + math.sin(a) * (kz * ry + 0.017), zc + 0.008))
+            hgt = 0.030 if k == 4 else 0.016 + 0.006 * (1 - abs(k - 4) / 4)
+            tube(bb, [(base_, 0.0045, 0.0025), (base_ + Vector((0, 0, hgt * 0.6)), 0.0035, 0.002),
+                      (base_ + Vector((0, 0, hgt)), 0.0008, 0.0008)], segs=8)
+        front_ = Vector((0, cy - (kz * ry + 0.022), zc + 0.004))
+        ellipsoid(bt, front_, (0.010, 0.005, 0.012), segs=12, rings=8)
     q, nn = hit_front(tt, 0.0, 1.372 if not male else 1.385)
     if q is not None:
         ellipsoid(bt, q + nn * 0.006, (0.011, 0.005, 0.015), segs=12, rings=8)
@@ -532,7 +598,54 @@ def build(tag, ox, sex, skin_hex, hair_hex, scale, outfit, seed):
             ac = sum(ank, Vector()) / len(ank)
             ar = sum(Vector((p.x - ac.x, p.y - ac.y, 0)).length for p in ank) / len(ank)
             ring_on(bleather, ac, (0, 0, 1), ar + 0.004, 0.004)
+    if guard:
+        # the harness: two leather straps crossing on the chest and the back, over both shoulders
+        for side in (1, -1):
+            sp = strap(side, 1.43 if male else 1.425, 1.0, 0.010 if male else 0.016)
+            tube(bleather, [(q, 0.004, 0.019) for q, nn in sp], segs=8, loop=True, ref=lambda i, sp=sp: sp[i][1])
     parts.append(obj_from(bleather, "leather_" + tag, cloth["leather"], coll))
+    if queen:
+        # a long cape from the shoulders, clear of the back and the skirt, bronze along its top
+        R_, C_ = 22, 17
+        bm = bmesh.new()
+        grid_ = []
+        z_top = 0.805 * H
+        for j in range(R_):
+            t = j / (R_ - 1)
+            z = z_top + (0.07 - z_top) * t
+            half = 0.165 + 0.19 * t ** 1.1
+            row = []
+            for k in range(C_):
+                u = 2 * k / (C_ - 1) - 1
+                x = u * half
+                loc, nn, _, _ = tb.ray_cast(Vector((x * (1 - t), 0.6, z if t < 0.3 else z_top)), Vector((0, -1, 0)))
+                yb = (loc.y if loc is not None else 0.12) + 0.014
+                y = yb + 0.20 * t ** 1.3 - 0.045 * u * u * (0.4 + t) + 0.012 * math.sin(9 * u + 0.7) * t
+                row.append(bm.verts.new((x, y, z)))
+            grid_.append(row)
+        for j in range(R_ - 1):
+            for k in range(C_ - 1):
+                bm.faces.new((grid_[j][k], grid_[j + 1][k], grid_[j + 1][k + 1], grid_[j][k + 1]))
+        cape = obj_from(bm, "cape_" + tag, mat("cape_" + tag, "#5a2a4a", 0.85), coll)
+        sm = cape.modifiers.new("sm", "SMOOTH")
+        sm.factor = 0.5
+        sm.iterations = 4
+        bake(cape)
+        push_out(cape, tb, 0.012)
+        push_out(cape, ts, 0.012)
+        for o in parts:
+            if o.name.startswith(("bronze_", "turquoise_")):
+                push_out(cape, bvh(o), 0.012, only=lambda co: abs(co.z - belt_z) < 0.07 and co.y > 0)
+        so = cape.modifiers.new("so", "SOLIDIFY")
+        so.thickness = 0.005
+        bake(cape)
+        parts.append(cape)
+        top_row = sorted([v.co.copy() for v in cape.data.vertices if v.co.z > z_top - 0.01], key=lambda p: p.x)
+        if len(top_row) > 3:
+            bbar = bmesh.new()
+            step = max(1, len(top_row) // 12)
+            tube(bbar, [(p + Vector((0, 0.004, 0.006)), 0.006, 0.006) for p in top_row[::step]], segs=8)
+            parts.append(obj_from(bbar, "clasp_" + tag, bronze, coll))
 
     bpy.data.objects.remove(torso_t)
     root = bpy.data.objects.new("wadee_" + tag, None)
@@ -546,13 +659,21 @@ def build(tag, ox, sex, skin_hex, hair_hex, scale, outfit, seed):
     return root, parts
 
 
+CLOTH_HEX = {"cream": "#e4d3b6", "rust": "#8e4a2b", "teal": "#3d8787"}
+# tag, x in the line-up, sex, skin, hair, scale, outfit (top, skirt, trim), seed, kind
 VARIANTS = [
-    ("a", -1.9, "f", "#8d5b3c", "#2a1a12", 1.00, ("cream", "rust", "teal"), 1),
-    ("b", -0.95, "f", "#6b432c", "#17100c", 1.03, ("cream", "teal", "rust"), 2),
-    ("c", 0.0, "f", "#a8714c", "#4e2e1a", 0.97, ("rust", "cream", "teal"), 3),
-    ("m", 0.95, "m", "#7a4c32", "#1e140e", 1.055, ("cream", "rust", "teal"), 4),
-    ("n", 1.9, "m", "#9a6644", "#3a2416", 1.04, ("teal", "cream", "rust"), 5),
+    ("a", -3.5, "f", "#8d5b3c", "#2a1a12", 1.00, ("cream", "rust", "teal"), 1, ""),
+    ("b", -2.5, "f", "#6b432c", "#17100c", 1.03, ("cream", "teal", "rust"), 2, ""),
+    ("c", -1.5, "f", "#a8714c", "#4e2e1a", 0.97, ("rust", "cream", "teal"), 3, ""),
+    ("m", -0.5, "m", "#7a4c32", "#1e140e", 1.055, ("cream", "rust", "teal"), 4, ""),
+    ("n", 0.5, "m", "#9a6644", "#3a2416", 1.04, ("teal", "cream", "rust"), 5, ""),
+    ("q", 1.5, "f", "#6b432c", "#17100c", 1.04, ("cream", "teal", "rust"), 6, "queen"),
+    ("s", 2.5, "f", "#8d5b3c", "#2a1a12", 1.02, ("rust", "cream", "teal"), 7, "guard"),
+    ("t", 3.5, "m", "#7a4c32", "#1e140e", 1.07, ("cream", "rust", "teal"), 8, "guard"),
 ]
+ONLY = [a for a in ARGS[2:] if len(a) == 1]
+if ONLY:
+    VARIANTS = [v for v in VARIANTS if v[0] in ONLY]
 built = [build(*v) for v in VARIANTS]
 for o in list(bpy.data.objects):
     if o.name in [n for k in SRC.values() for n in (k, k + ".eye.L", k + ".eye.R")]:
@@ -601,8 +722,13 @@ if RENDER:
         bpy.ops.render.render(write_still=True)
         print("WADEE render", sc.render.filepath)
 
-    shot("group", (0, -5.4, 1.6), (0, 0, 0.95), 30, (1600, 900))
-    shot("face_b", (-0.95, -0.62, 1.64 * 1.03), (-0.95, 0, 1.635 * 1.03), 50, (900, 900))
-    shot("face_c_3q", (0.30, -0.55, 1.61), (0.0, 0, 1.60 * 0.97), 50, (900, 900))
-    shot("face_m", (0.95, -0.66, 1.64 * 1.055), (0.95, 0, 1.635 * 1.055), 50, (900, 900))
-    shot("men_3q", (2.9, -2.6, 1.6), (1.4, 0, 1.05), 40, (900, 1200))
+    shot("group", (0, -9.6, 1.6), (0, 0, 0.95), 30, (2000, 900))
+    xs = {v[0]: v[1] for v in VARIANTS}
+    ks = {v[0]: v[5] for v in VARIANTS}
+    for t_ in xs:
+        x_, k_ = xs[t_], ks[t_]
+        shot("face_" + t_, (x_ + 0.18, -0.62, 1.64 * k_), (x_, 0, 1.62 * k_), 50, (700, 700))
+    for t_ in ("q", "s", "t", "m"):
+        if t_ in xs:
+            shot("back_" + t_, (xs[t_] + 1.3, 2.4, 1.5), (xs[t_], 0, 1.0), 40, (800, 1000))
+            shot("front_" + t_, (xs[t_] - 0.9, -2.6, 1.5), (xs[t_], 0, 1.0), 40, (800, 1000))
