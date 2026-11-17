@@ -1,27 +1,87 @@
 extends "res://test/probes/oasis_render.gd"
 
-## Five Wadees (assets/wadee/wadee_<a|b|c|m|n>.glb, made in Blender by
-## tools/blender/wadee_base.py) stood by the pool at WADIS's oasis, rendered on foot with
-## the eye 1.6 m over the ground. They are models only: no skeleton, no behaviour yet.
-## Run WITHOUT --headless, from who-knows:
+## The five Wadees moving by the pool at WADIS's oasis. The models are
+## assets/wadee/wadee_<a|b|c|m|n>.glb, made in Blender by tools/blender/wadee_base.py and
+## given skeletons and motions by tools/blender/wadee_rig.py. Three walk a loop on the north
+## bank while two stand talking inside it, then the three run a wider loop. A crowd of
+## CROWD more joins for one frame-rate reading. The views are on foot with the eye 1.6 m
+## over the ground, plus runs of frames (oasis_seq_<walk|run>_NN.png) that show the motion.
+## A spike: there is no NPC brain or locomotor yet; this script steers the walkers round
+## their circles and keeps their feet on the ground. Run WITHOUT --headless, from who-knows:
 ##
 ##   godot --path . --resolution 1280x720 --script res://test/probes/wadee_render.gd -- <abs out dir>
 
-## Where each stands, [east, north] m in the oasis's layout, and the model.
-const WADEES := [["a", [-11.4, 18.6]], ["b", [-10.0, 19.0]], ["c", [-8.6, 18.8]], ["m", [-7.1, 19.1]],
-	["n", [-5.6, 18.6]]]
-## Where they all face, [east, north] m.
-const FACING := [-8.6, 24.0]
-## [name, where you stand, what you look at, head pitch deg], [east, north] m.
-const SPIKE_VIEWS := [
-	["wadee_close", [-8.6, 24.4], [-8.6, 18.9], -6.0],
-	["wadee_face_b", [-10.0, 20.6], [-10.0, 19.0], -1.0],
-	["wadee_face_m", [-7.1, 20.75], [-7.1, 19.1], 1.0],
-	["wadee_three_quarter", [-4.0, 22.5], [-8.6, 18.9], -6.0],
-	["wadee_pool_behind", [-8.6, 28.0], [-8.6, 0.0], -3.0],
-	["wadee_backs", [-8.6, 14.0], [-8.6, 24.0], -6.0],
-	["wadee_far", [-8.6, 50.0], [-8.6, 0.0], 0.0],
+## The loops' middles, [east, north] m in the oasis's layout, and their radii, m.
+const WALK_AT := [-8.6, 22.0]
+const WALK_RADIUS := 5.5
+const RUN_AT := [-8.6, 24.0]
+const RUN_RADIUS := 8.0
+## How fast the library's body moves over the ground in each clip, m/s, with its hips
+## (Godot names a clip without the library's "_Loop" and loops it)
+## LIB_HIPS m up (a planted foot's slide, measured by wadee_rig.py). A Wadee moves at that
+## times its own hip height over LIB_HIPS, so its feet do not slide.
+const PACE := {"Walk": 1.05, "Walk_Formal": 1.05, "Jog_Fwd": 5.9}
+const LIB_HIPS := 0.917
+## [model, clip, where on the loop it starts, deg].
+const WALKERS := [["a", "Walk", 90.0], ["b", "Walk_Formal", 210.0], ["m", "Walk", 330.0]]
+## [model, clip, where it stands, what it faces], [east, north] m.
+const TALKERS := [["c", "Idle_Talking", [-9.4, 22.0], [-7.8, 22.0]],
+	["n", "Idle", [-7.8, 22.0], [-9.4, 22.0]]]
+## The crowd's loops: around this middle, at radii between these, all in view from
+## RUN_VIEWS (the worst case for the frame rate: every one of them drawn and posed).
+const CROWD := 20
+const CROWD_AT := [-8.6, 24.0]
+const CROWD_RADII := [3.0, 7.0]
+## [name, where you stand, what you look at, head pitch deg], [east, north] m. The east bank
+## is open; north of the loops (north 30 and on) stand the north court's houses.
+const WALK_VIEWS := [
+	["wadee_walk_bank", [-8.6, 33.0], [-8.6, 22.0], -6.0],
+	["wadee_walk_side", [0.5, 25.0], [-8.6, 22.0], -4.0],
+	["wadee_talkers", [-8.6, 18.6], [-8.6, 22.0], -2.0],
 ]
+## Where the walk's run of frames is seen from: close, on the east bank.
+const SEQ_WALK_VIEW := [[-1.0, 23.5], [-8.6, 22.0], -6.0]
+const RUN_VIEWS := [
+	["wadee_run_bank", [2.5, 25.5], [-8.6, 24.0], -5.0],
+]
+## Frames grabbed in a run, and the seconds between them.
+const SEQ_FRAMES := 12
+const SEQ_GAP := 0.1
+
+## Steers one Wadee round a circle at its clip's pace, its feet on the ground.
+class Walker extends Node:
+	var model: Node3D
+	var player: AnimationPlayer
+	var ground: Callable
+	var centre := Vector2.ZERO
+	var radius := 5.0
+	var angle := 0.0
+	var speed := 0.0
+	## Hip height over the library body's, from the skeleton's rest.
+	var scale_to_lib := 1.0
+
+	func play(clip: String, pace: float, at: Vector2, r: float) -> void:
+		centre = at
+		radius = r
+		var anim := player.get_animation(clip)
+		anim.loop_mode = Animation.LOOP_LINEAR
+		player.play(clip, 0.3)
+		speed = pace * scale_to_lib
+		_place()
+
+	func _process(delta: float) -> void:
+		if speed > 0.0:
+			angle += speed / radius * delta
+			_place()
+
+	func _place() -> void:
+		var p := centre + Vector2(cos(angle), sin(angle)) * radius
+		var q := centre + Vector2(cos(angle + 0.05), sin(angle + 0.05)) * radius
+		var at: Vector3 = ground.call(p.x, p.y)
+		var d: Vector3 = ground.call(q.x, q.y) - at
+		model.transform = Transform3D(Basis(Vector3.UP, atan2(d.x, d.z)), at)
+
+var _walkers: Array[Walker] = []
 
 func _run() -> void:
 	await _frames(3)
@@ -59,18 +119,69 @@ func _run() -> void:
 		return
 	var places: PlaceField = _scene.get("places")
 	var node := places.loaded(PLACE_ID)
-	for w: Array in WADEES:
-		var model: Node3D = (load("res://assets/wadee/wadee_%s.glb" % w[0]) as PackedScene).instantiate()
-		var at := PlaceField.on_ground(_oasis, _terrain, float(w[1][0]), float(w[1][1]))
-		var look := PlaceField.on_ground(_oasis, _terrain, float(FACING[0]), float(FACING[1]))
-		var d := look - at
-		model.transform = Transform3D(Basis(Vector3.UP, atan2(d.x, d.z)), at)
-		node.add_child(model)
-		print("wadee   %s at %s (ground) in %s" % [w[0], at, node.name])
-	for v: Array in SPIKE_VIEWS:
+	var ground := PlaceField.ground_fn(_oasis, _terrain)
+	for w: Array in WALKERS:
+		var walker := _wadee(w[0], node, ground)
+		walker.angle = deg_to_rad(float(w[2]))
+		walker.play(w[1], PACE[w[1]], _v2(WALK_AT), WALK_RADIUS)
+		_walkers.append(walker)
+	for t: Array in TALKERS:
+		var talker := _wadee(t[0], node, ground)
+		var at: Vector3 = ground.call(float(t[2][0]), float(t[2][1]))
+		var d: Vector3 = ground.call(float(t[3][0]), float(t[3][1])) - at
+		talker.model.transform = Transform3D(Basis(Vector3.UP, atan2(d.x, d.z)), at)
+		talker.player.get_animation(t[1]).loop_mode = Animation.LOOP_LINEAR
+		talker.player.play(t[1])
+	print("wadee   %d walking a %.1f m loop, %d talking, in %s" % [WALKERS.size(), WALK_RADIUS, TALKERS.size(), node.name])
+	for v: Array in WALK_VIEWS:
 		await _foot_look(v[0], v[1], v[2], deg_to_rad(float(v[3])))
-	await _reading_for("on foot by the pool with five Wadees in view", 5.0)
+	await _foot_look("seq_walk_start", SEQ_WALK_VIEW[0], SEQ_WALK_VIEW[1], deg_to_rad(float(SEQ_WALK_VIEW[2])))
+	await _sequence("seq_walk")
+	await _reading_for("on foot by the pool with five Wadees moving", 5.0)
+	for walker in _walkers:
+		walker.play("Jog_Fwd", PACE["Jog_Fwd"], _v2(RUN_AT), RUN_RADIUS)
+	for v: Array in RUN_VIEWS:
+		await _foot_look(v[0], v[1], v[2], deg_to_rad(float(v[3])))
+	await _sequence("seq_run")
+	for walker in _walkers:
+		walker.play("Walk", PACE["Walk"], _v2(WALK_AT), WALK_RADIUS)
+	# a town's worth: CROWD more walking further out, for one reading (no floor: it is a measure)
+	var models := ["a", "b", "c", "m", "n"]
+	for i in CROWD:
+		var walker := _wadee(models[i % models.size()], node, ground)
+		walker.angle = TAU * i / CROWD
+		var r := lerpf(float(CROWD_RADII[0]), float(CROWD_RADII[1]), float(i % 4) / 3.0)
+		walker.play("Walk", PACE["Walk"], _v2(CROWD_AT), r)
+	await _foot_look("wadee_crowd", RUN_VIEWS[0][1], RUN_VIEWS[0][2], deg_to_rad(float(RUN_VIEWS[0][3])))
+	var fps := await _fps(5.0)
+	var line := "fps     %.0f on foot by the pool with %d Wadees moving, over 5 s %s" % [fps, WALKERS.size() + TALKERS.size() + CROWD, _ms()]
+	print(line)
+	_readings.append(line)
 	_let_go()
-	for line in _readings:
-		print("        %s" % line)
+	for l in _readings:
+		print("        %s" % l)
 	quit(0)
+
+## One Wadee in the place's node, with its walker (which also holds its player).
+func _wadee(tag: String, node: Node3D, ground: Callable) -> Walker:
+	var model: Node3D = (load("res://assets/wadee/wadee_%s.glb" % tag) as PackedScene).instantiate()
+	node.add_child(model)
+	var walker := Walker.new()
+	walker.model = model
+	walker.ground = ground
+	walker.player = model.find_children("*", "AnimationPlayer", true, false)[0]
+	var skeleton: Skeleton3D = model.find_children("*", "Skeleton3D", true, false)[0]
+	walker.scale_to_lib = skeleton.get_bone_global_rest(skeleton.find_bone("Hips")).origin.y / LIB_HIPS
+	node.add_child(walker)
+	return walker
+
+## SEQ_FRAMES frames, SEQ_GAP s apart, from where you stand: oasis_<name>_NN.png.
+func _sequence(seq_name: String) -> void:
+	for k in SEQ_FRAMES:
+		await _seconds(SEQ_GAP)
+		var image := root.get_viewport().get_texture().get_image()
+		image.save_png("%s/oasis_%s_%02d.png" % [_out, seq_name, k])
+	print("render  %s/oasis_%s_00..%02d.png" % [_out, seq_name, SEQ_FRAMES - 1])
+
+func _v2(a: Array) -> Vector2:
+	return Vector2(float(a[0]), float(a[1]))
