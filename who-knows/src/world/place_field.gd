@@ -711,6 +711,15 @@ func lay(place_id: StringName, item_id: String, kind: StringName, at: Vector2, y
 		return null
 	return _lay(place_id, node, on_ground(place, terrain_of_place(place_id), at.x, at.y), item_id, kind, yaw)
 
+## Lays an item of `kind` called `item_id` with its foot at `foot`, in the place's
+## own frame (a room's floor, say, which on_ground knows nothing of), turned
+## `yaw` degrees: a gift handed to you (Wadoo spec §8). Null as for lay.
+func lay_at(place_id: StringName, item_id: String, kind: StringName, foot: Vector3, yaw := 0.0) -> Item:
+	var node := loaded(place_id)
+	if node == null or catalog == null:
+		return null
+	return _lay(place_id, node, foot, item_id, kind, yaw)
+
 ## How many items of `kind` lie in the place `place_id` now, untaken.
 func lying(place_id: StringName, kind: StringName) -> int:
 	var n := 0

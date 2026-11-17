@@ -19,7 +19,7 @@ const LOOKS: Array[StringName] = [&"plasma_pistol", &"mug", &"canister", &"crate
 	&"ration_tin", &"rock_sample", &"hand_lamp", &"flare", &"datapad",
 	&"rock_chunk", &"ice_chunk", &"scrap_plate", &"wire_coil", &"broken_module", &"quantum_shard",
 	&"limpet_husk", &"crystal_grit", &"repair_torch", &"package_hub", &"package_drill", &"package_store", &"hose_nozzle",
-	&"sun_cell", &"armlet", &"sun_lily"]
+	&"sun_cell", &"armlet", &"sun_lily", &"sun_rod", &"sun_rod_charmed"]
 ## Salvage (quantum energy spec §10.5): the looks that glint outside.
 ## The Limpet's husk glints too (rock creatures spec §6.4): it is salvage. So
 ## does the Delver's crystal grit (§5.4).
@@ -118,6 +118,10 @@ static func build(kit: InteriorKit, look: StringName, size: Vector3, variety: fl
 			armlet(kit, size)
 		&"sun_lily":
 			sun_lily(kit, size)
+		&"sun_rod":
+			sun_rod(kit, size, false)
+		&"sun_rod_charmed":
+			sun_rod(kit, size, true)
 		&"package_hub":
 			package(kit, size, InteriorPalette.MODULE_COLOURS[&"hub"])
 		&"package_drill":
@@ -650,6 +654,28 @@ static func sun_lily(kit: InteriorKit, size: Vector3) -> void:
 		var at := Vector3(cos(-turn), 0, sin(-turn)) * 0.03 + Vector3(0, 0.1, 0)
 		kit.bevel_box(SOLID, k * Transform3D(b, at), Vector3(0.016, 0.07, 0.03), 0.006, _c(WadeePalette.LILY))
 	kit.bevel_box(GLOW, k * _at(Vector3(0, 0.08, 0)), Vector3(0.026, 0.03, 0.026), 0.008, _lit(WadeePalette.SUNGLASS, 1.4))
+
+## The queen's sun-rod (Wadoo spec §8): a short bronze sunstaff along -z, a
+## leather-wrapped grip at the back, a bronze collar and a glowing sunglass head
+## in a cage of three bronze prongs at the front. With the charm, a water stone
+## (turquoise) is bound under the collar. Designed at 0.05 x 0.07 x 0.62.
+static func sun_rod(kit: InteriorKit, size: Vector3, charm: bool) -> void:
+	var k := _scale(size, Vector3(0.05, 0.07, 0.62))
+	var bronze := _c(WadeePalette.BRONZE)
+	var leather := _c(WadeePalette.LEATHER)
+	kit.tube_between(SOLID, k * Vector3(0, 0, 0.3), k * Vector3(0, 0, -0.23), 0.011, bronze)
+	kit.tube_between(SOLID, k * Vector3(0, 0, 0.27), k * Vector3(0, 0, 0.1), 0.016, leather)
+	kit.tube_between(SOLID, k * Vector3(0, 0, -0.2), k * Vector3(0, 0, -0.235), 0.02, bronze)
+	kit.bevel_box(GLOW, k * _at(Vector3(0, 0, -0.27)), Vector3(0.036, 0.046, 0.06), 0.012,
+		_lit(WadeePalette.SUNGLASS, 2.0))
+	for i in 3:
+		var d := Vector3(cos(TAU * i / 3.0 + PI * 0.5), sin(TAU * i / 3.0 + PI * 0.5), 0) * 0.026
+		kit.tube_between(SOLID, k * (d + Vector3(0, 0, -0.235)), k * (d * 0.6 + Vector3(0, 0, -0.305)), 0.004, bronze)
+	kit.bevel_box(SOLID, k * _at(Vector3(0, 0, 0.305)), Vector3(0.03, 0.03, 0.02), 0.008, bronze)
+	if charm:
+		kit.bevel_box(SOLID, k * _at(Vector3(0, -0.024, -0.175)), Vector3(0.022, 0.018, 0.026), 0.006,
+			_c(WadeePalette.TURQUOISE))
+		kit.tube_between(SOLID, k * Vector3(0, 0, -0.165), k * Vector3(0, 0, -0.185), 0.0135, leather)
 
 ## A salvage item's glint (spec §10.4), a child of its look: a warm diamond
 ## flashing for GLINT_FLASH every 2-4 s, as if the item caught the sun. An

@@ -31,6 +31,8 @@ var hostile := false
 var cell_made := false
 ## How many times each speaker (a record id) has spoken to you.
 var heard := {}
+## The queen has given you her sun-rod (§8): once, when you took up the hunt.
+var rod_given := false
 
 ## True once the task is done (the lilies: once one is laid).
 func did(task: StringName) -> bool:
@@ -87,6 +89,14 @@ func make_cell() -> void:
 		cell_made = true
 		changed.emit()
 
+## The queen gives you her sun-rod (§8): true the first time, false after.
+func give_rod() -> bool:
+	if rod_given:
+		return false
+	rod_given = true
+	changed.emit()
+	return true
+
 ## One counted wound (§9): the village is hostile for good.
 func turn_hostile() -> void:
 	if not hostile:
@@ -133,7 +143,7 @@ func to_dict() -> Dictionary:
 	for k: StringName in heard:
 		h[String(k)] = heard[k]
 	return {"regard": regard, "tasks": t, "met_queen": met_queen, "hunt": String(hunt), "hostile": hostile,
-		"cell_made": cell_made, "heard": h}
+		"cell_made": cell_made, "heard": h, "rod_given": rod_given}
 
 static func from_dict(d: Dictionary) -> WadooState:
 	var s := WadooState.new()
@@ -147,6 +157,7 @@ static func from_dict(d: Dictionary) -> WadooState:
 	s.hunt = h if h in [HUNT_NONE, HUNT_LATER, HUNT_ACCEPTED] else HUNT_NONE
 	s.hostile = bool(d.get("hostile", false))
 	s.cell_made = bool(d.get("cell_made", false))
+	s.rod_given = bool(d.get("rod_given", false))
 	var heard_d: Dictionary = d.get("heard", {})
 	for k: String in heard_d:
 		s.heard[StringName(k)] = int(heard_d[k])

@@ -173,8 +173,19 @@ func test_the_salvage_set_stows_and_sits_in_the_hand_as_authored():
 ## damage spec §8.1), the three module packages (habitat modules spec §4.1)
 ## and the hose's nozzle (quantum energy spec §11.1).
 ## 29, and the Wadees' three (Wadoo spec §7): the sun cell, the armlet, the sun-lily.
-func test_the_catalogue_has_32_kinds():
-	assert_eq(_cat.ids().size(), 32)
+## 32, and the queen's sun-rod, plain and charmed (§8): 34.
+func test_the_catalogue_has_34_kinds():
+	assert_eq(_cat.ids().size(), 34)
+
+## The queen's gift (§8): a one-hand sunstaff that never breaks, is never made, and
+## works outside; the charmed one is worth more.
+func test_the_sun_rods():
+	for id: StringName in [&"sun_rod", &"sun_rod_charmed"]:
+		var d := _cat.get_def(id)
+		assert_not_null(d, String(id))
+		assert_eq(d.stow_class, &"sidearm", String(id))
+		assert_true(d.works_outside, String(id))
+	assert_gt(_cat.get_def(&"sun_rod_charmed").quantum_value, _cat.get_def(&"sun_rod").quantum_value)
 
 func test_the_hose_nozzle():
 	var n := _cat.get_def(&"hose_nozzle")

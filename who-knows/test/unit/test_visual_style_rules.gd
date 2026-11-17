@@ -40,6 +40,8 @@ const PAINTING_FILES := [
 	"res://src/items/plasma_bolt.gd",
 	"res://src/combat/bolt.gd",
 	"res://src/combat/phaser_bolt.gd",
+	"res://src/combat/sun_bolt.gd",
+	"res://src/items/sun_rod.gd",
 	"res://src/combat/turret.gd",
 	"res://src/combat/turret_look.gd",
 	"res://src/items/hand_lamp.gd",

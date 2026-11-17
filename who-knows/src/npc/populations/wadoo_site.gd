@@ -41,6 +41,33 @@ const RAMP_SIDE := 0.3
 ## A Sunguard this near their post, m, holds it (`holds_ground`).
 const HOLDS := 0.6
 const GRAVITY := 9.8
+## Harm and defence (§9). The Sunguard fight from this far from you, m.
+const FIGHT_NEAR := 10.0
+const FIGHT_FAR := 25.0
+## A Wadee's eye (and staff) over their feet, and your chest under your eye, m.
+const EYE := 1.5
+const CHEST_UNDER_EYE := 0.45
+## You aim at a Wadee when the line of your eye passes this near their chest,
+## within AIM_RANGE, holding a gun.
+const AIMED_NEAR := 1.2
+const AIM_RANGE := 40.0
+## A bolt leaves the staff this long after the shot is asked for: the throw in
+## the clip (Spell_Simple_Shoot is 0.5 s), s.
+const RELEASE := 0.25
+## They aim where you will be this share of the bolt's flight ahead, and miss
+## by up to SPREAD, rad.
+const LEAD := 0.5
+const SPREAD := 0.02
+## What blocks a line of fire: the hull, and the ground, walls and houses.
+const SIGHT_MASK := 1 | BodyProxy.LAYER
+## Places to fight from: rings about you, so many round each.
+const SPOT_RINGS: Array[float] = [12.0, 16.0, 20.0, 24.0]
+const SPOT_AROUND := 12
+## A place with something solid this near is in cover, worth this many metres
+## less walking; and so many rays at most to find one with a clear line.
+const COVER := 1.5
+const COVER_WORTH := 6.0
+const MOST_RAYS := 4
 
 ## The paths of each place's layout, built once (a grid of a few hundred thousand
 ## cells is not built again each time the place loads).
@@ -92,6 +119,16 @@ var _near := {}    # Npc -> Vector2, this physics frame's
 var _rooms: Variant = null
 ## Whether the spots were made with the dry garden green (the pump fitted).
 var _green := false
+## The wall's ring, [east, north].
+var _ring := PackedVector2Array()
+## You as the town sees you this physics frame (you_here), and when you were
+## last down (blacked out), by the director's clock.
+var _you := {}
+var _you_frame := -1
+var _down_at := -INF
+## Bolts the Sunguard have thrown, and dice for their aim (not seeded: §9).
+var shots := 0
+var rolls := RandomNumberGenerator.new()
 
 func _init(p_node: Node3D, p_layout: Dictionary, p_pool_radius: float, p_ground: Callable,
 		p_centre := Vector3(0.0, -1.0e9, 0.0), place_id := &"oasis") -> void:
@@ -105,6 +142,9 @@ func _init(p_node: Node3D, p_layout: Dictionary, p_pool_radius: float, p_ground:
 	if not _paths_of.has(key):
 		_paths_of[key] = WadooPaths.build(layout, pool_radius)
 	paths = _paths_of[key]
+	for v: Array in layout.get("wall", {}).get("ring", []):
+		_ring.append(Vector2(float(v[0]), float(v[1])))
+	rolls.randomize()
 	_make_spots()
 
 func frame() -> Transform3D:
@@ -325,6 +365,11 @@ func fill(ctx: NpcContext, npc: Npc) -> void:
 		# indoors: they neither see you nor step aside for you
 		ctx.extra[&"indoors"] = true
 		ctx.player = null
+	# where you are, whether you are on your feet within the walls, and whether
+	# you aim at them (§9): the whole town knows once it has turned on you
+	var you := you_here(ctx.time)
+	ctx.extra[&"you"] = you
+	ctx.extra[&"aimed_at"] = _aimed_at(you, ctx.position + ctx.up * EYE)
 	var here := flat(ctx.position)
 	# a Sunguard standing at their post holds it: they never step aside (Oru
 	# stepped back from you through the queen's shut door)
@@ -595,7 +640,11 @@ func end_pair(who: StringName) -> void:
 ## Whether `npc` will talk to you now: the village is wired to a panel, they are
 ## out of doors, and no one else is talking with you.
 func can_talk(npc: Npc) -> bool:
-	return state != null and on_talk.is_valid() and not _hidden.has(npc.record.id) 		and (talking == &"" or talking == npc.record.id)
+	if state != null and state.hostile and person(npc.record).get("role", &"") == &"sunguard":
+		# turned on you, the Sunguard do not talk (§9)
+		return false
+	return state != null and on_talk.is_valid() and not _hidden.has(npc.record.id) \
+		and (talking == &"" or talking == npc.record.id)
 
 ## Their title if they have one (Queen Imsa), else their name.
 func talk_name(npc: Npc) -> String:
@@ -673,3 +722,133 @@ func mark(who: StringName, state: StringName) -> void:
 
 func hidden(who: StringName) -> bool:
 	return _hidden.has(who)
+
+# --- harm and defence (§9) ----------------------------------------------------
+
+## Whether [east, north] `p` lies within the town's wall.
+func inside_walls(p: Vector2) -> bool:
+	return _ring.size() >= 3 and Geometry2D.is_point_in_polygon(p, _ring)
+
+## You as the town knows you this physics frame, {} when you are not about: {at
+## (your feet), chest, vel (site-local), on_foot, down, armed (a gun in your
+## hands), in_town (within the walls), up_for (s since you were last down, by
+## `time`), eye and look (where your eye is and looks)}.
+func you_here(time: float) -> Dictionary:
+	var f := Engine.get_physics_frames()
+	if f == _you_frame:
+		return _you
+	_you_frame = f
+	_you = {}
+	if not is_instance_valid(avatar) or not avatar.is_inside_tree() or not alive():
+		return _you
+	var now := you_now()
+	var inv := frame().affine_inverse()
+	var at := inv * avatar.global_position
+	var down := bool(now.get("down", false))
+	if down:
+		_down_at = time
+	var standing := avatar.global_transform.translated_local(Vector3.UP * (EYE + CHEST_UNDER_EYE))
+	var eye_world: Transform3D = now.get("eye", standing)
+	var eye := inv * eye_world
+	var look := (inv.basis * -eye_world.basis.z).normalized()
+	_you = {"at": at, "chest": eye.origin - up_at(at) * CHEST_UNDER_EYE,
+		"vel": inv.basis * (now.get("velocity", Vector3.ZERO) as Vector3),
+		"on_foot": bool(now.get("on_foot", false)), "down": down, "armed": bool(now.get("armed", false)),
+		"in_town": inside_walls(flat(at)), "up_for": time - _down_at, "eye": eye.origin, "look": look}
+	return _you
+
+## Whether you, armed, aim at someone whose chest is at site-local `chest`.
+func _aimed_at(you: Dictionary, chest: Vector3) -> bool:
+	if you.is_empty() or not bool(you["armed"]):
+		return false
+	var to: Vector3 = chest - you["eye"]
+	var along := to.dot(you["look"])
+	return along > 0.0 and along < AIM_RANGE and (to - (you["look"] as Vector3) * along).length() < AIMED_NEAR
+
+## Whether a bolt from site-local `from` reaches `to` with nothing solid between
+## (the ground, a wall, a house, the hull).
+func clear_line(from: Vector3, to: Vector3) -> bool:
+	if not alive():
+		return false
+	var f := frame()
+	var query := PhysicsRayQueryParameters3D.create(f * from, f * to, SIGHT_MASK)
+	return node.get_world_3d().direct_space_state.intersect_ray(query).is_empty()
+
+## Whether a Wadee standing at `at` can shoot you now: a clear line from their
+## staff to your chest.
+func clear_shot(at: Vector3, you: Dictionary) -> bool:
+	return not you.is_empty() and clear_line(at + up_at(at) * EYE, you["chest"])
+
+## A place for a Sunguard at `from` to fight you from (§9), site-local on the
+## ground, or null: FIGHT_NEAR to FIGHT_FAR from you, open ground within the walls
+## and out of doors, with a clear line to you; the nearest to them, in cover (a
+## wall or house within COVER) counting COVER_WORTH metres nearer, give or take a
+## few by `salt` so they do not all pick one.
+func fire_spot(from: Vector3, you: Dictionary, salt: int) -> Variant:
+	if you.is_empty():
+		return null
+	var here := flat(from)
+	var them := flat(you["at"])
+	var scored: Array = []
+	var turn := fposmod(salt * 0.618034, 1.0)
+	for r: float in SPOT_RINGS:
+		for k in SPOT_AROUND:
+			var p := them + Vector2.from_angle(TAU * (k + turn) / SPOT_AROUND) * r
+			if not paths.is_open(p) or not inside_walls(p) or room_at(p) != "":
+				continue
+			var jitter := float(posmod(hash(salt * 31 + k * 7 + int(r)), 1000)) / 1000.0 * 4.0
+			scored.append([p.distance_to(here) - (COVER_WORTH if _in_cover(p) else 0.0) + jitter, p])
+	scored.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
+	for i in mini(scored.size(), MOST_RAYS):
+		var g := ground(scored[i][1])
+		if clear_shot(g, you):
+			return g
+	return null
+
+## Something solid within COVER of [east, north] `p`.
+func _in_cover(p: Vector2) -> bool:
+	for k in 8:
+		if not paths.is_open(p + Vector2.from_angle(TAU * k / 8.0) * COVER):
+			return true
+	return false
+
+## A Sunguard throws a bolt of sun at you (the body asks: Npc.shoot), out of their
+## staff's head after RELEASE, at where your chest will be, a little off.
+func shoot(npc: Npc) -> void:
+	if not npc.is_inside_tree() or you_here(director.time if director != null else 0.0).is_empty():
+		return
+	var record := npc.record
+	npc.get_tree().create_timer(RELEASE, false, true).timeout.connect(func() -> void: _release(npc, record))
+
+func _release(npc: Npc, record: NpcRecord) -> void:
+	if not is_instance_valid(npc) or npc.record != record or npc.down or not npc.is_inside_tree() \
+			or not is_instance_valid(avatar):
+		return
+	var you := you_here(director.time if director != null else 0.0)
+	if you.is_empty():
+		return
+	var f := frame()
+	var head: Variant = npc.look.call(&"staff_head") if npc.look != null and npc.look.has_method(&"staff_head") else null
+	var from: Vector3 = head if head != null else f * (npc.local_position() + up_at(npc.local_position()) * EYE)
+	var chest: Vector3 = f * (you["chest"] as Vector3)
+	var lead := (f.basis * (you["vel"] as Vector3)) * (from.distance_to(chest) / SunBolt.SPEED) * LEAD
+	var dir := (chest + lead - from).normalized()
+	var side := dir.cross(Vector3.UP if absf(dir.y) < 0.95 else Vector3.RIGHT).normalized()
+	dir = dir.rotated(side.rotated(dir, rolls.randf() * TAU), rolls.randf() * SPREAD)
+	var bolt := SunBolt.new()
+	bolt.source = npc
+	bolt.outside = true
+	bolt.ray_mask = SunBolt.AT_YOU_MASK
+	npc.get_parent().add_child(bolt)
+	bolt.launch(from, dir)
+	ImpactFlash.spawn(npc.get_parent(), from, dir, ImpactFlash.Kind.MUZZLE, true)
+	shots += 1
+
+## A wound (§9): one dealt by anyone but a Wadee, which is to say by you, turns
+## the town against you for good.
+func wounded(_npc: Npc, hit: Hit, _taken: float) -> void:
+	if state == null:
+		return
+	if is_instance_valid(hit.source) and hit.source is Npc:
+		return
+	state.turn_hostile()

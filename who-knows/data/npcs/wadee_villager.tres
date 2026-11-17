@@ -43,7 +43,7 @@ need_start = {
 &"thirst": Vector2(0, 0.6),
 &"work": Vector2(0.2, 0.9)
 }
-behaviours = Array[StringName]([&"work", &"rest_shade", &"talk_pair", &"drink", &"mourn", &"go_home", &"converse", &"greet", &"give_way"])
+behaviours = Array[StringName]([&"flee_home", &"cower", &"work", &"rest_shade", &"talk_pair", &"drink", &"mourn", &"go_home", &"converse", &"greet", &"give_way"])
 behaviour_weights = {}
 fear_of_player = 0.0
 curiosity_about_player = 0.3

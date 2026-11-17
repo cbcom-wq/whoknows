@@ -1081,7 +1081,11 @@ func _sync_hall(at_once := false) -> void:
 ## A line's `then`: the village's own (WadooState.apply), or the scene's:
 ## "heal", Wenna sees to your wounds (Wadoo spec §7).
 func _wadoo_effect(then: String) -> void:
-	if then == "" or wadoo_state.apply(then):
+	if then == "":
+		return
+	if wadoo_state.apply(then):
+		if then == "hunt_accepted":
+			_give_rod()
 		return
 	match then:
 		"heal":
@@ -1090,10 +1094,31 @@ func _wadoo_effect(then: String) -> void:
 		_:
 			push_warning("Wadoo: no such effect %s" % then)
 
-## What Wadoo sees of you (WadooSite.you): what you hold, and whether you are hurt.
+## The queen gives you her sun-rod (Wadoo spec §8), once: with the water-stone
+## charm if you did all three things. Into your hands if they are empty, else at
+## your feet.
+func _give_rod() -> void:
+	var site: WadooSite = wadoo.site if wadoo != null else null
+	if site == null or not wadoo_state.give_rod():
+		return
+	var kind := SunRod.CHARMED_ID if wadoo_state.tasks_done() == WadooState.TASKS.size() else &"sun_rod"
+	var at := WadooSite.flat(site.frame().affine_inverse() * _avatar.global_position)
+	var ahead := WadooSite.flat(site.frame().basis.inverse() * -_avatar.global_basis.z).normalized()
+	var item := places.lay_at(WadooSource.PLACE, "sun_rod_gift", kind, site.ground(at + ahead * 0.6),
+		rad_to_deg(atan2(ahead.x, ahead.y)))
+	if item != null and _avatar.grasp.item == null:
+		_avatar.take_item(item)
+
+## What Wadoo sees of you (WadooSite.you): what you hold, whether you are hurt,
+## and for a fight (§9) whether you are on your feet on the ground, down, holding
+## a gun, where your eye is and looks, and how you move.
 func _you_to_wadoo() -> Dictionary:
+	var held := _avatar.grasp.item if _avatar.grasp != null else null
 	return {"holding": String(Grasp.kind_in(_avatar)),
-		"hurt": _avatar.health != null and _avatar.health.current < _avatar.health.max}
+		"hurt": _avatar.health != null and _avatar.health.current < _avatar.health.max,
+		"on_foot": _avatar.mode == Avatar.Mode.FIELD, "down": _avatar.downed != null,
+		"armed": held != null and held.use_node != null and held.use_node.recoil() > 0.0,
+		"eye": _avatar.camera.global_transform, "velocity": _avatar.velocity}
 
 ## Takes the item of `kind` out of your hands and uses it up (a gift given, a
 ## cell fitted, a lily laid): true if you held one.

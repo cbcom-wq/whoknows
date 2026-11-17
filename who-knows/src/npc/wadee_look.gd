@@ -15,10 +15,34 @@ const MODELS := ["a", "b", "c", "m", "n"]
 const CLIPS := {&"": &"Idle", &"talk": &"Idle_Talking", &"water": &"Farm_Watering", &"harvest": &"Farm_Harvest",
 	&"plant": &"Farm_PlantSeed", &"kneel": &"Fixing_Kneeling", &"interact": &"Interact", &"lift": &"PickUp_Table",
 	&"sit": &"Sitting_Idle", &"sit_talk": &"Sitting_Talking", &"rise": &"Sitting_Exit", &"drink": &"Consume",
-	&"watch": &"Idle_FoldArms", &"nod": &"Yes", &"crouch": &"Crouch_Idle", &"dead": &"Death01"}
+	&"watch": &"Idle_FoldArms", &"nod": &"Yes", &"crouch": &"Crouch_Idle", &"cower": &"Crouch_Idle",
+	&"dead": &"Death01", &"armed": &"Spell_Simple_Idle", &"aim": &"Spell_Simple_Idle",
+	&"shoot": &"Spell_Simple_Shoot", &"roll": &"Roll"}
 ## Clips that loop while their action lasts, though the library made them once-through.
 const HELD := [&"Farm_Watering", &"Farm_Harvest", &"Farm_PlantSeed", &"Fixing_Kneeling", &"Interact",
 	&"PickUp_Table", &"Consume"]
+## Clips played once through, to their end, whatever the mind asks meanwhile
+## (Wadoo spec §9): a shot, a dodge, a stagger. Only falling dead cuts one short.
+const ONCE := [&"Spell_Simple_Shoot", &"Roll", &"Hit_Chest"]
+## Actions begun anew each time the mind turns to them: each is one shot, one roll.
+const TRIGGERED := [&"shoot", &"roll"]
+## Actions with the staff in the hand rather than across the back.
+const ARMED := [&"armed", &"aim", &"shoot", &"roll"]
+## Into a stagger, a shot or a fall, s: quicker than the usual blend.
+const SNAP := 0.08
+## The staff in the right hand, held upright at the side as the left hand casts
+## (Spell_Simple_Idle, _Shoot): gripped at the palm (HAND_PALM down the hand
+## bone) HAND_GRIP_UP up from its butt, and turned HAND_TURN in the bone's frame,
+## so that in those two clips it leans out to the right and forward, its glowing
+## head beside the shoulder where one she aims at sees it (the look's (0.3, 1,
+## -0.45)), its butt in and back behind the skirt. The hand bone is
+## bent at the wrist, so the turn was measured from the clips
+## (test/probes/wadee_poses.gd prints it), not reasoned from the bone's axes.
+const HAND_PALM := 0.07
+const HAND_GRIP_UP := 0.3
+const HAND_TURN := Vector3(-0.77, PI, -2.337)
+## The staff's glass head over its grip, m (sunstaff.glb).
+const STAFF_HEAD := Vector3(0.0, 1.03, 0.0)
 ## Moving: walking over WALK_OVER m/s, jogging over JOG_OVER.
 const WALK_OVER := 0.2
 const JOG_OVER := 2.4
@@ -57,11 +81,15 @@ var clip: StringName = &""
 var mesh: MeshInstance3D
 var player: AnimationPlayer
 var staff: Node3D
+## Where the staff hangs: across the back, or in the right hand (armed).
+var armed := false
 ## What they wear besides their clothes and staff: a gift given (`wears`).
 var worn: Array[StringName] = []
 ## The model's hips over the ground at rest, m (sets its pace).
 var hips := LIB_HIPS
 var _body: Node3D
+var _back: BoneAttachment3D
+var _hand: BoneAttachment3D
 var _fade := Vector2.ZERO
 var _lod_left := 0.0
 var _near := true
@@ -127,6 +155,9 @@ func _load() -> void:
 		_body.queue_free()
 		_body = null
 		staff = null
+		_back = null
+		_hand = null
+		armed = false
 	var scene := _scene(model)
 	if scene == null:
 		return
@@ -181,15 +212,42 @@ func _add_staff() -> void:
 	var scene: PackedScene = load("res://assets/wadee/sunstaff.glb") if ResourceLoader.exists("res://assets/wadee/sunstaff.glb") else null
 	if skel == null or scene == null or skel.find_bone("UpperChest") < 0:
 		return
-	var at := BoneAttachment3D.new()
-	at.name = "Back"
-	at.bone_name = "UpperChest"
-	skel.add_child(at)
+	_back = BoneAttachment3D.new()
+	_back.name = "Back"
+	_back.bone_name = "UpperChest"
+	skel.add_child(_back)
 	staff = scene.instantiate()
 	staff.name = "Sunstaff"
-	var rest := skel.get_bone_global_rest(skel.find_bone("UpperChest"))
-	staff.transform = rest.affine_inverse() * Transform3D(Basis(Vector3.BACK, STAFF_LEAN), STAFF_AT)
-	at.add_child(staff)
+	_back.add_child(staff)
+	if skel.find_bone("RightHand") >= 0:
+		_hand = BoneAttachment3D.new()
+		_hand.name = "Hand"
+		_hand.bone_name = "RightHand"
+		skel.add_child(_hand)
+	_hang_staff(armed)
+
+## The staff across the back, or in the right hand.
+func _hang_staff(in_hand: bool) -> void:
+	armed = in_hand and _hand != null
+	if staff == null:
+		return
+	var skel := skeleton()
+	var to := _hand if armed else _back
+	if staff.get_parent() != to:
+		staff.get_parent().remove_child(staff)
+		to.add_child(staff)
+	if armed:
+		var turn := Basis.from_euler(HAND_TURN)
+		staff.transform = Transform3D(turn, Vector3(0.0, HAND_PALM, 0.0) - turn.y * HAND_GRIP_UP)
+	else:
+		var rest := skel.get_bone_global_rest(skel.find_bone("UpperChest"))
+		staff.transform = rest.affine_inverse() * Transform3D(Basis(Vector3.BACK, STAFF_LEAN), STAFF_AT)
+
+## Where a bolt leaves the staff, world; null with no staff.
+func staff_head() -> Variant:
+	if staff == null or not staff.is_inside_tree():
+		return null
+	return staff.global_transform * STAFF_HEAD
 
 func skeleton() -> Skeleton3D:
 	if _body == null:
@@ -197,9 +255,36 @@ func skeleton() -> Skeleton3D:
 	var found := _body.find_children("*", "Skeleton3D", true, false)
 	return found[0] as Skeleton3D if not found.is_empty() else null
 
-## What the mind asks for this think.
+## What the mind asks for this think. A shot or a roll starts its clip the
+## think it is asked for; falling dead cuts anything short.
 func act(p_action: StringName) -> void:
+	var was := action
 	action = p_action
+	if staff != null and (action in ARMED) != armed and action != &"dead":
+		_hang_staff(action in ARMED)
+	if player == null:
+		return
+	if action == &"dead" and was != &"dead":
+		_once(CLIPS[&"dead"])
+	elif action in TRIGGERED and action != was:
+		_once(CLIPS[action])
+
+## A wound of `share` of their health (Npc.take_damage): a stagger, however big
+## (Hit_Knockback lays them flat by 0.3 s and there is no clip to get up again).
+## Nothing once dead.
+func hurt(_share: float) -> void:
+	if action == &"dead" or player == null:
+		return
+	_once(&"Hit_Chest")
+
+## Plays `name` from its start now, quickly blended in.
+func _once(name: StringName) -> void:
+	if not player.has_animation(name):
+		return
+	clip = name
+	player.speed_scale = 1.0
+	player.play(name, SNAP)
+	player.seek(0.0, false)
 
 func _process(delta: float) -> void:
 	if player == null or not is_visible_in_tree():
@@ -243,6 +328,9 @@ func _choose(at_once: bool) -> void:
 	# a queued clip (sitting down, then sitting) moves on by itself
 	if player.is_playing() and player.current_animation != "":
 		clip = StringName(player.current_animation)
+	# a shot, a dodge, a stagger plays to its end; the dead stay down
+	if action == &"dead" or (clip in ONCE and player.is_playing()):
+		return
 	var s := speed()
 	var want: StringName = CLIPS.get(action, &"Idle")
 	var pace := 0.0

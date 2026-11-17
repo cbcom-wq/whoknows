@@ -79,6 +79,8 @@ local z otherwise. Origin at the feet; up is local +y; forward is −z.
 | a ship's end (`flight_test._kill_aboard`) | every live NPC of `ship.npc_director` and every record of each of its `sources` is `mark_dead` in the ledger, the droid and dev creatures too, before the ship goes. Items aboard not held are freed |
 | the `&"blast"` hit (`CoreBlast`) | a hit like any other at `receive_hit`, `hit.damage` = `CoreBlast.damage_at(d, scale)`: 400 hp at the core, linear to 0 at `RADIUS` 120 m × scale (`SCALE` 0.5..2, a starter's about 1). NPCs outside only (`_outside`: an NPC with `inside` is skipped), and it shoves them `PUSH` 0.5 N·s per hp. A Delver (60 hp) dies within about 102 m of a starter's core |
 | `ctx.extra[&"hurt_ago"]` | seconds since it was last hurt, for a behaviour to read |
+| a person's look (`Npc._poses_itself()`: the look has `hurt`) | the look moves itself: `take_damage` calls `look.hurt(taken / max)` instead of the squash, and `_pose_look` never turns or squashes it. Dead, it gets `act(&"dead")` (its own fall), `down_left` is `INF` and `set_solid(false)` (you no longer walk into it); `lies_where_fell()` is true, and `NpcDirector.review` keeps it live while its source still offers its record (the ledger's dead are otherwise never wanted, so a review, every `REVIEW_EVERY` 0.25 s, demotes them at once: a creature's `CORPSE_FOR` 20 s on the ground does not happen in the game). Test: `test_npc_death.gd` `test_a_person_tells_their_place_staggers_and_lies_where_they_fell` |
+| `NpcSite.wounded(npc, hit, taken)`, `NpcSite.shoot(npc)` | the body tells its site of a wound that took health (`receive_hit`), and an intent with action `&"shoot"` asks the site to send the shot (`Npc.think`); both do nothing by default. Wadoo's site turns the town on a wound from anything but an NPC, and sends sun bolts |
 | `NpcDirector.targets`, `Weapons.TARGETS`, `Weapons.npc_id(record.id)` | the exterior director joins each promoted NPC to the weapons group as `npc:<record id>` and takes it out on `demote` (ship weapons spec §4.1); the interior director's `targets` is false. A turret's phaser bolt arrives at `receive_hit` like any other hit: **55 hp a light bolt (15 before hostile ships T16), 120 a heavy** (`WeaponValues` damage). `Weapons.usable` is false for a dead NPC (`is_dead()`), so it leaves every turret's choice and, 2 s on, the fire-control list; a knocked-out one is still a target. Test: `test_npc_director.gd` (`targets`) |
 | `behaviours/ambush.gd` | a reflex that springs: you within `AMBUSH` 5 m (`ctx.position` to `ctx.player`) and fear under `CALM` 0.4 -> first think `Intent.idle(&"leap")` with `leap_to` = you; then within `bite_reach + 0.3` one `&"bite"`, else `&"lunge"`; done after the bite or `GIVE_UP` 4 s. The bite sets its fear to at least `AFTER_FEAR` 0.8 (so `hide` follows and the nest re-arms as it fades), and a give-up raises it by `GAVE_UP_FEAR` 0.3 so a miss does not spring again every 4 s. `GlinterLook` shows its eyes for `leap`, `lunge` and `bite`. `test/probes/glinter_leap.gd` is the leap check (20 tries, reach and bite), `glinter_render.gd` the renders |
 | `behaviours/defend.gd` | the template for an NPC that fights back: a reflex scored from `hurt_ago`, fear and the player's distance, `Intent.go(player, 1.0, &"lunge"/&"bite")`, given up past 6 m or when calm; weight it over `scatter` |
@@ -424,6 +426,18 @@ Delver kept 1.1-1.2 m/s on every leg, arrived on all five and never stalled for 
   `SHADOW_WITHIN` 25 m; motion every frame within `FULL_RATE_WITHIN` 30 m, at `FAR_RATE` 15 Hz
   beyond; checked every `LOD_EVERY` 0.5 s. The Sunguard's staff hangs across the back
   (`STAFF_AT`, `STAFF_LEAN`). `test_wadee_look.gd`.
+  **Fighting** (Wadoo stage 4): `cower` Crouch_Idle; `armed` and `aim` Spell_Simple_Idle (the left
+  hand casts); `shoot` Spell_Simple_Shoot 0.5 s; `roll` Roll 1.46 s. `ONCE` (the shot, the roll,
+  Hit_Chest) play to their end whatever the mind asks meanwhile; `TRIGGERED` (`shoot`, `roll`) start
+  from the top each time the action turns to them; `_once(clip)` plays with `SNAP` 0.08 s. For an
+  action in `ARMED` (`armed`, `aim`, `shoot`, `roll`) the staff moves to a `BoneAttachment3D` "Hand" on
+  `RightHand`: gripped at `HAND_PALM` 0.07 m down the hand, `HAND_GRIP_UP` 0.3 m up from its butt,
+  turned `HAND_TURN` (-0.77, PI, -2.337), which stands it beside the right shoulder, leaning out and
+  forward, in those clips (measured by `test/probes/wadee_poses.gd`, which prints the turn for any
+  wanted lean). `staff_head()` (world, null with no staff) is `STAFF_HEAD` (0, 1.03, 0) on the staff:
+  where a bolt leaves. `hurt(share)` plays Hit_Chest whatever the share (Hit_Knockback lies them flat
+  and there is no clip to rise); nothing once dead. `act(&"dead")` plays Death01 once and they stay
+  down; the staff stays where it was.
 - **Copying a motion:** each bone turns in the world as the library's bone does. The turn is
   measured from a reference pose: the library's figure with each bone swung to point where ours
   points at rest, which brings the T-pose arms down. The hips' movement is scaled by hip height.
@@ -594,6 +608,66 @@ The first NPCs on a world. Everything is in the oasis place's frame (x east, z -
     wants one and none is about; a lily `LILY_REGROW` 30 s after none is about (at once as the place is
     built) while a stone is bare; nothing once hostile. `_out(kind)` counts held, lying and strays
     within `TOWN_REACH` 150 m; `_make(kind)` names it `<kind>_<n>`, the first n not taken.
+- **Harm and the Sunguard (stage 4, §9):**
+  - **Turning:** `WadooSite.wounded` calls `state.turn_hostile()` for a wound whose `hit.source` is not
+    an `Npc` (one counted wound; saved). While hostile `can_talk` is false for the Sunguard.
+  - **You, for a fight:** `WadooSite.you_here(time)` (cached per physics frame) gives `{at, chest, vel,
+    on_foot, down, armed, in_town, up_for, eye, look}`, site-local, from the `you` Callable's
+    `on_foot`, `down`, `armed`, `eye` (the camera's transform) and `velocity` (`flight_test._you_to_wadoo`;
+    armed is holding an item whose `use_node.recoil() > 0`). `fill` puts it in `ctx.extra[&"you"]` and
+    `ctx.extra[&"aimed_at"]` (you armed, looking within `AIMED_NEAR` 1.2 m of their eye `EYE` 1.5 m
+    up, within `AIM_RANGE` 40 m). `inside_walls(p)` is the layout's wall ring. `up_for` counts from the
+    last time you were seen down.
+  - **Lines and places:** `clear_line(from, to)` (a ray on `SIGHT_MASK` = hull | terrain, which holds
+    the walls and houses); `clear_shot(at, you)` from their staff (`EYE` up) to your chest
+    (`CHEST_UNDER_EYE` 0.45 under your eye). `fire_spot(from, you, salt)`: of the points on rings
+    `SPOT_RINGS` 12, 16, 20, 24 m round you (`SPOT_AROUND` 12 each, turned by `salt`) on open ground
+    inside the walls and not in a room, the nearest to them, a point in cover (`_in_cover`: not open
+    within `COVER` 1.5 m in one of 8 ways) counting `COVER_WORTH` 6 m nearer and each up to 4 m off by
+    `salt`; the first of the best `MOST_RAYS` 4 with a clear shot, else null. The fight's band is
+    `FIGHT_NEAR` 10 to `FIGHT_FAR` 25 m.
+  - **A shot:** `shoot(npc)` waits `RELEASE` 0.25 s (the clip's throw), then a `SunBolt` leaves
+    `look.staff_head()` for your chest led by `LEAD` 0.5 of your velocity times its flight, off by
+    `SPREAD` 0.02 rad, with `AT_YOU_MASK`, a muzzle flash, added beside the NPC (its parent); none if
+    they are down by then. `shots` counts them. The spread's dice are the site's `rolls` (randomized; a
+    test sets its seed).
+  - **`SunBolt`** (`src/combat/sun_bolt.gd`, a `Bolt`): `SPEED` 30 m/s, `LIFETIME` 1.6 s, `DAMAGE` 12,
+    `PUSH` 4, `LENGTH` 0.7, `THICKNESS` 0.12, kind `&"sun"`, a glow in `WadeePalette.SUNGLASS` and an
+    `OmniLight3D` in `WadeePalette.LAMP` (`LIGHT_ENERGY` 0.8, `LIGHT_RANGE` 3.5) times `bright`
+    (`CHARMED` 1.8 for the charmed rod's). `AT_YOU_MASK` = hull | avatar | terrain | items: it meets you
+    and the town, never a Wadee (a held item has no layer). With no `ray_mask` it takes
+    `PlasmaBolt.mask(outside)`. On you its burst is `ON_YOU_FLASH` 0.25 of the size (it lands 0.3 m
+    from your eye).
+  - **Behaviours:**
+    - `flee_home` (villagers; reflex 0.9, `min_time` 2): 0.95 while hostile with you in town and a door
+      (`WadooSite.door_of(home)`: `{at, door, out}`), or while in and not done; runs (`RUN` 2.6) to the
+      door's middle, within `IN` 0.45 calls `town.hide(who, true)` (hidden: not drawn, not solid, no
+      talking, unseen by others); out `STAY` 20 s after you left the walls; after `GIVE_UP` 60 s on the
+      way they stop where they are.
+    - `cower` (villagers; reflex 0.9, `min_time` 3): 1.0 while hostile when you are within `CORNERED` 7 m
+      and nearer their door than they are (or they have none), and while down with you within `CLEAR`
+      12 m; `Intent.idle(&"cower")` facing you.
+    - `fight_ranged` (the Sunguard; reflex 0.9): 1.0 while hostile and `fighting(you)` (on foot, not
+      down, in town, `up_for` >= `GRACE` 8 s). A new `fire_spot` when the old is past the band or every
+      `MOVE_EVERY` 5 to 9 s; run (`RUN` 2.4) there with action `armed`; no clear shot: close in to
+      `CLOSE_TO` 15 m or look again. Shoots every `EVERY` 1.5 to 2.5 s (each their own, `nature`, plus
+      `JITTER` 0.2), the first `FIRST` 0.8 to 1.6 s in; else `aim`. Aimed at, at most once in
+      `ROLL_EVERY` 4 s and on `ROLL_CHANCE` 0.5, rolls `ROLL` 2.5 m aside (`ROLL_SPEED` 1.0 for
+      `ROLL_FOR` 1.4 s, action `roll`) onto open ground. Its dice (`_dice`) are its own RNG, seeded in
+      `start` from the record and the time. Then `keep_post`.
+  - **Species:** villagers list `flee_home`, `cower` first; the Sunguard `fight_ranged` first (`max_health`
+    90; villagers 60).
+  - **The gift:** `WadooState.rod_given`, `give_rod()` (true the first time; saved). `flight_test._give_rod()`
+    after the line effect `hunt_accepted`: `sun_rod`, or `sun_rod_charmed` with all three tasks done, laid
+    with `PlaceField.lay_at(place, item_id, kind, foot, yaw)` (a foot in the place's own frame, so a
+    room's floor) 0.6 m ahead of you as `sun_rod_gift`, then put in empty hands. `WadooLines` fills
+    `{charm}` with the water-stone sentence when all three are done.
+  - **`SunRod`** (`src/items/sun_rod.gd`, an `ItemUse`): `COOLDOWN` 0.9 s, `DAMAGE` 25, `CHARGES` 6,
+    one back every `RECHARGE` 5 s while out of doors (`item.in_space`), `AIM_RANGE` 100, `recoil` 0.6,
+    `status` "4 of 6", saves its charges. A bolt leaves the item's `use_point` for what the eye's ray
+    meets, as the pistol's. `charmed(item)` for `sun_rod_charmed` (`bright` 1.8). Items: 0.05 x 0.07 x
+    0.62 m, a sidearm, works outside, never made, unbreakable, 300 and 360 QE; drawn by
+    `ItemLooks.sun_rod(kit, size, charm)`.
 
 ## Testing patterns
 
@@ -685,6 +759,10 @@ follows is what it and any fauna after the Wadees must respect.
 - **Renders:** without `--headless`: `godot --path who-knows --resolution 1280x720 --script
   res://test/probes/<render>.gd -- <abs out dir>`. In a container: `apt-get update && apt-get
   install -y mesa-vulkan-drivers`, then prefix with `xvfb-run -a -s "-screen 0 1280x720x24"`.
+- **Wadoo in the game:** `wadoo_play.gd -- <abs out dir> [hall|things|harm]` (a living town, then the
+  hall, the tasks, or a fight; a few minutes each). **A person's poses up close:** `wadee_poses.gd --
+  <abs out dir>` (seconds: a Sunguard's staff, shot, roll, stagger, fall, a villager cowering; prints
+  `HAND_TURN` for the wanted lean `WANT_UP`).
 
 ## Specs to read for depth
 

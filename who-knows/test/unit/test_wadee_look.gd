@@ -123,3 +123,75 @@ func test_wears_the_armlet_on_the_left_forearm():
 	var again := _make({"model": "a", "seed": 3, "role": &"villager", "wears": [&"armlet"]})
 	assert_eq(again.skeleton().find_children("Armlet", "BoneAttachment3D", false, false).size(), 1,
 		"worn when she wakes")
+
+## Wadoo spec §9: a shot, a roll and a stagger play once to their end, whatever
+## the mind asks meanwhile; each shot starts its clip again.
+func test_a_shot_plays_through_and_again():
+	var look := _make({"model": "s", "seed": 1, "role": &"sunguard", "staff": true})
+	look.act(&"aim")
+	look._process(0.05)
+	assert_eq(look.clip, &"Spell_Simple_Idle", "aiming")
+	look.act(&"shoot")
+	look._process(0.05)
+	assert_eq(look.clip, &"Spell_Simple_Shoot")
+	look.act(&"aim")
+	look._process(0.2)
+	assert_eq(look.clip, &"Spell_Simple_Shoot", "the throw is not cut short by aiming")
+	look._process(0.4)
+	look._process(0.05)
+	assert_eq(look.clip, &"Spell_Simple_Idle", "then back to aiming")
+	look.act(&"shoot")
+	look._process(0.05)
+	assert_eq(look.clip, &"Spell_Simple_Shoot", "the next shot")
+	assert_lt(look.player.current_animation_position, 0.1, "from its start")
+
+## Wadoo spec §9: the staff comes off the back into the right hand to fight, and
+## the bolt leaves its glass head.
+func test_the_staff_in_the_hand_to_fight():
+	var look := _make({"model": "s", "seed": 1, "role": &"sunguard", "staff": true})
+	assert_false(look.armed)
+	assert_eq(look.staff.get_parent().name, "Back")
+	look.act(&"armed")
+	assert_true(look.armed)
+	assert_eq(look.staff.get_parent().name, "Hand")
+	assert_eq((look.staff.get_parent() as BoneAttachment3D).bone_name, "RightHand")
+	var head: Vector3 = look.staff_head()
+	var hand := look.skeleton().global_transform * look.skeleton().get_bone_global_pose(look.skeleton().find_bone("RightHand")).origin
+	var over_grip := WadeeLook.STAFF_HEAD.y - WadeeLook.HAND_GRIP_UP
+	assert_between(head.distance_to(hand), over_grip - 0.12, over_grip + 0.12,
+		"gripped a third of the way up: the head is the rest of the staff from the hand")
+	look.act(&"")
+	assert_false(look.armed, "back across the back")
+	assert_eq(look.staff.get_parent().name, "Back")
+	var villager := _make({"model": "a", "seed": 1, "role": &"villager"})
+	villager.act(&"armed")
+	assert_null(villager.staff_head(), "no staff, no head")
+
+## Wadoo spec §9: hurt, a stagger, however big; dead, they fall
+## and stay down whatever else is asked.
+func test_staggers_and_falls():
+	var look := _make({"model": "a", "seed": 2, "role": &"villager"})
+	look.hurt(0.1)
+	assert_eq(look.clip, &"Hit_Chest")
+	look._process(0.5)
+	look.hurt(0.4)
+	assert_eq(look.clip, &"Hit_Chest", "a big wound staggers too: knocked flat, they could not get up")
+	assert_almost_eq(look.player.current_animation_position, 0.0, 0.01, "from its start again")
+	look.act(&"dead")
+	assert_eq(look.clip, &"Death01", "falling cuts the stagger short")
+	assert_eq(look.player.get_animation(&"Death01").loop_mode, Animation.LOOP_NONE)
+	for i in 30:
+		look._process(0.1)
+	assert_eq(look.clip, &"Death01", "and they stay down")
+	look.hurt(0.5)
+	assert_eq(look.clip, &"Death01", "the dead do not stagger")
+	_body.velocity = Vector3(2.0, 0.0, 0.0)
+	look._process(0.1)
+	assert_eq(look.clip, &"Death01", "nor walk")
+
+## Wadoo spec §9: cornered, a villager crouches.
+func test_cowers_crouched():
+	var look := _make({"model": "b", "seed": 2, "role": &"villager"})
+	look.act(&"cower")
+	look._process(0.05)
+	assert_eq(look.clip, &"Crouch_Idle")

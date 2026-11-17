@@ -204,9 +204,10 @@ restores your health while she talks.
   - If the queen or Kesh dies, the hunt can never be offered.
   - Oru is dead or hostile, so the hall door is barred to you. The queen, if you reach her,
     says only "Leave my hall."
-- **If you black out** among them, the Sunguard stop firing. You wake where you fell (the desert
-  world's rule), and they come for you again only once you are back on your feet and inside the
-  walls.
+- **If you black out** among them, the Sunguard stop firing. You wake aboard your ship, as after
+  any blackout outside (health and damage spec §7.2; this line first said "where you fell", which
+  is not the game's rule), with what you held dropped where you fell. They come for you again only
+  once you are back on your feet and inside the walls.
 - **Leaving the walls** ends the fight. The Sunguard return to their posts, still hostile.
 
 ## 10. Their places inside
@@ -455,3 +456,77 @@ Each stage is committed on branch `wadoo`, rendered at eye height and shown to t
   (`oasis_wadoo_armlet_close`). At 6 m it is a few pixels and its turquoise stone. Look straight
   at it and the crosshair hides it. Its glint (the salvage glint, 0.15 s every 2 to 4 s) was not
   caught in either still, so whether it shows on bright sand is not proved yet.
+
+### Stage 4: harm and the Sunguard (2026-11-17, branch `wadoo`)
+
+- **One wound turns the town.** A hit that takes health from a Wadee is told to the town
+  (`NpcSite.wounded`); one from anything but a Wadee (you, your bolt, your ship's turret) makes the
+  village hostile for good (`WadooState.hostile`, saved). A miss does nothing. Hostile, the Sunguard
+  will not talk.
+- **The villagers** run for their doors (`flee_home`, at 4.2 m/s) and go in: hidden, not drawn, not
+  solid. They come out 20 s after you have left the walls. One you stand between and their door,
+  within 7 m, crouches where they are, facing you (`cower`, `Crouch_Idle`), until you are 12 m off;
+  then they run for it.
+- **The Sunguard fight** while you are on your feet within the walls (`fight_ranged`):
+  - each picks a place 12 to 24 m from you on open ground inside the walls with a clear line to
+    your chest, the nearest to them, a place by a wall or house counting 6 m nearer (cover); they run
+    there with the staff in the right hand, and pick again every 5 to 9 s or when you have moved out
+    of their 10 to 25 m band;
+  - from there they throw a bolt of sun (`Spell_Simple_Shoot`, the left hand casting; the bolt
+    leaves the staff's glass head 0.25 s into the throw): 12 damage at 30 m/s, aimed half a lead
+    ahead of you, a little off. Each throws every 1.5 to 2.5 s, in their own rhythm. One that hits
+    you bursts at a quarter size: a full burst 0.3 m from your eye hid a sixth of the view;
+  - aimed at (you armed and looking within 1.2 m of them), at most once in 4 s and half the time,
+    they roll 2.5 m aside (`Roll`);
+  - hurt, they stagger (`Hit_Chest`). The spec's `Hit_Knockback` for a big wound was dropped: it lays
+    them flat by 0.3 s and there is no clip to rise, so they would pop up;
+  - no line to you from anywhere: they close in to 15 m.
+- **The staff in the hand.** The models have no finger bones, so the staff is held upright beside
+  the right shoulder in an open hand, leaning out and forward, its head where the one they aim at
+  sees it. Reasoned from the hand bone's axes it first leaned 40 degrees across the back with its
+  head hidden behind her own; the turn is now measured from the two clips
+  (`test/probes/wadee_poses.gd`).
+- **Death.** At 0 health (60 for a villager, 90 for a Sunguard) they fall (`Death01`) with what they
+  hold and lie where they fell, no longer solid, until the town sleeps; the ledger keeps them dead.
+  A person's look poses itself: the body never flips or shrinks it as it does a creature's. The
+  director demotes the ledger's dead at its next review (every 0.25 s), so a fallen Sunguard first
+  vanished at once; a person now stays while the town still offers them (`Npc.lies_where_fell`).
+  A creature still vanishes at once, though its `CORPSE_FOR` says it lies 20 s: that is older than
+  this stage and left as it was.
+- **You down.** Blacked out you are not someone to fight, and you wake aboard your ship (the game's
+  rule outside, health and damage §7.2; §9 is corrected). The rod lies where you fell. Back on your
+  feet within the walls, after 8 s of grace, the fight goes on. Leaving the walls ends it: the
+  Sunguard go back to their posts, still hostile.
+- **The sun-rod** (the queen's gift, §8). As you take up the hunt she says "Then take this. A
+  sun-rod: a sunstaff of your own, short enough for one hand. It drinks the sun as you walk." and it
+  is laid before you and put in your hands (`flight_test._give_rod`, once: `WadooState.rod_given`).
+  - It is a new hand weapon (`SunRod`, items `sun_rod` and `sun_rod_charmed`): a bolt of sun of 25
+    damage (the pistol's is 10) every 0.9 s (the pistol's 0.25), from 6 charges that come back one
+    every 5 s out of doors. It never breaks and is never made; worth 300 QE.
+  - With all three tasks done, she adds "I have bound a water stone to it, for all you did for us:
+    its sun will burn brighter.": a turquoise stone under the head, bolts 1.8 times as bright, 360 QE.
+- **The dead and the hall** need nothing of their own: a death comes only after a wound, which has
+  already turned the town. Hostile, the hall's door stays shut (`WadooState.door_open`), the queen
+  says only "Leave my hall." and anyone else "They will not look at you.", so the hunt is never
+  offered again.
+- **Proved:** `wadoo_play.gd -- <out> harm` lands, steps out on foot and plays it as a player
+  would, the rod fired through the hands and F to pick it up (run on the GTX 960 at 1280 x 720; all
+  checks passed, the numbers from the third of four runs, the first two having found the blackout
+  rule and the vanishing dead):
+  - the queen's rod in your hands, and a bolt of it over the town (5 of 6 left);
+  - you shoot Ema (35 of 60 hp left) and the town turns at once;
+  - Halla, cornered 3.5 m off between you and her door, cowers; 6 s after the wound 5 villagers are
+    in, 11 running home, 3 cowering, and all 5 Sunguard fighting;
+  - the first bolt comes within 6 s; Oru fires from 24 m; 160 fps in the fight with 25 awake;
+  - aimed at, Seli rolls aside (16 m off); 7 bolts of the rod bring her down (4 hit: she was moving
+    and rolling), and she lies where she fell to the end;
+  - you black out: no bolt while you are down; you wake aboard your ship; out of the airlock,
+    103 m from the middle and outside the walls, nobody fires; the rod lies where you fell, and F
+    takes it up; back in the walls the fight goes on;
+  - 70 m out, beyond the walls: no bolt in 5 s and no Sunguard fighting; the 16 hidden come out
+    again;
+  - standing in the open, 51 of their 56 bolts hit you, 612 hp over the run (the probe mended you
+    12 times): about 10 s of standing still in their fire puts you down. The lead only tells when
+    you move, so cover and moving are meant to matter; whether it is too hard is the owner's call.
+- **The poses** up close (`test/probes/wadee_poses.gd`): the staff across the back, upright in the
+  hand aiming and shooting, the roll, the stagger, the fall and the dead, and a villager cowering.

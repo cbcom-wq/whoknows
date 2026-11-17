@@ -245,3 +245,42 @@ func test_the_town_sees_what_you_hold_and_your_wounds():
 	assert_true(_root._give_held(&"armlet"))
 	assert_null(_avatar.grasp.item, "given")
 	assert_true(_root.places.is_taken(&"oasis", "armlet_breach"), "and never back")
+
+## The queen's gift (Wadoo spec §8): taking up the hunt puts her sun-rod in your
+## empty hands, once, plain unless you did all three things; and the town sees
+## (for a fight, §9) whether you are on foot, down or armed.
+func test_the_queen_gives_her_sun_rod_once():
+	await _hold_over(0, 0, 60.0)
+	var you: Dictionary = _root._you_to_wadoo()
+	for key: String in ["on_foot", "down", "armed", "eye", "velocity"]:
+		assert_true(you.has(key), key)
+	assert_false(you["on_foot"], "aboard, not on foot")
+	assert_false(you["down"])
+	assert_false(you["armed"], "empty hands")
+	_root.exterior_npcs.review()
+	assert_not_null(_root.wadoo.site, "the town is awake")
+	_root._wadoo_effect("hunt_accepted")
+	assert_true(_root.wadoo_state.rod_given)
+	var rod: Item = _avatar.grasp.item
+	assert_not_null(rod, "in your hands")
+	if rod == null:
+		return
+	assert_eq(rod.definition.id, &"sun_rod", "plain: not all three things done")
+	assert_true(_root._you_to_wadoo()["armed"], "a sun-rod is a weapon")
+	assert_true(_root.places.is_taken(&"oasis", "sun_rod_gift"), "taken as it was given")
+	Item.consume(rod)
+	_root._wadoo_effect("hunt_accepted")
+	assert_null(_avatar.grasp.item, "only once")
+	assert_eq(_root.places.lying(&"oasis", &"sun_rod"), 0, "and none laid instead")
+
+## All three things done, the rod comes with the water-stone charm.
+func test_for_all_three_things_the_rod_is_charmed():
+	await _hold_over(0, 0, 60.0)
+	for t: StringName in WadooState.TASKS:
+		_root.wadoo_state.do_task(t)
+	_root.exterior_npcs.review()
+	_root._wadoo_effect("hunt_accepted")
+	var rod: Item = _avatar.grasp.item
+	assert_not_null(rod)
+	if rod != null:
+		assert_eq(rod.definition.id, SunRod.CHARMED_ID)

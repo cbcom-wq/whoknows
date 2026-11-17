@@ -306,6 +306,8 @@ func think(time: float, dt: float) -> void:
 		bite()
 	elif intent.action == &"sip":
 		sip(dt)
+	elif intent.action == &"shoot":
+		site.shoot(self)
 	last_context = ctx
 	if look != null and look.has_method(&"act"):
 		look.call(&"act", intent.action)
@@ -314,14 +316,18 @@ func think(time: float, dt: float) -> void:
 
 ## A hit from a bolt or a thrown thing (hands-and-items spec §9.3): a touch,
 ## a shove, and the damage (health and damage spec §6): it flinches, and its
-## fear rises by the share of its health it lost.
+## fear rises by the share of its health it lost. A wound is told to its site.
 func receive_hit(hit: Hit) -> void:
 	if perception != null:
 		perception.touched(hit.position, 1.0, hit.source.get_instance_id() if is_instance_valid(hit.source) else 0)
 	shove(hit.impulse)
-	take_damage(hit.damage)
+	var taken := take_damage(hit.damage)
+	if taken > 0.0 and site != null:
+		site.wounded(self, hit, taken)
 
 ## Takes `amount` hp; returns what it took. Nothing more happens to it down.
+## A look that poses itself (a person: WadeeLook.hurt) staggers by its own
+## motion instead of the squash.
 func take_damage(amount: float) -> float:
 	if down or health == null or amount <= 0.0:
 		return 0.0
@@ -329,9 +335,18 @@ func take_damage(amount: float) -> float:
 	if taken > 0.0:
 		if brain != null and brain.needs.has(&"fear"):
 			brain.needs[&"fear"] = clampf(brain.needs[&"fear"] + taken / health.max, 0.0, 1.0)
-		_flinch_left = FLINCH_FOR
-		_pose_look()
+		if _poses_itself():
+			if not down:
+				look.call(&"hurt", taken / health.max)
+		else:
+			_flinch_left = FLINCH_FOR
+			_pose_look()
 	return taken
+
+## A look that moves as a person does (falls, staggers) by its own clips, rather
+## than being turned and squashed whole (WadeeLook).
+func _poses_itself() -> bool:
+	return look != null and look.has_method(&"hurt")
 
 ## Bites whoever is within the species' bite_reach (the defend behaviour asks for it):
 ## a hit that hurts and shoves them away. Returns whether it landed.
@@ -380,6 +395,11 @@ func sip(dt: float) -> float:
 func is_dead() -> bool:
 	return down and species != null and species.knocked_out_for <= 0.0
 
+## Dead, and lying where they fell until their place sleeps rather than going
+## after CORPSE_FOR: a person, whose look poses itself (Wadoo spec §9).
+func lies_where_fell() -> bool:
+	return is_dead() and _poses_itself()
+
 ## Gets up now, at `fraction` of its health (the torch, health and damage
 ## spec §8.2). Only one knocked out can; the dead stay dead.
 func revive(fraction := -1.0) -> void:
@@ -405,6 +425,11 @@ func _go_down() -> void:
 			look.call(&"act", &"knocked_out")
 	else:
 		down_left = CORPSE_FOR
+		if _poses_itself():
+			# a person falls by their own motion and lies where they fell until
+			# their place sleeps; you no longer walk into them
+			down_left = INF
+			set_solid(false)
 		if director != null and director.get(&"ledger") != null:
 			director.ledger.mark_dead(record.id)
 		if site != null:
@@ -426,6 +451,9 @@ func _tick_down(delta: float) -> void:
 ## back dead (shrinking away at the end), squashed for a moment in a flinch.
 func _pose_look() -> void:
 	if look == null:
+		return
+	if _poses_itself():
+		look.transform = Transform3D(Basis.from_scale(Vector3.ONE * _look_scale), Vector3(0.0, -look_drop, 0.0))
 		return
 	var basis := Basis.IDENTITY
 	var lift := 0.0

@@ -21,9 +21,19 @@ extends "res://test/probes/oasis_render.gd"
 ## fit it, and the dry garden grows green; you find Lio's armlet past the breach
 ## and give it to her, and she wears it; you pick a sun-lily by garden_1 and lay
 ## it at the memorial; hurt, you ask Wenna to heal you. Each through the
-## Interactor, as a player would. Run WITHOUT --headless, from who-knows:
+## Interactor, as a player would.
 ##
-##   godot --path . --resolution 1280x720 --script res://test/probes/wadoo_play.gd -- <abs out dir> [hall|things]
+## Stage 4 (§8, §9), alone with "harm" after the out dir: the queen's sun-rod put in
+## your hands (her gift as you take up the hunt) and a bolt of it over the town;
+## you shoot a villager and the town turns: the villagers run for their doors, one
+## you stand between and their door cowers, and the Sunguard come and shoot at
+## you from cover, one caught as they fire; aimed at, one rolls aside; you shoot
+## one down with the rod. You black out and they hold their fire; you wake aboard,
+## walk back in for the rod and the fight goes on; then you leave the walls and it is over, and the
+## villagers come out again. The frame rate is read in the fight. Run WITHOUT
+## --headless, from who-knows:
+##
+##   godot --path . --resolution 1280x720 --script res://test/probes/wadoo_play.gd -- <abs out dir> [hall|things|harm]
 
 ## How long to wait for the town to wake, and to let it live before looking, s.
 const WAKE_WAIT := 60.0
@@ -112,6 +122,15 @@ func _run() -> void:
 		return
 	# Stand in the middle of town while it lives: they greet you and go about their day.
 	await _foot_look("wadoo_waking", [14.0, 13.0], [-6.0, 0.0], deg_to_rad(-3.0))
+	if "harm" in OS.get_cmdline_user_args():
+		await _harm()
+		_census("at the end")
+		_let_go()
+		for l in _readings:
+			print("        %s" % l)
+		print("wadoo   %s" % ("ALL OK" if _fails == 0 else "%d FAILED" % _fails))
+		quit(0 if _fails == 0 else 1)
+		return
 	if "things" in OS.get_cmdline_user_args():
 		await _things()
 		_feet()
@@ -639,3 +658,323 @@ func _press_action(action: StringName) -> void:
 	up_ev.action = action
 	up_ev.pressed = false
 	Input.parse_input_event(up_ev)
+
+# --- stage 4: harm (§9) ----------------------------------------------------------
+
+## How long to wait for each turn of the fight, s.
+const FIGHT_WAIT := 25.0
+## Under this much health the probe mends you (and says so), so the fight can be
+## watched to its end; the blackout is brought on on purpose.
+const KEEP_UP_UNDER := 45.0
+
+var _found: Npc = null
+var _hits := 0
+var _taken := 0.0
+var _mended := 0
+var _fired := 0
+
+func _harm() -> void:
+	var site := _wadoo.site
+	var state: WadooState = _scene.get("wadoo_state")
+	_check(not state.hostile, "the town is at peace to begin with")
+	# the Sunguard's bolts, counted; you are mended when low, but for the
+	# blackout brought on on purpose (from no direction)
+	_avatar.hurt.connect(func(t, from) -> void:
+		if from == Vector3.ZERO:
+			return
+		_hits += 1
+		_taken += t
+		_keep_up())
+	# The queen's gift (§8, as you take up the hunt): her sun-rod, in your hands.
+	_scene.call("_give_rod")
+	var held: Item = _avatar.grasp.item
+	_check(held != null and held.definition.id == &"sun_rod", "the queen's sun-rod in your hands")
+	if held == null:
+		return
+	var rod := held.use_node as SunRod
+	var me := Vector2(14.0, 13.0)
+	var far := site.ground(Vector2(-6.0, 0.0))
+	await _site_look("wadoo_rod_held", me, far + Vector3(0.0, 1.4, 0.0))
+	# A bolt of sun, over the town's heads.
+	await _stand(me, far + Vector3(0.0, 5.0, 0.0))
+	await _frames(3)
+	_check(_avatar.grasp.use(), "the rod fires")
+	await _snap("wadoo_rod_bolt")
+	await _snap("wadoo_rod_bolt_on")
+	print("harm    the rod: %s, cooling %.2f s" % [rod.status(), rod.cooldown_left()])
+	await _seconds(1.5)
+	# You shoot a villager: one wound turns the town.
+	var villager := _nearest_of(&"wadee_villager", me, null)
+	_check(villager != null, "a villager about")
+	if villager == null:
+		return
+	var who := _name_of(villager)
+	await _walk_up(villager)
+	await _seconds(0.6)
+	for attempt in 3:
+		await _stand(_me(), villager.local_position() + Vector3(0.0, 1.15, 0.0))
+		await _frames(2)
+		_avatar.grasp.use()
+		if await _until(func() -> bool: return state.hostile, 1.5):
+			break
+	print("harm    you shoot %s: %.0f of %.0f hp left; the town %s" % [who, villager.health.current, villager.health.max,
+		"has turned" if state.hostile else "is at peace"])
+	_check(state.hostile, "one wound turns the town")
+	await _snap("wadoo_harm_wounded")
+	# One you stand between and their door, near, cowers.
+	var cornered := _to_corner(villager)
+	if cornered != null:
+		var at := WadooSite.flat(cornered.local_position())
+		var door: Dictionary = site.door_of(str(WadooCast.person(WadooCast.index_of(cornered.record.id)).get("home", "")))
+		var stand := at + (WadooSite.flat(door["door"]) - at).normalized() * 3.5
+		await _stand(stand, cornered.local_position() + Vector3(0.0, 0.8, 0.0))
+		var cowered := await _until(func() -> bool:
+			_keep_up()
+			return cornered.intent != null and cornered.intent.action == &"cower", 3.0)
+		print("harm    %s, cornered 3.5 m off between them and their door: %s" % [_name_of(cornered),
+			cornered.intent.action if cornered.intent != null else &"-"])
+		_check(cowered, "cornered, %s cowers" % _name_of(cornered))
+		await _seconds(0.8)
+		await _snap("wadoo_harm_cower")
+	else:
+		print("harm    no villager in the open to corner")
+	await _seconds(5.0)
+	_harm_census("6 s after the wound")
+	# The Sunguard come, and shoot at you from cover.
+	var fired := await _until(func() -> bool:
+		_keep_up()
+		return site.shots > 0, FIGHT_WAIT)
+	_check(fired, "the Sunguard shoot at you")
+	_found = null
+	var caught := await _until(func() -> bool:
+		_keep_up()
+		_found = _acting(&"shoot")
+		return _found != null, FIGHT_WAIT)
+	if caught:
+		var shooter := _found
+		_aim_at(shooter)
+		await _snap("wadoo_harm_shoot")
+		print("harm    %s fires from %.1f m, %s" % [_name_of(shooter), _flat_off(shooter), _where_seen(shooter)])
+		await _seconds(0.2)
+		_aim_at(shooter)
+		await _snap("wadoo_harm_shoot_on")
+		print("harm    %s a moment on, %s" % [_name_of(shooter), _where_seen(shooter)])
+	_harm_census("in the fight")
+	_mend()
+	await _reading_for("in a fight in Wadoo, %d Wadees awake" % _live().size(), 5.0)
+	# Aimed at, a Sunguard rolls aside now and then.
+	var target := _nearest_of(&"wadee_sunguard", _me(), null, true)
+	_check(target != null, "a Sunguard to aim at")
+	if target == null:
+		return
+	var rolled := await _until(func() -> bool:
+		_keep_up()
+		_aim_at(target)
+		return target.intent != null and target.intent.action == &"roll", FIGHT_WAIT)
+	print("harm    aiming at %s %.1f m off: %s" % [_name_of(target), _flat_off(target), "they roll aside" if rolled else "no roll"])
+	_check(rolled, "aimed at, a Sunguard rolls aside")
+	if rolled:
+		await _seconds(0.3)
+		_aim_at(target)
+		await _snap("wadoo_harm_roll")
+		print("harm    %s rolling, %s" % [_name_of(target), _where_seen(target)])
+	# You shoot them down with the rod (the probe fills it first).
+	rod.charges = SunRod.CHARGES
+	_fired = 0
+	var hp0 := target.health.current
+	var dead := await _until(func() -> bool:
+		_keep_up()
+		_aim_at(target)
+		if rod.cooldown_left() <= 0.0 and rod.charges > 0 and not target.is_dead():
+			if _avatar.grasp.use():
+				_fired += 1
+		if rod.charges <= 0:
+			rod.charges = SunRod.CHARGES
+		return target.is_dead(), FIGHT_WAIT)
+	print("harm    %s: %d bolts from the rod, %.0f hp taken of %.0f; %s" % [_name_of(target), _fired,
+		hp0 - target.health.current, target.health.max, "dead" if dead else "standing"])
+	_check(dead, "the rod brings a Sunguard down")
+	var dead_one := target
+	if dead:
+		await _seconds(0.5)
+		_aim_at(dead_one)
+		await _snap("wadoo_harm_falling")
+		print("harm    %s falling, %s" % [_name_of(dead_one), _where_seen(dead_one)])
+		await _seconds(2.4)
+		_aim_at(dead_one)
+		await _snap("wadoo_harm_fallen")
+		print("harm    %s fallen, %s" % [_name_of(dead_one), _where_seen(dead_one)])
+	# You black out: they hold their fire. You drop the rod where you fell and
+	# wake aboard your ship (health and damage spec §7.2), walk out and back in
+	# for it, and the fight goes on.
+	_mend()
+	var before := site.shots
+	_avatar.take_damage(_avatar.health.current + 1.0)
+	_check(_avatar.downed != null, "you black out")
+	await _seconds(1.0)
+	var at_down := site.shots
+	var woke := await _until(func() -> bool: return _avatar.downed == null, 40.0)
+	print("harm    shots: %d in flight as you fell, %d while you were down" % [at_down - before, site.shots - at_down])
+	_check(woke and site.shots == at_down, "no one fires at you down")
+	_check(not _avatar.is_outside(), "you wake aboard your ship")
+	if not await _out_through(_starter.airlocks.values()[0], "", "foot"):
+		return
+	var outside_at := site.shots
+	await _seconds(2.0)
+	print("harm    out by the pad, %.0f m from the middle (%s): %d shots" % [_me().length(),
+		"in the walls" if site.inside_walls(_me()) else "out of the walls", site.shots - outside_at])
+	_check(_avatar.grasp.item == null and is_instance_valid(held), "the rod lies where you fell")
+	if not is_instance_valid(held):
+		return
+	var lies := site.frame().affine_inverse() * held.global_position
+	var lies_at := WadooSite.flat(lies)
+	await _site_look("", lies_at + (-lies_at).normalized() * 1.2, lies)
+	await _frames(4)
+	if _avatar.interactor.current() == held:
+		await _press_action(&"interact")
+		await _frames(3)
+	_check(_avatar.grasp.item == held, "back for it, F takes it up")
+	var again := site.shots
+	var resumed := await _until(func() -> bool:
+		_keep_up()
+		return site.shots > again, FIGHT_WAIT)
+	print("harm    back in the walls, the Sunguard %s" % ("fire again" if resumed else "hold their fire"))
+	_check(resumed, "back on your feet in the walls, the fight goes on")
+	# You leave the walls: the fight is over, and in a while the villagers come out.
+	var out := _outside_walls(_me())
+	await _site_look("", out, site.ground(out * 0.5) + Vector3(0.0, 1.6, 0.0))
+	_mend()
+	await _seconds(2.0)
+	var after := site.shots
+	await _seconds(5.0)
+	var fighting := _count_doing(&"fight_ranged")
+	print("harm    %.0f m from the middle, out of the walls: %d shots in 5 s, %d Sunguard fighting" % [out.length(),
+		site.shots - after, fighting])
+	_check(fighting == 0 and site.shots == after, "beyond the walls, the fight is over")
+	var hidden_now := _hidden_count()
+	var out_again := await _until(func() -> bool: return _hidden_count() == 0, 40.0)
+	print("harm    %d hidden as you left; %s" % [hidden_now, "all out again" if out_again else "%d still in" % _hidden_count()])
+	_check(hidden_now > 0 and out_again, "the villagers hid, and came out once you were gone")
+	_check(is_instance_valid(dead_one) and dead_one.is_dead() and _npcs.live.has(dead_one.record.id),
+		"the fallen lie where they fell")
+	print("harm    the Sunguard threw %d bolts and hit you %d times for %.0f hp; the probe mended you %d times" % [
+		site.shots, _hits, _taken, _mended])
+
+## Mends you if a fight has worn you low, and counts it.
+func _keep_up() -> void:
+	if _avatar.downed == null and _avatar.health.current < KEEP_UP_UNDER:
+		_mend()
+
+func _mend() -> void:
+	if _avatar.health.current < _avatar.health.max:
+		_avatar.health.current = _avatar.health.max
+		_mended += 1
+
+## Where you stand, [east, north] on the town's ground.
+func _me() -> Vector2:
+	return WadooSite.flat(_wadoo.site.frame().affine_inverse() * _avatar.global_position)
+
+## Your eye turned on `npc`'s chest, where you stand.
+func _aim_at(npc: Npc) -> void:
+	if not is_instance_valid(npc):
+		return
+	var pos := _avatar.global_position
+	var up := _up(pos)
+	var chest := npc.global_position + npc.global_basis.y * (0.6 if npc.down else 1.15)
+	_face(chest - pos)
+	var to := chest - (pos + up * 1.6)
+	_avatar.set_head_pitch(atan2(to.dot(up), (to - up * to.dot(up)).length()))
+
+## The live one of `species` nearest [east, north] `at`, not `other`, not
+## hidden or down (and, with `fighting`, in the fight).
+func _nearest_of(species: StringName, at: Vector2, other: Npc, fighting := false) -> Npc:
+	var best: Npc = null
+	var best_d := INF
+	for npc in _live():
+		if npc == other or npc.down or npc.species.id != species or _wadoo.site.hidden(npc.record.id):
+			continue
+		if fighting and (npc.brain.current == null or npc.brain.current.id != &"fight_ranged"):
+			continue
+		var d := WadooSite.flat(npc.local_position()).distance_to(at)
+		if d < best_d:
+			best = npc
+			best_d = d
+	return best
+
+## A villager in the open, not `other`, with a door more than 6 m off: one to
+## corner.
+func _to_corner(other: Npc) -> Npc:
+	for npc in _live():
+		if npc == other or npc.down or npc.species.id != &"wadee_villager" or _wadoo.site.hidden(npc.record.id):
+			continue
+		var home := str(WadooCast.person(WadooCast.index_of(npc.record.id)).get("home", ""))
+		var door := _wadoo.site.door_of(home)
+		if door.is_empty():
+			continue
+		var at := WadooSite.flat(npc.local_position())
+		var to_door := WadooSite.flat(door["door"]) - at
+		if to_door.length() > 6.0 and _wadoo.site.open(at + to_door.normalized() * 3.5):
+			return npc
+	return null
+
+## A Sunguard whose body is doing `action` now, or null.
+func _acting(action: StringName) -> Npc:
+	for npc in _live():
+		if npc.species.id == &"wadee_sunguard" and not npc.down and npc.intent != null and npc.intent.action == action:
+			return npc
+	return null
+
+## How many live Wadees are in behaviour `id`.
+func _count_doing(id: StringName) -> int:
+	var n := 0
+	for npc in _live():
+		if not npc.down and npc.brain != null and npc.brain.current != null and npc.brain.current.id == id:
+			n += 1
+	return n
+
+func _hidden_count() -> int:
+	var n := 0
+	for npc in _live():
+		if _wadoo.site.hidden(npc.record.id):
+			n += 1
+	return n
+
+## Where `npc`'s middle is in the view, for cropping a still.
+func _where_seen(npc: Npc) -> String:
+	var cam := root.get_viewport().get_camera_3d()
+	var mid := npc.global_position + npc.global_basis.y * (0.3 if npc.down else 0.9)
+	if cam == null or cam.is_position_behind(mid):
+		return "off screen"
+	var p := cam.unproject_position(mid)
+	return "on screen at (%.0f, %.0f)" % [p.x, p.y]
+
+## How far `npc` is from you on the ground, m.
+func _flat_off(npc: Npc) -> float:
+	return WadooSite.flat(npc.local_position()).distance_to(_me())
+
+func _name_of(npc: Npc) -> String:
+	return str(WadooCast.person(WadooCast.index_of(npc.record.id)).get("name", npc.name))
+
+## A place on open ground 20 m out past the town's walls, the way you are from
+## its middle.
+func _outside_walls(from: Vector2) -> Vector2:
+	var dir := from.normalized() if from.length() > 1.0 else Vector2.RIGHT
+	var r := 10.0
+	while r < 400.0 and _wadoo.site.inside_walls(dir * r):
+		r += 5.0
+	return dir * (r + 20.0)
+
+## The town in a fight: who hides, cowers, runs or fights, the shots and you.
+func _harm_census(when: String) -> void:
+	var hiding := _hidden_count()
+	print("harm    %s: %d hidden, %d running home, %d cowering, %d Sunguard fighting; %d shots, you hit %d times for %.0f hp (health %.0f)" % [
+		when, hiding, _count_doing(&"flee_home") - hiding, _count_doing(&"cower"), _count_doing(&"fight_ranged"),
+		_wadoo.site.shots, _hits, _taken, _avatar.health.current])
+
+## A render at once (2 frames), for a moment in a fight: oasis_<name>.png.
+func _snap(shot_name: String) -> void:
+	await _frames(2)
+	var file := "%s/oasis_%s.png" % [_out, shot_name]
+	root.get_viewport().get_texture().get_image().save_png(file)
+	print("render  %s" % file)
+

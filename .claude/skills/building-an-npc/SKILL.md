@@ -126,7 +126,10 @@ Do these in order. Each names the check that proves it.
 8. **Health:** `max_health` in the species (the catalogue test checks it is above 0), and
    whether it dies (`knocked_out_for` 0) or is knocked out and gets up. A creature that fights
    back lists a reflex like `defend` and asks the body for the bite with an intent action; the
-   mind never delivers a hit itself. The bite is data: `bite_damage`, `bite_push`, `bite_reach`.
+   mind never delivers a hit itself. One that shoots asks with `&"shoot"` and its site sends the
+   bolt (`NpcSite.shoot`, as Wadoo's Sunguard, with `SunBolt`); a wound that took health is told to
+   the site (`NpcSite.wounded`), which is where a place turns on you. A person's look poses itself
+   (`hurt`, `act(&"dead")`): the body never flips or squashes it, and the dead lie where they fell. The bite is data: `bite_damage`, `bite_push`, `bite_reach`.
    A creature that drains (`drain_rate`, `drain_reach`) asks with `&"sip"`. **The body delivers every
    drain and every drop** (`Npc.sip`, `Npc.bite`, `RockSite.died`), and reaches the rest of the game
    only through its site's Callables (`place_salvage`, `base_place`, `base_sip`, `drop`, `count_near`),
@@ -324,6 +327,14 @@ Do these in order. Each names the check that proves it.
 | Weather through walls | The desert's sand streaks are particles round you: they blew through the hall as if it were open ground | `BlowingSand.sheltered` (the flight scene's `_indoors`, from `WadooSite.room_at`) stops the sand while you are in a room; anything weather-like needs the same |
 | A probe that stands you beside a walking NPC | `wadoo_play.gd` put you 1.8 m from Lio as she walked to work; nothing told her to stop, she was 3 m off before the Interactor looked, the armlet stayed in your hands, and full hands then found neither the lily nor the memorial | Walk up as a player does (`wadoo_play.gd` `_walk_up`: steps at 1.7 m/s toward where they are now), so `give_way` and `greet` stop them; read a later failure as maybe caused by an earlier one |
 | Running a list of tests with `-gtest=a,b` | The `.gutconfig.json` dirs still ran: the whole suite, 48 minutes | One `-gselect=<file>.gd` per run |
+| Chances from a hash of the time | The Sunguard's 50% roll used `WadooErrand.roll(ctx, salt)` (the time and a salt, through a golden ratio): checks 4 s apart drifted about 0.06, so ten chances in a row gave one roll | Dice that must be independent come from a `RandomNumberGenerator` of the behaviour's own, seeded in `start` (`fight_ranged._dice`); keep the hash for a person's fixed nature (`nature`) |
+| `trait` as a name | GDScript 4.5 reserves it: "Expected expression as the function argument" at the call, not the declaration | Call it something else (`nature`) |
+| A new `class_name` used at once | Another script naming `SunBolt` failed "Identifier not declared" until the editor had scanned it | After adding a file with a `class_name`, run `godot --headless --path . --import` before the tests |
+| A held prop turned by reasoning from the hand bone's axes | The wrist is bent in the clip: "up out of the fist" leaned the staff 40 degrees across her back, its head behind her own head, hidden from the one she aimed at | Measure the turn from the clip (`test/probes/wadee_poses.gd` prints `HAND_TURN` for a wanted lean in the look's frame), then render from the front and the side |
+| A knockback for a big hit | `Hit_Knockback` lays a Wadee flat by 0.3 s and there is no clip to rise, so a live one would pop up standing | A live hurt is always `Hit_Chest`; only death goes down |
+| A body that should lie, left to the director | The ledger's dead are never wanted, and a review (every 0.25 s) demotes what is not wanted: a Sunguard shot down went back to the pool at once, and the probe then aimed at the pool's parking place in the sky | `Npc.lies_where_fell()` (a person) keeps it while its source offers its record; creatures still go at once (their `CORPSE_FOR` never runs in the game) |
+| A burst at your own chest | A bolt hitting you burst full size 0.3 m from the eye and hid a sixth of the view | `SunBolt.ON_YOU_FLASH`: on the avatar the burst is a quarter size; a hit is told by the red edge and the jolt |
+| Waking where you fell, on a world | The spec said so; the game wakes you aboard your ship after any blackout outside (health and damage §7.2). The fight probe then aimed from inside the ship, 5 km off in engine space | Read the rule in the code (`flight_test._rescue`); a fight probe mends you in its `hurt` handler except for the blackout it means, then walks you back out |
 | Blender's default scene in a render script | `--factory-startup` keeps the default 2 m cube, which hid the figure in every frame | Remove or hide `Cube` (and the library's `Icosphere`) before rendering |
 
 ## Not built yet (plan for it; don't assume it works)
@@ -339,15 +350,17 @@ Do these in order. Each names the check that proves it.
 - **Interactions** beyond talking; the hose; carrying an NPC.
 - **Sound outside** (never, by the style guide) and **sensors** (`LifeContacts` for the bridge
   computer).
-- **Hunters and combat** beyond `defend` (which only bites back), and
-  NPC wingmen or crew at a helm. `ShipPilot` is the ship computer's pilot, not an NPC: it has no
+- **Hunters and combat** beyond `defend` (which only bites back) and the Sunguard's ranged fight
+  (`fight_ranged`: they never hunt you past their walls), and NPC wingmen or crew at a helm. `ShipPilot` is the ship computer's pilot, not an NPC: it has no
   `NpcRecord`, and a hostile carries no crew (hostile ships spec, call I).
 - **The frame budget on the target PC.** Measured 1.2 ms for 32 + the droid on a shared 2.1 GHz
   Xeon; unmeasured on the GTX 960 machine.
 - **People, beyond Wadoo's first stage.** The Wadees live in Wadoo (§ *worked examples*), but:
-  - things to do, harm and fighting are later stages of the Wadoo spec (talking and the queen's
-    audience are built);
-  - finger bones (nothing grips a spear; the Sunguard's staff hangs on the back);
+  - their homes' rooms and the Glassworks are stage 5 (talking, the audience, things to do, harm
+    and the Sunguard's fight are built);
+  - finger bones: a Sunguard holds the staff in an open hand;
+  - the Wadees fight only you on foot: nothing makes them fight a creature or a ship (a ship's
+    turret can still be sent after one, as after any NPC outside);
   - lighter meshes for distance: a model is 55–65k triangles; the town still runs at 132 fps
     (GTX 960) because a Wadee is one draw call and far motions step at 15 Hz;
   - indoors: the queen's hall is a room; a Wadee who goes home is still hidden, not inside one;

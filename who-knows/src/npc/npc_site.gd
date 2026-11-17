@@ -44,6 +44,16 @@ func died(_npc: Npc) -> void:
 func surfaced(_npc: Npc) -> void:
 	pass
 
+## Called by the body when a hit took `taken` hp from `npc` (a wound, not a
+## miss): a place whose people remember who hurt them overrides it (Wadoo).
+func wounded(_npc: Npc, _hit: Hit, _taken: float) -> void:
+	pass
+
+## Called by the body when its mind asks to shoot (intent action &"shoot"): the
+## site sends the shot, as it knows the target and the world. Nothing here.
+func shoot(_npc: Npc) -> void:
+	pass
+
 ## QE/s the body may drain from this site's own store for `npc`, over `dt`
 ## seconds; 0 when the place has none.
 func sip_source(_npc: Npc, _dt: float) -> float:

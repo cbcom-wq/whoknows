@@ -4,10 +4,23 @@ extends GutTest
 ## (docs/superpowers/specs/2026-09-29-health-and-damage-design.md §6).
 
 class FakeSite extends NpcSite:
+	var wounds: Array = []
 	func frame() -> Transform3D:
 		return Transform3D.IDENTITY
 	func alive() -> bool:
 		return true
+	func wounded(npc: Npc, hit: Hit, taken: float) -> void:
+		wounds.append([npc, hit, taken])
+
+## A look that moves as a person does (as WadeeLook): it is told of each hurt and
+## of its death, and is never turned or squashed by the body.
+class PersonLook extends Node3D:
+	var hurts: Array = []
+	var acts: Array = []
+	func hurt(share: float) -> void:
+		hurts.append(share)
+	func act(action: StringName) -> void:
+		acts.append(action)
 
 class FakeSource:
 	var entries: Array = []
@@ -133,3 +146,44 @@ func test_a_bite_hurts_and_shoves_you_when_you_are_close():
 	assert_gt(avatar.velocity.x, 0.0, "shoved away")
 	avatar.global_position = npc.global_position + Vector3(5, 0, 0)
 	assert_false(npc.bite(), "out of reach")
+
+func _person() -> Npc:
+	var npc := _live(&"creature")
+	if npc.look != null:
+		npc.look.queue_free()
+	var person := PersonLook.new()
+	npc.add_child(person)
+	npc.look = person
+	return npc
+
+## A person (Wadoo spec §9): a wound is told to their place; they stagger by
+## their own motion, not squashed; dead, they fall by it too, upright to the body,
+## no longer solid, and lie where they fell until their place sleeps.
+func test_a_person_tells_their_place_staggers_and_lies_where_they_fell():
+	var npc := _person()
+	var look := npc.look as PersonLook
+	npc.receive_hit(_hit(10.0))
+	assert_eq(_site.wounds.size(), 1, "the wound is told to the place")
+	assert_almost_eq(float(_site.wounds[0][2]), 10.0, 0.01)
+	assert_eq(look.hurts.size(), 1)
+	assert_almost_eq(float(look.hurts[0]), 0.25, 0.01, "a quarter of their health")
+	var b := look.transform.basis
+	assert_almost_eq(b.x.length(), b.y.length(), 0.001, "never squashed")
+	npc.receive_hit(_hit(100.0))
+	assert_true(npc.is_dead())
+	assert_true(look.acts.has(&"dead"), "they fall by their own motion")
+	assert_eq(look.hurts.size(), 1, "no stagger as they die")
+	assert_true(look.transform.basis.y.normalized().is_equal_approx(Vector3.UP), "never flipped")
+	assert_true(npc._shape.disabled, "you no longer walk into them")
+	var id := npc.record.id
+	npc._physics_process(Npc.CORPSE_FOR * 3.0)
+	assert_true(_director.live.has(id), "they stay")
+	_director.review()
+	assert_true(_director.live.has(id), "through the director's reviews, while their place offers them")
+	assert_eq(_site.wounds.size(), 2)
+	_source.entries.clear()
+	_director.review()
+	assert_false(_director.live.has(id), "gone with their place")
+	_source.entries.append([npc.record, _site])
+	_director.review()
+	assert_false(_director.live.has(id), "and never wake again")

@@ -299,4 +299,4 @@ func test_species_read_back():
 		for b: StringName in s.behaviours:
 			assert_true(NpcBehaviours.exists(b), "%s: %s" % [id, b])
 	assert_eq((load("res://data/npcs/wadee_sunguard.tres") as NpcSpecies).max_health, 90.0)
-	assert_eq((load("res://data/npcs/wadee_villager.tres") as NpcSpecies).behaviours.size(), 9, "eight of their day, and converse")
+	assert_eq((load("res://data/npcs/wadee_villager.tres") as NpcSpecies).behaviours.size(), 11, "flee home and cower (§9), eight of their day, and converse")

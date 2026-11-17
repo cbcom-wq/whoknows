@@ -103,7 +103,15 @@ static func _same(have: Variant, want: Variant) -> bool:
 	return str(have) == str(want)
 
 static func fill(text: String, person: Dictionary, facts: Dictionary) -> String:
-	return text.replace("{name}", str(person.get("name", ""))).replace("{deeds}", deeds(facts))
+	return text.replace("{name}", str(person.get("name", ""))).replace("{deeds}", deeds(facts)) \
+		.replace("{charm}", charm(facts))
+
+## What the queen adds to her gift (§8) if you did all three things: the water
+## stone, said as the end of a sentence; "" if not.
+static func charm(facts: Dictionary) -> String:
+	if int(facts.get("tasks_done", 0)) < WadooState.TASKS.size():
+		return ""
+	return " I have bound a water stone to it, for all you did for us: its sun will burn brighter."
 
 ## What you did for Wadoo, as the queen says it: "You woke Halla's pump, and you
 ## laid a lily for our dead". "You came to us" if nothing.
