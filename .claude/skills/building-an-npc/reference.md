@@ -292,7 +292,7 @@ Delver kept 1.1-1.2 m/s on every leg, arrived on all five and never stalled for 
 | | Exterior (`flight_test.gd._wire_npcs`) | Interior (`Ship._make_crew_quarters`) |
 |---|---|---|
 | Rule | `BY_DISTANCE`: live within `live_radius` of a node in `anchor_group` (`AsteroidStream.SPACE_ANCHOR`: the hull, you on a spacewalk); demoted past `live_radius + DEMOTE_MARGIN` (100) and only if no camera could see it | `BY_SITE`: every record of a live site |
-| `max_live` | 32 (over it: farthest out, one warning) | 8 |
+| `max_live` | 40 (Wadoo's 25 all awake at once, and room for herds; over it: farthest out, one warning) | 8 |
 | Holder, bus | scene root children; bus `setup(self, _universe)` | `Ship/Interior/Npcs`; bus `setup(interior)` |
 | Cameras (for sight and LOD) | chase, canopy, avatar | none (always full detail) |
 
@@ -329,6 +329,16 @@ Delver kept 1.1-1.2 m/s on every leg, arrived on all five and never stalled for 
   `set_solid(true)`, `Npc.surfaced()` (`surfaced_at`, `site.surfaced`, `look.act(&"emerge")`), and it clears the spent burrow intent and
   hands back to the crawler. `ctx.extra[&"surfaced_ago"]` is the seconds since `surfaced_at` (set at `setup` too). `Npc.setup` makes a
   pooled node solid and drawn again. `test_burrower.gd`.
+- **`GroundWalker`** (`ground_walker`; on a world's ground, the Wadees): kinematic, no `move_and_slide`.
+  It asks its site (untyped `var site: Variant = npc.site`, so any site with these works):
+  `route(from, to) -> PackedVector2Array` (flat [east, north] points), `ground(p) -> Vector3`,
+  `up_at(local)`, `neighbours(npc) -> PackedVector2Array`, `open(p) -> bool`. `TURN_RATE` 5 rad/s,
+  `CORNER` 0.35 m, `SLOWING` 0.8 m, `ARRIVED` 0.15 m, `PERSONAL` 0.6 m and `PUSH` 1.2 m/s (others
+  ease it aside, only onto open ground), `SLIDE_DECAY` 4, `SLIDE_STOPS` 0.03, neighbours asked every
+  `NEIGHBOURS_EVERY` 4 steps. Speed is scaled by how far it faces its way
+  (`clampf(heading.dot(want), 0, 1)`), so it turns on the spot before it walks. It sets
+  `global_transform` and `velocity` (for the look's pace) itself; `shoved` adds a slide and replans.
+  `test_ground_walker.gd` (a `FakeSite`).
 - **Bumps:** `Avatar.bump` shares momentum with an `Npc` by the rocks' rule
   (`SUIT_MASS × m / (SUIT_MASS + m)`, bounce 0.2) through `npc.shove`.
 
@@ -369,42 +379,51 @@ Delver kept 1.1-1.2 m/s on every leg, arrived on all five and never stalled for 
   quads) shown on `leap`, `lunge` and `bite`; wears `ItemLooks.glint` on `BEAT` 1.6 s, set by `set_group_seed`
   through `Glint.clock_phase` so a nest flashes together; at most 120 triangles.
 
-## People made in Blender (the Wadees, a spike: `tools/blender/README.md`)
+## People made in Blender (the Wadees: `tools/blender/README.md`)
 
 - **Files:** `tools/blender/wadee_base.py` (the models), `wadee_rig.py` (skeleton, weights,
-  motions), `wkit.py` (mesh helpers); `who-knows/assets/wadee/wadee_<a|b|c|m|n>.glb` (a, b and c are
-  women, m and n men); the probe `who-knows/test/probes/wadee_render.gd`.
+  motions, palette UVs), `wkit.py` (mesh helpers); `who-knows/assets/wadee/wadee_<tag>.glb` and
+  `sunstaff.glb`. Tags: `a`, `b`, `c` women and `m`, `n` men (villagers), `q` the queen, `s` and `t` a
+  woman and a man of the Sunguard. Probes: `wadee_render.gd` (models walked by hand) and
+  `wadoo_play.gd` (the town in the game).
 - **Sources (CC0, downloaded, not in the repo):**
   - Blender's *Human Base Meshes* v1.4.1, at `D:/git/blender_base_assets/hbm/`. It has no rig and
     no motions.
   - Quaternius's *Universal Animation Library* 1 and 2, Standard, at
-    `D:/git/blender_base_assets/ual/`, taken from OpenGameArt. Pack 1's Godot GLB has the
-    53-bone T-pose rig and 45 clips.
+    `D:/git/blender_base_assets/ual/`, taken from OpenGameArt. Pack 1's bones are `DEF-*`; pack 2's
+    are named as Unreal's mannequin (`wadee_rig.py` `NAMES2`).
   - Open them with `--disable-autoexec`. Nothing is ever paid for (the owner's rule).
 - **A model:**
-  - 1.745 m, times its variant's scale (1.0, 1.03, 0.97, 1.055 or 1.04);
+  - 1.745 m, times its variant's scale;
   - arms lowered 9° (women) or 12° (men) from the A-pose;
-  - 55–65k triangles (the body is 40k), about 2.3 MB as a rigged GLB;
-  - it faces +Z in Godot, so turn it with `Basis(Vector3.UP, atan2(d.x, d.z))`.
+  - **one mesh, one material**: every part's UVs point at its slot's texel in a 16 x 1 palette
+    (`SLOTS`: skin, lips, hair, brow, eye white, iris, pupil, lash, cloth 1-3, leather, bronze,
+    turquoise, sunglass, cape). `WadeePalette` paints that texture per person from their seed, so
+    five bodies dress 25 people and a Wadee is one draw call;
+  - it faces +Z in Godot; `WadeeLook` turns it to face -z as every NPC does.
 - **Skeleton:** 23 bones, `Hips` down from `Root` (`Root` does not deform and is not exported):
   `Spine`, `Chest`, `UpperChest`, `Neck`, `Head`; `Left`/`Right` + `Shoulder`, `UpperArm`, `LowerArm`,
   `Hand`, `UpperLeg`, `LowerLeg`, `Foot`, `Toes`. No fingers. The hips' rest height is 0.874 m on
   a 1.745 m body.
-- **Clips (Godot's names):**
-
-  | Clip | Length | Pace |
-  |---|---|---|
-  | `Idle` | 2.5 s | |
-  | `Idle_Talking` | 2.9 s | |
-  | `Walk` | 1.33 s | 1.05 m/s |
-  | `Walk_Formal` | 1.33 s | 1.05 m/s |
-  | `Jog_Fwd` (a fast run) | 0.92 s | about 5.9 m/s |
-  | `Sprint` | 0.67 s | about 8.8 m/s |
-
-  - The pace is the library's body's, with its hips 0.917 m up. Move a Wadee at that pace times
-    its own hip height over 0.917 (`skeleton.get_bone_global_rest(find_bone("Hips")).origin.y`),
-    so its feet do not slide.
-  - The clips import looped, at 30 fps.
+- **Clips (Godot's names), 29.** Pack 1: `Idle`, `Idle_Talking`, `Walk`, `Walk_Formal`,
+  `Jog_Fwd`, `Sprint`, `Sitting_Enter`, `Sitting_Idle`, `Sitting_Exit`, `Sitting_Talking`,
+  `Fixing_Kneeling`, `Interact`, `PickUp_Table`, `Hit_Chest`, `Hit_Head`, `Death01`, `Roll`,
+  `Spell_Simple_Shoot`, `Spell_Simple_Idle`, `Crouch_Idle`, `Crouch_Fwd`. Pack 2: `Farm_Watering`,
+  `Farm_Harvest`, `Farm_PlantSeed`, `Walk_Carry`, `Consume`, `Idle_FoldArms`, `Yes`, `Hit_Knockback`.
+  - Paces (m/s at the library's hips, `LIB_HIPS` 0.917 m): `Walk` 1.05, `Walk_Carry` 0.67,
+    `Jog_Fwd` 5.9, `Sprint` about 8.8. `WadeeLook` scales the clip's speed by the Npc's speed over
+    pace times its own hips over 0.917, so the feet do not slide.
+  - They import at 30 fps. Godot loops a clip whose library name ended `_Loop`; `WadeeLook.HELD`
+    loops the once-through ones an action holds (farming, kneeling, interact, lift, drink).
+- **`WadeeLook`** (`src/npc/wadee_look.gd`): `set_person({model, seed, role, staff})`;
+  `CLIPS` maps the intent's action to a clip standing (`""` Idle, `talk`, `water`, `harvest`,
+  `plant`, `kneel`, `interact`, `lift`, `sit`, `sit_talk`, `rise`, `drink`, `watch`, `nod`, `crouch`,
+  `dead`); moving over `WALK_OVER` 0.2 m/s it walks (`carry` walks with `Walk_Carry`), over
+  `JOG_OVER` 2.4 it jogs. Sitting: from a non-seated clip it plays `Sitting_Enter` first and holds the
+  wanted seated clip until it ends (`SEATED`, `_after_sit`). LOD: shadow only within
+  `SHADOW_WITHIN` 25 m; motion every frame within `FULL_RATE_WITHIN` 30 m, at `FAR_RATE` 15 Hz
+  beyond; checked every `LOD_EVERY` 0.5 s. The Sunguard's staff hangs across the back
+  (`STAFF_AT`, `STAFF_LEAN`). `test_wadee_look.gd`.
 - **Copying a motion:** each bone turns in the world as the library's bone does. The turn is
   measured from a reference pose: the library's figure with each bone swung to point where ours
   points at rest, which brings the T-pose arms down. The hips' movement is scaled by hip height.
@@ -413,7 +432,11 @@ Delver kept 1.1-1.2 m/s on every leg, arrived on all five and never stalled for 
   - hair: `Head`, `Neck`, `UpperChest` and `Chest` only;
   - clothes: the trunk's skin, with 40% of any leg pull given to the hips, then smoothed;
   - jewellery: a ring round an arm follows the arm, and everything else follows the trunk.
-- **Frame rate (GTX 960, the target PC, 2026-11-16, on foot by the pool, floor 80, 120 until that day):**
+- **Frame rate in the game (Wadoo stage 1, 2026-11-17, `wadoo_play.gd`, GTX 960, 1280 x 720):** all 25
+  awake, on foot in the middle of town: **132 fps** (gpu 4.6 ms, cpu 1.6 ms); seated in the ship on the
+  pad, 123. With minds, bodies and motions stopped, 165; hidden, 173: the town costs about 1.3 ms of
+  physics plus its motions. Feet within 0.014 m of the drawn ground at worst.
+- **Frame rate of the spike (before one mesh and the walker; 2026-11-16, by the pool, floor 80):**
   - five standing: 183 fps;
   - five moving: 153–164 fps;
   - 25 moving, all in view: 80 fps.
@@ -428,6 +451,50 @@ Delver kept 1.1-1.2 m/s on every leg, arrived on all five and never stalled for 
     - **draw calls are the cost, not triangles.** A Wadee is 13 meshes and 18 surfaces, so 25 make
       455 draws in view and about 1,800 more into the shadow maps. Godot's LODs at a 6 px
       threshold cut the triangles by a quarter and won 2 fps.
+
+## Wadoo (the Wadees' town; `docs/superpowers/specs/2026-11-16-wadoo-design.md`)
+
+The first NPCs on a world. Everything is in the oasis place's frame (x east, z -north; flat
+[east, north] points are `Vector2`, `WadooSite.flat(v3) = Vector2(v.x, -v.z)`).
+- **`WadooCast`** (`src/npc/populations/wadoo_cast.gd`): `SITE` `&"wadoo"`, `HERD` 0 (the whole town is
+  one herd), ids `"wadee:wadoo:%d"`. `PEOPLE`: 25 entries `[name, model tag, role, home, jobs,
+  traits]`: Queen Imsa (`q`, `house_b`), the Sunguard (Kesh, Oru, Tarro, Seli, Nadi: `s`/`t`, each with a
+  post) and 19 villagers. `record(n, layout)`, `records(layout)`, `person(n)` (adds `seed` =
+  `hash("wadoo:<name>") & 0x7FFFFFFF`, `staff`, `title`, `jobs`, `grief`, `shy`), `index_of(id)`,
+  `species_of(role)`.
+- **`WadooPaths`** (`wadoo_paths.gd`): an `AStarGrid2D` of `CELL` 0.5 m over the layout, walls, shells,
+  palms, benches (`BENCH_CLEAR` 0.2) and the memorial solid; `route(from, to)` then a forward greedy
+  tightening. Cached per layout (`WadooSite._paths_of`).
+- **`WadooSite`** (`wadoo_site.gd`, an `NpcSite`): `frame()` is the place node's; `alive()` while it
+  exists; `up_at` away from the world's centre; `ground(p)` bilinear on a 1 m grid cached from
+  `PlaceField.ground_fn`; `route` is the paths' plus a last stretch (`LAST_STRETCH` 1.2 m) onto a spot
+  the grid's margins leave out (a bench seat). **Spots** by kind (`SPOT_KINDS`: garden, dry, pump,
+  glass, breach, memorial, shade, bank, wash, post, court), each `{at, face, action, key}`:
+  `spots(kind)`, `spot(kind, key)`, `take_spot(kind, who, near, salt)` (claims; one claim per person:
+  a new claim drops the old), `claim`, `release(who)`, `holder_of`. `door_of(home)` -> `{at, door, out}`.
+  **Pairs:** `ask_pair(who)` (needs company >= `PAIR_WANTS` 0.45 in both, within `PAIR_REACH` 20 m;
+  they meet halfway, `PAIR_APART` 1.1 m), `pair_of`, `end_pair`. **State:** `mark(who, state)`
+  (`&"seated"` and the like), `hide(who, on)` (indoors: look hidden, not solid), `hidden(who)`.
+  `start_pose` wakes the Sunguard at their posts, the queen at `court:queen` and villagers at a
+  seeded choice of their door, a job spot or the bank. `fill` puts `town`, `person`, `pair`, `state`,
+  `indoors` and `nearby` (8 open points 2 m round) in `ctx.extra`; indoors, `ctx.player` is null.
+- **`WadooSource`** (`wadoo_source.gd`): offers the 25 records only while an anchor is within
+  `NEAR_ENOUGH` 1500 m of the oasis and its node exists; builds the site then (`places.design`,
+  `terrain_of_place`, the node's meta `water_radius`). Wired in `flight_test.gd` as `wadoo`
+  (`exterior_npcs.sources = [life, dev, wadoo]`).
+- **Species:** `wadee_villager`, `wadee_sunguard`, `wadee_queen` (`data/npcs/`): `ground_walker`,
+  look `wadee`, population `wadoo`, `live_radius` 400, fade (330, 380); top speed 1.6 / 1.8 / 1.4;
+  health 60 / 90 / 60; needs company, grief, home, rest, thirst, work.
+- **Behaviours** (`WadooErrand` is the base for walk-there-then-act: `WALK` 0.75, `ARRIVED` 0.35,
+  `GIVE_UP` 90 s; hooks `choose`, `action`, `walk_action`, `acting`, `finish`): `work` (gardens, the
+  pump then carry water home, glass, the breach), `rest_shade` (bench seats; `sit_talk` with company),
+  `talk_pair`, `drink`, `mourn` (grief only, at the memorial), `go_home` (hidden indoors 40-90 s),
+  `keep_post` (Sunguard; Kesh walks the breach in 30 s legs), `hold_court` (the queen), `greet` (a
+  reflex at 0.7 within 8 m, once a minute; the shy keep 3 m), `give_way` (reused; not while seated).
+  `test_wadoo_behaviours.gd`, `test_wadoo_site.gd`, `test_wadoo_paths.gd`.
+- **Place pieces:** benches (`BrickShell.bench`, two under each sail, `data/places/oasis.json`
+  `benches`) and the memorial (`OasisLooks.memorial`, six stones on a 2.4 m ring with sunglass lamps;
+  `memorial_dir(k, stones)` is where a mourner kneels).
 
 ## Testing patterns
 
@@ -454,10 +521,9 @@ Delver kept 1.1-1.2 m/s on every leg, arrived on all five and never stalled for 
 
 ## Worlds (desert world phases 0–3; `docs/superpowers/specs/2026-11-03-desert-world-design.md` §5–§8)
 
-**Nothing lives on a world yet.** No NPC, creature or droid stands on one. The Wadees, WADIS's
-people, exist only as models walked by a probe (§ *People made in Blender*). The first world
-creature is the beast, in its own design (desert world spec §5.7). What follows is what it, the
-Wadees and any fauna after them must respect.
+**The Wadees live on WADIS** (§ *Wadoo*): 25 people walk the oasis town with `GroundWalker`. No
+creature does yet; the first is the beast, in its own design (desert world spec §5.7). What
+follows is what it and any fauna after the Wadees must respect.
 
 - **`WorldGravity` exists** (`src/world/world_gravity.gd`): `at(p)`, `up_at(p)`, `altitude_at(p)`,
   `surface_gravity_at(p)`, `on_world_at(p)` and `body_at(p)`. **Anything outside, on a world, must
@@ -494,7 +560,7 @@ Wadees and any fauna after them must respect.
 - **Places exist on `p3` (WADIS) for the beast to come** (phase 3, Parts A and B; `PlaceField`,
   `data/places/oasis.json`, `data/systems/kesdra.json`). The oasis is one node in
   `Universe.EXTERIOR_SPACE`, built near the focus and freed far off, so a creature must not
-  depend on it being loaded. Its ground is the world's ground: a stamped floor (`TerrainStamp`,
+  depend on it being loaded (`WadooSource` offers nothing while it is gone). Its ground is the world's ground: a stamped floor (`TerrainStamp`,
   in `height_at`) is walked like any ground, on `BodyProxy.LAYER`, with no special case. The
   village's walls, shells, foundations, thresholds (0.15 m steps) and palms are solid
   (`StaticBody3D` on `BodyProxy.LAYER`) and its grass, tracks and water are not; wading in the

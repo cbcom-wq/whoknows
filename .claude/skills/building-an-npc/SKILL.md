@@ -40,6 +40,11 @@ Worked examples, inside and outside. Read the one nearest to what you are making
   the digging is `Burrower` (the mind only asks `Intent.go(point, speed, &"burrow")`), the pay is
   `RockSite.surfaced` / `died` through the `drop` and `count_near` Callables, the items `crystal_grit` and
   `quantum_shard`.
+- **The Wadees** (on a world, 25 people in the oasis town Wadoo): `data/npcs/wadee_{villager,sunguard,queen}.tres`,
+  `WadooCast` (a fixed cast, not a seeded herd) + `WadooSite` + `WadooSource` + `WadooPaths`,
+  `GroundWalker`, `behaviours/{work,rest_shade,talk_pair,drink,mourn,go_home,keep_post,hold_court,greet}.gd`
+  on `WadooErrand`, `WadeeLook` (Blender-made models, one mesh each, coloured by `WadeePalette`). Read
+  it for anything that walks a world or is a person; `docs/superpowers/specs/2026-11-16-wadoo-design.md`.
 
 **Read first:** `CLAUDE.md` (style guide binding; floating origin; no `#` in `.tscn`/`.tres`),
 `docs/superpowers/specs/2026-09-26-npc-foundation-design.md` (§2 the layers, §21 *As built*: why
@@ -55,7 +60,8 @@ Answer these, in the spec or the task, before writing code. Each answer picks ex
    new site and maybe a new director.
 2. **Which place does it belong to, and how many?** That is its population recipe and site: an
    existing one (a `RockLife` recipe on `RockSite`, or `ShipCrew`/`ShipSite`) or a new pair.
-3. **How does it move?** `DeckWalker` (floors under gravity), `SurfaceCrawler` + `ZeroGDrift`
+3. **How does it move?** `DeckWalker` (floors under gravity), `GroundWalker` (a world's ground,
+   over a site's routes), `SurfaceCrawler` + `ZeroGDrift`
    (any surface in zero g, leaping and puffing), or a new locomotor (§ *Recipes*).
 4. **What does it sense?** Sight (range, cone, `dark_sight`, `near_sense`), light response,
    vibration (through its own rock only), sound (air only), shake (a ship's felt gravity), touch.
@@ -278,6 +284,11 @@ Do these in order. Each names the check that proves it.
 | Calling a clip by the library's name | `Walk_Loop` was "not found": Godot drops the `_Loop` ending on import and loops the clip | Play `Walk`, `Idle`, `Jog_Fwd`; the probe prints the list (`AnimationPlayer.get_animation_list()`) |
 | Blaming the copy for a strange motion | The run looked like a crouch with legs split under the long skirts. Hips and feet, compared frame by frame with the library's own figure, matched within a few centimetres: the library's `Jog_Fwd` is a fast run, about 5.9 m/s | Render the library's figure in the same clip, compare numbers frame by frame, then judge the copy |
 | A probe's view not looked at | Two stand points (north 33 and 37) were inside the north court's houses, so the 25-Wadee reading (98 fps) was taken facing a wall. With all 25 in view it was 80 | Look at every shot before trusting the reading taken there; stand on open ground (the east bank) |
+| A spot held by a behaviour the brain dropped | The brain never tells a behaviour it has been switched away from, so a Wadee pre-empted on the way to a bench kept the seat claimed and nobody else could sit there | One claim per person: `WadooSite.claim`/`take_spot` release the person's old claim first, and every errand's `start` releases; a behaviour never assumes its `done` runs |
+| A seat inside the path grid's margin | `WadooPaths` keeps every cell 0.2 m clear of a bench, so a route ended at the nearest open cell and sitters sat half a metre in front of the bench, in the air | The site's `route` adds the spot itself as a last point when it is within `LAST_STRETCH` 1.2 m of the route's end |
+| Sitting straight from a walk | The mind asked for `sit` and the look cut from `Walk` to `Sitting_Idle`: a Wadee popped onto the bench, and a second think cut `Sitting_Enter` short | `WadeeLook` plays `Sitting_Enter` from any non-seated clip and holds the seated clip asked for until it ends (`SEATED`, `_after_sit`); `test_sits_down_once_and_stays_seated` |
+| A director too small for a town | The exterior `max_live` was 32, shared with rock herds: a full town and one herd would have left Wadees asleep in the middle of the street | `max_live` 40; count every population that can be awake in one place |
+| A probe's spot view on the spot's facing side | The Glassworks' spots face its door, so standing "in front" put the camera inside the workshop | Look at every shot; a negative distance in `wadoo_play.gd` `SPOT_VIEWS` stands behind the spot |
 | Blender's default scene in a render script | `--factory-startup` keeps the default 2 m cube, which hid the figure in every frame | Remove or hide `Cube` (and the library's `Icosphere`) before rendering |
 
 ## Not built yet (plan for it; don't assume it works)
@@ -286,21 +297,22 @@ Do these in order. Each names the check that proves it.
   `NpcDirector.amend`); nothing else about an NPC is remembered when it sleeps.
 - **A dead droid, and repairs by others.** Short of its ship being destroyed, the droid is only
   ever knocked out; the repair torch brings it round.
-- **Local avoidance.** A walker does not path round people: a droid heading through you steps
-  aside (`give_way`) and tries again. A player standing still in a doorway blocks it.
+- **Local avoidance.** A walker does not plan round people: a droid heading through you steps
+  aside (`give_way`) and tries again, and a player standing still in a doorway blocks it.
+  `GroundWalker` only eases off a neighbour within `PERSONAL` 0.6 m, onto open ground.
 - **Ladders and upper storeys for walkers.** `DeckPaths` joins one storey only.
 - **Interactions** beyond the seam; the hose; carrying an NPC.
 - **Sound outside** (never, by the style guide) and **sensors** (`LifeContacts` for the bridge
   computer).
-- **Hunters and combat** beyond `defend` (which only bites back), `GroundWalker` (worlds), and
+- **Hunters and combat** beyond `defend` (which only bites back), and
   NPC wingmen or crew at a helm. `ShipPilot` is the ship computer's pilot, not an NPC: it has no
   `NpcRecord`, and a hostile carries no crew (hostile ships spec, call I).
 - **The frame budget on the target PC.** Measured 1.2 ms for 32 + the droid on a shared 2.1 GHz
   Xeon; unmeasured on the GTX 960 machine.
-- **People as NPCs.** The Wadees are models with motions only, moved by a probe. Not built yet:
-  - a species, look id or population for them;
-  - `GroundWalker` for a world's ground;
-  - blending between clips by speed;
-  - finger bones (nothing grips a spear);
-  - lighter versions for distance. A model is 55–65k triangles, and 25 in view ran at 74–80 fps,
-    just under the floor of 80 (120 until 2026-11-16).
+- **People, beyond Wadoo's first stage.** The Wadees live in Wadoo (§ *worked examples*), but:
+  - talking, things to do, the queen's audience, harm and fighting are later stages of the Wadoo
+    spec;
+  - finger bones (nothing grips a spear; the Sunguard's staff hangs on the back);
+  - lighter meshes for distance: a model is 55–65k triangles; the town still runs at 132 fps
+    (GTX 960) because a Wadee is one draw call and far motions step at 15 Hz;
+  - indoors: a Wadee who goes home is hidden, not inside a room.

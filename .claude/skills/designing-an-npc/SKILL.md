@@ -43,7 +43,7 @@ The look comes before behaviour: the owner settles who they are before deciding 
 | How does the player meet them, and what do they want of the player? | the first meeting, a quest, interactions | find and talk to the queen to be invited on the hunt |
 | How do they speak? | a dialog panel, single lines | a panel styled like the computer's pages, ending in one choice; the others one short line each |
 | What can the player do to them, and what follows? | health, the ledger, reactions, saving | they can be wounded and killed; others flee, warriors attack, the queen never speaks to you again; saved |
-| How many, where, and who leads? | population, site, director | a town of women and a few men, led by a queen (numbers not settled) |
+| How many, where, and who leads? | population, site, director | 25 adults, no children: Queen Imsa, five Sunguard warriors and nineteen villagers, mostly women |
 | What do they look like? Is there concept art? | the look | slender and beautiful; the owner's drawing: long hair, cream, rust and teal wraps, bronze and turquoise jewellery |
 
 Then answer `building-an-npc`'s *Decide before you build* for the engine side: the space, the
@@ -94,6 +94,13 @@ locomotor, the senses, the needs, how it is found, what can be done to it.
   into every shadow map), motions on the CPU and the probe's steering, not triangles. So a
   people meant for crowds is designed as one mesh with few materials, shadows only near, and
   motions updated less often when far.
+  - **That design held** (Wadoo stage 1, 2026-11-17): one mesh and one material each, coloured
+    from a palette texture per person, shadows within 25 m and far motions at 15 Hz. All 25 awake
+    and walking in the game ran at 132 fps on the GTX 960, against 74–80 for the spike.
+- **Map each action to a clip before building** (`WadeeLook.CLIPS`): a job the design names
+  (water a garden, fetch water, mourn) needs a clip that reads as it from 10 m. The farming,
+  carrying, drinking, arms-folded and nodding clips came from the library's second pack; ask for
+  a second pack before inventing a motion.
 
 ## Mistakes already made (don't repeat)
 

@@ -317,3 +317,30 @@ Each stage is committed on branch `wadoo`, rendered at eye height and shown to t
 
   It saves runs of frames for GIFs.
 - **The owner sees** the GIFs and stills after each stage.
+
+## 15. As built
+
+### Stage 1: a living town (2026-11-17, branch `wadoo`)
+
+- **The people:** eight models (`a`, `b`, `c`, `m`, `n`, the queen `q`, the Sunguard `s` and `t`), one
+  mesh and one material each, coloured per person by `WadeePalette` from a 16 x 1 palette texture;
+  29 clips from both motion packs (`tools/blender/README.md`). The Sunguard carry the sunstaff across
+  the back; finger bones are still to come, so nothing is held in the hand yet.
+- **The cast** is a fixed list (`WadooCast.PEOPLE`), not a seeded herd: every name, role, home, job
+  and trait is written down, and only the colours come from the seed. Homes are `house_b` (the queen
+  and the Sunguard), `home_3`, `home_4`, `house_a`, `house_d` and `hut_b`.
+- **Behaviour names** differ from §12: `job` is `work`; `drink` (the bank), `hold_court` (the queen)
+  and `keep_post` were added; `flee_home`, `hide`, `fight_ranged` and `converse` belong to stages 2
+  and 4. `work` rotates each person's jobs; fetching water is the pump, then a walk home carrying.
+- **Rest needed benches:** six (two under each sail, `data/places/oasis.json` `benches`,
+  `BrickShell.bench`), with seats the walker reaches past the path grid's margin.
+- **The memorial** stands at [16.5, -16.5]: six stones on a 2.4 m ring, a cairn, and a sunglass lamp
+  before each stone (`OasisLooks.memorial`). Mourners kneel before a stone.
+- **Waking:** `WadooSource` offers the 25 records from 1.5 km (`NEAR_ENOUGH`), and the director wakes
+  them within the species' 400 m. The exterior director's `max_live` went from 32 to 40 so the whole
+  town is awake at once. Indoors is hidden, not a room, until stage 5.
+- **Proved:** `wadoo_play.gd` landed, stepped out and lived a minute in the town: all 25 awake;
+  **132 fps** on foot at 1280 x 720 on the GTX 960 (floor 80); feet 0.003 m from the drawn ground on
+  average, 0.014 at worst. Stopping their minds, bodies and motions gave 165 fps and hiding them 173:
+  the town costs about 1.3 ms of physics plus its motions. The census after a minute: 5 on post, 11 at
+  work, 3 resting, 2 mourning, 3 talking, the queen at court.
