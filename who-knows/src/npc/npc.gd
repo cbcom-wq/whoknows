@@ -172,6 +172,8 @@ static func make_locomotor(id: StringName) -> Locomotor:
 			loco = SurfaceCrawler.new()
 		&"burrower":
 			loco = Burrower.new()
+		&"ground_walker":
+			loco = GroundWalker.new()
 		&"zero_g_drift":
 			loco = ZeroGDrift.new()
 		_:
