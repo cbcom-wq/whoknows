@@ -35,7 +35,7 @@ In a fresh worktree run `godot --headless --path . --import` once first, or ever
 
 **A probe passes** when its first line after the engine's banner is `ship    probing <id>: <name>`
 (or it probed something else), no line holds `<--`, `MISMATCH`, `MISSING`, `REFUSED`, `NOT FOUND`, `UNREACHABLE`,
-`SHADER ERROR` or `SCRIPT ERROR`, and every `fps` line is at least 120. `exhaust BLOCKED` is a
+`SHADER ERROR` or `SCRIPT ERROR`, and every `fps` line is at least 80. `exhaust BLOCKED` is a
 note: the starter has six.
 
 ## The plan
@@ -297,8 +297,8 @@ z -1  H    Qk12 D    D    Qm   Qk8  H
 - **Fits the oasis pad:** half-diagonal at most 21 m (the pad on WADIS is 26 m round, less
   5 m), or the pad grows with the ship: `test_every_library_ship_fits_the_pad` fails otherwise.
 - **Size:** 400 blocks at most. A 400-block ship builds in about 1.2 s when it spawns, a freeze the
-  owner accepted for now; its rules take 0.3 s; it holds 121 fps in the worst view, just over the
-  120 floor, so **a big ship costs frames**: keep it no bigger than the brief needs.
+  owner accepted for now; its rules take 0.3 s; it holds 121 fps in the worst view (the
+  floor was 120 then; it is 80), so **a big ship costs frames**: keep it no bigger than the brief needs.
 
 ## 6. Worked example: the starter
 
@@ -362,7 +362,7 @@ z 2   Fh2
 | Mistake | What happened | Do instead |
 |---|---|---|
 | One quantum core for a big ship | A 600-block draft drew 92.8 MW against 36 made | Count power while drawing the cabin; a second `Qk` beside the corridor; grav plating sparingly (1.5 MW each) |
-| 600 blocks | The first limit; probed, its worst view fell to 116 fps (109 with a second ship), under the 120 floor | The limit is 400, which holds 121; size costs frames |
+| 600 blocks | The first limit; probed, its worst view fell to 116 fps (109 with a second ship), under the floor of the time, 120 | The limit is 400, which holds 121; size costs frames |
 | RCS only at the bow of a long ship | The 43-row draft turned 0.06 / 0.03 / 0.42 rad/s² | Rcs pairs at both ends; the lever arm is free authority |
 | Probing in a fresh worktree | Every class "not declared", no output at all | `godot --headless --path . --import` once first |
 | `ship_check` after a failed `to-json` | The Lamplighter's plan had `Fs12.` (no space): `to-json` refused it, the old file stayed, and `ship_check` passed the stale ship | A round stops when `to-json` exits non-zero |

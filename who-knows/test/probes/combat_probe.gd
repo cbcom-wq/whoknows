@@ -14,7 +14,7 @@ extends SceneTree
 # combat_turret_upright and combat_turret_flipped (a light turret's barrels
 # lying back at 135°, seen from the side).
 #
-# Pass: at least 80% at 400 m, at most 30% at 1.2 km, at least 120 fps.
+# Pass: at least 80% at 400 m, at most 30% at 1.2 km, at least 80 fps.
 
 const RANGES := [200.0, 400.0, 600.0, 800.0, 1000.0, 1150.0, 1200.0, 1400.0]
 const JINK := 5.0

@@ -25,7 +25,7 @@
 - **Colours come only from the palettes** (style guide §2.2). A new `OasisPalette` (`src/world/oasis_palette.gd`) holds the oasis's outside colours: water, palms, green grass, gardens, the brick skin, the weathered prefab plate, sails and tracks. New interior colours go in `InteriorPalette`. The desert palette (`SpacePalette.WORLDS[SpacePalette.DESERT_PALETTE]`) gains `&"pad"` and `&"damp"`. Every new painting file joins `PAINTING_FILES`. Spec §9 approved the palette list growing. CLAUDE.md's palette line is updated in Task 18.
 - **No new shader**, inside or out (style guide §2.5, §3.9). Engine materials only. Brick and the weathered prefab plate are copies of the hull's livery material (`GridHome.livery`) with other parameter values.
 - **No `#` comments inside `.tscn`/`.tres` blocks** (CLAUDE.md). The new room blocks copy `data/blocks/galley.tres` exactly, with no comments, and a test reads their values back at runtime.
-- **Frame budget:** at least **120 fps at 1280 × 720 on the GTX 960**, measured with the windowed probe. The worst views are expected to be seated on the pad looking across the oasis (the canopy view draws everything twice) and inside a building with the doorway's daylight. Phase 2 measured 136 seated landed on open dunes.
+- **Frame budget:** at least **80 fps at 1280 × 720 on the GTX 960** (120 until the owner lowered it on 2026-11-16), measured with the windowed probe. The worst views are expected to be seated on the pad looking across the oasis (the canopy view draws everything twice) and inside a building with the doorway's daylight. Phase 2 measured 136 seated landed on open dunes.
 - **Interior rules hold in buildings:** render layer 2, no interior shadows, one light per cell and the doorway clearance (style guide §5; their tests run in Task 14).
 - **Skills and documents are updated in the same branch** (CLAUDE.md, spec §11) in Task 18. `fleet_play.gd` runs after the airlock change (Task 13).
 - **Commits** end with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Merging and pushing need the owner.
@@ -730,8 +730,8 @@ These are the five most likely to bite a player that the spec implies and no tas
   - the log open on the screen, rendered at 1280 × 720;
   - the fps inside each building over 10 s, and walking out of home 3 into the village;
   - the whole trip played: land on the pad, walk to the comms hut, take the datapad, read it, walk back and board. Print each step.
-- [ ] **Step 2: Run it windowed:** `oasis_render.gd -- <scratchpad>/oasis_c all`, then `fleet_play.gd`. Expected: no errors; every fps line at least **120**; the trip ALL OK.
-- [ ] **Step 3: If a view is under 120 fps**, cut in this order and measure again: the daylight spot's range, the drifts' facets, the flickering practicals' count. Record the numbers.
+- [ ] **Step 2: Run it windowed:** `oasis_render.gd -- <scratchpad>/oasis_c all`, then `fleet_play.gd`. Expected: no errors; every fps line at least **80**; the trip ALL OK.
+- [ ] **Step 3: If a view is under 80 fps**, cut in this order and measure again: the daylight spot's range, the drifts' facets, the flickering practicals' count. Record the numbers.
 - [ ] **Step 4: Checkpoint C: show the owner.** `SendUserFile` the inside renders and the log with the fps lines. Ask:
   - do the interiors read as warm homes left in a hurry, differing from the ship by more than brightness;
   - are the new rooms' props right;

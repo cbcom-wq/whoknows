@@ -64,7 +64,7 @@ other ship in `data/ships/`.
    2. `.\run_tests.ps1 '-gselect=test_ship_catalog.gd'`: all pass (it covers your ship by itself).
    3. The probe with `--ship <id>`, windowed, logged to a file. It passes when **no line holds
       `<--`, `MISMATCH`, `MISSING`, `REFUSED`, `NOT FOUND`, `UNREACHABLE`, `SHADER ERROR` or
-      `SCRIPT ERROR`**, and every `fps` line is ≥ 120 (a ship just under: run it once more before
+      `SCRIPT ERROR`**, and every `fps` line is ≥ 80 (a ship just under: run it once more before
       shrinking it). The probe's first line after the engine's banner must be `ship    probing <id>: <name>`, or it probed
       something else. `exhaust BLOCKED` is a note, not a failure: the starter has six.
    4. `arrival_render.gd --ship <id>`: your ship arriving out of warp. It proves the arrival; at

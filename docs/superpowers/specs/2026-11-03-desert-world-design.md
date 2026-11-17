@@ -817,7 +817,7 @@ version notes record any change to that slot's seed (§7.4).
   pool, at the broken wall looking at the tracks, inside each enterable building, and from the
   seat as the ship comes in to land. Put them side by side with `descent.html` and
   `oasis-layout.html`.
-- **Frame budget:** at least **120 fps at 1280 × 720 on the GTX 960** (style guide §2.6). The
+- **Frame budget:** at least **80 fps at 1280 × 720 on the GTX 960** (style guide §2.6; 120 until 2026-11-16). The
   worst views are expected seated on the pad looking across the oasis (canopy view drawing
   everything twice) and low flight over dense dunes. Record the numbers in §2.6.
 - **Tests,** targeted to the change, never the full suite unless the owner asks:
