@@ -12,7 +12,8 @@ extends WorldMarker
 ## Mounted per view, like every WorldMarker. The course's own contact is left
 ## to the CourseMarker (bridge computer spec §6.1), so it is never drawn twice.
 
-## How many contacts it shows: the nearest.
+## How many contacts it shows: the nearest. A place's beacon is shown besides
+## these, at any range (beacons()).
 const MOST := 3
 ## How far the sensors are asked to look, metres.
 const RANGE := 10000.0
@@ -47,13 +48,29 @@ func render(telemetry: VehicleTelemetry) -> void:
 	for c: Contact in sensors.contacts(RANGE):
 		if shown >= MOST:
 			break
-		if not marks_kind(c.kind) or c.id == sensors.course:
+		if not marks_kind(c.kind) or c.kind == PlaceContacts.KIND or c.id == sensors.course:
 			continue
 		var mark := mark_for(c, cam, focus, sensors.time, size)
 		if not mark.is_empty():
 			marks.append(mark)
 		shown += 1
+	for c: Contact in beacons(focus):
+		if c.id == sensors.course:
+			continue
+		var mark := mark_for(c, cam, focus, sensors.time, size)
+		if not mark.is_empty():
+			marks.append(mark)
 	queue_redraw()
+
+## The beacons of named places, at any range: a place's source gives them only
+## inside its world's well (desert world spec §8.2), where they lead you in from
+## tens of km. They are marked besides the MOST nearest, never in their place.
+func beacons(focus: UniversePoint) -> Array[Contact]:
+	var out: Array[Contact] = []
+	for source in sensors.sources():
+		if source is PlaceContacts:
+			out.append_array((source as PlaceContacts).contacts(focus, RANGE, sensors.time))
+	return out
 
 ## Whether it marks contacts of `kind`. Not the big rocks: you see those
 ## through the canopy, and the bridge computer's map is where they are named
@@ -87,6 +104,8 @@ func mark_for(c: Contact, cam: Camera3D, focus: UniversePoint, time: float, view
 		if not cam.is_position_behind(at):
 			var edge := at + cam.global_basis.x * c.radius
 			radius = maxf(cam.unproject_position(edge).distance_to(cam.unproject_position(at)), RING_MIN)
+	elif from_cam >= 1000.0:
+		text = "%s %s" % [c.label, BodyMarker.distance_text(from_cam)]
 	else:
 		text = "%s %d M" % [c.label, roundi(from_cam)]
 	var state := VelocityMarker.resolve(INF, cam.is_position_behind(at), cam.unproject_position(at), view)

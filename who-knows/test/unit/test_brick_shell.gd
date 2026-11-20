@@ -437,6 +437,37 @@ func test_openings_for_a_shell():
 	var wide := BrickShell.openings_for(Vector3(11, 2.9, 4.6), 0.4, 2.4)
 	assert_true(wide.any(func(o: Array) -> bool: return absf(float(o[1]) - 2.4) < 0.01), "a wide double door")
 
+## A window over a door (a two-storey house's front, the queen's hall) leaves
+## the doorway open its whole height, drawn and solid: the wall under the window
+## once stood in the doorway as a brick pier.
+func test_a_window_over_a_door_leaves_the_doorway_open():
+	var holes := [[-0.55, 0.55, 0.0, 2.0], [-0.275, 0.275, 3.15, 3.75]]
+	var pieces := BrickShell._pieces(7.5, 5.6, holes)
+	var covers := func(u: float, y: float) -> bool:
+		return pieces.any(func(p: Array) -> bool: return u > p[0] and u < p[1] and y > p[2] and y < p[3])
+	for u: float in [-0.4, 0.0, 0.4]:
+		assert_false(covers.call(u, 1.0), "the doorway at %.1f is open" % u)
+	assert_false(covers.call(0.0, 3.4), "and the window")
+	assert_true(covers.call(0.0, 2.5), "the wall between them")
+	assert_true(covers.call(0.0, 4.5), "the wall over the window")
+	assert_true(covers.call(-0.4, 3.4), "the wall beside the window, over the door")
+	assert_true(covers.call(-2.0, 1.0), "the wall beside the door")
+	var area := 0.0
+	for p: Array in pieces:
+		area += (p[1] - p[0]) * (p[3] - p[2])
+	assert_almost_eq(area, 7.5 * 5.6 - 1.1 * 2.0 - 0.55 * 0.6, 0.001, "the wall less its holes, no overlaps")
+	# and solid: no shape of house_b's open shell stands in its doorway
+	var size := Vector3(7.5, 5.6, 6.0)
+	var openings := BrickShell.openings_for(size, 0.98)
+	var door: Array = BrickShell.door_spots(openings)[0]
+	var middle: Vector3 = door[0] + Vector3(0.0, 1.0, 0.0)
+	for c: CollisionShape3D in BrickShell.box_shapes(Transform3D.IDENTITY, size, openings, 0.98, false):
+		var box := c.shape as BoxShape3D
+		var local := c.transform.affine_inverse() * middle
+		var inside := absf(local.x) < box.size.x * 0.5 and absf(local.y) < box.size.y * 0.5 and absf(local.z) < box.size.z * 0.5
+		assert_false(inside, "a shape at %s stands in the doorway" % c.transform.origin)
+		c.free()
+
 ## The broken wall stands on its foundation course too, and where it ends at a
 ## breach its courses step down to a stub.
 func test_a_wall_has_a_footing_and_steps_down_at_a_breach():

@@ -398,6 +398,15 @@ static func _clip(poly: PackedVector3Array, value: PackedFloat64Array) -> Packed
 static func garden(kit: InteriorKit, f: Transform3D, size: Vector2, dried: bool, variety: float) -> void:
 	kit.bevel_box(InteriorKit.Batch.SOLID, f * InteriorKit.at(Vector3(0, 0.12, 0)),
 		Vector3(size.x, 0.4, size.y), 0.08, InteriorKit.solid(OasisPalette.GARDEN_SOIL))
+	crops(kit, f, size, dried, variety)
+
+## The bed's top over its foot, m: where the crops stand.
+const BED_TOP := 0.28
+
+## A garden's rows of crops at `f` (the bed's foot), green or dry, each `widen` m
+## wider than a crop: the sun pump's green, grown over a dry bed's crops, is a
+## little wider so it covers them (SunPump).
+static func crops(kit: InteriorKit, f: Transform3D, size: Vector2, dried: bool, variety: float, widen := 0.0) -> void:
 	var crop := OasisPalette.CROP_DRY if dried else OasisPalette.CROP_GREEN
 	var rows := maxi(int((size.y - 0.4) / 0.6) + 1, 1)
 	var cols := maxi(int((size.x - 0.5) / 0.55) + 1, 1)
@@ -405,9 +414,83 @@ static func garden(kit: InteriorKit, f: Transform3D, size: Vector2, dried: bool,
 		for c in cols:
 			var n := _noise(variety, c, r)
 			var h := (0.15 + 0.1 * n) if dried else (0.28 + 0.2 * n)
-			var at := Vector3(-size.x * 0.5 + 0.3 + c * 0.55, 0.28 + h * 0.5, -size.y * 0.5 + 0.3 + r * 0.6)
-			kit.bevel_box(InteriorKit.Batch.SOLID, f * InteriorKit.at(at), Vector3(0.3, h, 0.3), 0.06,
+			var at := Vector3(-size.x * 0.5 + 0.3 + c * 0.55, BED_TOP + h * 0.5, -size.y * 0.5 + 0.3 + r * 0.6)
+			kit.bevel_box(InteriorKit.Batch.SOLID, f * InteriorKit.at(at), Vector3(0.3 + widen, h, 0.3 + widen), 0.06,
 				InteriorKit.solid(SpacePalette.shade(crop, int(n * 2.99))))
+
+# --- the memorial ---------------------------------------------------------------
+
+## The memorial (Wadoo spec §4): its stones stand round a ring, stone k at
+## MEMORIAL_TURN + TAU k / stones from east toward north, where WadooSite puts a
+## mourner's kneeling spot; each is MEMORIAL_STONE (wide, tall, thick, its height
+## give or take a fifth) and leans back a little; a lamp stands LAMP_OUT outside it
+## and LAMP_ASIDE to its side, so a mourner kneels before the stone beside it.
+const MEMORIAL_TURN := 0.3
+const MEMORIAL_STONE := Vector3(0.62, 1.5, 0.3)
+const MEMORIAL_SINK := 0.2
+const CAIRN_ROCKS := 7
+const LAMP_OUT := 0.45
+const LAMP_ASIDE := 0.42
+const LAMP_HEIGHT := 0.42
+const LAMP_GLASS := 0.15
+
+## The way from the memorial's middle to stone `k` of `stones`, in the place's
+## frame (x east, z -north).
+static func memorial_dir(k: int, stones: int) -> Vector3:
+	var a := MEMORIAL_TURN + TAU * k / stones
+	return Vector3(cos(a), 0.0, -sin(a))
+
+## The memorial at `f` (its middle on the ground): `stones` standing stones on a
+## ring of `radius`, a low cairn in the middle, a sunglass lamp before each stone.
+static func memorial(kit: InteriorKit, f: Transform3D, radius: float, stones: int, variety: float) -> void:
+	var bronze := InteriorKit.solid(OasisPalette.BRONZE)
+	var glass := InteriorKit.lit(OasisPalette.SUNGLASS, InteriorMaterials.GLOW_ENERGY)
+	for i in CAIRN_ROCKS:
+		var n := _noise(variety, i, 31.0)
+		var top := i >= CAIRN_ROCKS - 2
+		var a := TAU * i / (CAIRN_ROCKS - 2) + n
+		var at := Vector3(0.0, 0.5, 0.0) if i == CAIRN_ROCKS - 1 else (
+			Vector3(cos(a) * 0.18, 0.32, -sin(a) * 0.18) if top else Vector3(cos(a) * 0.42, 0.1, -sin(a) * 0.42))
+		var size := Vector3(0.42, 0.3, 0.38) * (0.8 + 0.4 * n)
+		kit.bevel_box(InteriorKit.Batch.SOLID, f * Transform3D(Basis(Vector3.UP, n * TAU), at), size, 0.08,
+			InteriorKit.solid(SpacePalette.shade(OasisPalette.MEMORIAL_STONE, int(n * 2.99))))
+	for k in stones:
+		var d := memorial_dir(k, stones)
+		var n := _noise(variety, k, 41.0)
+		var size := Vector3(MEMORIAL_STONE.x, MEMORIAL_STONE.y * (0.8 + 0.4 * n), MEMORIAL_STONE.z)
+		var face := Basis.looking_at(-d, Vector3.UP)
+		var lean := Basis(face.x, -0.05 - 0.07 * n)
+		var at := d * radius
+		kit.bevel_box(InteriorKit.Batch.SOLID,
+			f * Transform3D(lean * face, at + Vector3(0.0, size.y * 0.5 - MEMORIAL_SINK, 0.0)), size, 0.08,
+			InteriorKit.solid(SpacePalette.shade(OasisPalette.MEMORIAL_STONE, int(n * 2.99))))
+		var foot := at + d * LAMP_OUT + face.x * LAMP_ASIDE
+		kit.tube_between(InteriorKit.Batch.SOLID, f * (foot - Vector3(0.0, 0.1, 0.0)),
+			f * (foot + Vector3(0.0, LAMP_HEIGHT, 0.0)), 0.025, bronze)
+		kit.bevel_box(InteriorKit.Batch.SOLID, f * InteriorKit.at(foot + Vector3(0.0, LAMP_HEIGHT, 0.0)),
+			Vector3(0.14, 0.05, 0.14), 0.015, bronze)
+		kit.bevel_box(InteriorKit.Batch.GLOW, f * Transform3D(Basis(Vector3(1, 0, 1).normalized(), PI * 0.25),
+			foot + Vector3(0.0, LAMP_HEIGHT + LAMP_GLASS * 0.6, 0.0)), Vector3.ONE * LAMP_GLASS, 0.03, glass)
+
+## The memorial's colliders: each stone, and the cairn.
+static func memorial_shapes(f: Transform3D, radius: float, stones: int) -> Array[CollisionShape3D]:
+	var out: Array[CollisionShape3D] = []
+	for k in stones:
+		var d := memorial_dir(k, stones)
+		var c := CollisionShape3D.new()
+		var box := BoxShape3D.new()
+		box.size = MEMORIAL_STONE
+		c.shape = box
+		c.transform = f * Transform3D(Basis.looking_at(-d, Vector3.UP), d * radius + Vector3(0.0, MEMORIAL_STONE.y * 0.5 - MEMORIAL_SINK, 0.0))
+		out.append(c)
+	var cairn := CollisionShape3D.new()
+	var cyl := CylinderShape3D.new()
+	cyl.radius = 0.6
+	cyl.height = 0.7
+	cairn.shape = cyl
+	cairn.transform = f * InteriorKit.at(Vector3(0.0, 0.25, 0.0))
+	out.append(cairn)
+	return out
 
 ## A hand pump at `f`: a squat base, a column with a cap, a spout and a handle.
 static func pump(kit: InteriorKit, f: Transform3D) -> void:
@@ -419,6 +502,80 @@ static func pump(kit: InteriorKit, f: Transform3D) -> void:
 	kit.tube_between(InteriorKit.Batch.SOLID, f * Vector3(0, 1.0, 0), f * Vector3(0.5, 0.9, 0), 0.06,
 		InteriorKit.solid(OasisPalette.PIPE))
 	kit.tube_between(InteriorKit.Batch.SOLID, f * Vector3(-0.55, 1.6, 0), f * Vector3(0.25, 1.42, 0), 0.04, dark)
+
+# --- Halla's sun pump (Wadoo spec §7) ------------------------------------------
+
+## The sun pump's measures, m: the well head (radius, height); its two posts
+## stand SUN_FRAME apart and SUN_FRAME_TALL high; the cage's middle (where a sun
+## cell sits) at SUN_CAGE, SUN_CAGE_SIZE (radius, half height); the rod's pivot
+## on the west post.
+const SUN_WELL := Vector2(0.46, 0.6)
+const SUN_FRAME := 0.86
+const SUN_FRAME_TALL := 1.72
+const SUN_CAGE := 1.4
+const SUN_CAGE_SIZE := Vector2(0.12, 0.17)
+const SUN_ROD_PIVOT := Vector3(-0.43, 1.12, 0.0)
+
+## Halla's sun pump at `f` (its foot on the ground; the frame across x): a round
+## stone well head with a dark mouth, two bronze posts and a crossbar, and the
+## bronze cage hung from it where the sun cell goes, empty.
+static func sun_pump(kit: InteriorKit, f: Transform3D) -> void:
+	var stone := InteriorKit.solid(OasisPalette.PUMP)
+	var dark := InteriorKit.solid(OasisPalette.PUMP_DARK)
+	var bronze := InteriorKit.solid(OasisPalette.BRONZE)
+	var up := Basis(Vector3.RIGHT, -PI * 0.5)
+	kit.tube_between(InteriorKit.Batch.SOLID, f * Vector3(0, -0.1, 0), f * Vector3(0, SUN_WELL.y, 0), SUN_WELL.x, stone)
+	kit.ring(InteriorKit.Batch.SOLID, f * Transform3D(up, Vector3(0, SUN_WELL.y, 0)), SUN_WELL.x - 0.1, SUN_WELL.x + 0.03,
+		0.0, 0.07, dark)
+	kit.disc(InteriorKit.Batch.SOLID, f * Transform3D(up, Vector3(0, SUN_WELL.y - 0.05, 0)), SUN_WELL.x - 0.1, dark)
+	for x: float in [-SUN_FRAME * 0.5, SUN_FRAME * 0.5]:
+		kit.tube_between(InteriorKit.Batch.SOLID, f * Vector3(x, SUN_WELL.y - 0.2, 0), f * Vector3(x, SUN_FRAME_TALL, 0), 0.035, bronze)
+	kit.tube_between(InteriorKit.Batch.SOLID, f * Vector3(-SUN_FRAME * 0.5 - 0.06, SUN_FRAME_TALL, 0),
+		f * Vector3(SUN_FRAME * 0.5 + 0.06, SUN_FRAME_TALL, 0), 0.04, bronze)
+	var lo := SUN_CAGE - SUN_CAGE_SIZE.y
+	var hi := SUN_CAGE + SUN_CAGE_SIZE.y
+	for y: float in [lo, hi]:
+		kit.ring(InteriorKit.Batch.SOLID, f * Transform3D(up, Vector3(0, y - 0.015, 0)), SUN_CAGE_SIZE.x - 0.015,
+			SUN_CAGE_SIZE.x + 0.01, 0.0, 0.03, bronze)
+	for i in 6:
+		var d := Vector3(cos(TAU * i / 6.0), 0, sin(TAU * i / 6.0)) * SUN_CAGE_SIZE.x
+		kit.tube_between(InteriorKit.Batch.SOLID, f * (d + Vector3(0, lo, 0)), f * (d + Vector3(0, hi, 0)), 0.01, bronze)
+	kit.tube_between(InteriorKit.Batch.SOLID, f * Vector3(0, hi, 0), f * Vector3(0, SUN_FRAME_TALL, 0), 0.018, bronze)
+
+## The sun pump's rod, in its pivot's frame `f`: a bronze beam out over the well's
+## mouth and a rod hanging from its end down into it. It nods while the pump draws.
+static func sun_pump_rod(kit: InteriorKit, f: Transform3D) -> void:
+	var bronze := InteriorKit.solid(OasisPalette.BRONZE)
+	var end := Vector3(-SUN_ROD_PIVOT.x, 0.0, 0.0)
+	kit.tube_between(InteriorKit.Batch.SOLID, f * Vector3(-0.08, 0, 0), f * (end + Vector3(0.1, 0, 0)), 0.03, bronze)
+	kit.tube_between(InteriorKit.Batch.SOLID, f * end, f * (end + Vector3(0, -(SUN_ROD_PIVOT.y - SUN_WELL.y) - 0.15, 0)),
+		0.022, InteriorKit.solid(OasisPalette.PUMP_DARK))
+
+## A stone channel on the ground from `a` to `b` (both in the kit's space, on the
+## ground): a shallow trough `width` m across, its floor dark.
+static func channel(kit: InteriorKit, a: Vector3, b: Vector3, width: float) -> void:
+	var way := Vector3(b.x - a.x, 0.0, b.z - a.z)
+	var length := way.length()
+	if length < 0.01:
+		return
+	var basis := Basis(Vector3.UP, atan2(-way.z, way.x))
+	var mid := (a + b) * 0.5
+	for side: float in [-1.0, 1.0]:
+		kit.bevel_box(InteriorKit.Batch.SOLID, Transform3D(basis, mid + basis * Vector3(0, 0.06, side * (width * 0.5 + 0.04))),
+			Vector3(length, 0.16, 0.08), 0.02, InteriorKit.solid(OasisPalette.PUMP))
+	kit.box(InteriorKit.Batch.SOLID, Transform3D(basis, mid + Vector3(0, 0.0, 0)), Vector3(length, 0.04, width),
+		InteriorKit.solid(OasisPalette.PUMP_DARK))
+
+## The water running in a channel from `a` to `b`: a flat strip just under the
+## trough's lip.
+static func channel_water(kit: InteriorKit, a: Vector3, b: Vector3, width: float) -> void:
+	var way := Vector3(b.x - a.x, 0.0, b.z - a.z)
+	var length := way.length()
+	if length < 0.01:
+		return
+	var basis := Basis(Vector3.UP, atan2(-way.z, way.x))
+	kit.box(InteriorKit.Batch.SOLID, Transform3D(basis, (a + b) * 0.5 + Vector3(0, 0.07, 0)), Vector3(length, 0.02, width),
+		InteriorKit.solid(OasisPalette.WATER))
 
 ## A pipe from `from` to `to` (both in the kit's space).
 static func pipe(kit: InteriorKit, from: Vector3, to: Vector3) -> void:

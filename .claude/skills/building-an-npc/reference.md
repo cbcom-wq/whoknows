@@ -79,6 +79,8 @@ local z otherwise. Origin at the feet; up is local +y; forward is −z.
 | a ship's end (`flight_test._kill_aboard`) | every live NPC of `ship.npc_director` and every record of each of its `sources` is `mark_dead` in the ledger, the droid and dev creatures too, before the ship goes. Items aboard not held are freed |
 | the `&"blast"` hit (`CoreBlast`) | a hit like any other at `receive_hit`, `hit.damage` = `CoreBlast.damage_at(d, scale)`: 400 hp at the core, linear to 0 at `RADIUS` 120 m × scale (`SCALE` 0.5..2, a starter's about 1). NPCs outside only (`_outside`: an NPC with `inside` is skipped), and it shoves them `PUSH` 0.5 N·s per hp. A Delver (60 hp) dies within about 102 m of a starter's core |
 | `ctx.extra[&"hurt_ago"]` | seconds since it was last hurt, for a behaviour to read |
+| a person's look (`Npc._poses_itself()`: the look has `hurt`) | the look moves itself: `take_damage` calls `look.hurt(taken / max)` instead of the squash, and `_pose_look` never turns or squashes it. Dead, it gets `act(&"dead")` (its own fall), `down_left` is `INF` and `set_solid(false)` (you no longer walk into it); `lies_where_fell()` is true, and `NpcDirector.review` keeps it live while its source still offers its record (the ledger's dead are otherwise never wanted, so a review, every `REVIEW_EVERY` 0.25 s, demotes them at once: a creature's `CORPSE_FOR` 20 s on the ground does not happen in the game). Test: `test_npc_death.gd` `test_a_person_tells_their_place_staggers_and_lies_where_they_fell` |
+| `NpcSite.wounded(npc, hit, taken)`, `NpcSite.shoot(npc)` | the body tells its site of a wound that took health (`receive_hit`), and an intent with action `&"shoot"` asks the site to send the shot (`Npc.think`); both do nothing by default. Wadoo's site turns the town on a wound from anything but an NPC, and sends sun bolts |
 | `NpcDirector.targets`, `Weapons.TARGETS`, `Weapons.npc_id(record.id)` | the exterior director joins each promoted NPC to the weapons group as `npc:<record id>` and takes it out on `demote` (ship weapons spec §4.1); the interior director's `targets` is false. A turret's phaser bolt arrives at `receive_hit` like any other hit: **55 hp a light bolt (15 before hostile ships T16), 120 a heavy** (`WeaponValues` damage). `Weapons.usable` is false for a dead NPC (`is_dead()`), so it leaves every turret's choice and, 2 s on, the fire-control list; a knocked-out one is still a target. Test: `test_npc_director.gd` (`targets`) |
 | `behaviours/ambush.gd` | a reflex that springs: you within `AMBUSH` 5 m (`ctx.position` to `ctx.player`) and fear under `CALM` 0.4 -> first think `Intent.idle(&"leap")` with `leap_to` = you; then within `bite_reach + 0.3` one `&"bite"`, else `&"lunge"`; done after the bite or `GIVE_UP` 4 s. The bite sets its fear to at least `AFTER_FEAR` 0.8 (so `hide` follows and the nest re-arms as it fades), and a give-up raises it by `GAVE_UP_FEAR` 0.3 so a miss does not spring again every 4 s. `GlinterLook` shows its eyes for `leap`, `lunge` and `bite`. `test/probes/glinter_leap.gd` is the leap check (20 tries, reach and bite), `glinter_render.gd` the renders |
 | `behaviours/defend.gd` | the template for an NPC that fights back: a reflex scored from `hurt_ago`, fear and the player's distance, `Intent.go(player, 1.0, &"lunge"/&"bite")`, given up past 6 m or when calm; weight it over `scatter` |
@@ -292,7 +294,7 @@ Delver kept 1.1-1.2 m/s on every leg, arrived on all five and never stalled for 
 | | Exterior (`flight_test.gd._wire_npcs`) | Interior (`Ship._make_crew_quarters`) |
 |---|---|---|
 | Rule | `BY_DISTANCE`: live within `live_radius` of a node in `anchor_group` (`AsteroidStream.SPACE_ANCHOR`: the hull, you on a spacewalk); demoted past `live_radius + DEMOTE_MARGIN` (100) and only if no camera could see it | `BY_SITE`: every record of a live site |
-| `max_live` | 32 (over it: farthest out, one warning) | 8 |
+| `max_live` | 40 (Wadoo's 25 all awake at once, and room for herds; over it: farthest out, one warning) | 8 |
 | Holder, bus | scene root children; bus `setup(self, _universe)` | `Ship/Interior/Npcs`; bus `setup(interior)` |
 | Cameras (for sight and LOD) | chase, canopy, avatar | none (always full detail) |
 
@@ -329,6 +331,16 @@ Delver kept 1.1-1.2 m/s on every leg, arrived on all five and never stalled for 
   `set_solid(true)`, `Npc.surfaced()` (`surfaced_at`, `site.surfaced`, `look.act(&"emerge")`), and it clears the spent burrow intent and
   hands back to the crawler. `ctx.extra[&"surfaced_ago"]` is the seconds since `surfaced_at` (set at `setup` too). `Npc.setup` makes a
   pooled node solid and drawn again. `test_burrower.gd`.
+- **`GroundWalker`** (`ground_walker`; on a world's ground, the Wadees): kinematic, no `move_and_slide`.
+  It asks its site (untyped `var site: Variant = npc.site`, so any site with these works):
+  `route(from, to) -> PackedVector2Array` (flat [east, north] points), `ground(p) -> Vector3`,
+  `up_at(local)`, `neighbours(npc) -> PackedVector2Array`, `open(p) -> bool`. `TURN_RATE` 5 rad/s,
+  `CORNER` 0.35 m, `SLOWING` 0.8 m, `ARRIVED` 0.15 m, `PERSONAL` 0.6 m and `PUSH` 1.2 m/s (others
+  ease it aside, only onto open ground), `SLIDE_DECAY` 4, `SLIDE_STOPS` 0.03, neighbours asked every
+  `NEIGHBOURS_EVERY` 4 steps. Speed is scaled by how far it faces its way
+  (`clampf(heading.dot(want), 0, 1)`), so it turns on the spot before it walks. It sets
+  `global_transform` and `velocity` (for the look's pace) itself; `shoved` adds a slide and replans.
+  `test_ground_walker.gd` (a `FakeSite`).
 - **Bumps:** `Avatar.bump` shares momentum with an `Npc` by the rocks' rule
   (`SUIT_MASS × m / (SUIT_MASS + m)`, bounce 0.2) through `npc.shove`.
 
@@ -369,6 +381,294 @@ Delver kept 1.1-1.2 m/s on every leg, arrived on all five and never stalled for 
   quads) shown on `leap`, `lunge` and `bite`; wears `ItemLooks.glint` on `BEAT` 1.6 s, set by `set_group_seed`
   through `Glint.clock_phase` so a nest flashes together; at most 120 triangles.
 
+## People made in Blender (the Wadees: `tools/blender/README.md`)
+
+- **Files:** `tools/blender/wadee_base.py` (the models), `wadee_rig.py` (skeleton, weights,
+  motions, palette UVs), `wkit.py` (mesh helpers); `who-knows/assets/wadee/wadee_<tag>.glb` and
+  `sunstaff.glb`. Tags: `a`, `b`, `c` women and `m`, `n` men (villagers), `q` the queen, `s` and `t` a
+  woman and a man of the Sunguard. Probes: `wadee_render.gd` (models walked by hand) and
+  `wadoo_play.gd` (the town in the game).
+- **Sources (CC0, downloaded, not in the repo):**
+  - Blender's *Human Base Meshes* v1.4.1, at `D:/git/blender_base_assets/hbm/`. It has no rig and
+    no motions.
+  - Quaternius's *Universal Animation Library* 1 and 2, Standard, at
+    `D:/git/blender_base_assets/ual/`, taken from OpenGameArt. Pack 1's bones are `DEF-*`; pack 2's
+    are named as Unreal's mannequin (`wadee_rig.py` `NAMES2`).
+  - Open them with `--disable-autoexec`. Nothing is ever paid for (the owner's rule).
+- **A model:**
+  - 1.745 m, times its variant's scale;
+  - arms lowered 9° (women) or 12° (men) from the A-pose;
+  - **one mesh, one material**: every part's UVs point at its slot's texel in a 16 x 1 palette
+    (`SLOTS`: skin, lips, hair, brow, eye white, iris, pupil, lash, cloth 1-3, leather, bronze,
+    turquoise, sunglass, cape). `WadeePalette` paints that texture per person from their seed, so
+    five bodies dress 25 people and a Wadee is one draw call;
+  - it faces +Z in Godot; `WadeeLook` turns it to face -z as every NPC does.
+- **Skeleton:** 23 bones, `Hips` down from `Root` (`Root` does not deform and is not exported):
+  `Spine`, `Chest`, `UpperChest`, `Neck`, `Head`; `Left`/`Right` + `Shoulder`, `UpperArm`, `LowerArm`,
+  `Hand`, `UpperLeg`, `LowerLeg`, `Foot`, `Toes`. No fingers. The hips' rest height is 0.874 m on
+  a 1.745 m body.
+- **Clips (Godot's names), 29.** Pack 1: `Idle`, `Idle_Talking`, `Walk`, `Walk_Formal`,
+  `Jog_Fwd`, `Sprint`, `Sitting_Enter`, `Sitting_Idle`, `Sitting_Exit`, `Sitting_Talking`,
+  `Fixing_Kneeling`, `Interact`, `PickUp_Table`, `Hit_Chest`, `Hit_Head`, `Death01`, `Roll`,
+  `Spell_Simple_Shoot`, `Spell_Simple_Idle`, `Crouch_Idle`, `Crouch_Fwd`. Pack 2: `Farm_Watering`,
+  `Farm_Harvest`, `Farm_PlantSeed`, `Walk_Carry`, `Consume`, `Idle_FoldArms`, `Yes`, `Hit_Knockback`.
+  - Paces (m/s at the library's hips, `LIB_HIPS` 0.917 m): `Walk` 1.05, `Walk_Carry` 0.67,
+    `Jog_Fwd` 5.9, `Sprint` about 8.8. `WadeeLook` scales the clip's speed by the Npc's speed over
+    pace times its own hips over 0.917, so the feet do not slide.
+  - They import at 30 fps. Godot loops a clip whose library name ended `_Loop`; `WadeeLook.HELD`
+    loops the once-through ones an action holds (farming, kneeling, interact, lift, drink).
+- **`WadeeLook`** (`src/npc/wadee_look.gd`): `set_person({model, seed, role, staff})`;
+  `CLIPS` maps the intent's action to a clip standing (`""` Idle, `talk`, `water`, `harvest`,
+  `plant`, `kneel`, `interact`, `lift`, `sit`, `sit_talk`, `rise`, `drink`, `watch`, `nod`, `crouch`,
+  `dead`); moving over `WALK_OVER` 0.2 m/s it walks (`carry` walks with `Walk_Carry`), over
+  `JOG_OVER` 2.4 it jogs. Sitting: from a non-seated clip it plays `Sitting_Enter` first and holds the
+  wanted seated clip until it ends (`SEATED`, `_after_sit`). LOD: shadow only within
+  `SHADOW_WITHIN` 25 m; motion every frame within `FULL_RATE_WITHIN` 30 m, at `FAR_RATE` 15 Hz
+  beyond; checked every `LOD_EVERY` 0.5 s. The Sunguard's staff hangs across the back
+  (`STAFF_AT`, `STAFF_LEAN`). `test_wadee_look.gd`.
+  **Fighting** (Wadoo stage 4): `cower` Crouch_Idle; `armed` and `aim` Spell_Simple_Idle (the left
+  hand casts); `shoot` Spell_Simple_Shoot 0.5 s; `roll` Roll 1.46 s. `ONCE` (the shot, the roll,
+  Hit_Chest) play to their end whatever the mind asks meanwhile; `TRIGGERED` (`shoot`, `roll`) start
+  from the top each time the action turns to them; `_once(clip)` plays with `SNAP` 0.08 s. For an
+  action in `ARMED` (`armed`, `aim`, `shoot`, `roll`) the staff moves to a `BoneAttachment3D` "Hand" on
+  `RightHand`: gripped at `HAND_PALM` 0.07 m down the hand, `HAND_GRIP_UP` 0.3 m up from its butt,
+  turned `HAND_TURN` (-0.77, PI, -2.337), which stands it beside the right shoulder, leaning out and
+  forward, in those clips (measured by `test/probes/wadee_poses.gd`, which prints the turn for any
+  wanted lean). `staff_head()` (world, null with no staff) is `STAFF_HEAD` (0, 1.03, 0) on the staff:
+  where a bolt leaves. `hurt(share)` plays Hit_Chest whatever the share (Hit_Knockback lies them flat
+  and there is no clip to rise); nothing once dead. `act(&"dead")` plays Death01 once and they stay
+  down; the staff stays where it was.
+- **Copying a motion:** each bone turns in the world as the library's bone does. The turn is
+  measured from a reference pose: the library's figure with each bone swung to point where ours
+  points at rest, which brings the T-pose arms down. The hips' movement is scaled by hip height.
+- **Weights:**
+  - eyes, lashes and brows: `Head`;
+  - hair: `Head`, `Neck`, `UpperChest` and `Chest` only;
+  - clothes: the trunk's skin, with 40% of any leg pull given to the hips, then smoothed;
+  - jewellery: a ring round an arm follows the arm, and everything else follows the trunk.
+- **Frame rate in the game (Wadoo stage 1, 2026-11-17, `wadoo_play.gd`, GTX 960, 1280 x 720):** all 25
+  awake, on foot in the middle of town: **132 fps** (gpu 4.6 ms, cpu 1.6 ms); seated in the ship on the
+  pad, 123. With minds, bodies and motions stopped, 165; hidden, 173: the town costs about 1.3 ms of
+  physics plus its motions. Feet within 0.014 m of the drawn ground at worst.
+- **Frame rate of the spike (before one mesh and the walker; 2026-11-16, by the pool, floor 80):**
+  - five standing: 183 fps;
+  - five moving: 153–164 fps;
+  - 25 moving, all in view: 80 fps.
+  - **Where the 25's time goes** (`wadee_render.gd` `_breakdown`, one thing taken away at a time;
+    74 fps = 13.5 ms a frame in that run):
+    - the scene alone in that view: 157 fps, 6.4 ms. Under the 12.5 ms floor (80 fps) that leaves about
+      6 ms for every Wadee: 25 just fit once a real walker replaces the probe's steering;
+    - the probe's own steering: 1.6 ms (the ground under a point costs 23 µs in GDScript, asked
+      twice a frame for each walker);
+    - the motions (25 `AnimationPlayer`s and skeletons, on the CPU): 2.4 ms;
+    - drawing them still: 3.2 ms, of which their shadows are 2.3 ms;
+    - **draw calls are the cost, not triangles.** A Wadee is 13 meshes and 18 surfaces, so 25 make
+      455 draws in view and about 1,800 more into the shadow maps. Godot's LODs at a 6 px
+      threshold cut the triangles by a quarter and won 2 fps.
+
+## Wadoo (the Wadees' town; `docs/superpowers/specs/2026-11-16-wadoo-design.md`)
+
+The first NPCs on a world. Everything is in the oasis place's frame (x east, z -north; flat
+[east, north] points are `Vector2`, `WadooSite.flat(v3) = Vector2(v.x, -v.z)`).
+- **`WadooCast`** (`src/npc/populations/wadoo_cast.gd`): `SITE` `&"wadoo"`, `HERD` 0 (the whole town is
+  one herd), ids `"wadee:wadoo:%d"`. `PEOPLE`: 25 entries `[name, model tag, role, home, jobs,
+  traits]`: Queen Imsa (`q`, `house_b`), the Sunguard (Kesh, Oru, Tarro, Seli, Nadi: `s`/`t`, each with a
+  post) and 19 villagers. `record(n, layout)`, `records(layout)`, `person(n)` (adds `seed` =
+  `hash("wadoo:<name>") & 0x7FFFFFFF`, `staff`, `title`, `jobs`, `grief`, `shy`), `index_of(id)`,
+  `species_of(role)`.
+- **`WadooPaths`** (`wadoo_paths.gd`): an `AStarGrid2D` of `CELL` 0.5 m over the layout, walls, shells,
+  palms, benches (`BENCH_CLEAR` 0.2) and the memorial solid; `route(from, to)` then a forward greedy
+  tightening. Cached per layout (`WadooSite._paths_of`).
+- **`WadooSite`** (`wadoo_site.gd`, an `NpcSite`): `frame()` is the place node's; `alive()` while it
+  exists; `up_at` away from the world's centre; `ground(p)` bilinear on a 1 m grid cached from
+  `PlaceField.ground_fn`; `route` is the paths' plus a last stretch (`LAST_STRETCH` 1.2 m) onto a spot
+  the grid's margins leave out (a bench seat). **Spots** by kind (`SPOT_KINDS`: garden, dry, pump,
+  glass, breach, memorial, shade, bank, wash, post, court, gather), each `{at, face, action, key}`:
+  `spots(kind)`, `spot(kind, key)`, `take_spot(kind, who, near, salt)` (claims; one claim per person:
+  a new claim drops the old), `claim`, `release(who)`, `holder_of`. `door_of(home)` -> `{at, door, out}`.
+  **Pairs:** `ask_pair(who)` (needs company >= `PAIR_WANTS` 0.45 in both, within `PAIR_REACH` 20 m;
+  they meet halfway, `PAIR_APART` 1.1 m), `pair_of`, `end_pair`. **State:** `mark(who, state)`
+  (`&"seated"` and the like), `hide(who, on)` (indoors: look hidden, not solid), `hidden(who)`.
+  `start_pose` wakes the Sunguard at their posts (at their `gather` spot once the hunt is taken
+  up), the queen on her throne (`court:throne`, else `court:queen`) and villagers at a seeded choice
+  of their door, a job spot or the bank. `fill` puts `town`, `person`, `pair`, `state`, `indoors`,
+  `talking`, `village` (the `WadooState`) and `nearby` (8 open points 2 m round) in `ctx.extra`;
+  indoors, `ctx.player` is null. `post_of(post)`: Oru's `queen_door` is `post:queen_door:shut` (on
+  the door's spot) until `state.door_open()`, then `post:queen_door` (1.3 m aside).
+  **Rooms:** `rooms()` (from the place node's meta `rooms`, set by `PlaceField._build_brick`:
+  `{shell id: {room, frame, size}}`), `room_of(shell_id)`; `ground(p)` inside a room is its floor
+  plus `WadooRooms.raised`, and before its door a ramp (`RAMP` 1.2 m, `RAMP_SIDE` 0.3 m past each
+  jamb) up from the terrain. `court:queen` and `court:throne` come from the hall's `stand` and `sit`
+  marks, facing the door. `room_at(p)` is the id of the open shell whose walls hold `p` ("" outside).
+  `fill` sets `ctx.extra.nearby` (open ground 2 m off, with a clear line, and never in a room the
+  walker is not in: a building's doorway is open on the grid whether its door is shut or not) and
+  `holds_ground` (a Sunguard within `HOLDS` 0.6 m of `post_of` their post; `give_way` scores 0 then).
+  **Talking:** `state` (a `WadooState`) and `on_talk` (Callable `(npc, person, said)`) are set by
+  `WadooSource` from the flight scene; `can_talk(npc)` needs both, the person not indoors and nobody
+  else talking (`talking`, a record id); `talk_name` is the title or the name; `talk(npc, actor)`
+  picks the line (`WadooLines.pick`), sets `talking`, ends any pair and calls `on_talk`;
+  `end_talk()`. `GATHER`: five spots [in from the breach, to the side] m: (2, 0), (3.2, ±1.4),
+  (4.3, ±2.6), facing out through it.
+- **`WadooSource`** (`wadoo_source.gd`): offers the 25 records only while an anchor is within
+  `NEAR_ENOUGH` 1500 m of the oasis and its node exists; builds the site then (`places.design`,
+  `terrain_of_place`, the node's meta `water_radius`). Wired in `flight_test.gd` as `wadoo`
+  (`exterior_npcs.sources = [life, dev, wadoo]`).
+- **Species:** `wadee_villager`, `wadee_sunguard`, `wadee_queen` (`data/npcs/`): `ground_walker`,
+  look `wadee`, population `wadoo`, `live_radius` 400, fade (330, 380); top speed 1.6 / 1.8 / 1.4;
+  health 60 / 90 / 60; needs company, grief, home, rest, thirst, work.
+- **Behaviours** (`WadooErrand` is the base for walk-there-then-act: `WALK` 0.75, `ARRIVED` 0.35,
+  `GIVE_UP` 90 s; hooks `choose`, `action`, `walk_action`, `acting`, `finish`): `work` (gardens, the
+  pump then carry water home, glass, the breach), `rest_shade` (bench seats; `sit_talk` with company),
+  `talk_pair`, `drink`, `mourn` (grief only, at the memorial), `go_home` (hidden indoors 40-90 s),
+  `keep_post` (Sunguard; Kesh walks the breach in 30 s legs), `hold_court` (the queen), `greet` (a
+  reflex at 0.7 within 8 m, once a minute; the shy keep 3 m), `give_way` (reused; not while seated).
+  `test_wadoo_behaviours.gd`, `test_wadoo_site.gd`, `test_wadoo_paths.gd`.
+- **Place pieces:** benches (`BrickShell.bench`, two under each sail, `data/places/oasis.json`
+  `benches`) and the memorial (`OasisLooks.memorial`, six stones on a 2.4 m ring with sunglass lamps;
+  `memorial_dir(k, stones)` is where a mourner kneels).
+- **Talking** (`test_wadoo_talk.gd`, `test_wadoo_lines.gd`): `NpcTalk` (`ID` `&"talk"`, in all three
+  species' `interactions`; `can`, `prompt` "Talk to <name>", `run`). `WadooLines` (`shared()`,
+  `pick(person, state, speaker)` -> `{pages, choice, then}`): `who` is a name (`RANK_NAME` 100), a
+  trait `#grief`/`#shy` (20), a role `@villager`/`@sunguard` (10) or `*` (0); `when` holds exact
+  facts or `min:`/`max:` bounds, and a line without `hostile` needs it false; the highest rank plus
+  count of conditions wins, ties cycled by `WadooState.heard_from`. `{deeds}` in a page names the
+  tasks done (`DEEDS`). `WadooState` (`src/world/wadoo_state.gd`, saved as the part `"wadoo"`):
+  `regard` 0-`REGARD_MAX` 3, `tasks` (`pump`, `armlet`, `lilies` up to `LILIES_MAX` 6), `met_queen`,
+  `hunt` (`""`, `later`, `accepted`: accepted sticks), `hostile`; `do_task`, `door_open()` (regard
+  >= 1 and not hostile), `apply(then)` (true for `meet_queen`, `hunt_accepted`, `hunt_later`),
+  `facts()`, signal `changed`. `DialogPanel` (`src/ui/dialog_panel.gd`, layer 3, `WIDTH` 760, `LIFT`
+  150): `open(speaker, pages, choice)`, `next()`, `pick(i)`, `close()`, signal `finished(answer)`;
+  F/Space/Enter next, 1/2 answer, Esc leave. `flight_test._talk_with` freezes you
+  (`set_control_enabled(false)`, `set_at_station(true)`); `_talk_done` applies each `then`
+  (`_wadoo_effect`) and lets you go.
+- **Behaviours of stage 2:** `converse` (a reflex at 0.85 while `ctx.extra.talking`; `talk` facing
+  you, `sit_talk` if seated; `min_time` 0.5); `gather` (0.9 once the hunt is accepted and not
+  hostile, for the Sunguard with a `WadooCast.gather_slot` >= 0: Kesh 0, then the others in cast
+  order, Oru never; walk 0.8, `watch` facing out); `hold_court` (the queen: sits on her throne,
+  rises (`RISE` 1.4 s, `rise`) when you come within `RISE_NEAR` 4.5 m of her stand and sits again
+  past `SIT_AGAIN` 7 m; with no throne she stands at `court:queen` looking about).
+- **The hall** (`test_wadoo_hall.gd`): `house_b` is `"open": true, "room": "hall"`. `PlaceField`
+  builds an open shell with no door leaves (`BrickShell.box(..., shut = false)`), the room
+  (`WadooRooms.build(room, node, f)`, `f` the shell's frame: the floor's middle, the door toward
+  -z), a `WadooDoor` in its doorway, and the meta `rooms`; it emits `place_built(id, node)` when a
+  place is built. `WadooRooms`: `SCENES` (`&"hall"` -> `res://assets/wadoo/hall.glb`), `build`,
+  `paint` (layer `OasisLooks.WORLD_LAYER`; each surface by its material's name from
+  `WadeePalette.ROOM`), `material(key)`, `mark(room, name)`, `raised(room, local)` (`RAISED`: the
+  dais 0.3 m from z 1.25 to the back wall, x +-2.2; its step 0.15 from z 1.0, x +-1.2), `solids(room)`
+  (the `col_` boxes); lamps are `OmniLight3D` `LAMP_ENERGY` 0.8, `LAMP_RANGE` 5.5, no shadow,
+  `WadeePalette.LAMP`. The room's inside is x +-3.3, z +-2.55, ceiling 4.94. `WadooDoor` (`NAME`
+  `"HallDoor"`, `make(width, tall, variety)`, `set_open(on, at_once)`): a plank leaf
+  (`BrickShell.door_leaf`) with bronze studs, solid on `BodyProxy.LAYER`, swinging in `SWING` 96
+  degrees over `SWING_TIME` 1.4 s. `flight_test._sync_hall` opens it to `wadoo_state.door_open()` on
+  `WadooState.changed` and at once on `place_built`. `WadooPaths`: an open shell with a room has its
+  inside open `ROOM_CLEAR` 0.3 m in from the walls, its doorway open (`DOORWAY_CLEAR` 0.25 m from the
+  jambs, at least 0.375 m either side of the middle), and the room's `col_` boxes solid again with
+  `ROOM_SOLID_CLEAR` 0.25 m; `rooms` lists them. No sand blows while you stand in a room
+  (`flight_test._indoors()` from `WadooSite.room_at`, set as `BlowingSand.sheltered`).
+- **Things to do** (stage 3, §7; `test_wadoo_things.gd`, `test_placed_items.gd`, `test_wadoo_talk.gd`,
+  `test_wadoo_site.gd`, `test_wadee_look.gd`):
+  - **Items** `sun_cell` (2.5 kg, carried in both hands), `armlet`, `sun_lily` (`data/items/`), each
+    `never_made` (`ItemDefinition.never_made`: worth its value if converted, never in
+    `QuantumValues.makeable`); drawn by `ItemLooks.sun_cell` / `armlet` / `sun_lily` in `WadeePalette`
+    colours (`LILY`); the armlet is in `GLINTS`. `Grasp.kind_in(actor)` is the kind in anything's
+    hands, or `&""`.
+  - **`SunPump`** (`src/world/sun_pump.gd`, `NAME` `"SunPump"`): built by `PlaceField._build_village`
+    from the layout's `sun_pump` `{at, garden, channel_to}`; a `StaticBody3D` on `BodyProxy.LAYER`
+    (a cylinder `RADIUS` 0.52, `HEIGHT` 1.8), interactable "Fit the sun cell" while broken and you
+    hold a cell; `fitted(actor)`; `set_working(on, at_once)` shows the cell in its cage, the water in
+    the channel and the green, nods the rod (`NOD` 0.2 rad, once every `NOD_EVERY` 1.6 s; broken it
+    hangs at `REST_TILT`), and grows the green (`OasisLooks.crops`, 0.03 m wider than the dry ones, on
+    the bed's top `OasisLooks.BED_TOP` 0.28) from `GROW_FROM` 0.05 of its height over `GROW_TIME` 60 s,
+    or whole `at_once`. It processes only while working. Its garden's variety is the village's
+    (`at.x * 0.173 + at.y * 0.291`), so the green rows stand over the dry ones.
+  - **`MemorialLilies`** (`src/world/memorial_lilies.gd`, `NAME`): an `Area3D` on layer 16 (exterior
+    props) over each stone (`MARGIN` 0.12 larger) and the cairn; "Lay the lily" while you hold one and a
+    stone is bare; `laid(actor)`; `set_count(n)` shows one lily before each of the first n stones,
+    `OUT` 0.4 m outside its stone, `ASIDE` -0.15 m (away from its lamp), its head toward the stone,
+    `LIE` 0.05 m up; `foot_of(middle, radius, k, stones)` for the ground under it.
+  - **`PlaceField.lay(place_id, item_id, kind, at, yaw)`** lays an item as the layout's are (frozen,
+    a child of the place, gone with it, taken once held); `lying(place_id, kind)` counts the untaken.
+    The layout's `makes` `{kind: {at, yaw}}` is where the cell and the lily are made; `WadooPaths`
+    keeps those and the sun pump solid.
+  - **The site:** `you` (Callable -> `{holding, hurt}`) and `on_give` (Callable(kind) -> bool), set by
+    `WadooSource` from the flight scene. `talk_prompt(npc)` ("Give the armlet to Lio", "Ask Wenna to
+    heal you", else "Talk to <name>"; `NpcSite.talk_prompt` is the default, `NpcTalk.prompt` asks it);
+    `gift_of(npc)` from the cast's `takes` `[kind, task, label]`; `heals`. Giving takes it from your
+    hands, does the task and calls `look.wear(kind)`. `person(record)` adds `wears` once a gift's task
+    is done. Setting `state` connects `changed`: the dry garden's spots are garden spots once the
+    pump is done. `WadooLines.pick(person, state, speaker, you)` merges your facts over the state's
+    (`cell_made`, `holding`, `hurt`); a fact missing is false.
+  - **`WadeeLook.wear(kind)`** / `worn`: the armlet on a `BoneAttachment3D` "Armlet" on `LeftLowerArm`,
+    `ARMLET_ALONG` 0.8 of the way to the wrist, `ARMLET_SIZE` (0.11, 0.04, 0.11); `set_person` puts on
+    `wears` after every `_load`.
+  - **The flight scene:** `_you_to_wadoo`, `_give_held(kind)` (consumes the held item), `_on_pump_fitted`,
+    `_on_lily_laid`, `_wadoo_effect` ("heal" heals you fully; "make_cell" is `WadooState.apply`'s),
+    `_sync_hall(at_once)` (the door, the pump working from `did(&"pump")`, the lilies' count, then
+    `_restock(0)`), `_restock(elapsed)` every `RESTOCK_EVERY` 2 s: a cell while `cell_made`, the pump
+    wants one and none is about; a lily `LILY_REGROW` 30 s after none is about (at once as the place is
+    built) while a stone is bare; nothing once hostile. `_out(kind)` counts held, lying and strays
+    within `TOWN_REACH` 150 m; `_make(kind)` names it `<kind>_<n>`, the first n not taken.
+- **Harm and the Sunguard (stage 4, §9):**
+  - **Turning:** `WadooSite.wounded` calls `state.turn_hostile()` for a wound whose `hit.source` is not
+    an `Npc` (one counted wound; saved). While hostile `can_talk` is false for the Sunguard.
+  - **You, for a fight:** `WadooSite.you_here(time)` (cached per physics frame) gives `{at, chest, vel,
+    on_foot, down, armed, in_town, up_for, eye, look}`, site-local, from the `you` Callable's
+    `on_foot`, `down`, `armed`, `eye` (the camera's transform) and `velocity` (`flight_test._you_to_wadoo`;
+    armed is holding an item whose `use_node.recoil() > 0`). `fill` puts it in `ctx.extra[&"you"]` and
+    `ctx.extra[&"aimed_at"]` (you armed, looking within `AIMED_NEAR` 1.2 m of their eye `EYE` 1.5 m
+    up, within `AIM_RANGE` 40 m). `inside_walls(p)` is the layout's wall ring. `up_for` counts from the
+    last time you were seen down.
+  - **Lines and places:** `clear_line(from, to)` (a ray on `SIGHT_MASK` = hull | terrain, which holds
+    the walls and houses); `clear_shot(at, you)` from their staff (`EYE` up) to your chest
+    (`CHEST_UNDER_EYE` 0.45 under your eye). `fire_spot(from, you, salt)`: of the points on rings
+    `SPOT_RINGS` 12, 16, 20, 24 m round you (`SPOT_AROUND` 12 each, turned by `salt`) on open ground
+    inside the walls and not in a room, the nearest to them, a point in cover (`_in_cover`: not open
+    within `COVER` 1.5 m in one of 8 ways) counting `COVER_WORTH` 6 m nearer and each up to 4 m off by
+    `salt`; the first of the best `MOST_RAYS` 4 with a clear shot, else null. The fight's band is
+    `FIGHT_NEAR` 10 to `FIGHT_FAR` 25 m.
+  - **A shot:** `shoot(npc)` waits `RELEASE` 0.25 s (the clip's throw), then a `SunBolt` leaves
+    `look.staff_head()` for your chest led by `LEAD` 0.5 of your velocity times its flight, off by
+    `SPREAD` 0.02 rad, with `AT_YOU_MASK`, a muzzle flash, added beside the NPC (its parent); none if
+    they are down by then. `shots` counts them. The spread's dice are the site's `rolls` (randomized; a
+    test sets its seed).
+  - **`SunBolt`** (`src/combat/sun_bolt.gd`, a `Bolt`): `SPEED` 30 m/s, `LIFETIME` 1.6 s, `DAMAGE` 12,
+    `PUSH` 4, `LENGTH` 0.7, `THICKNESS` 0.12, kind `&"sun"`, a glow in `WadeePalette.SUNGLASS` and an
+    `OmniLight3D` in `WadeePalette.LAMP` (`LIGHT_ENERGY` 0.8, `LIGHT_RANGE` 3.5) times `bright`
+    (`CHARMED` 1.8 for the charmed rod's). `AT_YOU_MASK` = hull | avatar | terrain | items: it meets you
+    and the town, never a Wadee (a held item has no layer). With no `ray_mask` it takes
+    `PlasmaBolt.mask(outside)`. On you its burst is `ON_YOU_FLASH` 0.25 of the size (it lands 0.3 m
+    from your eye).
+  - **Behaviours:**
+    - `flee_home` (villagers; reflex 0.9, `min_time` 2): 0.95 while hostile with you in town and a door
+      (`WadooSite.door_of(home)`: `{at, door, out}`), or while in and not done; runs (`RUN` 2.6) to the
+      door's middle, within `IN` 0.45 calls `town.hide(who, true)` (hidden: not drawn, not solid, no
+      talking, unseen by others); out `STAY` 20 s after you left the walls; after `GIVE_UP` 60 s on the
+      way they stop where they are.
+    - `cower` (villagers; reflex 0.9, `min_time` 3): 1.0 while hostile when you are within `CORNERED` 7 m
+      and nearer their door than they are (or they have none), and while down with you within `CLEAR`
+      12 m; `Intent.idle(&"cower")` facing you.
+    - `fight_ranged` (the Sunguard; reflex 0.9): 1.0 while hostile and `fighting(you)` (on foot, not
+      down, in town, `up_for` >= `GRACE` 8 s). A new `fire_spot` when the old is past the band or every
+      `MOVE_EVERY` 5 to 9 s; run (`RUN` 2.4) there with action `armed`; no clear shot: close in to
+      `CLOSE_TO` 15 m or look again. Shoots every `EVERY` 1.5 to 2.5 s (each their own, `nature`, plus
+      `JITTER` 0.2), the first `FIRST` 0.8 to 1.6 s in; else `aim`. Aimed at, at most once in
+      `ROLL_EVERY` 4 s and on `ROLL_CHANCE` 0.5, rolls `ROLL` 2.5 m aside (`ROLL_SPEED` 1.0 for
+      `ROLL_FOR` 1.4 s, action `roll`) onto open ground. Its dice (`_dice`) are its own RNG, seeded in
+      `start` from the record and the time. Then `keep_post`.
+  - **Species:** villagers list `flee_home`, `cower` first; the Sunguard `fight_ranged` first (`max_health`
+    90; villagers 60).
+  - **The gift:** `WadooState.rod_given`, `give_rod()` (true the first time; saved). `flight_test._give_rod()`
+    after the line effect `hunt_accepted`: `sun_rod`, or `sun_rod_charmed` with all three tasks done, laid
+    with `PlaceField.lay_at(place, item_id, kind, foot, yaw)` (a foot in the place's own frame, so a
+    room's floor) 0.6 m ahead of you as `sun_rod_gift`, then put in empty hands. `WadooLines` fills
+    `{charm}` with the water-stone sentence when all three are done.
+  - **`SunRod`** (`src/items/sun_rod.gd`, an `ItemUse`): `COOLDOWN` 0.9 s, `DAMAGE` 25, `CHARGES` 6,
+    one back every `RECHARGE` 5 s while out of doors (`item.in_space`), `AIM_RANGE` 100, `recoil` 0.6,
+    `status` "4 of 6", saves its charges. A bolt leaves the item's `use_point` for what the eye's ray
+    meets, as the pistol's. `charmed(item)` for `sun_rod_charmed` (`bright` 1.8). Items: 0.05 x 0.07 x
+    0.62 m, a sidearm, works outside, never made, unbreakable, 300 and 360 QE; drawn by
+    `ItemLooks.sun_rod(kit, size, charm)`.
+
 ## Testing patterns
 
 - **A behaviour:** build an `NpcContext` by hand (`memory = NpcMemory.new()`, `needs`, `record`,
@@ -394,9 +694,9 @@ Delver kept 1.1-1.2 m/s on every leg, arrived on all five and never stalled for 
 
 ## Worlds (desert world phases 0–3; `docs/superpowers/specs/2026-11-03-desert-world-design.md` §5–§8)
 
-**Nothing lives on a world yet.** No NPC, creature or droid stands on one. The first world
-creature is the beast, in its own design (desert world spec §5.7); what follows is what it, and
-any fauna after it, must respect.
+**The Wadees live on WADIS** (§ *Wadoo*): 25 people walk the oasis town with `GroundWalker`. No
+creature does yet; the first is the beast, in its own design (desert world spec §5.7). What
+follows is what it and any fauna after the Wadees must respect.
 
 - **`WorldGravity` exists** (`src/world/world_gravity.gd`): `at(p)`, `up_at(p)`, `altitude_at(p)`,
   `surface_gravity_at(p)`, `on_world_at(p)` and `body_at(p)`. **Anything outside, on a world, must
@@ -433,7 +733,7 @@ any fauna after it, must respect.
 - **Places exist on `p3` (WADIS) for the beast to come** (phase 3, Parts A and B; `PlaceField`,
   `data/places/oasis.json`, `data/systems/kesdra.json`). The oasis is one node in
   `Universe.EXTERIOR_SPACE`, built near the focus and freed far off, so a creature must not
-  depend on it being loaded. Its ground is the world's ground: a stamped floor (`TerrainStamp`,
+  depend on it being loaded (`WadooSource` offers nothing while it is gone). Its ground is the world's ground: a stamped floor (`TerrainStamp`,
   in `height_at`) is walked like any ground, on `BodyProxy.LAYER`, with no special case. The
   village's walls, shells, foundations, thresholds (0.15 m steps) and palms are solid
   (`StaticBody3D` on `BodyProxy.LAYER`) and its grass, tracks and water are not; wading in the
@@ -459,6 +759,10 @@ any fauna after it, must respect.
 - **Renders:** without `--headless`: `godot --path who-knows --resolution 1280x720 --script
   res://test/probes/<render>.gd -- <abs out dir>`. In a container: `apt-get update && apt-get
   install -y mesa-vulkan-drivers`, then prefix with `xvfb-run -a -s "-screen 0 1280x720x24"`.
+- **Wadoo in the game:** `wadoo_play.gd -- <abs out dir> [hall|things|harm]` (a living town, then the
+  hall, the tasks, or a fight; a few minutes each). **A person's poses up close:** `wadee_poses.gd --
+  <abs out dir>` (seconds: a Sunguard's staff, shot, roll, stagger, fall, a villager cowering; prints
+  `HAND_TURN` for the wanted lean `WANT_UP`).
 
 ## Specs to read for depth
 

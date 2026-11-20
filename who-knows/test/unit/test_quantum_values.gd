@@ -17,8 +17,11 @@ func test_makeable_lists_every_makeable_item_in_the_catalogue_cheapest_first():
 	var list := QuantumValues.makeable(_cat)
 	var makeable_ids := _cat.ids().filter(func(id: StringName) -> bool:
 		var def := _cat.get_def(id)
-		return not def.eva_tool and def.quantum_value > 0)
-	assert_eq(list.size(), makeable_ids.size(), "every item with a value, EVA tools left out (spec §4.3)")
+		return not def.eva_tool and not def.never_made and def.quantum_value > 0)
+	assert_eq(list.size(), makeable_ids.size(), "every item with a value, EVA tools and the never-made left out (spec §4.3)")
+	for id: StringName in [&"sun_cell", &"armlet", &"sun_lily"]:
+		assert_true(_cat.get_def(id).never_made, "%s is the Wadees' own" % id)
+		assert_false(list.has(_cat.get_def(id)), "the machine never makes %s (Wadoo spec §7)" % id)
 	var listed: Array = list.map(func(d: ItemDefinition) -> StringName: return d.id)
 	assert_false(listed.has(&"hose_nozzle"), "the nozzle is an EVA tool, never made (spec §4.3)")
 	assert_eq(list[0].id, &"mug", "the cheapest thing to make")

@@ -416,6 +416,18 @@ func test_every_piece_sits_on_the_ground():
 			else _lowest_under_rect(s["at"], Vector2(float(s["size"][0]), float(s["size"][2])), float(s.get("yaw", 0)))
 		assert_almost_eq(under, level, 0.02, "%s: the ground under all of it is level" % id)
 		checked += 1
+	for b: Dictionary in layout.get("benches", []):
+		var id := "bench_%d" % layout["benches"].find(b)
+		var lowest := float(by_id.get(id, {}).get("lowest", INF))
+		assert_lt(lowest, _ground_y(float(b["at"][0]), float(b["at"][1])) - 0.05, "%s's feet are in the ground" % id)
+		assert_gt(lowest, _ground_y(float(b["at"][0]), float(b["at"][1])) - 0.4, "%s is not buried" % id)
+		checked += 1
+	if layout.has("memorial"):
+		var m: Array = layout["memorial"]["at"]
+		var lowest := float(by_id.get("memorial", {}).get("lowest", INF))
+		assert_lt(lowest, _ground_y(float(m[0]), float(m[1])), "the memorial's stones stand in the ground")
+		assert_gt(lowest, _ground_y(float(m[0]), float(m[1])) - 0.6, "not sunk")
+		checked += 1
 	var runs: Array = _ring()["runs"]
 	for k in runs.size():
 		var id := "wall_%d" % k
@@ -438,7 +450,8 @@ func test_every_piece_sits_on_the_ground():
 		var under := _lowest_under_rect(g["at"], Vector2(float(g["size"][0]), float(g["size"][1])), 0.0)
 		assert_almost_eq(under, level, 0.02, "%s: the ground under it is level" % id)
 		checked += 1
-	assert_eq(checked, 17 + yards.size(), "twelve shells, two runs, three gardens and the yards")
+	assert_eq(checked, 17 + yards.size() + layout.get("benches", []).size() + 1,
+		"twelve shells, two runs, three gardens, the yards, the benches and the memorial")
 	assert_gt(yards.size(), 4, "yard walls between the compounds' buildings")
 
 func _ray(from: Vector3, to: Vector3, exclude: Array[RID] = []) -> Dictionary:
@@ -898,6 +911,8 @@ func test_the_village_is_whole():
 	assert_eq(count.get("pier", 0), 2, "the gate's two piers")
 	assert_eq(count.get("rubble", 0), 2, "rubble in and out of the breach")
 	assert_between(int(count.get("sail", 0)), 2, 3, "two or three shade sails")
+	assert_eq(count.get("bench", 0), 2 * int(count.get("sail", 0)), "two benches under each sail")
+	assert_eq(count.get("memorial", 0), 1, "the memorial")
 	assert_not_null(_oasis().get_node_or_null("Tracks_out"), "the tracks out")
 	assert_not_null(_oasis().get_node_or_null("Tracks_in"), "the tracks in")
 	assert_null(_oasis().get_node_or_null("Outcrop"), "no outcrop: the ledge is ground")
@@ -916,6 +931,34 @@ func test_the_village_is_whole():
 	var canister: Vector2 = items.get("canister_path", Vector2.INF)
 	assert_lt(canister.length(), gate_mid.length(), "the canister is inside the gate")
 	assert_lt(canister.distance_to(gate_mid), 10.0, "near it")
+	# Wadoo spec §7: Halla's sun pump by her dry garden, the memorial's lilies,
+	# and Lio's armlet outside the breach, among the rubble.
+	var pump := _oasis().get_node_or_null(SunPump.NAME) as SunPump
+	assert_not_null(pump, "the sun pump")
+	var dry := Vector2.INF
+	for g: Dictionary in _place.layout()["gardens"]:
+		if g["id"] == "garden_dry":
+			dry = _at_of(g)
+	var pump_at := _at_of(_place.layout()["sun_pump"])
+	assert_lt(pump_at.distance_to(dry), 5.0, "beside the dry garden")
+	assert_almost_eq(pump.position.y, _ground_y(pump_at.x, pump_at.y), 0.01, "on the ground")
+	assert_not_null(_oasis().get_node_or_null(MemorialLilies.NAME), "the memorial's lilies")
+	var armlet: Vector2 = items.get("armlet_breach", Vector2.INF)
+	var breach := _opening("breach")
+	assert_gt(armlet.length(), breach.length() + 3.0, "the armlet lies outside the breach")
+	assert_lt(armlet.distance_to(breach), 12.0, "not far out")
+	var works := Vector2.INF
+	for s: Dictionary in _place.layout()["shells"]:
+		if s["id"] == "workshop":
+			works = _at_of(s)
+	var makes: Dictionary = _place.layout()["makes"]
+	assert_lt(_at_of(makes["sun_cell"]).distance_to(works), 5.0, "Daro sets a cell out by the Glassworks")
+	var bed: Dictionary = _place.layout()["gardens"][1]
+	assert_eq(bed["id"], "garden_1")
+	var off := _at_of(makes["sun_lily"]) - _at_of(bed)
+	var edge := Vector2(maxf(absf(off.x) - float(bed["size"][0]) * 0.5, 0.0),
+		maxf(absf(off.y) - float(bed["size"][1]) * 0.5, 0.0)).length()
+	assert_between(edge, 0.1, 1.0, "a sun-lily grows at the edge of garden_1")
 
 # --- Rework 2: floors, doors, the grass's edge, the ledge -------------------------
 
@@ -928,11 +971,15 @@ func _shell_pieces() -> Dictionary:
 	return out
 
 ## The height a ray straight down from `from_height` m over the ground at
-## layout point `p` meets the Brick body at (in the place's frame), or NAN.
+## layout point `p` meets the Brick body, or a room's furniture in an open shell
+## (WadooRooms, the hall's basin), at (in the place's frame), or NAN.
 func _brick_down(p: Vector2, from_height: float) -> float:
 	var top := _over(p, from_height)
 	var hit := _ray(top, top - Vector3(0, from_height + 2.0, 0))
-	if hit.is_empty() or hit["collider"] != _oasis().get_node("Brick"):
+	if hit.is_empty():
+		return NAN
+	var by: Node = hit["collider"]
+	if by != _oasis().get_node("Brick") and not by.get_parent().name.begins_with("Room_"):
 		return NAN
 	return _oasis().to_local(hit["position"]).y
 
@@ -986,7 +1033,8 @@ func test_a_threshold_is_a_step():
 	assert_eq(checked, 12, "a door in every shell")
 
 ## Rework 2: a whole shell's door is shut (a ray through its middle meets its
-## collider); a crushed hut stays open where its walls broke.
+## collider; an open shell's, the door's leaf, WadooDoor); a crushed hut stays
+## open where its walls broke.
 func test_shell_doors_are_shut():
 	await _hold_over(0, 0, 60.0)
 	var pieces := _shell_pieces()
@@ -1011,7 +1059,12 @@ func test_shell_doors_are_shut():
 		for d: Array in doors:
 			var middle: Vector3 = (d[0] as Vector3) + Vector3(0, 1.0, 0)
 			var out: Vector3 = d[1]
-			assert_true(_meets(middle + out * 1.0, middle - out * 1.0, brick), "%s's door is shut" % id)
+			var shut: Node = brick
+			if bool(s.get("open", false)):
+				var door := _oasis().find_child(WadooDoor.NAME, false, false) as WadooDoor
+				assert_not_null(door, "%s has its door" % id)
+				shut = door.body if door != null else brick
+			assert_true(_meets(middle + out * 1.0, middle - out * 1.0, shut), "%s's door is shut" % id)
 
 ## How far inside the green's outline (its tufts' and its patch's, round the
 ## pool's middle on the ground) `at` is, m: under 0 past it.

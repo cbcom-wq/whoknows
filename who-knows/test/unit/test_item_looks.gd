@@ -72,8 +72,9 @@ func test_only_salvage_glints():
 	for look in ItemLooks.LOOKS:
 		# The Limpet's husk glints too: it is salvage in all but name (rock
 		# creatures spec §6.4).
-		# So does the Delver's grit (§5.4).
-		assert_eq(ItemLooks.has_glint(look), SALVAGE.has(look) or look == &"limpet_husk" or look == &"crystal_grit",
+		# So does the Delver's grit (§5.4), and Lio's armlet where it fell (Wadoo spec §7).
+		assert_eq(ItemLooks.has_glint(look), SALVAGE.has(look) or look == &"limpet_husk" or look == &"crystal_grit"
+			or look == &"armlet",
 			"%s" % look)
 
 func test_the_shard_is_all_glow():

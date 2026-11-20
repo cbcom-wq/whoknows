@@ -24,8 +24,10 @@ const MASK := 2 | 32
 ## on its reel, with hulls (layer 1), the ground (BodyProxy.LAYER) and rocks
 ## (AsteroidBody.LAYER) in the way, as walls are aboard (desert world spec
 ## §5.5): the ray stops at one, which shows no prompt, and nothing behind it is
-## offered. Grasp refuses to take anything else outside.
-const SUIT_MASK := 1 | BodyProxy.LAYER | 16 | 32 | AsteroidBody.LAYER
+## offered. Grasp refuses to take anything else outside. People outside too
+## (Npc.LAYER): a Wadee you look at is talked to (NpcTalk); a creature only stops
+## the ray.
+const SUIT_MASK := 1 | BodyProxy.LAYER | 16 | 32 | AsteroidBody.LAYER | Npc.LAYER
 ## How far from the line of sight an item can be and still be offered.
 const ASSIST_ANGLE := deg_to_rad(8.0)
 

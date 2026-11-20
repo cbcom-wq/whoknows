@@ -103,18 +103,22 @@ static func group_of(record: NpcRecord, every: int) -> int:
 ## Works out which NPCs should be live, and makes it so.
 func review() -> void:
 	var wanted := {}   # id -> [record, site]
+	var offered := {}  # id -> true, the dead too
 	for source in sources:
 		for entry: Array in source.records(self):
+			offered[(entry[0] as NpcRecord).id] = true
 			var record: NpcRecord = amend(entry[0])
 			if record != null:
 				wanted[record.id] = [record, entry[1]]
 	# A record no longer offered, or whose place has gone, is demoted at once:
-	# its place is gone or far beyond sight.
+	# its place is gone or far beyond sight. One dead is not wanted, and goes too,
+	# but a person who lies where they fell stays while their place offers them
+	# (Wadoo spec §9).
 	for id: StringName in live.keys():
 		var npc: Npc = live[id]
 		if not is_instance_valid(npc):
 			live.erase(id)
-		elif not wanted.has(id) or not npc.site.alive():
+		elif not npc.site.alive() or not (wanted.has(id) or (offered.has(id) and npc.lies_where_fell())):
 			demote(npc)
 	if rule == Rule.BY_SITE:
 		_review_by_site(wanted)

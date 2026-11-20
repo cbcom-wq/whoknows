@@ -74,3 +74,10 @@ const SAIL_POLE := Color("4e3a28")
 ## The beast's tracks (OasisLooks.tracks): a darker, slightly cooler sand than
 ## the desert's, fading toward the sand itself along their length.
 const TRACK := Color("8e6046")
+
+## The memorial (Wadoo spec §4): standing stones paler and cooler than the brick,
+## a cairn of the same stone, and before each stone a lamp of sunglass, warm amber
+## in a bronze cup on a bronze stem.
+const MEMORIAL_STONE := Color("b9ab92")
+const SUNGLASS := Color("ffbf5e")
+const BRONZE := Color("8f6436")

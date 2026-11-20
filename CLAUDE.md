@@ -60,6 +60,11 @@ finished, update the skill in the same branch**:
 
 If a name in the skill no longer exists, fix the skill.
 
+**A new NPC is designed first, with the `designing-an-npc` skill**: settling with the owner what it
+is, then spikes of its look and motion they keep, then the design doc. People (the Wadees) are
+made in Blender from CC0 base meshes and motion libraries (`tools/blender/README.md`), never
+paid for. When a design teaches something new, put it in that skill's *Mistakes already made*.
+
 ## Exterior space has a floating origin
 
 The outside world is re-centred on you every 2 km (`src/world/universe.gd`,

@@ -8,9 +8,11 @@
   {"id": "garden_1", "at": [-20.4, 36.1], "size": [4, 3]},
   {"id": "garden_dry", "at": [44.5, 1.6], "size": [4, 3], "dried": true}],
  "pump": {"at": [17, 1.2], "pipe_to": [12.4, 0.6]},
+ "sun_pump": {"at": [42.6, 4.6], "garden": "garden_dry", "channel_to": [43.3, 3.1]},
+ "makes": {"sun_cell": {"at": [-1.0, 27.7], "yaw": 15}, "sun_lily": {"at": [-18.0, 34.2], "yaw": 40}},
  "path": {"points": [[-56.8, -28.4], [-42.17, -22.47], [-15.2, -7.6]], "width": 1.4},
  "shells": [{"id": "workshop", "kind": "box", "at": [0.5, 31.4], "size": [10.8, 3.4, 6.4], "yaw": -179, "variety": 0.87, "stamp": "court_north", "enterable": true},
-  {"id": "house_b", "kind": "box", "at": [-8.0, 38.5], "size": [7.5, 5.6, 6.0], "yaw": -179, "variety": 0.98, "stamp": "court_north"},
+  {"id": "house_b", "kind": "box", "at": [-8.0, 38.5], "size": [7.5, 5.6, 6.0], "yaw": -179, "variety": 0.98, "stamp": "court_north", "open": true, "room": "hall"},
   {"id": "hut_b", "kind": "round", "at": [9.8, 35.9], "radius": 3.6, "height": 2.8, "yaw": -165, "variety": 0.09, "stamp": "court_north"},
   {"id": "store", "kind": "box", "at": [28.2, 31.3], "size": [11.0, 2.9, 4.6], "yaw": -138, "variety": 0.46, "stamp": "court_east", "door_width": 2.4},
   {"id": "house_a", "kind": "box", "at": [31.9, 20.7], "size": [8.0, 3.0, 5.5], "yaw": -123, "variety": 0.61, "stamp": "court_east"},
@@ -30,7 +32,8 @@
   {"at": [-33.59, 23.52], "size": [4.6, 3.4], "yaw": 125},
   {"at": [42.69, 10.64], "size": [4.4, 3.4], "yaw": -104}],
  "items": [{"id": "crate_hut", "kind": "crate", "at": [33.96, -23.03], "yaw": 20},
-  {"id": "canister_path", "kind": "canister", "at": [-39.5, -19.2], "yaw": 70}],
+  {"id": "canister_path", "kind": "canister", "at": [-39.5, -19.2], "yaw": 70},
+  {"id": "armlet_breach", "kind": "armlet", "at": [56.5, -8.0], "yaw": 35}],
  "yards": [{"id": "yard_north_0", "stamp": "court_north", "points": [[-25.5, 36.5], [-19.8, 28.3], [-10.5, 29.7]]},
   {"id": "yard_north_1", "stamp": "court_north", "points": [[9.5, 28.4], [14.0, 28.8], [20.2, 41.3]]},
   {"id": "yard_east_0", "stamp": "court_east", "points": [[23.5, 39.0], [18.3, 30.4], [22.5, 26.8]]},
@@ -38,4 +41,14 @@
   {"id": "yard_south_0", "stamp": "court_south", "points": [[18.5, -40.5], [13.3, -29.1], [7.4, -29.7]]},
   {"id": "yard_south_1", "stamp": "court_south", "points": [[-12.7, -29.9], [-20.6, -26.4], [-29.5, -21.5], [-37.6, -27.3]]},
   {"id": "yard_west_0", "stamp": "court_west", "points": [[-44.6, -15.4], [-35.0, -12.0], [-36.3, 3.8]]},
-  {"id": "yard_west_1", "stamp": "court_west", "points": [[-33.6, 13.6], [-23.8, 26.4], [-30.0, 33.4]]}]}
+  {"id": "yard_west_1", "stamp": "court_west", "points": [[-33.6, 13.6], [-23.8, 26.4], [-30.0, 33.4]]}],
+  "memorial": {"at": [16.5, -16.5], "radius": 2.4, "stones": 6},
+  "benches": [
+    {"at": [-19.07, -33.03], "yaw": 30.0, "length": 2.4},
+    {"at": [-19.93, -34.51], "yaw": -150.0, "length": 2.4},
+    {"at": [-32.89, 23.03], "yaw": 125.0, "length": 2.4},
+    {"at": [-34.29, 24.01], "yaw": -55.0, "length": 2.4},
+    {"at": [41.87, 10.43], "yaw": -104.0, "length": 2.4},
+    {"at": [43.51, 10.85], "yaw": 76.0, "length": 2.4}
+  ]
+}

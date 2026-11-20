@@ -1,6 +1,6 @@
 ---
 name: building-an-npc
-description: Use when adding or changing an NPC in the who-knows Godot project - a new creature, droid, crew member, wingman or world fauna; a new behaviour, need, sense, stimulus, locomotor, look, population or site; or wiring NPCs into a new space (another ship, a wreck, a world). Also when an NPC pops into view, is left behind by the floating origin, falls through or floats off a rock, snags on a doorway or edge, settles at 45° in a corner, dithers between behaviours, never reacts (or never stops reacting), won't step aside, walks through a shut door, reads as the wrong thing in renders, or blows the frame budget.
+description: Use when adding or changing an NPC in the who-knows Godot project - a new creature, droid, crew member, wingman, world fauna or person (townsfolk like the Wadees); a new behaviour, need, sense, stimulus, locomotor, look, population or site; a skeleton, rig or animation clip; or wiring NPCs into a new space (another ship, a wreck, a world). Also when an NPC pops into view, is left behind by the floating origin, falls through or floats off a rock, snags on a doorway or edge, settles at 45° in a corner, dithers between behaviours, never reacts (or never stops reacting), won't step aside, walks through a shut door, reads as the wrong thing in renders, or blows the frame budget.
 ---
 
 # Building an NPC
@@ -40,6 +40,13 @@ Worked examples, inside and outside. Read the one nearest to what you are making
   the digging is `Burrower` (the mind only asks `Intent.go(point, speed, &"burrow")`), the pay is
   `RockSite.surfaced` / `died` through the `drop` and `count_near` Callables, the items `crystal_grit` and
   `quantum_shard`.
+- **The Wadees** (on a world, 25 people in the oasis town Wadoo): `data/npcs/wadee_{villager,sunguard,queen}.tres`,
+  `WadooCast` (a fixed cast, not a seeded herd) + `WadooSite` + `WadooSource` + `WadooPaths`,
+  `GroundWalker`, `behaviours/{work,rest_shade,talk_pair,drink,mourn,go_home,keep_post,hold_court,greet,
+  converse,gather}.gd` on `WadooErrand`, `WadeeLook` (Blender-made models, one mesh each, coloured by
+  `WadeePalette`). You talk to them (`NpcTalk`, `DialogPanel`, `data/wadoo/lines.json`), and the queen
+  lives in a room inside her brick shell (`WadooRooms`, `WadooDoor`). Read it for anything that walks
+  a world, is a person, speaks or lives indoors; `docs/superpowers/specs/2026-11-16-wadoo-design.md`.
 
 **Read first:** `CLAUDE.md` (style guide binding; floating origin; no `#` in `.tscn`/`.tres`),
 `docs/superpowers/specs/2026-09-26-npc-foundation-design.md` (§2 the layers, §21 *As built*: why
@@ -55,7 +62,8 @@ Answer these, in the spec or the task, before writing code. Each answer picks ex
    new site and maybe a new director.
 2. **Which place does it belong to, and how many?** That is its population recipe and site: an
    existing one (a `RockLife` recipe on `RockSite`, or `ShipCrew`/`ShipSite`) or a new pair.
-3. **How does it move?** `DeckWalker` (floors under gravity), `SurfaceCrawler` + `ZeroGDrift`
+3. **How does it move?** `DeckWalker` (floors under gravity), `GroundWalker` (a world's ground,
+   over a site's routes), `SurfaceCrawler` + `ZeroGDrift`
    (any surface in zero g, leaping and puffing), or a new locomotor (§ *Recipes*).
 4. **What does it sense?** Sight (range, cone, `dark_sight`, `near_sense`), light response,
    vibration (through its own rock only), sound (air only), shake (a ship's felt gravity), touch.
@@ -64,8 +72,8 @@ Answer these, in the spec or the task, before writing code. Each answer picks ex
 6. **What does it look and sound like?** Palette of its space; silent outside.
 7. **How does the player find it?** If it is small or rare, give it a sensor source (as
    `LifeContacts`): a ping far off, a region close by, then the player looks (§ *Recipes*).
-8. **What can the player do to it?** Nothing yet unless asked: the interaction seam exists
-   (`species.interactions`, empty).
+8. **What can the player do to it?** Nothing unless asked. Talking exists (`NpcTalk`, the Wadees);
+   anything else is a new interaction on the same seam (§ *Recipes*).
 
 ## Checklist
 
@@ -112,10 +120,16 @@ Do these in order. Each names the check that proves it.
    `test_visual_style_rules.gd`. Outside: distance fade reversed (min = `fade.y`, max =
    `fade.x`), render layer 1. Inside: the interior kit, layer 2, glow batch, no light of its own.
    Proof: `test_npc_looks.gd`-style tests (triangle budget, palette, layer, fade, parts move).
+   **A person** (anything with a face seen close up) is not built from primitives: it is a model
+   made in Blender from base meshes, with a skeleton and motions (§ *Recipes*). Its look is
+   designed with the `designing-an-npc` skill first.
 8. **Health:** `max_health` in the species (the catalogue test checks it is above 0), and
    whether it dies (`knocked_out_for` 0) or is knocked out and gets up. A creature that fights
    back lists a reflex like `defend` and asks the body for the bite with an intent action; the
-   mind never delivers a hit itself. The bite is data: `bite_damage`, `bite_push`, `bite_reach`.
+   mind never delivers a hit itself. One that shoots asks with `&"shoot"` and its site sends the
+   bolt (`NpcSite.shoot`, as Wadoo's Sunguard, with `SunBolt`); a wound that took health is told to
+   the site (`NpcSite.wounded`), which is where a place turns on you. A person's look poses itself
+   (`hurt`, `act(&"dead")`): the body never flips or squashes it, and the dead lie where they fell. The bite is data: `bite_damage`, `bite_push`, `bite_reach`.
    A creature that drains (`drain_rate`, `drain_reach`) asks with `&"sip"`. **The body delivers every
    drain and every drop** (`Npc.sip`, `Npc.bite`, `RockSite.died`), and reaches the rest of the game
    only through its site's Callables (`place_salvage`, `base_place`, `base_sip`, `drop`, `count_near`),
@@ -200,8 +214,38 @@ Do these in order. Each names the check that proves it.
   spread); `_ship.sensors.add_source(...)` in `flight_test.gd`; a colour in `HudPalette.for_kind`.
   `ContactMarker` draws it with no change.
 - **An interaction** (only when the owner asks): a class with `can`, `prompt`, `run`; its id in
-  `species.interactions`; route it in `Npc.interact`/`prompt_text`/`can_interact`; add `npcs`
-  (128) to the `Interactor`'s mask.
+  `species.interactions` (`Npc.setup` then puts the body in group `interactable`); route it in
+  `Npc.interact`/`prompt_text`/`can_interact`. `Npc.LAYER` is in the `Interactor`'s `SUIT_MASK`
+  (outside, on foot or on a spacewalk) already; aboard (`MASK`) it is not, so add it for crew.
+  The worked one is `NpcTalk`: it asks the **site** (`can_talk`, `talk_name`, `talk`), and the site
+  calls a Callable the flight scene set (`on_talk`), which shows the panel and freezes you. Keep it
+  that way: `src/npc` never reaches for the UI or the scene.
+- **Talking:** lines are data (`data/wadoo/lines.json`, read by `WadooLines`), picked by the site
+  from the village's state (`WadooState`, saved as its own part); `DialogPanel` shows pages and one
+  choice and says only which answer was picked; the scene applies each `then`. A `converse` reflex
+  (`ctx.extra.talking`) turns the speaker to you; seated, they talk where they sit.
+- **A room inside a place's building:** a Blender room model (`tools/blender/wadoo_rooms.py`, export
+  to `assets/<kind>/<room>.glb`, then `--import`) placed in an open shell's frame by `PlaceField`
+  (`"open": true, "room": "<room>"` on the shell). Empties carry the meaning: `lamp_<n>`, `col_<name>`
+  (solid, walked round), `floor_<name>` (stood on), and marks (`WadooRooms.mark`). Walkers need three
+  things from it: the grid opened inside and through the doorway and the furniture solid again
+  (`WadooPaths._open_room`), the floor's height (`WadooSite.ground` from the node's meta `rooms`, plus
+  `WadooRooms.RAISED`), and spots at its marks.
+- **A person (a made, skinned look):** as the Wadees. `tools/blender/wadee_base.py` builds the
+  bodies, faces, hair and clothes from Blender's CC0 base meshes. `tools/blender/wadee_rig.py`
+  adds a 23-bone skeleton (Godot humanoid names) and copies CC0 motions onto it. Both are re-run
+  from the command line, and `tools/blender/README.md` says how. The GLB goes in
+  `assets/<kind>/`. Play a clip by Godot's name for it, and move the body at the clip's pace
+  (`reference.md` § *People made in Blender*). Prove it in the real scene with a probe like
+  `test/probes/wadee_render.gd`: eye-height shots, runs of frames for the motion, and the frame
+  rate with the real number in view.
+- **A thing to do with people** (Wadoo stage 3: a gift, a part to fit, something to lay): the item
+  (`never_made` if only people make it); a place piece in group `interactable` that answers what you
+  hold (`Grasp.kind_in`) and emits a signal; the flight scene answers it (`_give_held` takes the item
+  from your hands, then the task is done) and draws the piece from the saved state at once on
+  `place_built`. A gift to a person is the cast's `takes` and the site's `talk_prompt`. What people
+  make again goes in the layout's `makes` and is laid by `PlaceField.lay` when none is about
+  (`_restock`); the place's own `items` are made once and never again.
 - **A new space:** a director and a bus beside it; bus `setup(space_root, universe_or_null)`. The
   bus lookup picks the deepest `space_root`, so an interior's bus beats the exterior's for
   anything aboard. Outside, every NPC joins `Universe.EXTERIOR_SPACE` itself (`Npc.setup` does
@@ -259,6 +303,39 @@ Do these in order. Each names the check that proves it.
 | A hull far off a rock in a scene test | A dev Delver sent under 20-70 m was demoted about 14 s into the burrow with the hull 400 m above the rock (cause not pinned: its live radius 250 plus `DEMOTE_MARGIN` 100 is short of that from the hull alone) | Keep the hull within 120 m of the rock in a scene test of anything that travels: `test_delver_pay.gd` |
 | Adding a body to the world, then placing it | `NpcDirector.promote` added the NPC at the holder's origin and `setup` moved it to its site. Outside, the floating origin keeps *your ship* at that origin: for a step the skitter overlapped your hull, then jumped a kilometre to its site in one step. Your hull reported a touch by creatures ~1 km off and, once, flew off at ~9,900 m/s and broke up (the T6 crash; found by T16's duel probe through `test_ship_pilot`) | Set the transform before `add_child` (`promote` does: `holder.global_transform.affine_inverse() * site.frame() * pose`); any CharacterBody you move far, place before it joins or disable its shape across the move. `test_a_promoted_npc_never_touches_a_hull_at_the_origin` |
 | A hand-over that reads the intent that caused it | A burrow ask is still the intent after the burrower hands back (the mind thinks 5 times a second): the crawler sent it straight down again; and off a rock crawler and burrower would swap every tick | The burrower clears a spent `&"burrow"` intent as it hands back; `SurfaceCrawler.burrow_asked` needs a `RockSite`, the locomotor and a `move_to`; `test_burrower.gd` |
+| A person's face built from code shapes | The first Wadees (ellipsoids, tubes and remeshing) were rejected: the chin too weak and rounded, "eyes look pasted on, little contour" | Start from a sculpted base mesh (Blender's Human Base Meshes, CC0) and change it in code (`wadee_base.py`) |
+| Decimating a body with a vertex group to spare the face | Unweighted vertices are fully protected, so the rest collapsed and the bodies became sticks | Decimate the whole body evenly (`BODY_TRIS` 40000) |
+| Re-importing a GLB to rig it without merging | glTF splits vertices along material edges, so the lips came back as an island of their own, cut off from the face's weights | `import_scene.gltf(..., merge_vertices=True)`, and give any unweighted vertex its nearest weighted neighbour's weights |
+| Clothes and jewellery taking the weights of the nearest skin | The hand hangs beside the belt and skirt: a belt coin went with the hand and stuck out as a spike, and a skirt flap went with the chest | Take weights from the body without its arms (the "trunk"). An island follows the arm only if it is a ring whose middle lies on an arm bone (within 0.035 m) |
+| Cloth weighted vertex by vertex | A long skirt tore between the legs at every stride, where neighbours flipped from one thigh to the other | Smooth the weights along the cloth (30 passes for a skirt, 8 for a top), and give 40% of any leg pull to the hips. A running stride still stretches a long skirt: that needs skirt bones or cloth |
+| Calling a clip by the library's name | `Walk_Loop` was "not found": Godot drops the `_Loop` ending on import and loops the clip | Play `Walk`, `Idle`, `Jog_Fwd`; the probe prints the list (`AnimationPlayer.get_animation_list()`) |
+| Blaming the copy for a strange motion | The run looked like a crouch with legs split under the long skirts. Hips and feet, compared frame by frame with the library's own figure, matched within a few centimetres: the library's `Jog_Fwd` is a fast run, about 5.9 m/s | Render the library's figure in the same clip, compare numbers frame by frame, then judge the copy |
+| A probe's view not looked at | Two stand points (north 33 and 37) were inside the north court's houses, so the 25-Wadee reading (98 fps) was taken facing a wall. With all 25 in view it was 80 | Look at every shot before trusting the reading taken there; stand on open ground (the east bank) |
+| A spot held by a behaviour the brain dropped | The brain never tells a behaviour it has been switched away from, so a Wadee pre-empted on the way to a bench kept the seat claimed and nobody else could sit there | One claim per person: `WadooSite.claim`/`take_spot` release the person's old claim first, and every errand's `start` releases; a behaviour never assumes its `done` runs |
+| A seat inside the path grid's margin | `WadooPaths` keeps every cell 0.2 m clear of a bench, so a route ended at the nearest open cell and sitters sat half a metre in front of the bench, in the air | The site's `route` adds the spot itself as a last point when it is within `LAST_STRETCH` 1.2 m of the route's end |
+| Sitting straight from a walk | The mind asked for `sit` and the look cut from `Walk` to `Sitting_Idle`: a Wadee popped onto the bench, and a second think cut `Sitting_Enter` short | `WadeeLook` plays `Sitting_Enter` from any non-seated clip and holds the seated clip asked for until it ends (`SEATED`, `_after_sit`); `test_sits_down_once_and_stays_seated` |
+| A director too small for a town | The exterior `max_live` was 32, shared with rock herds: a full town and one herd would have left Wadees asleep in the middle of the street | `max_live` 40; count every population that can be awake in one place |
+| A probe's spot view on the spot's facing side | The Glassworks' spots face its door, so standing "in front" put the camera inside the workshop | Look at every shot; a negative distance in `wadoo_play.gd` `SPOT_VIEWS` stands behind the spot |
+| A person's trait outranking their own lines | The queen grieves (`#grief`, rank 20 + its conditions) and her lines were under the role `@queen` (10): she greeted you as a mourner | A named person's lines go under their name (rank 100); give equal-rank lines that must not cycle a condition that tells them apart (`met_queen` on the hunt lines) |
+| A room's empty added and the model not re-exported | `WadooRooms.mark(&"hall", "sit")` was null: the script had the new empty, the GLB did not | After any change to `wadoo_rooms.py`, export again, copy the GLB in and `--import`; `test_wadoo_hall.gd` reads every mark |
+| A dais the walkers stand on but you fall through | The dais was only drawn: the queen's feet were 0.3 m over the slab a ray met, and you would have walked into it | Boxes you stand on are `floor_` empties: solid to you, never in the walkers' grid; their height is `WadooRooms.RAISED` |
+| A probe standing you on the terrain inside a building | `_stand_far` puts you on the terrain's height, under a building's floor slab | `wadoo_play.gd` `_site_look` stands you on `WadooSite.ground` (the room's floor) |
+| A test that a ray down meets the floor, in a furnished room | `test_every_shell_has_a_floor` met the hall's basin, a body of the room's own, and called it no floor | Count a room's bodies (a `Room_*` parent) as something met; the lowest ray still finds the floor |
+| A guard who gives way | You walked up to Oru to talk, `give_way` stepped him back from you through the queen's doorway (open on the grid, door shut or not) into the leaf, and the Interactor met the door, not him | A Sunguard at their post holds it (`ctx.extra.holds_ground`); step-aside spots (`nearby`) never lie in a room the walker is not in (`WadooSite.room_at`) |
+| A wall cut into pieces across, not along | `BrickShell._pieces` cut a wall at every hole's sides and stacked the pieces under each hole: a window over a door made a "below the window" piece down across the doorway, so a brick pier stood in the queen's door | Each upright strip between cuts leaves every hole over it open (`test_a_window_over_a_door_leaves_the_doorway_open`); look into a doorway from both sides in the real scene |
+| A room lit like the street | Four lamps at 1.6 lit the hall's pale walls as bright as the desert outside; a `ReflectionProbe` for the sky's light barely changed it | Light a room with few, weak lamps (`WadooRooms.LAMP_ENERGY` 0.8) and look at it at eye height before and after |
+| Weather through walls | The desert's sand streaks are particles round you: they blew through the hall as if it were open ground | `BlowingSand.sheltered` (the flight scene's `_indoors`, from `WadooSite.room_at`) stops the sand while you are in a room; anything weather-like needs the same |
+| A probe that stands you beside a walking NPC | `wadoo_play.gd` put you 1.8 m from Lio as she walked to work; nothing told her to stop, she was 3 m off before the Interactor looked, the armlet stayed in your hands, and full hands then found neither the lily nor the memorial | Walk up as a player does (`wadoo_play.gd` `_walk_up`: steps at 1.7 m/s toward where they are now), so `give_way` and `greet` stop them; read a later failure as maybe caused by an earlier one |
+| Running a list of tests with `-gtest=a,b` | The `.gutconfig.json` dirs still ran: the whole suite, 48 minutes | One `-gselect=<file>.gd` per run |
+| Chances from a hash of the time | The Sunguard's 50% roll used `WadooErrand.roll(ctx, salt)` (the time and a salt, through a golden ratio): checks 4 s apart drifted about 0.06, so ten chances in a row gave one roll | Dice that must be independent come from a `RandomNumberGenerator` of the behaviour's own, seeded in `start` (`fight_ranged._dice`); keep the hash for a person's fixed nature (`nature`) |
+| `trait` as a name | GDScript 4.5 reserves it: "Expected expression as the function argument" at the call, not the declaration | Call it something else (`nature`) |
+| A new `class_name` used at once | Another script naming `SunBolt` failed "Identifier not declared" until the editor had scanned it | After adding a file with a `class_name`, run `godot --headless --path . --import` before the tests |
+| A held prop turned by reasoning from the hand bone's axes | The wrist is bent in the clip: "up out of the fist" leaned the staff 40 degrees across her back, its head behind her own head, hidden from the one she aimed at | Measure the turn from the clip (`test/probes/wadee_poses.gd` prints `HAND_TURN` for a wanted lean in the look's frame), then render from the front and the side |
+| A knockback for a big hit | `Hit_Knockback` lays a Wadee flat by 0.3 s and there is no clip to rise, so a live one would pop up standing | A live hurt is always `Hit_Chest`; only death goes down |
+| A body that should lie, left to the director | The ledger's dead are never wanted, and a review (every 0.25 s) demotes what is not wanted: a Sunguard shot down went back to the pool at once, and the probe then aimed at the pool's parking place in the sky | `Npc.lies_where_fell()` (a person) keeps it while its source offers its record; creatures still go at once (their `CORPSE_FOR` never runs in the game) |
+| A burst at your own chest | A bolt hitting you burst full size 0.3 m from the eye and hid a sixth of the view | `SunBolt.ON_YOU_FLASH`: on the avatar the burst is a quarter size; a hit is told by the red edge and the jolt |
+| Waking where you fell, on a world | The spec said so; the game wakes you aboard your ship after any blackout outside (health and damage §7.2). The fight probe then aimed from inside the ship, 5 km off in engine space | Read the rule in the code (`flight_test._rescue`); a fight probe mends you in its `hurt` handler except for the blackout it means, then walks you back out |
+| Blender's default scene in a render script | `--factory-startup` keeps the default 2 m cube, which hid the figure in every frame | Remove or hide `Cube` (and the library's `Icosphere`) before rendering |
 
 ## Not built yet (plan for it; don't assume it works)
 
@@ -266,14 +343,27 @@ Do these in order. Each names the check that proves it.
   `NpcDirector.amend`); nothing else about an NPC is remembered when it sleeps.
 - **A dead droid, and repairs by others.** Short of its ship being destroyed, the droid is only
   ever knocked out; the repair torch brings it round.
-- **Local avoidance.** A walker does not path round people: a droid heading through you steps
-  aside (`give_way`) and tries again. A player standing still in a doorway blocks it.
+- **Local avoidance.** A walker does not plan round people: a droid heading through you steps
+  aside (`give_way`) and tries again, and a player standing still in a doorway blocks it.
+  `GroundWalker` only eases off a neighbour within `PERSONAL` 0.6 m, onto open ground.
 - **Ladders and upper storeys for walkers.** `DeckPaths` joins one storey only.
-- **Interactions** beyond the seam; the hose; carrying an NPC.
+- **Interactions** beyond talking; the hose; carrying an NPC.
 - **Sound outside** (never, by the style guide) and **sensors** (`LifeContacts` for the bridge
   computer).
-- **Hunters and combat** beyond `defend` (which only bites back), `GroundWalker` (worlds), and
-  NPC wingmen or crew at a helm. `ShipPilot` is the ship computer's pilot, not an NPC: it has no
+- **Hunters and combat** beyond `defend` (which only bites back) and the Sunguard's ranged fight
+  (`fight_ranged`: they never hunt you past their walls), and NPC wingmen or crew at a helm. `ShipPilot` is the ship computer's pilot, not an NPC: it has no
   `NpcRecord`, and a hostile carries no crew (hostile ships spec, call I).
 - **The frame budget on the target PC.** Measured 1.2 ms for 32 + the droid on a shared 2.1 GHz
   Xeon; unmeasured on the GTX 960 machine.
+- **People, beyond Wadoo's first stage.** The Wadees live in Wadoo (§ *worked examples*), but:
+  - their homes' rooms and the Glassworks are stage 5 (talking, the audience, things to do, harm
+    and the Sunguard's fight are built);
+  - finger bones: a Sunguard holds the staff in an open hand;
+  - the Wadees fight only you on foot: nothing makes them fight a creature or a ship (a ship's
+    turret can still be sent after one, as after any NPC outside);
+  - lighter meshes for distance: a model is 55–65k triangles; the town still runs at 132 fps
+    (GTX 960) because a Wadee is one draw call and far motions step at 15 Hz;
+  - indoors: the queen's hall is a room; a Wadee who goes home is still hidden, not inside one;
+  - doors in the walkers' grid are always open: the grid is built once per layout, so a walker
+    could route through the hall's shut door (none does: the queen lives inside and nobody else
+    goes there).

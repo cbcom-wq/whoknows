@@ -175,6 +175,20 @@ func test_it_stops_when_you_leave_the_desert():
 	assert_false(_sand.emitting, "no sand by a world that is not a desert")
 	assert_eq(_sand.amount_ratio, 0.0)
 
+## Wadoo spec §10: no sand blows under a roof; the streaks went through the
+## queen's hall's walls. The flight scene says where a roof is (`sheltered`).
+func test_none_blows_under_a_roof():
+	assert_true(_sand.sheltered.is_valid(), "the flight scene says where a roof is")
+	await _set_down(&"p3")
+	assert_true(_sand.emitting)
+	_sand.sheltered = func() -> bool: return true
+	await wait_physics_frames(2)
+	assert_false(_sand.emitting, "indoors: no sand")
+	assert_eq(_sand.amount_ratio, 0.0)
+	_sand.sheltered = func() -> bool: return false
+	await wait_physics_frames(2)
+	assert_true(_sand.emitting, "out again: it blows")
+
 func test_sand_never_holds_the_origin():
 	var up := await _set_down(&"p3")
 	assert_true(_sand.emitting)

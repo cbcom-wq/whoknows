@@ -24,7 +24,7 @@ static func makeable(catalog: ItemCatalog) -> Array[ItemDefinition]:
 	var result: Array[ItemDefinition] = []
 	for id in catalog.ids():
 		var def := catalog.get_def(id)
-		if def.eva_tool or def.quantum_value <= 0:
+		if def.eva_tool or def.never_made or def.quantum_value <= 0:
 			continue
 		result.append(def)
 	result.sort_custom(func(a: ItemDefinition, b: ItemDefinition) -> bool:

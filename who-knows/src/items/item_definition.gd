@@ -57,6 +57,10 @@ enum Grip {
 ## How much it takes before it breaks, hp (ship weapons spec §6.6): three light
 ## bolts or four pistol bolts for most things.
 @export var hp: float = 40.0
+## Made by someone in the world, never by the machine (Wadoo spec §7): the
+## Wadees' sun cell, Lio's armlet, a sun-lily. Worth its value if converted, but
+## never in QuantumValues.makeable.
+@export var never_made: bool = false
 ## Never breaks: the tools and the module packages.
 @export var unbreakable: bool = false
 ## For a package: the module it unfolds into (ModuleCatalog).

@@ -96,6 +96,15 @@ const SAIL_LIFT := 0.5
 const SAIL_SAG := 0.3
 const SAIL_CELLS := 4
 const POLE := 0.07
+## A bench under a sail (Wadoo spec §5): a plank seat on two stone blocks, its
+## length from the layout, this deep and its seat this high, m. Sitters face its +z.
+const BENCH_DEPTH := 0.45
+const BENCH_SEAT := 0.45
+const BENCH_PLANK := 0.07
+## The bench's stone feet: this wide, this far in from its ends, sunk this far.
+const BENCH_FOOT := 0.34
+const BENCH_FOOT_IN := 0.3
+const BENCH_SINK := 0.1
 ## What a building stands on (Rework 2): a course of stone FOUNDATION high over
 ## the ground and FOUNDATION_PROUD proud of the walls, the floor slab on it at
 ## its top (FLOOR_THICK of it shows above the ground inside a crushed hut).
@@ -717,6 +726,25 @@ static func sail(kit: InteriorKit, f: Transform3D, size: Vector2, variety: float
 				kit.tri(InteriorKit.Batch.SOLID, p0, p1, p2, n, colour)
 				kit.tri(InteriorKit.Batch.SOLID, p0, p1, p2, -n, colour)
 
+## A bench at `f` (its middle on the ground, sitters facing its +z): a wooden
+## plank BENCH_SEAT high on two blocks of the foundation's stone, `length` long.
+static func bench(kit: InteriorKit, f: Transform3D, length: float, variety: float) -> void:
+	var stone := InteriorKit.solid(SpacePalette.shade(OasisPalette.FOUNDATION, int(clampf(variety, 0.0, 1.0) * 2.99)))
+	var foot := BENCH_SEAT - BENCH_PLANK + BENCH_SINK
+	for side: float in [-1.0, 1.0]:
+		kit.bevel_box(InteriorKit.Batch.SOLID,
+			f * InteriorKit.at(Vector3(side * (length * 0.5 - BENCH_FOOT_IN), foot * 0.5 - BENCH_SINK, 0.0)),
+			Vector3(BENCH_FOOT, foot, BENCH_DEPTH * 0.85), 0.04, stone)
+	kit.bevel_box(InteriorKit.Batch.SOLID, f * InteriorKit.at(Vector3(0.0, BENCH_SEAT - BENCH_PLANK * 0.5, 0.0)),
+		Vector3(length, BENCH_PLANK, BENCH_DEPTH), 0.02, InteriorKit.solid(OasisPalette.WOOD))
+
+## The bench's collider: one box, from its feet to its seat.
+static func bench_shapes(f: Transform3D, length: float) -> Array[CollisionShape3D]:
+	var out: Array[CollisionShape3D] = []
+	out.append(_shape(f * InteriorKit.at(Vector3(0.0, (BENCH_SEAT - BENCH_SINK) * 0.5, 0.0)),
+		Vector3(length, BENCH_SEAT + BENCH_SINK, BENCH_DEPTH)))
+	return out
+
 # --- the gate's piers ----------------------------------------------------------
 
 ## A gate pier at `f` (its foot, SUNK under the ground; x along the wall, z
@@ -927,6 +955,12 @@ static func _fill(kit: InteriorKit, w: Transform3D, h: Array, shut: bool, variet
 			_leaf(kit, w * Transform3D(Basis(Vector3.UP, s * swing), hinge), -s, half, y1 - y0 - 0.02, SHUTTER,
 				variety, salt * 8 + k, false)
 
+## A door's leaf in frame `t` (its hinge edge at the origin, its foot at y 0),
+## `width` along x, `tall` high, PLANK thick: what a shut door shows, for a door
+## that opens (WadooDoor).
+static func door_leaf(kit: InteriorKit, t: Transform3D, width: float, tall: float, variety: float, salt: int) -> void:
+	_leaf(kit, t, 1.0, width, tall, PLANK, variety, salt, true)
+
 ## One wooden leaf in frame `t` (its hinge edge at the origin, its foot at y
 ## 0): `width` along `s` x, `tall` high, `thick` deep, of planks in WOOD's
 ## shades (a door's three, a shutter's two) with two dark battens across.
@@ -974,21 +1008,35 @@ static func _holes(w: Transform3D, length: float, openings: Array) -> Array:
 	return out
 
 ## A wall `length` long and `height` high cut round `holes`: [u0, u1, y0, y1]
-## per piece: whole-height piers between the holes, and the wall under and
-## over each.
+## per piece. The wall is cut into upright strips at every hole's edge, and each
+## strip is solid but for the holes that cross it: whole-height piers between
+## the holes, and the wall under, over and between the holes stacked in a strip
+## (a two-storey house's window over its door leaves both open).
 static func _pieces(length: float, height: float, holes: Array) -> Array:
-	var out := []
-	var cursor := -length * 0.5
+	var cuts: Array[float] = [-length * 0.5, length * 0.5]
 	for h: Array in holes:
-		if h[0] > cursor + 0.01:
-			out.append([cursor, h[0], 0.0, height])
-		if h[2] > 0.02:
-			out.append([h[0], h[1], 0.0, h[2]])
-		if h[3] < height - 0.02:
-			out.append([h[0], h[1], h[3], height])
-		cursor = maxf(cursor, h[1])
-	if cursor < length * 0.5 - 0.01:
-		out.append([cursor, length * 0.5, 0.0, height])
+		cuts.append(clampf(float(h[0]), -length * 0.5, length * 0.5))
+		cuts.append(clampf(float(h[1]), -length * 0.5, length * 0.5))
+	cuts.sort()
+	var out := []
+	for k in cuts.size() - 1:
+		var a := cuts[k]
+		var b := cuts[k + 1]
+		if b - a < 0.01:
+			continue
+		var mid := (a + b) * 0.5
+		var spans := []
+		for h: Array in holes:
+			if float(h[0]) < mid and float(h[1]) > mid:
+				spans.append([float(h[2]), float(h[3])])
+		spans.sort_custom(func(p: Array, q: Array) -> bool: return p[0] < q[0])
+		var y := 0.0
+		for sp: Array in spans:
+			if sp[0] > y + 0.02:
+				out.append([a, b, y, sp[0]])
+			y = maxf(y, sp[1])
+		if y < height - 0.02:
+			out.append([a, b, y, height])
 	return out
 
 static func _span(p: Array) -> Transform3D:

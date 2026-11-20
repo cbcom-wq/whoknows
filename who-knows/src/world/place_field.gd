@@ -17,6 +17,10 @@ extends Node3D
 
 ## A place within this far of the focus is loaded; beyond FREE_BEYOND it is
 ## freed (so a place at the edge does not load and free each tick), m.
+## A place was built (its node is new): what lives on it, or opens in it, may
+## set itself up (the flight scene opens the queen's hall door from WadooState).
+signal place_built(id: StringName, node: Node3D)
+
 const LOAD_WITHIN := 8000.0
 const FREE_BEYOND := 10000.0
 
@@ -100,6 +104,19 @@ func loaded(id: StringName) -> Node3D:
 	var node: Node3D = _loaded.get(id)
 	return node if is_instance_valid(node) else null
 
+## The design of the place `id`, or null.
+func design(id: StringName) -> PlaceDesign:
+	for p in _places:
+		if p.id == id:
+			return p
+	return null
+
+## The terrain of the world the place `id` is on, or null.
+func terrain_of_place(id: StringName) -> WorldTerrain:
+	var p := design(id)
+	var body := system.body(p.body_id) if p != null else null
+	return whereabouts.terrain_of(body) if body != null else null
+
 func _point_of(place: PlaceDesign, body: SystemBody) -> UniversePoint:
 	if not _points.has(place.id):
 		_points[place.id] = ground_point(place, body, whereabouts.terrain_of(body))
@@ -113,6 +130,7 @@ func _load(place: PlaceDesign, body: SystemBody) -> void:
 	node.add_to_group(Universe.EXTERIOR_SPACE)
 	_loaded[place.id] = node
 	_build(place, body, node)
+	place_built.emit(place.id, node)
 
 func _free(id: StringName) -> void:
 	var node: Node3D = _loaded[id]
@@ -133,6 +151,8 @@ func _build(place: PlaceDesign, body: SystemBody, node: Node3D) -> void:
 	var water_radius := 0.0
 	if layout.has("pool"):
 		water_radius = _build_pool(place, terrain, layout["pool"], node)
+	# the water's edge, for those who walk the place (WadooSite)
+	node.set_meta(&"water_radius", water_radius)
 	_build_village(place, terrain, layout, node, water_radius)
 	if layout.has("ledge"):
 		_build_ledge(place, terrain, layout["ledge"], node)
@@ -226,6 +246,23 @@ func _build_village(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionar
 			OasisLooks.pipe(kit, pipe_from, to)
 			pipe_from = to
 		mark.call("pump", "pump", from)
+	# Halla's sun pump by her dry garden (Wadoo spec §7): a piece of its own.
+	if layout.has("sun_pump"):
+		var sp: Dictionary = layout["sun_pump"]
+		var at: Array = sp["at"]
+		var foot: Vector3 = ground.call(float(at[0]), float(at[1]))
+		var to: Array = sp.get("channel_to", at)
+		var bed := {}
+		for g: Dictionary in gardens:
+			if str(g.get("id", "")) == str(sp.get("garden", "")):
+				bed = g
+		var bed_at: Array = bed.get("at", at)
+		var bed_size: Array = bed.get("size", [4.0, 3.0])
+		var pump := SunPump.make(Transform3D(Basis.IDENTITY, foot), ground.call(float(to[0]), float(to[1])),
+			Transform3D(Basis.IDENTITY, ground.call(float(bed_at[0]), float(bed_at[1]))),
+			Vector2(float(bed_size[0]), float(bed_size[1])), float(bed_at[0] * 0.173 + bed_at[1] * 0.291))
+		node.add_child(pump)
+		avoid.append(Vector3(foot.x, foot.z, PUMP_CLEAR))
 	if layout.has("path"):
 		var from := kit.vertex_count(InteriorKit.Batch.SOLID)
 		var path: Dictionary = layout["path"]
@@ -349,6 +386,9 @@ func _build_brick(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionary,
 	var add := func(shapes: Array[CollisionShape3D]) -> void:
 		for c in shapes:
 			brick.add_child(c)
+	# Open shells with a room inside (Wadoo spec §8, §10), by shell id, for those
+	# who walk them (WadooSite): {room, frame, size}.
+	var rooms := {}
 	for s: Dictionary in shells:
 		var from := kit.vertex_count(InteriorKit.Batch.SOLID)
 		var at: Array = s["at"]
@@ -381,15 +421,28 @@ func _build_brick(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionary,
 				doors = BrickShell.door_spots([], 0.0, size)
 			else:
 				var openings := BrickShell.openings_for(size, variety, float(s.get("door_width", BrickShell.DOOR.x)))
-				BrickShell.box(kit, f, size, openings, variety)
-				add.call(BrickShell.box_shapes(f, size, openings, variety))
+				var open := bool(s.get("open", false))
+				BrickShell.box(kit, f, size, openings, variety, not open)
+				add.call(BrickShell.box_shapes(f, size, openings, variety, not open))
 				doors = BrickShell.door_spots(openings)
+				if open and s.has("room"):
+					var room := StringName(str(s["room"]))
+					WadooRooms.build(room, node, f)
+					rooms[str(s["id"])] = {"room": room, "frame": f, "size": size}
+					if not doors.is_empty():
+						var d: Array = doors[0]
+						var c: Vector3 = d[0]
+						var width := float(d[2])
+						var door := WadooDoor.make(width - 0.02, BrickShell.DOOR.y - 0.02, variety)
+						node.add_child(door)
+						door.transform = f * Transform3D(Basis.IDENTITY, Vector3(c.x - width * 0.5 + 0.01, 0.0, c.z + 0.1))
 			avoid.append(Vector3(centre.x, centre.z, Vector2(size.x, size.z).length() * 0.5 + GRASS_MARGIN))
 		# Each door in the place's frame: [its middle at the floor, the way out, width].
 		var placed := []
 		for d: Array in doors:
 			placed.append([f * (d[0] as Vector3), (f.basis * (d[1] as Vector3)).normalized(), d[2]])
 		mark.call("shell", str(s["id"]), from, foot, {"slab": foot + BrickShell.FOUNDATION, "doors": placed})
+	node.set_meta(&"rooms", rooms)
 	var yards: Array = layout.get("yards", [])
 	for k in yards.size():
 		var from := kit.vertex_count(InteriorKit.Batch.SOLID)
@@ -428,6 +481,36 @@ func _build_brick(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionary,
 		BrickShell.sail(kit, f, size, 0.2 + 0.5 * k)
 		avoid.append(Vector3(f.origin.x, f.origin.z, size.length() * 0.5 + GRASS_MARGIN))
 		mark.call("sail", "sail_%d" % k, from)
+	# Under each sail two benches face each other (Wadoo spec §5: rest in the shade).
+	var benches: Array = layout.get("benches", [])
+	for k in benches.size():
+		var from := kit.vertex_count(InteriorKit.Batch.SOLID)
+		var b: Dictionary = benches[k]
+		var at: Array = b["at"]
+		var length := float(b.get("length", 2.4))
+		var f := Transform3D(Basis(Vector3.UP, -deg_to_rad(float(b.get("yaw", 0.0)))),
+			on_ground(place, terrain, float(at[0]), float(at[1])))
+		BrickShell.bench(kit, f, length, fposmod(0.3 + 0.37 * k, 1.0))
+		add.call(BrickShell.bench_shapes(f, length))
+		mark.call("bench", "bench_%d" % k, from)
+	# The memorial to those the beast killed (Wadoo spec §4).
+	if layout.has("memorial"):
+		var from := kit.vertex_count(InteriorKit.Batch.SOLID)
+		var m: Dictionary = layout["memorial"]
+		var at: Array = m["at"]
+		var radius := float(m.get("radius", 2.4))
+		var stones := int(m.get("stones", 6))
+		var f := Transform3D(Basis.IDENTITY, on_ground(place, terrain, float(at[0]), float(at[1])))
+		OasisLooks.memorial(kit, f, radius, stones, 0.61)
+		add.call(OasisLooks.memorial_shapes(f, radius, stones))
+		avoid.append(Vector3(f.origin.x, f.origin.z, radius + 0.8))
+		mark.call("memorial", "memorial", from)
+		# the lilies you lay before its stones (Wadoo spec §7)
+		var feet := PackedVector3Array()
+		for k in stones:
+			var p := MemorialLilies.foot_of(Vector2(float(at[0]), float(at[1])), radius, k, stones)
+			feet.append(on_ground(place, terrain, p.x, p.y))
+		node.add_child(MemorialLilies.make(f, radius, stones, feet))
 
 ## The ground under a wall's line `run` ([east, north] m), in the place's
 ## frame, about every WALL_STEP: where its foot goes.
@@ -611,24 +694,57 @@ func _build_items(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionary,
 		var item_id := str(entry["id"])
 		if is_taken(place.id, item_id):
 			continue
-		var def := catalog.get_def(StringName(entry["kind"]))
-		if def == null:
-			push_warning("PlaceField: no item called %s for %s" % [entry["kind"], item_id])
-			continue
 		var at: Array = entry["at"]
-		var item := Item.new()
-		item.setup(def, float(hash(item_id) % 100) / 100.0)
-		item.set_space(true)
-		item.can_sleep = false
-		item.freeze_mode = RigidBody3D.FREEZE_MODE_STATIC
-		item.freeze = true
-		var foot: Vector3 = ground.call(float(at[0]), float(at[1]))
-		item.transform = Transform3D(Basis(Vector3.UP, -deg_to_rad(float(entry.get("yaw", 0.0)))),
-			foot + Vector3(0.0, def.size.y * 0.5, 0.0))
-		node.add_child(item)
-		_lying[item] = [place.id, item_id]
-		_hooks[item] = take.bind(item)
-		item.consumed.connect(_hooks[item])
+		_lay(place.id, node, ground.call(float(at[0]), float(at[1])), item_id, StringName(entry["kind"]),
+			float(entry.get("yaw", 0.0)))
+
+## Lays a new item of `kind`, called `item_id`, on the ground of the loaded place
+## `place_id` at `at` ([east, north] m), turned `yaw` degrees, as the layout's
+## items lie, and marked taken once the hands take it: what the Wadees make
+## (Daro's sun cell, a sun-lily; Wadoo spec §7). It goes with the place when the
+## place is freed, and is never made again by the place itself. Null when the
+## place is not loaded or there is no such kind.
+func lay(place_id: StringName, item_id: String, kind: StringName, at: Vector2, yaw := 0.0) -> Item:
+	var node := loaded(place_id)
+	var place := design(place_id)
+	if node == null or place == null or catalog == null:
+		return null
+	return _lay(place_id, node, on_ground(place, terrain_of_place(place_id), at.x, at.y), item_id, kind, yaw)
+
+## Lays an item of `kind` called `item_id` with its foot at `foot`, in the place's
+## own frame (a room's floor, say, which on_ground knows nothing of), turned
+## `yaw` degrees: a gift handed to you (Wadoo spec §8). Null as for lay.
+func lay_at(place_id: StringName, item_id: String, kind: StringName, foot: Vector3, yaw := 0.0) -> Item:
+	var node := loaded(place_id)
+	if node == null or catalog == null:
+		return null
+	return _lay(place_id, node, foot, item_id, kind, yaw)
+
+## How many items of `kind` lie in the place `place_id` now, untaken.
+func lying(place_id: StringName, kind: StringName) -> int:
+	var n := 0
+	for item: Variant in _lying:
+		if is_instance_valid(item) and _lying[item][0] == place_id and (item as Item).definition.id == kind:
+			n += 1
+	return n
+
+func _lay(place_id: StringName, node: Node3D, foot: Vector3, item_id: String, kind: StringName, yaw: float) -> Item:
+	var def := catalog.get_def(kind)
+	if def == null:
+		push_warning("PlaceField: no item called %s for %s" % [kind, item_id])
+		return null
+	var item := Item.new()
+	item.setup(def, float(hash(item_id) % 100) / 100.0)
+	item.set_space(true)
+	item.can_sleep = false
+	item.freeze_mode = RigidBody3D.FREEZE_MODE_STATIC
+	item.freeze = true
+	item.transform = Transform3D(Basis(Vector3.UP, -deg_to_rad(yaw)), foot + Vector3(0.0, def.size.y * 0.5, 0.0))
+	node.add_child(item)
+	_lying[item] = [place_id, item_id]
+	_hooks[item] = take.bind(item)
+	item.consumed.connect(_hooks[item])
+	return item
 
 ## `item` has been taken into the hands (grasp.taken) or used up (Item.consumed):
 ## if it is one lying in a place, it is marked taken and is ours no more, so

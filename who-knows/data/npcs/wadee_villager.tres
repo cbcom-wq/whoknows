@@ -1,0 +1,53 @@
+[gd_resource type="Resource" script_class="NpcSpecies" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/npc/npc_species.gd" id="1_species"]
+
+[resource]
+script = ExtResource("1_species")
+id = &"wadee_villager"
+display_name = "Wadee"
+size = 0.45
+height = 1.75
+width = 0.45
+mass = 60.0
+top_speed = 1.6
+max_health = 60.0
+knocked_out_for = 0.0
+wake_health = 0.25
+locomotors = Array[StringName]([&"ground_walker"])
+look = &"wadee"
+move_sound = &""
+sight_range = 25.0
+sight_cone_deg = 160.0
+dark_sight = 1.0
+near_sense = 4.0
+feels_vibration = 0.0
+hears = 1.0
+feels_shake = 0.0
+light_response = 0.0
+needs = {
+&"company": 0.004,
+&"fear": 0.0,
+&"grief": 0.004,
+&"home": 0.0015,
+&"rest": 0.003,
+&"thirst": 0.002,
+&"work": 0.006
+}
+need_start = {
+&"company": Vector2(0, 0.7),
+&"fear": Vector2(0, 0),
+&"grief": Vector2(0.2, 0.8),
+&"home": Vector2(0, 0.5),
+&"rest": Vector2(0, 0.6),
+&"thirst": Vector2(0, 0.6),
+&"work": Vector2(0.2, 0.9)
+}
+behaviours = Array[StringName]([&"flee_home", &"cower", &"work", &"rest_shade", &"talk_pair", &"drink", &"mourn", &"go_home", &"converse", &"greet", &"give_way"])
+behaviour_weights = {}
+fear_of_player = 0.0
+curiosity_about_player = 0.3
+population = &"wadoo"
+live_radius = 400.0
+fade = Vector2(330, 380)
+interactions = Array[StringName]([&"talk"])
