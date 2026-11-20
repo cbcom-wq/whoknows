@@ -112,8 +112,9 @@ func review() -> void:
 				wanted[record.id] = [record, entry[1]]
 	# A record no longer offered, or whose place has gone, is demoted at once:
 	# its place is gone or far beyond sight. One dead is not wanted, and goes too,
-	# but a person who lies where they fell stays while their place offers them
-	# (Wadoo spec §9).
+	# but a corpse lies where it fell while its place offers it: a person until
+	# the town sleeps (Wadoo spec §9), any other dead one until its CORPSE_FOR
+	# has run out (Npc.lies_where_fell).
 	for id: StringName in live.keys():
 		var npc: Npc = live[id]
 		if not is_instance_valid(npc):

@@ -395,10 +395,11 @@ func sip(dt: float) -> float:
 func is_dead() -> bool:
 	return down and species != null and species.knocked_out_for <= 0.0
 
-## Dead, and lying where they fell until their place sleeps rather than going
-## after CORPSE_FOR: a person, whose look poses itself (Wadoo spec §9).
+## Dead, and still lying where they fell (Wadoo spec §9): a person until their
+## place sleeps (their down_left is INF), any other dead one until its CORPSE_FOR
+## has run out. Past that the director demotes it, and the ledger keeps it dead.
 func lies_where_fell() -> bool:
-	return is_dead() and _poses_itself()
+	return is_dead() and down_left > 0.0
 
 ## Gets up now, at `fraction` of its health (the torch, health and damage
 ## spec §8.2). Only one knocked out can; the dead stay dead.
