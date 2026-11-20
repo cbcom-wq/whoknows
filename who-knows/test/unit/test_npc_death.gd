@@ -32,13 +32,14 @@ var _source: FakeSource
 var _site: FakeSite
 var _ledger: NpcLedger
 
-func _species(id: StringName, knocked_out_for := 0.0) -> NpcSpecies:
+func _species(id: StringName, knocked_out_for := 0.0, live_radius := 0.0) -> NpcSpecies:
 	var s := NpcSpecies.new()
 	s.id = id
 	s.size = 0.8
 	s.height = 0.4
 	s.max_health = 40.0
 	s.knocked_out_for = knocked_out_for
+	s.live_radius = live_radius
 	s.needs = {&"fear": 0.0}
 	return s
 
@@ -187,3 +188,63 @@ func test_a_person_tells_their_place_staggers_and_lies_where_they_fell():
 	_source.entries.append([npc.record, _site])
 	_director.review()
 	assert_false(_director.live.has(id), "and never wake again")
+
+## A dead creature lies as a corpse for CORPSE_FOR (health and damage spec §6): the
+## director's reviews keep it while its place offers it, then it goes, and the
+## ledger keeps it dead, so no review wakes it again.
+func test_a_dead_creature_lies_as_a_corpse_through_reviews_then_goes():
+	var npc := _live(&"creature")
+	var id := npc.record.id
+	npc.receive_hit(_hit(100.0))
+	_lie_through_reviews(npc, Npc.CORPSE_FOR - 1.0)
+	assert_true(_director.live.has(id), "it still lies through the reviews")
+	npc._physics_process(0.75)
+	_director.review()
+	assert_true(_director.live.has(id), "a quarter second to go, it is still there")
+	npc._physics_process(0.5)
+	_director.review()
+	assert_false(_director.live.has(id), "then it goes")
+	_director.review()
+	assert_false(_director.live.has(id), "and never wakes again")
+
+## Outside, by distance: a dead creature near its anchor lies its corpse time too,
+## through the distance reviews as well (the far ones they demote, this is near).
+func test_outside_a_dead_creature_lies_as_a_corpse_then_goes():
+	_director.rule = NpcDirector.Rule.BY_DISTANCE
+	_director.catalog.register(_species(&"outside", 0.0, 350.0))
+	var anchor := Node3D.new()
+	anchor.add_to_group(AsteroidStream.SPACE_ANCHOR)
+	add_child_autofree(anchor)
+	var npc := _live(&"outside")
+	var id := npc.record.id
+	npc.receive_hit(_hit(100.0))
+	_lie_through_reviews(npc, Npc.CORPSE_FOR - 1.0)
+	assert_true(_director.live.has(id), "it lies there, outside too")
+	npc._physics_process(1.5)
+	_director.review()
+	assert_false(_director.live.has(id), "then it goes")
+	_director.review()
+	assert_false(_director.live.has(id), "and the distance reviews do not wake it")
+
+## A corpse whose place stops offering it goes at that review, and the next review
+## does not wake it though it is offered again: the ledger keeps it dead.
+func test_a_dead_creature_its_place_stops_offering_goes_at_once_and_stays_dead():
+	var npc := _live(&"creature")
+	var id := npc.record.id
+	npc.receive_hit(_hit(100.0))
+	_lie_through_reviews(npc, 2.0)
+	assert_true(_director.live.has(id))
+	_source.entries.clear()
+	_director.review()
+	assert_false(_director.live.has(id), "gone with its place's offer")
+	_source.entries.append([npc.record, _site])
+	_director.review()
+	assert_false(_director.live.has(id), "not woken again: the ledger keeps it dead")
+
+## Lets `npc` lie for `seconds` more, its director reviewing it every REVIEW_EVERY.
+func _lie_through_reviews(npc: Npc, seconds: float) -> void:
+	var lay := 0.0
+	while lay < seconds:
+		npc._physics_process(NpcDirector.REVIEW_EVERY)
+		_director.review()
+		lay += NpcDirector.REVIEW_EVERY

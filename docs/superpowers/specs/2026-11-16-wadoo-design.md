@@ -491,8 +491,8 @@ Each stage is committed on branch `wadoo`, rendered at eye height and shown to t
   A person's look poses itself: the body never flips or shrinks it as it does a creature's. The
   director demotes the ledger's dead at its next review (every 0.25 s), so a fallen Sunguard first
   vanished at once; a person now stays while the town still offers them (`Npc.lies_where_fell`).
-  A creature still vanishes at once, though its `CORPSE_FOR` says it lies 20 s: that is older than
-  this stage and left as it was.
+  A creature lies its `CORPSE_FOR` 20 s too, with the same keep (`Npc.lies_where_fell` holds any
+  dead one whose time is not yet run out while its source offers it; the `corpses` branch).
 - **You down.** Blacked out you are not someone to fight, and you wake aboard your ship (the game's
   rule outside, health and damage §7.2; §9 is corrected). The rod lies where you fell. Back on your
   feet within the walls, after 8 s of grace, the fight goes on. Leaving the walls ends it: the

@@ -71,7 +71,7 @@ local z otherwise. Origin at the feet; up is local +y; forward is −z.
 | API | Does |
 |---|---|
 | `Npc.health` (`Health`), `take_damage(hp)`, `receive_hit(hit)` | a hit touches, shoves, takes `hit.damage`, raises fear by the share lost, squashes the look for `FLINCH_FOR` 0.15 s |
-| `Npc.down`, `is_dead()`, `revive(fraction)` | at 0 hp: dead (on its back, `CORPSE_FOR` 20 s, shrinks over the last 1 s, demoted) or knocked out (slumped `SLUMP` 70°, up after `knocked_out_for` at `wake_health`, or at once by `revive`) |
+| `Npc.down`, `is_dead()`, `revive(fraction)` | at 0 hp: dead (on its back, `CORPSE_FOR` 20 s, shrinks over the last 1 s, then demoted; `review()` keeps it while its source offers it, `lies_where_fell`) or knocked out (slumped `SLUMP` 70°, up after `knocked_out_for` at `wake_health`, or at once by `revive`) |
 | `Npc.bite()` (species `bite_damage`, `bite_push`, `bite_reach`) | the body's bite, asked for by an intent with action `&"bite"`; the hit is kind `&"bite"` |
 | `Npc.sip(dt)`, `Npc.sipped` | the body's sip, asked for by an intent with action `&"sip"`: a hit of kind `&"sip"` with `drain` = `drain_rate × dt` to the avatar if it is within `drain_reach` of the creature's middle, else `site.sip_source(npc, dt)` (a base's store). `sipped` is the running total since it woke, for the husks |
 | the `&"sip"` hit | `Hit.drain` (QE asked) and `Hit.drained` (QE given, written by the receiver); `Avatar.receive_hit` drains `suit_cell.drain(...)` on a spacewalk within `Avatar.SIP_CAP` 1.2 QE/s for all Limpets together (a budget, `refill_sip`); `SuitCell.drain(qe)` takes up to `charge` and returns it. A dry suit goes home by `Suit.home_step`. A Limpet never drains the ship's store |
@@ -304,6 +304,10 @@ Delver kept 1.1-1.2 m/s on every leg, arrived on all five and never stalled for 
 - `promote` pools by species; `demote` returns to the pool; `amend(record)` is the ledger hook;
   `herd_of(npc)` lists live herd mates; `anchors()`, `live_npcs()`, `could_be_seen(npc)`.
 - A record demoted in a review is not woken in the same review.
+- A corpse (`Npc.lies_where_fell()`: dead, `down_left` not yet run out) is kept by `review()` while
+  its source offers its record, both rules and both directors: a person's `down_left` is INF, a
+  creature's is `CORPSE_FOR` (20 s). Past that `_tick_down` demotes it, and `amend` (the ledger's
+  dead) never offers it again.
 
 ## Movement numbers
 

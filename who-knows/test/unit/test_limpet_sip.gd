@@ -322,6 +322,8 @@ func test_the_husks_are_at_rest_and_worth_20_qe():
 		assert_lt(item.global_position.distance_to(npc.global_position), 1.0, "where it died")
 	assert_eq(found, 1)
 
+## A dead Limpet lies as a corpse for CORPSE_FOR (the director keeps it while its
+## place offers it), then goes; no review wakes it, the ledger has it dead.
 func test_a_dead_limpet_stays_dead():
 	await _bed(1, 50.0)
 	var npc := _limpets()[0]
@@ -331,8 +333,14 @@ func test_a_dead_limpet_stays_dead():
 	assert_null(_root.exterior_npcs.amend(record), "and a review will not offer it again")
 	_root.exterior_npcs.review()
 	await wait_physics_frames(5)
+	assert_true(_root.exterior_npcs.live.has(record.id), "it lies as a corpse through a review")
+	assert_true(npc.is_dead(), "dead, not woken")
+	npc._physics_process(Npc.CORPSE_FOR)
+	_root.exterior_npcs.review()
+	await wait_physics_frames(5)
+	assert_false(_root.exterior_npcs.live.has(record.id), "gone once CORPSE_FOR has passed")
 	for other: Npc in _limpets():
-		assert_ne(other.record.id, record.id, "it is not woken")
+		assert_ne(other.record.id, record.id, "and it is not woken")
 
 ## StrayField.count_of counts by kind and distance, an unloaded stray as well
 ## as a live one (the Delver's grit cap reads it, spec §5.4).
