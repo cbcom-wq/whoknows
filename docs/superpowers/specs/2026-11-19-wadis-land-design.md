@@ -104,6 +104,8 @@ those.
 | Deep water on foot | **You tread water at chest depth, slowly; no diving** | My call |
 | The sea's water | **Opaque, faceted, flat colour by depth** | My call |
 | Where the stricter limit applies | **Every world (it is about streaming); the air hold only in air** | My call |
+| Where the streaming changes apply | **Every world; none of them reshapes a world** (§8) | My call |
+| WADIS's layout | **The sea in view on arrival, a canyon ending on a beach, a range on Wadoo's skyline** (§5.3) | My call |
 
 ## 5. The world plan
 
@@ -164,7 +166,17 @@ dials. *My call, tuned at Checkpoint 1:*
 - `oases` 6.
 - Dunes and plains: the remaining 0.55.
 
-`SystemDesign`'s validator learns the `plan` key (§10).
+**Placement pins.** A design may also say *where* a feature goes relative to one of its places,
+never its shape: the generator still grows the sea, bends the range and routes the canyon. WADIS
+pins (*my call*), so §2's moment happens:
+- **the sea's nearest shore 20–40 km from Wadoo**, outside the kept disc. A warp arrives about
+  68 km over the oasis, where the horizon is some 110 km off, so the sea is in view on arrival;
+- **a range within about 15 km of Wadoo**, on its skyline (§5.6).
+
+Every world with a sea also gets, by the generator's own rule, **at least one canyon whose mouth
+opens on a beach**.
+
+`SystemDesign`'s validator learns the `plan` key, its dials and its pins (§10).
 
 ### 5.4 How the plan is made
 
@@ -212,7 +224,7 @@ A design can keep a disc of a world as it is. WADIS's file keeps one round the o
   people stand on exactly what they stand on now.
 - **Over the blend** the old ground eases into the plan's.
 - **Nothing the plan places** (sea, range, plateau, canyon, site) comes within radius + blend.
-  A range on Wadoo's skyline is welcome (*my call*: place one within about 15 km if the plan can).
+  A range stands on Wadoo's skyline, within about 15 km (pinned, §5.3).
 
 The `wadoo` branch is building its stage 5 on today's ground. The kept disc means the two never
 meet.
@@ -291,6 +303,13 @@ own bounds, or a 2 km peak would keep far chunks from ever being culled.
 
 ## 8. Streaming and speed
 
+**Every world** gets this section's changes (*my call*): they change how the ground is streamed and
+how fast you may fly, never what a world's ground is. "Ground to the bit" (§3, §10) means
+`height_at` and `colour_at` at full detail: what the finest chunks draw and what collision,
+altitude and landing use. Coarse chunks may draw less detail than today (§8.2), on rock worlds too.
+Tighter bounds (§8.3) need a plan, so they come to deserts only; rock worlds keep today's relief
+pad, which their relief (at most 1,200 m) allows.
+
 ### 8.1 Measure first
 
 A new probe, `test/probes/stream_probe.gd`, flies fixed routes on WADIS (over dunes, along a canyon,
@@ -303,6 +322,11 @@ It records, at 1280 × 720 on the GTX 960:
 
 It runs on today's main before any change, so the gains are measured, not guessed.
 
+**The pass line** (*my call*, starting point, shown to the owner at Checkpoint 2): along the way
+ahead, within 500 m, ground drawn more than one level coarser than the quadtree wants in no more
+than 2% of the probe's samples, never for longer than 0.5 s at a time, and no pop within 300 m
+(§8.2).
+
 ### 8.2 Plain far, detailed near
 
 - **Detail by level.** A chunk asks only for the detail its quads can show: the plan's shape and
@@ -310,8 +334,11 @@ It runs on today's main before any change, so the gains are measured, not guesse
   Coarse chunks are then what their children average to, so a swap barely moves the ground, and
   they are cheaper to build. Collision, the analytic floor and altitude still use full detail.
 - **Ease in.** When finer chunks replace a coarser one, their points ease from the coarser shape
-  to their own (over a fraction of a second, or across a distance band), so nothing pops. The
-  builder picks the method (on the CPU, or a vertex shader with the parent's heights).
+  to their own (over a fraction of a second, or across a distance band), so nothing pops.
+  **Open, the owner's:** style guide §3.9 allows no exterior shader without the owner. A ground
+  shader that only eases the points, and otherwise draws exactly what the ground's
+  `StandardMaterial3D` draws today, is the cheap way. Without it, easing is done on the CPU for
+  the nearest chunks only, and detail by level keeps the farther swaps small.
 
 ### 8.3 Tighter bounds
 
@@ -330,9 +357,12 @@ so the horizon culls as it should and splits stay honest.
 
 - **On every world** (*my call*: streaming is the same everywhere), the limit falls near the
   surface. *Starting point:* 70 m/s up to 50 m over the surface (ground or sea), rising to today's
-  curve by 1,000 m; today's curve unchanged above that. The final numbers are the lowest at which
-  the probe shows the ground ahead drawn in time on the GTX 960, shown to the owner at
-  Checkpoint 2.
+  curve by 1,000 m; today's curve unchanged above that. The final numbers are the fastest limit
+  that still meets §8.1's pass line on the GTX 960 after this section's other work, shown to the
+  owner at Checkpoint 2.
+- **Ships flown by the AI** fly under the same limit (it is worked out from the focus), so low
+  fights near airless worlds slow down too. Hostiles stay above the air on worlds with air (the
+  desert world spec §4), and rocks have no well, so the limit never touches them.
 - **In air, the assist off too:** past the limit the air's drag climbs steeply, so a hull at
   full thrust settles about at the limit. The game-world reason is the thick air. On airless
   worlds the assist off stays unlimited, as today.
@@ -360,8 +390,8 @@ so the horizon culls as it should and splits stay honest.
 
 ## 10. Keeping everything else the same
 
-- **Non-desert worlds** keep their ground to the bit. A test pins sample heights and colours for a
-  handful of seeds of each archetype.
+- **Non-desert worlds** keep their ground to the bit (§8: `height_at` and `colour_at` at full
+  detail). A test pins sample heights and colours for a handful of seeds of each archetype.
 - **Desert worlds change:** `WorldRecipe.GENERATOR_VERSION` goes to 4, with a save note. A ship
   saved landed on a desert is restored onto the new surface by the existing safe restore; a probe
   proves it, including one restored over what is now sea.
@@ -459,6 +489,11 @@ Shaping the big features by hand on WADIS was ruled out: it wouldn't carry to ot
    six oases.
 3. Treading water in deep water rather than being blocked at the shore.
 4. Opaque water coloured by depth.
-5. The stricter limit on every world, starting at 70 m/s under 50 m.
+5. The stricter limit on every world, starting at 70 m/s under 50 m. It slows the AI's low
+   fights near airless worlds too.
 6. No stepping out over deep water; no items dropped while treading water.
 7. Salt pans near the sea, if renders want them.
+8. The streaming changes on every world, with coarse chunks drawing less detail than today.
+9. WADIS's placement pins: the sea's near shore 20–40 km from Wadoo, a range on its skyline, and
+   a canyon ending on a beach on every world with a sea.
+10. §8.1's pass line for the ground keeping up.
