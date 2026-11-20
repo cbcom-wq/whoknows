@@ -63,6 +63,10 @@ const SHORE_WAVE := 15000.0
 const SHORE_ROUGH := 0.5
 ## Seeded centres tried for each sea before its pin is given up on.
 const SEA_TRIES := 16
+## A grown sea is tidied (_tidy) at most this many times over, and must still
+## cover SEA_FULL of its share.
+const TIDY_PASSES := 8
+const SEA_FULL := 0.97
 ## From the water's edge the seabed falls SHELF_DEPTH metres over SHELF_WIDTH
 ## (the shelf), then to the deep floor, SEA_DEEP under sea level, over
 ## SLOPE_WIDTH more.
@@ -200,6 +204,18 @@ func _seas(recipe: WorldRecipe, dirs: PackedVector3Array) -> PackedFloat32Array:
 	var taken := PackedByteArray()
 	taken.resize(CubeSphere.FACES * PlanMap.CELLS * PlanMap.CELLS)
 	taken.fill(0)
+	# By k: the k standing for a corner and all its copies, and by that k how
+	# many cells meet there (4, or 3 at a cube's corner).
+	var copies := _corner_copies(dirs)
+	var canon := PackedInt32Array(range(dirs.size()))
+	var full := PackedByteArray()
+	full.resize(dirs.size())
+	full.fill(4)
+	for k: int in copies:
+		var group: PackedInt32Array = copies[k]
+		canon[k] = group[0]
+		if group.size() == 3:
+			full[group[0]] = 3
 	for s in dials.seas:
 		# The first sea is aimed at the pin; any other only keeps off it.
 		var aimed := pin and s == 0
@@ -217,15 +233,19 @@ func _seas(recipe: WorldRecipe, dirs: PackedVector3Array) -> PackedFloat32Array:
 			if taken[start] != 0 or priority.call(start) == INF:
 				continue
 			var grown := _grow(start, area, priority, step, taken, dirs)
-			var miss := 0.0 if grown.area >= area * 0.99 else 1e9
+			var cells := _tidy(grown.cells, priority, taken, canon, full)
+			var got := 0.0
+			for c in cells:
+				got += _cell_area(c, dirs)
+			var miss := 0.0 if got >= area * SEA_FULL else 1e9
 			if pin:
-				var near := _shore_from(pin.dir, pin_cell, grown.cells, dirs) * radius
+				var near := _shore_from(pin.dir, pin_cell, cells, dirs) * radius
 				miss += maxf(pin.within.x - near, 0.0)
 				if aimed:
 					miss += maxf(near - pin.within.y, 0.0)
 					aim += (pin.within.x + pin.within.y) * 0.5 - near
 			if miss < best_miss:
-				best = {"cells": grown.cells, "centre": centre}
+				best = {"cells": cells, "centre": centre}
 				best_miss = miss
 			if miss == 0.0:
 				break
@@ -239,7 +259,7 @@ func _seas(recipe: WorldRecipe, dirs: PackedVector3Array) -> PackedFloat32Array:
 	if shapes.seas.is_empty():
 		sea_level = -INF
 		return shore
-	return _shore_field(dirs, taken, radius)
+	return _shore_field(dirs, copies, canon, full, radius)
 
 ## The design's pin on the sea's shore (§5.3): {"place", "dir", "within":
 ## Vector2(least, most) metres from the place to the nearest shore}, or {} if
@@ -287,6 +307,122 @@ func _grow(start: int, area: float, priority: Callable, step: float, taken: Pack
 					queue.push(o, key)
 	return {"cells": cells, "area": got}
 
+## Tidies the grown body `cells` so a field held at the map's corners can show
+## it, and gives back its cells. A cell none of whose corners is all sea (a
+## one-cell arm or tip) would be water with no depth, so it goes; a free cell
+## with three or more sides in the body (a one-cell notch or spit) would read
+## as sea, so it joins if priority(cell) lets it. Over again, up to
+## TIDY_PASSES times, until nothing changes; then, if a cell that went could
+## have parted the body, only its largest connected part is kept. Dropping a
+## part makes no cell thin, since a corner is all sea only where its cells are
+## joined. `canon` and `full` are by corner k: the k that stands for its
+## copies, and how many cells meet there.
+func _tidy(cells: PackedInt32Array, priority: Callable, taken: PackedByteArray, canon: PackedInt32Array,
+		full: PackedByteArray) -> PackedInt32Array:
+	var member := PackedByteArray()
+	member.resize(taken.size())
+	member.fill(0)
+	# By canon k: how many of the body's cells meet at the corner.
+	var wet := PackedByteArray()
+	wet.resize(canon.size())
+	wet.fill(0)
+	for c in cells:
+		member[c] = 1
+		_touch(c, wet, canon, 1)
+	var near := PackedInt32Array()
+	near.resize(4)
+	var beside := PackedInt32Array()
+	beside.resize(4)
+	var split := false
+	for turn in TIDY_PASSES:
+		var changed := false
+		var kept := PackedInt32Array()
+		# The kept cells with some corner not all sea: the only ones with a
+		# free cell beside them.
+		var coast := PackedInt32Array()
+		for c in cells:
+			var all_sea := _sea_corners(c, wet, canon, full)
+			if all_sea == 0:
+				member[c] = 0
+				_touch(c, wet, canon, -1)
+				changed = true
+				_cell_neighbours(c, near)
+				split = split or member[near[0]] + member[near[1]] + member[near[2]] + member[near[3]] >= 2
+			else:
+				kept.append(c)
+				if all_sea < 4:
+					coast.append(c)
+		for c in coast:
+			_cell_neighbours(c, near)
+			for o in near:
+				if member[o] == 1 or taken[o] != 0:
+					continue
+				_cell_neighbours(o, beside)
+				if member[beside[0]] + member[beside[1]] + member[beside[2]] + member[beside[3]] >= 3 \
+						and priority.call(o) < INF:
+					member[o] = 1
+					_touch(o, wet, canon, 1)
+					kept.append(o)
+					changed = true
+		cells = kept
+		if not changed:
+			break
+	return _largest_body(cells, member) if split else cells
+
+## Adds `by` to `wet` at each corner of cell `c`, by canon k.
+static func _touch(c: int, wet: PackedByteArray, canon: PackedInt32Array, by: int) -> void:
+	var k := _first_corner(c)
+	var up := PlanMap.SIDE
+	wet[canon[k]] += by
+	wet[canon[k + 1]] += by
+	wet[canon[k + up]] += by
+	wet[canon[k + up + 1]] += by
+
+## How many of cell `c`'s corners have only body cells round them (`wet` the
+## count of body cells there, `full` of all): 0 for a cell one cell thin, 4
+## for one inside the body.
+static func _sea_corners(c: int, wet: PackedByteArray, canon: PackedInt32Array, full: PackedByteArray) -> int:
+	var k := _first_corner(c)
+	var up := PlanMap.SIDE
+	var a := canon[k]
+	var b := canon[k + 1]
+	var e := canon[k + up]
+	var f := canon[k + up + 1]
+	return int(wet[a] == full[a]) + int(wet[b] == full[b]) + int(wet[e] == full[e]) + int(wet[f] == full[f])
+
+## The largest connected part of `cells` (those marked 1 in `member`); the
+## others are unmarked.
+func _largest_body(cells: PackedInt32Array, member: PackedByteArray) -> PackedInt32Array:
+	var part := PackedInt32Array()
+	part.resize(member.size())
+	part.fill(-1)
+	var near := PackedInt32Array()
+	near.resize(4)
+	var parts: Array[PackedInt32Array] = []
+	for c in cells:
+		if member[c] == 0 or part[c] >= 0:
+			continue
+		var body := PackedInt32Array([c])
+		part[c] = parts.size()
+		var at := 0
+		while at < body.size():
+			_cell_neighbours(body[at], near)
+			at += 1
+			for o in near:
+				if member[o] == 1 and part[o] < 0:
+					part[o] = parts.size()
+					body.append(o)
+		parts.append(body)
+	var largest := 0
+	for p in parts.size():
+		if parts[p].size() > parts[largest].size():
+			largest = p
+	for p in parts.size():
+		if p != largest:
+			for c in parts[p]:
+				member[c] = 0
+	return parts[largest] if parts else PackedInt32Array()
+
 ## Great-circle radians from `place` (in cell `place_cell`) to the nearest
 ## corner of the outline of the body `cells`: negative if it lies in the body.
 func _shore_from(place: Vector3, place_cell: int, cells: PackedInt32Array, dirs: PackedVector3Array) -> float:
@@ -319,38 +455,30 @@ func _take(cells: PackedInt32Array, taken: PackedByteArray) -> void:
 		ring = next
 
 ## Each corner's signed great-circle metres to the nearest shore, by k. The
-## seas are shapes.seas, their cells marked 1 in `taken`. Their outline's
-## corners (shared by a sea cell and a land cell) are 0, and a front spreads
-## from them over the corners, nearest first, each corner carrying the outline
-## corner it was reached from, so its distance is to a true point of the
-## outline. Negative where all of a corner's cells are sea.
-func _shore_field(dirs: PackedVector3Array, taken: PackedByteArray, radius: float) -> PackedFloat32Array:
+## seas are shapes.seas. Their outline's corners (where sea cells and land
+## cells meet) are 0, and a front spreads from them over the corners, nearest
+## first, each corner carrying the outline corner it was reached from, so its
+## distance is to a true point of the outline. Negative where only sea cells
+## meet. `copies` are each face-edge corner's copies; `canon` and `full` are
+## by k the k standing for them all and how many cells meet there.
+func _shore_field(dirs: PackedVector3Array, copies: Dictionary, canon: PackedInt32Array,
+		full: PackedByteArray, radius: float) -> PackedFloat32Array:
 	var count := dirs.size()
 	var up := PlanMap.SIDE
-	var cells := PackedInt32Array()
-	for sea: Dictionary in shapes.seas:
-		cells.append_array(sea.cells)
-	# By k: 1 where a sea cell meets the corner, 2 on the outline. A corner on
-	# a face's edge then takes the most of its copies'.
+	# By canon k: how many sea cells meet at the corner.
 	var wet := PackedByteArray()
 	wet.resize(count)
 	wet.fill(0)
-	for c in cells:
-		var k := _first_corner(c)
-		wet[k] = 1
-		wet[k + 1] = 1
-		wet[k + up] = 1
-		wet[k + up + 1] = 1
-	var outline := _outline(cells, taken)
-	for k in outline:
-		wet[k] = 2
-	var copies := _corner_copies(dirs)
-	for k: int in copies:
-		for c: int in copies[k]:
-			wet[k] = maxi(wet[k], wet[c])
+	for sea: Dictionary in shapes.seas:
+		for c: int in sea.cells:
+			_touch(c, wet, canon, 1)
+	var outline := PackedInt32Array()
+	for k in count:
+		var at := canon[k]
+		if wet[at] > 0 and wet[at] < full[at]:
+			outline.append(k)
 	# The chord to the outline corner each corner was reached from: as the
-	# great circle, but cheaper, and in the same order. A corner on the outline
-	# reaches its copies at 0 when it is done.
+	# great circle, but cheaper, and in the same order.
 	var chord := PackedFloat32Array()
 	chord.resize(count)
 	chord.fill(INF)
@@ -369,12 +497,11 @@ func _shore_field(dirs: PackedVector3Array, taken: PackedByteArray, radius: floa
 	var item := PackedInt32Array()
 	var after := PackedInt32Array()
 	for k in outline:
-		if chord[k] > 0.0:
-			chord[k] = 0.0
-			from[k] = dirs[k]
-			item.append(k)
-			after.append(head[0])
-			head[0] = item.size() - 1
+		chord[k] = 0.0
+		from[k] = dirs[k]
+		item.append(k)
+		after.append(head[0])
+		head[0] = item.size() - 1
 	var near := PackedInt32Array()
 	near.resize(11)
 	var low := 0
@@ -440,8 +567,9 @@ func _shore_field(dirs: PackedVector3Array, taken: PackedByteArray, radius: floa
 	var shore := PackedFloat32Array()
 	shore.resize(count)
 	for k in count:
+		var at := canon[k]
 		var metres := 2.0 * asin(minf(chord[k] * 0.5, 1.0)) * radius
-		shore[k] = 0.0 if wet[k] == 2 else (-metres if wet[k] == 1 else metres)
+		shore[k] = metres if wet[at] == 0 else (-metres if wet[at] == full[at] else 0.0)
 	return shore
 
 ## The corners (by k) at the ends of every edge between a cell of `cells` and

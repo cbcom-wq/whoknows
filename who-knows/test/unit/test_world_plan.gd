@@ -75,6 +75,39 @@ func test_the_shore_is_the_great_circle_to_the_seas_outline():
 	assert_lt(worst, edge, "within a cell of the nearest outline corner")
 	assert_eq(wrong_side, 0, "negative in the sea's cells, positive out of them")
 
+func test_no_sea_or_land_is_one_cell_thin():
+	# A corner-held field can't show a one-cell feature: a sea cell whose
+	# corners are all on the outline is water with no depth, and a land cell
+	# with three sides at sea is a notch or spit that reads as sea.
+	var plans: Array[WorldPlan] = [_wadis().plan()]
+	for s in 200:
+		var r := WorldRecipe.from_seed(s)
+		if r.is_desert() and PlanDials.roll(r.seed, r.radius_m).sea > 0.0:
+			plans.append(r.plan())
+			if plans.size() == 4:
+				break
+	assert_eq(plans.size(), 4)
+	for p in plans:
+		var sea := _sea_cells(p)
+		var outline := {}
+		for d in _outline(p, sea):
+			outline[d] = true
+		var thin_sea := 0
+		var sea_sided := {}
+		for c: Vector4i in sea:
+			var on := 0
+			for corner in 4:
+				if outline.has(p.map.corner_dir(c.x, c.z + (corner & 1), c.w + (corner >> 1))):
+					on += 1
+			if on == 4:
+				thin_sea += 1
+			for o in p.map.neighbours(c):
+				if not sea.has(o) and p.map.neighbours(o).filter(func(n): return sea.has(n)).size() >= 3:
+					sea_sided[o] = true
+		assert_gt(sea.size(), 0)
+		assert_eq(thin_sea, 0, "no sea cell with all four corners on the outline")
+		assert_eq(sea_sided.size(), 0, "no land cell with three or more sea neighbours")
+
 func test_the_seabed_falls_from_the_shore_through_the_shelf():
 	var p := _wadis().plan()
 	var m := p.map
