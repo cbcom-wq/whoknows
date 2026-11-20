@@ -99,6 +99,7 @@ those.
 | World controls | **A few dials per world, from the seed, pinnable in its design file** | Shown |
 | One design in phases | **Land, then streaming and speed, then the sea, then the oases** (§12) | Shown |
 | Speed limit with assist off | **Thick air holds you near the limit, even with the assist off** | Shown |
+| Easing detail in | **One ground shader, only to ease detail in; it otherwise draws what today's ground does** (§8.2) | Owner |
 | Wadoo | **Its ground is today's to the bit, inside a kept disc** | My call |
 | WADIS's dials | **§5.3's numbers** | My call |
 | Deep water on foot | **You tread water at chest depth, slowly; no diving** | My call |
@@ -335,10 +336,14 @@ than 2% of the probe's samples, never for longer than 0.5 s at a time, and no po
   they are cheaper to build. Collision, the analytic floor and altitude still use full detail.
 - **Ease in.** When finer chunks replace a coarser one, their points ease from the coarser shape
   to their own (over a fraction of a second, or across a distance band), so nothing pops.
-  **Open, the owner's:** style guide §3.9 allows no exterior shader without the owner. A ground
-  shader that only eases the points, and otherwise draws exactly what the ground's
-  `StandardMaterial3D` draws today, is the cheap way. Without it, easing is done on the CPU for
-  the nearest chunks only, and detail by level keeps the farther swaps small.
+  **The owner allowed one ground shader for this (2026-11-20),** an exception to style guide
+  §3.9's "no exterior shader". Its whole job is easing: each chunk carries its parent's shape
+  alongside its own, and the vertex stage blends from one to the other. Everything else (flat
+  colour per triangle, the light, the haze, the shadows) draws exactly what the ground's
+  `StandardMaterial3D` draws today; a render beside today's must not tell them apart once the
+  ease has finished. It is the only exterior shader; any other still needs the owner. Style
+  guide §3.9 and §2.5, and a check in `test_visual_style_rules.gd` that pins it as the only one,
+  change in the same branch.
 
 ### 8.3 Tighter bounds
 
@@ -422,7 +427,8 @@ so the horizon culls as it should and splits stay honest.
   - `surface_at` and altitude over the sea;
   - the new speed limit curve, and the air hold with the assist off;
   - wading and treading water; no step-out over deep water; no landing on water;
-  - the style rules (`test_visual_style_rules.gd`) with the new palette keys;
+  - the style rules (`test_visual_style_rules.gd`) with the new palette keys, and the ground's
+    easing shader as the only exterior shader;
   - `test_floating_origin_scene.gd` with sea chunks and a wild oasis loaded.
 - **Probes:** the new `stream_probe`; `world_probe`, `desert_render`, `descent_render`,
   `landing_play`, `oasis_render` and `fleet_play` still pass.
@@ -463,7 +469,8 @@ Shaping the big features by hand on WADIS was ruled out: it wouldn't carry to ot
 ## 14. Docs and skills to update in the same branch
 
 - **Style guide:** the new landforms and the sea in the world sections, the new palette keys
-  (guide, code and `test_visual_style_rules.gd` together), and §2.6's new numbers.
+  (guide, code and `test_visual_style_rules.gd` together), and §2.6's new numbers. §3.9 and §2.5
+  name the ground's easing shader as the one exterior shader (§8.2), with the test that pins it.
 - **The desert world spec:** a pointer here from §7.2 and §13 (the sea now exists, smaller than
   the ocean world).
 - **`building-a-ship`:** the new limit curve and air hold in `reference.md`; no landing on water
