@@ -569,6 +569,44 @@ The first NPCs on a world. Everything is in the oasis place's frame (x east, z -
   jambs, at least 0.375 m either side of the middle), and the room's `col_` boxes solid again with
   `ROOM_SOLID_CLEAR` 0.25 m; `rooms` lists them. No sand blows while you stand in a room
   (`flight_test._indoors()` from `WadooSite.room_at`, set as `BlowingSand.sheltered`).
+- **Their homes** (stage 5, §10; `test_wadoo_homes.gd`):
+  - **Rooms.** `home_4` is `"open": true, "room": "home"` and `workshop` is `"room": "glassworks"`.
+    `WadooRooms.SCENES` maps `&"hall"`, `&"home"` and `&"glassworks"` to `res://assets/wadoo/<room>.glb`.
+    `WadooRooms.DOORS` is `[&"hall"]`: only those rooms get a `WadooDoor` (`PlaceField`); the others
+    keep an open doorway.
+  - **Sizes.** The home's inside is x ±3.0, z ±2.0, ceiling 2.53. The Glassworks' is x ±4.95,
+    z ±2.75, ceiling 2.71.
+  - **Lights and glow.** A `kiln_<n>` empty makes an `OmniLight3D` of `WadeePalette.KILN` at
+    `KILN_ENERGY` 1.3 and `KILN_RANGE` 6.5. `GLOWS` sets which materials glow: `sunglass` 1.0 and
+    `ember` 1.6. `ROUGH` adds `glass` 0.12 and `ember` 0.6.
+  - **`WadooRooms.spots(room)`.** It returns `[{kind, n, action, at, look}]` in the room's frame,
+    sorted by kind and then n, read from the empties `spot_<kind>_<n>_<action>` and
+    `look_<kind>_<n>` (a missing look faces +z).
+    - The home has `home` 0 and 1 `sit` (the stools at the table's west and east ends; each sitter
+      stands 0.38 m from the stool toward the table, facing it, and sits back), `home` 2 `kneel`
+      (the loom) and `home` 3 `kneel` (a bedroll). Its table is at (-0.6, 0.15).
+    - The home also has `jar` 0 `interact` (the water jar) and `hide` 0 to 2 `cower` (the back
+      corners, facing the door).
+    - The Glassworks has `glass` 0 `interact` (the kiln), `glass` 1 `kneel` (the bench) and `glass` 2
+      `lift` (the sand bins).
+  - **The site.** `WadooSite` adds every room's spots, keyed `<kind>:<shell>:<n>`, beside the town's
+    (the Glassworks' outside spots stay `glass:0` to `glass:2`).
+    - `take_spot(kind, who, near, salt, prefix := "")` takes only keys that begin with `prefix`.
+    - `spot_in(kind, shell)` is the first spot of that kind in that shell's room.
+    - `company_in(kind, shell, action, who)`: whether anyone else holds one of that room's spots
+      whose action is `action`.
+  - **`go_home`.** It takes a `home:<shell>:` spot when the home has a room and walks in, never
+    hidden. Once at the spot (or rising) it scores 1.0 until its time is up, as indoors.
+    - At the spot it marks them `&"seated"` (a stool) or `&"home"`.
+    - With company at the table it gives `sit_talk` and `sit` by turns (`TURN` 6 s each); alone it
+      gives `sit`.
+    - A sitter `rise`s for `RISE` 1.4 s before letting the stool go.
+    - A home with no room is as before: in through the door, hidden.
+  - **`work` at the pump.** With a jar in their home's room, the water is carried (`carry`) to the
+    jar's spot and poured there (`interact`, `POUR` 3 s). Without one, it goes to the door as
+    before.
+  - **`flee_home`.** With a room it takes a `hide:<shell>:` spot, runs there and huddles
+    (`Intent.idle(&"cower")` facing the door), seen. Once it is safe again it lets the spot go.
 - **Things to do** (stage 3, §7; `test_wadoo_things.gd`, `test_placed_items.gd`, `test_wadoo_talk.gd`,
   `test_wadoo_site.gd`, `test_wadee_look.gd`):
   - **Items** `sun_cell` (2.5 kg, carried in both hands), `armlet`, `sun_lily` (`data/items/`), each

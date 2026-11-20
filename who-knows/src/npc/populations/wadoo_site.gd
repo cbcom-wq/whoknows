@@ -426,14 +426,17 @@ func holder_of(key: String) -> Variant:
 	return _claims.get(key)
 
 ## A free spot of `kind` for `who`, claimed: the nearest to `near`, give or take
-## a few metres by `salt`, so the same person does not always pick the same. {} if
-## every one is held.
-func take_spot(kind: StringName, who: StringName, near: Vector3, salt: int) -> Dictionary:
+## a few metres by `salt`, so the same person does not always pick the same. Only
+## those whose key begins with `prefix`, if given ("home:home_4:": in one room).
+## {} if every one is held.
+func take_spot(kind: StringName, who: StringName, near: Vector3, salt: int, prefix := "") -> Dictionary:
 	var best := {}
 	var best_score := INF
 	var list: Array = _spots.get(kind, [])
 	for k in list.size():
 		var s: Dictionary = list[k]
+		if prefix != "" and not String(s["key"]).begins_with(prefix):
+			continue
 		var holder: Variant = _claims.get(s["key"])
 		if holder != null and holder != who:
 			continue
@@ -565,6 +568,35 @@ func _make_spots() -> void:
 				_add(&"court", "court:queen", flat(f * (stand as Transform3D).origin), door, &"", false)
 			if sit != null:
 				_add(&"court", "court:throne", flat(f * (sit as Transform3D).origin), door, &"sit", false)
+	# the rooms' own spots (Wadoo spec §10; WadooRooms.spots), keyed <kind>:<shell>:<n>:
+	# a home's stools, loom and bedroll (home), its water jar (jar) and where its
+	# people huddle in danger (hide); the Glassworks' kiln, bench and sand bins
+	# (glass, beside the three before its door). Reached by the last stretch.
+	for r: Dictionary in rooms():
+		var rf: Transform3D = r["frame"]
+		for s: Dictionary in WadooRooms.spots(r["room"]):
+			_add(s["kind"], "%s:%s:%d" % [s["kind"], r["id"], s["n"]], flat(rf * (s["at"] as Vector3)),
+				flat(rf * (s["look"] as Vector3)), s["action"], false)
+
+## The first spot of `kind` in the room of the shell `shell`, or {} (a home's jar).
+func spot_in(kind: StringName, shell: String) -> Dictionary:
+	var prefix := "%s:%s:" % [kind, shell]
+	for s: Dictionary in _spots.get(kind, []):
+		if String(s["key"]).begins_with(prefix):
+			return s
+	return {}
+
+## Whether anyone but `who` holds a spot of `kind` in the room of `shell` whose
+## action is `action` (someone else sitting at a home's table).
+func company_in(kind: StringName, shell: String, action: StringName, who: StringName) -> bool:
+	var prefix := "%s:%s:" % [kind, shell]
+	for s: Dictionary in _spots.get(kind, []):
+		if s["action"] != action or not String(s["key"]).begins_with(prefix):
+			continue
+		var holder: Variant = _claims.get(s["key"])
+		if holder != null and holder != who:
+			return true
+	return false
 
 ## A spot of `kind`, its point snapped to open ground unless `snap` is false (a
 ## seat is reached by the last stretch).

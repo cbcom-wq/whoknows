@@ -530,3 +530,57 @@ Each stage is committed on branch `wadoo`, rendered at eye height and shown to t
     you move, so cover and moving are meant to matter; whether it is too hard is the owner's call.
 - **The poses** up close (`test/probes/wadee_poses.gd`): the staff across the back, upright in the
   hand aiming and shooting, the roll, the stagger, the fall and the dead, and a villager cowering.
+
+### Stage 5: their homes (2026-11-19, branch `wadoo`)
+
+- **Two more rooms**, made in Blender like the hall (`tools/blender/wadoo_rooms.py`, `home.glb` and
+  `glassworks.glb`), painted from `WadeePalette.ROOM` (new: `glass`, a pale sea-green, and `ember`)
+  and lit warm and dim:
+  - **the home** in `home_4`: three bedrolls along the walls and one rolled up, the family's
+    hanging, a low table on a round rug with a lamp, bowls and cups, a stool at each end, an
+    upright loom with a cloth half woven, the family's water jar, a shelf of pots, pots by the
+    door, a hanging lamp, and the doorway's curtain tied back;
+  - **the Glassworks** in `workshop`: a domed kiln with a glowing mouth, a flue, bellows and
+    tongs; a quench trough; a workbench with a sunstaff being made, rods and a blowpipe; a rack of
+    rods; finished staffs on the wall; sand bins; shelves of glass; three lamps and the roof beams.
+    The kiln's mouth glows (`ember`) and casts one hotter, redder light (`WadeePalette.KILN`).
+- **Open doorways.** Only the hall has a door that swings (`WadooRooms.DOORS`). The home and the
+  Glassworks stand open, so their people are seen inside. §10's "Their doors are what Wadees vanish
+  through" now holds only for the shut homes.
+- **Spots in the model.** Empties `spot_<kind>_<n>_<action>` and `look_<kind>_<n>` say where a
+  Wadee does something and what they face (`WadooRooms.spots`). The site adds them beside the
+  town's as `<kind>:<shell>:<n>`.
+  - The home: two stools at the table (`sit`), the loom and a bedroll (`kneel`), the jar
+    (`interact`), and three corners at the back to huddle in (`hide`, `cower`).
+  - The Glassworks: the kiln (`interact`), the bench (`kneel`) and the sand bins (`lift`). They
+    are three more `glass` spots beside the three before its door, so its workers are inside or
+    out.
+- **Going home to a room** (`go_home`): the household walks in to a spot and is never hidden.
+  - At the table they sit, and with someone else seated they talk and fall quiet by turns (6 s
+    each). They get up (1.4 s) before they go.
+  - Once there they stay until their time is up (40 to 90 s), as the hidden do indoors. At first,
+    easing the need let `mourn` or a talk pull them up after 10 to 20 s.
+- **Water to the jar** (`work`): from the pump, someone whose home has a jar carries the water
+  in and pours it for 3 s; anyone else carries it to their door as before.
+- **Afraid at home** (`flee_home`): someone whose home has a room runs to a corner at its back and
+  huddles there, facing the door, seen. If you come in after them they crouch facing you
+  (`cower`), as anyone cornered does.
+- **The first layout walled half the home off.** The table, three stools and a shelf, each
+  widened by the walkers' 0.25 m margin, cut the loom, a bedroll, a corner and two stools off from
+  the doorway. The household took their spots and stood idle in the street. The stool on the
+  table's near side went, leaving a passage along the front. A test now routes from the street to
+  every spot in both rooms. Leaving the stools out of the walkers' grid was tried first: a Wadee
+  then walked through one sitting there.
+- **Proved:** `wadoo_play.gd -- <out> homes` lands and steps out on foot. It sends home_4's
+  household home (their need raised) and takes the three glass spots before the Glassworks' door,
+  then looks in at eye height. It was run on the GTX 960 at 1280 x 720 and all checks passed; the
+  numbers are from the fifth run, the first four having found the walled-off half, the sitters
+  leaving early, the town turned with you inside the doorway, and people walking through sitters:
+  - after 25 s, Hami and Jori sit at the table talking by turns, never hidden;
+  - in the Glassworks, Ilsa works the sand bins (`lift`);
+  - 128 fps inside the home and 155 inside the Glassworks, with 25 awake (the floor is 80);
+  - turned from the street, Hami and Jori run in and huddle at the back; you come in and they
+    crouch facing you;
+  - the feet are 0.017 m from the floor at worst.
+  - Water being poured into the jar was not caught in the game (the household was sent home, not
+    to the pump). `test_wadoo_homes.gd` proves it, as it proves the rest.
