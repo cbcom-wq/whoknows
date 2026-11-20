@@ -37,14 +37,21 @@ func test_the_edge_points_cross_their_edges():
 	var points := _face_edge_points(400)
 	assert_gte(points.size(), 400)
 	var corners := {}
+	var distinct := {}
 	for edge_dir in points:
 		var e: Vector3 = edge_dir[0]; var step: Vector3 = edge_dir[1]
+		distinct[Vector3i((e * 1e5).round())] = true
 		assert_ne(CubeSphere.face_of((e + step * 1e-6).normalized()),
 			CubeSphere.face_of((e - step * 1e-6).normalized()))
 		var a := e.abs()
 		if is_equal_approx(a.x, a.y) and is_equal_approx(a.y, a.z):
 			corners[e.sign()] = true
 	assert_eq(corners.size(), 8, "all eight cube corners")
+	# Spread along each edge, not just its ends and middle: every point but the
+	# corners (shared by three edges) is its own.
+	var per := points.size() / 12
+	assert_gt(distinct.size(), 20)
+	assert_eq(distinct.size(), 12 * (per - 2) + 8, "points spread along every edge")
 
 func test_open_ground_is_a_gentle_roll_of_dunes_and_plains():
 	var p := _wadis().plan()
@@ -187,7 +194,7 @@ func _face_edge_points(n: int) -> Array:
 			var eu: Vector3 = CubeSphere.AXES[a][1]
 			var ev: Vector3 = CubeSphere.AXES[a][2]
 			for k in per:
-				var p := na + nb + along * (-1.0 + 2.0 * k / (per - 1))
+				var p := na + nb + along * (-1.0 + 2.0 * float(k) / float(per - 1))
 				var e := CubeSphere.direction(a, p.dot(eu), p.dot(ev))
 				var across := (nb - na) - e * e.dot(nb - na)
 				out.append([e, across.normalized()])
