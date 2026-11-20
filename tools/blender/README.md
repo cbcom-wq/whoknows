@@ -106,3 +106,25 @@ the floor of the time, 120 (it is 80 since 2026-11-16).
 - **Long skirts:** they stretch between the legs when running. That needs skirt bones or cloth.
 - **Small faults:** a man's anklet hangs low, and the women's tops gap a little at the armpit
   when running.
+
+## Their rooms (`wadoo_rooms.py`)
+
+`wadoo_rooms.py` builds the furnishings inside three of Wadoo's brick shells, one GLB per room:
+- `hall`: the queen's hall, in `house_b`;
+- `home`: a family's home, in `home_4`;
+- `glassworks`: the Glassworks, in `workshop`.
+
+Everything is plain shapes made in the script, with no downloads. Materials are named by what they
+are, and the game paints each from `WadeePalette.ROOM`. Empties mark where lamps (`lamp_`) and the
+kiln (`kiln_`) shine, which boxes are solid (`col_`) or stood on (`floor_`), the queen's marks, and
+the spots where a Wadee works, sits or hides (`spot_<kind>_<n>_<action>` and `look_<kind>_<n>`). The
+script's docstring has the details.
+
+```
+"C:/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b --factory-startup --disable-autoexec --python wadoo_rooms.py -- <out dir> hall home glassworks [render]
+```
+
+Copy the GLBs into `../../who-knows/assets/wadoo` and `--import`, after every change: the game
+reads the empties from the GLB, not the script, and `test_wadoo_hall.gd` and `test_wadoo_homes.gd`
+check them there.
+`render` writes preview shots of each room (`VIEWS`).

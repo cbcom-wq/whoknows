@@ -450,6 +450,30 @@ until then these are the rules they were built to:
   a few lavender crystal crumbs (`crystal_grit`, 0.09 m, from `InteriorPalette`) 0.5 m behind its tail.
   Up close it is a creature; from 40 m a thin streak, and the lavender is what shows. At most 300
   triangles (built: 228); it fades in by the dither; silent.
+- **The Wadees are people, in their own palette** (`WadeePalette`;
+  `docs/superpowers/specs/2026-11-16-wadoo-design.md` §11). They are the one exception to "no NPC palette of
+  its own", because a person needs skin, hair and eyes no space palette has; the owner approved the look
+  ("the Wadees style"). Each Wadee is one skinned mesh made in Blender from CC0 base meshes
+  (`tools/blender/`). Its UVs point at a 16-texel strip that the game fills for each person from their seed
+  and role:
+  - warm brown skin and near-black hair;
+  - cloth in cream, rust and teal and their kin;
+  - leather, bronze, turquoise (the water stone) and glowing sunglass;
+  - the queen in cream, deep teal and saffron with a royal cape.
+
+  Flat colour, no texture detail, as everything else.
+- **The Wadees' rooms are furnished in the same palette** (`WadeePalette.ROOM`, `WadooRooms`). Each room
+  is a Blender model (`tools/blender/wadoo_rooms.py`) set inside a brick shell. Every surface is painted
+  by its material's name, so no colour lives in the model. The materials:
+  - pale stone and dark wood;
+  - the people's cloths for bedrolls, cushions and hangings;
+  - clay for pots and jars;
+  - pale sea-green glass in the Glassworks.
+
+  The rooms follow §2.3's warm, dim light. They are lit by a few sunglass lamps (`WadeePalette.LAMP`,
+  energy 0.8, no shadows). In the Glassworks the kiln's ember mouth glows (`ember`) and casts one hotter,
+  redder light (`WadeePalette.KILN`, energy 1.3). Light through the doorway does the rest: a home's
+  doorway is open, its curtain tied back. Only the queen's hall has a door that shuts.
 - **Sensor contacts on the HUD are coloured by kind** (`HudPalette.for_kind`): signs of life a
   soft green, salvage the quantum violet, anything else the readout blue.
 - **Legs never stretch.** A foot left behind by a bolting body is drawn at the end of its reach.

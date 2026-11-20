@@ -429,7 +429,7 @@ func _build_brick(place: PlaceDesign, terrain: WorldTerrain, layout: Dictionary,
 					var room := StringName(str(s["room"]))
 					WadooRooms.build(room, node, f)
 					rooms[str(s["id"])] = {"room": room, "frame": f, "size": size}
-					if not doors.is_empty():
+					if WadooRooms.DOORS.has(room) and not doors.is_empty():
 						var d: Array = doors[0]
 						var c: Vector3 = d[0]
 						var width := float(d[2])

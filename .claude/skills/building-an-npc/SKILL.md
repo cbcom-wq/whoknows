@@ -231,6 +231,13 @@ Do these in order. Each names the check that proves it.
   things from it: the grid opened inside and through the doorway and the furniture solid again
   (`WadooPaths._open_room`), the floor's height (`WadooSite.ground` from the node's meta `rooms`, plus
   `WadooRooms.RAISED`), and spots at its marks.
+- **Things to do in a room are spots in the model:** an empty `spot_<kind>_<n>_<action>` where they
+  stand, and `look_<kind>_<n>` what they face. `WadooRooms.spots(room)` reads them, and
+  `WadooSite` adds each as `<kind>:<shell>:<n>`. So a room's spots join the town's
+  (`take_spot(kind, who, near, salt, prefix)`, with the prefix `"<kind>:<shell>:"` to pick one in a
+  given room), and a behaviour only asks for a kind. `kiln_<n>` makes a kiln's light.
+  - A room with no shutting door is left out of `WadooRooms.DOORS`, and its doorway stays open.
+  - A home with a room is walked into, never hidden (`go_home`, `flee_home`): its people are seen.
 - **A person (a made, skinned look):** as the Wadees. `tools/blender/wadee_base.py` builds the
   bodies, faces, hair and clothes from Blender's CC0 base meshes. `tools/blender/wadee_rig.py`
   adds a 23-bone skeleton (Godot humanoid names) and copies CC0 motions onto it. Both are re-run
@@ -326,6 +333,11 @@ Do these in order. Each names the check that proves it.
 | A room lit like the street | Four lamps at 1.6 lit the hall's pale walls as bright as the desert outside; a `ReflectionProbe` for the sky's light barely changed it | Light a room with few, weak lamps (`WadooRooms.LAMP_ENERGY` 0.8) and look at it at eye height before and after |
 | Weather through walls | The desert's sand streaks are particles round you: they blew through the hall as if it were open ground | `BlowingSand.sheltered` (the flight scene's `_indoors`, from `WadooSite.room_at`) stops the sand while you are in a room; anything weather-like needs the same |
 | A probe that stands you beside a walking NPC | `wadoo_play.gd` put you 1.8 m from Lio as she walked to work; nothing told her to stop, she was 3 m off before the Interactor looked, the armlet stayed in your hands, and full hands then found neither the lily nor the memorial | Walk up as a player does (`wadoo_play.gd` `_walk_up`: steps at 1.7 m/s toward where they are now), so `give_way` and `greet` stop them; read a later failure as maybe caused by an earlier one |
+| Furniture's margins closing a small room | In the 6 x 4 m home the table, three stools and a shelf, each widened by `ROOM_SOLID_CLEAR`, walled the west half (the loom, a bedroll, a corner, two stools) off from the doorway. The household took their spots and stood idle in the street | Lay a room out with passages at least 0.8 m wider than the margins on both sides; `test_every_spot_inside_is_reached_from_the_street` routes from the street to every spot in a room. To see why one fails, print the grid as ASCII over the room's frame. The near stool went; two stand at the table's ends |
+| Furniture left out of the walkers' grid | To open the home, stools were made solid to you only: routes then crossed them, and in the game a Wadee walked through one sitting there | Never take a seat out of the grid; move or remove furniture instead, and look at the shots for people overlapping |
+| A stay that eases its own need | Seated at home, the need for home eased, and in 10 to 20 s `mourn`, `talk_pair` or `rest_shade` outscored `go_home`. The room emptied before you could see it | A stay holds its score while it is there (`go_home` returns 1.0 while `acting()` in a room, as it did indoors). Watch for 60 s in the game what the brain does after they arrive |
+| A probe that turns the town while you stand in a home | You were between the household and their door, so they cowered in the street (`cower`, rightly) and never ran in | Turn the town from the street (16 m out from the door), then walk in |
+| Tests that assumed one room, or a door on every open shell | `test_wadoo_hall` and `test_place_field` failed when the home and the Glassworks opened | Rooms with a door that swings are listed (`WadooRooms.DOORS`); a test of a room names its room |
 | Running a list of tests with `-gtest=a,b` | The `.gutconfig.json` dirs still ran: the whole suite, 48 minutes | One `-gselect=<file>.gd` per run |
 | Chances from a hash of the time | The Sunguard's 50% roll used `WadooErrand.roll(ctx, salt)` (the time and a salt, through a golden ratio): checks 4 s apart drifted about 0.06, so ten chances in a row gave one roll | Dice that must be independent come from a `RandomNumberGenerator` of the behaviour's own, seeded in `start` (`fight_ranged._dice`); keep the hash for a person's fixed nature (`nature`) |
 | `trait` as a name | GDScript 4.5 reserves it: "Expected expression as the function argument" at the call, not the declaration | Call it something else (`nature`) |

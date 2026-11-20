@@ -1061,6 +1061,10 @@ func test_shell_doors_are_shut():
 			var out: Vector3 = d[1]
 			var shut: Node = brick
 			if bool(s.get("open", false)):
+				if not WadooRooms.DOORS.has(StringName(str(s.get("room", "")))):
+					# a home's or the Glassworks' doorway stands open (Wadoo spec §10)
+					assert_false(_meets(middle + out * 1.0, middle - out * 1.0, brick), "%s's doorway is open" % id)
+					continue
 				var door := _oasis().find_child(WadooDoor.NAME, false, false) as WadooDoor
 				assert_not_null(door, "%s has its door" % id)
 				shut = door.body if door != null else brick

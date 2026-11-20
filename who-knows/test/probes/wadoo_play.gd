@@ -33,7 +33,14 @@ extends "res://test/probes/oasis_render.gd"
 ## villagers come out again. The frame rate is read in the fight. Run WITHOUT
 ## --headless, from who-knows:
 ##
-##   godot --path . --resolution 1280x720 --script res://test/probes/wadoo_play.gd -- <abs out dir> [hall|things|harm]
+## Stage 5 (§10), alone with "homes" after the out dir: the household of home_4 is
+## sent home (their need for it raised) and the Glassworks' spots before its door
+## are taken, so its workers go in. You walk in at eye height: the family at the
+## table (seated, talking by turns), weaving, tidying; water poured into the jar;
+## the kiln, the bench and the sand bins worked; the frame rate read in each room.
+## Then the town turns and the household huddles at the back of its room, seen.
+##
+##   godot --path . --resolution 1280x720 --script res://test/probes/wadoo_play.gd -- <abs out dir> [hall|things|harm|homes]
 
 ## How long to wait for the town to wake, and to let it live before looking, s.
 const WAKE_WAIT := 60.0
@@ -139,6 +146,16 @@ func _run() -> void:
 		print("wadoo   %s" % ("ALL OK" if _fails == 0 else "%d FAILED" % _fails))
 		quit(0 if _fails == 0 else 1)
 		return
+	if "homes" in OS.get_cmdline_user_args():
+		await _homes()
+		_feet()
+		_census("at the end")
+		_let_go()
+		for l in _readings:
+			print("        %s" % l)
+		print("wadoo   %s" % ("ALL OK" if _fails == 0 else "%d FAILED" % _fails))
+		quit(0 if _fails == 0 else 1)
+		return
 	if "hall" in OS.get_cmdline_user_args():
 		await _hall()
 		_feet()
@@ -218,6 +235,7 @@ func _who_is_near(view: String, at: Vector2) -> void:
 func _feet() -> void:
 	var space := root.get_world_3d().direct_space_state
 	var worst := 0.0
+	var worst_at := ""
 	var total := 0.0
 	var n := 0
 	for npc in _live():
@@ -231,10 +249,14 @@ func _feet() -> void:
 		if hit.is_empty():
 			continue
 		var gap := (npc.global_position - (hit["position"] as Vector3)).dot(up)
+		if absf(gap) > worst:
+			worst_at = "%s at [%.1f, %.1f]%s, %s" % [_name_of(npc), WadooSite.flat(npc.local_position()).x,
+				WadooSite.flat(npc.local_position()).y, " in " + _wadoo.site.room_at(WadooSite.flat(npc.local_position()))
+				if _wadoo.site.room_at(WadooSite.flat(npc.local_position())) != "" else "", (hit["collider"] as Node).name]
 		worst = maxf(worst, absf(gap))
 		total += absf(gap)
 		n += 1
-	var line := "feet    %d Wadees: the feet %.3f m from the ground on average, %.3f at worst" % [n, total / maxf(n, 1), worst]
+	var line := "feet    %d Wadees: the feet %.3f m from the ground on average, %.3f at worst (%s)" % [n, total / maxf(n, 1), worst, worst_at]
 	print(line)
 	_readings.append(line)
 	_check(worst < 0.1, "every Wadee's feet within 0.1 m of the ground (worst %.3f)" % worst)
@@ -978,3 +1000,194 @@ func _snap(shot_name: String) -> void:
 	root.get_viewport().get_texture().get_image().save_png(file)
 	print("render  %s" % file)
 
+# --- stage 5: their homes ---------------------------------------------------------
+
+## The views of the two rooms, in their frames (x across, z from the door to the
+## back): [name, shell, where you stand, what you look at (its height over the floor)].
+const HOME_VIEWS := [
+	["wadoo_home_door", "home_4", Vector3(0.4, 0.0, -1.55), Vector3(-0.6, 0.75, 0.4)],
+	["wadoo_home_corner", "home_4", Vector3(2.45, 0.0, -1.45), Vector3(-1.6, 0.85, 0.7)],
+	["wadoo_home_back", "home_4", Vector3(-0.2, 0.0, 1.0), Vector3(0.6, 1.0, -2.0)],
+]
+const GLASS_VIEWS := [
+	["wadoo_glass_door", "workshop", Vector3(0.3, 0.0, -2.2), Vector3(-3.0, 0.9, 0.7)],
+	["wadoo_glass_kiln", "workshop", Vector3(-0.8, 0.0, -0.6), Vector3(-3.7, 1.0, 0.9)],
+	["wadoo_glass_back", "workshop", Vector3(3.9, 0.0, 1.7), Vector3(-1.0, 0.9, -1.2)],
+]
+## How long the household is given to come home, and the glassworkers to go in, s.
+const HOME_WAIT := 70.0
+## How long the household is given to huddle once the town turns, s.
+const HUDDLE_WAIT := 20.0
+
+## Stage 5 (§10): the home and the Glassworks lived in.
+func _homes() -> void:
+	var site := _wadoo.site
+	var home := site.room_of("home_4")
+	var gw := site.room_of("workshop")
+	_check(not home.is_empty() and not gw.is_empty(), "home_4 and the workshop are rooms")
+	if home.is_empty() or gw.is_empty():
+		return
+	print("homes   %d home spots, %d hide spots, a jar %s, %d glass spots inside" % [
+		_count_keys(&"home", "home:home_4:"), _count_keys(&"hide", "hide:home_4:"),
+		"yes" if not site.spot_in(&"jar", "home_4").is_empty() else "no", _count_keys(&"glass", "glass:workshop:")])
+	# The household sent home; the glassworkers sent to work, the spots outside taken.
+	var household: Array[Npc] = []
+	var glassers: Array[Npc] = []
+	for npc in _live():
+		var p := WadooCast.person(WadooCast.index_of(npc.record.id))
+		if str(p.get("home", "")) == "home_4":
+			household.append(npc)
+			npc.brain.needs[&"home"] = 1.0
+			npc.brain.needs[&"work"] = 0.0
+		elif (p.get("jobs", []) as Array).has("glass"):
+			glassers.append(npc)
+			npc.brain.needs[&"work"] = 1.0
+			npc.brain.needs[&"home"] = 0.0
+	for k in 3:
+		site.claim("glass:%d" % k, StringName("probe:%d" % k))
+	print("homes   the household: %s; glassworkers: %s" % [", ".join(household.map(_name_of)), ", ".join(glassers.map(_name_of))])
+	var poured := {}
+	var seen_home := {}
+	var seen_glass := {}
+	var jar := site.spot_in(&"jar", "home_4")
+	var waited := 0.0
+	while waited < HOME_WAIT:
+		await _seconds(1.0)
+		waited += 1.0
+		for npc in _live():
+			if not jar.is_empty() and npc.intent != null and npc.intent.action == &"interact" \
+					and WadooSite.flat(npc.local_position()).distance_to(WadooSite.flat(jar["at"])) < 0.6:
+				poured[_name_of(npc)] = true
+			var key := _key_of(npc)
+			if key != "" and npc.intent != null and npc.intent.action != &"" 					and WadooSite.flat(npc.local_position()).distance_to(WadooSite.flat(_spot_at(key))) < 0.5:
+				if key.begins_with("home:home_4:"):
+					seen_home[_name_of(npc)] = npc.intent.action
+				elif key.begins_with("glass:workshop:"):
+					seen_glass[_name_of(npc)] = npc.intent.action
+		if int(waited) % 10 == 0:
+			for npc in household + glassers:
+				var b := npc.brain
+				print("homes   %3.0f s %-6s %-11s go_home %.2f work %.2f; home %.2f work %.2f fear %.2f; holds '%s'; %s, %.1f m from home_4's door" % [
+					waited, _name_of(npc), b.current.id if b.current != null else &"-", float(b.scores.get(&"go_home", 0.0)),
+					float(b.scores.get(&"work", 0.0)), float(b.needs.get(&"home", 0.0)), float(b.needs.get(&"work", 0.0)),
+					float(b.needs.get(&"fear", 0.0)), _key_of(npc), npc.intent.action if npc.intent != null else &"-",
+					WadooSite.flat(npc.local_position()).distance_to(WadooSite.flat(site.door_of("home_4")["door"]))])
+		if _held_near(&"home", "home:home_4:") >= 2:
+			break
+	print("homes   after %.0f s: %d at home in the room, %d at work in the Glassworks, %d hidden" % [
+		waited, _held_near(&"home", "home:home_4:"), _held_near(&"glass", "glass:workshop:"), _hidden_count()])
+	print("homes   seen at home in the room: %s; at work in the Glassworks: %s" % [seen_home, seen_glass])
+	_check(_held_near(&"home", "home:home_4:") >= 2, "the household is home, in the room")
+	for npc in household:
+		_check(not site.hidden(npc.record.id), "%s is never out of sight" % _name_of(npc))
+	_room_report("home_4", &"home", "home:home_4:")
+	# Inside the home.
+	var f: Transform3D = home["frame"]
+	for v: Array in HOME_VIEWS:
+		await _site_look(v[0], WadooSite.flat(f * (v[2] as Vector3)), f * (v[3] as Vector3))
+		_who_is_near(v[0], WadooSite.flat(f * Vector3.ZERO))
+	var talk := await _until(func() -> bool: return _doing_in(&"sit_talk", "home:home_4:") > 0, 20.0)
+	print("homes   at the table: %d sitting, %d talking" % [_doing_in(&"sit", "home:home_4:"), _doing_in(&"sit_talk", "home:home_4:")])
+	if talk:
+		await _site_look("wadoo_home_talk", WadooSite.flat(f * (HOME_VIEWS[0][2] as Vector3)), f * (HOME_VIEWS[0][3] as Vector3))
+	await _site_look("", WadooSite.flat(f * (HOME_VIEWS[0][2] as Vector3)), f * (HOME_VIEWS[0][3] as Vector3))
+	await _reading_for("inside the home, %d Wadees awake" % _live().size(), 5.0)
+	# Inside the Glassworks: the glassworkers sent to work again.
+	for npc in glassers:
+		npc.brain.needs[&"work"] = 1.0
+	await _until(func() -> bool: return _held_near(&"glass", "glass:workshop:") >= 1, 60.0)
+	_check(_held_near(&"glass", "glass:workshop:") >= 1 or not seen_glass.is_empty(), "glass is worked inside")
+	_room_report("workshop", &"glass", "glass:workshop:")
+	var g: Transform3D = gw["frame"]
+	for v: Array in GLASS_VIEWS:
+		await _site_look(v[0], WadooSite.flat(g * (v[2] as Vector3)), g * (v[3] as Vector3))
+		_who_is_near(v[0], WadooSite.flat(g * Vector3.ZERO))
+	await _site_look("", WadooSite.flat(g * (GLASS_VIEWS[1][2] as Vector3)), g * (GLASS_VIEWS[1][3] as Vector3))
+	await _reading_for("inside the Glassworks, %d Wadees awake" % _live().size(), 5.0)
+	print("homes   water poured into the jar while you waited: %s" % (", ".join(poured.keys()) if not poured.is_empty() else "none"))
+	# The town turns: the household huddles at the back of its room.
+	for k in 3:
+		site.release(StringName("probe:%d" % k))
+	for npc in household:
+		npc.brain.needs[&"home"] = 1.0
+	var state: WadooState = _scene.get("wadoo_state")
+	_avatar.hurt.connect(func(_t, _from) -> void: _keep_up())
+	# From the street, 16 m before their door, so you are not between them and it.
+	var door := site.door_of("home_4")
+	var door_at := WadooSite.flat(door["at"])
+	var street := site.paths.nearest_open(door_at + (door["out"] as Vector2) * 16.0)
+	await _site_look("", street, door["door"] + Vector3(0.0, 1.2, 0.0))
+	state.turn_hostile()
+	await _until(func() -> bool:
+		_keep_up()
+		return _huddled() >= mini(2, household.size()), HUDDLE_WAIT)
+	await _seconds(1.5)
+	print("homes   the town turned: %d huddled at the back of home_4, %d hidden" % [_huddled(), _hidden_count()])
+	_check(_huddled() >= 1, "the household huddles in its room")
+	_room_report("home_4", &"hide", "hide:home_4:")
+	await _site_look("wadoo_home_huddle_door", door_at + (door["out"] as Vector2) * 1.5, f * Vector3(0.0, 0.7, 0.8))
+	await _site_look("wadoo_home_huddle", WadooSite.flat(f * (HOME_VIEWS[1][2] as Vector3)), f * Vector3(-0.8, 0.6, 0.9))
+	var in_room := 0
+	for npc in household:
+		if site.room_at(WadooSite.flat(npc.local_position())) == "home_4" and npc.intent != null and npc.intent.action == &"cower":
+			in_room += 1
+	print("homes   you inside: %d of the household crouched in the room, facing you" % in_room)
+
+## Where the spot called `key` is (site-local).
+func _spot_at(key: String) -> Vector3:
+	var kind := StringName(key.get_slice(":", 0))
+	return _wadoo.site.spot(kind, key).get("at", Vector3.ZERO)
+
+## How many spots of `kind` whose keys begin with `prefix` the site has.
+func _count_keys(kind: StringName, prefix: String) -> int:
+	var n := 0
+	for s: Dictionary in _wadoo.site.spots(kind):
+		if String(s["key"]).begins_with(prefix):
+			n += 1
+	return n
+
+## How many of those spots are held by someone standing on them (within 0.5 m).
+func _held_near(kind: StringName, prefix: String) -> int:
+	var n := 0
+	for s: Dictionary in _wadoo.site.spots(kind):
+		if not String(s["key"]).begins_with(prefix):
+			continue
+		var holder: Variant = _wadoo.site.holder_of(s["key"])
+		for npc in _live():
+			if npc.record.id == holder and WadooSite.flat(npc.local_position()).distance_to(WadooSite.flat(s["at"])) < 0.5:
+				n += 1
+	return n
+
+## How many holding a spot that begins with `prefix` are doing `action` now.
+func _doing_in(action: StringName, prefix: String) -> int:
+	var n := 0
+	for npc in _live():
+		if _key_of(npc).begins_with(prefix) and npc.intent != null and npc.intent.action == action:
+			n += 1
+	return n
+
+## The key of the spot `npc` holds, or "".
+func _key_of(npc: Npc) -> String:
+	for kind: StringName in [&"home", &"hide", &"glass", &"jar"]:
+		for s: Dictionary in _wadoo.site.spots(kind):
+			if _wadoo.site.holder_of(s["key"]) == npc.record.id:
+				return s["key"]
+	return ""
+
+## How many huddle, cowering, at a corner of home_4.
+func _huddled() -> int:
+	return _doing_in(&"cower", "hide:home_4:")
+
+## Who holds which of the room's spots, and what they do.
+func _room_report(shell: String, kind: StringName, prefix: String) -> void:
+	for s: Dictionary in _wadoo.site.spots(kind):
+		if not String(s["key"]).begins_with(prefix):
+			continue
+		var holder: Variant = _wadoo.site.holder_of(s["key"])
+		var line := "%s: free" % s["key"]
+		for npc in _live():
+			if npc.record.id == holder:
+				line = "%s: %s, %.2f m off, %s (%s)" % [s["key"], _name_of(npc),
+					WadooSite.flat(npc.local_position()).distance_to(WadooSite.flat(s["at"])),
+					npc.intent.action if npc.intent != null else &"-", (npc.look as WadeeLook).clip]
+		print("room    %s %s" % [shell, line])

@@ -97,7 +97,8 @@ func test_the_door_swings_in_and_stays_solid() -> void:
 
 func test_paths_open_the_hall_and_its_doorway() -> void:
 	var paths := WadooPaths.build(_layout, POOL_RADIUS)
-	assert_eq(paths.rooms.size(), 1)
+	assert_eq(paths.rooms.map(func(r: Dictionary) -> StringName: return r["room"]), [&"glassworks", &"hall", &"home"],
+		"the hall, and since stage 5 a home and the Glassworks")
 	assert_true(paths.is_open(_in_hall(Vector3(0.0, 0.0, -1.8))), "the floor before the basin")
 	assert_true(paths.is_open(_in_hall(Vector3(0.0, 0.0, -2.775))), "the doorway")
 	assert_false(paths.is_open(_in_hall(Vector3(0.0, 0.0, -0.45))), "the basin")
