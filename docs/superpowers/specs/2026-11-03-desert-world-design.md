@@ -290,6 +290,13 @@ this is the land it lives in).
 >   km from the centre, the well 109.2 km). The owner at Checkpoint A: it stays inside the well. A
 >   warp to `p3` arrives over the oasis, turned toward your side by at most 75°
 >   (`WarpPlan.ARRIVE_MAX`); the test lands it 28.9° from the entry side.
+> - **The beacon on the HUD, fixed 2026-11-19.** The owner flew low over WADIS and could not
+>   find the town. The HUD's contact marks ask the sensors for contacts within 10 km
+>   (`ContactMarker.RANGE`), so the beacon showed only within 10 km, or as the course once set on
+>   the map. The probe had set the course before its still, which hid that. Now
+>   `ContactMarker.beacons()` marks every beacon in your world's well at any range, alongside the
+>   three nearest contacts, with the distance in km (`OASIS 41 KM`). From low and far off the
+>   oasis is under the horizon, so its mark points the way through the ground.
 > - **The village was reworked after Checkpoint B.** The owner rejected the first one (huts built
 >   into the sand with no floors, too few buildings, a wall that did not surround them, grass that
 >   ended abruptly, a rock outcrop out of place). As built now:

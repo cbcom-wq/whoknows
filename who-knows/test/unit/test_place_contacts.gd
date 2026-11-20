@@ -52,6 +52,43 @@ func test_beacon_only_inside_the_well() -> void:
 	var other := _system.planets()[0] if _system.planets()[0].id != &"p3" else _system.planets()[1]
 	assert_eq(_contacts.contacts(other.point, 1.0e9, 0.0).size(), 0, "none in another world's well")
 
+## The HUD marks the beacon from anywhere in the well, not only within the
+## marker's 10 km RANGE, and beside the nearest MOST, never in their place: the
+## owner flew low over WADIS 40 km off and saw nothing to steer by.
+func test_the_hud_marks_the_beacon_from_far_off() -> void:
+	var cam := Camera3D.new()
+	add_child_autofree(cam)
+	cam.current = true
+	var universe := Universe.new()
+	add_child_autofree(universe)
+	var beacon := _contacts.contacts(_at(0.0), 1.0, 0.0)[0]
+	var up := beacon.point.minus(_planet.point).normalized()
+	var side := up.cross(Vector3.UP if absf(up.y) < 0.9 else Vector3.RIGHT).normalized()
+	## 40 km round the curve from the oasis, 2 km up, looking at it.
+	var dir := (up * cos(40000.0 / _planet.radius) + side * sin(40000.0 / _planet.radius)).normalized()
+	universe.origin = _planet.point.plus(dir * (_planet.radius + 2000.0))
+	universe.set_focus(cam)
+	cam.look_at(universe.to_engine(beacon.point), dir)
+	var sensors := ShipSensors.new()
+	add_child_autofree(sensors)
+	sensors.universe = universe
+	sensors.add_source(_contacts)
+	var marker := ContactMarker.new()
+	marker.size = Vector2(1280, 720)
+	add_child_autofree(marker)
+	marker.set_camera(cam)
+	marker.sensors = sensors
+	marker.render(VehicleTelemetry.from_state(Basis.IDENTITY, Vector3.ZERO, Vector3.ZERO, Vector3.ZERO, true, false, 8.0))
+	assert_eq(marker.marks.size(), 1, "the beacon is marked")
+	if marker.marks.is_empty():
+		return
+	var m: Dictionary = marker.marks[0]
+	assert_eq(m["kind"], PlaceContacts.KIND)
+	assert_eq(m["mode"], VelocityMarker.Mode.ON_FRAME, "ahead, on screen")
+	var km := universe.to_engine(beacon.point).length() / 1000.0
+	assert_between(km, 39.0, 42.0, "about 40 km off")
+	assert_eq(m["text"], "OASIS %d KM" % roundi(km))
+
 func test_no_beacon_without_one() -> void:
 	var plain := SystemRecipe.from_seed(4242, false)
 	var planet := plain.planets()[0]

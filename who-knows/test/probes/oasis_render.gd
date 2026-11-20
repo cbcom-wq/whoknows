@@ -63,6 +63,12 @@ const HOVER_BACK: Array[float] = [1.0, 2.0]
 const BEACON_RANGE := 200000.0
 ## Inside the well, this share of its radius from the centre, for the beacon.
 const WELL_DEPTH := 0.9
+## Flying low and far off: this far round the world from the oasis, m, and this
+## high over the ground, m (the HUD must still mark its beacon).
+const LOW_OFF := 40000.0
+const LOW_UP := 2000.0
+## How far the nose is down there, degrees.
+const LOW_PITCH := 12.0
 ## The warp starts at least this far past the cluster's limit it began in, m.
 const OUT_OF_THE_CLUSTER := 500.0
 ## Warp steps are taken at the physics rate.
@@ -502,9 +508,26 @@ func _warp_in() -> void:
 	if beacon != null:
 		print("        the beacon %s (%s), %.0f km off, listed inside the well" % [beacon.label, beacon.kind,
 			beacon.point.minus(_universe.to_universe(hull.global_position)).length() / 1000.0])
+		# With no course set, as a pilot who has not opened the map: the HUD's
+		# contact marks must show it (the owner flew low over WADIS and saw nothing,
+		# 2026-11-19; the course's marker had hidden that here).
+		_starter.sensors.clear_course()
+		await _frames(10)
+		var seen := _beacon_mark()
+		_check(not seen.is_empty(), "warp the HUD marks the beacon with no course set (%s)" % seen)
+		await _shot("warp_inside_well_no_course")
 		_starter.sensors.set_course(beacon.id)
 		await _frames(10)
 		await _shot("warp_inside_well")
+
+## The text of the beacon's mark on whichever HUD contact marker is showing, or "".
+func _beacon_mark() -> String:
+	for node in root.find_children("*", "", true, false):
+		if node is ContactMarker and (node as ContactMarker).is_visible_in_tree():
+			for m: Dictionary in (node as ContactMarker).marks:
+				if m["kind"] == PlaceContacts.KIND:
+					return m["text"]
+	return ""
 
 ## The beacon in the starter's sensor contacts, or null.
 func _beacon() -> Contact:
@@ -529,6 +552,17 @@ func _hover_views() -> void:
 			var pitch := Basis(_level(from, nose).x.normalized(), -atan2(h, back))
 			await _hold_at(from, h, nose, pitch)
 			await _shot("seated_%d_%s" % [roundi(h), way[0]])
+	# Flying low and far off, nosed at the oasis and a little down, no course
+	# set: the HUD's contact marks still point the way (2026-11-19).
+	_starter.sensors.clear_course()
+	var far := _off(_spot, _sun_flat, _planet.radius * tan(LOW_OFF / _planet.radius))
+	var ahead := _way_to(far, _spot)
+	await _hold_at(far, LOW_UP, ahead, Basis(_level(far, ahead).x.normalized(), deg_to_rad(-LOW_PITCH)))
+	await _frames(10)
+	var seen := _beacon_mark()
+	_check(not seen.is_empty(), "the HUD marks the beacon flying %.0f m up, %.0f km round the world from it (%s)" % [
+		LOW_UP, LOW_OFF / 1000.0, seen])
+	await _shot("low_far_beacon")
 
 # --- landing ---------------------------------------------------------------------
 
