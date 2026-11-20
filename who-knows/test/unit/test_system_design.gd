@@ -306,3 +306,21 @@ func test_a_moons_own_name_tweak_wins() -> void:
 	assert_eq(changed.warp_target(moons[0].id).name, "PEBBLE")
 	assert_eq(changed.body(moons[1].id).name, moons[1].name, "a sibling keeps its derived name")
 	assert_eq(changed.body(planet.id).name, planet.name)
+
+func test_wadis_pins_its_plan():
+	var r := SystemRecipe.from_seed(1337).body(&"p3").recipe
+	var d := r.plan().dials
+	assert_eq([d.sea, d.seas, d.mountains, d.ranges, d.peak, d.plateaus, d.canyons, d.oases],
+		[0.15, 1, 0.10, 3, 2000.0, 0.20, 4, 6])
+	assert_eq(r.keeps.size(), 1)
+	assert_eq(r.keeps[0].radius, 2000.0)
+	assert_eq(r.keeps[0].blend, 1500.0)
+
+func test_the_validator_knows_the_plan_key():
+	var bad := SystemDesign.from_data({"seed": 1337, "bodies": {"p3": {"plan": {"sea": 0.6, "lakes": 2,
+		"keep": [{"place": "nowhere", "radius": 2000, "blend": 1500}]}}}})
+	var problems := bad.problems(SystemRecipe.from_seed(1337))
+	assert_true(Array(problems).any(func(p): return "sea" in p))
+	assert_true(Array(problems).any(func(p): return "lakes" in p))
+	assert_true(Array(problems).any(func(p): return "nowhere" in p))
+	assert_eq(SystemDesign.for_seed(1337).problems(SystemRecipe.from_seed(1337)).size(), 0)

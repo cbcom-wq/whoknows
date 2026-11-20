@@ -52,7 +52,7 @@ func test_worlds_are_tens_of_kilometres_with_real_mountains():
 	for s in 200:
 		var r := WorldRecipe.from_seed(s * 131 + 7)
 		assert_between(r.relief_m, minf(r.radius_m * 0.01, 1200.0) - 0.001, 1200.0)
-	assert_eq(WorldRecipe.GENERATOR_VERSION, 3)
+	assert_eq(WorldRecipe.GENERATOR_VERSION, 4)
 
 func test_planets_pull_at_most_seven():
 	assert_eq(WorldRecipe.GRAVITY[WorldRecipe.Kind.PLANET], Vector2(2.0, 7.0))
@@ -154,3 +154,10 @@ func test_every_palette_has_cover_colours():
 	for p in SpacePalette.WORLDS:
 		assert_true(p.has(&"boulder") and p.has(&"grass"), String(p[&"name"]))
 	assert_true(SpacePalette.WORLDS[SpacePalette.DESERT_PALETTE].has(&"streak"))
+
+func test_only_planned_deserts_have_a_plan():
+	var r := SystemRecipe.from_seed(1337).body(&"p3").recipe
+	assert_not_null(r.plan())
+	assert_same(r.plan(), r.plan())
+	r.planned = false
+	assert_null(r.plan())
