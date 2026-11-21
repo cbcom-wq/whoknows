@@ -8,7 +8,8 @@ extends RefCounted
 ## shapes drawn on it (PlanShapes). So far the map holds the open ground, dune
 ## seas and gravel plains on a gentle roll, the seas sunk into it and the
 ## mountain ranges and plateau country raised on it, and the canyons are drawn
-## through it; the kept discs come later.
+## through it. Its sites (oases, shores, kept discs), the kept discs' weight and
+## the bounds the streaming culls by come last.
 
 enum Land { SEA, DUNES, PLAINS, PLATEAU, MOUNTAINS }
 
@@ -230,11 +231,59 @@ const CANYON_BRANCH_FROM := Vector2(4000.0, 12000.0)
 ## (_list_canyon).
 const LIST_RUN := 8
 
+## The kept discs (§5.6): a disc's weight (keep_weight) is 1 within its radius
+## and eases to 0 over its blend, and the ground inside it stays as it always
+## was, so its bounds are today's desert's range, KEPT_LOW to KEPT_HIGH metres.
+## The weight is exactly 1 and exactly 0 within KEEP_SNAP metres of the disc's
+## radius and of its blend's end (where a smoothstep is flat), so rounding in a
+## great-circle distance never leaves a hair of weight.
+const KEEP_SNAP := 0.001
+const KEPT_LOW := -60.0
+const KEPT_HIGH := 300.0
+
+## The sites (§5.5). Each kind is listed best first (PlanSite.rank). An oasis
+## site is a cell's middle on dune or gravel ground at least OASIS_SHORE_MIN
+## metres from the water, no steeper than OASIS_LEVEL_MAX, at least
+## OASIS_SPACING metres from any other.
+## A site's `level` is the base's rise from its middle to the farthest of eight
+## points SITE_RADIUS metres round, over SITE_RADIUS, over SITE_ROUGH_SLOPE.
+## A candidate is favoured (rank less by OASIS_FAVOUR for each) beside a canyon,
+## at a range's foot (some mountain weight but not mountains), within
+## OASIS_COAST metres of the shore, or, among dunes, in a hollow (the cell's
+## base OASIS_HOLLOW metres or more under the mean of the cells beside it). A
+## low base ranks better by up to OASIS_LOW_RANK, over the roll's whole height.
+const SITE_RADIUS := 500.0
+const SITE_ROUGH_SLOPE := 0.1
+const OASIS_SPACING := 4000.0
+const OASIS_SHORE_MIN := 300.0
+const OASIS_LEVEL_MAX := 0.25
+## An oasis site is looked for among every SITE_STRIDEth cell each way; the
+## `oases` dial's count and OASIS_EXTRA more are listed.
+const SITE_STRIDE := 2
+const OASIS_EXTRA := 4
+const OASIS_FAVOUR := 0.15
+const OASIS_COAST := 4000.0
+const OASIS_HOLLOW := 1.0
+const OASIS_LOW_RANK := 0.4
+## A shore site is a cell's middle 0 to SHORE_SITE_REACH metres from the water,
+## no rougher than SHORE_LEVEL_MAX, at least SHORE_SPACING metres from any
+## other, at most SHORE_MAX of them.
+const SHORE_SITE_REACH := 400.0
+const SHORE_LEVEL_MAX := 0.6
+const SHORE_SPACING := 2000.0
+const SHORE_MAX := 32
+
 var dials: PlanDials
 ## Metres above radius of the sea's water: SEA_LEVEL, or -INF with no sea.
 var sea_level := -INF
 var map: PlanMap
 var shapes: PlanShapes
+## The places set aside, by kind, best first within each (PlanSite).
+var sites: Array[PlanSite] = []
+## The kept discs, by keep: its direction, radius and blend.
+var _keep_dirs := PackedVector3Array()
+var _keep_radius := PackedFloat64Array()
+var _keep_blend := PackedFloat64Array()
 
 static func build(recipe: WorldRecipe) -> WorldPlan:
 	var p := WorldPlan.new()
@@ -252,22 +301,42 @@ static func build(recipe: WorldRecipe) -> WorldPlan:
 	p._plateaus(recipe, dirs, shore, copies)
 	p._canyons(recipe, dirs)
 	p.shapes.pack_near()
-	var low := PackedFloat32Array()
-	var high := PackedFloat32Array()
-	p.map.cell_range(S_BASE, low, high)
-	p.map.set_bounds(low, high)
+	for keep: Dictionary in recipe.keeps:
+		p._keep_dirs.append(keep.dir)
+		p._keep_radius.append(keep.radius)
+		p._keep_blend.append(keep.blend)
+	var values := p._corner_values()
+	p._sites(recipe, dirs, values)
+	p._bounds(recipe, dirs, values)
 	return p
 
 ## Every field at `d` into `out` (S_SIZE long, the caller's own): allocates
 ## nothing. The map holds all but the canyon's, which are worked out here
 ## (PlanShapes.canyon_at): a floor a few hundred metres wide is too fine for the
-## map's corners.
+## map's corners. The kept discs' weight is worked out here too (keep_weight),
+## exactly, not read from the map.
 func sample(d: Vector3, out: PackedFloat64Array) -> void:
 	var u := d.normalized()
 	var canyon := shapes.canyon_at(u, map.sample(u, out))
 	out[S_CANYON] = canyon.x
 	out[S_CANYON_FLOOR] = canyon.y
 	out[S_CANYON_RIM] = canyon.z
+	out[S_KEEP] = keep_weight(u)
+
+## The most any kept disc weighs at `d`: 1 within its radius, easing (a
+## smoothstep) to 0 over its blend by great-circle metres from its place, 0
+## beyond. Exact, from any thread; allocates nothing.
+func keep_weight(d: Vector3) -> float:
+	var best := 0.0
+	for n in _keep_dirs.size():
+		var metres := d.angle_to(_keep_dirs[n]) * shapes.radius_m
+		var radius := _keep_radius[n]
+		if metres <= radius + KEEP_SNAP:
+			return 1.0
+		var edge := radius + _keep_blend[n]
+		if metres < edge - KEEP_SNAP:
+			best = maxf(best, 1.0 - smoothstep(radius, edge, metres))
+	return best
 
 ## SEA at or past the water's edge; MOUNTAINS on a range's upper flanks;
 ## PLATEAU on a plateau's body; else what the open ground is.
@@ -296,6 +365,289 @@ func nearest_shore_m(d: Vector3) -> float:
 ## Vector2(least, most) height of the ground under the quadtree node `key`.
 func bounds_of(key: Vector4i) -> Vector2:
 	return map.bounds_of(key)
+
+## Lists the plan's sites (§5.4 step 7). `cv` is the map's base, shore, dunes,
+## mountain and plateau fields by corner (_corner_values). Candidates are cells,
+## weighed from their corners alone: oases among every SITE_STRIDEth cell each
+## way (sites lie thousands of metres apart), shore sites among the land cells
+## beside a sea's. A candidate is ranked (see OASIS_FAVOUR and the constants
+## round it), then the best first are looked at closely (_site_at) one at a
+## time and kept if they pass and keep their distance from those kept: the
+## cells' worth is weighed once, the exact work done for a few. Each kind is
+## listed best first by its rank, its exact level in it. A KEPT site is added for
+## each kept disc, and each oasis is given a seeded heading.
+func _sites(recipe: WorldRecipe, dirs: PackedVector3Array, cv: Array[PackedFloat32Array]) -> void:
+	var radius := recipe.radius_m
+	var edge := CubeSphere.edge_m(radius, PlanMap.PLAN_DEPTH)
+	var base := cv[S_BASE]
+	var shore := cv[S_SHORE]
+	var dunes := cv[S_DUNES]
+	var mountain := cv[S_MOUNTAIN]
+	var up := PlanMap.SIDE
+	var cells := CubeSphere.FACES * PlanMap.CELLS * PlanMap.CELLS
+	# By cell, what ranking the candidates found: its rank and its cell-wide level.
+	var rank := PackedFloat32Array()
+	rank.resize(cells)
+	var wide := PackedFloat32Array()
+	wide.resize(cells)
+	var oases := PackedFloat64Array()
+	var shores := PackedFloat64Array()
+	# The rise across a cell that is a level of 1.
+	var steep := SITE_ROUGH_SLOPE * edge
+	var c := -1
+	for face in CubeSphere.FACES:
+		for j in PlanMap.CELLS:
+			var row := (face * up + j) * up
+			for i in PlanMap.CELLS:
+				c += 1
+				if j % SITE_STRIDE != 0 or i % SITE_STRIDE != 0:
+					continue
+				var k := row + i
+				var s := 0.25 * (shore[k] + shore[k + 1] + shore[k + up] + shore[k + up + 1])
+				if s < OASIS_SHORE_MIN:
+					continue
+				var a := base[k]
+				var b := base[k + 1]
+				var d := base[k + up]
+				var e := base[k + up + 1]
+				var spread := maxf(maxf(a, b), maxf(d, e)) - minf(minf(a, b), minf(d, e))
+				if spread > steep * OASIS_LEVEL_MAX:
+					continue
+				var m := maxf(maxf(mountain[k], mountain[k + 1]), maxf(mountain[k + up], mountain[k + up + 1]))
+				var favours := int(m > 0.0) + int(s <= OASIS_COAST) + int(shapes.canyon_floor_low(c) < INF)
+				var mean := 0.25 * (a + b + d + e)
+				var dune := 0.25 * (dunes[k] + dunes[k + 1] + dunes[k + up] + dunes[k + up + 1])
+				if dune >= DUNES_FROM and i >= 3 and j >= 3 and i < PlanMap.CELLS - 3 and j < PlanMap.CELLS - 3:
+					var around := 0.25 * (base[k - 3] + base[k + 3] + base[k - 3 * up] + base[k + 3 * up])
+					favours += int(mean <= around - OASIS_HOLLOW)
+				wide[c] = spread / steep
+				rank[c] = wide[c] + OASIS_LOW_RANK * clampf((mean + BASE_ROLL) / (2.0 * BASE_ROLL), 0.0, 1.0) \
+					- OASIS_FAVOUR * favours
+				oases.append(_sort_key(rank[c], c))
+	if sea_level > -INF:
+		var near := PackedInt32Array()
+		near.resize(4)
+		# 2 for a sea's cells, 1 for any other looked at.
+		var listed := PackedByteArray()
+		listed.resize(cells)
+		listed.fill(0)
+		for sea: Dictionary in shapes.seas:
+			for w: int in sea.cells:
+				listed[w] = 2
+		for sea: Dictionary in shapes.seas:
+			for w: int in sea.cells:
+				_cell_neighbours(w, near)
+				for o in near:
+					if listed[o] != 0:
+						continue
+					listed[o] = 1
+					var k := _first_corner(o)
+					var s := 0.25 * (shore[k] + shore[k + 1] + shore[k + up] + shore[k + up + 1])
+					if s <= 0.0 or s > SHORE_SITE_REACH * 1.5:
+						continue
+					var spread := maxf(maxf(base[k], base[k + 1]), maxf(base[k + up], base[k + up + 1])) \
+						- minf(minf(base[k], base[k + 1]), minf(base[k + up], base[k + up + 1]))
+					if spread > steep * SHORE_LEVEL_MAX:
+						continue
+					wide[o] = spread / steep
+					rank[o] = wide[o]
+					shores.append(_sort_key(rank[o], o))
+	var rng := WorldSeed.rng(recipe.seed, &"plan_sites")
+	for site: PlanSite in _pick(oases, rank, wide, dirs, PlanSite.Kind.OASIS, OASIS_SPACING, dials.oases + OASIS_EXTRA, radius):
+		site.heading = rng.randf_range(0.0, 360.0)
+		sites.append(site)
+	for site: PlanSite in _pick(shores, rank, wide, dirs, PlanSite.Kind.SHORE, SHORE_SPACING, SHORE_MAX, radius):
+		site.heading = _facing_sea(site.dir, radius)
+		sites.append(site)
+	for keep: Dictionary in recipe.keeps:
+		var site := PlanSite.new()
+		site.kind = PlanSite.Kind.KEPT
+		site.dir = keep.dir
+		site.radius = keep.radius
+		site.heading = float(keep.get("heading", 0.0))
+		sites.append(site)
+
+## A sort key for candidate cell `c` of rank `rank`: ascending is rank order,
+## ties by cell (_cell_of_key undoes it). Exact in a double.
+static func _sort_key(rank: float, c: int) -> float:
+	return floorf((rank + 4.0) * 10000.0) * 32768.0 + c
+
+static func _cell_of_key(key: float) -> int:
+	return int(key) % 32768
+
+## The sites of `kind` among the candidates `keys` (_sort_key), at most `cap`,
+## at least `spacing` metres apart: the best candidate that passes a close look
+## (_site_at), then the best that does and is clear of it, and so on. Listed
+## best first by rank, with the exact level in place of the cell-wide `wide`.
+func _pick(keys: PackedFloat64Array, rank: PackedFloat32Array, wide: PackedFloat32Array, dirs: PackedVector3Array,
+		kind: PlanSite.Kind, spacing: float, cap: int, radius: float) -> Array[PlanSite]:
+	keys.sort()
+	# Past this cosine two directions are nearer than `spacing` (a hair more).
+	var near := cos(minf(spacing * 1.001 / radius, PI))
+	var out: Array[PlanSite] = []
+	var fields := PackedFloat64Array()
+	fields.resize(LAND_FIELDS)
+	for key in keys:
+		if out.size() >= cap:
+			break
+		var c := _cell_of_key(key)
+		var mid := _cell_centre(c, dirs)
+		var clear := true
+		for other in out:
+			if mid.dot(other.dir) > near:
+				clear = false
+				break
+		if not clear:
+			continue
+		var level := _site_at(mid, c, kind, radius, fields)
+		if level < 0.0:
+			continue
+		var site := PlanSite.new()
+		site.kind = kind
+		site.dir = mid
+		site.radius = SITE_RADIUS
+		site.level = level
+		site.rank = rank[c] - wide[c] + level
+		out.append(site)
+	out.sort_custom(func(a: PlanSite, b: PlanSite) -> bool: return a.rank < b.rank)
+	return out
+
+## The level of a site of `kind` at `mid`, the middle of cell number `c`, or -1
+## if there can be none there: the ground is not what that kind needs (OASIS:
+## dune or gravel ground OASIS_SHORE_MIN or more from the water; SHORE: land 0
+## to SHORE_SITE_REACH from it), a kept disc is within SITE_RADIUS, a canyon's
+## walls reach it or the ring of points SITE_RADIUS round it, or its level is
+## over the kind's most. `fields` is scratch, LAND_FIELDS long.
+func _site_at(mid: Vector3, c: int, kind: PlanSite.Kind, radius: float, fields: PackedFloat64Array) -> float:
+	map.sample(mid, fields, LAND_FIELDS)
+	var metres := fields[S_SHORE]
+	var land := land_in(fields)
+	var most: float
+	if kind == PlanSite.Kind.OASIS:
+		if (land != Land.DUNES and land != Land.PLAINS) or metres < OASIS_SHORE_MIN:
+			return -1.0
+		most = OASIS_LEVEL_MAX
+	else:
+		if metres <= 0.0 or metres > SHORE_SITE_REACH:
+			return -1.0
+		most = SHORE_LEVEL_MAX
+	if not _clear_of_sites(mid, SITE_RADIUS, radius) or shapes.canyon_at(mid, c).x < INF:
+		return -1.0
+	var angle := SITE_RADIUS / radius
+	var near_canyon := shapes.canyon_floor_low(c) < INF
+	var base := fields[S_BASE]
+	var worst := 0.0
+	for n in 8:
+		var d := _toward(mid, angle, n * TAU / 8.0)
+		if near_canyon and shapes.canyon_at(d, map.cell_number(d)).x < INF:
+			return -1.0
+		worst = maxf(worst, absf(map.at(S_BASE, d) - base))
+	var level := minf(worst / SITE_RADIUS / SITE_ROUGH_SLOPE, 1.0)
+	return level if level <= most else -1.0
+
+## True if `d`, and a disc of `margin` metres round it, is clear of every kept
+## disc's radius and blend.
+func _clear_of_sites(d: Vector3, margin: float, radius: float) -> bool:
+	for n in _keep_dirs.size():
+		if d.angle_to(_keep_dirs[n]) * radius - margin < _keep_radius[n] + _keep_blend[n]:
+			return false
+	return true
+
+## The heading, degrees clockwise from north (as PlaceDesign.heading), toward the
+## sea from `at`: the way the shore's metres fall off most steeply over 300 m
+## either way.
+func _facing_sea(at: Vector3, radius: float) -> float:
+	var frame := SystemDesign.frame_at(at, 0.0)
+	var east := frame.x
+	var north := -frame.z
+	var angle := 300.0 / radius
+	var e := nearest_shore_m((at * cos(angle) - east * sin(angle)).normalized()) \
+		- nearest_shore_m((at * cos(angle) + east * sin(angle)).normalized())
+	var n := nearest_shore_m((at * cos(angle) - north * sin(angle)).normalized()) \
+		- nearest_shore_m((at * cos(angle) + north * sin(angle)).normalized())
+	return fposmod(rad_to_deg(atan2(e, n)), 360.0)
+
+## The map's base, shore, dunes, mountain and plateau fields by corner (by k),
+## indexed by field; the others are empty.
+func _corner_values() -> Array[PackedFloat32Array]:
+	var out: Array[PackedFloat32Array] = []
+	out.resize(S_SIZE)
+	for field in [S_BASE, S_SHORE, S_DUNES, S_MOUNTAIN, S_PLATEAU]:
+		out[field] = map.values_of(field)
+	return out
+
+## Sets the map's bounds (§5.4 step 8, §8.3): by cell, the base's corners' least
+## less, and most plus, the most DETAIL_REACH of the lands at its corners (a
+## sea corner counts the open ground the coast's cell may hold too); under it,
+## the lowest floor of any canyon listed near the cell; up to sea level in the
+## cells of a sea (the water is drawn there); and over every cell within a kept
+## disc's radius and blend, today's desert's range, KEPT_LOW to KEPT_HIGH.
+## `cv` is _corner_values'.
+func _bounds(recipe: WorldRecipe, dirs: PackedVector3Array, cv: Array[PackedFloat32Array]) -> void:
+	var shore := cv[S_SHORE]
+	var dunes := cv[S_DUNES]
+	var mountain := cv[S_MOUNTAIN]
+	var plateau := cv[S_PLATEAU]
+	var sea_reach: float = DETAIL_REACH[Land.SEA]
+	var dunes_reach: float = DETAIL_REACH[Land.DUNES]
+	var plains_reach: float = DETAIL_REACH[Land.PLAINS]
+	var plateau_reach: float = DETAIL_REACH[Land.PLATEAU]
+	var mountain_reach: float = DETAIL_REACH[Land.MOUNTAINS]
+	var reach := PackedFloat32Array()
+	reach.resize(shore.size())
+	for k in reach.size():
+		var r := dunes_reach if dunes[k] >= DUNES_FROM else plains_reach
+		if shore[k] <= 0.0:
+			r = maxf(r, sea_reach)
+		elif mountain[k] >= MOUNTAINS_FROM:
+			r = mountain_reach
+		elif plateau[k] >= PLATEAU_FROM:
+			r = plateau_reach
+		reach[k] = r
+	var low := PackedFloat32Array()
+	var high := PackedFloat32Array()
+	map.cell_range(S_BASE, low, high, reach)
+	shapes.lower_by_canyons(low)
+	for sea: Dictionary in shapes.seas:
+		for c: int in sea.cells:
+			high[c] = maxf(high[c], sea_level)
+	for keep: Dictionary in recipe.keeps:
+		_widen_to_kept(keep, dirs, low, high)
+	map.set_bounds(low, high)
+
+## Widens the bounds of every cell within `keep`'s radius and blend (those
+## _clear_of_keeps says are not clear), found by a flood from its place, to
+## KEPT_LOW and KEPT_HIGH.
+func _widen_to_kept(keep: Dictionary, dirs: PackedVector3Array, low: PackedFloat32Array,
+		high: PackedFloat32Array) -> void:
+	var radius := shapes.radius_m
+	var edge := CubeSphere.edge_m(radius, PlanMap.PLAN_DEPTH)
+	var inside: float = keep.radius + keep.blend
+	var dir: Vector3 = keep.dir
+	var reach := inside + 2.0 * edge
+	var seen := PackedByteArray()
+	seen.resize(low.size())
+	seen.fill(0)
+	var start := map.cell_number(dir)
+	var todo := PackedInt32Array([start])
+	seen[start] = 1
+	var near := PackedInt32Array()
+	near.resize(4)
+	var at := 0
+	while at < todo.size():
+		var c := todo[at]
+		at += 1
+		var metres := _cell_centre(c, dirs).angle_to(dir) * radius
+		if metres > reach:
+			continue
+		if metres - edge < inside:
+			low[c] = minf(low[c], KEPT_LOW)
+			high[c] = maxf(high[c], KEPT_HIGH)
+		_cell_neighbours(c, near)
+		for o in near:
+			if seen[o] == 0:
+				seen[o] = 1
+				todo.append(o)
 
 ## Every corner's direction, by k as PlanMap numbers them.
 func _corner_dirs() -> PackedVector3Array:

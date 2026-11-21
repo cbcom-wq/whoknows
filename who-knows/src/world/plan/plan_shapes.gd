@@ -150,6 +150,27 @@ func ridge_m(d: Vector3, cell: Vector4i) -> Vector2:
 		return Vector2(INF, 0.0)
 	return Vector2(best * radius_m, height)
 
+## The lowest floor, metres above radius, of the canyon segments listed near cell
+## number `cell` (cell_index's): the least the walls can cut to in the cell. INF
+## with no canyon near. From any thread; allocates nothing.
+func canyon_floor_low(cell: int) -> float:
+	var low := INF
+	for e in range(_near_from[cell], _near_from[cell + 1]):
+		var i := _near[e] - CANYON * SHAPES
+		if i < 0 or i >= SHAPES:
+			continue
+		var bed: PackedFloat32Array = canyons[i].floor
+		for s in range(_near_first[e], _near_last[e] + 2):
+			low = minf(low, bed[s])
+	return low
+
+## Lowers `low` (a height by cell) to the lowest floor of any canyon listed near
+## the cell, where there is one.
+func lower_by_canyons(low: PackedFloat32Array) -> void:
+	for c in low.size():
+		if _near_from[c + 1] > _near_from[c]:
+			low[c] = minf(low[c], canyon_floor_low(c))
+
 ## The canyon at `d`, a unit direction in cell number `cell` (cell_index's):
 ## Vector3(metres from its centreline over its floor's half-width, at most 1
 ## on the floor; its floor's height; its rim, metres over the floor), what

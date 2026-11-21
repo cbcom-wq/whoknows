@@ -210,25 +210,43 @@ func bounds_of(key: Vector4i) -> Vector2:
 
 ## Fills `low` and `high`, one per cell in set_bounds' order, with the least
 ## and most of `field` over each cell's four corners: what it reaches in the
-## cell, since it is read bilinearly.
-func cell_range(field: int, low: PackedFloat32Array, high: PackedFloat32Array) -> void:
+## cell, since it is read bilinearly. With `pad` (a value by corner, by k), the
+## least is less, and the most more, by the most of it over the cell's corners.
+func cell_range(field: int, low: PackedFloat32Array, high: PackedFloat32Array, pad := PackedFloat32Array()) -> void:
 	var cells := CubeSphere.FACES * CELLS * CELLS
 	low.resize(cells)
 	high.resize(cells)
 	var up := SIDE * fields
+	var padded := not pad.is_empty()
 	var cell := 0
 	for face in CubeSphere.FACES:
 		for j in CELLS:
-			var k := ((face * SIDE + j) * SIDE) * fields + field
+			var corner := (face * SIDE + j) * SIDE
+			var k := corner * fields + field
 			for i in CELLS:
 				var a := _values[k]
 				var b := _values[k + fields]
 				var c := _values[k + up]
 				var e := _values[k + up + fields]
-				low[cell] = minf(minf(a, b), minf(c, e))
-				high[cell] = maxf(maxf(a, b), maxf(c, e))
+				var by := 0.0
+				if padded:
+					by = maxf(maxf(pad[corner], pad[corner + 1]), maxf(pad[corner + SIDE], pad[corner + SIDE + 1]))
+					corner += 1
+				low[cell] = minf(minf(a, b), minf(c, e)) - by
+				high[cell] = maxf(maxf(a, b), maxf(c, e)) + by
 				k += fields
 				cell += 1
+
+## `field` at every corner, by k.
+func values_of(field: int) -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	var count := _values.size() / fields
+	out.resize(count)
+	var at := field
+	for k in count:
+		out[k] = _values[at]
+		at += fields
+	return out
 
 ## Where `dir` falls: Vector3(k of its cell's first corner, how far across the
 ## cell it lies in u and in v, 0 to 1). The face's (u, v) comes from inverting

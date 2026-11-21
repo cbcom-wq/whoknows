@@ -232,7 +232,7 @@ func test_open_ground_is_a_gentle_roll_of_dunes_and_plains():
 			continue
 		assert_between(out[WorldPlan.S_BASE], -WorldPlan.BASE_ROLL, WorldPlan.BASE_ROLL)
 		assert_between(out[WorldPlan.S_DUNES], 0.0, 1.0)
-		assert_eq(out[WorldPlan.S_KEEP], 0.0)
+		assert_between(out[WorldPlan.S_KEEP], 0.0, 1.0)
 		var land := p.land_at(d)
 		assert_eq(land, WorldPlan.Land.DUNES if out[WorldPlan.S_DUNES] >= 0.5 else WorldPlan.Land.PLAINS)
 		if land == WorldPlan.Land.DUNES:
@@ -623,6 +623,108 @@ func test_the_plan_bounds_hold_its_base():
 		assert_between(h, b.x - 1e-3, b.y + 1e-3)
 		var top := p.bounds_of(CubeSphere.key_for(d, 2))
 		assert_true(top.x <= b.x and top.y >= b.y)
+
+func test_oasis_sites_are_low_level_dry_and_spaced():
+	var p := _wadis().plan()
+	var oases := p.sites.filter(func(s): return s.kind == PlanSite.Kind.OASIS)
+	assert_gte(oases.size(), 6)
+	for s in oases:
+		assert_gt(p.nearest_shore_m(s.dir), 0.0)
+		assert_eq(p.keep_weight(s.dir), 0.0)
+		assert_lt(s.level, 0.3)
+		for o in oases:
+			if o != s:
+				assert_gte(s.dir.angle_to(o.dir) * _wadis().radius_m, WorldPlan.OASIS_SPACING)
+
+func test_sites_are_listed_best_first_within_their_kind():
+	var p := _wadis().plan()
+	for kind in [PlanSite.Kind.OASIS, PlanSite.Kind.SHORE]:
+		var last := -INF
+		for s in p.sites.filter(func(s): return s.kind == kind):
+			assert_gte(s.rank, last)
+			last = s.rank
+	var kept := p.sites.filter(func(s): return s.kind == PlanSite.Kind.KEPT)
+	assert_eq(kept.size(), _wadis().keeps.size())
+	assert_eq(kept[0].radius, _wadis().keeps[0].radius)
+
+func test_the_same_seed_plans_the_same_sites():
+	var a := _wadis().plan()
+	var b := WorldPlan.build(_wadis())
+	assert_eq(a.sites.size(), b.sites.size())
+	for n in mini(a.sites.size(), b.sites.size()):
+		assert_eq(a.sites[n].dir, b.sites[n].dir)
+		assert_eq(a.sites[n].heading, b.sites[n].heading)
+
+func test_shore_sites_lie_by_the_water():
+	var p := _wadis().plan()
+	for s in p.sites.filter(func(s): return s.kind == PlanSite.Kind.SHORE):
+		assert_between(p.nearest_shore_m(s.dir), 0.0, 400.0)
+		assert_eq(p.keep_weight(s.dir), 0.0)
+
+func test_nothing_planned_comes_near_wadoo():
+	var p := _wadis().plan()
+	var wadoo := SystemDesign.dir_of(-2.16, -171.97)
+	var out := PackedFloat64Array(); out.resize(WorldPlan.S_SIZE)
+	for d in _disc_points(wadoo, 3500.0, 1000):
+		p.sample(d, out)
+		assert_eq(out[WorldPlan.S_MOUNTAIN], 0.0)
+		assert_eq(out[WorldPlan.S_PLATEAU], 0.0)
+		assert_true(is_inf(out[WorldPlan.S_CANYON]))   # no canyon reaches it, walls and all
+		assert_gt(out[WorldPlan.S_SHORE], 0.0)
+	for s in p.sites:
+		if s.kind != PlanSite.Kind.KEPT:
+			assert_gt(s.dir.angle_to(wadoo) * _wadis().radius_m, 3500.0)
+
+func test_keep_weight_is_one_in_the_disc_and_eases_to_nothing_over_the_blend():
+	var p := _wadis().plan()
+	var radius := _wadis().radius_m
+	var wadoo := SystemDesign.dir_of(-2.16, -171.97)
+	var keep: Dictionary = _wadis().keeps[0]
+	var out := PackedFloat64Array(); out.resize(WorldPlan.S_SIZE)
+	for metres in [0.0, 1000.0, 2000.0]:
+		assert_eq(p.keep_weight(_off_by(wadoo, metres, 0.7, radius)), 1.0)
+	for metres in [3500.0, 3600.0, 20000.0]:
+		assert_eq(p.keep_weight(_off_by(wadoo, metres, 2.1, radius)), 0.0)
+	var d := _off_by(wadoo, 2750.0, 4.0, radius)
+	assert_almost_eq(p.keep_weight(d), 0.5, 1e-3, "halfway over the blend")
+	p.sample(d, out)
+	assert_eq(out[WorldPlan.S_KEEP], p.keep_weight(d))
+	assert_eq(keep.radius, 2000.0)
+
+func test_the_bounds_hold_the_base_less_and_plus_its_detail_the_canyons_and_the_kept_range():
+	var p := _wadis().plan()
+	var radius := _wadis().radius_m
+	var rng := RandomNumberGenerator.new(); rng.seed = 9
+	var reach: Dictionary = WorldPlan.DETAIL_REACH
+	for k in 3000:
+		var d := _dir(rng)
+		var b := p.bounds_of(CubeSphere.key_for(d, 7))
+		var f := PackedFloat64Array(); f.resize(WorldPlan.S_SIZE)
+		p.sample(d, f)
+		var land := WorldPlan.land_in(f)
+		assert_gte(f[WorldPlan.S_BASE] - reach[land], b.x - 1e-3)
+		assert_lte(f[WorldPlan.S_BASE] + reach[land], b.y + 1e-3)
+		if not is_inf(f[WorldPlan.S_CANYON]):
+			assert_gte(f[WorldPlan.S_CANYON_FLOOR], b.x - 1e-3)
+	var wadoo := SystemDesign.dir_of(-2.16, -171.97)
+	for d in _disc_points(wadoo, 3500.0, 200):
+		var b := p.bounds_of(CubeSphere.key_for(d, 9))
+		assert_lte(b.x, -60.0)
+		assert_gte(b.y, 300.0)
+	assert_lte(p.bounds_of(CubeSphere.key_for(wadoo, 12)).x, -60.0)
+
+## `n` seeded points in the disc of `radius_m` round `centre`, even over its area.
+func _disc_points(centre: Vector3, radius_m: float, n: int) -> Array[Vector3]:
+	var rng := RandomNumberGenerator.new(); rng.seed = 33
+	var radius := _wadis().radius_m
+	var out: Array[Vector3] = []
+	for k in n:
+		out.append(_off_by(centre, sqrt(rng.randf()) * radius_m, rng.randf() * TAU, radius))
+	return out
+
+## The direction `metres` from `from` on a world of `radius`, on bearing `bearing`.
+func _off_by(from: Vector3, metres: float, bearing: float, radius: float) -> Vector3:
+	return WorldPlan._toward(from, metres / radius, bearing)
 
 ## A random unit direction, even over the sphere.
 func _dir(rng: RandomNumberGenerator) -> Vector3:
