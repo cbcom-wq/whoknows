@@ -835,7 +835,9 @@ func _peak(d: Vector3) -> float:
 ## are `f` (a sample's): on a range's coast its base held to the water's edge
 ## (PlanMap.held), and where the coast is a cliff (_cliff_share) the face from
 ## the cliff line (_cliff_line) down over CLIFF_RUN to the beach at its foot
-## (_beach).
+## (_beach). The line stands at least CLIFF_IN inland, so within CLIFF_IN less
+## CLIFF_RUN of the water the beach is whole wherever the line stands, and the
+## line (seven reads of the field a step) is not found there.
 func _cliff(d: Vector3, f: PackedFloat64Array, ground: float) -> float:
 	var share := smoothstep(0.0, CLIFF_FADE, f[WorldPlan.S_PLATEAU])
 	if f[WorldPlan.S_MOUNTAIN] > 0.0:
@@ -846,6 +848,8 @@ func _cliff(d: Vector3, f: PackedFloat64Array, ground: float) -> float:
 	var shore := f[WorldPlan.S_SHORE]
 	if shore >= CLIFF_BAY or share <= 0.0:
 		return ground
+	if shore <= CLIFF_IN - CLIFF_RUN:
+		return lerpf(ground, _beach(shore), share)
 	var line := _cliff_line(d)
 	if shore >= line:
 		return ground
@@ -981,7 +985,8 @@ func _planned_ground(d: Vector3, out: PackedFloat64Array) -> StringName:
 		if shore < CLIFF_BAY and (plateau > 0.0 or out[WorldPlan.S_MOUNTAIN] > 0.0):
 			var share := _cliff_share(d, out)
 			if share > 0.0:
-				var line := _cliff_line(d)
+				# Nearer the water than any line's face, under it wherever it stands.
+				var line := CLIFF_IN if shore < CLIFF_IN - CLIFF_RUN else _cliff_line(d)
 				under = shore < line
 				if under and share >= 0.5:
 					if shore >= line - CLIFF_RUN:

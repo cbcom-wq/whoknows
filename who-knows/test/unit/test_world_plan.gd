@@ -1469,6 +1469,198 @@ func test_a_cliff_top_has_no_pit_behind_it():
 		assert_gt(walks, 0, "%s: walks from convex corners of its cliff coasts" % r.name)
 		assert_eq(folds, 0, "%s: walks that fall back under the cliff line" % r.name)
 
+## A cliff coast is seamless: where a cell's edge or a cube face's edge crosses a
+## cliff's face, and along the coast where the line turns between headland and
+## bay, the ground steps from one metre to the next no more than the face's own
+## fall over that metre allows: the cliff's height over the sea (the most along
+## the way) times what S_SHORE and the line (WorldTerrain._cliff_line) move in it,
+## over CLIFF_RUN, and SEAM_SLACK more for the ground's own slope. And the line,
+## read at the water's edge each point faces (WorldTerrain._shore_point), moves
+## no more than LINE_STEP_MOST in a metre, so no Newton step there overshoots to
+## another shore's bays; S_SHORE no more than SHORE_STEP_MOST (the plan's field,
+## drawn out or in over a cell). On the cliff coasts (_on_cliff_coast) of WADIS
+## and the worlds of SEAM_SEEDS (WADIS's coasts never cross a face's edge; theirs
+## do, SEAM_FACE_EDGES_LEAST times or more), from every point where a cell's edge
+## crosses the line (_seam_crossings), SEAM_HALF metres either way at 1 m across
+## the edge and down the shore's fall; and along the coast, the contour of S_SHORE
+## through every SEAM_ALONG-th of them, SEAM_HALF_ALONG metres either way. (The
+## line moves up to 6.6 m in a metre, on TAROR-91, where it slides round a convex
+## corner; a Newton step of twice its length moved it 15 to 106 m, and a beach a
+## twentieth short of whole within CLIFF_IN less CLIFF_RUN of the water stepped
+## 2.9 m over the face's fall.)
+const SEAM_SEEDS := [139, 248]
+const SEAM_HALF := 30
+const SEAM_ALONG := 5
+const SEAM_HALF_ALONG := 150
+const SEAM_SLACK := 1.0
+const LINE_STEP_MOST := 10.0
+const SHORE_STEP_MOST := 1.6
+const SEAM_FACE_EDGES_LEAST := 3
+
+func test_a_cliff_coast_is_seamless_over_cell_and_face_edges():
+	var recipes: Array[WorldRecipe] = [_wadis()]
+	for s: int in SEAM_SEEDS:
+		recipes.append(WorldRecipe.from_seed(s))
+	var face_edges := 0
+	for r in recipes:
+		var t := WorldTerrain.new(r)
+		var p := t.plan
+		var radius := t.radius
+		var crossings := _seam_crossings(t)
+		var most := [0.0, 0.0, -INF]
+		var bad := 0
+		var turns := 0
+		var on_faces := 0
+		for i in crossings.size():
+			var q: Vector3 = crossings[i][0]
+			if crossings[i][2]:
+				on_faces += 1
+			for way: Vector3 in [q.cross(crossings[i][1]).normalized(), _shore_fall(p, q, radius)]:
+				var path: Array[Vector3] = []
+				for m in range(-SEAM_HALF, SEAM_HALF + 1):
+					path.append(_across(q, way, m, radius))
+				bad += _seam_steps(t, path, most)
+			if i % SEAM_ALONG != 0:
+				continue
+			# Along the coast: the contour through q, back then on.
+			var shore := p.map.at(WorldPlan.S_SHORE, q)
+			var coast: Array[Vector3] = [q]
+			for side: float in [-1.0, 1.0]:
+				var at := q
+				var half: Array[Vector3] = []
+				for m in SEAM_HALF_ALONG:
+					var along := at.cross(_shore_rise(p, at, radius)).normalized() * side
+					at = _onto_shore(p, _across(at, along, 1.0, radius), radius, shore)
+					half.append(at)
+				if side < 0.0:
+					half.reverse()
+					half.append_array(coast)
+					coast = half
+				else:
+					coast.append_array(half)
+			for k in coast.size() - 1:
+				if (p.map.at(WorldPlan.S_SHORE, coast[k]) >= t._cliff_line(coast[k])) \
+						!= (p.map.at(WorldPlan.S_SHORE, coast[k + 1]) >= t._cliff_line(coast[k + 1])):
+					turns += 1
+			bad += _seam_steps(t, coast, most)
+		face_edges += on_faces
+		gut.p("%s: %d crossings of the cliff line with cell edges (%d on face edges), the face crossed %d times along the coast; the line moves up to %.2f m in a metre, S_SHORE %.2f, the ground over the face's fall by %.2f m" % [
+			r.name, crossings.size(), on_faces, turns, most[0], most[1], most[2]])
+		assert_gt(crossings.size(), 0, "%s: cell edges crossing its cliff lines" % r.name)
+		assert_gt(turns, 0, "%s: the face crossed along the coast" % r.name)
+		assert_eq(bad, 0, "%s: metre steps by cliff lines over the face's fall, LINE_STEP_MOST or SHORE_STEP_MOST" % r.name)
+	assert_gte(face_edges, SEAM_FACE_EDGES_LEAST, "cube face edges crossing cliff lines")
+
+## [point, the edge's unit tangent there, whether the edge is a cube face's]:
+## where a cell's edge crosses the cliff line (S_SHORE at WorldTerrain._cliff_line)
+## on a cliff coast of either kind (_on_cliff_coast), to a few millimetres. Over
+## the edges of cells within 1.5 km of the water with a range or plateau near
+## (as _cliff_spots draws from) whose corners' S_SHORE spans CLIFF_IN to
+## CLIFF_BAY in part, each edge once, tried at sixteen points along it.
+func _seam_crossings(t: WorldTerrain) -> Array:
+	var p := t.plan
+	var f := PackedFloat64Array(); f.resize(WorldPlan.S_SIZE)
+	var off_line := func(d: Vector3) -> float: return p.map.at(WorldPlan.S_SHORE, d) - t._cliff_line(d)
+	var out := []
+	var seen := {}
+	for index in CubeSphere.FACES * PlanMap.CELLS * PlanMap.CELLS:
+		var key := PlanShapes.cell_key(index)
+		var rr := CubeSphere.node_rect(key)
+		p.sample(CubeSphere.direction(key.x, rr.x + 0.5 * rr.z, rr.y + 0.5 * rr.z), f)
+		if absf(f[WorldPlan.S_SHORE]) >= 1500.0 or f[WorldPlan.S_PLATEAU] <= 0.0 and f[WorldPlan.S_MOUNTAIN] <= 0.0:
+			continue
+		for e: Array in [[0, 1], [2, 3], [0, 2], [1, 3]]:
+			var a := Vector2(rr.x + (e[0] & 1) * rr.z, rr.y + (e[0] >> 1) * rr.z)
+			var b := Vector2(rr.x + (e[1] & 1) * rr.z, rr.y + (e[1] >> 1) * rr.z)
+			var da := CubeSphere.direction(key.x, a.x, a.y)
+			var db := CubeSphere.direction(key.x, b.x, b.y)
+			var sa := p.map.at(WorldPlan.S_SHORE, da)
+			var sb := p.map.at(WorldPlan.S_SHORE, db)
+			if minf(sa, sb) >= WorldTerrain.CLIFF_BAY or maxf(sa, sb) <= WorldTerrain.CLIFF_IN:
+				continue
+			var mid := (da + db).normalized()
+			var id := Vector3i(roundi(mid.x * 1e6), roundi(mid.y * 1e6), roundi(mid.z * 1e6))
+			if seen.has(id):
+				continue
+			seen[id] = true
+			var on_face := a.x == b.x and absf(a.x) == 1.0 or a.y == b.y and absf(a.y) == 1.0
+			var tangent := db - da
+			var prev: float = off_line.call(da)
+			for k in range(1, 17):
+				var now: float = off_line.call(CubeSphere.direction(key.x, lerpf(a.x, b.x, k / 16.0), lerpf(a.y, b.y, k / 16.0)))
+				if (prev > 0.0) != (now > 0.0):
+					var lo := (k - 1) / 16.0
+					var hi := k / 16.0
+					var low_above := prev > 0.0
+					for i in 30:
+						var half_way := 0.5 * (lo + hi)
+						if (off_line.call(CubeSphere.direction(key.x, lerpf(a.x, b.x, half_way), lerpf(a.y, b.y, half_way))) > 0.0) == low_above:
+							lo = half_way
+						else:
+							hi = half_way
+					var w := 0.5 * (lo + hi)
+					var q := CubeSphere.direction(key.x, lerpf(a.x, b.x, w), lerpf(a.y, b.y, w))
+					if _on_cliff_coast(p, q, &"range", f) or _on_cliff_coast(p, q, &"plateau", f):
+						out.append([q, (tangent - q * q.dot(tangent)).normalized(), on_face])
+				prev = now
+	return out
+
+## How many of the metre steps along `path` break test_a_cliff_coast_is_seamless's
+## bounds; `most` keeps [the line's largest step, S_SHORE's, and the ground's most
+## over the face's fall]. The cliff's height is the highest ground along the way:
+## each runs through a crossing, where the ground stands at the cliff's top. The
+## line and S_SHORE are read where height_at reads the ground, `d` normalised once
+## more: on a face a few millimetres' rounding is a metre or more of height.
+func _seam_steps(t: WorldTerrain, path: Array[Vector3], most: Array) -> int:
+	var p := t.plan
+	var heights: Array[float] = []
+	var lines: Array[float] = []
+	var shores: Array[float] = []
+	for d in path:
+		heights.append(t.height_at(d))
+		lines.append(t._cliff_line(d.normalized()))
+		shores.append(p.map.at(WorldPlan.S_SHORE, d.normalized()))
+	var face: float = heights.max() - p.sea_level
+	var bad := 0
+	for k in path.size() - 1:
+		var line := absf(lines[k + 1] - lines[k])
+		var shore := absf(shores[k + 1] - shores[k])
+		var over := absf(heights[k + 1] - heights[k]) - face * (line + shore) / WorldTerrain.CLIFF_RUN
+		most[0] = maxf(most[0], line)
+		most[1] = maxf(most[1], shore)
+		most[2] = maxf(most[2], over)
+		if line > LINE_STEP_MOST or shore > SHORE_STEP_MOST or over > SEAM_SLACK:
+			bad += 1
+	return bad
+
+## A sea cliff's bay lays its beach a little over sea level up to CLIFF_BAY of
+## S_SHORE inland of the water (WorldTerrain._beach), and where a world's cells
+## are smaller than that a cell can lie all on land within it: PlanBounds holds
+## every cell with a corner under CLIFF_BAY down to sea level. Without that, 53
+## such cells of TOMERKA-79 (BAY_BOUNDS_SEED, 15.7 km across, cells of 386 m)
+## stood over it; none of WADIS's or ALLOROR-29's, whose cells are 1.3 km or more.
+const BAY_BOUNDS_SEED := 71
+
+func test_the_bounds_hold_a_bays_beach_where_cells_are_small():
+	var p := WorldRecipe.from_seed(BAY_BOUNDS_SEED).plan()
+	var nearest := PackedFloat32Array()
+	var farthest := PackedFloat32Array()
+	p.map.cell_range(WorldPlan.S_SHORE, nearest, farthest)
+	var near := 0
+	var dry := 0
+	var over := 0
+	for index in nearest.size():
+		if nearest[index] >= WorldTerrain.CLIFF_BAY:
+			continue
+		near += 1
+		if nearest[index] >= 0.0:
+			dry += 1
+		if p.bounds_of(PlanShapes.cell_key(index)).x > p.sea_level:
+			over += 1
+	gut.p("%d cells with a corner within CLIFF_BAY of the water, %d of them all on land" % [near, dry])
+	assert_gt(dry, 0, "cells all on land within CLIFF_BAY of the water")
+	assert_eq(over, 0, "cells within CLIFF_BAY of the water whose low bound stands over sea level")
+
 ## On land, just off the water: the S_SHORE a walk along a coast keeps to.
 const WALK_SHORE := 2.0
 ## A walk's steps between its points, and the most it looks for a cliff's face.
@@ -1524,10 +1716,10 @@ func _on_cliff_coast(p: WorldPlan, d: Vector3, kind: StringName, f: PackedFloat6
 		return f[WorldPlan.S_PLATEAU] >= 1.0
 	return p.map.held(WorldPlan.S_MOUNTAIN, WorldPlan.S_SHORE, d) >= 0.5
 
-## `d` moved along the shore's rise to where S_SHORE is WALK_SHORE.
-func _onto_shore(p: WorldPlan, d: Vector3, radius: float) -> Vector3:
+## `d` moved along the shore's rise to where S_SHORE is `shore` (WALK_SHORE).
+func _onto_shore(p: WorldPlan, d: Vector3, radius: float, shore := WALK_SHORE) -> Vector3:
 	for i in 8:
-		var off := p.map.at(WorldPlan.S_SHORE, d) - WALK_SHORE
+		var off := p.map.at(WorldPlan.S_SHORE, d) - shore
 		if absf(off) < 0.01:
 			break
 		var rise := _shore_rise(p, d, radius)
