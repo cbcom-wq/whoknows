@@ -1481,16 +1481,17 @@ func test_a_cliff_top_has_no_pit_behind_it():
 ## drawn out over a cell: 1.62 by a cube's corner on TOMERKA-79). On the cliff
 ## coasts (_on_cliff_coast) of WADIS and the worlds of SEAM_SEEDS (WADIS's coasts
 ## never cross a face's edge; theirs do, SEAM_FACE_EDGES_LEAST times or more; and
-## TOMERKA-79's cells are under CLIFF_BAY, WorldTerrain.bay_depth), from every
-## point where a cell's edge
-## crosses the line (_seam_crossings), SEAM_HALF metres either way at 1 m across
-## the edge and down the shore's fall; and along the coast, the contour of S_SHORE
-## through every SEAM_ALONG-th of them, SEAM_HALF_ALONG metres either way. (The
-## line moves up to 6.6 m in a metre, on TAROR-91, where it slides round a convex
-## corner; a Newton step of twice its length moved it 15 to 106 m, a beach a
-## twentieth short of whole within CLIFF_IN less CLIFF_RUN of the water stepped
-## 2.9 m over the face's fall, and TOMERKA-79's bays CLIFF_BAY deep moved it 32.6.)
-const SEAM_SEEDS := [139, 248, 71]
+## TOMERKA-79's and KASEN-88's cells are under CLIFF_BAY, WorldTerrain.bay_depth),
+## from every point where a cell's edge crosses the line (_seam_crossings),
+## SEAM_HALF metres either way at 1 m across the edge and down the shore's fall;
+## and along the coast, the contour of S_SHORE through every SEAM_ALONG-th of
+## them, SEAM_HALF_ALONG metres either way. (The line moves up to 6.6 m in a
+## metre on TAROR-91, where it slides round a convex corner, and 6.9 on KASEN-88;
+## a Newton step of twice its length moved it 15 to 106 m, a beach a twentieth
+## short of whole within CLIFF_IN less CLIFF_RUN of the water stepped 2.9 m over
+## the face's fall, and bays CLIFF_BAY deep moved it 32.6 on TOMERKA-79 and 145
+## on KASEN-88, 0.8 of a cell deep 20.9 on KASEN-88.)
+const SEAM_SEEDS := [139, 248, 71, 1812]
 const SEAM_HALF := 30
 const SEAM_ALONG := 5
 const SEAM_HALF_ALONG := 150
