@@ -100,6 +100,13 @@ const DUNE_SPOT_MARGIN := 0.005
 const DUNE_SPOT_POLE := 0.8
 const DUNE_SPOT_RANGE := 12.0
 ## The search for the nearest tower and mesa: bearings, step and reach, m.
+## A planned desert's spot search (_plateau_edge_spot): the sun's elevation
+## over the plateau edge cells looked at, the rings round each, m, and the
+## cells looked at once a spot is found.
+const EDGE_SUN_MIN := 15.0
+const EDGE_SUN_MAX := 50.0
+const EDGE_RINGS: Array[float] = [400.0, 800.0, 1200.0]
+const EDGE_CELLS := 12
 const NEAR_BEARINGS := 72
 const TOWER_STEP := 10.0
 const TOWER_REACH := 1500.0
@@ -183,6 +190,7 @@ var _terrain: WorldTerrain
 ## The wind at `_spot` (windward to lee, along the ground), and the nearest
 ## mesa's and tower's foot: [direction, metres from the spot]; INF if none.
 var _wind := Vector3.ZERO
+var _plan_fields := PackedFloat64Array()
 var _mesa := [Vector3.ZERO, INF]
 var _tower := [Vector3.ZERO, INF]
 ## The cover set's landing spots: among grass, and the densest talus (ZERO if
@@ -293,6 +301,11 @@ func _desert_spot() -> void:
 				best = d
 				best_line = "bearing %d of %d, %.0f m off the ring: dunes %.1f m trough to crest, a tower %.0f m off, a mesa %.0f m off" % [
 					k, RING_BEARINGS, offset, dunes, float(tower[1]), float(mesa[1])]
+	if best == Vector3.ZERO and _terrain.plan != null:
+		var found := _plateau_edge_spot()
+		if found != Vector3.ZERO:
+			best = found
+			best_line = "a planned plateau's edge band, found from the plan's cells"
 	if best == Vector3.ZERO:
 		print("        no open dunes on the ring have both a tower within %.0f m and a mesa within %.0f m: the tallest dunes (%.1f m)" % [
 			TOWER_REACH, MESA_REACH, fallback_range])
@@ -318,7 +331,18 @@ func _open_below() -> float:
 	return WorldTerrain.MESA_FROM - WorldTerrain.TOWER_BAND - DUNE_SPOT_MARGIN
 
 func _open_dunes(d: Vector3) -> bool:
+	if _terrain.plan != null:
+		# A planned desert's open dunes are the plan's dune land.
+		return _terrain.plan.land_at(d) == WorldPlan.Land.DUNES and absf(d.dot(_terrain.wind_axis)) < DUNE_SPOT_POLE
 	return _terrain.continent_at(d) < _open_below() and absf(d.dot(_terrain.wind_axis)) < DUNE_SPOT_POLE
+
+## The plan's plateau weight (S_PLATEAU) at `d`: its country from
+## WorldPlan.PLATEAU_FROM, its edge band below that.
+func _plateau_at(d: Vector3) -> float:
+	if _plan_fields.is_empty():
+		_plan_fields.resize(WorldPlan.S_SIZE)
+	_terrain.plan.sample(d, _plan_fields)
+	return _plan_fields[WorldPlan.S_PLATEAU]
 
 ## Trough to crest within 400 m either way along the wind at `d`, m.
 func _dune_range(d: Vector3) -> float:
@@ -353,18 +377,87 @@ func _nearest(from: Vector3, test: Callable, step: float, reach: float) -> Array
 	return best
 
 ## The nearest mesa: the continent layer at or over MESA_FROM.
+## On a planned desert a mesa is its plateau country, S_PLATEAU at or over
+## WorldPlan.PLATEAU_FROM: the terraced edge climbing to the region's top.
 func _nearest_mesa(from: Vector3) -> Array:
+	if _terrain.plan != null:
+		return _nearest(from, func(d: Vector3) -> bool: return _plateau_at(d) >= WorldPlan.PLATEAU_FROM,
+			MESA_STEP_M, MESA_REACH)
 	return _nearest(from, func(d: Vector3) -> bool: return _terrain.continent_at(d) >= WorldTerrain.MESA_FROM,
 		MESA_STEP_M, MESA_REACH)
 
 ## The nearest tower: a tall rise, rock by rule, in the tower band.
+## On a planned desert a tower stands on the outer half of a plateau's edge
+## band (S_PLATEAU over 0, under WorldPlan.PLATEAU_FROM), rock by rule.
 func _nearest_tower(from: Vector3) -> Array:
 	var h0 := _terrain.height_at(from)
+	if _terrain.plan != null:
+		return _nearest(from, func(d: Vector3) -> bool:
+			var z := _plateau_at(d)
+			return z > 0.0 and z < WorldPlan.PLATEAU_FROM 				and _terrain.ground_at(d, 0.0) == &"rock" and _terrain.height_at(d) - h0 > TOWER_TALL,
+			TOWER_STEP, TOWER_REACH)
 	return _nearest(from, func(d: Vector3) -> bool:
 		var z := _terrain.continent_at(d)
 		return z >= WorldTerrain.MESA_FROM - WorldTerrain.TOWER_BAND and z < WorldTerrain.MESA_FROM \
 			and _terrain.ground_at(d, 0.0) == &"rock" and _terrain.height_at(d) - h0 > TOWER_TALL,
 		TOWER_STEP, TOWER_REACH)
+
+## A planned desert's spot: open dunes with a tower within TOWER_REACH and a
+## mesa within MESA_REACH, found from the plan's own cells. Every cell of the
+## plan's map whose plateau weight (S_PLATEAU) is in its edge band, with the
+## sun EDGE_SUN_MIN to EDGE_SUN_MAX deg up there, is a tower's possible home;
+## rings of EDGE_RINGS round it are looked at for open dunes, and the best
+## (the sun nearest SUN_DEG, then the nearest tower and mesa) is taken. ZERO
+## if none.
+func _plateau_edge_spot() -> Vector3:
+	var p := _terrain.plan
+	var f := PackedFloat64Array()
+	f.resize(WorldPlan.S_SIZE)
+	var cells: Array[Vector3] = []
+	for index in CubeSphere.FACES * PlanMap.CELLS * PlanMap.CELLS:
+		var key := PlanShapes.cell_key(index)
+		var rr := CubeSphere.node_rect(key)
+		var mid := CubeSphere.direction(key.x, rr.x + 0.5 * rr.z, rr.y + 0.5 * rr.z)
+		var up := 90.0 - rad_to_deg(mid.angle_to(_to_star()))
+		if up < EDGE_SUN_MIN or up > EDGE_SUN_MAX:
+			continue
+		p.sample(mid, f)
+		if f[WorldPlan.S_PLATEAU] > 0.1 and f[WorldPlan.S_PLATEAU] < WorldPlan.PLATEAU_FROM and f[WorldPlan.S_KEEP] <= 0.0 				and f[WorldPlan.S_CANYON] == INF:
+			cells.append(mid)
+	cells.sort_custom(func(a: Vector3, b: Vector3) -> bool:
+		return absf(90.0 - rad_to_deg(a.angle_to(_to_star())) - SUN_DEG) < absf(90.0 - rad_to_deg(b.angle_to(_to_star())) - SUN_DEG))
+	var best := Vector3.ZERO
+	var best_score := INF
+	var tried := 0
+	for mid in cells:
+		var ab := _tangents(mid)
+		for ring: float in EDGE_RINGS:
+			for k in 12:
+				var d := _off(mid, ab[0] * cos(k * TAU / 12.0) + ab[1] * sin(k * TAU / 12.0), ring)
+				if not _open_dunes(d) or _dune_range(d) < DUNE_SPOT_RANGE:
+					continue
+				var tower := _nearest_tower(d)
+				if float(tower[1]) == INF:
+					continue
+				var mesa := _nearest_mesa(d)
+				if float(mesa[1]) == INF:
+					continue
+				# The landing is on the flattest dune near, so the tower and mesa
+				# must be in reach of that spot.
+				var land := _flattest_dune(d)
+				tower = _nearest_tower(land)
+				mesa = _nearest_mesa(land)
+				if float(tower[1]) == INF or float(mesa[1]) == INF:
+					continue
+				var score := float(tower[1]) + 0.5 * float(mesa[1])
+				if score < best_score:
+					best_score = score
+					best = land
+		tried += 1
+		if best != Vector3.ZERO and tried >= EDGE_CELLS:
+			break
+	print("        plateau edge cells in daylight: %d, %d looked at" % [cells.size(), tried])
+	return best
 
 ## The flattest open dune within LAND_SEARCH of `near`.
 func _flattest_dune(near: Vector3) -> Vector3:
