@@ -2,8 +2,8 @@ class_name PlanShapes
 extends RefCounted
 
 ## What a world plan draws on its map (docs/superpowers/specs/2026-11-19-wadis-land-design.md
-## §5.1): so far its seas, ranges and plateaus; canyons come later. Plain
-## data, written while the plan is built and only read after, from any thread.
+## §5.1): its seas, ranges, plateaus and canyons. Plain data, written while the
+## plan is built and only read after, from any thread.
 ##
 ## A cell is the map's: the quadtree's node at PlanMap.PLAN_DEPTH, numbered
 ## (face * CELLS + j) * CELLS + i, the order PlanMap.set_bounds takes them in.
@@ -28,7 +28,18 @@ var ranges: Array[Dictionary] = []
 ## Each plateau region, one connected body of cells: {"cells":
 ## PackedInt32Array, "top": float, metres above radius its top stands at}.
 var plateaus: Array[Dictionary] = []
-## The world's radius, metres: what ridge_m measures in.
+## Each canyon: {"path": PackedVector3Array, unit directions about
+## WorldPlan.CANYON_STEP apart from its head to its mouth; by path point,
+## "floor": PackedFloat32Array, metres above radius of its floor, never
+## climbing toward the mouth, "half_floor": PackedFloat32Array, metres from the
+## centreline to the floor's edge, and "rim": PackedFloat32Array, metres its
+## walls' top stands over the floor, where they end, WorldPlan.CANYON_WALL_RUN
+## times that past the floor's edge; "mouth": StringName, &"beach" where it
+## meets the sea or &"basin" where it ends in a dry basin}. A branch is its own
+## canyon, with "mouth" &"" and "joins": its parent's index, its path ending on
+## the parent's and its floor at the parent's there.
+var canyons: Array[Dictionary] = []
+## The world's radius, metres: what ridge_m and canyon_at measure in.
 var radius_m := 0.0
 
 ## The near lists, by cell: its entries are _near_from[cell] to
@@ -138,3 +149,56 @@ func ridge_m(d: Vector3, cell: Vector4i) -> Vector2:
 	if best == INF:
 		return Vector2(INF, 0.0)
 	return Vector2(best * radius_m, height)
+
+## The canyon at `d`, a unit direction in cell number `cell` (cell_index's):
+## Vector3(metres from its centreline over its floor's half-width, at most 1
+## on the floor; its floor's height; its rim, metres over the floor), what
+## WorldPlan.S_CANYON, S_CANYON_FLOOR and S_CANYON_RIM hold, or Vector3(INF, 0,
+## 0) where no canyon's walls reach. Of each canyon near the cell, the nearest
+## point of its path whose walls reach `d` (the floor's half-width and
+## WorldPlan.CANYON_WALL_RUN times the rim there); where two canyons reach it,
+## the one whose cut stands lowest at `d`: its floor plus the walls' rise past
+## the floor's edge, so where canyons meet, the deeper's floor and walls cut
+## through the other's. From any thread; allocates nothing.
+func canyon_at(d: Vector3, cell: int) -> Vector3:
+	var out := Vector3(INF, 0.0, 0.0)
+	var lowest := INF
+	var run := WorldPlan.CANYON_WALL_RUN
+	for e in range(_near_from[cell], _near_from[cell + 1]):
+		var i := _near[e] - CANYON * SHAPES
+		if i < 0 or i >= SHAPES:
+			continue
+		var c: Dictionary = canyons[i]
+		var path: PackedVector3Array = c.path
+		var half: PackedFloat32Array = c.half_floor
+		var rim: PackedFloat32Array = c.rim
+		# The nearest point within reach: nearest by its chord's square (in the
+		# same order as the great circle for points this near), within reach
+		# by the great circle.
+		var best := INF
+		var at := -1
+		var at_t := 0.0
+		var metres := 0.0
+		for s in range(_near_first[e], _near_last[e] + 1):
+			var a := path[s]
+			var ab := path[s + 1] - a
+			var t := clampf((d - a).dot(ab) / ab.length_squared(), 0.0, 1.0)
+			var q := a + ab * t
+			var gap := d.distance_squared_to(q)
+			if gap < best:
+				var m := d.angle_to(q) * radius_m
+				if m <= lerpf(half[s], half[s + 1], t) + lerpf(rim[s], rim[s + 1], t) * run:
+					best = gap
+					at = s
+					at_t = t
+					metres = m
+		if at < 0:
+			continue
+		var bed: PackedFloat32Array = c.floor
+		var w := lerpf(half[at], half[at + 1], at_t)
+		var f := lerpf(bed[at], bed[at + 1], at_t)
+		var cut := f + maxf(metres - w, 0.0) / run
+		if cut < lowest:
+			lowest = cut
+			out = Vector3(metres / w, f, lerpf(rim[at], rim[at + 1], at_t))
+	return out

@@ -7,8 +7,8 @@ extends RefCounted
 ## its dials, a map (PlanMap) of fields that sample() reads anywhere, and the
 ## shapes drawn on it (PlanShapes). So far the map holds the open ground, dune
 ## seas and gravel plains on a gentle roll, the seas sunk into it and the
-## mountain ranges raised on it; the plateaus, canyons and kept discs come
-## later.
+## mountain ranges and plateau country raised on it, and the canyons are drawn
+## through it; the kept discs come later.
 
 enum Land { SEA, DUNES, PLAINS, PLATEAU, MOUNTAINS }
 
@@ -144,6 +144,75 @@ const PLATEAU_FROM := 0.5
 ## open ground).
 const MOUNTAINS_FROM := 0.5
 
+## The canyons (§5.4 step 6, §6). Each of the `canyons` dial's sets out in
+## plateau country (a cell of a region's flat top) or, CANYON_FROM_RANGE of the
+## time, on a range's lower flank (a cell whose S_MOUNTAIN is CANYON_FLANK, so
+## its floor sets out gently), and steps from cell to cell downhill to the sea:
+## to the neighbour lowest by its base, plus CANYON_PULL metres a metre from the
+## coast (which carries it over the open ground's roll, where it would
+## otherwise stop in the first hollow), plus a seeded wander, up to
+## CANYON_WANDER metres in a noise CANYON_WANDER_WAVE across. One that finds no
+## lower neighbour, or is CANYON_LENGTH.y long (the cap), or is on a world with
+## no sea, ends where it is, in a dry basin it digs. Of its tries, one
+## CANYON_LENGTH.x long or more is liked better.
+const CANYON_FLOOR_WIDTH := Vector2(150.0, 600.0)
+const CANYON_DEPTH := Vector2(100.0, 400.0)
+## A floor stays this far over sea level until its mouth.
+const CANYON_LAND_FLOOR := 1.0
+const CANYON_LENGTH := Vector2(8000.0, 60000.0)
+const CANYON_FROM_RANGE := 0.3
+const CANYON_FLANK := Vector2(0.1, 0.3)
+const CANYON_PULL := 0.03
+const CANYON_WANDER := 20.0
+const CANYON_WANDER_WAVE := 15000.0
+## A canyon's path is a smooth curve through its cells' middles, a point every
+## CANYON_STEP metres or so, winding up to CANYON_WIND metres either side in a
+## noise CANYON_WIND_WAVE across (less within half a wave of its ends, which
+## stay where its cells put them). Its floor's width wanders within
+## CANYON_FLOOR_WIDTH in a noise CANYON_WIDTH_WAVE across, widening to the
+## widest over the last CANYON_BASIN metres of one that ends in a basin.
+const CANYON_STEP := 300.0
+const CANYON_WIND := 300.0
+const CANYON_WIND_WAVE := 4000.0
+const CANYON_WIDTH_WAVE := 8000.0
+const CANYON_BASIN := 1500.0
+## Its floor is the running minimum of the base less its depth (drawn from
+## CANYON_DEPTH), so it never climbs toward its mouth, and stays
+## CANYON_LAND_FLOOR over sea level until its mouth, where it comes down to the
+## water: a beach of its own. It falls at most CANYON_GRADE a metre, so it can
+## be landed on: where the base falls faster, the floor above is lowered to
+## meet it, which also brings a branch down to its parent's floor.
+const CANYON_GRADE := 0.1
+## Its walls rise from the floor's edge, CANYON_WALL_RUN metres out for each
+## metre up, to its rim: CANYON_RIM_PAD over the highest base across the canyon
+## where they end, so there they stand over the ground, its detail and all, and
+## leaving a canyon makes no seam.
+const CANYON_WALL_RUN := 1.5
+const CANYON_RIM_PAD := 60.0
+## A canyon's cells keep this many metres more than a kept disc's radius and
+## blend from its place: room for its walls and its winding. Its walls are
+## measured against the disc once it is drawn.
+const CANYON_KEEP_CLEAR := 4000.0
+## Seeded heads tried for each canyon (and branch, and canyon-and-beach pairs
+## for to_beach); the first whose canyon keeps clear of the kept discs and the
+## other canyons, reaches the sea and is long enough is kept, else the nearest
+## miss.
+const CANYON_TRIES := 24
+## Where no canyon opens on a beach (a shore with no range's flank or plateau
+## in it), the nearest is rerouted from its path to one: stepped down over the
+## land with this many metres a metre from the beach added to each cell, enough
+## to carry it over any ground between (its floor stays the running minimum, so
+## where the ground rises it only cuts deeper).
+const CANYON_BEACH_PULL := 1.0
+## How many branches a world's canyons have, seeded. Each sets out, as a canyon
+## does, CANYON_BRANCH_FROM metres from a point of its parent's path, and steps
+## down to it.
+const CANYON_BRANCHES := Vector2i(1, 2)
+const CANYON_BRANCH_FROM := Vector2(4000.0, 12000.0)
+## A canyon's path is listed near the cells in runs of this many segments
+## (_list_canyon).
+const LIST_RUN := 8
+
 var dials: PlanDials
 ## Metres above radius of the sea's water: SEA_LEVEL, or -INF with no sea.
 var sea_level := -INF
@@ -164,6 +233,7 @@ static func build(recipe: WorldRecipe) -> WorldPlan:
 	p._open_ground(recipe, dirs, shore)
 	p._ranges(recipe, dirs, shore, copies)
 	p._plateaus(recipe, dirs, shore, copies)
+	p._canyons(recipe, dirs)
 	p.shapes.pack_near()
 	var low := PackedFloat32Array()
 	var high := PackedFloat32Array()
@@ -172,9 +242,15 @@ static func build(recipe: WorldRecipe) -> WorldPlan:
 	return p
 
 ## Every field at `d` into `out` (S_SIZE long, the caller's own): allocates
-## nothing.
+## nothing. The map holds all but the canyon's, which are worked out here
+## (PlanShapes.canyon_at): a floor a few hundred metres wide is too fine for the
+## map's corners.
 func sample(d: Vector3, out: PackedFloat64Array) -> void:
-	map.sample(d, out)
+	var u := d.normalized()
+	var canyon := shapes.canyon_at(u, map.sample(u, out))
+	out[S_CANYON] = canyon.x
+	out[S_CANYON_FLOOR] = canyon.y
+	out[S_CANYON_RIM] = canyon.z
 
 ## SEA at or past the water's edge; MOUNTAINS on a range's upper flanks;
 ## PLATEAU on a plateau's body; else what the open ground is.
@@ -1175,6 +1251,142 @@ func _lay_plateaus(canon: PackedInt32Array, full: PackedByteArray) -> void:
 		if w > 0.0:
 			map.set_corner(S_BASE, face, i, j, lerpf(map.corner(S_BASE, face, i, j), top, w))
 
+## Draws the dials' canyons into shapes.canyons (§5.4 step 6), then their
+## branches, and lists each near every cell its walls can reach
+## (_list_canyon). On a world with a sea, if no canyon's mouth opens on a beach
+## (_on_beach), the canyon nearest such a shore is routed to it instead; if none
+## can be, that is an error. CanyonDraw draws each.
+func _canyons(recipe: WorldRecipe, dirs: PackedVector3Array) -> void:
+	if dials.canyons <= 0:
+		return
+	var draw := CanyonDraw.new(self, recipe, dirs)
+	for n in dials.canyons:
+		var c := draw.canyon(n)
+		if c.is_empty():
+			push_error("WorldPlan: no head for canyon %d of %s in plateau country or on a range's flank" % [n + 1, recipe.name])
+			continue
+		draw.take(c)
+	var mains := shapes.canyons.size()
+	if sea_level > -INF and mains > 0 and not shapes.canyons.any(_on_beach):
+		draw.to_beach()
+		if not shapes.canyons.any(_on_beach):
+			push_error("WorldPlan: no canyon of %s opens on a beach" % recipe.name)
+	if mains > 0:
+		for n in draw.rng.randi_range(CANYON_BRANCHES.x, CANYON_BRANCHES.y):
+			var b := draw.branch(mains)
+			if b.is_empty():
+				push_error("WorldPlan: no branch %d for %s's canyons" % [n + 1, recipe.name])
+				continue
+			draw.take(b)
+	var seen := PackedInt32Array()
+	seen.resize(CubeSphere.FACES * PlanMap.CELLS * PlanMap.CELLS)
+	seen.fill(-1)
+	for i in shapes.canyons.size():
+		_list_canyon(i, dirs, seen)
+
+## True if canyon `c` meets the sea on open ground: no range's flank and no
+## plateau over the last BEACH_WIDTH of its path.
+func _on_beach(c: Dictionary) -> bool:
+	if c.mouth != &"beach":
+		return false
+	var path: PackedVector3Array = c.path
+	var back := 0.0
+	for i in range(path.size() - 1, -1, -1):
+		if map.at(S_MOUNTAIN, path[i]) > 0.0 or map.at(S_PLATEAU, path[i]) > 0.0:
+			return false
+		if i > 0:
+			back += path[i].angle_to(path[i - 1]) * shapes.radius_m
+			if back > BEACH_WIDTH:
+				return true
+	return true
+
+## Lists canyon `i` near every cell its walls can reach, with the segments of
+## its path from the first to the last that can be nearest a point of the cell:
+## every segment within the canyon's widest reach and the cell's own (its middle
+## to its farthest corner) of the cell's middle. The path is looked through in
+## runs of LIST_RUN segments, each skipped whole where it lies too far, so every
+## segment that may count is found even where the path winds back on itself.
+## The cells are found by a front from those the path crosses, through the cells
+## listed and a ring of cells past them. `seen` is by cell the last canyon to
+## reach it.
+func _list_canyon(i: int, dirs: PackedVector3Array, seen: PackedInt32Array) -> void:
+	var c: Dictionary = shapes.canyons[i]
+	var path: PackedVector3Array = c.path
+	var half: PackedFloat32Array = c.half_floor
+	var rim: PackedFloat32Array = c.rim
+	var widest := 0.0
+	for k in path.size():
+		widest = maxf(widest, half[k] + rim[k] * CANYON_WALL_RUN)
+	widest /= shapes.radius_m
+	var segments := path.size() - 1
+	# Each run's middle, and the radians within which its points lie of it.
+	var runs := ceili(float(segments) / LIST_RUN)
+	var middles := PackedVector3Array()
+	middles.resize(runs)
+	var spans := PackedFloat32Array()
+	spans.resize(runs)
+	for r in runs:
+		var last := mini((r + 1) * LIST_RUN, segments)
+		var m := Vector3.ZERO
+		for k in range(r * LIST_RUN, last + 1):
+			m += path[k]
+		m = m.normalized()
+		var span := 0.0
+		for k in range(r * LIST_RUN, last + 1):
+			span = maxf(span, m.angle_to(path[k]))
+		middles[r] = m
+		spans[r] = span
+	var shape := PlanShapes.CANYON * PlanShapes.SHAPES + i
+	var up := PlanMap.SIDE
+	# The front, and by each cell whether the cell it was reached from was
+	# listed (1) or not (0).
+	var todo := PackedInt32Array()
+	var after := PackedByteArray()
+	for d in path:
+		var cell := map.cell_number(d)
+		if seen[cell] != i:
+			seen[cell] = i
+			todo.append(cell)
+			after.append(1)
+	var near := PackedInt32Array()
+	near.resize(4)
+	var at := 0
+	while at < todo.size():
+		var cell := todo[at]
+		var from_listed := after[at] == 1
+		at += 1
+		var mid := _cell_centre(cell, dirs)
+		var k := _first_corner(cell)
+		var bound := widest + 1.01 * maxf(maxf(mid.angle_to(dirs[k]), mid.angle_to(dirs[k + 1])),
+			maxf(mid.angle_to(dirs[k + up]), mid.angle_to(dirs[k + up + 1])))
+		var first := segments
+		var last := -1
+		for r in runs:
+			if mid.dot(middles[r]) < cos(minf(spans[r] + bound, PI)):
+				continue
+			for s in range(r * LIST_RUN, mini((r + 1) * LIST_RUN, segments)):
+				if _segment_angle(path, s, mid) <= bound:
+					first = mini(first, s)
+					last = maxi(last, s)
+		var listed := last >= 0
+		if listed:
+			shapes.add_near(cell, shape, first, last)
+		elif not from_listed:
+			continue
+		_cell_neighbours(cell, near)
+		for o in near:
+			if seen[o] != i:
+				seen[o] = i
+				todo.append(o)
+				after.append(1 if listed else 0)
+
+## `field` averaged over cell `c`'s four corners: what it is at the cell's
+## middle, read bilinearly.
+func _cell_mean(field: int, c: int) -> float:
+	var k := _first_corner(c)
+	var up := PlanMap.SIDE
+	return 0.25 * (_corner_at(field, k) + _corner_at(field, k + 1) + _corner_at(field, k + up) + _corner_at(field, k + up + 1))
+
 ## Radians from `d` to the nearest point of segment `s` of `spine` (from point
 ## s to point s + 1): to the nearest point of its chord, seen from the centre.
 static func _segment_angle(spine: PackedVector3Array, s: int, d: Vector3) -> float:
@@ -1344,3 +1556,514 @@ class Buckets:
 				return _item[e]
 			_low += 1
 		return -1
+
+## What _canyons works with while it draws a plan's canyons (§5.4 step 6): their
+## routes down the cells, the curves drawn through them, and which cells a
+## canyon may set out from or cross. Lives only while the plan is built.
+class CanyonDraw:
+	var plan: WorldPlan
+	var recipe: WorldRecipe
+	## Every corner's direction, by k.
+	var dirs: PackedVector3Array
+	var radius: float
+	var edge: float
+	var rng: RandomNumberGenerator
+	var wander: FastNoiseLite
+	var wind: FastNoiseLite
+	var width: FastNoiseLite
+	## By cell, 1 for a sea's.
+	var wet := PackedByteArray()
+	## By cell, 1 + the index of the first canyon whose path crosses it or a
+	## cell beside it; 0 for none.
+	var owner := PackedInt32Array()
+	## By cell: the height a canyon steps down by (the base at its middle and
+	## the wander), INF too near a kept disc; and its middle's metres to the
+	## coast. NAN until first asked.
+	var _lie := PackedFloat32Array()
+	var _coast := PackedFloat32Array()
+	## By canyon index, once asked (toward): by cell, the steps from the cells
+	## its path crosses.
+	var _toward := {}
+
+	func _init(p_plan: WorldPlan, p_recipe: WorldRecipe, p_dirs: PackedVector3Array) -> void:
+		plan = p_plan
+		recipe = p_recipe
+		dirs = p_dirs
+		radius = recipe.radius_m
+		edge = CubeSphere.edge_m(radius, PlanMap.PLAN_DEPTH)
+		rng = WorldSeed.rng(recipe.seed, &"plan_canyons")
+		wander = WorldPlan._noise(recipe, &"plan_canyon_wander", CANYON_WANDER_WAVE, 2)
+		wind = WorldPlan._noise(recipe, &"plan_canyon_wind", CANYON_WIND_WAVE, 2)
+		width = WorldPlan._noise(recipe, &"plan_canyon_width", CANYON_WIDTH_WAVE, 2)
+		var cells := CubeSphere.FACES * PlanMap.CELLS * PlanMap.CELLS
+		wet.resize(cells)
+		wet.fill(0)
+		for sea: Dictionary in plan.shapes.seas:
+			for c: int in sea.cells:
+				wet[c] = 1
+		owner.resize(cells)
+		owner.fill(0)
+		_lie.resize(cells)
+		_lie.fill(NAN)
+		_coast.resize(cells)
+		_coast.fill(NAN)
+
+	## The next canyon, `n` of the dials': of CANYON_TRIES seeded heads, the
+	## first whose route down (pulled toward the coast) keeps clear of the kept
+	## discs and the other canyons, reaches the sea and is CANYON_LENGTH.x long;
+	## else the nearest miss, by those three in that order, with an error if it
+	## is not clear (one that ends in a dry basin, or short, is only less
+	## liked). {} if no head was found.
+	func canyon(n: int) -> Dictionary:
+		var sea := plan.sea_level > -INF
+		var pull := func(c: int) -> float: return CANYON_PULL * coast(c) if sea else 0.0
+		var goal := func(c: int) -> bool: return wet[c] != 0
+		var best := {}
+		var best_rank := Vector3(INF, INF, INF)
+		for attempt in CANYON_TRIES:
+			var start := head()
+			if start < 0:
+				continue
+			var route := descend(start, goal, pull)
+			var cells: PackedInt32Array = route.cells
+			if cells.size() < 2:
+				continue
+			var rank := Vector3(cell_miss(cells, -1), 0.0 if route.reached or not sea else 1.0, 0.0)
+			if not (rank < best_rank):
+				continue
+			var shape := shape_of(cells, route.reached, rng.randf_range(CANYON_DEPTH.x, CANYON_DEPTH.y), -1)
+			rank.x += miss(shape)
+			rank.z = short(shape)
+			if rank < best_rank:
+				best = shape
+				best_rank = rank
+			if rank == Vector3.ZERO:
+				break
+		if best_rank.x > 0.0 and not best.is_empty():
+			push_error("WorldPlan: no head for canyon %d of %s gives one clear of its kept discs and the other canyons; kept the nearest miss" % [
+				n + 1, recipe.name])
+		return best
+
+	## A branch of one of the first `mains` canyons: of CANYON_TRIES seeded
+	## heads, each CANYON_BRANCH_FROM from a point of its parent's path and at
+	## least CANYON_BRANCH_FROM.x from all of it, the first whose route down
+	## (pulled toward the parent's path) reaches it, falls at least
+	## CANYON_DEPTH.x to the parent's floor where they meet, and keeps clear of
+	## the kept discs and the other canyons; else the nearest miss to reach it,
+	## with an error. Its depth is drawn, or as far as its head stands over the
+	## parent's floor where they meet, if less. {} if none reached it.
+	func branch(mains: int) -> Dictionary:
+		var best := {}
+		var best_miss := INF
+		var least := ceili(CANYON_BRANCH_FROM.x / edge)
+		for attempt in CANYON_TRIES:
+			var p := rng.randi() % mains
+			var parent: Dictionary = plan.shapes.canyons[p]
+			var on: PackedVector3Array = parent.path
+			var steps := toward(p)
+			var start := -1
+			for draw in CANYON_TRIES:
+				var c := plan.map.cell_number(WorldPlan._toward(on[rng.randi() % on.size()],
+					rng.randf_range(CANYON_BRANCH_FROM.x, CANYON_BRANCH_FROM.y) / radius, rng.randf() * TAU))
+				if steps[c] >= least and is_head(c):
+					start = c
+					break
+			if start < 0:
+				continue
+			var route := descend(start, func(c: int) -> bool: return steps[c] == 0,
+				func(c: int) -> float: return CANYON_PULL * edge * steps[c] if steps[c] >= 0 else INF)
+			if not route.reached:
+				continue
+			var cells: PackedInt32Array = route.cells
+			var meet := _nearest(on, WorldPlan._cell_centre(cells[-1], dirs))
+			var fall: float = plan._cell_mean(S_BASE, start) - parent.floor[meet]
+			var depth := minf(rng.randf_range(CANYON_DEPTH.x, CANYON_DEPTH.y), fall)
+			var missed := cell_miss(cells, p) + maxf(0.0, CANYON_DEPTH.x - depth)
+			if missed >= best_miss:
+				continue
+			var shape := shape_of(cells, true, maxf(depth, CANYON_DEPTH.x), p, meet)
+			missed += miss(shape)
+			if missed < best_miss:
+				best = shape
+				best_miss = missed
+			if missed == 0.0:
+				break
+		if best_miss > 0.0 and not best.is_empty():
+			push_error("WorldPlan: no branch of %s's canyons falls to its parent's floor clear of its kept discs and the other canyons; kept the nearest miss" % recipe.name)
+		return best
+
+	## Routes a canyon to a beach: a land cell beside the sea with no range's
+	## flank or plateau in it or the land cells beside it, clear of the kept
+	## discs. Of the canyons drawn so far and the beaches, the nearest pairs
+	## first (CANYON_TRIES of them, at most), the first canyon that, kept as it
+	## is down to its point nearest the beach and from there stepped down over
+	## the land to the beach (pulled toward it, CANYON_BEACH_PULL) and into the
+	## sea beside it,
+	## meets the sea on a beach (_on_beach) and keeps every rule takes its
+	## place.
+	func to_beach() -> void:
+		var beaches := PackedInt32Array()
+		var near := PackedInt32Array()
+		near.resize(4)
+		var beside := PackedInt32Array()
+		beside.resize(4)
+		var seen := PackedByteArray()
+		seen.resize(wet.size())
+		seen.fill(0)
+		for sea: Dictionary in plan.shapes.seas:
+			for c: int in sea.cells:
+				plan._cell_neighbours(c, near)
+				for o in near:
+					if wet[o] != 0 or seen[o] != 0:
+						continue
+					seen[o] = 1
+					var open := lie(o) < INF and _open(o)
+					plan._cell_neighbours(o, beside)
+					for b in beside:
+						open = open and (wet[b] != 0 or _open(b))
+					if open:
+						beaches.append(o)
+		var canyons := plan.shapes.canyons
+		# Each pair as Vector3(radians from the canyon's path to the beach, the
+		# canyon, the beach), and by pair the path's point nearest the beach.
+		var pairs: Array[Vector3] = []
+		var points := {}
+		for i in canyons.size():
+			var path: PackedVector3Array = canyons[i].path
+			for b in beaches.size():
+				var at := WorldPlan._cell_centre(beaches[b], dirs)
+				var best := Vector2(INF, 0)
+				for k in range(0, path.size(), 6):
+					var a := path[k].angle_to(at)
+					if a < best.x:
+						best = Vector2(a, k)
+				pairs.append(Vector3(best.x, i, b))
+				points[Vector2i(i, b)] = int(best.y)
+		pairs.sort()
+		for pair in pairs.slice(0, CANYON_TRIES):
+			var i := int(pair.y)
+			var to := beaches[int(pair.z)]
+			var at := WorldPlan._cell_centre(to, dirs)
+			var path: PackedVector3Array = canyons[i].path
+			var cells := PackedInt32Array()
+			for k in points[Vector2i(i, int(pair.z))] + 1:
+				var c := plan.map.cell_number(path[k])
+				if cells.is_empty() or cells[-1] != c:
+					cells.append(c)
+			var rest := descend(cells[-1], func(c: int) -> bool: return c == to,
+				func(c: int) -> float: return INF if wet[c] != 0 else CANYON_BEACH_PULL * WorldPlan._cell_centre(c, dirs).angle_to(at) * radius)
+			if not rest.reached:
+				continue
+			cells.append_array(rest.cells.slice(1))
+			plan._cell_neighbours(to, near)
+			for o in near:
+				if wet[o] != 0:
+					cells.append(o)
+					break
+			if cell_miss(cells, i) > 0.0:
+				continue
+			var shape := shape_of(cells, true, rng.randf_range(CANYON_DEPTH.x, CANYON_DEPTH.y), -1)
+			if miss(shape) > 0.0 or not plan._on_beach(shape):
+				continue
+			canyons[i] = shape
+			owner.fill(0)
+			for k in canyons.size():
+				mark(k)
+			return
+
+	## True if no range's flank and no plateau reaches into cell `c`.
+	func _open(c: int) -> bool:
+		return plan._cell_mean(S_MOUNTAIN, c) == 0.0 and plan._cell_mean(S_PLATEAU, c) == 0.0
+
+	## Adds canyon `c` to the plan's, and marks the cells its path crosses, and
+	## the cells beside them, its own.
+	func take(c: Dictionary) -> void:
+		plan.shapes.canyons.append(c)
+		mark(plan.shapes.canyons.size() - 1)
+
+	## Marks the cells canyon `i`'s path crosses, and the cells beside them,
+	## its own, where no canyon has them yet.
+	func mark(i: int) -> void:
+		var near := PackedInt32Array()
+		near.resize(4)
+		var last := -1
+		for d: Vector3 in plan.shapes.canyons[i].path:
+			var c := plan.map.cell_number(d)
+			if c == last:
+				continue
+			last = c
+			if owner[c] == 0:
+				owner[c] = i + 1
+			plan._cell_neighbours(c, near)
+			for o in near:
+				if owner[o] == 0:
+					owner[o] = i + 1
+
+	## A seeded head for a canyon (is_head), drawn from a plateau region's
+	## cells or, CANYON_FROM_RANGE of the time, about a range's lower flank; -1
+	## if CANYON_TRIES draws find none.
+	func head() -> int:
+		var ranges := plan.shapes.ranges
+		var plateaus := plan.shapes.plateaus
+		if ranges.is_empty() and plateaus.is_empty():
+			return -1
+		for draw in CANYON_TRIES:
+			var c: int
+			if plateaus.is_empty() or (not ranges.is_empty() and rng.randf() < CANYON_FROM_RANGE):
+				var r: Dictionary = ranges[rng.randi() % ranges.size()]
+				var spine: PackedVector3Array = r.spine
+				var out: float = (1.0 - rng.randf_range(CANYON_FLANK.x, CANYON_FLANK.y)) * r.half_width
+				c = plan.map.cell_number(WorldPlan._toward(spine[rng.randi() % spine.size()], out / radius, rng.randf() * TAU))
+			else:
+				var region: PackedInt32Array = plateaus[rng.randi() % plateaus.size()].cells
+				c = region[rng.randi() % region.size()]
+			if is_head(c):
+				return c
+		return -1
+
+	## True if a canyon may set out from cell `c`: on a plateau region's flat
+	## top, or where a range's flanks' weight is CANYON_FLANK; on land, clear of
+	## the kept discs and of every canyon so far.
+	func is_head(c: int) -> bool:
+		if owner[c] != 0 or wet[c] != 0 or lie(c) == INF:
+			return false
+		if plan._cell_mean(S_PLATEAU, c) >= 1.0:
+			return true
+		var w := plan._cell_mean(S_MOUNTAIN, c)
+		return w >= CANYON_FLANK.x and w <= CANYON_FLANK.y
+
+	## The cells from `start` down, each the neighbour lowest by its lie plus
+	## pull(cell) metres, to the first that goal(cell) holds for:
+	## {"cells": PackedInt32Array, start first; "reached": bool}. It stops short,
+	## unreached, where no neighbour is lower or once it is CANYON_LENGTH.y long.
+	func descend(start: int, goal: Callable, pull: Callable) -> Dictionary:
+		var cells := PackedInt32Array([start])
+		var here := start
+		var height: float = lie(start) + pull.call(start)
+		var most := ceili(CANYON_LENGTH.y / edge)
+		var near := PackedInt32Array()
+		near.resize(4)
+		while not goal.call(here):
+			if cells.size() > most:
+				return {"cells": cells, "reached": false}
+			plan._cell_neighbours(here, near)
+			var next := -1
+			for o in near:
+				var h := lie(o)
+				if h < INF:
+					h += pull.call(o)
+					if h < height:
+						height = h
+						next = o
+			if next < 0:
+				return {"cells": cells, "reached": false}
+			cells.append(next)
+			here = next
+		return {"cells": cells, "reached": true}
+
+	## The canyon `depth` deep (CANYON_DEPTH) down `cells`, start first: its path
+	## a smooth curve through their middles (_curve), cut off at the water if it
+	## `reached` the sea or, for a branch of canyon `joins`, ending on point
+	## `meet` of its parent's path; its floor (CANYON_GRADE, CANYON_LAND_FLOOR),
+	## the floor's half-widths and the walls' rims (CANYON_WALL_RUN,
+	## CANYON_RIM_PAD). Draws nothing from rng.
+	func shape_of(cells: PackedInt32Array, reached: bool, depth: float, joins: int, meet := -1) -> Dictionary:
+		var points := PackedVector3Array()
+		for c in cells:
+			points.append(WorldPlan._cell_centre(c, dirs))
+		var meets := -INF
+		if joins >= 0:
+			var parent: Dictionary = plan.shapes.canyons[joins]
+			points[points.size() - 1] = parent.path[meet]
+			meets = parent.floor[meet]
+		var path := _curve(points)
+		var mouth := &""
+		if joins < 0:
+			mouth = &"basin"
+			if reached:
+				for i in range(1, path.size()):
+					if plan.nearest_shore_m(path[i]) <= 0.0:
+						path = path.slice(0, i + 1)
+						mouth = &"beach"
+						break
+		var n := path.size()
+		var along := PackedFloat32Array()
+		along.resize(n)
+		along[0] = 0.0
+		for i in range(1, n):
+			along[i] = along[i - 1] + path[i - 1].angle_to(path[i]) * radius
+		var base := PackedFloat32Array()
+		base.resize(n)
+		for i in n:
+			base[i] = plan.map.at(S_BASE, path[i])
+		# The floor: the running minimum, held over the sea until the mouth,
+		# then from the mouth up never steeper than CANYON_GRADE.
+		var bed := PackedFloat32Array()
+		bed.resize(n)
+		var low := INF
+		var land := SEA_LEVEL + CANYON_LAND_FLOOR
+		for i in n:
+			low = minf(low, base[i] - depth)
+			bed[i] = maxf(maxf(low, land), meets)
+		if mouth == &"beach":
+			bed[n - 1] = plan.sea_level
+		elif joins >= 0:
+			bed[n - 1] = meets
+		for i in range(n - 2, -1, -1):
+			bed[i] = minf(bed[i], bed[i + 1] + CANYON_GRADE * (along[i + 1] - along[i]))
+		var half := PackedFloat32Array()
+		half.resize(n)
+		for i in n:
+			var w := lerpf(CANYON_FLOOR_WIDTH.x, CANYON_FLOOR_WIDTH.y, clampf(0.5 + width.get_noise_3dv(path[i]), 0.0, 1.0))
+			if mouth == &"basin":
+				w = lerpf(w, CANYON_FLOOR_WIDTH.y, smoothstep(along[n - 1] - CANYON_BASIN, along[n - 1], along[i]))
+			half[i] = 0.5 * w
+		# The rim: over the highest base across the canyon where its walls
+		# end, found by looking out to where they would end and, while the
+		# ground there stands higher, out again.
+		var rim := PackedFloat32Array()
+		rim.resize(n)
+		for i in n:
+			var across := path[i].cross(path[mini(i + 1, n - 1)] - path[maxi(i - 1, 0)]).normalized()
+			var top := base[i]
+			for look in 4:
+				var out := (half[i] + (top + CANYON_RIM_PAD - bed[i]) * CANYON_WALL_RUN) / radius
+				var higher := maxf(plan.map.at(S_BASE, (path[i] * cos(out) + across * sin(out)).normalized()),
+					plan.map.at(S_BASE, (path[i] * cos(out) - across * sin(out)).normalized()))
+				if higher <= top:
+					break
+				top = higher
+			rim[i] = top + CANYON_RIM_PAD - bed[i]
+		var shape := {"path": path, "floor": bed, "half_floor": half, "rim": rim, "mouth": mouth}
+		if joins >= 0:
+			shape["joins"] = joins
+		return shape
+
+	## A smooth curve through `points` (unit directions) from the first to the
+	## last: their corners cut twice over (Chaikin's), then a point every
+	## CANYON_STEP metres or so along it, each moved across it by the winding,
+	## less within half a CANYON_WIND_WAVE of its ends, so they stay put.
+	func _curve(points: PackedVector3Array) -> PackedVector3Array:
+		var p := points
+		for turn in 2:
+			if p.size() < 3:
+				break
+			var cut := PackedVector3Array([p[0]])
+			for i in p.size() - 1:
+				cut.append((p[i] * 0.75 + p[i + 1] * 0.25).normalized())
+				cut.append((p[i] * 0.25 + p[i + 1] * 0.75).normalized())
+			cut.append(p[-1])
+			p = cut
+		var along := PackedFloat64Array()
+		along.resize(p.size())
+		along[0] = 0.0
+		for i in range(1, p.size()):
+			along[i] = along[i - 1] + p[i - 1].angle_to(p[i])
+		var total := along[-1] * radius
+		var n := maxi(1, roundi(total / CANYON_STEP))
+		var even := PackedVector3Array()
+		even.resize(n + 1)
+		var s := 0
+		for k in n + 1:
+			var want := along[-1] * k / n
+			while s < p.size() - 2 and along[s + 1] < want:
+				s += 1
+			var span := along[s + 1] - along[s]
+			even[k] = p[s].lerp(p[s + 1], (want - along[s]) / span if span > 0.0 else 0.0).normalized()
+		even[0] = p[0]
+		even[n] = p[-1]
+		var out := even.duplicate()
+		var ends := CANYON_WIND_WAVE * 0.5
+		for k in range(1, n):
+			var across := even[k].cross(even[k + 1] - even[k - 1]).normalized()
+			var off := CANYON_WIND * clampf(wind.get_noise_3dv(even[k]), -1.0, 1.0) \
+				* smoothstep(0.0, ends, mini(k, n - k) * total / n)
+			out[k] = (even[k] + across * (off / radius)).normalized()
+		return out
+
+	## Metres canyon `c`'s walls reach within a kept disc's radius and blend.
+	func miss(c: Dictionary) -> float:
+		var path: PackedVector3Array = c.path
+		var half: PackedFloat32Array = c.half_floor
+		var rim: PackedFloat32Array = c.rim
+		var out := 0.0
+		for keep: Dictionary in recipe.keeps:
+			var near := INF
+			for s in path.size() - 1:
+				var reach := maxf(half[s] + rim[s] * CANYON_WALL_RUN, half[s + 1] + rim[s + 1] * CANYON_WALL_RUN)
+				near = minf(near, WorldPlan._segment_angle(path, s, keep.dir) * radius - reach)
+			out += maxf(0.0, keep.radius + keep.blend - near)
+		return out
+
+	## Metres canyon `c` is short of CANYON_LENGTH.x.
+	func short(c: Dictionary) -> float:
+		var path: PackedVector3Array = c.path
+		var length := 0.0
+		for i in range(1, path.size()):
+			length += path[i - 1].angle_to(path[i]) * radius
+		return maxf(0.0, CANYON_LENGTH.x - length)
+
+	## Metres of `cells` that are another canyon's, or beside one: any but
+	## canyon `own`'s.
+	func cell_miss(cells: PackedInt32Array, own: int) -> float:
+		var out := 0.0
+		for c in cells:
+			if owner[c] != 0 and owner[c] != own + 1:
+				out += edge
+		return out
+
+	## The height a canyon steps down by in cell `c`, INF too near a kept disc.
+	func lie(c: int) -> float:
+		var h := _lie[c]
+		if is_nan(h):
+			var mid := WorldPlan._cell_centre(c, dirs)
+			h = plan._cell_mean(S_BASE, c) + CANYON_WANDER * clampf(wander.get_noise_3dv(mid), -1.0, 1.0)
+			for keep: Dictionary in recipe.keeps:
+				if mid.angle_to(keep.dir) * radius < keep.radius + keep.blend + CANYON_KEEP_CLEAR:
+					h = INF
+			_lie[c] = h
+		return h
+
+	## Metres from cell `c`'s middle to the coast.
+	func coast(c: int) -> float:
+		var s := _coast[c]
+		if is_nan(s):
+			s = plan._cell_mean(S_SHORE, c)
+			_coast[c] = s
+		return s
+
+	## By cell, the steps to it from the cells canyon `p`'s path crosses (0 for
+	## those), out to a cell past CANYON_BRANCH_FROM.y; -1 beyond.
+	func toward(p: int) -> PackedInt32Array:
+		if _toward.has(p):
+			return _toward[p]
+		var steps := PackedInt32Array()
+		steps.resize(wet.size())
+		steps.fill(-1)
+		var ring := PackedInt32Array()
+		for d: Vector3 in plan.shapes.canyons[p].path:
+			var c := plan.map.cell_number(d)
+			if steps[c] < 0:
+				steps[c] = 0
+				ring.append(c)
+		var near := PackedInt32Array()
+		near.resize(4)
+		for r in ceili(CANYON_BRANCH_FROM.y / edge) + 1:
+			var next := PackedInt32Array()
+			for c in ring:
+				plan._cell_neighbours(c, near)
+				for o in near:
+					if steps[o] < 0:
+						steps[o] = r + 1
+						next.append(o)
+			ring = next
+		_toward[p] = steps
+		return steps
+
+	## The index of the point of `path`, short of its last, nearest `d`.
+	static func _nearest(path: PackedVector3Array, d: Vector3) -> int:
+		var best := 0
+		for i in path.size() - 1:
+			if path[i].angle_to(d) < path[best].angle_to(d):
+				best = i
+		return best

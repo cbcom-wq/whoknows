@@ -104,9 +104,10 @@ func at(field: int, dir: Vector3) -> float:
 	# NaN only where an INF corner had no weight: as far as INF.
 	return s if s == s else INF
 
-## Every field at `dir` into `out` (fields long), each as at() gives it; the
+## Every field at `dir` into `out` (fields long), each as at() gives it, and
+## gives back the number of the cell it falls in (as cell_number does); the
 ## blend is written out here, since this runs per height.
-func sample(dir: Vector3, out: PackedFloat64Array) -> void:
+func sample(dir: Vector3, out: PackedFloat64Array) -> int:
 	var cell := _locate(dir)
 	var fu := cell.y
 	var fv := cell.z
@@ -126,6 +127,14 @@ func sample(dir: Vector3, out: PackedFloat64Array) -> void:
 		else:
 			var s := a * w00 + b * w10 + c * w01 + e * w11
 			out[f] = s if s == s else INF   # as in at()
+	return _number(int(cell.x))
+
+## The number of the cell `dir` falls in, (face * CELLS + j) * CELLS + i: as
+## cell_of's, but in closed form, so cheap enough to ask per height. Within a
+## hair of a cell's edge the two may differ, and either cell holds the
+## direction.
+func cell_number(dir: Vector3) -> int:
+	return _number(int(_locate(dir).x))
 
 ## The cell `dir` falls in: the quadtree's node at PLAN_DEPTH.
 func cell_of(dir: Vector3) -> Vector4i:
@@ -243,6 +252,12 @@ func _locate(dir: Vector3) -> Vector3:
 	var ix := mini(int(x), CELLS - 1)
 	var iy := mini(int(y), CELLS - 1)
 	return Vector3((face * SIDE + iy) * SIDE + ix, x - ix, y - iy)
+
+## The number of the cell whose first corner is k (as _locate gives it).
+static func _number(k: int) -> int:
+	var face := k / (SIDE * SIDE)
+	var at := k % (SIDE * SIDE)
+	return (face * CELLS + at / SIDE) * CELLS + at % SIDE
 
 ## The cell whose centre is `p`, on the cube in half cells.
 static func _cell_at(p: Vector3i) -> Vector4i:

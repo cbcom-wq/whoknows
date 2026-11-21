@@ -177,10 +177,12 @@ func test_samples_are_continuous_across_every_face_edge():
 		p.sample((e - step * 1e-6).normalized(), across)
 		assert_almost_eq(out[WorldPlan.S_BASE], across[WorldPlan.S_BASE], 0.1)
 
-func test_building_wadis_takes_under_half_a_second():
+func test_building_wadis_takes_well_under_a_second():
+	# Spec §5.1: well under a second, and never a hitch, since the first build
+	# moves to a worker at load. 800 ms, raised from 500 when the canyons came.
 	var t := Time.get_ticks_usec()
 	WorldPlan.build(_wadis())
-	assert_lt(Time.get_ticks_usec() - t, 500000)
+	assert_lt(Time.get_ticks_usec() - t, 800000)
 
 func test_the_edge_points_cross_their_edges():
 	var points := _face_edge_points(400)
@@ -215,7 +217,6 @@ func test_open_ground_is_a_gentle_roll_of_dunes_and_plains():
 			continue
 		assert_between(out[WorldPlan.S_BASE], -WorldPlan.BASE_ROLL, WorldPlan.BASE_ROLL)
 		assert_between(out[WorldPlan.S_DUNES], 0.0, 1.0)
-		assert_eq(out[WorldPlan.S_CANYON], INF)
 		assert_eq(out[WorldPlan.S_KEEP], 0.0)
 		var land := p.land_at(d)
 		assert_eq(land, WorldPlan.Land.DUNES if out[WorldPlan.S_DUNES] >= 0.5 else WorldPlan.Land.PLAINS)
@@ -343,6 +344,169 @@ func test_ridge_m_is_the_way_to_the_nearest_spine():
 			assert_eq(p.shapes.ridge_m(d, p.map.cell_of(d)), Vector2(INF, 0.0))
 			far += 1
 	assert_gt(far, 500)
+
+func test_every_canyon_reaches_the_sea_or_a_basin_and_never_climbs():
+	var p := _wadis().plan()
+	assert_eq(p.shapes.canyons.filter(func(c): return not c.has("joins")).size(), 4)
+	for c in p.shapes.canyons:
+		var f: PackedFloat32Array = c.floor
+		for i in range(1, f.size()):
+			assert_true(f[i] <= f[i - 1] + 1e-3, "a canyon's floor climbs toward its mouth")
+		assert_true(c.mouth == &"beach" or c.mouth == &"basin" or c.has("joins"))
+
+func test_a_canyon_ends_on_a_beach():
+	assert_true(_wadis().plan().shapes.canyons.any(func(c): return c.mouth == &"beach"))
+
+func test_every_canyon_floor_takes_the_starter():
+	for c in _wadis().plan().shapes.canyons:
+		assert_gte(Array(c.half_floor).min() * 2.0, 150.0)
+
+func test_canyon_floors_stay_over_the_sea_until_their_mouth():
+	var p := _wadis().plan()
+	var bad := {}
+	for c: Dictionary in p.shapes.canyons:
+		var path: PackedVector3Array = c.path
+		var f: PackedFloat32Array = c.floor
+		var n := path.size()
+		for i in n:
+			var w := Vector2(c.half_floor[i] * 2.0, c.rim[i])
+			if w.x < WorldPlan.CANYON_FLOOR_WIDTH.x - 1e-3 or w.x > WorldPlan.CANYON_FLOOR_WIDTH.y + 1e-3:
+				bad["the floor's width is within CANYON_FLOOR_WIDTH"] = w.x
+			if w.y <= 0.0:
+				bad["the walls stand over the floor"] = w.y
+			var mouth: bool = i == n - 1 and c.mouth == &"beach"
+			if not mouth and f[i] < p.sea_level + WorldPlan.CANYON_LAND_FLOOR - 1e-3:
+				bad["over the sea until the mouth"] = f[i]
+			if not mouth and p.nearest_shore_m(path[i]) <= 0.0:
+				bad["on land until the mouth"] = i
+		if c.mouth == &"beach":
+			assert_lte(p.nearest_shore_m(path[-1]), 0.0, "a beach's mouth is at the water")
+			assert_almost_eq(f[-1], p.sea_level, 1e-3, "and its floor at sea level")
+	assert_eq(bad, {})
+
+func test_some_canyon_opens_on_open_ground_by_the_sea():
+	# A beach, not a cliff: no range's flank and no plateau at its mouth.
+	var p := _wadis().plan()
+	assert_true(p.shapes.canyons.any(func(c): return c.mouth == &"beach" \
+			and p.map.at(WorldPlan.S_MOUNTAIN, c.path[-2]) == 0.0 and p.map.at(WorldPlan.S_PLATEAU, c.path[-2]) == 0.0))
+
+func test_with_no_canyon_on_a_beach_the_nearest_is_rerouted_to_one():
+	# WADIS's first draw opens on its beaches, so take those canyons away: the
+	# reroute must then bring one of the rest to a beach, in its place.
+	var r := _wadis()
+	var p := WorldPlan.build(r)
+	var rest := p.shapes.canyons.filter(func(c): return not c.has("joins") and not p._on_beach(c))
+	assert_gt(rest.size(), 0)
+	p.shapes.canyons.assign(rest)
+	var draw := WorldPlan.CanyonDraw.new(p, r, p._corner_dirs())
+	for i in rest.size():
+		draw.mark(i)
+	draw.to_beach()
+	assert_eq(p.shapes.canyons.size(), rest.size(), "rerouted in place, not added")
+	assert_true(p.shapes.canyons.any(func(c): return p._on_beach(c)))
+	for c in p.shapes.canyons:
+		var f: PackedFloat32Array = c.floor
+		for i in range(1, f.size()):
+			assert_true(f[i] <= f[i - 1] + 1e-3, "a rerouted floor climbs toward its mouth")
+		assert_gte(Array(c.half_floor).min() * 2.0, WorldPlan.CANYON_FLOOR_WIDTH.x)
+
+func test_one_or_two_branches_meet_their_parents_floor():
+	var p := _wadis().plan()
+	var radius := _wadis().radius_m
+	var branches := p.shapes.canyons.filter(func(c): return c.has("joins"))
+	assert_between(branches.size(), 1, 2)
+	for b: Dictionary in branches:
+		assert_eq(b.mouth, &"")
+		var parent: Dictionary = p.shapes.canyons[b.joins]
+		assert_false(parent.has("joins"), "a branch joins a canyon, not a branch")
+		var end: Vector3 = b.path[-1]
+		var at := _nearest_on(parent.path, end)
+		assert_lt(at.x * radius, 0.5, "its last point is on its parent's path")
+		assert_almost_eq(b.floor[-1], lerpf(parent.floor[int(at.y)], parent.floor[int(at.y) + 1], at.z), 0.01,
+			"and its floor is its parent's there")
+
+func test_canyon_at_is_the_nearest_canyon_whose_walls_reach():
+	var p := _wadis().plan()
+	var radius := _wadis().radius_m
+	var out := PackedFloat64Array(); out.resize(WorldPlan.S_SIZE)
+	var rng := RandomNumberGenerator.new(); rng.seed = 15
+	var inside := 0
+	var outside := 0
+	for k in 600:
+		var d: Vector3
+		if k % 5 == 4:
+			d = _dir(rng)
+		else:
+			# Within one and a half reaches of a canyon's point.
+			var c: Dictionary = p.shapes.canyons[rng.randi_range(0, p.shapes.canyons.size() - 1)]
+			var i := rng.randi_range(0, c.path.size() - 1)
+			var reach: float = c.half_floor[i] + c.rim[i] * WorldPlan.CANYON_WALL_RUN
+			d = _off(c.path[i], rng.randf() * 1.5 * reach / radius, rng)
+		var want := _brute_canyon(p, d)
+		var got := p.shapes.canyon_at(d, PlanShapes.cell_index(p.map.cell_of(d)))
+		# sample() fills the canyon's fields from canyon_at (a direction is
+		# good to a few millimetres in single precision).
+		p.sample(d, out)
+		var filled := Vector3(out[WorldPlan.S_CANYON], out[WorldPlan.S_CANYON_FLOOR], out[WorldPlan.S_CANYON_RIM])
+		if is_inf(got.x):
+			assert_eq(filled, got)
+		else:
+			assert_almost_eq(filled, got, Vector3(1e-4, 1e-3, 1e-3))
+		if is_inf(want.x):
+			assert_eq(got, Vector3(INF, 0.0, 0.0))
+			outside += 1
+		else:
+			assert_almost_eq(got.x, want.x, 1e-3)
+			assert_almost_eq(got.y, want.y, 0.01)
+			assert_almost_eq(got.z, want.z, 0.01)
+			inside += 1
+	assert_gt(inside, 300)
+	assert_gt(outside, 100)
+
+func test_a_canyons_walls_top_the_ground_where_they_end():
+	# Leaving a canyon's reach makes no seam: there its walls stand over the
+	# base, with CANYON_RIM_PAD to spare for the ground's detail.
+	var p := _wadis().plan()
+	var radius := _wadis().radius_m
+	var worst := -INF
+	var tried := 0
+	for c: Dictionary in p.shapes.canyons:
+		var path: PackedVector3Array = c.path
+		for i in range(1, path.size() - 1, 3):
+			var along := (path[i + 1] - path[i - 1]).normalized()
+			var across := path[i].cross(along).normalized()
+			var reach: float = (c.half_floor[i] + c.rim[i] * WorldPlan.CANYON_WALL_RUN) / radius
+			for side: float in [-1.0, 1.0]:
+				var d := (path[i] * cos(reach) + across * side * sin(reach)).normalized()
+				worst = maxf(worst, p.map.at(WorldPlan.S_BASE, d) - (c.floor[i] + c.rim[i]))
+				tried += 1
+	assert_gt(tried, 200)
+	assert_lt(worst, -0.5 * WorldPlan.CANYON_RIM_PAD)
+
+func test_no_canyon_reaches_wadoos_disc():
+	var p := _wadis().plan()
+	var radius := _wadis().radius_m
+	var wadoo := SystemDesign.dir_of(-2.16, -171.97)
+	var nearest := INF
+	for c: Dictionary in p.shapes.canyons:
+		var path: PackedVector3Array = c.path
+		for s in path.size() - 1:
+			var reach := maxf(c.half_floor[s] + c.rim[s] * WorldPlan.CANYON_WALL_RUN,
+				c.half_floor[s + 1] + c.rim[s + 1] * WorldPlan.CANYON_WALL_RUN)
+			nearest = minf(nearest, _segment_rad(path, s, wadoo) * radius - reach)
+	assert_gte(nearest, 3500.0, "the walls and all keep out of the kept disc and its blend")
+	var out := PackedFloat64Array(); out.resize(WorldPlan.S_SIZE)
+	var rng := RandomNumberGenerator.new(); rng.seed = 16
+	for k in 300:
+		p.sample(_off(wadoo, sqrt(rng.randf()) * 3500.0 / radius, rng), out)
+		assert_true(is_inf(out[WorldPlan.S_CANYON]))
+
+func test_a_desert_with_no_sea_digs_its_canyons_basins():
+	var p := _desert_with(func(d: PlanDials): return d.sea == 0.0 and d.canyons >= 2).plan()
+	var mains := p.shapes.canyons.filter(func(c): return not c.has("joins"))
+	assert_eq(mains.size(), p.dials.canyons)
+	for c in mains:
+		assert_eq(c.mouth, &"basin")
 
 func test_a_corner_on_a_face_edge_is_one_corner():
 	var m := PlanMap.new(2)
@@ -566,6 +730,58 @@ func _nearest_spine(p: WorldPlan, d: Vector3) -> Vector3:
 			var angle := d.angle_to(a + ab * t)
 			if angle < out.x:
 				out = Vector3(angle, lerpf(r.height[s], r.height[s + 1], t), r.half_width)
+	return out
+
+## Radians from `d` to the nearest point of segment `s` of `path`.
+func _segment_rad(path: PackedVector3Array, s: int, d: Vector3) -> float:
+	var a := path[s]
+	var ab := path[s + 1] - a
+	return d.angle_to(a + ab * clampf((d - a).dot(ab) / ab.length_squared(), 0.0, 1.0))
+
+## Vector3(radians from `d` to the nearest point of `path`, its segment, how
+## far along it), every segment tried.
+func _nearest_on(path: PackedVector3Array, d: Vector3) -> Vector3:
+	var out := Vector3(INF, 0.0, 0.0)
+	for s in path.size() - 1:
+		var a := path[s]
+		var ab := path[s + 1] - a
+		var t := clampf((d - a).dot(ab) / ab.length_squared(), 0.0, 1.0)
+		var angle := d.angle_to(a + ab * t)
+		if angle < out.x:
+			out = Vector3(angle, s, t)
+	return out
+
+## What canyon_at should give at `d`, every segment of every canyon tried: of
+## each canyon, the nearest point of its path whose walls reach `d` (its floor's
+## half-width and CANYON_WALL_RUN times its rim); of those, the one whose cut
+## stands lowest at `d` (its floor, and the walls' rise past the floor's edge).
+## Nearest by the chord, as canyon_at measures, so where two points of a path
+## are as near as makes no odds (inside a bend) both pick the same.
+func _brute_canyon(p: WorldPlan, d: Vector3) -> Vector3:
+	var radius := p.shapes.radius_m
+	var out := Vector3(INF, 0.0, 0.0)
+	var lowest := INF
+	for c: Dictionary in p.shapes.canyons:
+		var path: PackedVector3Array = c.path
+		var best := INF
+		var got := Vector3.ZERO
+		var cut := INF
+		for s in path.size() - 1:
+			var a := path[s]
+			var ab := path[s + 1] - a
+			var t := clampf((d - a).dot(ab) / ab.length_squared(), 0.0, 1.0)
+			var chord := d.distance_to(a + ab * t)
+			var metres := d.angle_to(a + ab * t) * radius
+			var half := lerpf(c.half_floor[s], c.half_floor[s + 1], t)
+			var rim := lerpf(c.rim[s], c.rim[s + 1], t)
+			if chord < best and metres <= half + rim * WorldPlan.CANYON_WALL_RUN:
+				best = chord
+				var bed := lerpf(c.floor[s], c.floor[s + 1], t)
+				got = Vector3(metres / half, bed, rim)
+				cut = bed + maxf(metres - half, 0.0) / WorldPlan.CANYON_WALL_RUN
+		if cut < lowest:
+			lowest = cut
+			out = got
 	return out
 
 ## Radians from `d` to the nearest of `points`.
