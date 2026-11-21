@@ -40,12 +40,22 @@ func setup(p_recipe: SystemRecipe, p_universe: Universe, p_sun: DirectionalLight
 	_bodies = Node3D.new()
 	_bodies.name = "Bodies"
 	add_child(_bodies)
+	# Every planned desert's plan builds at once on the workers, while the other
+	# worlds' far meshes are made here; a desert's own mesh waits on its plan.
+	var plan_tasks: Array[int] = []
+	for b in recipe.bodies:
+		if b.recipe != null:
+			var task := b.recipe.start_plan()
+			if task >= 0:
+				plan_tasks.append(task)
 	for b in recipe.bodies:
 		var p := BodyProxy.new()
 		p.setup(b)
 		_bodies.add_child(p)
 		proxies.append(p)
 		_by_id[b.id] = p
+	for task in plan_tasks:
+		WorkerThreadPool.wait_for_task_completion(task)
 	halo = StarHalo.new()
 	halo.setup(SpacePalette.STARS[recipe.star.star_palette])
 	proxy(recipe.star.id).add_child(halo)

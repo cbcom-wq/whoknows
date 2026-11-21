@@ -106,6 +106,22 @@ func plan() -> WorldPlan:
 	_plan_lock.unlock()
 	return out
 
+## Starts building this world's plan on a worker thread, and returns the task
+## to wait on (WorkerThreadPool.wait_for_task_completion), or -1 when there is
+## nothing to start: not a planned desert, or its plan is already built. The
+## build is plan() itself, so a caller arriving mid-build waits on the lock and
+## gets the same object, and nothing is built twice. Whoever starts a task waits
+## for it before the world can be freed.
+func start_plan() -> int:
+	if not is_desert() or not planned:
+		return -1
+	_plan_lock.lock()
+	var built := _plan != null
+	_plan_lock.unlock()
+	if built:
+		return -1
+	return WorkerThreadPool.add_task(plan, false, "world plan")
+
 ## Metres above `radius_m` where this world's air ends: below it gravity holds
 ## the avatar, loose items and NPCs (the desert world spec §5.1, §6.1). Ships
 ## feel the whole well, out to well_radius().

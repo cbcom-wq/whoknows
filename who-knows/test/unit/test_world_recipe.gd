@@ -161,3 +161,59 @@ func test_only_planned_deserts_have_a_plan():
 	assert_same(r.plan(), r.plan())
 	r.planned = false
 	assert_null(r.plan())
+
+## Planned deserts' plans build side by side on workers (the wadis land spec §5.1,
+## Checkpoint 1): start_plan is plan() on a task, so nothing builds twice.
+
+func _planned_deserts() -> Array[WorldRecipe]:
+	var out: Array[WorldRecipe] = []
+	for b in SystemRecipe.from_seed(1337).bodies:
+		if b.recipe != null and b.recipe.is_desert():
+			out.append(b.recipe)
+	return out
+
+func test_start_plan_has_nothing_to_start_for_a_world_with_no_plan():
+	var deserts := _planned_deserts()
+	assert_gte(deserts.size(), 2, "system 1337 has two planned deserts")
+	deserts[0].planned = false
+	assert_eq(deserts[0].start_plan(), -1, "an unplanned desert")
+	var rock := WorldRecipe.from_seed(5)
+	rock.archetype = WorldRecipe.Archetype.ROLLING
+	assert_eq(rock.start_plan(), -1, "not a desert")
+
+func test_start_plan_builds_the_one_plan_a_caller_then_gets():
+	var r := _planned_deserts()[0]
+	var task := r.start_plan()
+	assert_gte(task, 0)
+	# Arriving mid-build waits on the lock and gets the very object the worker made.
+	var p := r.plan()
+	WorkerThreadPool.wait_for_task_completion(task)
+	assert_same(r.plan(), p)
+	assert_eq(r.start_plan(), -1, "a recipe that has its plan starts no other task")
+
+func test_two_worlds_plans_built_at_once_equal_those_built_one_after_the_other():
+	var seq := _planned_deserts()
+	var par := _planned_deserts()
+	var tasks: Array[int] = []
+	for r in par:
+		tasks.append(r.start_plan())
+	for t in tasks:
+		WorkerThreadPool.wait_for_task_completion(t)
+	var a := PackedFloat64Array(); a.resize(WorldPlan.S_SIZE)
+	var b := a.duplicate()
+	for i in seq.size():
+		var one := seq[i].plan()
+		var two := par[i].plan()
+		assert_eq(one.shapes.seas.size(), two.shapes.seas.size())
+		assert_eq(one.shapes.canyons.size(), two.shapes.canyons.size())
+		assert_eq(one.sites.size(), two.sites.size())
+		for k in one.sites.size():
+			assert_eq(one.sites[k].dir, two.sites[k].dir)
+			assert_eq(one.sites[k].kind, two.sites[k].kind)
+		for k in one.shapes.canyons.size():
+			assert_eq(one.shapes.canyons[k].get("path"), two.shapes.canyons[k].get("path"))
+		var rng := RandomNumberGenerator.new(); rng.seed = 9
+		for k in 1500:
+			var d := Vector3(rng.randfn(), rng.randfn(), rng.randfn()).normalized()
+			one.sample(d, a); two.sample(d, b)
+			assert_eq(a, b)
