@@ -385,6 +385,7 @@ func _sites(recipe: WorldRecipe, dirs: PackedVector3Array, cv: Array[PackedFloat
 	var mountain := cv[S_MOUNTAIN]
 	var up := PlanMap.SIDE
 	var cells := CubeSphere.FACES * PlanMap.CELLS * PlanMap.CELLS
+	assert(cells <= 32768, "_sort_key holds a cell number in 15 bits")
 	# By cell, what ranking the candidates found: its rank and its cell-wide level.
 	var rank := PackedFloat32Array()
 	rank.resize(cells)
@@ -577,10 +578,10 @@ func _corner_values() -> Array[PackedFloat32Array]:
 	return out
 
 ## Sets the map's bounds (§5.4 step 8, §8.3): by cell, the base's corners' least
-## less, and most plus, the most DETAIL_REACH of the lands at its corners (a
-## sea corner counts the open ground the coast's cell may hold too); under it,
-## the lowest floor of any canyon listed near the cell; up to sea level in the
-## cells of a sea (the water is drawn there); and over every cell within a kept
+## less, and most plus, the most DETAIL_REACH of every land a corner's fields
+## allow (a sea corner, or a mountain's, counts the open ground too); under it,
+## the lowest floor of any canyon listed near the cell; up to sea level in every
+## cell with a corner under it (the water is drawn there); and over every cell within a kept
 ## disc's radius and blend, today's desert's range, KEPT_LOW to KEPT_HIGH.
 ## `cv` is _corner_values'.
 func _bounds(recipe: WorldRecipe, dirs: PackedVector3Array, cv: Array[PackedFloat32Array]) -> void:
@@ -599,18 +600,22 @@ func _bounds(recipe: WorldRecipe, dirs: PackedVector3Array, cv: Array[PackedFloa
 		var r := dunes_reach if dunes[k] >= DUNES_FROM else plains_reach
 		if shore[k] <= 0.0:
 			r = maxf(r, sea_reach)
-		elif mountain[k] >= MOUNTAINS_FROM:
-			r = mountain_reach
-		elif plateau[k] >= PLATEAU_FROM:
-			r = plateau_reach
+		if mountain[k] >= MOUNTAINS_FROM:
+			r = maxf(r, mountain_reach)
+		if plateau[k] >= PLATEAU_FROM:
+			r = maxf(r, plateau_reach)
 		reach[k] = r
 	var low := PackedFloat32Array()
 	var high := PackedFloat32Array()
 	map.cell_range(S_BASE, low, high, reach)
 	shapes.lower_by_canyons(low)
-	for sea: Dictionary in shapes.seas:
-		for c: int in sea.cells:
-			high[c] = maxf(high[c], sea_level)
+	if sea_level > -INF:
+		var wet := PackedFloat32Array()
+		var spare := PackedFloat32Array()
+		map.cell_range(S_SHORE, wet, spare)
+		for c in wet.size():
+			if wet[c] < 0.0:
+				high[c] = maxf(high[c], sea_level)
 	for keep: Dictionary in recipe.keeps:
 		_widen_to_kept(keep, dirs, low, high)
 	map.set_bounds(low, high)

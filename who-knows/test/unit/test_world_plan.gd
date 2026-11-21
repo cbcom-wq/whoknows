@@ -192,6 +192,26 @@ func test_samples_are_continuous_across_every_face_edge():
 		p.sample((e - step * 1e-6).normalized(), across)
 		assert_almost_eq(out[WorldPlan.S_BASE], across[WorldPlan.S_BASE], 0.1)
 
+func test_the_bounds_hold_the_coast_where_ranges_and_plateaus_meet_it():
+	var p := _wadis().plan()
+	var rng := RandomNumberGenerator.new(); rng.seed = 12
+	var reach: Dictionary = WorldPlan.DETAIL_REACH
+	var f := PackedFloat64Array(); f.resize(WorldPlan.S_SIZE)
+	var checked := 0
+	for k in 60000:
+		var d := _dir(rng)
+		if absf(p.nearest_shore_m(d)) > 3000.0:
+			continue
+		p.sample(d, f)
+		if f[WorldPlan.S_MOUNTAIN] <= 0.0 and f[WorldPlan.S_PLATEAU] <= 0.0:
+			continue
+		checked += 1
+		var b := p.bounds_of(CubeSphere.key_for(d, 8))
+		var land := WorldPlan.land_in(f)
+		assert_gte(f[WorldPlan.S_BASE] - reach[land], b.x - 1e-3)
+		assert_lte(f[WorldPlan.S_BASE] + reach[land], b.y + 1e-3)
+	assert_gt(checked, 0, "some coast has a range or plateau on it")
+
 func test_building_wadis_takes_well_under_a_second():
 	# Spec §5.1: well under a second, and never a hitch, since the first build
 	# moves to a worker at load. 800 ms, raised from 500 when the canyons came.
@@ -228,11 +248,11 @@ func test_open_ground_is_a_gentle_roll_of_dunes_and_plains():
 	for k in 2000:
 		var d := _dir(rng)
 		p.sample(d, out)
-		if out[WorldPlan.S_SHORE] < AWAY_FROM_SEA or out[WorldPlan.S_MOUNTAIN] > 0.0 or out[WorldPlan.S_PLATEAU] > 0.0:
+		if out[WorldPlan.S_SHORE] < AWAY_FROM_SEA or out[WorldPlan.S_MOUNTAIN] > 0.0 or out[WorldPlan.S_PLATEAU] > 0.0 or p.keep_weight(d) > 0.0:
 			continue
 		assert_between(out[WorldPlan.S_BASE], -WorldPlan.BASE_ROLL, WorldPlan.BASE_ROLL)
 		assert_between(out[WorldPlan.S_DUNES], 0.0, 1.0)
-		assert_between(out[WorldPlan.S_KEEP], 0.0, 1.0)
+		assert_eq(out[WorldPlan.S_KEEP], 0.0)
 		var land := p.land_at(d)
 		assert_eq(land, WorldPlan.Land.DUNES if out[WorldPlan.S_DUNES] >= 0.5 else WorldPlan.Land.PLAINS)
 		if land == WorldPlan.Land.DUNES:
@@ -628,6 +648,7 @@ func test_oasis_sites_are_low_level_dry_and_spaced():
 	var p := _wadis().plan()
 	var oases := p.sites.filter(func(s): return s.kind == PlanSite.Kind.OASIS)
 	assert_gte(oases.size(), 6)
+	assert_gte(oases.size(), p.dials.oases)
 	for s in oases:
 		assert_gt(p.nearest_shore_m(s.dir), 0.0)
 		assert_eq(p.keep_weight(s.dir), 0.0)
@@ -635,6 +656,29 @@ func test_oasis_sites_are_low_level_dry_and_spaced():
 		for o in oases:
 			if o != s:
 				assert_gte(s.dir.angle_to(o.dir) * _wadis().radius_m, WorldPlan.OASIS_SPACING)
+
+func test_a_world_lists_at_least_its_dials_oases():
+	# WADIS, the first three deserts by seed, and the smallest of the first twelve.
+	var worlds: Array[WorldRecipe] = [_wadis()]
+	var small: WorldRecipe = null
+	var found := 0
+	for sd in 2000:
+		var r := WorldRecipe.from_seed(sd)
+		if not r.is_desert():
+			continue
+		found += 1
+		if found <= 3:
+			worlds.append(r)
+		if found <= 12 and (small == null or r.radius_m < small.radius_m):
+			small = r
+		if found == 12:
+			break
+	worlds.append(small)
+	assert_eq(found, 12, "enough deserts among the seeds")
+	for r in worlds:
+		var p := r.plan()
+		var oases := p.sites.filter(func(s): return s.kind == PlanSite.Kind.OASIS)
+		assert_gte(oases.size(), p.dials.oases, "%s (radius %.0f km) lists its dial's oases" % [r.name, r.radius_m / 1000.0])
 
 func test_sites_are_listed_best_first_within_their_kind():
 	var p := _wadis().plan()
