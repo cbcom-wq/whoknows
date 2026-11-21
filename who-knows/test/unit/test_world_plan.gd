@@ -211,7 +211,7 @@ func test_open_ground_is_a_gentle_roll_of_dunes_and_plains():
 	for k in 2000:
 		var d := _dir(rng)
 		p.sample(d, out)
-		if out[WorldPlan.S_SHORE] < AWAY_FROM_SEA:
+		if out[WorldPlan.S_SHORE] < AWAY_FROM_SEA or out[WorldPlan.S_MOUNTAIN] > 0.0:
 			continue
 		assert_between(out[WorldPlan.S_BASE], -WorldPlan.BASE_ROLL, WorldPlan.BASE_ROLL)
 		assert_between(out[WorldPlan.S_DUNES], 0.0, 1.0)
@@ -222,6 +222,89 @@ func test_open_ground_is_a_gentle_roll_of_dunes_and_plains():
 		if land == WorldPlan.Land.DUNES:
 			dunes += 1
 	assert_between(dunes, 400, 1600, "both dune seas and plains")
+
+func test_wadis_has_three_ranges_to_two_km():
+	var p := _wadis().plan()
+	assert_eq(p.shapes.ranges.size(), 3)
+	var top := 0.0
+	for r in p.shapes.ranges:
+		top = maxf(top, Array(r.height).max())
+	assert_between(top, 1800.0, 2000.0)
+
+func test_a_range_stands_on_wadoos_skyline_but_not_in_its_disc():
+	var p := _wadis().plan()
+	var wadoo := SystemDesign.dir_of(-2.16, -171.97)
+	var nearest := INF
+	for r in p.shapes.ranges:
+		var spine_m := INF
+		for d: Vector3 in r.spine:
+			spine_m = minf(spine_m, d.angle_to(wadoo) * _wadis().radius_m)
+		assert_gte(spine_m, 3500.0 + r.half_width)   # its flanks stay out of keep + blend
+		nearest = minf(nearest, spine_m)
+	assert_lte(nearest, 15000.0)
+
+func test_some_range_reaches_the_coast():
+	var p := _wadis().plan()
+	assert_true(p.shapes.ranges.any(func(r):
+		return absf(p.nearest_shore_m(r.spine[0])) < 2000.0 or absf(p.nearest_shore_m(r.spine[-1])) < 2000.0))
+
+func test_ranges_raise_their_flanks_and_never_the_sea():
+	var p := _wadis().plan()
+	var m := p.map
+	var bad := {}
+	for face in CubeSphere.FACES:
+		for j in PlanMap.SIDE:
+			for i in PlanMap.SIDE:
+				var w := m.corner(WorldPlan.S_MOUNTAIN, face, i, j)
+				if w < 0.0 or w > 1.0:
+					bad["a weight is 0 to 1"] = w
+				if m.corner(WorldPlan.S_SHORE, face, i, j) <= 0.0 and w != 0.0:
+					bad["no weight at sea or at the water's edge"] = w
+				if w > 0.0 and m.corner(WorldPlan.S_RIDGE, face, i, j) >= WorldPlan.RANGE_HALF_WIDTH.y:
+					bad["weight only within a half-width of a spine"] = w
+	assert_eq(bad, {})
+	var edge := CubeSphere.edge_m(_wadis().radius_m, PlanMap.PLAN_DEPTH)
+	var high := 0
+	for r: Dictionary in p.shapes.ranges:
+		for k in r.spine.size():
+			var d: Vector3 = r.spine[k]
+			if p.nearest_shore_m(d) > 2.0 * edge:
+				assert_gt(m.at(WorldPlan.S_BASE, d), 0.2 * r.height[k], "the base stands high on the spine")
+				high += 1
+	assert_gt(high, 100)
+	assert_between(_share(func(d): return m.at(WorldPlan.S_MOUNTAIN, d) > 0.0, 20000), 0.06, 0.12,
+		"the flanks cover about the mountains dial's share")
+	assert_gt(_share(func(d): return p.land_at(d) == WorldPlan.Land.MOUNTAINS, 20000), 0.02)
+
+func test_ridge_m_is_the_way_to_the_nearest_spine():
+	var p := _wadis().plan()
+	var radius := _wadis().radius_m
+	var rng := RandomNumberGenerator.new(); rng.seed = 14
+	var flanks := 0
+	for i in p.shapes.ranges.size():
+		var r: Dictionary = p.shapes.ranges[i]
+		var spine: PackedVector3Array = r.spine
+		for k in 200:
+			# Within the range's half-width of one of its spine's points.
+			var at := spine[rng.randi_range(0, spine.size() - 1)]
+			var d := _off(at, rng.randf() * r.half_width / radius, rng)
+			var cell := p.map.cell_of(d)
+			assert_true(p.shapes.near(cell).has(PlanShapes.RANGE * PlanShapes.SHAPES + i), "near names the range")
+			var want := _nearest_spine(p, d)
+			if want.x * radius < want.z:
+				var got := p.shapes.ridge_m(d, cell)
+				assert_almost_eq(got.x, want.x * radius, 0.5)
+				assert_almost_eq(got.y, want.y, 0.5)
+				flanks += 1
+	assert_gt(flanks, 400)
+	var edge := CubeSphere.edge_m(radius, PlanMap.PLAN_DEPTH)
+	var far := 0
+	for k in 1000:
+		var d := _dir(rng)
+		if _nearest_spine(p, d).x * radius > WorldPlan.RANGE_HALF_WIDTH.y + 2.0 * edge:
+			assert_eq(p.shapes.ridge_m(d, p.map.cell_of(d)), Vector2(INF, 0.0))
+			far += 1
+	assert_gt(far, 500)
 
 func test_a_corner_on_a_face_edge_is_one_corner():
 	var m := PlanMap.new(2)
@@ -424,6 +507,27 @@ func _outline(p: WorldPlan, sea: Dictionary) -> Array[Vector3]:
 	for d: Vector3 in wet:
 		if dry.has(d):
 			out.append(d)
+	return out
+
+## The direction `angle` radians from `d`, on a seeded bearing.
+func _off(d: Vector3, angle: float, rng: RandomNumberGenerator) -> Vector3:
+	var across := _dir(rng)
+	across = (across - d * d.dot(across)).normalized()
+	return (d * cos(angle) + across * sin(angle)).normalized()
+
+## Vector3(radians from `d` to the nearest point of any range's spine, the
+## spine's height there, that range's half-width), every segment tried.
+func _nearest_spine(p: WorldPlan, d: Vector3) -> Vector3:
+	var out := Vector3(INF, 0.0, 0.0)
+	for r: Dictionary in p.shapes.ranges:
+		var spine: PackedVector3Array = r.spine
+		for s in spine.size() - 1:
+			var a := spine[s]
+			var ab := spine[s + 1] - a
+			var t := clampf((d - a).dot(ab) / ab.length_squared(), 0.0, 1.0)
+			var angle := d.angle_to(a + ab * t)
+			if angle < out.x:
+				out = Vector3(angle, lerpf(r.height[s], r.height[s + 1], t), r.half_width)
 	return out
 
 ## Radians from `d` to the nearest of `points`.

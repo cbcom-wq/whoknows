@@ -6,8 +6,9 @@ extends RefCounted
 ## a recipe, on any thread, the same on every one, and never written after:
 ## its dials, a map (PlanMap) of fields that sample() reads anywhere, and the
 ## shapes drawn on it (PlanShapes). So far the map holds the open ground, dune
-## seas and gravel plains on a gentle roll, and the seas sunk into it; the
-## ranges, plateaus, canyons and kept discs come later.
+## seas and gravel plains on a gentle roll, the seas sunk into it and the
+## mountain ranges raised on it; the plateaus, canyons and kept discs come
+## later.
 
 enum Land { SEA, DUNES, PLAINS, PLATEAU, MOUNTAINS }
 
@@ -83,6 +84,36 @@ const LAND_ABOVE := 6.0
 ## at a beach's foot where the ground's detail dips. Never a puddle inland.
 const PUDDLE_FROM := 2000.0
 
+## The ranges (§5.4 step 3, §6). Each is a spine RANGE_LENGTH metres long, a
+## smooth curve, with flanks RANGE_HALF_WIDTH metres either side of it; their
+## sizes are drawn so their flanks cover about the `mountains` share between
+## them.
+const RANGE_LENGTH := Vector2(20000, 60000)
+const RANGE_HALF_WIDTH := Vector2(4000, 8000)
+## Metres between a spine's points, about.
+const SPINE_STEP := 1000.0
+## A spine turns at most RANGE_BEND radians a metre, never tighter than a circle
+## 40 km in radius, as a noise RANGE_BEND_WAVE metres across bends it.
+const RANGE_BEND := 1.0 / 40000.0
+const RANGE_BEND_WAVE := 20000.0
+## Along its spine a range stands tallest at one point and falls toward its
+## ends, to RANGE_END of that; its summits and saddles rise and fall SUMMITS of
+## it more, in a noise SUMMIT_WAVE metres across.
+const RANGE_END := 0.3
+const SUMMITS := 0.25
+const SUMMIT_WAVE := 8000.0
+## The first range stands the `peak` dial tall; each other RANGE_TOP_LEAST to 1
+## of it.
+const RANGE_TOP_LEAST := 0.6
+## A range's flanks keep this many cells clear of a kept disc's blend, so no
+## corner of a cell reaching into the disc has any of a range's weight.
+const KEEP_CLEAR_CELLS := 2.0
+## Seeded spines tried for each range before its rules are given up on.
+const RANGE_TRIES := 32
+## Mountains are where S_MOUNTAIN is this or more (their flanks' foothills are
+## open ground).
+const MOUNTAINS_FROM := 0.5
+
 var dials: PlanDials
 ## Metres above radius of the sea's water: SEA_LEVEL, or -INF with no sea.
 var sea_level := -INF
@@ -96,9 +127,13 @@ static func build(recipe: WorldRecipe) -> WorldPlan:
 	p.sea_level = SEA_LEVEL if p.dials.sea > 0.0 else -INF
 	p.map = PlanMap.new(S_SIZE)
 	p.shapes = PlanShapes.new()
+	p.shapes.radius_m = recipe.radius_m
 	var dirs := p._corner_dirs()
-	var shore := p._seas(recipe, dirs)
+	var copies := _corner_copies(dirs)
+	var shore := p._seas(recipe, dirs, copies)
 	p._open_ground(recipe, dirs, shore)
+	p._ranges(recipe, dirs, shore, copies)
+	p.shapes.pack_near()
 	var low := PackedFloat32Array()
 	var high := PackedFloat32Array()
 	p.map.cell_range(S_BASE, low, high)
@@ -110,10 +145,13 @@ static func build(recipe: WorldRecipe) -> WorldPlan:
 func sample(d: Vector3, out: PackedFloat64Array) -> void:
 	map.sample(d, out)
 
-## SEA at or past the water's edge; else what the open ground is.
+## SEA at or past the water's edge; MOUNTAINS on a range's upper flanks; else
+## what the open ground is.
 func land_at(d: Vector3) -> Land:
 	if map.at(S_SHORE, d) <= 0.0:
 		return Land.SEA
+	if map.at(S_MOUNTAIN, d) >= MOUNTAINS_FROM:
+		return Land.MOUNTAINS
 	return Land.DUNES if map.at(S_DUNES, d) >= DUNES_FROM else Land.PLAINS
 
 ## Great-circle metres from `d` to the nearest shore: negative at sea, INF on a
@@ -183,8 +221,9 @@ func _coast(open: float, shore: float) -> float:
 ## every kept disc and of the other seas and, for a world whose design pins the
 ## shore (`pins.sea_shore`), puts the first sea's nearest shore within the
 ## pin's reach of the pinned place (any other only no nearer). If none does,
-## that is an error, and the nearest miss is kept.
-func _seas(recipe: WorldRecipe, dirs: PackedVector3Array) -> PackedFloat32Array:
+## that is an error, and the nearest miss is kept. `copies` are each face-edge
+## corner's copies (_corner_copies).
+func _seas(recipe: WorldRecipe, dirs: PackedVector3Array, copies: Dictionary) -> PackedFloat32Array:
 	var shore := PackedFloat32Array()
 	shore.resize(dirs.size())
 	shore.fill(INF)
@@ -206,14 +245,12 @@ func _seas(recipe: WorldRecipe, dirs: PackedVector3Array) -> PackedFloat32Array:
 	taken.fill(0)
 	# By k: the k standing for a corner and all its copies, and by that k how
 	# many cells meet there (4, or 3 at a cube's corner).
-	var copies := _corner_copies(dirs)
-	var canon := PackedInt32Array(range(dirs.size()))
+	var canon := _canon(copies, dirs.size())
 	var full := PackedByteArray()
 	full.resize(dirs.size())
 	full.fill(4)
 	for k: int in copies:
 		var group: PackedInt32Array = copies[k]
-		canon[k] = group[0]
 		if group.size() == 3:
 			full[group[0]] = 3
 	for s in dials.seas:
@@ -597,6 +634,368 @@ func _outline(cells: PackedInt32Array, member: PackedByteArray) -> PackedInt32Ar
 			out.append(k + 1)
 	return out
 
+## Draws the dials' ranges into shapes.ranges (§5.4 step 3) and lays them on
+## the map (_lay_ranges). Each range's spine is the first of a seeded run of
+## candidates that keeps off the sea, keeps its flanks off every kept disc
+## (_clearance) and off the flanks of the ranges before it. On a world whose
+## design pins a range (`pins.range`) the first range passes within the pin's
+## reach of its place, its middle aimed halfway between that and the place's
+## kept disc; on a world with a sea one range runs inland from the coast, its
+## first point within a cell of the shore. If no candidate keeps every rule,
+## that is an error, and the nearest miss is kept. `shore` is each corner's
+## metres to the nearest shore, by k; `copies` are each face-edge corner's
+## copies (_corner_copies).
+func _ranges(recipe: WorldRecipe, dirs: PackedVector3Array, shore: PackedFloat32Array, copies: Dictionary) -> void:
+	if dials.ranges <= 0 or dials.mountains <= 0.0:
+		return
+	var radius := recipe.radius_m
+	var edge := CubeSphere.edge_m(radius, PlanMap.PLAN_DEPTH)
+	var rng := WorldSeed.rng(recipe.seed, &"plan_ranges")
+	var bend := _noise(recipe, &"plan_range_bend", RANGE_BEND_WAVE, 2)
+	var summits := _noise(recipe, &"plan_summits", SUMMIT_WAVE, 2)
+	var canon := _canon(copies, dirs.size())
+	var pin := _range_pin(recipe)
+	# Where a range may set out inland from: corners on land within a cell of
+	# the water.
+	var coast := PackedInt32Array()
+	if sea_level > -INF:
+		for k in dirs.size():
+			var s := shore[k]
+			if s > 0.0 and s <= edge and canon[k] == k:
+				coast.append(k)
+	var coastal := -1
+	if not coast.is_empty():
+		coastal = 1 if pin and dials.ranges > 1 else 0
+	# Each range's flanks' share of the sphere, square metres.
+	var area := dials.mountains * 4.0 * PI * radius * radius / dials.ranges
+	for n in dials.ranges:
+		var size := _range_size(area, rng)
+		var top := dials.peak if n == 0 else dials.peak * rng.randf_range(RANGE_TOP_LEAST, 1.0)
+		var aimed := pin and n == 0
+		var to_coast := n == coastal
+		var aim := 0.0
+		if aimed:
+			for keep: Dictionary in recipe.keeps:
+				if keep.place == pin.place:
+					aim = maxf(aim, _clearance(keep, size.y, edge))
+			aim = (aim + pin.within) * 0.5
+		var best := {}
+		var best_miss := INF
+		for attempt in RANGE_TRIES:
+			# A range with both rules is drawn each way by turns.
+			var inland := to_coast and not (aimed and attempt % 2 == 0)
+			var spine: PackedVector3Array
+			if inland:
+				var at := dirs[coast[rng.randi() % coast.size()]]
+				var heading := _rotated(_inland(at, 0.5 * edge / radius), at, rng.randf_range(-0.25 * PI, 0.25 * PI))
+				spine = _march(at, heading, size.x, radius, bend, 1.0)
+			elif aimed:
+				var mid := _toward(pin.dir, aim / radius, rng.randf() * TAU)
+				var toward: Vector3 = (pin.dir - mid * mid.dot(pin.dir)).normalized()
+				spine = _spine_through(mid, mid.cross(toward), size.x, radius, bend)
+			else:
+				var mid := _anywhere(rng)
+				spine = _spine_through(mid, _tangent(mid, rng.randf() * TAU), size.x, radius, bend)
+			var miss := _range_miss(recipe, spine, size, pin if aimed else {}, edge if to_coast else 0.0)
+			if miss < best_miss:
+				best = {"spine": spine, "height": PackedFloat32Array(), "half_width": size.y}
+				best_miss = miss
+			if miss == 0.0:
+				break
+		if best_miss > 0.0:
+			push_error("WorldPlan: no spine for range %d of %s keeps off the sea, its kept discs and the other ranges%s%s; kept the nearest miss" % [
+				n + 1, recipe.name, " and meets its range pin" if aimed else "", " and runs to the coast" if to_coast else ""])
+		best.height = _spine_heights(best.spine, top, rng, summits)
+		shapes.ranges.append(best)
+	_lay_ranges(dirs, canon, edge)
+
+## The design's pin on a range (§5.3): {"place", "dir", "within": metres from
+## the place to the nearest spine, at most}, or {} if it pins none (or names no
+## place on this world).
+static func _range_pin(recipe: WorldRecipe) -> Dictionary:
+	var pins: Variant = recipe.plan_pins.get("pins", {})
+	var pin: Variant = pins.get("range") if pins is Dictionary else null
+	if not pin is Dictionary:
+		return {}
+	var place := StringName(str(pin.get("place", "")))
+	var within: Variant = pin.get("within")
+	if not recipe.pin_places.has(place) or not (within is float or within is int):
+		return {}
+	return {"place": place, "dir": recipe.pin_places[place], "within": float(within)}
+
+## Vector2(length, half-width) of a range whose flanks cover `area` square
+## metres (2 * length * half-width either side, and round its ends): a
+## half-width drawn from RANGE_HALF_WIDTH, the length to suit within
+## RANGE_LENGTH, then the half-width to suit that length, within its own.
+static func _range_size(area: float, rng: RandomNumberGenerator) -> Vector2:
+	var half := rng.randf_range(RANGE_HALF_WIDTH.x, RANGE_HALF_WIDTH.y)
+	var length := clampf(area / (2.0 * half) - PI * half * 0.5, RANGE_LENGTH.x, RANGE_LENGTH.y)
+	half = clampf((sqrt(length * length + PI * area) - length) / PI, RANGE_HALF_WIDTH.x, RANGE_HALF_WIDTH.y)
+	return Vector2(length, half)
+
+## The metres a range's spine keeps from `keep`'s place, its flanks
+## `half_width` wide: the disc's radius and blend, the flanks, and
+## KEEP_CLEAR_CELLS cells more.
+static func _clearance(keep: Dictionary, half_width: float, edge: float) -> float:
+	return keep.radius + keep.blend + half_width + KEEP_CLEAR_CELLS * edge
+
+## How far `spine`, of a range `size` (Vector2(length, half-width)), misses its
+## rules, in metres; 0 when it keeps them all. No point at sea or on the
+## water's edge; clear of every kept disc (_clearance); its flanks clear of the
+## ranges already drawn; with a `pin`, within its reach of its place; with
+## `coast` over 0, an end within `coast` metres of the shore.
+func _range_miss(recipe: WorldRecipe, spine: PackedVector3Array, size: Vector2, pin: Dictionary, coast: float) -> float:
+	var radius := recipe.radius_m
+	var edge := CubeSphere.edge_m(radius, PlanMap.PLAN_DEPTH)
+	var miss := 0.0
+	if sea_level > -INF:
+		for d in spine:
+			var s := nearest_shore_m(d)
+			if s <= 0.0:
+				miss += 1.0 - s
+	for keep: Dictionary in recipe.keeps:
+		miss += maxf(0.0, _clearance(keep, size.y, edge) - _spine_angle(spine, keep.dir) * radius)
+	var mid := spine[spine.size() / 2]
+	for r: Dictionary in shapes.ranges:
+		var other: PackedVector3Array = r.spine
+		var apart: float = size.y + r.half_width
+		# Every point of a spine lies within half its length of its middle.
+		if mid.angle_to(other[other.size() / 2]) * radius > (size.x + _spine_length(other, radius)) * 0.5 + apart:
+			continue
+		var near := INF
+		for d in spine:
+			near = minf(near, _spine_angle(other, d))
+		miss += maxf(0.0, apart - near * radius)
+	if pin:
+		miss += maxf(0.0, _spine_angle(spine, pin.dir) * radius - pin.within)
+	if coast > 0.0:
+		miss += maxf(0.0, minf(absf(nearest_shore_m(spine[0])), absf(nearest_shore_m(spine[-1]))) - coast)
+	return miss
+
+## `length` metres of spine from `from`, setting out along `heading` (a unit
+## tangent there): a point every SPINE_STEP or so, the heading turned between
+## them as `bend` says there (`turn` -1 turns it the other way, for a spine
+## marched backward). Gives back the points, `from` first.
+static func _march(from: Vector3, heading: Vector3, length: float, radius: float, bend: FastNoiseLite,
+		turn: float) -> PackedVector3Array:
+	var steps := maxi(1, roundi(length / SPINE_STEP))
+	var step := length / steps
+	var angle := step / radius
+	var out := PackedVector3Array()
+	out.resize(steps + 1)
+	out[0] = from
+	var p := from
+	var t := heading
+	for n in steps:
+		t = _rotated(t, p, turn * RANGE_BEND * step * clampf(bend.get_noise_3dv(p), -1.0, 1.0))
+		var q := (p * cos(angle) + t * sin(angle)).normalized()
+		t = t * cos(angle) - p * sin(angle)
+		p = q
+		t = (t - p * p.dot(t)).normalized()
+		out[n + 1] = p
+	return out
+
+## A spine `length` metres long whose middle is `mid`, running along `heading`
+## (a unit tangent there): _march both ways from it, end to end.
+static func _spine_through(mid: Vector3, heading: Vector3, length: float, radius: float,
+		bend: FastNoiseLite) -> PackedVector3Array:
+	var ahead := _march(mid, heading, length * 0.5, radius, bend, 1.0)
+	var behind := _march(mid, -heading, length * 0.5, radius, bend, -1.0)
+	behind.reverse()
+	behind.append_array(ahead.slice(1))
+	return behind
+
+## The unit tangent at `at` that leads most steeply away from the sea, by the
+## shore's metres `angle` radians either way.
+func _inland(at: Vector3, angle: float) -> Vector3:
+	var east := _tangent(at, 0.0)
+	var north := _tangent(at, 0.5 * PI)
+	var away := east * (nearest_shore_m(_toward(at, angle, 0.0)) - nearest_shore_m(_toward(at, angle, PI))) \
+		+ north * (nearest_shore_m(_toward(at, angle, 0.5 * PI)) - nearest_shore_m(_toward(at, angle, 1.5 * PI)))
+	return away.normalized() if away.length_squared() > 0.0 else east
+
+## By point of `spine`, the metres it stands over the open ground: `top` at the
+## tallest, about a crest drawn from `rng` a quarter to three quarters along it
+## and falling toward each end to RANGE_END of the crest, its summits and
+## saddles from `summits`.
+static func _spine_heights(spine: PackedVector3Array, top: float, rng: RandomNumberGenerator,
+		summits: FastNoiseLite) -> PackedFloat32Array:
+	var n := spine.size()
+	var crest := rng.randf_range(0.25, 0.75)
+	var raw := PackedFloat64Array()
+	raw.resize(n)
+	var most := 0.0
+	for i in n:
+		var t := float(i) / float(n - 1)
+		var u := (t - crest) / (crest if t < crest else 1.0 - crest)
+		raw[i] = lerpf(RANGE_END, 1.0, 1.0 - u * u) * (1.0 + SUMMITS * clampf(summits.get_noise_3dv(spine[i]), -1.0, 1.0))
+		most = maxf(most, raw[i])
+	var out := PackedFloat32Array()
+	out.resize(n)
+	for i in n:
+		out[i] = raw[i] / most * top
+	return out
+
+## Lays shapes.ranges on the map. For each range a front over the cells, from
+## those its spine crosses, finds every cell whose centre lies within its
+## half-width and a cell of the spine, and lists the range near it with the
+## segments that may hold the spine's nearest point to any point of the cell
+## (those as near its centre as the nearest and two cells more: a point of a
+## cell is within 0.77 of a cell of its centre). At those cells' corners:
+## S_RIDGE, metres to the nearest spine of any range; S_MOUNTAIN, 1 at a spine
+## falling evenly to 0 at its half-width, the most of any range; and the base
+## raised by the spine's height there times that weight squared, the most of
+## any range. Neither weight nor rise on the water's edge or at sea: a range
+## ends at the coast, and its shore is a cliff. `canon` is by k the k standing
+## for a corner's copies.
+func _lay_ranges(dirs: PackedVector3Array, canon: PackedInt32Array, edge: float) -> void:
+	var radius := shapes.radius_m
+	var count := dirs.size()
+	var up := PlanMap.SIDE
+	var ridge := PackedFloat32Array()
+	ridge.resize(count)
+	ridge.fill(INF)
+	var weight := PackedFloat32Array()
+	weight.resize(count)
+	weight.fill(0.0)
+	var lift := PackedFloat32Array()
+	lift.resize(count)
+	lift.fill(0.0)
+	# By cell, and by canon k: the last range to reach it.
+	var seen := PackedInt32Array()
+	seen.resize(CubeSphere.FACES * PlanMap.CELLS * PlanMap.CELLS)
+	seen.fill(-1)
+	var done := PackedInt32Array()
+	done.resize(count)
+	done.fill(-1)
+	var near := PackedInt32Array()
+	near.resize(4)
+	var span := 2.0 * edge / radius
+	for r in shapes.ranges.size():
+		var shape: Dictionary = shapes.ranges[r]
+		var spine: PackedVector3Array = shape.spine
+		var tall: PackedFloat32Array = shape.height
+		var half: float = shape.half_width
+		var end := spine.size() - 2
+		var reach := (half + edge) / radius
+		# The front: cells to visit, and by each where to start looking, the
+		# nearest segment and the window of the cell it was reached from.
+		var todo := PackedInt32Array()
+		var hint := PackedVector3Array()
+		for s in spine.size():
+			var c := PlanShapes.cell_index(map.cell_of(spine[s]))
+			if seen[c] != r:
+				seen[c] = r
+				todo.append(c)
+				var h := mini(s, end)
+				hint.append(Vector3(h, h, h))
+		var at := 0
+		while at < todo.size():
+			var c := todo[at]
+			var from := Vector3i(hint[at])
+			at += 1
+			var mid := _cell_centre(c, dirs)
+			# The segment nearest the centre: down or up the spine from the
+			# hint while it nears.
+			var h := from.x
+			var best := _segment_angle(spine, h, mid)
+			while h > 0:
+				var a := _segment_angle(spine, h - 1, mid)
+				if a >= best:
+					break
+				best = a
+				h -= 1
+			while h < end:
+				var a := _segment_angle(spine, h + 1, mid)
+				if a >= best:
+					break
+				best = a
+				h += 1
+			if best > reach:
+				continue
+			# The window: every segment about h within `bound`, its ends moved
+			# from the last cell's, out while within it or in while not.
+			var bound := best + span
+			var first := mini(from.y, h)
+			if first > 0 and _segment_angle(spine, first - 1, mid) <= bound:
+				first -= 1
+				while first > 0 and _segment_angle(spine, first - 1, mid) <= bound:
+					first -= 1
+			else:
+				while first < h and _segment_angle(spine, first, mid) > bound:
+					first += 1
+			var last := maxi(from.z, h)
+			if last < end and _segment_angle(spine, last + 1, mid) <= bound:
+				last += 1
+				while last < end and _segment_angle(spine, last + 1, mid) <= bound:
+					last += 1
+			else:
+				while last > h and _segment_angle(spine, last, mid) > bound:
+					last -= 1
+			shapes.add_near(c, PlanShapes.RANGE * PlanShapes.SHAPES + r, first, last)
+			var k0 := _first_corner(c)
+			for e in 4:
+				var k := canon[k0 + (e & 1) + (e >> 1) * up]
+				if done[k] == r:
+					continue
+				done[k] = r
+				var d := dirs[k]
+				var angle := INF
+				var height := 0.0
+				for s in range(first, last + 1):
+					var a := spine[s]
+					var ab := spine[s + 1] - a
+					var t := clampf((d - a).dot(ab) / ab.length_squared(), 0.0, 1.0)
+					var by := d.angle_to(a + ab * t)
+					if by < angle:
+						angle = by
+						height = lerpf(tall[s], tall[s + 1], t)
+				var metres := angle * radius
+				ridge[k] = minf(ridge[k], metres)
+				if _corner_at(S_SHORE, k) > 0.0:
+					var w := 1.0 - minf(metres / half, 1.0)
+					weight[k] = maxf(weight[k], w)
+					lift[k] = maxf(lift[k], height * w * w)
+			_cell_neighbours(c, near)
+			for o in near:
+				if seen[o] != r:
+					seen[o] = r
+					todo.append(o)
+					hint.append(Vector3(h, first, last))
+	for k in count:
+		if canon[k] != k or ridge[k] == INF:
+			continue
+		var face := k / (up * up)
+		var i := k % up
+		var j := (k / up) % up
+		map.set_corner(S_RIDGE, face, i, j, ridge[k])
+		map.set_corner(S_MOUNTAIN, face, i, j, weight[k])
+		if lift[k] > 0.0:
+			map.set_corner(S_BASE, face, i, j, map.corner(S_BASE, face, i, j) + lift[k])
+
+## Radians from `d` to the nearest point of segment `s` of `spine` (from point
+## s to point s + 1): to the nearest point of its chord, seen from the centre.
+static func _segment_angle(spine: PackedVector3Array, s: int, d: Vector3) -> float:
+	var a := spine[s]
+	var ab := spine[s + 1] - a
+	return d.angle_to(a + ab * clampf((d - a).dot(ab) / ab.length_squared(), 0.0, 1.0))
+
+## Radians from `d` to the nearest point of `spine`.
+static func _spine_angle(spine: PackedVector3Array, d: Vector3) -> float:
+	var near := INF
+	for s in spine.size() - 1:
+		near = minf(near, _segment_angle(spine, s, d))
+	return near
+
+## Metres along `spine`, end to end, on a world of `radius`.
+static func _spine_length(spine: PackedVector3Array, radius: float) -> float:
+	return (spine.size() - 1) * spine[0].angle_to(spine[1]) * radius
+
+## `field` at corner k.
+func _corner_at(field: int, k: int) -> float:
+	var up := PlanMap.SIDE
+	return map.corner(field, k / (up * up), k % up, (k / up) % up)
+
 ## The four cells that share an edge with cell `c`, into `out`: across its +u,
 ## -u, +v and -v edges, in that order, as PlanMap.neighbours gives them.
 func _cell_neighbours(c: int, out: PackedInt32Array) -> void:
@@ -643,6 +1042,15 @@ static func _corner_copies(dirs: PackedVector3Array) -> Dictionary:
 			copies[k] = groups[d]
 	return copies
 
+## By k, the k standing for a corner and all its copies: the first of them, by
+## `copies` (_corner_copies), of `count` corners.
+static func _canon(copies: Dictionary, count: int) -> PackedInt32Array:
+	var canon := PackedInt32Array(range(count))
+	for k: int in copies:
+		var group: PackedInt32Array = copies[k]
+		canon[k] = group[0]
+	return canon
+
 ## The k of cell `c`'s first corner, (i, j); the others are k + 1, k + SIDE and
 ## k + SIDE + 1.
 static func _first_corner(c: int) -> int:
@@ -662,12 +1070,20 @@ static func _cell_area(c: int, dirs: PackedVector3Array) -> float:
 
 ## The direction `angle` radians from `from`, on the bearing `bearing`.
 static func _toward(from: Vector3, angle: float, bearing: float) -> Vector3:
-	var east := from.cross(Vector3.UP)
+	return (from * cos(angle) + _tangent(from, bearing) * sin(angle)).normalized()
+
+## The unit tangent at `at` on the bearing `bearing`.
+static func _tangent(at: Vector3, bearing: float) -> Vector3:
+	var east := at.cross(Vector3.UP)
 	if east.length_squared() < 1e-6:
-		east = from.cross(Vector3.RIGHT)
+		east = at.cross(Vector3.RIGHT)
 	east = east.normalized()
-	var north := from.cross(east)
-	return (from * cos(angle) + (east * cos(bearing) + north * sin(bearing)) * sin(angle)).normalized()
+	var north := at.cross(east)
+	return east * cos(bearing) + north * sin(bearing)
+
+## `v`, a tangent at `at`, turned `angle` radians about it.
+static func _rotated(v: Vector3, at: Vector3, angle: float) -> Vector3:
+	return v * cos(angle) + at.cross(v) * sin(angle)
 
 ## A direction drawn evenly over the sphere.
 static func _anywhere(rng: RandomNumberGenerator) -> Vector3:
