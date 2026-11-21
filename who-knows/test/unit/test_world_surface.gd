@@ -759,12 +759,17 @@ func test_a_ghosted_hull_is_left_alone():
 
 # --- the floor at a lip (final review I1) --------------------------------------
 
-## 1337's desert, p3: its mesas' risers are near-sheer, so at a lip the finest
-## chunk's triangles cut the convex edge metres under height_at.
+## 1337's desert, p3, on today's ground (`planned = false`): its mesas' risers
+## are near-sheer, so at a lip the finest chunk's triangles cut the convex edge
+## metres under height_at. The mesas and towers live on inside the plan's kept
+## discs; a system of its own, so `_planet()`'s is left as it is.
+var _desert_system: SystemRecipe
+
 func _desert() -> SystemBody:
-	if _system == null:
-		_system = SystemRecipe.from_seed(1337)
-	return _system.body(&"p3")
+	if _desert_system == null:
+		_desert_system = SystemRecipe.from_seed(1337)
+		_desert_system.body(&"p3").recipe.planned = false
+	return _desert_system.body(&"p3")
 
 ## A point on the ground the collision has (a finest chunk's triangle, found
 ## as GroundCover finds it) where that triangle is more than `under` m under
