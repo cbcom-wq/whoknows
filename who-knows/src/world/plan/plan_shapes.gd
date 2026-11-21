@@ -54,7 +54,8 @@ var canyons: Array[Dictionary] = []
 ## its apron, its talus and the sand it clears; "reach_cos": float, the cosine
 ## of that as an angle; "mesa": bool, a small mesa (else a tall butte); "cells":
 ## PackedInt32Array, the cells it is listed near: every cell its reach may
-## touch}. No two buttes' reaches overlap.
+## touch}. No two buttes' reaches overlap. The record the plan is built and
+## tested by; butte_at reads the same values from the typed arrays below.
 var buttes: Array[Dictionary] = []
 ## The world's radius, metres: what ridge_m and canyon_at measure in.
 var radius_m := 0.0
@@ -76,6 +77,20 @@ var _add_cell := PackedInt32Array()
 var _add_shape := PackedInt32Array()
 var _add_first := PackedInt32Array()
 var _add_last := PackedInt32Array()
+## The buttes' values butte_at reads, by butte, copied from `buttes` by
+## pack_near: a Dictionary's key costs a hash a read, and butte_at runs per
+## height. Float64 as a Dictionary's floats are, so a height is the same to the
+## bit. Butte i's top's corners are _butte_corners[_butte_from[i]] to
+## _butte_corners[_butte_from[i + 1] - 1].
+var _butte_dir := PackedVector3Array()
+var _butte_east := PackedVector3Array()
+var _butte_north := PackedVector3Array()
+var _butte_reach_cos := PackedFloat64Array()
+var _butte_face := PackedFloat64Array()
+var _butte_top := PackedFloat64Array()
+var _butte_height := PackedFloat64Array()
+var _butte_corners := PackedVector2Array()
+var _butte_from := PackedInt32Array()
 
 ## The number of the cell `key` (a node at PLAN_DEPTH).
 static func cell_index(key: Vector4i) -> int:
@@ -108,7 +123,8 @@ func mark_near(kind: int, out: PackedByteArray) -> void:
 			out[_add_cell[e]] = 1
 
 ## Once every shape is added: files the entries cell by cell, each cell's in the
-## order they were added, and marks each cell's kinds.
+## order they were added, and marks each cell's kinds; and copies the buttes'
+## values butte_at reads into their typed arrays.
 func pack_near() -> void:
 	var cells := CubeSphere.FACES * PlanMap.CELLS * PlanMap.CELLS
 	_near_from.resize(cells + 1)
@@ -137,6 +153,28 @@ func pack_near() -> void:
 	_add_shape = PackedInt32Array()
 	_add_first = PackedInt32Array()
 	_add_last = PackedInt32Array()
+	var n := buttes.size()
+	_butte_dir.resize(n)
+	_butte_east.resize(n)
+	_butte_north.resize(n)
+	_butte_reach_cos.resize(n)
+	_butte_face.resize(n)
+	_butte_top.resize(n)
+	_butte_height.resize(n)
+	_butte_corners.clear()
+	_butte_from.resize(n + 1)
+	for i in n:
+		var b := buttes[i]
+		_butte_dir[i] = b.dir
+		_butte_east[i] = b.east
+		_butte_north[i] = b.north
+		_butte_reach_cos[i] = b.reach_cos
+		_butte_face[i] = b.face
+		_butte_top[i] = b.top
+		_butte_height[i] = b.height
+		_butte_from[i] = _butte_corners.size()
+		_butte_corners.append_array(b.outline)
+	_butte_from[n] = _butte_corners.size()
 
 ## The shapes whose reach touches `cell`, each kind * SHAPES + i. A new array:
 ## a height asked per vertex uses near_count and near_at, which allocate
@@ -284,27 +322,26 @@ func canyon_parts_at(d: Vector3, cell: int) -> Vector4:
 ## reaches. The top's edge between two corners is the straight line joining them,
 ## so the outline is faceted. Buttes' reaches never overlap, so one at most. What
 ## a height close up stands a butte by (WorldTerrain, with butte_rise). From any
-## thread; allocates nothing.
+## thread once pack_near has run (it reads the typed arrays); allocates nothing.
 func butte_at(d: Vector3, cell: int) -> Vector4:
 	for e in range(_near_from[cell], _near_from[cell + 1]):
 		var i := _near[e] - BUTTE * SHAPES
 		if i < 0 or i >= SHAPES:
 			continue
-		var b: Dictionary = buttes[i]
-		if d.dot(b.dir) < b.reach_cos:
+		if d.dot(_butte_dir[i]) < _butte_reach_cos[i]:
 			continue
-		var p := Vector2(d.dot(b.east), d.dot(b.north)) * radius_m
-		var corners: PackedVector2Array = b.outline
-		var n := corners.size()
+		var p := Vector2(d.dot(_butte_east[i]), d.dot(_butte_north[i])) * radius_m
+		var first := _butte_from[i]
+		var n := _butte_from[i + 1] - first
 		var k := mini(int(fposmod(atan2(p.y, p.x), TAU) * n / TAU), n - 1)
-		var a := corners[k]
-		var c := corners[(k + 1) % n]
+		var a := _butte_corners[first + k]
+		var c := _butte_corners[first + (k + 1) % n]
 		# How far out `d` lies along its ray from the middle, as a share of where
 		# the ray crosses the edge from corner k to k + 1.
 		var t := p.cross(c - a) / a.cross(c)
 		var out := p.length()
 		var past := out - out / t if t > 0.0 else -a.length()
-		return Vector4(past, b.face, b.top, b.height)
+		return Vector4(past, _butte_face[i], _butte_top[i], _butte_height[i])
 	return Vector4(INF, 0.0, 0.0, 0.0)
 
 ## A butte's ground over its base, `past` metres past its top's edge (butte_at's
