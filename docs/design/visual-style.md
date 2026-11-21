@@ -209,14 +209,17 @@ added no shader. On `p3` (WADIS), after the village's rework:
 The cost to watch there is the canopy's second render of the whole village. The buildings' interiors
 (Part C) have no numbers yet.
 
-Measure after any change that adds lights, pieces, windows, particles or post-processing.
+WADIS's planned land (the wadis land spec's Checkpoint 1, 2026-11-21, windowed 1280 × 720 on the GTX
+960, `land_render.gd`'s own runs, each seated at the starter's helm over 3 s; GPU 3.8 ms a frame in
+every view):
+- from 3 radii off: 156 fps; 10 km over the shore: 128; 2 km over the dry sea basin: 137; on a
+  beach, eye height: 139;
+- 2 km over a range: 130; at a range's foot, eye height: 127;
+- 300 m along a canyon: 131; on a canyon floor, eye height: 131; on Wadoo's pad, eye height: 117;
+- flown 60 m over the ground at the speed limit there (121.6 m/s) for 20 s: along a canyon 98
+  (the lowest), over a range 102.
 
-WADIS's planned land, Checkpoint 1 of the wadis land spec (2026-11-21, windowed 1280 x 720 on the GTX 960,
-`land_render.gd`, each seated at the starter's helm, 3 s): from 3 radii off 156 fps; 10 km over the
-shore 128; 2 km over the sea basin (dry) 137; on a beach 139; 2 km over a range 130; at a range's
-foot 127; 300 m along a canyon 131; on a canyon floor 131; on Wadoo's pad 117. Flown 60 m over the
-ground at the speed limit there (121.6 m/s) for 20 s: along a canyon 98 fps, over a range 102.
-Render time was 3.8-3.9 ms on the GPU throughout; the low readings are the flights.
+Measure after any change that adds lights, pieces, windows, particles or post-processing.
 
 ### 2.7 Windows show the real outside
 

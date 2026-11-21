@@ -61,6 +61,10 @@ func _run() -> void:
 	_scene.set("reload", func() -> void: pass)
 	var args := OS.get_cmdline_user_args()
 	var which := args[1] if args.size() > 1 else "all"
+	if not which in ["all", "views", "flights"]:
+		print("land    no set called %s: views, flights or all" % which)
+		quit(1)
+		return
 	print("gpu     %s (%s)" % [RenderingServer.get_video_adapter_name(), RenderingServer.get_video_adapter_vendor()])
 	if not await _to_the_planet():
 		quit(1)
@@ -339,15 +343,21 @@ func _canyon_views() -> void:
 	await _view("canyon_300m", path[i], _h(path[i]) + 300.0, ahead, float(c.floor[i + 6]), 40.0, relit)
 	await _view("canyon_floor_1.6m", path[i], floor_h + EYE, ahead, float(c.floor[i + 6]) + 40.0, 40.0, relit)
 
+## Wadoo's middle, from the plan's one KEPT site.
+func _wadoo_dir() -> Vector3:
+	return _sites(PlanSite.Kind.KEPT)[0].dir
+
 ## From Wadoo's pad at eye height, toward the nearest range's spine (the one on
 ## its skyline).
 func _wadoo_view() -> void:
 	var p := _terrain.plan
-	var oasis := SystemDesign.dir_of(-2.16, -171.97)
+	var oasis := _wadoo_dir()
 	var frame := SystemDesign.frame_at(oasis, 0.0)
 	var east := frame.x
 	var north := -frame.z
-	var pad := _off(_off(oasis, east, -80.0), north, -40.0)
+	# The pad is Wadoo's own: places/oasis.json's "pad" "at", metres east and north of the place.
+	var at: Array = JSON.parse_string(FileAccess.get_file_as_string("res://data/places/oasis.json"))["pad"]["at"]
+	var pad := _off(_off(oasis, east, float(at[0])), north, float(at[1]))
 	var spine := Vector3.ZERO
 	var near := INF
 	for rg: Dictionary in p.shapes.ranges:

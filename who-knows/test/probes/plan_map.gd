@@ -124,7 +124,10 @@ func _init() -> void:
 				_ring(s.dir, maxi(10, int(ceil((s.radius + 1500.0) / (TAU * radius / MAP_W)))), KEPT)
 	print("sites   %d oasis, %d shore, %d kept" % [counts.get(PlanSite.Kind.OASIS, 0),
 		counts.get(PlanSite.Kind.SHORE, 0), counts.get(PlanSite.Kind.KEPT, 0)])
-	var arrive := SystemDesign.dir_of(-2.16, -171.97)
+	var arrive := Vector3.ZERO
+	for s in plan.sites:
+		if s.kind == PlanSite.Kind.KEPT:
+			arrive = s.dir
 	_cross(arrive, 16, ARRIVAL)
 	_legend(plan)
 	var dir_path := args[0] if not args.is_empty() else "user:/"

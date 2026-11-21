@@ -394,7 +394,8 @@ func _nearest_tower(from: Vector3) -> Array:
 	if _terrain.plan != null:
 		return _nearest(from, func(d: Vector3) -> bool:
 			var z := _plateau_at(d)
-			return z > 0.0 and z < WorldPlan.PLATEAU_FROM 				and _terrain.ground_at(d, 0.0) == &"rock" and _terrain.height_at(d) - h0 > TOWER_TALL,
+			return z > 0.0 and z < WorldPlan.PLATEAU_FROM \
+				and _terrain.ground_at(d, 0.0) == &"rock" and _terrain.height_at(d) - h0 > TOWER_TALL,
 			TOWER_STEP, TOWER_REACH)
 	return _nearest(from, func(d: Vector3) -> bool:
 		var z := _terrain.continent_at(d)
@@ -422,7 +423,8 @@ func _plateau_edge_spot() -> Vector3:
 		if up < EDGE_SUN_MIN or up > EDGE_SUN_MAX:
 			continue
 		p.sample(mid, f)
-		if f[WorldPlan.S_PLATEAU] > 0.1 and f[WorldPlan.S_PLATEAU] < WorldPlan.PLATEAU_FROM and f[WorldPlan.S_KEEP] <= 0.0 				and f[WorldPlan.S_CANYON] == INF:
+		if f[WorldPlan.S_PLATEAU] > 0.1 and f[WorldPlan.S_PLATEAU] < WorldPlan.PLATEAU_FROM and f[WorldPlan.S_KEEP] <= 0.0 \
+				and f[WorldPlan.S_CANYON] == INF:
 			cells.append(mid)
 	cells.sort_custom(func(a: Vector3, b: Vector3) -> bool:
 		return absf(90.0 - rad_to_deg(a.angle_to(_to_star())) - SUN_DEG) < absf(90.0 - rad_to_deg(b.angle_to(_to_star())) - SUN_DEG))
