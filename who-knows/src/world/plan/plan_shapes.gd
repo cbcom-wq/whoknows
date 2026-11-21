@@ -41,6 +41,10 @@ var plateaus: Array[Dictionary] = []
 var canyons: Array[Dictionary] = []
 ## The world's radius, metres: what ridge_m and canyon_at measure in.
 var radius_m := 0.0
+## By cell, which kinds of shape are listed near it, a bit (1 << kind) each:
+## so a height asks a cell's canyons only where it has one, by one look. Set by
+## pack_near.
+var kinds := PackedByteArray()
 
 ## The near lists, by cell: its entries are _near_from[cell] to
 ## _near_from[cell + 1] - 1, and entry e names shape _near[e] and the first
@@ -82,13 +86,17 @@ func mark_near_ranges(out: PackedByteArray) -> void:
 			out[_add_cell[e]] = 1
 
 ## Once every shape is added: files the entries cell by cell, each cell's in the
-## order they were added.
+## order they were added, and marks each cell's kinds.
 func pack_near() -> void:
 	var cells := CubeSphere.FACES * PlanMap.CELLS * PlanMap.CELLS
 	_near_from.resize(cells + 1)
 	_near_from.fill(0)
-	for c in _add_cell:
+	kinds.resize(cells)
+	kinds.fill(0)
+	for e in _add_cell.size():
+		var c := _add_cell[e]
 		_near_from[c + 1] += 1
+		kinds[c] = kinds[c] | (1 << (_add_shape[e] / SHAPES))
 	for c in cells:
 		_near_from[c + 1] += _near_from[c]
 	var count := _add_cell.size()
@@ -182,7 +190,18 @@ func lower_by_canyons(low: PackedFloat32Array) -> void:
 ## the floor's edge, so where canyons meet, the deeper's floor and walls cut
 ## through the other's. From any thread; allocates nothing.
 func canyon_at(d: Vector3, cell: int) -> Vector3:
-	var out := Vector3(INF, 0.0, 0.0)
+	var c := canyon_parts_at(d, cell)
+	if c.x == INF:
+		return Vector3(INF, 0.0, 0.0)
+	return Vector3(c.x / c.y, c.z, c.w)
+
+## The canyon canyon_at picks at `d` (a unit direction in cell number `cell`),
+## in parts: Vector4(metres from its centreline, its floor's half-width there,
+## its floor's height, its rim over the floor), or Vector4(INF, 0, 0, 0) where
+## no canyon's walls reach. What a height close up cuts by (WorldTerrain): the
+## metres past the floor's edge are x - y. From any thread; allocates nothing.
+func canyon_parts_at(d: Vector3, cell: int) -> Vector4:
+	var out := Vector4(INF, 0.0, 0.0, 0.0)
 	var lowest := INF
 	var run := WorldPlan.CANYON_WALL_RUN
 	for e in range(_near_from[cell], _near_from[cell + 1]):
@@ -221,5 +240,5 @@ func canyon_at(d: Vector3, cell: int) -> Vector3:
 		var cut := f + maxf(metres - w, 0.0) / run
 		if cut < lowest:
 			lowest = cut
-			out = Vector3(metres / w, f, lerpf(rim[at], rim[at + 1], at_t))
+			out = Vector4(metres, w, f, lerpf(rim[at], rim[at + 1], at_t))
 	return out

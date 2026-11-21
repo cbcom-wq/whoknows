@@ -18,8 +18,10 @@ extends RefCounted
 ## across (PATCH_QUADS) at every detail. A desert (DUNES) is its own shape
 ## and colours on the same continent layer: dunes, mesas and towers (the
 ## desert world spec §7.2), and the wind that laid them (wind_at). A planned
-## desert draws its plan's land instead (`plan`; the wadis land spec §5, §6),
-## and that old ground only within its kept discs, to the bit.
+## desert draws its plan's land instead (`plan`; the wadis land spec §5, §6):
+## the plan's base, each kind of land's own detail close up on it, and its
+## canyons cut into that; and that old ground only within its kept discs, to
+## the bit.
 
 ## Continents: this many across the unit sphere.
 const CONTINENT_SCALE := 1.4
@@ -136,6 +138,71 @@ const _CREST := 1.0 - DUNE_LEE
 const _UP := 1.0 / _CREST
 const _DOWN := -1.0 / DUNE_LEE
 
+# A planned desert's ground close up (the wadis land spec §6): each kind of
+# land's own detail on the plan's base (WorldPlan.S_BASE), never more than that
+# land's WorldPlan.DETAIL_REACH over or under it, so the plan's bounds and its
+# canyons' rims hold it. Flat colour throughout, steep ground rock.
+
+## Plains: a gentle roll PLAINS_ROLL metres either way, in swells about
+## PLAINS_ROLL_WAVE metres across. It fades out over a dune sea's edge
+## (WorldPlan.DUNES_EDGE), down a beach to the water and up onto a range's or a
+## plateau's land.
+const PLAINS_ROLL := 4.0
+const PLAINS_ROLL_WAVE := 900.0
+## Mountains: sharp ridged peaks along a range's spine, from a ridged noise of
+## the terrain's own (MOUNTAIN_OCTAVES, the biggest MOUNTAIN_WAVE metres
+## across), cubed so its ridges stand narrow and steep over wide valleys and
+## their faces turn rock (ROCK_SLOPE); a gentler noise or a wider wave leaves the
+## range's faces under ROCK_SLOPE everywhere, all one colour. The peaks stand
+## up to MOUNTAIN_ROUGH of the spine's height there and never more than
+## MOUNTAIN_ROUGH_MOST metres (within DETAIL_REACH): whole on the spine, falling
+## to none at the mountains' edge (WorldPlan.MOUNTAINS_FROM). SPINE_SHARE of it is
+## a crest on the spine itself, gone SPINE_CREST metres either side, so the spine
+## is the range's sharpest ridge. All of it fades over the last MOUNTAIN_SHORE
+## metres to the water, where a range ends in a cliff.
+const MOUNTAIN_ROUGH := 0.15
+const MOUNTAIN_ROUGH_MOST := 280.0
+const MOUNTAIN_WAVE := 800.0
+const MOUNTAIN_OCTAVES := 4
+const SPINE_SHARE := 0.35
+const SPINE_CREST := 1200.0
+const MOUNTAIN_SHORE := 200.0
+## A range's foot, its flanks under the mountains' edge: boulders gather
+## (in_talus) where S_MOUNTAIN is MOUNTAIN_TALUS.x to MOUNTAIN_TALUS.y; and
+## alluvial fans spread there, the peaks' ridges running on as low spurs at most
+## FAN_RISE metres tall, rising over the flanks' first FAN.x of weight and gone
+## between FAN.y and the mountains' edge.
+const MOUNTAIN_TALUS := Vector2(0.25, 0.5)
+const FAN_RISE := 7.0
+const FAN := Vector2(0.2, 0.3)
+## Plateau country: the inner half of a region's edge band (S_PLATEAU from
+## WorldPlan.PLATEAU_FROM to 1) climbs to the region's own top (S_PLATEAU_TOP) in
+## TERRACES flat terraces, each rising first in a near-sheer rock riser over
+## 1 - MESA_FLAT of it, as today's mesas do; the outer half is the talus at their
+## foot. The terraces' lines are pushed inward by up to TERRACE_WANDER of the
+## climb (most at its foot, none at the top) by a noise TERRACE_WANDER_WAVE
+## metres across, so they follow no cell's edge. On the foot's level in front of
+## the first riser stand today's towers (_tower_stand), rising to the first
+## terrace and merging into it, shorter over the climb's first TOWER_EASE.
+const TERRACE_WANDER := 0.3
+const TERRACE_WANDER_WAVE := 1500.0
+const TOWER_EASE := 0.1
+## Canyons: walls in steps from the floor's edge, each CANYON_STEP metres up, a
+## near-sheer rock riser and then a ground_high ledge, CANYON_LEDGE of the step's
+## run. Never under the plan's straight wall (WorldPlan.CANYON_WALL_RUN metres out
+## a metre up), so where the walls end they stand over the ground and leaving a
+## canyon makes no seam.
+const CANYON_STEP := 30.0
+const CANYON_LEDGE := 0.6
+## The sea's waterline: wet sand (damp) where the ground stands from DAMP_BAND.x
+## metres under sea level to DAMP_BAND.y over it. The ground's height is only
+## looked at where the base is within DAMP_LOOK metres of sea level, more than
+## the detail lifts or lowers it there.
+const DAMP_BAND := Vector2(2.0, 0.6)
+const DAMP_LOOK := 50.0
+## PlanShapes.kinds' bit for a canyon listed near a cell.
+const _CANYON_NEAR := 1 << PlanShapes.CANYON
+
 var recipe: WorldRecipe
 var radius: float
 ## Metres from the ground's lowest to its highest, at most, centred on the
@@ -184,6 +251,15 @@ var _legacy_half := 0.0
 ## This terrain's own fields for the plan's samples (WorldPlan.S_SIZE long): one
 ## per terrain, so one per thread, and none made per height.
 var _fields := PackedFloat64Array()
+## A planned desert's: by cell, the kinds of shape listed near it
+## (PlanShapes.kinds); its sea level (-INF with no sea); and the noises of its
+## detail close up, its own: the plains' roll, the mountains' ridged peaks and
+## the terraces' wander.
+var _near_kinds := PackedByteArray()
+var _sea_level := -INF
+var _roll: FastNoiseLite
+var _peaks: FastNoiseLite
+var _wander: FastNoiseLite
 
 var _continents := FastNoiseLite.new()
 var _hills := FastNoiseLite.new()
@@ -248,6 +324,12 @@ func _init(p_recipe: WorldRecipe) -> void:
 		_keeps_centre = plan.keeps_centre
 		_keeps_cos = plan.keeps_cos
 		_fields.resize(WorldPlan.S_SIZE)
+		_near_kinds = plan.shapes.kinds
+		_sea_level = plan.sea_level
+		_roll = _simplex(&"plan_roll", 2)
+		_wander = _simplex(&"plan_terraces", 2)
+		_peaks = _simplex(&"plan_peaks", MOUNTAIN_OCTAVES)
+		_peaks.fractal_type = FastNoiseLite.FRACTAL_RIDGED
 		relief = _planned_relief()
 	_take_stamps()
 
@@ -417,14 +499,15 @@ func wind_at(dir: Vector3) -> Vector3:
 
 ## Whether `dir` is where a desert's boulders gather: the low ground of the
 ## tower band below a mesa (which holds the MESA_EDGE the dunes fade over),
-## off the towers themselves. On a planned desert, only so within a kept disc
-## (over the inner half of its blend). False on any other world.
+## off the towers themselves. On a planned desert, the feet of its ranges and
+## plateaus (_planned_talus), and today's only within a kept disc (over the
+## inner half of its blend). False on any other world.
 func in_talus(dir: Vector3) -> bool:
 	if archetype != WorldRecipe.Archetype.DUNES:
 		return false
 	var d := dir.normalized()
 	if plan != null and _kept(d) <= 0.5:
-		return false
+		return _planned_talus(d)
 	var z := _mesa_continent(d, _continents.get_noise_3dv(d * CONTINENT_SCALE))
 	return z >= MESA_FROM - TOWER_BAND and z < MESA_FROM and _tower(d, z) == 0.0
 
@@ -447,7 +530,7 @@ func ground_at(dir: Vector3, slope: float) -> StringName:
 		# A kept disc's own over the inner half of its blend, as its heights
 		# are mostly its own there.
 		if plan != null and _kept(d) <= 0.5:
-			return _planned_ground(d)
+			return _planned_ground(d, _fields)
 		return _desert_ground(d)
 	var n := _pattern.get_noise_3dv(d * PATTERN_SCALE)
 	match archetype:
@@ -562,26 +645,140 @@ func _dune(d: Vector3, a: float, stand: float) -> float:
 	return DUNE_HEIGHT * stand * p * (DUNE_LOW + (1.0 - DUNE_LOW) * swell)
 
 ## A planned desert's ground at the unit direction `d`, as the plan lays it,
-## kept discs aside: the plan's base (WorldPlan.S_BASE: the open roll, the sea's
-## basin, the ranges' and plateaus' lift), with today's dunes on its dune seas
-## (_plan_dunes), faded toward the wind axis's poles as today's are. Only the
-## map's land fields are read: nothing here needs the canyons'.
+## kept discs aside: the plan's base (WorldPlan.S_BASE: the open roll, the
+## sea's basin, the ranges' and plateaus' lift) with its land's detail, cut
+## where a canyon's walls reach to the least of that and the canyon's floor and
+## stepped walls (_canyon_wall), which rise to meet the ground. At sea the base
+## alone, the basin's shelf and deep floor; on plateau country its terraces
+## (_terraces) and its top; on a range's mountains its ridged peaks; on open
+## ground today's dunes on the dune seas (_plan_dunes, faded toward the wind
+## axis's poles as today's are), the plains' roll and a range's fans at its
+## foot. The map's land fields are sampled, and a canyon is asked only in a cell
+## with one near. Written out in one function: this runs per height, and a
+## GDScript call costs about what a noise lookup does.
 func _planned_height(d: Vector3) -> float:
 	var f := _fields
-	_map.sample(d, f, WorldPlan.LAND_FIELDS)
+	var cell := _map.sample(d, f, WorldPlan.LAND_FIELDS)
 	var ground := f[WorldPlan.S_BASE]
-	if f[WorldPlan.S_DUNES] <= WorldPlan.DUNES_FROM:
+	var shore := f[WorldPlan.S_SHORE]
+	if shore > 0.0:
+		var plateau := f[WorldPlan.S_PLATEAU]
+		var mountain := f[WorldPlan.S_MOUNTAIN]
+		if plateau >= 1.0:
+			ground = f[WorldPlan.S_PLATEAU_TOP]
+		elif plateau >= WorldPlan.PLATEAU_FROM:
+			ground = _terraces(d, ground, f[WorldPlan.S_PLATEAU_TOP], plateau)
+		elif mountain >= WorldPlan.MOUNTAINS_FROM:
+			var spine := plan.shapes.ridge_m(d, PlanShapes.cell_key(cell))
+			var rough := minf(MOUNTAIN_ROUGH * spine.y, MOUNTAIN_ROUGH_MOST) \
+				* smoothstep(WorldPlan.MOUNTAINS_FROM, 1.0, mountain)
+			if shore < MOUNTAIN_SHORE:
+				rough *= smoothstep(0.0, MOUNTAIN_SHORE, shore)
+			var crest := maxf(0.0, 1.0 - spine.x / SPINE_CREST)
+			ground += rough * (SPINE_SHARE * crest + (1.0 - SPINE_SHARE) * _peak(d))
+		else:
+			var dunes := f[WorldPlan.S_DUNES]
+			# How plain the ground is, for its roll.
+			var plain := 1.0
+			if dunes > WorldPlan.DUNES_FROM:
+				var stand := _plan_dunes(f)
+				if stand > 0.0:
+					var a := d.dot(wind_axis)
+					# pole_fade(a), written out.
+					var pole := absf(a)
+					if pole > DUNE_POLE:
+						stand *= 1.0 - smoothstep(DUNE_POLE, (1.0 + DUNE_POLE) * 0.5, pole)
+					if stand > 0.0:
+						ground += _dune(d, a, stand)
+				plain = 1.0 - smoothstep(WorldPlan.DUNES_FROM, WorldPlan.DUNES_FROM + WorldPlan.DUNES_EDGE, dunes)
+			if shore < WorldPlan.BEACH_WIDTH:
+				plain *= smoothstep(0.0, WorldPlan.BEACH_WIDTH, shore)
+			if plateau > 0.0:
+				plain *= 1.0 - smoothstep(0.0, WorldPlan.PLATEAU_FROM, plateau)
+			if mountain > 0.0:
+				plain *= 1.0 - smoothstep(0.0, WorldPlan.MOUNTAINS_FROM, mountain)
+				var fan := smoothstep(0.0, FAN.x, mountain) * (1.0 - smoothstep(FAN.y, WorldPlan.MOUNTAINS_FROM, mountain))
+				if shore < MOUNTAIN_SHORE:
+					fan *= smoothstep(0.0, MOUNTAIN_SHORE, shore)
+				if fan > 0.0:
+					ground += FAN_RISE * fan * _peak(d)
+			if plain > 0.0:
+				ground += PLAINS_ROLL * plain * _roll.get_noise_3dv(d * (radius / PLAINS_ROLL_WAVE))
+	if _near_kinds[cell] & _CANYON_NEAR == 0:
 		return ground
-	var stand := _plan_dunes(f)
-	if stand > 0.0:
-		var a := d.dot(wind_axis)
-		# pole_fade(a), written out.
-		var pole := absf(a)
-		if pole > DUNE_POLE:
-			stand *= 1.0 - smoothstep(DUNE_POLE, (1.0 + DUNE_POLE) * 0.5, pole)
+	var c := plan.shapes.canyon_parts_at(d, cell)
+	if c.x == INF:
+		return ground
+	return minf(ground, c.z + _canyon_wall(c.x - c.y))
+
+## A planned plateau's ground on its edge band's inner half, at the unit
+## direction `d` whose base is `base`, whose region's top is `top` and whose
+## S_PLATEAU is `plateau` (PLATEAU_FROM to under 1). Over the inner half the
+## climb goes from 0 to 1 and the base climbs straight from the foot's level to
+## the top; the terraces climb in steps as today's mesas do (a riser first, then
+## the flat), by the climb pushed in (_terrace_climb). In front of the first
+## riser, the foot's level and today's towers on it, rising to the first
+## terrace. The climb still to come from `d`'s, over the base's rise still to
+## come, is the climb's whole height (`span`).
+func _terraces(d: Vector3, base: float, top: float, plateau: float) -> float:
+	var u := (plateau - WorldPlan.PLATEAU_FROM) / (1.0 - WorldPlan.PLATEAU_FROM)
+	var v := _terrace_climb(d, u)
+	var t := v * TERRACES
+	if t >= TERRACES - MESA_FLAT:
+		return top
+	var span := (top - base) / (1.0 - u)
+	if v <= 0.0:
+		var foot := top - span
+		var stand := _tower_stand(d)
 		if stand > 0.0:
-			ground += _dune(d, a, stand)
-	return ground
+			return lerpf(foot, foot + span / TERRACES, stand * smoothstep(0.0, TOWER_EASE, u))
+		return foot
+	var k := floorf(t)
+	return top - span * (1.0 - (k + minf((t - k) / (1.0 - MESA_FLAT), 1.0)) / TERRACES)
+
+## Where a planned plateau's terraces are on their climb at the unit direction
+## `d`, whose straight climb is `u` (0 to 1): `u` pushed in by up to
+## TERRACE_WANDER of the climb still to come, so it is `u` at the top and at the
+## foot's level nowhere outside the inner half; 0 or less in front of the first
+## riser.
+func _terrace_climb(d: Vector3, u: float) -> float:
+	var wander := clampf((_wander.get_noise_3dv(d * (radius / TERRACE_WANDER_WAVE)) + 1.0) * 0.5, 0.0, 1.0)
+	return u - TERRACE_WANDER * wander * (1.0 - u)
+
+## The mountains' ridged noise at the unit direction `d`, cubed, 0 to 1: 1 on
+## its ridges.
+func _peak(d: Vector3) -> float:
+	var ridge := clampf((_peaks.get_noise_3dv(d * (radius / MOUNTAIN_WAVE)) + 1.0) * 0.5, 0.0, 1.0)
+	return ridge * ridge * ridge
+
+## A canyon's walls' rise over its floor `past` metres out from the floor's edge
+## (none on the floor): steps CANYON_STEP metres up, each its riser and then its
+## ledge, so never under the plan's straight wall, past / CANYON_WALL_RUN.
+static func _canyon_wall(past: float) -> float:
+	if past <= 0.0:
+		return 0.0
+	var t := past / (CANYON_STEP * WorldPlan.CANYON_WALL_RUN)
+	var k := floorf(t)
+	return CANYON_STEP * (k + minf((t - k) / (1.0 - CANYON_LEDGE), 1.0))
+
+## Whether a planned desert's boulders gather at the unit direction `d`: at a
+## range's foot (MOUNTAIN_TALUS), and at a plateau's, its edge band's outer half
+## and the foot's level in front of its first riser, off the towers. Never at sea.
+func _planned_talus(d: Vector3) -> bool:
+	var f := _fields
+	_map.sample(d, f, WorldPlan.LAND_FIELDS)
+	if f[WorldPlan.S_SHORE] <= 0.0:
+		return false
+	var mountain := f[WorldPlan.S_MOUNTAIN]
+	if mountain >= MOUNTAIN_TALUS.x and mountain < MOUNTAIN_TALUS.y:
+		return true
+	var plateau := f[WorldPlan.S_PLATEAU]
+	if plateau <= 0.0 or plateau >= 1.0:
+		return false
+	if plateau < WorldPlan.PLATEAU_FROM:
+		return true
+	var u := (plateau - WorldPlan.PLATEAU_FROM) / (1.0 - WorldPlan.PLATEAU_FROM)
+	return _terrace_climb(d, u) <= 0.0 and _tower_stand(d) == 0.0
 
 ## A planned desert's kept discs' weight at the unit direction `d`
 ## (WorldPlan.keep_weight), by one dot where no disc reaches.
@@ -606,19 +803,72 @@ func _plan_dunes(f: PackedFloat64Array) -> float:
 		* (1.0 - smoothstep(0.0, WorldPlan.MOUNTAINS_FROM, f[WorldPlan.S_MOUNTAIN])) \
 		* (1.0 - smoothstep(0.0, WorldPlan.PLATEAU_FROM, f[WorldPlan.S_PLATEAU]))
 
-## A planned desert's colours as the plan lays them, where its kept discs
-## weigh half or less (steep ground is rock before this is asked): a standing
-## dune's lee face, crest to trough, dust, as today's (DUST_STAND); the rest
-## ground_low.
-func _planned_ground(d: Vector3) -> StringName:
-	_map.sample(d, _fields, WorldPlan.LAND_FIELDS)
-	var stand := _plan_dunes(_fields)
+## A planned desert's colours at the unit direction `d` as the plan lays them,
+## where its kept discs weigh half or less (steep ground is rock before this is
+## asked), the plan's fields sampled into `out` (S_SIZE long, the caller's own):
+## a canyon's floor ground_low and, where its walls are the ground, their risers
+## rock and ledges ground_high; a plateau's as _terrace_ground has it; a range's
+## mountains ground_high; wet sand (damp) along the sea's waterline
+## (DAMP_BAND); a standing dune's lee face, crest to trough, dust, as today's
+## (DUST_STAND); the rest ground_low.
+func _planned_ground(d: Vector3, out: PackedFloat64Array) -> StringName:
+	var cell := _map.sample(d, out, WorldPlan.LAND_FIELDS)
+	# The ground's height (_planned_height), once it has been worked out.
+	var height := NAN
+	if _near_kinds[cell] & _CANYON_NEAR != 0:
+		var c := plan.shapes.canyon_parts_at(d, cell)
+		if c.x < INF:
+			var past := c.x - c.y
+			if past <= 0.0:
+				# The floor, or by a mouth the beach where it lies lower.
+				var floor_h := c.z
+				if floor_h - _sea_level <= DAMP_LOOK:
+					floor_h = _planned_height(d)
+				return &"damp" if _damp(floor_h) else &"ground_low"
+			# The walls are the ground where the ground is their cut, the
+			# least of it and the land's.
+			var cut := c.z + _canyon_wall(past)
+			height = _planned_height(d)
+			if height == cut:
+				var step := past / (CANYON_STEP * WorldPlan.CANYON_WALL_RUN)
+				return &"rock" if step - floorf(step) < 1.0 - CANYON_LEDGE else &"ground_high"
+	var plateau := out[WorldPlan.S_PLATEAU]
+	if plateau >= WorldPlan.PLATEAU_FROM:
+		return _terrace_ground(d, plateau)
+	if out[WorldPlan.S_MOUNTAIN] >= WorldPlan.MOUNTAINS_FROM and out[WorldPlan.S_SHORE] > 0.0:
+		return &"ground_high"
+	if _sea_level > -INF and absf(out[WorldPlan.S_BASE] - _sea_level) <= DAMP_LOOK:
+		if is_nan(height):
+			height = _planned_height(d)
+		if _damp(height):
+			return &"damp"
+	var stand := _plan_dunes(out)
 	if stand < DUST_STAND:
 		return &"ground_low"
 	var a := d.dot(wind_axis)
 	if stand * pole_fade(a) >= DUST_STAND and fposmod(_phase(d, a), 1.0) > _CREST:
 		return &"dust"
 	return &"ground_low"
+
+## A planned plateau's colours at the unit direction `d` whose S_PLATEAU is
+## `plateau` (PLATEAU_FROM or more), as _terraces lays it: its risers and towers
+## rock, its terraces and top ground_high, the foot's level in front of the
+## first riser ground_low.
+func _terrace_ground(d: Vector3, plateau: float) -> StringName:
+	if plateau >= 1.0:
+		return &"ground_high"
+	var u := (plateau - WorldPlan.PLATEAU_FROM) / (1.0 - WorldPlan.PLATEAU_FROM)
+	var t := _terrace_climb(d, u) * TERRACES
+	if t <= 0.0:
+		return &"rock" if u > 0.0 and _tower_stand(d) > 0.0 else &"ground_low"
+	if t < TERRACES - MESA_FLAT and t - floorf(t) < 1.0 - MESA_FLAT:
+		return &"rock"
+	return &"ground_high"
+
+## Whether ground `height` metres above radius is in the damp band along a
+## planned desert's waterline (DAMP_BAND).
+func _damp(height: float) -> bool:
+	return height >= _sea_level - DAMP_BAND.x and height <= _sea_level + DAMP_BAND.y
 
 ## How much of its height a dune stands at a point whose d . wind_axis is `a`
 ## and whose continent layer is `z`: 1 on the open dunes, fading to 0 toward
@@ -660,15 +910,21 @@ func _phase(d: Vector3, a: float) -> float:
 
 ## How much of a tower stands at `d`, whose continent layer is `z`: 1 on its
 ## top, 0 off it. Towers stand in the band below the mesa line and merge into
-## the first terrace above it. Their cells are laid out flat on each cube face
-## in equal angles, so they keep their size, and a face is a whole number of
-## cells across: every tower lies inside its own cell (TOWER_JITTER), and so
-## inside its face, and none is cut. (The face is worked out here rather than
-## through CubeSphere: this runs per height.)
+## the first terrace above it, shorter toward the band's floor.
 func _tower(d: Vector3, z: float) -> float:
 	var floor_z := MESA_FROM - TOWER_BAND
 	if z < floor_z or z >= MESA_FROM + MESA_STEP:
 		return 0.0
+	return _tower_stand(d) * smoothstep(floor_z, floor_z + TOWER_BAND * 0.25, z)
+
+## How much of a tower stands at the unit direction `d` by its cells alone,
+## wherever it may stand: 1 on its top, 0 off it. Today's towers (_tower) and
+## a planned plateau's (_terraces) both stand on it. The cells are laid out
+## flat on each cube face in equal angles, so the towers keep their size, and a
+## face is a whole number of cells across: every tower lies inside its own cell
+## (TOWER_JITTER), and so inside its face, and none is cut. (The face is worked
+## out here rather than through CubeSphere: this runs per height.)
+func _tower_stand(d: Vector3) -> float:
 	# The cube face `d` lies on, and its two angles across that face.
 	var a := d.abs()
 	var face := 0.0
@@ -693,8 +949,7 @@ func _tower(d: Vector3, z: float) -> float:
 		return 0.0
 	var r := lerpf(TOWER_RADIUS.x, TOWER_RADIUS.y, cell / TOWER_SHARE)
 	var gap := (_tower_gap.get_noise_2d(x, y) + 1.0) * radius / _tower_scale
-	var stand := clampf((r * TOWER_FOOT - gap) / (r * (TOWER_FOOT - 1.0)), 0.0, 1.0)
-	return stand * smoothstep(floor_z, floor_z + TOWER_BAND * 0.25, z)
+	return clampf((r * TOWER_FOOT - gap) / (r * (TOWER_FOOT - 1.0)), 0.0, 1.0)
 
 ## A desert's colours: mesa tops ground_high, their risers and the towers
 ## rock, a standing dune's lee face (crest to trough) dust, the rest of the

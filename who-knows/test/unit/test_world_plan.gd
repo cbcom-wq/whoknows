@@ -940,6 +940,171 @@ func test_planned_heights_on_workers_are_the_main_thread_s_to_the_bit():
 				differ += 1
 		assert_eq(differ, 0, "worker %d: heights unlike the main thread's" % w)
 
+# The land close up (the wadis land spec §6): each kind's own detail on the
+# plan's base, within the plan's bounds, with canyon floors to land on and no
+# puddle away from the sea.
+
+func test_canyon_floors_are_level_enough_to_land_on():
+	var t := WorldTerrain.new(_wadis())
+	for d in _canyon_floor_points(t.plan, 400):
+		assert_lt(_slope(t, d, 5.0), deg_to_rad(10.0))
+
+func test_ground_stays_within_the_plans_bounds():
+	var t := WorldTerrain.new(_wadis())
+	for k in _keys_at_depths(t, [4, 6, 8, 10], 200):
+		var b := t.plan.bounds_of(k)
+		for d in _points_in(k, 25):
+			var h := t.height_at(d)
+			assert_true(h >= b.x - 0.01 and h <= b.y + 0.01, "%s outside %s" % [h, b])
+
+func test_no_puddles_away_from_the_sea():
+	var t := WorldTerrain.new(_wadis())
+	for d in _dirs(20000):
+		if t.height_at(d) < t.plan.sea_level:
+			assert_lt(t.plan.nearest_shore_m(d), WorldPlan.PUDDLE_FROM)
+
+func test_from_300_m_something_stands_on_the_horizon():
+	# §3's anti-goal: from 300 m over open ground, a range, a plateau's edge, a canyon or the sea
+	var t := WorldTerrain.new(_wadis())
+	var hits := 0
+	var spots := _open_ground(t, 200)
+	for d in spots:
+		if _horizon_feature(t, d, 300.0):
+			hits += 1
+	gut.p("%d of %d spots over open ground see something on the horizon from 300 m" % [hits, spots.size()])
+	assert_gt(float(hits) / spots.size(), 0.8)
+
+func test_a_range_s_peaks_stand_sharp_with_rock_faces():
+	var t := WorldTerrain.new(_wadis())
+	var f := PackedFloat64Array(); f.resize(WorldPlan.S_SIZE)
+	var rng := RandomNumberGenerator.new(); rng.seed = 97
+	var steep := 0
+	var tallest := 0.0
+	for k in 500:
+		var d := _dir(rng)
+		t.plan.sample(d, f)
+		while f[WorldPlan.S_KEEP] > 0.0 or f[WorldPlan.S_CANYON] < INF \
+				or WorldPlan.land_in(f) != WorldPlan.Land.MOUNTAINS:
+			d = _dir(rng)
+			t.plan.sample(d, f)
+		if _slope(t, d, 5.0) > WorldTerrain.ROCK_SLOPE:
+			steep += 1
+		tallest = maxf(tallest, t.height_at(d) - f[WorldPlan.S_BASE])
+	gut.p("%d of 500 points on the mountains past ROCK_SLOPE; peaks up to %.0f m over the base" % [steep, tallest])
+	assert_gt(steep, 15, "some of a range's faces are rock")
+	assert_gt(tallest, 100.0, "its peaks stand over the base")
+
+func test_a_plateau_s_top_stands_flat_at_its_own_top():
+	var t := WorldTerrain.new(_wadis())
+	var f := PackedFloat64Array(); f.resize(WorldPlan.S_SIZE)
+	var tops := 0
+	var off := 0
+	for d in _dirs(20000):
+		t.plan.sample(d, f)
+		if f[WorldPlan.S_PLATEAU] < 1.0 or f[WorldPlan.S_CANYON] < INF or f[WorldPlan.S_KEEP] > 0.0:
+			continue
+		tops += 1
+		if t.height_at(d) != f[WorldPlan.S_PLATEAU_TOP] or t.ground_at(d, 0.0) != &"ground_high":
+			off += 1
+	assert_gt(tops, 1000)
+	assert_eq(off, 0, "points on a top not at its top, or not ground_high")
+
+func test_boulders_gather_at_the_feet_of_ranges_and_plateaus():
+	var t := WorldTerrain.new(_wadis())
+	var f := PackedFloat64Array(); f.resize(WorldPlan.S_SIZE)
+	var feet := 0
+	var bare := 0
+	var open := 0
+	var strewn := 0
+	for d in _dirs(20000):
+		t.plan.sample(d, f)
+		if f[WorldPlan.S_KEEP] > 0.0:
+			continue
+		var mountain := f[WorldPlan.S_MOUNTAIN]
+		var plateau := f[WorldPlan.S_PLATEAU]
+		if f[WorldPlan.S_SHORE] > 0.0 and plateau < WorldPlan.PLATEAU_FROM \
+				and (plateau > 0.0 or (mountain >= WorldTerrain.MOUNTAIN_TALUS.x and mountain < WorldTerrain.MOUNTAIN_TALUS.y)):
+			feet += 1
+			if not t.in_talus(d):
+				bare += 1
+		elif mountain == 0.0 and plateau == 0.0:
+			open += 1
+			if t.in_talus(d):
+				strewn += 1
+	assert_gt(feet, 500)
+	assert_eq(bare, 0, "points at a foot with no boulders")
+	assert_gt(open, 5000)
+	assert_eq(strewn, 0, "points away from every foot with boulders")
+
+func test_the_planned_ground_wears_the_desert_s_colours_and_its_waterline_is_damp():
+	var t := WorldTerrain.new(_wadis())
+	var palette: Dictionary = SpacePalette.WORLDS[SpacePalette.DESERT_PALETTE]
+	var f := PackedFloat64Array(); f.resize(WorldPlan.S_SIZE)
+	var seen := {}
+	for d in _dirs(20000):
+		if t.plan.keep_weight(d) == 0.0:
+			var g := t.ground_at(d, 0.0)
+			seen[g] = seen.get(g, 0) + 1
+	gut.p("colours over the planned ground: %s" % seen)
+	for g: StringName in seen:
+		assert_true(palette.has(g), "%s is the desert palette's" % g)
+	for g in [&"ground_low", &"ground_high", &"dust", &"damp"]:
+		assert_true(seen.has(g), "some ground is %s" % g)
+	# Along the coast the ground is damp where it stands in the band by the water
+	# (on the beaches: a range's, a plateau's or a canyon's own colours come first).
+	var rng := RandomNumberGenerator.new(); rng.seed = 83
+	var coast := 0
+	var damp := 0
+	var dry := 0
+	while coast < 400:
+		var d := _dir(rng)
+		t.plan.sample(d, f)
+		if f[WorldPlan.S_KEEP] > 0.0 or absf(f[WorldPlan.S_SHORE]) >= 150.0 or f[WorldPlan.S_CANYON] < INF \
+				or f[WorldPlan.S_MOUNTAIN] >= WorldPlan.MOUNTAINS_FROM or f[WorldPlan.S_PLATEAU] >= WorldPlan.PLATEAU_FROM:
+			continue
+		coast += 1
+		var h := t.height_at(d) - t.plan.sea_level
+		var in_band := h >= -WorldTerrain.DAMP_BAND.x and h <= WorldTerrain.DAMP_BAND.y
+		var wet := t.ground_at(d, 0.0) == &"damp"
+		if wet:
+			damp += 1
+		if wet != in_band:
+			dry += 1
+	gut.p("%d of %d points on the coast damp" % [damp, coast])
+	assert_gt(damp, 100)
+	assert_eq(dry, 0, "points damp out of the band by the water, or in it and not")
+
+func test_canyon_walls_step_up_and_meet_the_ground_with_no_seam():
+	var t := WorldTerrain.new(_wadis())
+	var p := t.plan
+	var radius := t.radius
+	var rng := RandomNumberGenerator.new(); rng.seed = 89
+	var kinds := {}
+	var walls := 0
+	var profiles := 0
+	while profiles < 60:
+		var c: Dictionary = p.shapes.canyons[rng.randi_range(0, p.shapes.canyons.size() - 1)]
+		var i := rng.randi_range(1, c.path.size() - 2)
+		var at: Vector3 = c.path[i]
+		var across: Vector3 = at.cross(c.path[i + 1] - c.path[i - 1]).normalized()
+		var side := 1.0 if rng.randf() < 0.5 else -1.0
+		var reach: float = c.half_floor[i] + c.rim[i] * WorldPlan.CANYON_WALL_RUN
+		if p.keep_weight(at) > 0.0:
+			continue
+		profiles += 1
+		var inside := _across(at, across, side * (reach - 0.05), radius)
+		var outside := _across(at, across, side * (reach + 0.05), radius)
+		assert_almost_eq(t.height_at(inside), t.height_at(outside), 0.25, "the ground where the walls end")
+		var m: float = c.half_floor[i] + 1.0
+		while m < reach - 1.0:
+			var g := t.ground_at(_across(at, across, side * m, radius), 0.0)
+			kinds[g] = kinds.get(g, 0) + 1
+			walls += 1
+			m += 2.0
+	gut.p("colours across canyon walls: %s" % kinds)
+	assert_gt(kinds.get(&"rock", 0), walls / 10, "the walls' risers are rock")
+	assert_gt(kinds.get(&"ground_high", 0), walls / 10, "their ledges ground_high")
+
 ## The heights of `t` at `n` seeded directions, even over the sphere.
 func _heights(t: WorldTerrain, n: int) -> Array[float]:
 	var rng := RandomNumberGenerator.new(); rng.seed = 27
@@ -1190,3 +1355,147 @@ func _nearest(d: Vector3, points: Array[Vector3]) -> float:
 	for o in points:
 		near = minf(near, d.angle_to(o))
 	return near
+
+## `n` seeded directions, even over the sphere.
+func _dirs(n: int) -> Array[Vector3]:
+	var rng := RandomNumberGenerator.new(); rng.seed = 61
+	var out: Array[Vector3] = []
+	for k in n:
+		out.append(_dir(rng))
+	return out
+
+## Points on a canyon's floor are no nearer its edge than this share of its
+## half-width (at least 11 m on the narrowest floor: past a 5 m slope's reach).
+const FLOOR_IN := 0.85
+
+## `n` seeded points on `p`'s canyon floors: each a seeded point of a seeded
+## canyon's path moved across it up to FLOOR_IN of its floor's half-width, kept
+## where the plan has it on a floor (S_CANYON FLOOR_IN or less), out of every
+## kept disc.
+func _canyon_floor_points(p: WorldPlan, n: int) -> Array[Vector3]:
+	var rng := RandomNumberGenerator.new(); rng.seed = 71
+	var radius := p.shapes.radius_m
+	var f := PackedFloat64Array(); f.resize(WorldPlan.S_SIZE)
+	var out: Array[Vector3] = []
+	while out.size() < n:
+		var c: Dictionary = p.shapes.canyons[rng.randi_range(0, p.shapes.canyons.size() - 1)]
+		var path: PackedVector3Array = c.path
+		var s := rng.randi_range(0, path.size() - 2)
+		var t := rng.randf()
+		var q := path[s].lerp(path[s + 1], t).normalized()
+		var across := q.cross(path[s + 1] - path[s]).normalized()
+		var off: float = rng.randf_range(-FLOOR_IN, FLOOR_IN) * lerpf(c.half_floor[s], c.half_floor[s + 1], t) / radius
+		var d := (q * cos(off) + across * sin(off)).normalized()
+		p.sample(d, f)
+		if f[WorldPlan.S_CANYON] <= FLOOR_IN and f[WorldPlan.S_KEEP] == 0.0:
+			out.append(d)
+	return out
+
+## The slope of `t`'s ground at `d`, radians: from its heights `step` metres
+## either way along two bearings at right angles.
+func _slope(t: WorldTerrain, d: Vector3, step: float) -> float:
+	var r := t.radius
+	var gx := (t.height_at(_at(d, step, 0.0, r)) - t.height_at(_at(d, step, PI, r))) / (2.0 * step)
+	var gy := (t.height_at(_at(d, step, 0.5 * PI, r)) - t.height_at(_at(d, step, 1.5 * PI, r))) / (2.0 * step)
+	return atan(sqrt(gx * gx + gy * gy))
+
+## The unit direction `metres` from the unit direction `at` along the great
+## circle toward the unit tangent `across` (backward for negative metres), on a
+## world of `radius` metres.
+func _across(at: Vector3, across: Vector3, metres: float, radius: float) -> Vector3:
+	return (at * cos(metres / radius) + across * sin(metres / radius)).normalized()
+
+## Quadtree nodes of `t`'s world to hold its ground to the plan's bounds: `n`
+## seeded ones spread over `depths`, and at depths 8 and 10 the nodes round
+## SPOTS seeded points of each kind where the detail is most or the land changes:
+## on the coast (where the water's edge crosses a cell), on a coast where a range
+## or plateau meets the sea, across a canyon's walls, on a plateau's edge band and
+## on a range's flanks.
+const SPOTS := 40
+
+func _keys_at_depths(t: WorldTerrain, depths: Array, n: int) -> Array[Vector4i]:
+	var rng := RandomNumberGenerator.new(); rng.seed = 73
+	var p := t.plan
+	var radius := t.radius
+	var out: Array[Vector4i] = []
+	for k in n:
+		out.append(CubeSphere.key_for(_dir(rng), depths[k % depths.size()]))
+	var f := PackedFloat64Array(); f.resize(WorldPlan.S_SIZE)
+	var kinds := {
+		"coast": func() -> bool: return absf(f[WorldPlan.S_SHORE]) < 300.0,
+		"cliff": func() -> bool: return absf(f[WorldPlan.S_SHORE]) < 1500.0 \
+			and (f[WorldPlan.S_MOUNTAIN] > 0.0 or f[WorldPlan.S_PLATEAU] > 0.0),
+		"plateau edge": func() -> bool: return f[WorldPlan.S_PLATEAU] > 0.0 and f[WorldPlan.S_PLATEAU] < 1.0,
+		"flanks": func() -> bool: return f[WorldPlan.S_MOUNTAIN] > 0.3,
+	}
+	var spots: Array[Vector3] = []
+	for kind: String in kinds:
+		var found := 0
+		for k in 200000:
+			var d := _dir(rng)
+			p.sample(d, f)
+			if f[WorldPlan.S_KEEP] == 0.0 and kinds[kind].call():
+				spots.append(d)
+				found += 1
+				if found == SPOTS:
+					break
+		assert_eq(found, SPOTS, "spots on the %s" % kind)
+	# Across canyon walls: out from the floor's edge to the walls' end.
+	for k in SPOTS:
+		var c: Dictionary = p.shapes.canyons[rng.randi_range(0, p.shapes.canyons.size() - 1)]
+		var i := rng.randi_range(1, c.path.size() - 2)
+		var at: Vector3 = c.path[i]
+		var across: Vector3 = at.cross(c.path[i + 1] - c.path[i - 1]).normalized()
+		var out_m: float = rng.randf_range(c.half_floor[i], c.half_floor[i] + c.rim[i] * WorldPlan.CANYON_WALL_RUN)
+		var off := (1.0 if rng.randf() < 0.5 else -1.0) * out_m / radius
+		spots.append((at * cos(off) + across * sin(off)).normalized())
+	for d in spots:
+		for depth in [8, 10]:
+			out.append(CubeSphere.key_for(d, depth))
+	return out
+
+## `n` points inside the quadtree node `key`, in an even grid off its edges.
+func _points_in(key: Vector4i, n: int) -> Array[Vector3]:
+	var r := CubeSphere.node_rect(key)
+	var side := roundi(sqrt(float(n)))
+	var out: Array[Vector3] = []
+	for j in side:
+		for i in side:
+			out.append(CubeSphere.direction(key.x, r.x + (i + 0.5) / side * r.z, r.y + (j + 0.5) / side * r.z))
+	return out
+
+## `n` seeded spots over `t`'s open ground (dunes or plains), out of the kept discs.
+func _open_ground(t: WorldTerrain, n: int) -> Array[Vector3]:
+	var rng := RandomNumberGenerator.new(); rng.seed = 79
+	var out: Array[Vector3] = []
+	while out.size() < n:
+		var d := _dir(rng)
+		var land := t.plan.land_at(d)
+		if (land == WorldPlan.Land.DUNES or land == WorldPlan.Land.PLAINS) and t.plan.keep_weight(d) == 0.0:
+			out.append(d)
+	return out
+
+## Metres between the samples _horizon_feature takes along a bearing.
+const HORIZON_STEP := 250.0
+
+## True if, `altitude` metres over the ground at `d`, something stands within
+## the horizon on one of 36 bearings: a sample, every HORIZON_STEP out to the
+## horizon, whose land is not open ground (a range, a plateau or the sea), that
+## a canyon's walls reach, or whose ground stands 60 m over the spot's.
+func _horizon_feature(t: WorldTerrain, d: Vector3, altitude: float) -> bool:
+	var r := t.radius
+	var reach := r * acos(r / (r + altitude))
+	var here := t.height_at(d)
+	var f := PackedFloat64Array(); f.resize(WorldPlan.S_SIZE)
+	for b in 36:
+		var m := HORIZON_STEP
+		while m <= reach:
+			var q := _at(d, m, deg_to_rad(b * 10.0), r)
+			t.plan.sample(q, f)
+			var land := WorldPlan.land_in(f)
+			if (land != WorldPlan.Land.DUNES and land != WorldPlan.Land.PLAINS) or f[WorldPlan.S_CANYON] < INF:
+				return true
+			if t.height_at(q) > here + 60.0:
+				return true
+			m += HORIZON_STEP
+	return false
