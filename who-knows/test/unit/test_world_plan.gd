@@ -398,7 +398,7 @@ func test_with_no_canyon_on_a_beach_the_nearest_is_rerouted_to_one():
 	var rest := p.shapes.canyons.filter(func(c): return not c.has("joins") and not p._on_beach(c))
 	assert_gt(rest.size(), 0)
 	p.shapes.canyons.assign(rest)
-	var draw := WorldPlan.CanyonDraw.new(p, r, p._corner_dirs())
+	var draw := PlanCanyons.new(p, r, p._corner_dirs())
 	for i in rest.size():
 		draw.mark(i)
 	draw.to_beach()
