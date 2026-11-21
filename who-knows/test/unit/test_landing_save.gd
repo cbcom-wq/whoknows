@@ -501,9 +501,8 @@ static func _crests(t: WorldTerrain, from: Vector3, most: int) -> Array[Vector3]
 ## ground is mostly today's, that is below the tower band. On a planned desert
 ## it is where WorldTerrain._plan_dunes times pole_fade reaches DUNE_SEA_STAND:
 ## off the plan's plains, beaches, ranges and plateaus. `f` is scratch for a
-## plan's sample. The dunes must stand whole, as today's open dunes do: at
-## 0.95 the crests on WADIS were a few per cent lower, and none of the 9 that
-## were found carried the Warden by its 0.7 m (the best was 0.50 m).
+## plan's sample. The dunes must stand whole, as today's open dunes do: the
+## Warden's crest needs every metre of their height.
 const DUNE_SEA_STAND := 0.999
 
 static func _open_dunes(t: WorldTerrain, d: Vector3, f: PackedFloat64Array) -> bool:
@@ -517,7 +516,7 @@ static func _open_dunes(t: WorldTerrain, d: Vector3, f: PackedFloat64Array) -> b
 ## (_open_dunes) to `from`. The search walks rings DUNE_SEA_STEP m apart, out
 ## to DUNE_SEA_REACH, on DUNE_SEA_BEARINGS bearings each, and takes the first
 ## bearing on the nearest ring that has one. On planned WADIS the hop's point
-## is on a plateau, about 21 km from the nearest dune sea.
+## is on a plateau, about 19 km from the nearest dune sea.
 const DUNE_SEA_STEP := 250.0
 const DUNE_SEA_BEARINGS := 32
 const DUNE_SEA_REACH := 40000.0

@@ -803,6 +803,143 @@ func test_a_planned_desert_reaches_its_peaks_and_its_seabed():
 	assert_lt(hs.min(), t.plan.sea_level - 100.0)
 	assert_gt(hs.max(), 1000.0)
 
+## Review fix 1: a dune sea's dunes are today's, whole across its interior.
+## They rise over its edge only (WorldPlan.DUNES_EDGE of S_DUNES past
+## DUNES_FROM). Faded over all of S_DUNES's range they stood at about half
+## height at the median. On WADIS's dune seas (land DUNES, outside the kept
+## disc), at least SEA_WHOLE of the ground has the plan's dunes
+## (WorldTerrain._plan_dunes) whole, at WHOLE or more. The fade toward the
+## wind axis's poles is today's own, the same on planned ground and today's,
+## so it is printed beside them, not judged.
+const SEA_WHOLE := 0.6
+const WHOLE := 0.999
+
+func test_a_dune_sea_stands_its_dunes_whole_off_its_edges():
+	var t := WorldTerrain.new(_wadis())
+	var f := PackedFloat64Array(); f.resize(WorldPlan.S_SIZE)
+	var rng := RandomNumberGenerator.new(); rng.seed = 27
+	var plan: Array[float] = []
+	var poled: Array[float] = []
+	while plan.size() < 40000:
+		var d := _dir(rng)
+		t.plan.sample(d, f)
+		if f[WorldPlan.S_KEEP] > 0.0 or WorldPlan.land_in(f) != WorldPlan.Land.DUNES:
+			continue
+		var s := t._plan_dunes(f)
+		plan.append(s)
+		poled.append(s * WorldTerrain.pole_fade(d.dot(t.wind_axis)))
+	var a := _stand_spread(plan)
+	var b := _stand_spread(poled)
+	gut.p("the plan's dunes over 40000 points of dune sea: median %.3f, mean %.3f, whole %.3f, under a quarter %.3f" % a)
+	gut.p("with the pole fade too: median %.3f, mean %.3f, whole %.3f, under a quarter %.3f" % b)
+	assert_gte(a[0], WHOLE, "whole at the median")
+	assert_gte(a[2], SEA_WHOLE, "whole across most of the dune seas")
+	assert_lt(a[3], 0.25, "few points where under a quarter of the dunes stands")
+
+## [median, mean, share at WHOLE or more, share under 0.25] of `stands`.
+static func _stand_spread(stands: Array[float]) -> Array:
+	var sorted := stands.duplicate()
+	sorted.sort()
+	var sum := 0.0
+	var whole := 0
+	var low := 0
+	for s in stands:
+		sum += s
+		if s >= WHOLE:
+			whole += 1
+		if s < 0.25:
+			low += 1
+	var n := float(stands.size())
+	return [sorted[stands.size() / 2], sum / n, whole / n, low / n]
+
+## The edge a dune sea's dunes rise over is hundreds of metres wide, so whole
+## 40 m dunes rise gently and never in a step. In every plan cell that
+## S_DUNES's band (DUNES_FROM to DUNES_FROM + DUNES_EDGE) crosses, S_DUNES at
+## its steepest climbs the band over EDGE_LEAST metres or more. The steepest
+## is found at the cell's corners, as the cell is bilinear. At EDGE_LEAST the
+## dunes' height grows at most 1.5 x 40 m / 300 m, a fifth of a metre a metre:
+## half a dune's own lee face.
+const EDGE_LEAST := 300.0
+
+func test_a_dune_seas_edge_is_hundreds_of_metres_wide():
+	var p := _wadis().plan()
+	var radius := _wadis().radius_m
+	var m := p.map
+	var s := WorldPlan.S_DUNES
+	var low := WorldPlan.DUNES_FROM
+	var high := WorldPlan.DUNES_FROM + WorldPlan.DUNES_EDGE
+	var narrowest := INF
+	var widths: Array[float] = []
+	for face in CubeSphere.FACES:
+		for j in PlanMap.CELLS:
+			for i in PlanMap.CELLS:
+				var c00 := m.corner(s, face, i, j)
+				var c10 := m.corner(s, face, i + 1, j)
+				var c01 := m.corner(s, face, i, j + 1)
+				var c11 := m.corner(s, face, i + 1, j + 1)
+				if maxf(maxf(c00, c10), maxf(c01, c11)) < low or minf(minf(c00, c10), minf(c01, c11)) > high:
+					continue
+				var d00 := m.corner_dir(face, i, j)
+				var d10 := m.corner_dir(face, i + 1, j)
+				var d01 := m.corner_dir(face, i, j + 1)
+				var d11 := m.corner_dir(face, i + 1, j + 1)
+				var u0 := (c10 - c00) / (d00.angle_to(d10) * radius)
+				var u1 := (c11 - c01) / (d01.angle_to(d11) * radius)
+				var v0 := (c01 - c00) / (d00.angle_to(d01) * radius)
+				var v1 := (c11 - c10) / (d10.angle_to(d11) * radius)
+				var steepest := sqrt(maxf(u0 * u0, u1 * u1) + maxf(v0 * v0, v1 * v1))
+				var width := WorldPlan.DUNES_EDGE / maxf(steepest, 1e-12)
+				narrowest = minf(narrowest, width)
+				widths.append(width)
+	widths.sort()
+	gut.p("%d cells on a dune sea's edge: narrowest %.0f m, 1%% %.0f m, median %.0f m" % [widths.size(), narrowest,
+		widths[widths.size() / 100], widths[widths.size() / 2]])
+	assert_gt(widths.size(), 100, "cells on the edge")
+	assert_gte(narrowest, EDGE_LEAST)
+
+## The planned ground is the same on every thread: several WorldTerrains of
+## WADIS, each built and read on a worker of its own, give the main thread's
+## heights to the bit at THREADED_POINTS points outside the kept disc. Each
+## terrain's _fields is its own, and nothing they share is written.
+const THREADED_POINTS := 3000
+const WORKERS := 4
+
+func test_planned_heights_on_workers_are_the_main_thread_s_to_the_bit():
+	var recipe := _wadis()
+	var main := WorldTerrain.new(recipe)
+	var rng := RandomNumberGenerator.new(); rng.seed = 41
+	var points: Array[Vector3] = []
+	var want := PackedFloat64Array()
+	while points.size() < THREADED_POINTS:
+		var d := _dir(rng)
+		if main.plan.keep_weight(d) > 0.0:
+			continue
+		points.append(d)
+		want.append(main.height_at(d))
+	# A lambda captures locals by value, so each worker's heights come back in
+	# a box of its own.
+	var boxes: Array = []
+	var ids: Array[int] = []
+	for w in WORKERS:
+		var box := [null]
+		boxes.append(box)
+		ids.append(WorkerThreadPool.add_task(func() -> void:
+			var t := WorldTerrain.new(recipe)
+			var got := PackedFloat64Array()
+			for d in points:
+				got.append(t.height_at(d))
+			box[0] = got))
+	for id in ids:
+		WorkerThreadPool.wait_for_task_completion(id)
+	for w in WORKERS:
+		var got: PackedFloat64Array = boxes[w][0]
+		assert_eq(got.size(), THREADED_POINTS, "worker %d's heights" % w)
+		var differ := 0
+		for k in mini(got.size(), want.size()):
+			if got[k] != want[k]:
+				differ += 1
+		assert_eq(differ, 0, "worker %d: heights unlike the main thread's" % w)
+
 ## The heights of `t` at `n` seeded directions, even over the sphere.
 func _heights(t: WorldTerrain, n: int) -> Array[float]:
 	var rng := RandomNumberGenerator.new(); rng.seed = 27

@@ -54,10 +54,14 @@ const BASE_WAVE := 24000.0
 ## Dune seas and gravel plains lie in patches about DUNES_WAVE metres across:
 ## S_DUNES is 0.5 plus DUNES_CONTRAST times a noise, so most ground is plainly
 ## one or the other. Open ground is dune sea where S_DUNES is DUNES_FROM or
-## more.
+## more. A dune sea's dunes (WorldTerrain._plan_dunes) rise from none at
+## DUNES_FROM to whole at DUNES_FROM + DUNES_EDGE, and stand whole across the
+## rest of it. On WADIS that edge is about 1.2 km wide at the median and never
+## under about 370 m, so the dunes rise gently and with no step.
 const DUNES_WAVE := 30000.0
 const DUNES_CONTRAST := 1.5
 const DUNES_FROM := 0.5
+const DUNES_EDGE := 0.1
 ## Low ground leans to dunes and high to gravel: S_DUNES is moved by up to this
 ## much, down at the roll's top and up at its bottom.
 const DUNES_LOW_LEAN := 0.25

@@ -591,15 +591,17 @@ func _kept(d: Vector3) -> float:
 	return plan.keep_weight(d)
 
 ## How much of today's dunes stand on the plan's ground, from its fields `f`
-## (a sample's): none on the gravel plains (S_DUNES at DUNES_FROM or under),
-## rising to all where the ground is all dune sea; and only on open ground,
-## fading out down a beach to the water and up onto a range's or a plateau's
-## land, so no dune lies under the sea or on a peak and none ends in a step.
+## (a sample's). None stand on the gravel plains (S_DUNES at DUNES_FROM or
+## under). They rise over a dune sea's edge, WorldPlan.DUNES_EDGE of S_DUNES
+## past DUNES_FROM, and stand whole across the rest of it, as today's open
+## dunes do. They stand only on open ground, fading out down a beach to the
+## water and up onto a range's or a plateau's land, so no dune lies under the
+## sea or on a peak and none ends in a step.
 func _plan_dunes(f: PackedFloat64Array) -> float:
 	var dunes := f[WorldPlan.S_DUNES]
 	if dunes <= WorldPlan.DUNES_FROM or f[WorldPlan.S_SHORE] <= 0.0:
 		return 0.0
-	return smoothstep(WorldPlan.DUNES_FROM, 1.0, dunes) \
+	return smoothstep(WorldPlan.DUNES_FROM, WorldPlan.DUNES_FROM + WorldPlan.DUNES_EDGE, dunes) \
 		* smoothstep(0.0, WorldPlan.BEACH_WIDTH, f[WorldPlan.S_SHORE]) \
 		* (1.0 - smoothstep(0.0, WorldPlan.MOUNTAINS_FROM, f[WorldPlan.S_MOUNTAIN])) \
 		* (1.0 - smoothstep(0.0, WorldPlan.PLATEAU_FROM, f[WorldPlan.S_PLATEAU]))
