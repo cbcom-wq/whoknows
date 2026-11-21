@@ -211,6 +211,13 @@ The cost to watch there is the canopy's second render of the whole village. The 
 
 Measure after any change that adds lights, pieces, windows, particles or post-processing.
 
+WADIS's planned land, Checkpoint 1 of the wadis land spec (2026-11-21, windowed 1280 x 720 on the GTX 960,
+`land_render.gd`, each seated at the starter's helm, 3 s): from 3 radii off 156 fps; 10 km over the
+shore 128; 2 km over the sea basin (dry) 137; on a beach 139; 2 km over a range 130; at a range's
+foot 127; 300 m along a canyon 131; on a canyon floor 131; on Wadoo's pad 117. Flown 60 m over the
+ground at the speed limit there (121.6 m/s) for 20 s: along a canyon 98 fps, over a range 102.
+Render time was 3.8-3.9 ms on the GPU throughout; the low readings are the flights.
+
 ### 2.7 Windows show the real outside
 
 Every window is a **portal**. `CanopyPortal` renders the outside each frame from exactly where the
