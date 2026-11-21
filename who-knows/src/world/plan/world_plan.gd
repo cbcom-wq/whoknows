@@ -56,8 +56,9 @@ const BASE_WAVE := 24000.0
 ## one or the other. Open ground is dune sea where S_DUNES is DUNES_FROM or
 ## more. A dune sea's dunes (WorldTerrain._plan_dunes) rise from none at
 ## DUNES_FROM to whole at DUNES_FROM + DUNES_EDGE, and stand whole across the
-## rest of it. On WADIS that edge is about 1.2 km wide at the median and never
-## under about 370 m, so the dunes rise gently and with no step.
+## rest of it. On WADIS that edge is about a kilometre wide at the median and
+## never under about 350 m, so the dunes rise gently and with no step
+## (test_world_plan's test_a_dune_seas_edge_is_hundreds_of_metres_wide).
 const DUNES_WAVE := 30000.0
 const DUNES_CONTRAST := 1.5
 const DUNES_FROM := 0.5
