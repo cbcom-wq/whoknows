@@ -181,6 +181,15 @@ func test_the_same_seed_builds_the_same_plan_on_any_thread():
 			assert_eq(oa, ob)
 			floors += 1
 	assert_gt(floors, 300)
+	# And its buttes, every key of each.
+	assert_eq(a.shapes.buttes.size(), b.shapes.buttes.size())
+	assert_gt(a.shapes.buttes.size(), 0)
+	for i in mini(a.shapes.buttes.size(), b.shapes.buttes.size()):
+		var ba: Dictionary = a.shapes.buttes[i]
+		var bb: Dictionary = b.shapes.buttes[i]
+		assert_eq(ba.keys(), bb.keys())
+		for key in ba:
+			assert_eq(ba[key], bb.get(key), "butte %d's %s" % [i, key])
 
 func test_samples_are_continuous_across_every_face_edge():
 	var p := _wadis().plan()
@@ -904,7 +913,8 @@ func test_a_dune_seas_edge_is_hundreds_of_metres_wide():
 
 ## The planned ground is the same on every thread: several WorldTerrains of
 ## WADIS, each built and read on a worker of its own, give the main thread's
-## heights to the bit at THREADED_POINTS points outside the kept disc. Each
+## heights to the bit at THREADED_POINTS points outside the kept disc and on
+## every butte (_butte_spots). Each
 ## terrain's _fields is its own, and nothing they share is written.
 const THREADED_POINTS := 3000
 const WORKERS := 4
@@ -920,6 +930,10 @@ func test_planned_heights_on_workers_are_the_main_thread_s_to_the_bit():
 		if main.plan.keep_weight(d) > 0.0:
 			continue
 		points.append(d)
+	# And on every butte: its top, its face and its apron.
+	for b: Dictionary in main.plan.shapes.buttes:
+		points.append_array(_butte_spots(b, recipe.radius_m))
+	for d in points:
 		want.append(main.height_at(d))
 	# A lambda captures locals by value, so each worker's heights come back in
 	# a box of its own.
@@ -938,7 +952,7 @@ func test_planned_heights_on_workers_are_the_main_thread_s_to_the_bit():
 		WorkerThreadPool.wait_for_task_completion(id)
 	for w in WORKERS:
 		var got: PackedFloat64Array = boxes[w][0]
-		assert_eq(got.size(), THREADED_POINTS, "worker %d's heights" % w)
+		assert_eq(got.size(), points.size(), "worker %d's heights" % w)
 		var differ := 0
 		for k in mini(got.size(), want.size()):
 			if got[k] != want[k]:
@@ -978,6 +992,193 @@ func test_from_300_m_something_stands_on_the_horizon():
 			hits += 1
 	gut.p("%d of %d spots over open ground see something on the horizon from 300 m" % [hits, spots.size()])
 	assert_gt(float(hits) / spots.size(), 0.8)
+
+# Buttes and small mesas on open ground (the wadis land spec §6, Checkpoint 1).
+
+func test_buttes_stand_only_on_open_ground():
+	# Every butte's ground, out past its reach by BUTTE_CLEAR, is dunes or plains
+	# with no range's or plateau's weight, no canyon's walls, BUTTE_SHORE or more
+	# from the water, and clear of every kept disc by its radius and blend too.
+	var f := PackedFloat64Array(); f.resize(WorldPlan.S_SIZE)
+	for r in _butte_worlds():
+		var p := r.plan()
+		var points := 0
+		var off := 0
+		var kept := 0
+		for b: Dictionary in p.shapes.buttes:
+			var dir: Vector3 = b.dir
+			var out: float = b.reach + WorldPlan.BUTTE_CLEAR
+			for keep: Dictionary in r.keeps:
+				if dir.angle_to(keep.dir) * r.radius_m < keep.radius + keep.blend + out:
+					kept += 1
+			for q in _butte_points(dir, out, r.radius_m):
+				p.sample(q, f)
+				points += 1
+				var land := WorldPlan.land_in(f)
+				if (land != WorldPlan.Land.DUNES and land != WorldPlan.Land.PLAINS) or f[WorldPlan.S_MOUNTAIN] != 0.0 \
+						or f[WorldPlan.S_PLATEAU] != 0.0 or f[WorldPlan.S_CANYON] < INF or f[WorldPlan.S_SHORE] < WorldPlan.BUTTE_SHORE:
+					off += 1
+		gut.p("%s: %d buttes, %d points round them" % [r.name, p.shapes.buttes.size(), points])
+		assert_gt(p.shapes.buttes.size(), 0, "%s has buttes" % r.name)
+		assert_eq(off, 0, "%s: points of a butte's ground not open, or near a range, plateau, canyon or the sea" % r.name)
+		assert_eq(kept, 0, "%s: buttes near a kept disc" % r.name)
+
+## A butte's top is level to TOP_LEVEL metres, and its face falls FACE_FALL of its
+## height within a third of its radius.
+const TOP_LEVEL := 2.0
+const FACE_FALL := 0.8
+const FACE_BEARINGS := 8
+
+func test_a_butte_has_a_flat_top_and_sheer_rock_sides():
+	# For each of WADIS's buttes: over the inner half of its top (half its nearest
+	# corner's radius) the ground is its top and ground_high; along FACE_BEARINGS
+	# bearings, out from its top's edge (where the ground first falls under its
+	# top), the ground falls FACE_FALL of its height within a third of its radius,
+	# and halfway down that fall it is rock, steeper than ROCK_SLOPE; past the fall,
+	# half BUTTE_TALUS of its height on, its foot is talus, and its top and face are
+	# not.
+	var t := WorldTerrain.new(_wadis())
+	var radius := t.radius
+	var tops := 0
+	var off_top := 0
+	var faces := 0
+	var slow := 0
+	var not_rock := 0
+	var bare := 0
+	var falls: Array[float] = []
+	for b: Dictionary in t.plan.shapes.buttes:
+		var dir: Vector3 = b.dir
+		var top: float = b.top
+		var height: float = b.height
+		var inner := INF
+		for c: Vector2 in b.outline:
+			inner = minf(inner, c.length())
+		inner *= 0.5
+		for k in 13:
+			var q := dir if k == 0 else _at(dir, inner, k * TAU / 12.0, radius)
+			tops += 1
+			if absf(t.height_at(q) - top) > TOP_LEVEL or t.ground_at(q, 0.0) != &"ground_high" or t.in_talus(q):
+				off_top += 1
+		for k in FACE_BEARINGS:
+			var bearing := (k + 0.5) * TAU / FACE_BEARINGS
+			var lo := inner
+			var hi: float = b.reach
+			for i in 30:
+				var mid := 0.5 * (lo + hi)
+				if t.height_at(_at(dir, mid, bearing, radius)) >= top - 0.01:
+					lo = mid
+				else:
+					hi = mid
+			faces += 1
+			var fall := -1.0
+			var m := 0.0
+			while m <= b.radius / 3.0:
+				if t.height_at(_at(dir, lo + m, bearing, radius)) <= top - FACE_FALL * height:
+					fall = m
+					break
+				m += 0.5
+			if fall < 0.0:
+				slow += 1
+				continue
+			falls.append(fall / height)
+			var face := _at(dir, lo + 0.5 * fall, bearing, radius)
+			if t.ground_at(face, 0.0) != &"rock" or _slope(t, face, 1.0) <= WorldTerrain.ROCK_SLOPE or t.in_talus(face):
+				not_rock += 1
+			if not t.in_talus(_at(dir, lo + fall + 0.5 * WorldPlan.BUTTE_TALUS * height, bearing, radius)):
+				bare += 1
+	falls.sort()
+	if not falls.is_empty():
+		gut.p("%d butte faces: each falls %.0f%% of its height within %.3f to %.3f of the height (median %.3f)" % [
+			faces, 100.0 * FACE_FALL, falls[0], falls[-1], falls[falls.size() / 2]])
+	assert_gt(faces, 100)
+	assert_eq(off_top, 0, "of %d points on tops, not level, not ground_high or talus" % tops)
+	assert_eq(slow, 0, "faces that fall too slowly")
+	assert_eq(not_rock, 0, "faces not rock, not steep or talus")
+	assert_eq(bare, 0, "feet with no talus")
+
+## The `buttes` dial (§5.2) is how many buttes and small mesas stand per 1,000 km²
+## of open desert, the dials' open share of the sphere. The plan stands that many
+## rounded to a whole one, so where there is room the count per 1,000 km² is the
+## dial to within half a butte's share of the open desert: 500 over its km² (0.024
+## on WADIS). On the rolled worlds of _butte_worlds and on WADIS pinned at 1 and 6.
+func test_butte_density_follows_the_dial():
+	var worlds := _butte_worlds()
+	for dial in [1.0, 6.0]:
+		var pinned := _wadis()
+		pinned.plan_pins["buttes"] = dial
+		worlds.append(pinned)
+	for r in worlds:
+		var p := r.plan()
+		var open_km2 := p.dials.open_share() * 4.0 * PI * r.radius_m * r.radius_m / 1e6
+		var per := p.shapes.buttes.size() * 1000.0 / open_km2
+		gut.p("%s: %d buttes on %.0f km² of open desert, %.3f per 1,000 km² for a dial of %.3f" % [
+			r.name, p.shapes.buttes.size(), open_km2, per, p.dials.buttes])
+		assert_almost_eq(per, p.dials.buttes, 500.0 / open_km2 + 1e-9, "%s's buttes by its dial" % r.name)
+
+func test_sites_keep_clear_of_buttes():
+	# No oasis's or shore's site comes within its SITE_RADIUS and BUTTE_SITE_CLEAR
+	# of a butte's reach. Oases seldom fall by buttes anyway (they favour ground
+	# by ranges, coasts and canyons, which buttes keep clear of), so the close look
+	# that picks them (PlanSites._site_at) is asked too: an oasis on any butte's
+	# middle, or a metre inside that clearance off its reach, is turned down.
+	var f := PackedFloat64Array()
+	f.resize(WorldPlan.LAND_FIELDS)
+	for r in _butte_worlds():
+		var p := r.plan()
+		var sites := 0
+		var near := 0
+		for s in p.sites:
+			if s.kind == PlanSite.Kind.KEPT:
+				continue
+			sites += 1
+			for b: Dictionary in p.shapes.buttes:
+				if s.dir.angle_to(b.dir) * r.radius_m < b.reach + WorldPlan.SITE_RADIUS + WorldPlan.BUTTE_SITE_CLEAR:
+					near += 1
+		assert_gt(sites, 0, "%s has sites" % r.name)
+		assert_gt(p.shapes.buttes.size(), 0, "%s has buttes" % r.name)
+		assert_eq(near, 0, "%s: sites near a butte" % r.name)
+		var look := PlanSites.new(p)
+		var taken := 0
+		for b: Dictionary in p.shapes.buttes:
+			for m: float in [0.0, b.reach + WorldPlan.SITE_RADIUS + WorldPlan.BUTTE_SITE_CLEAR - 1.0]:
+				var d: Vector3 = b.dir if m == 0.0 else _at(b.dir, m, 0.0, r.radius_m)
+				if look._site_at(d, p.map.cell_number(d), PlanSite.Kind.OASIS, r.radius_m, f) >= 0.0:
+					taken += 1
+		assert_eq(taken, 0, "%s: oases a close look would take on or by a butte" % r.name)
+
+## WADIS (its dial pinned) and the first two deserts by seed (theirs rolled).
+func _butte_worlds() -> Array[WorldRecipe]:
+	var out: Array[WorldRecipe] = [_wadis()]
+	for sd in 2000:
+		var r := WorldRecipe.from_seed(sd)
+		if r.is_desert():
+			out.append(r)
+			if out.size() == 3:
+				break
+	return out
+
+## Points round `dir` out to `out` metres on a world of `radius`: it, and rings
+## at a quarter, half, three quarters and all of `out`, 24 points each.
+func _butte_points(dir: Vector3, out: float, radius: float) -> Array[Vector3]:
+	var points: Array[Vector3] = [dir]
+	for ring in [0.25, 0.5, 0.75, 1.0]:
+		for k in 24:
+			points.append(_at(dir, out * ring, k * TAU / 24.0, radius))
+	return points
+
+## Points on butte `b` (a PlanShapes.buttes entry) on a world of `radius`: its
+## middle, on its top, and out along the bearing of its first corner (where its
+## top's edge is that corner) halfway down its face and halfway out its apron.
+func _butte_spots(b: Dictionary, radius: float) -> Array[Vector3]:
+	var dir: Vector3 = b.dir
+	var east: Vector3 = b.east
+	var outline: PackedVector2Array = b.outline
+	var corner := outline[0].length()
+	var face: float = b.face
+	var out: Array[Vector3] = [dir]
+	for m: float in [corner + 0.5 * face, corner + face + 0.5 * WorldPlan.BUTTE_APRON * b.height]:
+		out.append((dir * cos(m / radius) + east * sin(m / radius)).normalized())
+	return out
 
 ## A range's peaks stand sharp (the wadis land spec §6): of the ground within a
 ## third of a range's half-width of its spine, at least ROCK_SHARE is past
@@ -1080,7 +1281,9 @@ func test_boulders_gather_at_the_feet_of_ranges_and_plateaus():
 			feet += 1
 			if not t.in_talus(d):
 				bare += 1
-		elif mountain == 0.0 and plateau == 0.0:
+		elif mountain == 0.0 and plateau == 0.0 and t.plan.shapes.butte_at(d, t.plan.map.cell_number(d)).x == INF:
+			# Off every butte's reach too: a butte's foot is talus
+			# (test_a_butte_has_a_flat_top_and_sheer_rock_sides).
 			open += 1
 			if t.in_talus(d):
 				strewn += 1
@@ -2139,7 +2342,7 @@ func _across(at: Vector3, across: Vector3, metres: float, radius: float) -> Vect
 ## SPOTS seeded points of each kind where the detail is most or the land changes:
 ## on the coast (where the water's edge crosses a cell), on a coast where a range
 ## or plateau meets the sea, across a canyon's walls, on a plateau's edge band and
-## on a range's flanks.
+## on a range's flanks; and on SPOTS buttes, their tops, faces and aprons.
 const SPOTS := 40
 
 func _keys_at_depths(t: WorldTerrain, depths: Array, n: int) -> Array[Vector4i]:
@@ -2194,6 +2397,10 @@ func _keys_at_depths(t: WorldTerrain, depths: Array, n: int) -> Array[Vector4i]:
 			spots.append(_across(d, fall, shore - 0.5 * foot, radius))
 			spots.append(_across(d, fall, shore - foot + 2.0, radius))
 	assert_gt(bays, 4, "spots behind a bay")
+	# On buttes: their tops, faces and aprons.
+	assert_gt(p.shapes.buttes.size(), SPOTS / 4, "buttes to look at")
+	for i in mini(SPOTS, p.shapes.buttes.size()):
+		spots.append_array(_butte_spots(p.shapes.buttes[i], radius))
 	for d in spots:
 		for depth in [8, 10]:
 			out.append(CubeSphere.key_for(d, depth))

@@ -8,8 +8,9 @@ extends RefCounted
 ## shapes drawn on it (PlanShapes). So far the map holds the open ground, dune
 ## seas and gravel plains on a gentle roll, the seas sunk into it and the
 ## mountain ranges and plateau country raised on it, and the canyons are drawn
-## through it. Its sites (oases, shores, kept discs), the kept discs' weight and
-## the bounds the streaming culls by come last.
+## through it, and buttes and small mesas stand on its open ground. Its sites
+## (oases, shores, kept discs), the kept discs' weight and the bounds the
+## streaming culls by come last.
 
 enum Land { SEA, DUNES, PLAINS, PLATEAU, MOUNTAINS }
 
@@ -245,6 +246,53 @@ const CANYON_BRANCH_FROM := Vector2(4000.0, 12000.0)
 ## (_list_canyon).
 const LIST_RUN := 8
 
+## The buttes and small mesas on open ground (§6, Checkpoint 1; PlanButtes stands
+## them). The `buttes` dial's count per 1,000 km² of open desert (the dials' open
+## share of the sphere), rounded to a whole one, stand alone or in groups. A group
+## starts only BUTTE_APART metres or more from every butte standing, so they
+## spread over the open ground rather than bunch: the horizon (§3) wants one in
+## sight from most of it, and lone ones are seen from more of it than a group's
+## are. Of each group, BUTTE_LONE of the time one alone, else BUTTE_GROUP of them,
+## each after the first BUTTE_SPREAD metres from the first, on a seeded bearing. Each
+## stands BUTTE_HEIGHT metres over its base, BUTTE_TALL of them tall buttes whose
+## top's corners stand BUTTE_RADIUS times their height from their middle, the rest
+## small mesas, MESA_RADIUS times. Its top has BUTTE_SIDES corners, evenly round
+## by bearing, each jittered in or out by up to BUTTE_JITTER of its radius, and
+## stretched along a seeded heading up to BUTTE_STRETCH times as long as it is
+## wide (its area kept), so no top is round.
+const BUTTE_LONE := 0.75
+const BUTTE_APART := 5000.0
+const BUTTE_GROUP := Vector2i(2, 3)
+const BUTTE_SPREAD := Vector2(800.0, 2500.0)
+const BUTTE_HEIGHT := Vector2(60.0, 200.0)
+const BUTTE_TALL := 0.3
+const BUTTE_RADIUS := Vector2(0.5, 1.5)
+const MESA_RADIUS := Vector2(2.0, 4.0)
+const BUTTE_SIDES := Vector2i(6, 9)
+const BUTTE_JITTER := 0.18
+const BUTTE_STRETCH := 1.6
+## A butte's flat top stands over its base (its middle's S_BASE) by its height;
+## its sheer face runs BUTTE_FACE of its height out past the top's edge, down to
+## BUTTE_SKIRT of its height, where its apron eases down to the base over
+## BUTTE_APRON more (PlanShapes.butte_rise). Boulders gather (WorldTerrain.in_talus)
+## from the face's foot BUTTE_TALUS of its height out, and the dunes and the
+## plains' roll rise back from none at the face's foot over BUTTE_SAND metres.
+const BUTTE_FACE := 0.12
+const BUTTE_SKIRT := 0.12
+const BUTTE_APRON := 0.4
+const BUTTE_TALUS := 0.8
+const BUTTE_SAND := 150.0
+## Every cell within BUTTE_CLEAR metres past a butte's reach has no range's or
+## plateau's weight at its corners and no canyon listed near it, and is
+## BUTTE_SHORE metres or more from the water at every corner (past the beach); and
+## its reach keeps BUTTE_CLEAR past every kept disc's radius and blend. A site
+## (§5.5) keeps SITE_RADIUS and BUTTE_SITE_CLEAR more from a butte's reach.
+const BUTTE_CLEAR := 500.0
+const BUTTE_SHORE := 2000.0
+const BUTTE_SITE_CLEAR := 300.0
+## Groups tried, at most, for each butte the dial asks for.
+const BUTTE_TRIES := 40
+
 ## The kept discs (§5.6): a disc's weight (keep_weight) is 1 within its radius
 ## and eases to 0 over its blend, and the ground inside it stays as it always
 ## was, so its bounds are today's desert's range, KEPT_LOW to KEPT_HIGH metres.
@@ -323,6 +371,10 @@ static func build(recipe: WorldRecipe) -> WorldPlan:
 	p._ranges(recipe, dirs, shore, copies)
 	p._plateaus(recipe, dirs, shore, copies)
 	p._canyons(recipe, dirs)
+	# The map is whole from here: its corners' values serve the buttes, the
+	# sites and the bounds.
+	var values := PlanBounds.corner_values(p.map)
+	PlanButtes.new(p).stand(recipe, dirs, values)
 	p.shapes.pack_near()
 	for keep: Dictionary in recipe.keeps:
 		p._keep_dirs.append(keep.dir)
@@ -330,7 +382,6 @@ static func build(recipe: WorldRecipe) -> WorldPlan:
 		p._keep_blend.append(keep.blend)
 		p._keep_cull.append(cos(minf((keep.radius + keep.blend + KEEP_CULL) / recipe.radius_m, PI)))
 	p._keeps_cap()
-	var values := PlanBounds.corner_values(p.map)
 	p.sites = PlanSites.new(p).list(recipe, dirs, values)
 	PlanBounds.new(p).set_bounds(recipe, dirs, values)
 	return p

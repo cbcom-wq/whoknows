@@ -24,7 +24,9 @@ static func corner_values(map: PlanMap) -> Array[PackedFloat32Array]:
 ## less, and most plus, the most DETAIL_REACH of every land a corner's fields
 ## allow (a sea corner, or a mountain's, counts the open ground too); under it,
 ## the lowest floor of any canyon listed near the cell; up to a plateau's top
-## and its DETAIL_REACH in every cell with plateau country; up to sea level in
+## and its DETAIL_REACH in every cell with plateau country; up to a butte's top
+## and the most DETAIL_REACH of the land at the cell's corners in every cell the
+## butte is listed near; up to sea level in
 ## every cell with a corner under it (the water is drawn there), and down to it
 ## in every cell with a corner within WorldTerrain.bay_depth of the water (a sea
 ## cliff's bay and its beach); and over every cell within a kept disc's radius
@@ -65,6 +67,11 @@ func set_bounds(recipe: WorldRecipe, dirs: PackedVector3Array, cv: Array[PackedF
 	for c in high.size():
 		if weights[c] >= WorldPlan.PLATEAU_FROM:
 			high[c] = maxf(high[c], tops[c] + plateau_reach)
+	var up := PlanMap.SIDE
+	for b: Dictionary in plan.shapes.buttes:
+		for c: int in b.cells:
+			var k := WorldPlan._first_corner(c)
+			high[c] = maxf(high[c], b.top + maxf(maxf(reach[k], reach[k + 1]), maxf(reach[k + up], reach[k + up + 1])))
 	if plan.sea_level > -INF:
 		var wet := PackedFloat32Array()
 		var spare := PackedFloat32Array()

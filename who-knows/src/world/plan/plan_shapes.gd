@@ -2,8 +2,8 @@ class_name PlanShapes
 extends RefCounted
 
 ## What a world plan draws on its map (docs/superpowers/specs/2026-11-19-wadis-land-design.md
-## §5.1): its seas, ranges, plateaus and canyons. Plain data, written while the
-## plan is built and only read after, from any thread.
+## §5.1): its seas, ranges, plateaus, canyons and buttes. Plain data, written
+## while the plan is built and only read after, from any thread.
 ##
 ## A cell is the map's: the quadtree's node at PlanMap.PLAN_DEPTH, numbered
 ## (face * CELLS + j) * CELLS + i, the order PlanMap.set_bounds takes them in.
@@ -14,6 +14,7 @@ extends RefCounted
 const RANGE := 0
 const CANYON := 1
 const PLATEAU := 2
+const BUTTE := 3
 ## Shapes of one kind, at most.
 const SHAPES := 4096
 
@@ -39,6 +40,22 @@ var plateaus: Array[Dictionary] = []
 ## canyon, with "mouth" &"" and "joins": its parent's index, its path ending on
 ## the parent's and its floor at the parent's there.
 var canyons: Array[Dictionary] = []
+## Each butte or small mesa on open ground (PlanButtes, §6): {"dir": Vector3, the
+## unit direction of its middle; "east", "north": Vector3, unit tangents there,
+## its outline's frame, east turned to its heading; "outline":
+## PackedVector2Array, its flat top's corners in metres in that frame, evenly
+## round by bearing, counterclockwise from east, so its first corner lies due
+## east; "radius": float, the metres its top's corners stand from its middle
+## before they are jittered and stretched along its heading; "height": float,
+## metres it stands over its base; "top": float, metres above radius of its flat
+## top (the base where it stands, its middle's S_BASE, plus its height); "face":
+## float, the metres its sheer face runs out past the top's edge (butte_rise);
+## "reach": float, metres from its middle to the farthest ground it changes,
+## its apron, its talus and the sand it clears; "reach_cos": float, the cosine
+## of that as an angle; "mesa": bool, a small mesa (else a tall butte); "cells":
+## PackedInt32Array, the cells it is listed near: every cell its reach may
+## touch}. No two buttes' reaches overlap.
+var buttes: Array[Dictionary] = []
 ## The world's radius, metres: what ridge_m and canyon_at measure in.
 var radius_m := 0.0
 ## By cell, which kinds of shape are listed near it, a bit (1 << kind) each:
@@ -81,8 +98,13 @@ func add_near(cell: int, shape: int, first := 0, last := -1) -> void:
 ## While building: marks 1 in `out` (a byte per cell) every cell a range has
 ## been listed near so far.
 func mark_near_ranges(out: PackedByteArray) -> void:
+	mark_near(RANGE, out)
+
+## While building: marks 1 in `out` (a byte per cell) every cell a shape of
+## `kind` has been listed near so far.
+func mark_near(kind: int, out: PackedByteArray) -> void:
 	for e in _add_cell.size():
-		if _add_shape[e] < SHAPES:
+		if _add_shape[e] / SHAPES == kind:
 			out[_add_cell[e]] = 1
 
 ## Once every shape is added: files the entries cell by cell, each cell's in the
@@ -254,3 +276,57 @@ func canyon_parts_at(d: Vector3, cell: int) -> Vector4:
 			lowest = cut
 			out = Vector4(metres, w, f, lerpf(rim[at], rim[at + 1], at_t))
 	return out
+
+## The butte at `d`, a unit direction in cell number `cell` (cell_index's):
+## Vector4(metres past its top's edge, out along the bearing from its middle
+## through `d`, 0 or less on its top; its face's run; its top, metres above
+## radius; its height over its base), or Vector4(INF, 0, 0, 0) where no butte
+## reaches. The top's edge between two corners is the straight line joining them,
+## so the outline is faceted. Buttes' reaches never overlap, so one at most. What
+## a height close up stands a butte by (WorldTerrain, with butte_rise). From any
+## thread; allocates nothing.
+func butte_at(d: Vector3, cell: int) -> Vector4:
+	for e in range(_near_from[cell], _near_from[cell + 1]):
+		var i := _near[e] - BUTTE * SHAPES
+		if i < 0 or i >= SHAPES:
+			continue
+		var b: Dictionary = buttes[i]
+		if d.dot(b.dir) < b.reach_cos:
+			continue
+		var p := Vector2(d.dot(b.east), d.dot(b.north)) * radius_m
+		var corners: PackedVector2Array = b.outline
+		var n := corners.size()
+		var k := mini(int(fposmod(atan2(p.y, p.x), TAU) * n / TAU), n - 1)
+		var a := corners[k]
+		var c := corners[(k + 1) % n]
+		# How far out `d` lies along its ray from the middle, as a share of where
+		# the ray crosses the edge from corner k to k + 1.
+		var t := p.cross(c - a) / a.cross(c)
+		var out := p.length()
+		var past := out - out / t if t > 0.0 else -a.length()
+		return Vector4(past, b.face, b.top, b.height)
+	return Vector4(INF, 0.0, 0.0, 0.0)
+
+## A butte's ground over its base, `past` metres past its top's edge (butte_at's
+## x), for a butte `height` metres tall whose face runs `face` metres: its height
+## on its top; down its sheer face to WorldPlan.BUTTE_SKIRT of its height at the
+## face's foot; then down its apron, easing to nothing BUTTE_APRON of its height
+## on. From any thread.
+static func butte_rise(past: float, face: float, height: float) -> float:
+	if past <= 0.0:
+		return height
+	if past < face:
+		return height * (1.0 - (1.0 - WorldPlan.BUTTE_SKIRT) * past / face)
+	var apron := WorldPlan.BUTTE_APRON * height
+	var left := 1.0 - (past - face) / apron
+	if left <= 0.0:
+		return 0.0
+	return WorldPlan.BUTTE_SKIRT * height * left * left
+
+## True if no butte's reach comes within `metres` of the unit direction `d`.
+## While building and after (PlanSites), not per height: it asks every butte.
+func clear_of_buttes(d: Vector3, metres: float) -> bool:
+	for b: Dictionary in buttes:
+		if d.angle_to(b.dir) * radius_m < b.reach + metres:
+			return false
+	return true

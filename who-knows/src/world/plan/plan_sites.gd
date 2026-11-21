@@ -3,8 +3,8 @@ extends RefCounted
 
 ## Finds a world plan's sites (docs/superpowers/specs/2026-11-19-wadis-land-design.md
 ## §5.4 step 7, §5.5): its oases, its shore ledges and a kept site for each kept
-## disc. Run once while the plan is built (WorldPlan.build), after its canyons
-## and kept discs are in; the constants it uses are WorldPlan's.
+## disc. Run once while the plan is built (WorldPlan.build), after its canyons,
+## buttes and kept discs are in; the constants it uses are WorldPlan's.
 
 var plan: WorldPlan
 
@@ -163,9 +163,10 @@ func _pick(keys: PackedFloat64Array, rank: PackedFloat32Array, wide: PackedFloat
 ## The level of a site of `kind` at `mid`, the middle of cell number `c`, or -1
 ## if there can be none there: the ground is not what that kind needs (OASIS:
 ## dune or gravel ground OASIS_SHORE_MIN or more from the water; SHORE: land 0
-## to SHORE_SITE_REACH from it), a kept disc is within SITE_RADIUS, a canyon's
-## walls reach it or the ring of points SITE_RADIUS round it, or its level is
-## over the kind's most. `fields` is scratch, LAND_FIELDS long.
+## to SHORE_SITE_REACH from it), a kept disc is within SITE_RADIUS, a butte's
+## reach within SITE_RADIUS and BUTTE_SITE_CLEAR, a canyon's walls reach it or the
+## ring of points SITE_RADIUS round it, or its level is over the kind's most.
+## `fields` is scratch, LAND_FIELDS long.
 func _site_at(mid: Vector3, c: int, kind: PlanSite.Kind, radius: float, fields: PackedFloat64Array) -> float:
 	plan.map.sample(mid, fields, WorldPlan.LAND_FIELDS)
 	var metres := fields[WorldPlan.S_SHORE]
@@ -179,7 +180,8 @@ func _site_at(mid: Vector3, c: int, kind: PlanSite.Kind, radius: float, fields: 
 		if metres <= 0.0 or metres > WorldPlan.SHORE_SITE_REACH:
 			return -1.0
 		most = WorldPlan.SHORE_LEVEL_MAX
-	if not _clear_of_sites(mid, WorldPlan.SITE_RADIUS, radius) or plan.shapes.canyon_at(mid, c).x < INF:
+	if not _clear_of_sites(mid, WorldPlan.SITE_RADIUS, radius) or plan.shapes.canyon_at(mid, c).x < INF \
+			or not plan.shapes.clear_of_buttes(mid, WorldPlan.SITE_RADIUS + WorldPlan.BUTTE_SITE_CLEAR):
 		return -1.0
 	var angle := WorldPlan.SITE_RADIUS / radius
 	var near_canyon := plan.shapes.canyon_floor_low(c) < INF

@@ -253,8 +253,9 @@ const BAY_SHORE := 60.0
 ## the detail lifts or lowers it there.
 const DAMP_BAND := Vector2(2.0, 0.6)
 const DAMP_LOOK := 50.0
-## PlanShapes.kinds' bit for a canyon listed near a cell.
+## PlanShapes.kinds' bits for a canyon and for a butte listed near a cell.
 const _CANYON_NEAR := 1 << PlanShapes.CANYON
+const _BUTTE_NEAR := 1 << PlanShapes.BUTTE
 ## Of a plateau's whole climb from its outline, how far under its top the first
 ## terrace stands: the edge band's inner half climbs the upper half of it, and
 ## the first of TERRACES terraces a TERRACES'th of that.
@@ -573,9 +574,9 @@ func wind_at(dir: Vector3) -> Vector3:
 
 ## Whether `dir` is where a desert's boulders gather: the low ground of the
 ## tower band below a mesa (which holds the MESA_EDGE the dunes fade over),
-## off the towers themselves. On a planned desert, the feet of its ranges and
-## plateaus (_planned_talus), and today's only within a kept disc (over the
-## inner half of its blend). False on any other world.
+## off the towers themselves. On a planned desert, the feet of its ranges,
+## plateaus and buttes (_planned_talus), and today's only within a kept disc (over
+## the inner half of its blend). False on any other world.
 func in_talus(dir: Vector3) -> bool:
 	if archetype != WorldRecipe.Archetype.DUNES:
 		return false
@@ -733,9 +734,10 @@ func _dune(d: Vector3, a: float, stand: float) -> float:
 ## (_terraces) and its top; on a range's mountains its ridged peaks; on open
 ## ground today's dunes on the dune seas (_plan_dunes, faded toward the wind
 ## axis's poles as today's are), the plains' roll and a range's fans at its
-## foot. The map's land fields are sampled, and a canyon is asked only in a cell
-## with one near. Written out in one function: this runs per height, and a
-## GDScript call costs about what a noise lookup does.
+## foot, and a butte where one stands (_butte). The map's land fields are
+## sampled, and a butte or a canyon is asked only in a cell with one near. Written
+## out in one function: this runs per height, and a GDScript call costs about
+## what a noise lookup does.
 func _planned_height(d: Vector3) -> float:
 	var f := _fields
 	var cell := _map.sample(d, f, WorldPlan.LAND_FIELDS)
@@ -794,12 +796,34 @@ func _planned_height(d: Vector3) -> float:
 						ground = lerpf(ground, first, tower * smoothstep(0.0, TOWER_EASE, plateau))
 		if shore < CLIFF_LOOK and (mountain > 0.0 or plateau > 0.0):
 			ground = _cliff(d, f, ground)
-	if _near_kinds[cell] & _CANYON_NEAR == 0:
+	var near := _near_kinds[cell]
+	if near == 0:
+		return ground
+	if near & _BUTTE_NEAR != 0:
+		ground = _butte(d, cell, f[WorldPlan.S_BASE], ground)
+	if near & _CANYON_NEAR == 0:
 		return ground
 	var c := plan.shapes.canyon_parts_at(d, cell)
 	if c.x == INF:
 		return ground
 	return minf(ground, c.z + PlanShapes.wall_rise(c.x - c.y))
+
+## A planned desert's `ground` at the unit direction `d` in cell number `cell`,
+## a butte's cell, whose base is `base`, with the butte there if one reaches
+## (PlanShapes.butte_at; the wadis land spec §6, Checkpoint 1): the open ground's
+## detail, its dunes and roll (all its ground over the base, since a butte's
+## cells are open ground with no range's or plateau's weight, past the beach),
+## cleared from none at the face's foot to whole WorldPlan.BUTTE_SAND on, and the
+## butte standing over that (PlanShapes.butte_rise over its base): its flat top,
+## its sheer face and its apron. Dunes run up to its foot, never over its top.
+func _butte(d: Vector3, cell: int, base: float, ground: float) -> float:
+	var b := plan.shapes.butte_at(d, cell)
+	if b.x == INF:
+		return ground
+	var open := smoothstep(b.y, b.y + WorldPlan.BUTTE_SAND, b.x)
+	if open < 1.0:
+		ground = base + (ground - base) * open
+	return maxf(ground, b.z - b.w + PlanShapes.butte_rise(b.x, b.y, b.w))
 
 ## A planned plateau's ground on its edge band's inner half, at the unit
 ## direction `d` whose base is `base`, whose region's top is `top` and whose
@@ -922,14 +946,19 @@ func _cliff_share(d: Vector3, f: PackedFloat64Array) -> float:
 	return share
 
 ## Whether a planned desert's boulders gather at the unit direction `d`: at a
-## range's foot (MOUNTAIN_TALUS), and at a plateau's, its edge band's outer half
-## and the foot's level in front of its first riser, off the towers on both.
-## Never at sea.
+## range's foot (MOUNTAIN_TALUS), at a plateau's, its edge band's outer half and
+## the foot's level in front of its first riser, off the towers on both, and at a
+## butte's, from its face's foot WorldPlan.BUTTE_TALUS of its height out. Never at
+## sea.
 func _planned_talus(d: Vector3) -> bool:
 	var f := _fields
-	_map.sample(d, f, WorldPlan.LAND_FIELDS)
+	var cell := _map.sample(d, f, WorldPlan.LAND_FIELDS)
 	if f[WorldPlan.S_SHORE] <= 0.0:
 		return false
+	if _near_kinds[cell] & _BUTTE_NEAR != 0:
+		var b := plan.shapes.butte_at(d, cell)
+		if b.x < INF:
+			return b.x > b.y and b.x <= b.y + WorldPlan.BUTTE_TALUS * b.w
 	var mountain := f[WorldPlan.S_MOUNTAIN]
 	if mountain >= MOUNTAIN_TALUS.x and mountain < MOUNTAIN_TALUS.y:
 		return true
@@ -970,10 +999,11 @@ func _plan_dunes(f: PackedFloat64Array) -> float:
 ## a canyon's floor ground_low and, where its walls are the ground, their risers
 ## rock and ledges ground_high; a cliff's face rock (CLIFF_IN, CLIFF_RUN); a
 ## plateau's as _terrace_ground has it, and the towers on its edge band's outer
-## half rock; wet sand (damp) along the sea's waterline (DAMP_BAND); a standing
-## dune's lee face, crest to trough, dust, as today's (DUST_STAND); the rest,
-## a range's mountains too, ground_low, so the colour changes only where the
-## ground folds or past ROCK_SLOPE.
+## half rock; wet sand (damp) along the sea's waterline (DAMP_BAND); a butte's top
+## ground_high and its face rock; a standing dune's lee face, crest to trough,
+## dust, as today's (DUST_STAND), where the dunes stand (_butte clears them by a
+## butte's foot); the rest, a range's mountains too, ground_low, so the colour
+## changes only where the ground folds or past ROCK_SLOPE.
 func _planned_ground(d: Vector3, out: PackedFloat64Array) -> StringName:
 	var cell := _map.sample(d, out, WorldPlan.LAND_FIELDS)
 	# The ground's height (_planned_height), once it has been worked out.
@@ -1022,6 +1052,14 @@ func _planned_ground(d: Vector3, out: PackedFloat64Array) -> StringName:
 		if _damp(height):
 			return &"damp"
 	var stand := _plan_dunes(out)
+	if _near_kinds[cell] & _BUTTE_NEAR != 0:
+		var b := plan.shapes.butte_at(d, cell)
+		if b.x < INF:
+			if b.x <= 0.0:
+				return &"ground_high"
+			if b.x < b.y:
+				return &"rock"
+			stand *= smoothstep(b.y, b.y + WorldPlan.BUTTE_SAND, b.x)
 	if stand < DUST_STAND:
 		return &"ground_low"
 	var a := d.dot(wind_axis)

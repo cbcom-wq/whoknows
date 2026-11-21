@@ -4,7 +4,7 @@ extends SceneTree
 # §11, Checkpoint 1): the whole world at once, equirectangular, MAP_W x MAP_H,
 # north up, longitude 0 in the middle. Each Land is a flat colour; the canyons
 # (every path, branches too) are drawn over it, and the ranges' spines; the
-# sites are marked by kind; Wadoo and its kept disc are ringed, and the arrival
+# buttes and small mesas are small dark marks; the sites are marked by kind; Wadoo and its kept disc are ringed, and the arrival
 # point (a warp is dropped over Wadoo, WarpPlan.arrival_dir) is crossed. A
 # legend sits in a corner so the picture reads alone. This is a probe's output,
 # not game art, so the colours are plain and the lettering is a 5x7 bitmap font
@@ -29,6 +29,7 @@ const PLATEAU := Color8(204, 112, 62)
 const MOUNTAINS := Color8(120, 118, 126)
 const CANYON := Color8(240, 20, 200)
 const SPINE := Color8(255, 255, 255)
+const BUTTE := Color8(70, 36, 22)
 const OASIS := Color8(20, 220, 60)
 const SHORE := Color8(20, 230, 230)
 const KEPT := Color8(255, 40, 40)
@@ -112,6 +113,11 @@ func _init() -> void:
 		_line(r.spine, SPINE, 0)
 	for c: Dictionary in plan.shapes.canyons:
 		_line(c.path, CANYON, 1)
+	var mesas := 0
+	for b: Dictionary in plan.shapes.buttes:
+		_mark(b.dir, 2, BUTTE)
+		mesas += int(b.mesa)
+	print("buttes  %d, %d of them small mesas" % [plan.shapes.buttes.size(), mesas])
 	var counts := {}
 	for s in plan.sites:
 		counts[s.kind] = counts.get(s.kind, 0) + 1
@@ -172,6 +178,15 @@ func _disc(d: Vector3, r: int, c: Color) -> void:
 			elif dx * dx + dy * dy <= (r + 1) * (r + 1):
 				_dot(p.x + dx, p.y + dy, PAPER)
 
+## A filled disc of `r` pixels with no outline: a mark small enough not to hide
+## the land round it.
+func _mark(d: Vector3, r: int, c: Color) -> void:
+	var p := _px(d)
+	for dx in range(-r, r + 1):
+		for dy in range(-r, r + 1):
+			if dx * dx + dy * dy <= r * r + 1:
+				_dot(p.x + dx, p.y + dy, c)
+
 func _square(d: Vector3, r: int, c: Color) -> void:
 	var p := _px(d)
 	for dx in range(-r - 1, r + 2):
@@ -215,7 +230,7 @@ func _legend(plan: WorldPlan) -> void:
 	var rows := [
 		["SEA", SEA, "box"], ["DUNES", DUNES, "box"], ["PLAINS", PLAINS, "box"],
 		["PLATEAU", PLATEAU, "box"], ["MOUNTAINS", MOUNTAINS, "box"],
-		["CANYON", CANYON, "line"], ["RANGE SPINE", SPINE, "line"],
+		["CANYON", CANYON, "line"], ["RANGE SPINE", SPINE, "line"], ["BUTTE OR MESA", BUTTE, "mark"],
 		["OASIS SITE", OASIS, "dot"], ["SHORE SITE", SHORE, "box"],
 		["WADOO AND KEPT DISC", KEPT, "ring"], ["ARRIVAL (OVER WADOO)", ARRIVAL, "cross"],
 	]
@@ -242,6 +257,13 @@ func _legend(plan: WorldPlan) -> void:
 					for dy in 12:
 						if (dx - 5.5) * (dx - 5.5) + (dy - 5.5) * (dy - 5.5) <= 30.0:
 							_dot(x0 + 10 + dx, y + dy, c)
+			"mark":
+				# On a swatch of dunes, as it is seen on the map: the panel is too dark for it.
+				_swatch(x0 + 10, y, DUNES)
+				for dx in range(-2, 3):
+					for dy in range(-2, 3):
+						if dx * dx + dy * dy <= 5:
+							_dot(x0 + 16 + dx, y + 6 + dy, c)
 			"ring":
 				for k in 40:
 					var a := TAU * k / 40.0
