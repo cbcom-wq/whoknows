@@ -41,6 +41,9 @@ const S_CANYON_RIM := 9
 ## A kept disc's weight, 0 to 1.
 const S_KEEP := 10
 const S_SIZE := 11
+## The fields land_in reads are among the first this many, S_BASE to
+## S_MOUNTAIN, so a sample of only these is enough for it.
+const LAND_FIELDS := S_MOUNTAIN + 1
 
 ## The open ground's base rolls this many metres either way of the radius, in
 ## swells about BASE_WAVE metres across: the open desert, never as low as a
@@ -144,6 +147,13 @@ const PLATEAU_FROM := 0.5
 ## open ground).
 const MOUNTAINS_FROM := 0.5
 
+## By Land, the most height, metres, the close-up detail (Task 10) may add over
+## the plan's base on that kind of land. Task 8's bounds (bounds_of) count on it,
+## and Task 10's bounds test proves the detail stays within it. Where a
+## canyon's walls end, they stand at least this far over the base, so they top
+## the ground there, detail and all.
+const DETAIL_REACH := {Land.DUNES: 45.0, Land.PLAINS: 12.0, Land.PLATEAU: 60.0, Land.MOUNTAINS: 300.0, Land.SEA: 10.0}
+
 ## The canyons (§5.4 step 6, §6). Each of the `canyons` dial's sets out in
 ## plateau country (a cell of a region's flat top) or, CANYON_FROM_RANGE of the
 ## time, on a range's lower flank (a cell whose S_MOUNTAIN is CANYON_FLANK, so
@@ -184,11 +194,18 @@ const CANYON_BASIN := 1500.0
 ## meet it, which also brings a branch down to its parent's floor.
 const CANYON_GRADE := 0.1
 ## Its walls rise from the floor's edge, CANYON_WALL_RUN metres out for each
-## metre up, to its rim: CANYON_RIM_PAD over the highest base across the canyon
-## where they end, so there they stand over the ground, its detail and all, and
-## leaving a canyon makes no seam.
+## metre up, to its rim: where they end, on either side, over the base and the
+## DETAIL_REACH of the land there, so they stand over the ground, its detail and
+## all, and leaving a canyon makes no seam. Since taller walls end farther out,
+## the rim is found by looking out to where they would end and, while the
+## ground there stands higher, out again, at most CANYON_RIM_LOOKS times; a
+## canyon kept whose rim has not settled by then is an error (the ground there
+## rises faster than the walls can). Each time, the rim is raised
+## CANYON_RIM_SPARE metres past the ground it found, so on rising ground it
+## settles in a few looks instead of creeping up on it.
 const CANYON_WALL_RUN := 1.5
-const CANYON_RIM_PAD := 60.0
+const CANYON_RIM_LOOKS := 32
+const CANYON_RIM_SPARE := 1.0
 ## A canyon's cells keep this many metres more than a kept disc's radius and
 ## blend from its place: room for its walls and its winding. Its walls are
 ## measured against the disc once it is drawn.
@@ -255,13 +272,21 @@ func sample(d: Vector3, out: PackedFloat64Array) -> void:
 ## SEA at or past the water's edge; MOUNTAINS on a range's upper flanks;
 ## PLATEAU on a plateau's body; else what the open ground is.
 func land_at(d: Vector3) -> Land:
-	if map.at(S_SHORE, d) <= 0.0:
+	var f := PackedFloat64Array()
+	f.resize(LAND_FIELDS)
+	map.sample(d, f, LAND_FIELDS)
+	return land_in(f)
+
+## What land_at gives, from `f`, a sample's fields (its first LAND_FIELDS at
+## least).
+static func land_in(f: PackedFloat64Array) -> Land:
+	if f[S_SHORE] <= 0.0:
 		return Land.SEA
-	if map.at(S_MOUNTAIN, d) >= MOUNTAINS_FROM:
+	if f[S_MOUNTAIN] >= MOUNTAINS_FROM:
 		return Land.MOUNTAINS
-	if map.at(S_PLATEAU, d) >= PLATEAU_FROM:
+	if f[S_PLATEAU] >= PLATEAU_FROM:
 		return Land.PLATEAU
-	return Land.DUNES if map.at(S_DUNES, d) >= DUNES_FROM else Land.PLAINS
+	return Land.DUNES if f[S_DUNES] >= DUNES_FROM else Land.PLAINS
 
 ## Great-circle metres from `d` to the nearest shore: negative at sea, INF on a
 ## world with no sea.

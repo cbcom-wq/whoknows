@@ -104,10 +104,11 @@ func at(field: int, dir: Vector3) -> float:
 	# NaN only where an INF corner had no weight: as far as INF.
 	return s if s == s else INF
 
-## Every field at `dir` into `out` (fields long), each as at() gives it, and
-## gives back the number of the cell it falls in (as cell_number does); the
-## blend is written out here, since this runs per height.
-func sample(dir: Vector3, out: PackedFloat64Array) -> int:
+## Every field at `dir` into `out` (fields long), each as at() gives it, or
+## only the first `count` of them, and gives back the number of the cell it
+## falls in (as cell_number does); the blend is written out here, since this
+## runs per height.
+func sample(dir: Vector3, out: PackedFloat64Array, count := -1) -> int:
 	var cell := _locate(dir)
 	var fu := cell.y
 	var fv := cell.z
@@ -117,7 +118,7 @@ func sample(dir: Vector3, out: PackedFloat64Array) -> int:
 	var w11 := fu * fv
 	var k := int(cell.x) * fields
 	var up := SIDE * fields
-	for f in fields:
+	for f in (fields if count < 0 else count):
 		var a := _values[k + f]
 		var b := _values[k + fields + f]
 		var c := _values[k + up + f]

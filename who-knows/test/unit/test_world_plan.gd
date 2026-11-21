@@ -166,6 +166,21 @@ func test_the_same_seed_builds_the_same_plan_on_any_thread():
 		var d := _dir(rng)
 		a.sample(d, oa); b.sample(d, ob)
 		assert_eq(oa, ob)
+	# Its canyons too, which few of those fall in: the shapes, and the samples
+	# down every canyon's floor.
+	assert_eq(a.shapes.canyons.size(), b.shapes.canyons.size())
+	var floors := 0
+	for i in mini(a.shapes.canyons.size(), b.shapes.canyons.size()):
+		var ca: Dictionary = a.shapes.canyons[i]
+		var cb: Dictionary = b.shapes.canyons[i]
+		for key in ["path", "floor", "half_floor", "rim", "mouth", "joins"]:
+			assert_eq(ca.get(key), cb.get(key), "canyon %d's %s" % [i, key])
+		for d: Vector3 in ca.path:
+			a.sample(d, oa); b.sample(d, ob)
+			assert_lte(oa[WorldPlan.S_CANYON], 1.0, "a point of a canyon's path is on its floor")
+			assert_eq(oa, ob)
+			floors += 1
+	assert_gt(floors, 300)
 
 func test_samples_are_continuous_across_every_face_edge():
 	var p := _wadis().plan()
@@ -463,25 +478,27 @@ func test_canyon_at_is_the_nearest_canyon_whose_walls_reach():
 	assert_gt(inside, 300)
 	assert_gt(outside, 100)
 
-func test_a_canyons_walls_top_the_ground_where_they_end():
-	# Leaving a canyon's reach makes no seam: there its walls stand over the
-	# base, with CANYON_RIM_PAD to spare for the ground's detail.
-	var p := _wadis().plan()
-	var radius := _wadis().radius_m
-	var worst := -INF
-	var tried := 0
-	for c: Dictionary in p.shapes.canyons:
-		var path: PackedVector3Array = c.path
-		for i in range(1, path.size() - 1, 3):
-			var along := (path[i + 1] - path[i - 1]).normalized()
-			var across := path[i].cross(along).normalized()
-			var reach: float = (c.half_floor[i] + c.rim[i] * WorldPlan.CANYON_WALL_RUN) / radius
-			for side: float in [-1.0, 1.0]:
-				var d := (path[i] * cos(reach) + across * side * sin(reach)).normalized()
-				worst = maxf(worst, p.map.at(WorldPlan.S_BASE, d) - (c.floor[i] + c.rim[i]))
-				tried += 1
-	assert_gt(tried, 200)
-	assert_lt(worst, -0.5 * WorldPlan.CANYON_RIM_PAD)
+func test_a_canyons_walls_top_the_ground_and_its_detail_where_they_end():
+	# Leaving a canyon's reach makes no seam: there, either side of every point
+	# of its path, its walls stand over the base and the most detail the land
+	# there may add (DETAIL_REACH), so close-up detail cannot open one.
+	var walls := _walls_short(_wadis().plan())
+	assert_gt(walls.y, 800)
+	assert_eq(walls.x, 0, "walls under the ground and its detail where they end")
+
+func test_every_rim_settles_on_wadis_and_a_handful_of_worlds():
+	# The rim is looked for out to where the walls end, at most
+	# CANYON_RIM_LOOKS times; on these (ranges' flanks among them) every one
+	# settles, with no error, and its walls top the ground and its detail.
+	var recipes: Array[WorldRecipe] = [_wadis()]
+	for s in [119, 139, 141, 248]:
+		recipes.append(WorldRecipe.from_seed(s))
+	for r in recipes:
+		assert_true(r.is_desert())
+		var walls := _walls_short(WorldPlan.build(r))
+		assert_gt(walls.y, 200, r.name)
+		assert_eq(walls.x, 0, "%s: walls under the ground and its detail where they end" % r.name)
+	assert_push_error(0, "every rim settles, and nothing else goes wrong")
 
 func test_no_canyon_reaches_wadoos_disc():
 	var p := _wadis().plan()
@@ -730,6 +747,26 @@ func _nearest_spine(p: WorldPlan, d: Vector3) -> Vector3:
 			var angle := d.angle_to(a + ab * t)
 			if angle < out.x:
 				out = Vector3(angle, lerpf(r.height[s], r.height[s + 1], t), r.half_width)
+	return out
+
+# Vector2i(where a canyon's walls end below the base and the DETAIL_REACH of
+# the land there, the places tried): either side of every point of every
+# canyon's path of `p`, across it as the plan draws its rim.
+func _walls_short(p: WorldPlan) -> Vector2i:
+	var radius := p.shapes.radius_m
+	var out := Vector2i.ZERO
+	for c: Dictionary in p.shapes.canyons:
+		var path: PackedVector3Array = c.path
+		var n := path.size()
+		for i in n:
+			var across := path[i].cross(path[mini(i + 1, n - 1)] - path[maxi(i - 1, 0)]).normalized()
+			var reach: float = (c.half_floor[i] + c.rim[i] * WorldPlan.CANYON_WALL_RUN) / radius
+			for side: float in [-1.0, 1.0]:
+				var d := (path[i] * cos(reach) + across * side * sin(reach)).normalized()
+				var need: float = p.map.at(WorldPlan.S_BASE, d) + WorldPlan.DETAIL_REACH[p.land_at(d)]
+				if need > c.floor[i] + c.rim[i] + 0.01:
+					out.x += 1
+				out.y += 1
 	return out
 
 ## Radians from `d` to the nearest point of segment `s` of `path`.

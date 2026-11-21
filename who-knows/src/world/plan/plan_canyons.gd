@@ -26,6 +26,9 @@ var owner := PackedInt32Array()
 ## coast. NAN until first asked.
 var _lie := PackedFloat32Array()
 var _coast := PackedFloat32Array()
+## The fields _over samples into, and WorldPlan.DETAIL_REACH by Land.
+var _fields := PackedFloat64Array()
+var _reach := PackedFloat64Array()
 ## By canyon index, once asked (toward): by cell, the steps from the cells
 ## its path crosses.
 var _toward := {}
@@ -52,6 +55,10 @@ func _init(p_plan: WorldPlan, p_recipe: WorldRecipe, p_dirs: PackedVector3Array)
 	_lie.fill(NAN)
 	_coast.resize(cells)
 	_coast.fill(NAN)
+	_fields.resize(WorldPlan.LAND_FIELDS)
+	_reach.resize(WorldPlan.Land.size())
+	for land: int in WorldPlan.DETAIL_REACH:
+		_reach[land] = WorldPlan.DETAIL_REACH[land]
 
 ## The next canyon, `n` of the dials': of WorldPlan.CANYON_TRIES seeded heads, the
 ## first whose route down (pulled toward the coast) keeps clear of the kept
@@ -210,7 +217,7 @@ func to_beach() -> void:
 		var shape := shape_of(cells, true, rng.randf_range(WorldPlan.CANYON_DEPTH.x, WorldPlan.CANYON_DEPTH.y), -1)
 		if miss(shape) > 0.0 or not plan._on_beach(shape):
 			continue
-		canyons[i] = shape
+		keep(i, shape)
 		owner.fill(0)
 		for k in canyons.size():
 			mark(k)
@@ -220,11 +227,28 @@ func to_beach() -> void:
 func _open(c: int) -> bool:
 	return plan._cell_mean(WorldPlan.S_MOUNTAIN, c) == 0.0 and plan._cell_mean(WorldPlan.S_PLATEAU, c) == 0.0
 
-## Adds canyon `c` to the plan's, and marks the cells its path crosses, and
-## the cells beside them, its own.
+## Adds canyon `c` to the plan's (keep), and marks the cells its path crosses,
+## and the cells beside them, its own.
 func take(c: Dictionary) -> void:
-	plan.shapes.canyons.append(c)
+	plan.shapes.canyons.append({})
+	keep(plan.shapes.canyons.size() - 1, c)
 	mark(plan.shapes.canyons.size() - 1)
+
+## Puts canyon `c` in the plan's as canyon `i`, with an error if its rim has not
+## settled somewhere (shape_of's "unsettled", taken out here).
+func keep(i: int, c: Dictionary) -> void:
+	var unsettled: int = c.get("unsettled", 0)
+	c.erase("unsettled")
+	plan.shapes.canyons[i] = c
+	if unsettled > 0:
+		push_error("WorldPlan: canyon %d of %s has a rim that does not settle at %d of its points within %d looks (CANYON_RIM_LOOKS): the ground there rises about as fast as its walls" % [
+			i, recipe.name, unsettled, WorldPlan.CANYON_RIM_LOOKS])
+
+## The height the walls must stand over at `d` where they end: the base and the
+## DETAIL_REACH of the land there, from one sample of the fields that tell it.
+func _over(d: Vector3) -> float:
+	plan.map.sample(d, _fields, WorldPlan.LAND_FIELDS)
+	return _fields[WorldPlan.S_BASE] + _reach[WorldPlan.land_in(_fields)]
 
 ## Marks the cells canyon `i`'s path crosses, and the cells beside them,
 ## its own, where no canyon has them yet.
@@ -306,12 +330,15 @@ func descend(start: int, goal: Callable, pull: Callable) -> Dictionary:
 		here = next
 	return {"cells": cells, "reached": true}
 
-## The canyon `depth` deep (WorldPlan.CANYON_DEPTH) down `cells`, start first: its path
-## a smooth curve through their middles (_curve), cut off at the water if it
-## `reached` the sea or, for a branch of canyon `joins`, ending on point
-## `meet` of its parent's path; its floor (WorldPlan.CANYON_GRADE, WorldPlan.CANYON_LAND_FLOOR),
-## the floor's half-widths and the walls' rims (WorldPlan.CANYON_WALL_RUN,
-## WorldPlan.CANYON_RIM_PAD). Draws nothing from rng.
+## The canyon `depth` deep (WorldPlan.CANYON_DEPTH) down `cells`, start first:
+## its path a smooth curve through their middles (_curve), cut off at the water
+## if it `reached` the sea or, for a branch of canyon `joins`, ending on point
+## `meet` of its parent's path; its floor (WorldPlan.CANYON_GRADE,
+## WorldPlan.CANYON_LAND_FLOOR), the floor's half-widths and the walls' rims
+## (WorldPlan.CANYON_WALL_RUN, WorldPlan.DETAIL_REACH, WorldPlan.CANYON_RIM_LOOKS,
+## WorldPlan.CANYON_RIM_SPARE). A rim that has not settled within
+## CANYON_RIM_LOOKS is counted in "unsettled", which keep() takes out. Draws
+## nothing from rng.
 func shape_of(cells: PackedInt32Array, reached: bool, depth: float, joins: int, meet := -1) -> Dictionary:
 	var points := PackedVector3Array()
 	for c in cells:
@@ -337,10 +364,14 @@ func shape_of(cells: PackedInt32Array, reached: bool, depth: float, joins: int, 
 	along[0] = 0.0
 	for i in range(1, n):
 		along[i] = along[i - 1] + path[i - 1].angle_to(path[i]) * radius
+	# The base along it, and what the walls must stand over there (_over).
 	var base := PackedFloat32Array()
 	base.resize(n)
+	var over := PackedFloat64Array()
+	over.resize(n)
 	for i in n:
-		base[i] = plan.map.at(WorldPlan.S_BASE, path[i])
+		over[i] = _over(path[i])
+		base[i] = _fields[WorldPlan.S_BASE]
 	# The floor: the running minimum, held over the sea until the mouth,
 	# then from the mouth up never steeper than WorldPlan.CANYON_GRADE.
 	var bed := PackedFloat32Array()
@@ -363,23 +394,32 @@ func shape_of(cells: PackedInt32Array, reached: bool, depth: float, joins: int, 
 		if mouth == &"basin":
 			w = lerpf(w, WorldPlan.CANYON_FLOOR_WIDTH.y, smoothstep(along[n - 1] - WorldPlan.CANYON_BASIN, along[n - 1], along[i]))
 		half[i] = 0.5 * w
-	# The rim: over the highest base across the canyon where its walls
-	# end, found by looking out to where they would end and, while the
-	# ground there stands higher, out again.
+	# The rim: over the ground and its detail where the walls end on either
+	# side, found by looking out to where they would end and, while the
+	# ground there stands higher, out again (a little past it, so it settles
+	# soon on rising ground), until it settles.
 	var rim := PackedFloat32Array()
 	rim.resize(n)
+	var unsettled := 0
 	for i in n:
 		var across := path[i].cross(path[mini(i + 1, n - 1)] - path[maxi(i - 1, 0)]).normalized()
-		var top := base[i]
-		for look in 4:
-			var out := (half[i] + (top + WorldPlan.CANYON_RIM_PAD - bed[i]) * WorldPlan.CANYON_WALL_RUN) / radius
-			var higher := maxf(plan.map.at(WorldPlan.S_BASE, (path[i] * cos(out) + across * sin(out)).normalized()),
-				plan.map.at(WorldPlan.S_BASE, (path[i] * cos(out) - across * sin(out)).normalized()))
+		var top := over[i]
+		var settled := false
+		for look in WorldPlan.CANYON_RIM_LOOKS:
+			var out := (half[i] + (top - bed[i]) * WorldPlan.CANYON_WALL_RUN) / radius
+			var mid := path[i] * cos(out)
+			var side := across * sin(out)
+			var higher := maxf(_over(mid + side), _over(mid - side))
 			if higher <= top:
+				settled = true
 				break
-			top = higher
-		rim[i] = top + WorldPlan.CANYON_RIM_PAD - bed[i]
+			top = higher + WorldPlan.CANYON_RIM_SPARE
+		if not settled:
+			unsettled += 1
+		rim[i] = top - bed[i]
 	var shape := {"path": path, "floor": bed, "half_floor": half, "rim": rim, "mouth": mouth}
+	if unsettled > 0:
+		shape["unsettled"] = unsettled
 	if joins >= 0:
 		shape["joins"] = joins
 	return shape
