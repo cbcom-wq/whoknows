@@ -25,9 +25,12 @@ extends Node3D
 ## CoverField's (a child that never moves either; its blocks are members).
 ##
 ## Choosing the leaves is pure (the statics below). A node is culled by its
-## cull bound (corner chord plus half the relief: safe for the horizon) but
-## split by its ground (the real ground under it, less the corner chord), so
-## the relief pad never makes a far chunk look near enough to split.
+## cull bound (safe for the horizon) but split by its ground (the real ground
+## under it, less the corner chord), so the bound's pad never makes a far chunk
+## look near enough to split. The cull bound is the corner chord plus half the
+## relief, or on a planned desert the plan's least and most height under the
+## node (the wadis land spec §8.3), whose 2 km peaks would leave a relief pad
+## culling almost nothing; and the horizon reaches by the plan's too.
 
 ## Split a node when the focus is within SPLIT times its edge of it; merge it
 ## again only beyond MERGE (§5.2). About 21 leaves a level at 1.5.
@@ -35,6 +38,9 @@ const SPLIT := 1.5
 const MERGE := 1.8
 ## Chunk builds in flight at once.
 const MAX_JOBS := 12
+## A planned desert's cull bound is this many metres wider than its plan's
+## bounds make it: the bounds are 32-bit floats, and so are the node's corners.
+const PLAN_SLACK := 1.0
 ## Main-thread time a tick may spend turning finished chunks into nodes: the
 ## asteroids' own budget.
 const APPLY_BUDGET_USEC := AsteroidStream.APPLY_BUDGET_USEC
@@ -132,33 +138,58 @@ var _since_prune := PRUNE_TICKS
 ## only safe for horizon visibility, not for measuring proximity.
 static func select(radius: float, relief: float, depth_max: int, local: Vector3,
 		was_split: Dictionary, bounds: Dictionary, height_at := Callable()) -> Array:
+	return _select(radius, relief, null, depth_max, local,
+		horizon_reach(radius, -relief * 0.5, relief * 0.5, local.length()), was_split, bounds, height_at)
+
+## `select` for `terrain`'s world: its heights (`height_at` if given, as
+## update's remembered ones, else the terrain's own), and on a planned desert
+## its plan's bounds, for the nodes and for the horizon (§8.3). On any other
+## world exactly today's select, by its relief pad.
+static func select_for(terrain: WorldTerrain, local: Vector3, was_split := {}, bounds := {},
+		height_at := Callable()) -> Array:
+	var heights := height_at if height_at.is_valid() else terrain.height_at
+	var depth_max := CubeSphere.depth_for(terrain.radius)
+	if terrain.plan == null:
+		return select(terrain.radius, terrain.relief, depth_max, local, was_split, bounds, heights)
+	return _select(terrain.radius, terrain.relief, terrain.plan, depth_max, local,
+		horizon_reach(terrain.radius, terrain.lowest, terrain.highest, local.length()), was_split, bounds, heights)
+
+## The walk from each face's root: nodes bounded by `plan`'s bounds if there is
+## one, else the relief pad (bound_of), culled past `reach` (horizon_reach).
+static func _select(radius: float, relief: float, plan: WorldPlan, depth_max: int, local: Vector3, reach: float,
+		was_split: Dictionary, bounds: Dictionary, height_at: Callable) -> Array:
 	var leaves: Array[Vector4i] = []
 	var split := {}
-	var reach := horizon_reach(radius, relief, local.length())
 	for f in CubeSphere.FACES:
-		_walk(Vector4i(f, 0, 0, 0), radius, relief, depth_max, local, reach, was_split, bounds, leaves, split, height_at)
+		_walk(Vector4i(f, 0, 0, 0), radius, relief, plan, depth_max, local, reach, was_split, bounds, leaves, split, height_at)
 	return [leaves, split]
 
-## How far from a focus `d` from the centre any ground can still be seen: to
+## How far from a focus `d` from the centre any ground can still be seen, on a
+## world whose ground lies from `lowest` to `highest` metres above `radius`: to
 ## the horizon of the lowest ground, then on to the highest ground beyond it.
 ## Everywhere, from inside the lowest ground.
-static func horizon_reach(radius: float, relief: float, d: float) -> float:
-	var low := radius - relief * 0.5
-	var high := radius + relief * 0.5
+static func horizon_reach(radius: float, lowest: float, highest: float, d: float) -> float:
+	var low := radius + lowest
+	var high := radius + highest
 	if d <= low:
 		return INF
 	return sqrt(d * d - low * low) + sqrt(high * high - low * low)
 
 ## A node's [centre, cull_radius, ground, chord]. The cull_radius (corner
-## chord + relief/2) is safe for horizon visibility but not for split decisions;
-## the chord is the corner chord alone. The centre, cull_radius and chord are
-## cached; the ground is worked out fresh each call from `height_at` (the
-## sphere point at radius if none) so a cache never holds stale ground. A
-## bounds dictionary belongs to one planet's radius and relief.
-static func bound_of(key: Vector4i, radius: float, relief: float, bounds: Dictionary, height_at := Callable()) -> Array:
+## chord + relief/2, or by `plan`'s bounds: _planned_bound) is safe for horizon
+## visibility but not for split decisions; the chord is the corner chord alone.
+## The centre, cull_radius and chord are cached; the ground is worked out fresh
+## each call from `height_at` (the sphere point at radius if none) so a cache
+## never holds stale ground. A bounds dictionary belongs to one planet's radius
+## and relief, and its plan.
+static func bound_of(key: Vector4i, radius: float, relief: float, bounds: Dictionary, height_at := Callable(),
+		plan: WorldPlan = null) -> Array:
 	if not bounds.has(key):
-		var b := CubeSphere.node_bound(key, radius, relief)
-		bounds[key] = [b[0], b[1], float(b[1]) - relief * 0.5]
+		if plan == null:
+			var b := CubeSphere.node_bound(key, radius, relief)
+			bounds[key] = [b[0], b[1], float(b[1]) - relief * 0.5]
+		else:
+			bounds[key] = _planned_bound(key, radius, plan)
 	var cached: Array = bounds[key]
 	var centre: Vector3 = cached[0]
 	var ground := centre
@@ -166,9 +197,25 @@ static func bound_of(key: Vector4i, radius: float, relief: float, bounds: Dictio
 		ground = centre.normalized() * (radius + height_at.call(centre.normalized()))
 	return [centre, cached[1], ground, cached[2]]
 
-static func _walk(key: Vector4i, radius: float, relief: float, depth_max: int, local: Vector3, reach: float,
-		was_split: Dictionary, bounds: Dictionary, leaves: Array[Vector4i], split: Dictionary, height_at := Callable()) -> void:
-	var b := bound_of(key, radius, relief, bounds, height_at)
+## A planned desert's node bound, [centre, cull_radius, chord]: its ground lies
+## from the plan's least to its most height under the node
+## (WorldPlan.bounds_of), so the sphere round the middle of that span, over the
+## node's middle, holds it. A point of the ground is no farther from that centre
+## than the corner chord at the most height (scaled from the radius) plus half
+## the span, and PLAN_SLACK.
+static func _planned_bound(key: Vector4i, radius: float, plan: WorldPlan) -> Array:
+	var b := CubeSphere.node_bound(key, radius, 0.0)
+	var mid: Vector3 = b[0]
+	var chord: float = b[1]
+	var span := plan.bounds_of(key)
+	var centre := mid.normalized() * (radius + (span.x + span.y) * 0.5)
+	var cull := chord * (radius + span.y) / radius + (span.y - span.x) * 0.5 + PLAN_SLACK
+	return [centre, cull, chord]
+
+static func _walk(key: Vector4i, radius: float, relief: float, plan: WorldPlan, depth_max: int, local: Vector3,
+		reach: float, was_split: Dictionary, bounds: Dictionary, leaves: Array[Vector4i], split: Dictionary,
+		height_at: Callable) -> void:
+	var b := bound_of(key, radius, relief, bounds, height_at, plan)
 	var centre: Vector3 = b[0]
 	var cull_radius: float = b[1]
 	var ground: Vector3 = b[2]
@@ -182,7 +229,7 @@ static func _walk(key: Vector4i, radius: float, relief: float, depth_max: int, l
 	if key.y < depth_max and ground_near < factor * CubeSphere.edge_m(radius, key.y):
 		split[key] = true
 		for c in CubeSphere.children(key):
-			_walk(c, radius, relief, depth_max, local, reach, was_split, bounds, leaves, split, height_at)
+			_walk(c, radius, relief, plan, depth_max, local, reach, was_split, bounds, leaves, split, height_at)
 	else:
 		leaves.append(key)
 
@@ -211,7 +258,7 @@ func update(focus: UniversePoint) -> void:
 	_local = focus.minus(body.point)
 	if _selected_at == null or focus.minus(_selected_at).length() >= RESELECT_AFTER:
 		_selected_at = focus
-		var sel := select(body.radius, terrain.relief, depth_max, _local, _split, _bounds, _node_height)
+		var sel := select_for(terrain, _local, _split, _bounds, _node_height)
 		leaves.assign(sel[0])
 		_leaf_set.clear()
 		for k in leaves:
@@ -742,5 +789,5 @@ func _rank(key: Vector4i) -> float:
 	return float(urgent) - 1e9 if urgent != null else _distance(key)
 
 func _distance(key: Vector4i) -> float:
-	var b := bound_of(key, body.radius, terrain.relief, _bounds)
+	var b := bound_of(key, terrain.radius, terrain.relief, _bounds, Callable(), terrain.plan)
 	return maxf((b[0] as Vector3).distance_to(_local) - float(b[1]), 0.0)

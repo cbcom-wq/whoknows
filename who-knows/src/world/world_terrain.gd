@@ -222,8 +222,19 @@ var recipe: WorldRecipe
 var radius: float
 ## Metres from the ground's lowest to its highest, at most, centred on the
 ## radius: the recipe's relief_m, or on a planned desert the plan's whole range
-## (_planned_relief), which the streaming pads its bounds by.
+## (_planned_range), which the streaming pads its bounds by on a world with no
+## plan.
 var relief: float
+## The least and most the ground's height can be, metres above radius: half the
+## relief under and over it, or on a planned desert its plan's bounds over the
+## whole world, from its seabed to its highest peak. The streaming's horizon
+## reaches by them (WorldSurface.select_for).
+var lowest: float
+var highest: float
+## Metres above radius of a planned desert's sea (its plan's sea_level), and
+## -INF on every world with no sea. Under it, the ground is seabed, and the
+## surface (surface_at) is the water.
+var sea_level := -INF
 var archetype: WorldRecipe.Archetype
 var palette: Dictionary
 ## [centre direction, angular radius] per crater; empty unless CRATERED.
@@ -267,11 +278,9 @@ var _legacy_half := 0.0
 ## per terrain, so one per thread, and none made per height.
 var _fields := PackedFloat64Array()
 ## A planned desert's: by cell, the kinds of shape listed near it
-## (PlanShapes.kinds); its sea level (-INF with no sea); and the noises of its
-## detail close up, its own: the plains' roll, the mountains' ridged peaks and
-## the terraces' wander.
+## (PlanShapes.kinds); and the noises of its detail close up, its own: the
+## plains' roll, the mountains' ridged peaks and the terraces' wander.
 var _near_kinds := PackedByteArray()
-var _sea_level := -INF
 var _roll: FastNoiseLite
 var _peaks: FastNoiseLite
 var _wander: FastNoiseLite
@@ -296,6 +305,8 @@ func _init(p_recipe: WorldRecipe) -> void:
 	radius = recipe.radius_m
 	relief = recipe.relief_m
 	_legacy_half = recipe.relief_m * 0.5
+	lowest = -relief * 0.5
+	highest = relief * 0.5
 	archetype = recipe.archetype
 	palette = SpacePalette.WORLDS[recipe.palette]
 	_continents.seed = WorldSeed.noise_seed(WorldSeed.sub(recipe.seed, &"continents"))
@@ -340,26 +351,26 @@ func _init(p_recipe: WorldRecipe) -> void:
 		_keeps_cos = plan.keeps_cos
 		_fields.resize(WorldPlan.S_SIZE)
 		_near_kinds = plan.shapes.kinds
-		_sea_level = plan.sea_level
+		sea_level = plan.sea_level
 		_roll = _simplex(&"plan_roll", 2)
 		_wander = _simplex(&"plan_terraces", 2)
 		_peaks = _simplex(&"plan_peaks", MOUNTAIN_OCTAVES)
 		_peaks.fractal_type = FastNoiseLite.FRACTAL_RIDGED
-		relief = _planned_relief()
+		_planned_range()
 	_take_stamps()
 
-## A planned desert's relief: twice the farthest the plan's bounds over the
-## whole world (each face's node at depth 0) reach from the radius, either way,
-## so its deepest seabed and highest peak are within half of it, and the
-## streaming's relief pad covers them.
-func _planned_relief() -> float:
-	var low := INF
-	var high := -INF
+## A planned desert's lowest and highest: the least and most of the plan's
+## bounds over the whole world (each face's node at depth 0); and its relief,
+## twice the farther of them from the radius, so its deepest seabed and highest
+## peak are within half of it.
+func _planned_range() -> void:
+	lowest = INF
+	highest = -INF
 	for face in CubeSphere.FACES:
 		var b := plan.bounds_of(Vector4i(face, 0, 0, 0))
-		low = minf(low, b.x)
-		high = maxf(high, b.y)
-	return 2.0 * maxf(absf(low), absf(high))
+		lowest = minf(lowest, b.x)
+		highest = maxf(highest, b.y)
+	relief = 2.0 * maxf(absf(lowest), absf(highest))
 
 ## Copies the recipe's stamps, outer first, and gives each FLATTEN or MESA with
 ## no level the mean of the ground under its flat part with the stamps before
@@ -531,6 +542,12 @@ func altitude_of(local: Vector3) -> float:
 	if local.is_zero_approx():
 		return -radius
 	return local.length() - (radius + height_at(local))
+
+## Metres above radius of the surface at `dir` (the wadis land spec §7.1): the
+## higher of the ground and the sea, so the water over a seabed; the ground on a
+## world with no sea.
+func surface_at(dir: Vector3) -> float:
+	return maxf(height_at(dir), sea_level)
 
 ## Which of the palette's grounds faces `dir` on ground this steep (radians).
 func ground_at(dir: Vector3, slope: float) -> StringName:
@@ -791,7 +808,7 @@ func _cliff(d: Vector3, f: PackedFloat64Array, ground: float) -> float:
 	var shore := f[WorldPlan.S_SHORE]
 	if shore >= CLIFF_IN or share <= 0.0:
 		return ground
-	return lerpf(ground, _sea_level, share * minf((CLIFF_IN - shore) / CLIFF_RUN, 1.0))
+	return lerpf(ground, sea_level, share * minf((CLIFF_IN - shore) / CLIFF_RUN, 1.0))
 
 ## How much of a cliff a planned desert's coast is at the unit direction `d`,
 ## whose fields are `f` (a sample's): 1 where a range's weight (held to the
@@ -866,7 +883,7 @@ func _planned_ground(d: Vector3, out: PackedFloat64Array) -> StringName:
 			if past <= 0.0:
 				# The floor, or by a mouth the beach where it lies lower.
 				var floor_h := c.z
-				if floor_h - _sea_level <= DAMP_LOOK:
+				if floor_h - sea_level <= DAMP_LOOK:
 					floor_h = _planned_height(d)
 				return &"damp" if _damp(floor_h) else &"ground_low"
 			# The walls are the ground where the ground is their cut, the
@@ -886,7 +903,7 @@ func _planned_ground(d: Vector3, out: PackedFloat64Array) -> StringName:
 			return _terrace_ground(d, plateau)
 		if plateau > 0.0 and plateau < WorldPlan.PLATEAU_FROM and _tower_stand(d) > 0.0:
 			return &"rock"
-	if _sea_level > -INF and absf(out[WorldPlan.S_BASE] - _sea_level) <= DAMP_LOOK:
+	if sea_level > -INF and absf(out[WorldPlan.S_BASE] - sea_level) <= DAMP_LOOK:
 		if is_nan(height):
 			height = _planned_height(d)
 		if _damp(height):
@@ -917,7 +934,7 @@ func _terrace_ground(d: Vector3, plateau: float) -> StringName:
 ## Whether ground `height` metres above radius is in the damp band along a
 ## planned desert's waterline (DAMP_BAND).
 func _damp(height: float) -> bool:
-	return height >= _sea_level - DAMP_BAND.x and height <= _sea_level + DAMP_BAND.y
+	return height >= sea_level - DAMP_BAND.x and height <= sea_level + DAMP_BAND.y
 
 ## How much of its height a dune stands at a point whose d . wind_axis is `a`
 ## and whose continent layer is `z`: 1 on the open dunes, fading to 0 toward
