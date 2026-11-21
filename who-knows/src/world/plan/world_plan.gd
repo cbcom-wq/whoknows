@@ -54,6 +54,9 @@ const BASE_WAVE := 24000.0
 const DUNES_WAVE := 30000.0
 const DUNES_CONTRAST := 1.5
 const DUNES_FROM := 0.5
+## Low ground leans to dunes and high to gravel: S_DUNES is moved by up to this
+## much, down at the roll's top and up at its bottom.
+const DUNES_LOW_LEAN := 0.25
 
 ## The seas (§5.4 step 2, §7). Each grows over the map's cells from a seeded
 ## centre, nearest first, to its share of the surface (the `sea` dial split
@@ -110,6 +113,33 @@ const RANGE_TOP_LEAST := 0.6
 const KEEP_CLEAR_CELLS := 2.0
 ## Seeded spines tried for each range before its rules are given up on.
 const RANGE_TRIES := 32
+## The plateau country (§5.4 step 4, §6). The `plateaus` dial's share is split
+## between PLATEAU_REGIONS regions (how many, seeded), each grown over the
+## cells (as a sea is) from a seeded centre, and each standing at its own top
+## drawn from PLATEAU_TOP, metres over the radius. A region keeps off the sea's
+## cells, the ranges' flanks and the kept discs, though it may reach the coast,
+## where it ends in a cliff. Its centre starts at least PLATEAU_INLAND_CELLS
+## cells inland, and its outline is pushed in and out by a noise PLATEAU_WAVE
+## metres across, up to PLATEAU_ROUGH times a round region's radius.
+const PLATEAU_TOP := Vector2(100.0, 400.0)
+const PLATEAU_REGIONS := Vector2i(3, 6)
+const PLATEAU_WAVE := 12000.0
+const PLATEAU_ROUGH := 0.4
+const PLATEAU_INLAND_CELLS := 3.0
+## Seeded centres tried for each region; the first to fill PLATEAU_FULL of its
+## share is kept, else the fullest.
+const PLATEAU_TRIES := 8
+const PLATEAU_FULL := 0.9
+## A region is grown this much over its share: the outer half of its edge band
+## is under PLATEAU_FROM, so the plateau country itself is less than its cells.
+const PLATEAU_GROW := 1.2
+## S_PLATEAU rises from 0 on a region's outline to 1 this many cells in (a
+## smoothstep): the edge band, where terraces and towers are laid. _lay_plateaus
+## knows only the two cells it is.
+const PLATEAU_EDGE_CELLS := 2
+## Plateau country is where S_PLATEAU is this or more.
+const PLATEAU_FROM := 0.5
+
 ## Mountains are where S_MOUNTAIN is this or more (their flanks' foothills are
 ## open ground).
 const MOUNTAINS_FROM := 0.5
@@ -133,6 +163,7 @@ static func build(recipe: WorldRecipe) -> WorldPlan:
 	var shore := p._seas(recipe, dirs, copies)
 	p._open_ground(recipe, dirs, shore)
 	p._ranges(recipe, dirs, shore, copies)
+	p._plateaus(recipe, dirs, shore, copies)
 	p.shapes.pack_near()
 	var low := PackedFloat32Array()
 	var high := PackedFloat32Array()
@@ -145,13 +176,15 @@ static func build(recipe: WorldRecipe) -> WorldPlan:
 func sample(d: Vector3, out: PackedFloat64Array) -> void:
 	map.sample(d, out)
 
-## SEA at or past the water's edge; MOUNTAINS on a range's upper flanks; else
-## what the open ground is.
+## SEA at or past the water's edge; MOUNTAINS on a range's upper flanks;
+## PLATEAU on a plateau's body; else what the open ground is.
 func land_at(d: Vector3) -> Land:
 	if map.at(S_SHORE, d) <= 0.0:
 		return Land.SEA
 	if map.at(S_MOUNTAIN, d) >= MOUNTAINS_FROM:
 		return Land.MOUNTAINS
+	if map.at(S_PLATEAU, d) >= PLATEAU_FROM:
+		return Land.PLATEAU
 	return Land.DUNES if map.at(S_DUNES, d) >= DUNES_FROM else Land.PLAINS
 
 ## Great-circle metres from `d` to the nearest shore: negative at sea, INF on a
@@ -193,14 +226,16 @@ func _open_ground(recipe: WorldRecipe, dirs: PackedVector3Array, shore: PackedFl
 		for j in PlanMap.SIDE:
 			for i in PlanMap.SIDE:
 				var d := dirs[k]
-				var base := BASE_ROLL * clampf(roll.get_noise_3dv(d), -1.0, 1.0)
+				var rolled := clampf(roll.get_noise_3dv(d), -1.0, 1.0)
+				var base := BASE_ROLL * rolled
 				if sea:
 					var s := shore[k]
 					# Past the beach, as _coast gives it, without the call.
 					base = _coast(base, s) if s < BEACH_WIDTH else maxf(base, sea_level + LAND_ABOVE)
 					map.set_corner(S_SHORE, face, i, j, s)
 				map.set_corner(S_BASE, face, i, j, base)
-				map.set_corner(S_DUNES, face, i, j, clampf(0.5 + DUNES_CONTRAST * dunes.get_noise_3dv(d), 0.0, 1.0))
+				map.set_corner(S_DUNES, face, i, j, clampf(
+					0.5 + DUNES_CONTRAST * dunes.get_noise_3dv(d) - DUNES_LOW_LEAN * rolled, 0.0, 1.0))
 				k += 1
 
 ## The base `shore` metres from the coast (negative at sea) where the open
@@ -972,6 +1007,173 @@ func _lay_ranges(dirs: PackedVector3Array, canon: PackedInt32Array, edge: float)
 		map.set_corner(S_MOUNTAIN, face, i, j, weight[k])
 		if lift[k] > 0.0:
 			map.set_corner(S_BASE, face, i, j, map.corner(S_BASE, face, i, j) + lift[k])
+
+## Draws the dials' plateau regions into shapes.plateaus (§5.4 step 4) and lays
+## them on the map (_lay_plateaus). The `plateaus` share is split evenly between
+## a seeded number of regions, each the first of a seeded run of centres,
+## inland of the sea, whose region grows (_grow, then _tidy) to its share clear
+## of the sea's cells, of the ranges' flanks (a cell with a corner of any
+## weight), of the kept discs and of the regions before it. A region is as full
+## as the room lets it be: one that finds little is small, never an error.
+## `shore` is each corner's metres to the nearest shore, by k; `copies` are each
+## face-edge corner's copies (_corner_copies).
+func _plateaus(recipe: WorldRecipe, dirs: PackedVector3Array, shore: PackedFloat32Array, copies: Dictionary) -> void:
+	if dials.plateaus <= 0.0:
+		return
+	var radius := recipe.radius_m
+	var edge := CubeSphere.edge_m(radius, PlanMap.PLAN_DEPTH)
+	var rng := WorldSeed.rng(recipe.seed, &"plan_plateaus")
+	var noise := _noise(recipe, &"plan_plateau_edge", PLATEAU_WAVE, 2)
+	var canon := _canon(copies, dirs.size())
+	var full := PackedByteArray()
+	full.resize(dirs.size())
+	full.fill(4)
+	for k: int in copies:
+		var group: PackedInt32Array = copies[k]
+		if group.size() == 3:
+			full[group[0]] = 3
+	var count := rng.randi_range(PLATEAU_REGIONS.x, PLATEAU_REGIONS.y)
+	var share := dials.plateaus / count
+	var area := 4.0 * PI * share * PLATEAU_GROW
+	var reach := acos(1.0 - 2.0 * share) * radius
+	var rough := PLATEAU_ROUGH * reach
+	var step := edge / 8.0
+	# 1 for each cell of the sea, and then of each region and the two cells
+	# round it, so no two regions share even a corner.
+	var taken := PackedByteArray()
+	taken.resize(CubeSphere.FACES * PlanMap.CELLS * PlanMap.CELLS)
+	taken.fill(0)
+	for sea: Dictionary in shapes.seas:
+		for c: int in sea.cells:
+			taken[c] = 1
+	# Cells with a corner on a range's flanks are not for plateaus: the cells
+	# the ranges are listed near, which reach as far as any of their weight.
+	var blocked := PackedByteArray()
+	blocked.resize(taken.size())
+	blocked.fill(0)
+	shapes.mark_near_ranges(blocked)
+	# Each kept disc as Vector4(direction, the cosine of the angle within
+	# which a cell is in it or its blend).
+	var discs: Array[Vector4] = []
+	for keep: Dictionary in recipe.keeps:
+		var angle: float = (keep.radius + keep.blend + edge) / radius
+		var dir: Vector3 = keep.dir
+		discs.append(Vector4(dir.x, dir.y, dir.z, cos(angle)))
+	var inland := PLATEAU_INLAND_CELLS * edge
+	for n in count:
+		var top := rng.randf_range(PLATEAU_TOP.x, PLATEAU_TOP.y)
+		var best := PackedInt32Array()
+		var best_got := -1.0
+		for attempt in PLATEAU_TRIES:
+			var centre := _anywhere(rng)
+			var start := PlanShapes.cell_index(map.cell_of(centre))
+			var mid := _cell_centre(start, dirs)
+			if taken[start] != 0 or blocked[start] != 0 or _in_discs(mid, discs) or shore[_first_corner(start)] < inland:
+				continue
+			var priority := func(c: int) -> float:
+				if blocked[c] != 0:
+					return INF
+				var at := _cell_centre(c, dirs)
+				if _in_discs(at, discs):
+					return INF
+				return acos(minf(at.dot(mid), 1.0)) * radius + rough * (1.0 + clampf(noise.get_noise_3dv(at), -1.0, 1.0))
+			var grown := _grow(start, area, priority, step, taken, dirs)
+			var cells := _tidy(grown.cells, priority, taken, canon, full)
+			# Tidying moves a few cells: the grown area is near enough.
+			var got: float = grown.area
+			if got > best_got:
+				best = cells
+				best_got = got
+			if got >= area * PLATEAU_FULL:
+				break
+		if best.is_empty():
+			continue
+		shapes.plateaus.append({"cells": best, "top": top})
+		_take(best, taken)
+	_lay_plateaus(canon, full)
+
+## True if `d` is within any of `discs` (Vector4 of a direction and the cosine
+## of an angle, as _plateaus makes them).
+static func _in_discs(d: Vector3, discs: Array[Vector4]) -> bool:
+	for disc in discs:
+		if d.x * disc.x + d.y * disc.y + d.z * disc.z > disc.w:
+			return true
+	return false
+
+## Lays shapes.plateaus on the map, and lists each region near its cells and
+## the cells beside them. A cell is on its region's edge if a cell beside it is
+## not in the region (depth 1), else inside (depth 2: the edge band is two cells
+## deep); a corner with every cell round it in a region is as deep as the
+## shallowest of them, any other (on the outline) is 0 deep. At every corner a
+## region's cells touch, S_PLATEAU_TOP is its top; S_PLATEAU is smoothstep(0,
+## 1, depth over PLATEAU_EDGE_CELLS); and the base is lerped toward the top by
+## it. `canon` and `full` are by k the k standing for a corner's copies and how
+## many cells meet there. Regions share no corner (_take), so a corner has one
+## owner.
+func _lay_plateaus(canon: PackedInt32Array, full: PackedByteArray) -> void:
+	if shapes.plateaus.is_empty():
+		return
+	var up := PlanMap.SIDE
+	var cells := CubeSphere.FACES * PlanMap.CELLS * PlanMap.CELLS
+	# By cell, the region it is in plus one (0 for none).
+	var region := PackedInt32Array()
+	region.resize(cells)
+	region.fill(0)
+	for r in shapes.plateaus.size():
+		for c: int in shapes.plateaus[r].cells:
+			region[c] = r + 1
+	# By cell, the last region listed near it.
+	var listed := PackedInt32Array()
+	listed.resize(cells)
+	listed.fill(-1)
+	# By canon k: the shallowest cell there, how many cells meet, and whose.
+	var shallow := PackedByteArray()
+	shallow.resize(canon.size())
+	shallow.fill(255)
+	var meet := PackedByteArray()
+	meet.resize(canon.size())
+	meet.fill(0)
+	var owner := PackedInt32Array()
+	owner.resize(canon.size())
+	owner.fill(0)
+	var touched := PackedInt32Array()
+	var near := PackedInt32Array()
+	near.resize(4)
+	for r in shapes.plateaus.size():
+		var shape := PlanShapes.PLATEAU * PlanShapes.SHAPES + r
+		for c: int in shapes.plateaus[r].cells:
+			_cell_neighbours(c, near)
+			var depth := 2
+			for e in 4:
+				var o := near[e]
+				if region[o] != r + 1:
+					depth = 1
+				if listed[o] != r:
+					listed[o] = r
+					shapes.add_near(o, shape)
+			if listed[c] != r:
+				listed[c] = r
+				shapes.add_near(c, shape)
+			var k := _first_corner(c)
+			for e in 4:
+				var at := canon[k + (e & 1) + (e >> 1) * up]
+				if meet[at] == 0:
+					touched.append(at)
+				shallow[at] = mini(shallow[at], depth)
+				meet[at] += 1
+				owner[at] = r + 1
+	for k in touched:
+		var face := k / (up * up)
+		var i := k % up
+		var j := (k / up) % up
+		var top: float = shapes.plateaus[owner[k] - 1].top
+		var w := 0.0
+		if meet[k] == full[k]:
+			w = smoothstep(0.0, 1.0, float(shallow[k]) / PLATEAU_EDGE_CELLS)
+		map.set_corner(S_PLATEAU_TOP, face, i, j, top)
+		map.set_corner(S_PLATEAU, face, i, j, w)
+		if w > 0.0:
+			map.set_corner(S_BASE, face, i, j, lerpf(map.corner(S_BASE, face, i, j), top, w))
 
 ## Radians from `d` to the nearest point of segment `s` of `spine` (from point
 ## s to point s + 1): to the nearest point of its chord, seen from the centre.

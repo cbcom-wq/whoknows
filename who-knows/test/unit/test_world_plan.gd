@@ -211,7 +211,7 @@ func test_open_ground_is_a_gentle_roll_of_dunes_and_plains():
 	for k in 2000:
 		var d := _dir(rng)
 		p.sample(d, out)
-		if out[WorldPlan.S_SHORE] < AWAY_FROM_SEA or out[WorldPlan.S_MOUNTAIN] > 0.0:
+		if out[WorldPlan.S_SHORE] < AWAY_FROM_SEA or out[WorldPlan.S_MOUNTAIN] > 0.0 or out[WorldPlan.S_PLATEAU] > 0.0:
 			continue
 		assert_between(out[WorldPlan.S_BASE], -WorldPlan.BASE_ROLL, WorldPlan.BASE_ROLL)
 		assert_between(out[WorldPlan.S_DUNES], 0.0, 1.0)
@@ -222,6 +222,44 @@ func test_open_ground_is_a_gentle_roll_of_dunes_and_plains():
 		if land == WorldPlan.Land.DUNES:
 			dunes += 1
 	assert_between(dunes, 400, 1600, "both dune seas and plains")
+
+func test_plateaus_no_longer_all_stand_at_one_height():
+	var tops := {}
+	for r in _wadis().plan().shapes.plateaus:
+		assert_between(r.top, 100.0, 400.0)
+		tops[snappedf(r.top, 10.0)] = true
+	assert_gt(tops.size(), 1)
+
+func test_dunes_and_plains_keep_at_least_half_the_world():
+	var p := _wadis().plan()
+	var open := _share(func(d): var l := p.land_at(d); return l == WorldPlan.Land.DUNES or l == WorldPlan.Land.PLAINS, 20000)
+	assert_gt(open, 0.5)
+	assert_between(_share(func(d): return p.land_at(d) == WorldPlan.Land.PLATEAU, 20000), 0.15, 0.25)
+
+func test_plateaus_stand_on_their_tops_and_keep_off_ranges_and_keeps():
+	var r := _wadis()
+	var p := r.plan()
+	var m := p.map
+	var lifted := 0
+	for face in CubeSphere.FACES:
+		for j in PlanMap.SIDE:
+			for i in PlanMap.SIDE:
+				var w := m.corner(WorldPlan.S_PLATEAU, face, i, j)
+				assert_between(w, 0.0, 1.0)
+				if w <= 0.0:
+					continue
+				assert_eq(m.corner(WorldPlan.S_MOUNTAIN, face, i, j), 0.0, "no plateau on a range's flank")
+				assert_gt(m.corner(WorldPlan.S_SHORE, face, i, j), 0.0, "no plateau at sea")
+				var top := m.corner(WorldPlan.S_PLATEAU_TOP, face, i, j)
+				assert_between(top, 100.0, 400.0)
+				if w == 1.0:
+					lifted += 1
+					assert_almost_eq(m.corner(WorldPlan.S_BASE, face, i, j), top, 0.01)
+				var d := m.corner_dir(face, i, j)
+				for keep: Dictionary in r.keeps:
+					assert_gt(d.angle_to(keep.dir) * r.radius_m, keep.radius + keep.blend)
+	assert_gt(lifted, 100)
+	assert_gt(p.shapes.plateaus.size(), 1)
 
 func test_wadis_has_three_ranges_to_two_km():
 	var p := _wadis().plan()

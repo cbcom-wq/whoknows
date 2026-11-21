@@ -2,7 +2,7 @@ class_name PlanShapes
 extends RefCounted
 
 ## What a world plan draws on its map (docs/superpowers/specs/2026-11-19-wadis-land-design.md
-## §5.1): so far its seas and ranges; plateaus and canyons come later. Plain
+## §5.1): so far its seas, ranges and plateaus; canyons come later. Plain
 ## data, written while the plan is built and only read after, from any thread.
 ##
 ## A cell is the map's: the quadtree's node at PlanMap.PLAN_DEPTH, numbered
@@ -25,6 +25,9 @@ var seas: Array[Dictionary] = []
 ## spine point, metres it stands over the open ground; "half_width": float,
 ## metres from the spine to its flanks' foot}.
 var ranges: Array[Dictionary] = []
+## Each plateau region, one connected body of cells: {"cells":
+## PackedInt32Array, "top": float, metres above radius its top stands at}.
+var plateaus: Array[Dictionary] = []
 ## The world's radius, metres: what ridge_m measures in.
 var radius_m := 0.0
 
@@ -59,6 +62,13 @@ func add_near(cell: int, shape: int, first := 0, last := -1) -> void:
 	_add_shape.append(shape)
 	_add_first.append(first)
 	_add_last.append(last)
+
+## While building: marks 1 in `out` (a byte per cell) every cell a range has
+## been listed near so far.
+func mark_near_ranges(out: PackedByteArray) -> void:
+	for e in _add_cell.size():
+		if _add_shape[e] < SHAPES:
+			out[_add_cell[e]] = 1
 
 ## Once every shape is added: files the entries cell by cell, each cell's in the
 ## order they were added.
