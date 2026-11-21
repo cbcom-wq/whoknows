@@ -1096,6 +1096,66 @@ func test_a_butte_has_a_flat_top_and_sheer_rock_sides():
 	assert_eq(not_rock, 0, "faces not rock, not steep or talus")
 	assert_eq(bare, 0, "feet with no talus")
 
+## Where a butte gives the ground back there is no seam: across its apron's end
+## and its reach's edge, along SEAM_BEARINGS bearings, the ground between points
+## SEAM_STEP apart never rises or falls SEAM_JUMP. (Open ground off the plateaus'
+## edge bands and the canyons, all a butte stands on, climbs under 0.32 m a metre
+## at its 99th percentile: its dunes' lee faces.)
+const SEAM_BEARINGS := 8
+const SEAM_STEP := 1.0
+const SEAM_JUMP := 0.5
+
+func test_a_butte_gives_the_ground_back_without_a_seam():
+	# For each of WADIS's buttes, along SEAM_BEARINGS bearings: out from its top's
+	# edge (found as test_a_butte_has_a_flat_top_and_sheer_rock_sides finds it), a
+	# point every SEAM_STEP from 5 m inside its apron's end (its face's run and
+	# BUTTE_APRON of its height past the edge) to 30 m past it, and from 30 m
+	# inside its reach to 10 m past it.
+	var t := WorldTerrain.new(_wadis())
+	var radius := t.radius
+	var runs := 0
+	var seams := 0
+	var worst := 0.0
+	for b: Dictionary in t.plan.shapes.buttes:
+		var dir: Vector3 = b.dir
+		var top: float = b.top
+		var reach: float = b.reach
+		var inner := INF
+		for c: Vector2 in b.outline:
+			inner = minf(inner, c.length())
+		inner *= 0.5
+		for k in SEAM_BEARINGS:
+			var bearing := (k + 0.25) * TAU / SEAM_BEARINGS
+			var lo := inner
+			var hi := reach
+			for i in 30:
+				var mid := 0.5 * (lo + hi)
+				if t.height_at(_at(dir, mid, bearing, radius)) >= top - 0.01:
+					lo = mid
+				else:
+					hi = mid
+			var foot: float = lo + b.face + WorldPlan.BUTTE_APRON * b.height
+			for run: Vector2 in [Vector2(foot - 5.0, foot + 30.0), Vector2(reach - 30.0, reach + 10.0)]:
+				runs += 1
+				var was := t.height_at(_at(dir, run.x, bearing, radius))
+				var jump := 0.0
+				var m := run.x + SEAM_STEP
+				while m <= run.y:
+					var h := t.height_at(_at(dir, m, bearing, radius))
+					jump = maxf(jump, absf(h - was))
+					was = h
+					m += SEAM_STEP
+				worst = maxf(worst, jump)
+				if jump >= SEAM_JUMP:
+					seams += 1
+	gut.p("%d runs across buttes' apron ends and reach edges: a metre's step rises or falls %.3f m at most" % [runs, worst])
+	assert_gt(runs, 1000)
+	assert_eq(seams, 0, "runs with a seam")
+	# And on any world: by a butte's reach (BUTTE_SAND or more past its face) the
+	# bank the dunes are cut to stands over the tallest dune, and its roll's few
+	# metres more, so they are whole there.
+	assert_gt(WorldPlan.BUTTE_BANK * WorldPlan.BUTTE_SAND, WorldTerrain.DUNE_HEIGHT + 5.0, "the bank over the dunes by a butte's reach")
+
 ## The `buttes` dial (§5.2) is how many buttes and small mesas stand per 1,000 km²
 ## of open desert, the dials' open share of the sphere. The plan stands that many
 ## rounded to a whole one, so where there is room the count per 1,000 km² is the
@@ -1167,17 +1227,19 @@ func _butte_points(dir: Vector3, out: float, radius: float) -> Array[Vector3]:
 	return points
 
 ## Points on butte `b` (a PlanShapes.buttes entry) on a world of `radius`: its
-## middle, on its top, and out along the bearing of its first corner (where its
-## top's edge is that corner) halfway down its face and halfway out its apron.
+## middle, on its top, and out along the bearing of each of its corners (where
+## its top's edge is that corner) halfway down its face and halfway out its apron.
 func _butte_spots(b: Dictionary, radius: float) -> Array[Vector3]:
 	var dir: Vector3 = b.dir
 	var east: Vector3 = b.east
-	var outline: PackedVector2Array = b.outline
-	var corner := outline[0].length()
+	var north: Vector3 = b.north
 	var face: float = b.face
 	var out: Array[Vector3] = [dir]
-	for m: float in [corner + 0.5 * face, corner + face + 0.5 * WorldPlan.BUTTE_APRON * b.height]:
-		out.append((dir * cos(m / radius) + east * sin(m / radius)).normalized())
+	for c: Vector2 in b.outline:
+		var way := (east * c.x + north * c.y).normalized()
+		var corner := c.length()
+		for m: float in [corner + 0.5 * face, corner + face + 0.5 * WorldPlan.BUTTE_APRON * b.height]:
+			out.append((dir * cos(m / radius) + way * sin(m / radius)).normalized())
 	return out
 
 ## A range's peaks stand sharp (the wadis land spec §6): of the ground within a
@@ -2342,7 +2404,8 @@ func _across(at: Vector3, across: Vector3, metres: float, radius: float) -> Vect
 ## SPOTS seeded points of each kind where the detail is most or the land changes:
 ## on the coast (where the water's edge crosses a cell), on a coast where a range
 ## or plateau meets the sea, across a canyon's walls, on a plateau's edge band and
-## on a range's flanks; and on SPOTS buttes, their tops, faces and aprons.
+## on a range's flanks; and on SPOTS buttes, their tops, and their faces and
+## aprons on every corner's bearing.
 const SPOTS := 40
 
 func _keys_at_depths(t: WorldTerrain, depths: Array, n: int) -> Array[Vector4i]:

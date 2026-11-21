@@ -165,7 +165,7 @@ dials. *My call, tuned at Checkpoint 1:*
 - `sea` 0.15, `seas` 1: one inland sea, about 85 km across on a world 343 km round.
 - `mountains` 0.10, `ranges` 3, `peak` 2,000 m.
 - `plateaus` 0.20, `canyons` 4.
-- `oases` 6; `buttes` 4.5 (Checkpoint 1: the least, in steps of 0.5, that passes the horizon test).
+- `oases` 6; `buttes` 5.0 (Checkpoint 1: the least, in steps of 0.5, that passes the horizon test by 0.01 or more).
 - Dunes and plains: the remaining 0.55.
 
 **Placement pins.** A design may also say *where* a feature goes relative to one of its places,

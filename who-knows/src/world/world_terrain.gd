@@ -813,17 +813,25 @@ func _planned_height(d: Vector3) -> float:
 ## (PlanShapes.butte_at; the wadis land spec §6, Checkpoint 1): the open ground's
 ## detail, its dunes and roll (all its ground over the base, since a butte's
 ## cells are open ground with no range's or plateau's weight, past the beach),
-## cleared from none at the face's foot to whole WorldPlan.BUTTE_SAND on, and the
-## butte standing over that (PlanShapes.butte_rise over its base): its flat top,
-## its sheer face and its apron. Dunes run up to its foot, never over its top.
+## banked down to the face's foot (WorldPlan.BUTTE_BANK), and the butte standing
+## over that (PlanShapes.butte_rise): its flat top, its sheer face and its apron.
+## The bank cuts the dunes no steeper than it climbs, and by the butte's reach it
+## stands over the tallest; so the dunes run up to its foot, never over its top,
+## and come back whole, never steeper than their own lee faces or the bank. Its
+## top stands level on its middle's base; under its face and apron that base
+## eases onto the ground round it, whole by the apron's end, so the butte hands
+## the ground back with no step where the base rolls away from its middle's or a
+## dune's trough dips under it.
 func _butte(d: Vector3, cell: int, base: float, ground: float) -> float:
 	var b := plan.shapes.butte_at(d, cell)
 	if b.x == INF:
 		return ground
-	var open := smoothstep(b.y, b.y + WorldPlan.BUTTE_SAND, b.x)
-	if open < 1.0:
-		ground = base + (ground - base) * open
-	return maxf(ground, b.z - b.w + PlanShapes.butte_rise(b.x, b.y, b.w))
+	ground = minf(ground, base + WorldPlan.BUTTE_BANK * maxf(b.x - b.y, 0.0))
+	var foot := b.y + WorldPlan.BUTTE_APRON * b.w
+	if b.x >= foot:
+		return ground
+	var under := lerpf(b.z - b.w, ground, smoothstep(0.0, foot, b.x))
+	return maxf(ground, under + PlanShapes.butte_rise(b.x, b.y, b.w))
 
 ## A planned plateau's ground on its edge band's inner half, at the unit
 ## direction `d` whose base is `base`, whose region's top is `top` and whose

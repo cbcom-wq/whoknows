@@ -273,15 +273,23 @@ const BUTTE_JITTER := 0.18
 const BUTTE_STRETCH := 1.6
 ## A butte's flat top stands over its base (its middle's S_BASE) by its height;
 ## its sheer face runs BUTTE_FACE of its height out past the top's edge, down to
-## BUTTE_SKIRT of its height, where its apron eases down to the base over
-## BUTTE_APRON more (PlanShapes.butte_rise). Boulders gather (WorldTerrain.in_talus)
-## from the face's foot BUTTE_TALUS of its height out, and the dunes and the
-## plains' roll rise back from none at the face's foot over BUTTE_SAND metres.
+## BUTTE_SKIRT of its height, where its apron eases down onto the ground round it
+## over BUTTE_APRON more (PlanShapes.butte_rise, WorldTerrain._butte). Boulders
+## gather (WorldTerrain.in_talus) from the face's foot BUTTE_TALUS of its height
+## out. The dunes and the plains' roll are banked down to the face's foot: they
+## stand no higher over the base than BUTTE_BANK a metre out from it. A butte
+## reaches BUTTE_SAND metres or more past its face, where the bank stands
+## BUTTE_BANK * BUTTE_SAND (52.5 m) over the base, over the tallest dune
+## (WorldTerrain.DUNE_HEIGHT, 40 m), so the ground is whole there; and the bank
+## climbs less steeply than a dune's lee face (to about 0.47 a metre), so it
+## makes the ground no steeper. The dunes' lee faces' dust comes back over
+## BUTTE_SAND too.
 const BUTTE_FACE := 0.12
 const BUTTE_SKIRT := 0.12
 const BUTTE_APRON := 0.4
 const BUTTE_TALUS := 0.8
 const BUTTE_SAND := 150.0
+const BUTTE_BANK := 0.35
 ## Every cell within BUTTE_CLEAR metres past a butte's reach has no range's or
 ## plateau's weight at its corners and no canyon listed near it, and is
 ## BUTTE_SHORE metres or more from the water at every corner (past the beach); and

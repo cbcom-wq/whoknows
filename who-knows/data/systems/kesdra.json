@@ -3,7 +3,7 @@
 	"bodies": {
 		"p3": {
 			"tweak": {"name": "WADIS", "archetype": "DUNES", "palette": "desert", "atmosphere": "THICK"},
-			"plan": {"sea": 0.15, "seas": 1, "mountains": 0.10, "ranges": 3, "peak": 2000, "plateaus": 0.20, "canyons": 4, "oases": 6, "buttes": 4.5, "keep": [{"place": "oasis", "radius": 2000, "blend": 1500}], "pins": {"sea_shore": {"place": "oasis", "within": [20000, 40000]}, "range": {"place": "oasis", "within": 15000}}},
+			"plan": {"sea": 0.15, "seas": 1, "mountains": 0.10, "ranges": 3, "peak": 2000, "plateaus": 0.20, "canyons": 4, "oases": 6, "buttes": 5.0, "keep": [{"place": "oasis", "radius": 2000, "blend": 1500}], "pins": {"sea_shore": {"place": "oasis", "within": [20000, 40000]}, "range": {"place": "oasis", "within": 15000}}},
 			"places": [
 				{"id": "oasis", "name": "OASIS", "lat": -2.16, "lon": -171.97, "heading": 0, "beacon": true}
 			],

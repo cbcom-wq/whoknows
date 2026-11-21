@@ -311,7 +311,7 @@ func test_wadis_pins_its_plan():
 	var r := SystemRecipe.from_seed(1337).body(&"p3").recipe
 	var d := r.plan().dials
 	assert_eq([d.sea, d.seas, d.mountains, d.ranges, d.peak, d.plateaus, d.canyons, d.oases, d.buttes],
-		[0.15, 1, 0.10, 3, 2000.0, 0.20, 4, 6, 4.5])
+		[0.15, 1, 0.10, 3, 2000.0, 0.20, 4, 6, 5.0])
 	assert_eq(r.keeps.size(), 1)
 	assert_eq(r.keeps[0].radius, 2000.0)
 	assert_eq(r.keeps[0].blend, 1500.0)

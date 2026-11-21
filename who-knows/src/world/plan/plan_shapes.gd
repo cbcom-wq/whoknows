@@ -51,7 +51,7 @@ var canyons: Array[Dictionary] = []
 ## top (the base where it stands, its middle's S_BASE, plus its height); "face":
 ## float, the metres its sheer face runs out past the top's edge (butte_rise);
 ## "reach": float, metres from its middle to the farthest ground it changes,
-## its apron, its talus and the sand it clears; "reach_cos": float, the cosine
+## its apron, its talus and the dunes it banks; "reach_cos": float, the cosine
 ## of that as an angle; "mesa": bool, a small mesa (else a tall butte); "cells":
 ## PackedInt32Array, the cells it is listed near: every cell its reach may
 ## touch}. No two buttes' reaches overlap. The record the plan is built and
