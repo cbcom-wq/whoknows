@@ -318,9 +318,12 @@ func test_wadis_pins_its_plan():
 
 func test_the_validator_knows_the_plan_key():
 	var bad := SystemDesign.from_data({"seed": 1337, "bodies": {"p3": {"plan": {"sea": 0.6, "lakes": 2,
-		"keep": [{"place": "nowhere", "radius": 2000, "blend": 1500}]}}}})
+		"buttes": 12, "keep": [{"place": "nowhere", "radius": 2000, "blend": 1500}]}}}})
 	var problems := bad.problems(SystemRecipe.from_seed(1337))
 	assert_true(Array(problems).any(func(p): return "sea" in p))
 	assert_true(Array(problems).any(func(p): return "lakes" in p))
+	assert_true(Array(problems).any(func(p): return "buttes" in p), "buttes past the rolls' span")
 	assert_true(Array(problems).any(func(p): return "nowhere" in p))
+	var fine := SystemDesign.from_data({"seed": 1337, "bodies": {"p3": {"plan": {"buttes": 2.5}}}})
+	assert_eq(fine.problems(SystemRecipe.from_seed(1337)).size(), 0, "buttes 2.5 is a dial in its span")
 	assert_eq(SystemDesign.for_seed(1337).problems(SystemRecipe.from_seed(1337)).size(), 0)

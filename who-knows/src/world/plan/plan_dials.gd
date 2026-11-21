@@ -2,12 +2,15 @@ class_name PlanDials
 extends RefCounted
 
 ## The few numbers that say what a desert world's plan holds: how much of it is
-## sea, mountain and plateau, and how many seas, ranges, canyons and oases
+## sea, mountain and plateau, how many seas, ranges, canyons and oases, and how
+## thickly buttes stand on its open desert
 ## (docs/superpowers/specs/2026-11-19-wadis-land-design.md §5.2). Rolled from the
 ## world's seed, one sub-seed per dial so a dial added later never reshuffles the
 ## rest; a system design may pin any of them. Shares are of the sphere's surface.
 
-const NAMES: Array[String] = ["sea", "seas", "mountains", "ranges", "plateaus", "canyons", "peak", "oases"]
+## A dial added later goes on the end (`buttes`, at Checkpoint 1).
+const NAMES: Array[String] = ["sea", "seas", "mountains", "ranges", "plateaus", "canyons", "peak", "oases",
+	"buttes"]
 ## Open desert is never less than this share of the world: sea, mountains and
 ## plateaus are scaled together to leave it.
 const OPEN_LEAST := 0.5
@@ -25,6 +28,9 @@ var canyons := 0
 ## Metres: the tallest a range stands over the open ground.
 var peak := 600.0
 var oases := 2
+## Lone buttes and small mesas per 1,000 km² of open desert (open_share() of the
+## sphere): PlanButtes stands them (§6, Checkpoint 1).
+var buttes := 1.0
 
 static func roll(world_seed: int, radius_m: float) -> PlanDials:
 	var plan_seed := WorldSeed.sub(world_seed, &"plan")
@@ -38,6 +44,7 @@ static func roll(world_seed: int, radius_m: float) -> PlanDials:
 	d.canyons = WorldSeed.rng(plan_seed, &"canyons").randi_range(0, 6)
 	d.peak = minf(WorldSeed.rng(plan_seed, &"peak").randf_range(600.0, 2500.0), PEAK_RADIUS_SHARE * radius_m)
 	d.oases = WorldSeed.rng(plan_seed, &"oases").randi_range(2, 8)
+	d.buttes = WorldSeed.rng(plan_seed, &"buttes").randf_range(1.0, 6.0)
 	d._normalise()
 	return d
 

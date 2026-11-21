@@ -14,7 +14,7 @@ extends RefCounted
 ## raise, keep, floor, depth, height (a mesa's top over its level), ground.
 ## Place keys: id, name, lat, lon, heading, beacon.
 ## Plan keys (a desert only): the dials sea, seas, mountains, ranges, plateaus,
-## canyons, peak and oases; keep, a list of {place, radius, blend} discs that
+## canyons, peak, oases and buttes; keep, a list of {place, radius, blend} discs that
 ## keep today's ground; pins, a Dictionary of placement wishes for the plan.
 
 const DIR := "res://data/systems"
@@ -28,12 +28,12 @@ const BODY_KEYS: Array[String] = ["tweak", "stamps", "places", "plan"]
 ## A literal, since GDScript will not add arrays in a constant; a test holds it
 ## equal to PlanDials.NAMES + ["keep", "pins"].
 const PLAN_KEYS: Array[String] = ["sea", "seas", "mountains", "ranges", "plateaus", "canyons", "peak", "oases",
-	"keep", "pins"]
+	"buttes", "keep", "pins"]
 ## Each dial's allowed range in a file: the rolls' span, with 0 allowed for
 ## shares and counts.
 const PLAN_RANGES := {"sea": Vector2(0.0, 0.25), "seas": Vector2(0.0, 2.0), "mountains": Vector2(0.0, 0.15),
 	"ranges": Vector2(0.0, 5.0), "plateaus": Vector2(0.0, 0.30), "canyons": Vector2(0.0, 6.0),
-	"peak": Vector2(600.0, 2500.0), "oases": Vector2(0.0, 8.0)}
+	"peak": Vector2(600.0, 2500.0), "oases": Vector2(0.0, 8.0), "buttes": Vector2(0.0, 6.0)}
 ## A stamp's kind as the file spells it.
 const KINDS := {"flatten": TerrainStamp.Kind.FLATTEN, "basin": TerrainStamp.Kind.BASIN,
 	"mesa": TerrainStamp.Kind.MESA}
