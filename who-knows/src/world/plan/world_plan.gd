@@ -217,8 +217,8 @@ const CANYON_WALL_RUN := 1.5
 ## never under the straight wall above, and at most CANYON_WALL_STEP times
 ## CANYON_WALL_LEDGE over it. Where canyons meet, the one whose stepped walls
 ## stand lowest is the ground (PlanShapes.canyon_at).
-const CANYON_WALL_STEP := 30.0
-const CANYON_WALL_LEDGE := 0.6
+const CANYON_WALL_STEP := 60.0
+const CANYON_WALL_LEDGE := 0.5
 const CANYON_RIM_LOOKS := 32
 const CANYON_RIM_SPARE := 1.0
 ## A canyon's cells keep this many metres more than a kept disc's radius and
