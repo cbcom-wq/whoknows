@@ -152,6 +152,7 @@ sub-seed, as `WorldSeed` does for the recipe, so adding a dial later never reshu
 | `canyons` | how many canyon systems | 0–6 |
 | `peak` | tallest peak, m over the plains | 600–2,500, and at most 4% of the radius |
 | `oases` | how many wild oases | 2–8 |
+| `buttes` | lone buttes and small mesas on open desert, per 1,000 km² of it (Checkpoint 1) | 1–6 |
 
 Dunes and plains fill the rest, and must keep at least half the world: a roll that leaves less
 scales the other shares down. The ranges are a starting point, tuned from renders.
@@ -247,9 +248,17 @@ flat-coloured, one colour a triangle, steep ground `rock` (`ROCK_SLOPE`).
 - **Canyons:** cut into whatever they cross. Stepped walls (terraces, `rock` risers, `ground_high`
   ledges), a flat sandy floor 150–600 m wide that winds, 100–400 m deep where they cut plateaus.
   Every floor is wide enough to land the starter, so you can always be picked up.
+  *Checkpoint 1:* fewer, taller steps than first built (30 m read as rows of teeth from 300 m).
 - **The sea basin:** sand beaches where dunes and plains run down, cliffs where mountains or
   plateaus meet it, a shallow shelf, then a deep floor (to a few hundred metres under the water).
   Wet sand (`damp`) in a band along the waterline.
+  *Checkpoint 1:* a cliff's line wanders in and out along the coast, headlands where it
+  stands at the water and bays where it steps back behind a beach, never a ruler-straight wall.
+- **Buttes on open ground** (Checkpoint 1, 2026-11-21): lone buttes and small mesas, 60–200 m
+  over the ground around, flat-topped with sheer faceted `rock` sides and talus at the foot,
+  scattered over dunes and plains (singly or in small groups) by the `buttes` dial, so that from
+  300 m something stands on the horizon over most of the world (the anti-goal in §3). They keep
+  clear of the sea, ranges, plateaus, canyons, kept discs and sites.
 - **Wild oasis sites:** green and palms (§9).
 
 **Seen from afar.** The far mesh (`BodyLook`) samples `height_at` and `colour_at` as today, so the
@@ -447,6 +456,15 @@ Each phase ends with renders and numbers shown to the owner.
    and treading, deep-water chunks. *Checkpoint 3:* the shore and sea renders.
 4. **Wild oases.** Sites to places, pools, palms, green, ruins. *Checkpoint 4:* oasis renders.
 5. **Docs and skills** (§14).
+
+**Checkpoint 1 (2026-11-21), what the owner decided.** From the map and renders:
+- **Buttes on open ground** (§6, the `buttes` dial in §5.2): from 300 m, something stood on the
+  horizon from only 54% of open spots, against 80%; more, smaller plateau regions saturated near
+  65% and cost the plateaus' sea cliffs.
+- **Cliffs that wander** (§6): the first range cliffs ran ~420 m tall and ruler-straight.
+- **Fewer, taller canyon steps** (§6).
+- **The plans built side by side on workers at load:** two planned deserts added about 1.2 s
+  before the first frame (§5.1 asks that building a plan never hitches the game).
 
 ## 13. Approaches
 
