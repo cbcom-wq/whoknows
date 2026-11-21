@@ -17,7 +17,9 @@ extends RefCounted
 ## §3.5) -- with steep ground bare rock, in shade patches a few triangles
 ## across (PATCH_QUADS) at every detail. A desert (DUNES) is its own shape
 ## and colours on the same continent layer: dunes, mesas and towers (the
-## desert world spec §7.2), and the wind that laid them (wind_at).
+## desert world spec §7.2), and the wind that laid them (wind_at). A planned
+## desert draws its plan's land instead (`plan`; the wadis land spec §5, §6),
+## and that old ground only within its kept discs, to the bit.
 
 ## Continents: this many across the unit sphere.
 const CONTINENT_SCALE := 1.4
@@ -136,6 +138,9 @@ const _DOWN := -1.0 / DUNE_LEE
 
 var recipe: WorldRecipe
 var radius: float
+## Metres from the ground's lowest to its highest, at most, centred on the
+## radius: the recipe's relief_m, or on a planned desert the plan's whole range
+## (_planned_relief), which the streaming pads its bounds by.
 var relief: float
 var archetype: WorldRecipe.Archetype
 var palette: Dictionary
@@ -157,6 +162,28 @@ const STAMP_CULL_SLACK := 2.0e-3
 ## in), and per stamp the cosine of the angle past which it is of no concern.
 var stamps: Array[TerrainStamp] = []
 var _stamp_cos: PackedFloat64Array = PackedFloat64Array()
+## One cap holding every stamp's (its centre, and the cosine of its angular
+## radius, STAMP_CULL_SLACK past the farthest): past it no stamp is of
+## concern, by one dot. Until the stamps are all taken, the whole sphere.
+var _stamps_centre := Vector3.ZERO
+var _stamps_cos := -2.0
+
+## A planned desert's plan (WorldRecipe.plan(), the wadis land spec §5): null on
+## every other world, and on a desert drawn as it always was (recipe.planned
+## false). Its ground is the plan's, and today's inside a kept disc.
+var plan: WorldPlan
+## The plan's map and its kept discs' cap (WorldPlan.keeps_centre, keeps_cos),
+## held here: read per height.
+var _map: PlanMap
+var _keeps_centre := Vector3.ZERO
+var _keeps_cos := 2.0
+## Half today's relief (recipe.relief_m): what today's desert ground reads, and
+## everything reached from it, where `relief` is a planned desert's whole
+## range. So a kept disc stays as it always was.
+var _legacy_half := 0.0
+## This terrain's own fields for the plan's samples (WorldPlan.S_SIZE long): one
+## per terrain, so one per thread, and none made per height.
+var _fields := PackedFloat64Array()
 
 var _continents := FastNoiseLite.new()
 var _hills := FastNoiseLite.new()
@@ -177,6 +204,7 @@ func _init(p_recipe: WorldRecipe) -> void:
 	recipe = p_recipe
 	radius = recipe.radius_m
 	relief = recipe.relief_m
+	_legacy_half = recipe.relief_m * 0.5
 	archetype = recipe.archetype
 	palette = SpacePalette.WORLDS[recipe.palette]
 	_continents.seed = WorldSeed.noise_seed(WorldSeed.sub(recipe.seed, &"continents"))
@@ -214,11 +242,31 @@ func _init(p_recipe: WorldRecipe) -> void:
 		_tower_gap = _cells(FastNoiseLite.RETURN_DISTANCE)
 		_tower_cell = _cells(FastNoiseLite.RETURN_CELL_VALUE)
 		_tower_scale = (floorf(PI * 0.25 * radius / TOWER_WAVE) + 0.5) / (PI * 0.25)
+	plan = recipe.plan()
+	if plan != null:
+		_map = plan.map
+		_keeps_centre = plan.keeps_centre
+		_keeps_cos = plan.keeps_cos
+		_fields.resize(WorldPlan.S_SIZE)
+		relief = _planned_relief()
 	_take_stamps()
+
+## A planned desert's relief: twice the farthest the plan's bounds over the
+## whole world (each face's node at depth 0) reach from the radius, either way,
+## so its deepest seabed and highest peak are within half of it, and the
+## streaming's relief pad covers them.
+func _planned_relief() -> float:
+	var low := INF
+	var high := -INF
+	for face in CubeSphere.FACES:
+		var b := plan.bounds_of(Vector4i(face, 0, 0, 0))
+		low = minf(low, b.x)
+		high = maxf(high, b.y)
+	return 2.0 * maxf(absf(low), absf(high))
 
 ## Copies the recipe's stamps, outer first, and gives each FLATTEN or MESA with
 ## no level the mean of the ground under its flat part with the stamps before
-## it applied.
+## it applied; then the cap that holds them all.
 ## The copies are this terrain's own: the recipe is shared across threads and
 ## stays as it was.
 func _take_stamps() -> void:
@@ -233,6 +281,18 @@ func _take_stamps() -> void:
 		stamps.append(s)
 		var outer := maxf(s.reach(), s.radius + TerrainStamp.CLEAR_MARGIN)
 		_stamp_cos.append(cos(minf(outer / radius + STAMP_CULL_SLACK, PI)))
+	var middle := Vector3.ZERO
+	for s in stamps:
+		middle += s.centre
+	if middle.length_squared() < 1e-12:
+		return
+	var centre := middle.normalized()
+	var widest := 0.0
+	for i in stamps.size():
+		widest = maxf(widest, centre.angle_to(stamps[i].centre) + acos(clampf(_stamp_cos[i], -1.0, 1.0)))
+	if widest + STAMP_CULL_SLACK < PI:
+		_stamps_centre = centre
+		_stamps_cos = cos(widest + STAMP_CULL_SLACK)
 
 ## Metres above radius at `dir`, within half the relief either way: the base
 ## ground with each stamp applied in order.
@@ -243,6 +303,8 @@ func height_at(dir: Vector3) -> float:
 	# The base ground from `dir` as given, as with no stamps: normalising it a second
 	# time would shift far ground by a rounding (bit for bit beyond a stamp's reach).
 	var h := base_height_at(dir)
+	if d.dot(_stamps_centre) < _stamps_cos:
+		return h
 	for i in stamps.size():
 		if d.dot(stamps[i].centre) < _stamp_cos[i]:
 			continue
@@ -269,6 +331,8 @@ func stamp_clear(dir: Vector3) -> bool:
 	if stamps.is_empty():
 		return false
 	var d := dir.normalized()
+	if d.dot(_stamps_centre) < _stamps_cos:
+		return false
 	for i in stamps.size():
 		if d.dot(stamps[i].centre) < _stamp_cos[i]:
 			continue
@@ -280,6 +344,8 @@ func stamp_clear(dir: Vector3) -> bool:
 ## The innermost stamp's ground at `d` if `d` is within its radius, else &"".
 func _stamp_ground(d: Vector3) -> StringName:
 	var found := &""
+	if d.dot(_stamps_centre) < _stamps_cos:
+		return found
 	for i in stamps.size():
 		if d.dot(stamps[i].centre) < _stamp_cos[i]:
 			continue
@@ -289,9 +355,19 @@ func _stamp_ground(d: Vector3) -> StringName:
 	return found
 
 ## The ground before any stamp, metres above radius within half the relief
-## either way.
+## either way. On a planned desert the plan's (_planned_height), but inside a
+## kept disc today's, to the bit, eased into the plan's over its blend (the
+## wadis land spec §5.6).
 func base_height_at(dir: Vector3) -> float:
 	var d := dir.normalized()
+	if plan != null:
+		# _kept(d), written out.
+		var w := 0.0 if d.dot(_keeps_centre) < _keeps_cos else plan.keep_weight(d)
+		if w < 1.0:
+			var planned := _planned_height(d)
+			if w == 0.0:
+				return planned
+			return lerpf(planned, _desert_height(d, _continents.get_noise_3dv(d * CONTINENT_SCALE)), w)
 	var continent := _continents.get_noise_3dv(d * CONTINENT_SCALE)
 	if archetype == WorldRecipe.Archetype.DUNES:
 		return _desert_height(d, continent)
@@ -341,11 +417,14 @@ func wind_at(dir: Vector3) -> Vector3:
 
 ## Whether `dir` is where a desert's boulders gather: the low ground of the
 ## tower band below a mesa (which holds the MESA_EDGE the dunes fade over),
-## off the towers themselves. False on any other world.
+## off the towers themselves. On a planned desert, only so within a kept disc
+## (over the inner half of its blend). False on any other world.
 func in_talus(dir: Vector3) -> bool:
 	if archetype != WorldRecipe.Archetype.DUNES:
 		return false
 	var d := dir.normalized()
+	if plan != null and _kept(d) <= 0.5:
+		return false
 	var z := _mesa_continent(d, _continents.get_noise_3dv(d * CONTINENT_SCALE))
 	return z >= MESA_FROM - TOWER_BAND and z < MESA_FROM and _tower(d, z) == 0.0
 
@@ -365,6 +444,10 @@ func ground_at(dir: Vector3, slope: float) -> StringName:
 		if stamped != &"":
 			return stamped
 	if archetype == WorldRecipe.Archetype.DUNES:
+		# A kept disc's own over the inner half of its blend, as its heights
+		# are mostly its own there.
+		if plan != null and _kept(d) <= 0.5:
+			return _planned_ground(d)
 		return _desert_ground(d)
 	var n := _pattern.get_noise_3dv(d * PATTERN_SCALE)
 	match archetype:
@@ -411,11 +494,12 @@ func _terrace(h: float) -> float:
 ## A desert's height at `d`, from the continents' noise there: dunes on the
 ## continent layer (flattened to DUNE_FLOOR), faded toward the mesas and the
 ## wind axis's poles; terraces above the mesa line; towers in the band below.
-## The dune's stand (_dune_stand), its phase (_phase) and its cross-section
-## are written out here rather than called: this runs per height, on the main
-## thread too, and a GDScript call costs more than a noise lookup.
+## The dune's stand (_dune_stand) is written out here rather than called: this
+## runs per height, on the main thread too, and a GDScript call costs more than
+## a noise lookup. The dune itself is _dune's, which the plan's dune seas share.
+## Half today's relief throughout (_legacy_half), never a planned desert's.
 func _desert_height(d: Vector3, continent: float) -> float:
-	var half := relief * 0.5
+	var half := _legacy_half
 	# _mesa_continent(d, continent), written out.
 	var z := CONTINENT_SHARE * continent
 	if z >= MESA_FROM - TOWER_BAND - MESA_HILLS:
@@ -431,32 +515,7 @@ func _desert_height(d: Vector3, continent: float) -> float:
 		if pole > DUNE_POLE:
 			stand *= 1.0 - smoothstep(DUNE_POLE, (1.0 + DUNE_POLE) * 0.5, pole)
 		if stand > 0.0:
-			# The phase, within one wave (_phase).
-			var t := fposmod(-radius * acos(clampf(a, -1.0, 1.0)) / DUNE_WAVE
-				+ DUNE_WARP * _wind.get_noise_3dv(d * (radius / DUNE_TURN)), 1.0)
-			# The cross-section over one wave, t from 0 at a trough: rising
-			# gently over 1 - DUNE_LEE to the crest, falling over DUNE_LEE; the
-			# crest rounded by a parabola tangent to both slopes over
-			# DUNE_CREST_EASE either side, the trough over DUNE_EASE. Never
-			# below 0.
-			var p: float
-			if t < _CREST - DUNE_CREST_EASE:
-				if t >= DUNE_EASE:
-					p = t * _UP
-				else:
-					var e := t + DUNE_EASE
-					p = _DOWN * t + (_UP - _DOWN) * e * e / (4.0 * DUNE_EASE)
-			elif t <= _CREST + DUNE_CREST_EASE:
-				var e := t - _CREST + DUNE_CREST_EASE
-				p = 1.0 + _UP * (t - _CREST) + (_DOWN - _UP) * e * e / (4.0 * DUNE_CREST_EASE)
-			elif t <= 1.0 - DUNE_EASE:
-				p = (1.0 - t) / DUNE_LEE
-			else:
-				var x := t - 1.0
-				var e := x + DUNE_EASE
-				p = _DOWN * x + (_UP - _DOWN) * e * e / (4.0 * DUNE_EASE)
-			var swell := clampf(_swell.get_noise_3dv(d * (radius / DUNE_SWELL)) + 0.5, 0.0, 1.0)
-			ground += DUNE_HEIGHT * stand * p * (DUNE_LOW + (1.0 - DUNE_LOW) * swell)
+			ground += _dune(d, a, stand)
 	else:
 		# Terrace k + 1, rising from terrace k (or from the floor for the first).
 		var t := (z - MESA_FROM) / MESA_STEP
@@ -469,6 +528,95 @@ func _desert_height(d: Vector3, continent: float) -> float:
 		if top > ground:
 			ground = lerpf(ground, top, _tower(d, z))
 	return clampf(ground, -half, half)
+
+## A dune's height over the ground it lies on at `d`, whose d . wind_axis is
+## `a`, where it stands `stand` of its height: by its phase (_phase, written
+## out here), its cross-section over that wave, and its swell along the crest.
+## Today's desert (_desert_height) and the plan's dune seas (_planned_height)
+## both lay it.
+func _dune(d: Vector3, a: float, stand: float) -> float:
+	# The phase, within one wave (_phase).
+	var t := fposmod(-radius * acos(clampf(a, -1.0, 1.0)) / DUNE_WAVE
+		+ DUNE_WARP * _wind.get_noise_3dv(d * (radius / DUNE_TURN)), 1.0)
+	# The cross-section over one wave, t from 0 at a trough: rising gently over
+	# 1 - DUNE_LEE to the crest, falling over DUNE_LEE; the crest rounded by a
+	# parabola tangent to both slopes over DUNE_CREST_EASE either side, the
+	# trough over DUNE_EASE. Never below 0.
+	var p: float
+	if t < _CREST - DUNE_CREST_EASE:
+		if t >= DUNE_EASE:
+			p = t * _UP
+		else:
+			var e := t + DUNE_EASE
+			p = _DOWN * t + (_UP - _DOWN) * e * e / (4.0 * DUNE_EASE)
+	elif t <= _CREST + DUNE_CREST_EASE:
+		var e := t - _CREST + DUNE_CREST_EASE
+		p = 1.0 + _UP * (t - _CREST) + (_DOWN - _UP) * e * e / (4.0 * DUNE_CREST_EASE)
+	elif t <= 1.0 - DUNE_EASE:
+		p = (1.0 - t) / DUNE_LEE
+	else:
+		var x := t - 1.0
+		var e := x + DUNE_EASE
+		p = _DOWN * x + (_UP - _DOWN) * e * e / (4.0 * DUNE_EASE)
+	var swell := clampf(_swell.get_noise_3dv(d * (radius / DUNE_SWELL)) + 0.5, 0.0, 1.0)
+	return DUNE_HEIGHT * stand * p * (DUNE_LOW + (1.0 - DUNE_LOW) * swell)
+
+## A planned desert's ground at the unit direction `d`, as the plan lays it,
+## kept discs aside: the plan's base (WorldPlan.S_BASE: the open roll, the sea's
+## basin, the ranges' and plateaus' lift), with today's dunes on its dune seas
+## (_plan_dunes), faded toward the wind axis's poles as today's are. Only the
+## map's land fields are read: nothing here needs the canyons'.
+func _planned_height(d: Vector3) -> float:
+	var f := _fields
+	_map.sample(d, f, WorldPlan.LAND_FIELDS)
+	var ground := f[WorldPlan.S_BASE]
+	if f[WorldPlan.S_DUNES] <= WorldPlan.DUNES_FROM:
+		return ground
+	var stand := _plan_dunes(f)
+	if stand > 0.0:
+		var a := d.dot(wind_axis)
+		# pole_fade(a), written out.
+		var pole := absf(a)
+		if pole > DUNE_POLE:
+			stand *= 1.0 - smoothstep(DUNE_POLE, (1.0 + DUNE_POLE) * 0.5, pole)
+		if stand > 0.0:
+			ground += _dune(d, a, stand)
+	return ground
+
+## A planned desert's kept discs' weight at the unit direction `d`
+## (WorldPlan.keep_weight), by one dot where no disc reaches.
+func _kept(d: Vector3) -> float:
+	if d.dot(_keeps_centre) < _keeps_cos:
+		return 0.0
+	return plan.keep_weight(d)
+
+## How much of today's dunes stand on the plan's ground, from its fields `f`
+## (a sample's): none on the gravel plains (S_DUNES at DUNES_FROM or under),
+## rising to all where the ground is all dune sea; and only on open ground,
+## fading out down a beach to the water and up onto a range's or a plateau's
+## land, so no dune lies under the sea or on a peak and none ends in a step.
+func _plan_dunes(f: PackedFloat64Array) -> float:
+	var dunes := f[WorldPlan.S_DUNES]
+	if dunes <= WorldPlan.DUNES_FROM or f[WorldPlan.S_SHORE] <= 0.0:
+		return 0.0
+	return smoothstep(WorldPlan.DUNES_FROM, 1.0, dunes) \
+		* smoothstep(0.0, WorldPlan.BEACH_WIDTH, f[WorldPlan.S_SHORE]) \
+		* (1.0 - smoothstep(0.0, WorldPlan.MOUNTAINS_FROM, f[WorldPlan.S_MOUNTAIN])) \
+		* (1.0 - smoothstep(0.0, WorldPlan.PLATEAU_FROM, f[WorldPlan.S_PLATEAU]))
+
+## A planned desert's colours as the plan lays them, where its kept discs
+## weigh half or less (steep ground is rock before this is asked): a standing
+## dune's lee face, crest to trough, dust, as today's (DUST_STAND); the rest
+## ground_low.
+func _planned_ground(d: Vector3) -> StringName:
+	_map.sample(d, _fields, WorldPlan.LAND_FIELDS)
+	var stand := _plan_dunes(_fields)
+	if stand < DUST_STAND:
+		return &"ground_low"
+	var a := d.dot(wind_axis)
+	if stand * pole_fade(a) >= DUST_STAND and fposmod(_phase(d, a), 1.0) > _CREST:
+		return &"dust"
+	return &"ground_low"
 
 ## How much of its height a dune stands at a point whose d . wind_axis is `a`
 ## and whose continent layer is `z`: 1 on the open dunes, fading to 0 toward

@@ -109,10 +109,14 @@ func test_shades_come_in_patches_a_few_triangles_across():
 
 # The desert (the desert world spec §7.2): long dunes running one way and
 # turning across the world, flat mesas with rock risers, rock towers where the
-# terraces break up.
+# terraces break up. A planned desert keeps this ground in its kept discs (the
+# wadis land spec §5.6), so it is tested as a desert drawn as it always was.
 
+## Today's desert ground everywhere: a desert recipe with its plan off.
 func _desert(seed := 1) -> WorldTerrain:
-	return WorldTerrain.new(_recipe(seed, WorldRecipe.Archetype.DUNES))
+	var r := _recipe(seed, WorldRecipe.Archetype.DUNES)
+	r.planned = false
+	return WorldTerrain.new(r)
 
 ## An open point on a desert's dunes: sand, off the talus, below where the
 ## dunes start to fade toward a mesa, and clear of the wind axis's poles.
@@ -144,19 +148,26 @@ static func _spread(heights: PackedFloat64Array) -> float:
 		hi = maxf(hi, h)
 	return hi - lo
 
-func test_dunes_stay_within_the_relief():
+func test_a_desert_stays_within_its_relief_planned_or_not():
+	# Today's within today's relief; a planned desert's within its plan's,
+	# which holds its seabed and its peaks.
 	for seed in [1, 200]:
-		var t := _desert(seed)
-		var rng := RandomNumberGenerator.new()
-		rng.seed = seed
-		var lo := INF
-		var hi := -INF
-		for i in 2000:
-			var h := t.height_at(_dir(rng))
-			lo = minf(lo, h)
-			hi = maxf(hi, h)
-		assert_gte(lo, -t.relief * 0.5, "seed %d" % seed)
-		assert_lte(hi, t.relief * 0.5, "seed %d" % seed)
+		var planned := WorldTerrain.new(_recipe(seed, WorldRecipe.Archetype.DUNES))
+		assert_not_null(planned.plan, "seed %d: a desert has a plan" % seed)
+		for t: WorldTerrain in [_desert(seed), planned]:
+			var rng := RandomNumberGenerator.new()
+			rng.seed = seed
+			var lo := INF
+			var hi := -INF
+			for i in 2000:
+				var h := t.height_at(_dir(rng))
+				lo = minf(lo, h)
+				hi = maxf(hi, h)
+			gut.p("seed %d, %s: %.1f to %.1f m, relief %.1f m" % [seed,
+				"planned" if t.plan != null else "today's", lo, hi, t.relief])
+			assert_gte(lo, -t.relief * 0.5, "seed %d" % seed)
+			assert_lte(hi, t.relief * 0.5, "seed %d" % seed)
+		assert_eq(_desert(seed).relief, planned.recipe.relief_m, "seed %d: today's relief" % seed)
 
 func test_the_windward_side_is_gentler_than_the_lee():
 	for seed in [1, 200, 400]:

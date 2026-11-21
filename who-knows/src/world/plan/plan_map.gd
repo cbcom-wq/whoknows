@@ -104,31 +104,68 @@ func at(field: int, dir: Vector3) -> float:
 	# NaN only where an INF corner had no weight: as far as INF.
 	return s if s == s else INF
 
-## Every field at `dir` into `out` (fields long), each as at() gives it, or
-## only the first `count` of them, and gives back the number of the cell it
-## falls in (as cell_number does); the blend is written out here, since this
-## runs per height.
+## Every field at `dir` into `out` (fields long), each as at() gives it, to the
+## bit, or only the first `count` of them, and gives back the number of the
+## cell it falls in (as cell_number does). Where it falls (_locate) and the
+## blend are written out here, since this runs per height.
 func sample(dir: Vector3, out: PackedFloat64Array, count := -1) -> int:
-	var cell := _locate(dir)
-	var fu := cell.y
-	var fv := cell.z
+	# _locate(dir), written out.
+	var d := dir.normalized()
+	var ax := absf(d.x)
+	var ay := absf(d.y)
+	var az := absf(d.z)
+	var face: int
+	var b: float
+	var c: float
+	if ax >= ay and ax >= az:
+		if d.x > 0.0:
+			face = 0; b = -d.z; c = d.y
+		else:
+			face = 1; b = d.z; c = d.y
+	elif ay >= az:
+		if d.y > 0.0:
+			face = 2; b = d.x; c = -d.z
+		else:
+			face = 3; b = d.x; c = d.z
+	elif d.z > 0.0:
+		face = 4; b = d.x; c = d.y
+	else:
+		face = 5; b = -d.x; c = d.y
+	var bb := b * b
+	var cc := c * c
+	var q := 3.0 - 2.0 * bb + 2.0 * cc
+	var vv := 12.0 * cc / (q + sqrt(maxf(0.0, q * q - 24.0 * cc)))
+	q = 3.0 + 2.0 * bb - 2.0 * cc
+	var uu := 12.0 * bb / (q + sqrt(maxf(0.0, q * q - 24.0 * bb)))
+	var x := clampf((b / sqrt(0.5 - vv / 6.0) + 1.0) * 0.5 * CELLS, 0.0, CELLS)
+	var y := clampf((c / sqrt(0.5 - uu / 6.0) + 1.0) * 0.5 * CELLS, 0.0, CELLS)
+	var ix := mini(int(x), CELLS - 1)
+	var iy := mini(int(y), CELLS - 1)
+	# As 32-bit floats, as _locate's Vector3 holds them.
+	var across := Vector2(x - ix, y - iy)
+	var fu := across.x
+	var fv := across.y
 	var w00 := (1.0 - fu) * (1.0 - fv)
 	var w10 := fu * (1.0 - fv)
 	var w01 := (1.0 - fu) * fv
 	var w11 := fu * fv
-	var k := int(cell.x) * fields
-	var up := SIDE * fields
-	for f in (fields if count < 0 else count):
-		var a := _values[k + f]
-		var b := _values[k + fields + f]
-		var c := _values[k + up + f]
-		var e := _values[k + up + fields + f]
-		if a == b and a == c and a == e:
+	var values := _values
+	var stride := fields
+	var k := ((face * SIDE + iy) * SIDE + ix) * stride
+	var up := SIDE * stride
+	var over := up + stride
+	for f in (stride if count < 0 else count):
+		var a := values[k]
+		var e := values[k + stride]
+		var g := values[k + up]
+		var h := values[k + over]
+		if a == e and a == g and a == h:
 			out[f] = a
 		else:
-			var s := a * w00 + b * w10 + c * w01 + e * w11
+			var s := a * w00 + e * w10 + g * w01 + h * w11
 			out[f] = s if s == s else INF   # as in at()
-	return _number(int(cell.x))
+		k += 1
+	return (face * CELLS + iy) * CELLS + ix
 
 ## The number of the cell `dir` falls in, (face * CELLS + j) * CELLS + i: as
 ## cell_of's, but in closed form, so cheap enough to ask per height. Within a
@@ -253,13 +290,32 @@ func values_of(field: int) -> PackedFloat32Array:
 ## CubeSphere.direction in closed form: on face (n, eu, ev) a unit direction's
 ## b = d . eu is u * sqrt(1/2 - v^2/6) and its c = d . ev is
 ## v * sqrt(1/2 - u^2/6), so v^2 solves v^4 + (2b^2 - 2c^2 - 3) v^2 + 6c^2 = 0
-## (the smaller root, written without cancelling), and u^2 likewise.
+## (the smaller root, written without cancelling), and u^2 likewise. The face
+## (CubeSphere.face_of) and b and c (by CubeSphere.AXES) are written out, and
+## sample() writes all of this out again, since it runs per height: each axis
+## is a unit axis, so each dot is one of d's components, exactly.
 func _locate(dir: Vector3) -> Vector3:
 	var d := dir.normalized()
-	var face := CubeSphere.face_of(d)
-	var axes: Array = CubeSphere.AXES[face]
-	var b := d.dot(axes[1])
-	var c := d.dot(axes[2])
+	var ax := absf(d.x)
+	var ay := absf(d.y)
+	var az := absf(d.z)
+	var face: int
+	var b: float
+	var c: float
+	if ax >= ay and ax >= az:
+		if d.x > 0.0:
+			face = 0; b = -d.z; c = d.y
+		else:
+			face = 1; b = d.z; c = d.y
+	elif ay >= az:
+		if d.y > 0.0:
+			face = 2; b = d.x; c = -d.z
+		else:
+			face = 3; b = d.x; c = d.z
+	elif d.z > 0.0:
+		face = 4; b = d.x; c = d.y
+	else:
+		face = 5; b = -d.x; c = d.y
 	var bb := b * b
 	var cc := c * c
 	var q := 3.0 - 2.0 * bb + 2.0 * cc

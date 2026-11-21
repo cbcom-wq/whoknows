@@ -4,7 +4,7 @@ extends GutTest
 ## every cell that reaches the beach.
 const AWAY_FROM_SEA := 2.0 * WorldPlan.PUDDLE_FROM
 
-var _wadis_plan: WorldPlan
+var _wadis_terrain: WorldTerrain
 
 func _wadis() -> WorldRecipe:
 	return SystemRecipe.from_seed(1337).body(&"p3").recipe
@@ -592,6 +592,23 @@ func test_at_is_bilinear_in_the_cell():
 	var d := CubeSphere.direction(3, r.x + r.z * 0.25, r.y + r.z * 0.5)
 	assert_almost_eq(m.at(0, d), 1.0 * 0.375 + 2.0 * 0.125 + 3.0 * 0.375 + 4.0 * 0.125, 1e-4)
 
+func test_a_sample_is_at_and_cell_number_to_the_bit():
+	# sample() writes out where a direction falls (_locate): it gives every field
+	# as at() does and its cell as cell_number does, for directions of any length,
+	# on every face and on the faces' edges and corners.
+	var p := _wadis().plan()
+	var out := PackedFloat64Array(); out.resize(WorldPlan.S_SIZE)
+	var rng := RandomNumberGenerator.new(); rng.seed = 41
+	var dirs: Array[Vector3] = []
+	for k in 2000:
+		dirs.append(_dir(rng) * (1.0 if k % 2 == 0 else 3.7))
+	for e: Array in _face_edge_points(120):
+		dirs.append(e[0])
+	for d in dirs:
+		assert_eq(p.map.sample(d, out), p.map.cell_number(d))
+		for f in WorldPlan.S_SIZE:
+			assert_eq(out[f], p.map.at(f, d), "field %d" % f)
+
 func test_every_cell_has_four_neighbours_that_name_it_back():
 	var m := PlanMap.new(1)
 	var n := PlanMap.CELLS
@@ -757,6 +774,43 @@ func test_the_bounds_hold_the_base_less_and_plus_its_detail_the_canyons_and_the_
 		assert_gte(b.y, 300.0)
 	assert_lte(p.bounds_of(CubeSphere.key_for(wadoo, 12)).x, -60.0)
 
+func test_wadoos_disc_is_todays_ground_to_the_bit():
+	var planned := WorldTerrain.new(_wadis())
+	var r := _wadis(); r.planned = false
+	var today := WorldTerrain.new(r)
+	for d in _disc_points(SystemDesign.dir_of(-2.16, -171.97), 2000.0, 2000):
+		assert_eq(planned.height_at(d), today.height_at(d))
+		assert_eq(planned.colour_at(d, 0.2, 8.0), today.colour_at(d, 0.2, 8.0))
+
+func test_the_kept_disc_eases_out_without_a_step():
+	# today's ground has its own cliffs (towers), so the weight is what is checked
+	var p := _wadis().plan()
+	var wadoo := SystemDesign.dir_of(-2.16, -171.97)
+	var radius := _wadis().radius_m
+	for bearing in 36:
+		var last := NAN
+		for m in range(1900, 3700):
+			var w := p.keep_weight(_at(wadoo, float(m), deg_to_rad(bearing * 10.0), radius))
+			if m <= 2000: assert_eq(w, 1.0)
+			if m >= 3500: assert_eq(w, 0.0)
+			if not is_nan(last):
+				assert_lte(absf(w - last), 1.5 / 1500.0 + 1e-6)   # smoothstep's steepest, a metre
+			last = w
+
+func test_a_planned_desert_reaches_its_peaks_and_its_seabed():
+	var t := WorldTerrain.new(_wadis())
+	var hs := _heights(t, 20000)
+	assert_lt(hs.min(), t.plan.sea_level - 100.0)
+	assert_gt(hs.max(), 1000.0)
+
+## The heights of `t` at `n` seeded directions, even over the sphere.
+func _heights(t: WorldTerrain, n: int) -> Array[float]:
+	var rng := RandomNumberGenerator.new(); rng.seed = 27
+	var out: Array[float] = []
+	for k in n:
+		out.append(t.height_at(_dir(rng)))
+	return out
+
 ## `n` seeded points in the disc of `radius_m` round `centre`, even over its area.
 func _disc_points(centre: Vector3, radius_m: float, n: int) -> Array[Vector3]:
 	var rng := RandomNumberGenerator.new(); rng.seed = 33
@@ -765,6 +819,32 @@ func _disc_points(centre: Vector3, radius_m: float, n: int) -> Array[Vector3]:
 	for k in n:
 		out.append(_off_by(centre, sqrt(rng.randf()) * radius_m, rng.randf() * TAU, radius))
 	return out
+
+## As _off_by, `m` metres from `centre` on bearing `bearing` on a world of
+## `radius`, but worked out in 64-bit floats and only then made a Vector3: so
+## points a metre apart are a metre apart to under a millimetre (_off_by turns
+## 32-bit vectors, a few millimetres out on WADIS).
+func _at(centre: Vector3, m: float, bearing: float, radius: float) -> Vector3:
+	var n := sqrt(centre.x * centre.x + centre.y * centre.y + centre.z * centre.z)
+	var cx := centre.x / n
+	var cy := centre.y / n
+	var cz := centre.z / n
+	# East, centre x UP (or x RIGHT at a pole), then north, centre x east.
+	var ex := -cz
+	var ey := 0.0
+	var ez := cx
+	if ex * ex + ez * ez < 1e-6:
+		ex = 0.0; ey = cz; ez = -cy
+	var en := sqrt(ex * ex + ey * ey + ez * ez)
+	ex /= en; ey /= en; ez /= en
+	var nx := cy * ez - cz * ey
+	var ny := cz * ex - cx * ez
+	var nz := cx * ey - cy * ex
+	var tx := ex * cos(bearing) + nx * sin(bearing)
+	var ty := ey * cos(bearing) + ny * sin(bearing)
+	var tz := ez * cos(bearing) + nz * sin(bearing)
+	var a := m / radius
+	return Vector3(cx * cos(a) + tx * sin(a), cy * cos(a) + ty * sin(a), cz * cos(a) + tz * sin(a))
 
 ## The direction `metres` from `from` on a world of `radius`, on bearing `bearing`.
 func _off_by(from: Vector3, metres: float, bearing: float, radius: float) -> Vector3:
@@ -802,11 +882,11 @@ func _centre(cell: Vector4i) -> Vector3:
 	var r := CubeSphere.node_rect(cell)
 	return CubeSphere.direction(cell.x, r.x + r.z * 0.5, r.y + r.z * 0.5)
 
-## WADIS's ground at `d`: the plan's base, until the terrain reads the plan.
+## WADIS's ground at `d`, as its terrain draws it.
 func _ground(d: Vector3) -> float:
-	if _wadis_plan == null:
-		_wadis_plan = _wadis().plan()
-	return _wadis_plan.map.at(WorldPlan.S_BASE, d)
+	if _wadis_terrain == null:
+		_wadis_terrain = WorldTerrain.new(_wadis())
+	return _wadis_terrain.height_at(d)
 
 ## The share of `n` seeded directions, even over the sphere, where `pred` holds.
 func _share(pred: Callable, n: int) -> float:

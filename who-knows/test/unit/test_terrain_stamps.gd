@@ -3,8 +3,13 @@ extends GutTest
 ## Hand-made shapes in the ground (the desert world spec §8.1): a flattened
 ## disc and a basin, blended into height_at; a world with none is untouched.
 
+## p3 from its seed alone, with the ground its oasis's stamps stand on: today's
+## desert, which WADIS's kept disc keeps there (the wadis land spec §5.6), and
+## which a recipe with no design keeps only with its plan off.
 func _p3() -> WorldRecipe:
-	return WorldRecipe.from_seed(SystemRecipe.from_seed(1337).body(&"p3").seed)
+	var r := WorldRecipe.from_seed(SystemRecipe.from_seed(1337).body(&"p3").seed)
+	r.planned = false
+	return r
 
 static func _dir(rng: RandomNumberGenerator) -> Vector3:
 	while true:
@@ -105,7 +110,7 @@ func test_keep_zero_is_unchanged():
 	var r := _p3()
 	var plain := _flatten(&"floor", HERE, 120.0, 150.0)
 	r.stamps.append(plain)
-	var kept := WorldRecipe.from_seed(r.seed)
+	var kept := _p3()
 	var zero := _flatten(&"floor", HERE, 120.0, 150.0)
 	zero.keep = 0.0
 	kept.stamps.append(zero)

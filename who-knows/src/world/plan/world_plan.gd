@@ -236,8 +236,10 @@ const LIST_RUN := 8
 ## was, so its bounds are today's desert's range, KEPT_LOW to KEPT_HIGH metres.
 ## The weight is exactly 1 and exactly 0 within KEEP_SNAP metres of the disc's
 ## radius and of its blend's end (where a smoothstep is flat), so rounding in a
-## great-circle distance never leaves a hair of weight.
+## great-circle distance never leaves a hair of weight. A point more than
+## KEEP_CULL metres past a blend's end is passed over by its dot alone.
 const KEEP_SNAP := 0.001
+const KEEP_CULL := 10.0
 const KEPT_LOW := -60.0
 const KEPT_HIGH := 300.0
 
@@ -280,10 +282,17 @@ var map: PlanMap
 var shapes: PlanShapes
 ## The places set aside, by kind, best first within each (PlanSite).
 var sites: Array[PlanSite] = []
-## The kept discs, by keep: its direction, radius and blend.
+## The kept discs, by keep: its direction, radius and blend, and the cosine of
+## the angle KEEP_CULL metres past its blend's end.
 var _keep_dirs := PackedVector3Array()
 var _keep_radius := PackedFloat64Array()
 var _keep_blend := PackedFloat64Array()
+var _keep_cull := PackedFloat64Array()
+## One cap holding every kept disc, blend and KEEP_CULL and all: its centre and
+## the cosine of its angular radius. Past it keep_weight is 0, so a caller asking
+## per height may pass over by one dot. With no keeps, it holds nothing.
+var keeps_centre := Vector3.ZERO
+var keeps_cos := 2.0
 
 static func build(recipe: WorldRecipe) -> WorldPlan:
 	var p := WorldPlan.new()
@@ -305,6 +314,8 @@ static func build(recipe: WorldRecipe) -> WorldPlan:
 		p._keep_dirs.append(keep.dir)
 		p._keep_radius.append(keep.radius)
 		p._keep_blend.append(keep.blend)
+		p._keep_cull.append(cos(minf((keep.radius + keep.blend + KEEP_CULL) / recipe.radius_m, PI)))
+	p._keeps_cap()
 	var values := PlanBounds.corner_values(p.map)
 	p.sites = PlanSites.new(p).list(recipe, dirs, values)
 	PlanBounds.new(p).set_bounds(recipe, dirs, values)
@@ -323,13 +334,23 @@ func sample(d: Vector3, out: PackedFloat64Array) -> void:
 	out[S_CANYON_RIM] = canyon.z
 	out[S_KEEP] = keep_weight(u)
 
-## The most any kept disc weighs at `d`: 1 within its radius, easing (a
-## smoothstep) to 0 over its blend by great-circle metres from its place, 0
-## beyond. Exact, from any thread; allocates nothing.
+## The most any kept disc weighs at the unit direction `d`: 1 within its
+## radius, easing (a smoothstep) to 0 over its blend by great-circle metres from
+## its place, 0 beyond. Exact, from any thread; allocates nothing. The metres
+## are worked out in 64-bit floats from d's components: Vector3.angle_to works
+## in 32-bit ones, a few millimetres out on WADIS, and the ease is asked metre
+## by metre.
 func keep_weight(d: Vector3) -> float:
 	var best := 0.0
 	for n in _keep_dirs.size():
-		var metres := d.angle_to(_keep_dirs[n]) * shapes.radius_m
+		var k := _keep_dirs[n]
+		var dot := d.x * k.x + d.y * k.y + d.z * k.z
+		if dot < _keep_cull[n]:
+			continue
+		var cx := d.y * k.z - d.z * k.y
+		var cy := d.z * k.x - d.x * k.z
+		var cz := d.x * k.y - d.y * k.x
+		var metres := atan2(sqrt(cx * cx + cy * cy + cz * cz), dot) * shapes.radius_m
 		var radius := _keep_radius[n]
 		if metres <= radius + KEEP_SNAP:
 			return 1.0
@@ -337,6 +358,24 @@ func keep_weight(d: Vector3) -> float:
 		if metres < edge - KEEP_SNAP:
 			best = maxf(best, 1.0 - smoothstep(radius, edge, metres))
 	return best
+
+## Sets keeps_centre and keeps_cos from the kept discs: the cap round their
+## middle out to the farthest of them, the whole sphere if that is past PI.
+func _keeps_cap() -> void:
+	if _keep_dirs.is_empty():
+		return
+	var middle := Vector3.ZERO
+	for k in _keep_dirs:
+		middle += k
+	if middle.length_squared() < 1e-12:
+		keeps_cos = -2.0
+		return
+	var centre := middle.normalized()
+	var widest := 0.0
+	for n in _keep_dirs.size():
+		widest = maxf(widest, centre.angle_to(_keep_dirs[n]) + acos(clampf(_keep_cull[n], -1.0, 1.0)))
+	keeps_centre = centre
+	keeps_cos = cos(widest) if widest < PI else -2.0
 
 ## SEA at or past the water's edge; MOUNTAINS on a range's upper flanks;
 ## PLATEAU on a plateau's body; else what the open ground is.
