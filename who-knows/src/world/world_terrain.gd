@@ -192,19 +192,53 @@ const TERRACE_WANDER := 0.3
 const TERRACE_WANDER_WAVE := 1500.0
 const TOWER_EASE := 0.1
 ## Where a range or a plateau meets the sea it ends in a cliff: the land's height
-## held to the cliff line CLIFF_IN metres inland of the water's edge (by
-## WorldPlan.S_SHORE), then a sheer rock face over the next CLIFF_RUN metres of
-## it (a little more on the ground, where the shore's metres are drawn out over a
-## coastal cell) down to a strip of beach at sea level. A coast is all cliff where the land's
-## mountains' weight (PlanMap.held: its cell's inland corners', held to the
-## water) or its plateau's is CLIFF_FADE or more, and none where there is none.
-## A range's base is held to the water the same way, since its cell's corners on
-## the water's edge stand at sea level. Only looked for within CLIFF_LOOK metres
-## of the water.
+## held to the cliff line (_cliff_line), then a sheer rock face over the next
+## CLIFF_RUN metres of WorldPlan.S_SHORE (a little more on the ground, where the
+## shore's metres are drawn out over a coastal cell) down to a beach. The line
+## wanders in and out along the coast (the wadis land spec §6, Checkpoint 1):
+## CLIFF_IN metres inland of the water's edge (by S_SHORE) at a headland, out to
+## CLIFF_BAY at the back of a bay, by a noise of the terrain's own (plan_bays)
+## CLIFF_WAVE metres across read along the water's edge, eased from headland to
+## bay as its size goes from BAY_NOISE.x to BAY_NOISE.y: a headland wherever the
+## noise passes zero, every kilometre or few, and between them bays of every
+## width and depth. CLIFF_BAY stays well inside a coastal cell (on WADIS the
+## first corner off the water is 985 m or more inland of it), and PlanBounds
+## holds every cell within CLIFF_BAY of the water down to sea level. A coast is
+## all cliff where the land's mountains' weight (PlanMap.held: its cell's inland
+## corners', held to the water) or its plateau's is CLIFF_FADE or more, and none
+## where there is none. A range's base is held to the water the same way, since
+## its cell's corners on the water's edge stand at sea level. Only looked for
+## within CLIFF_LOOK metres of the water.
 const CLIFF_IN := 40.0
+const CLIFF_BAY := 400.0
+const CLIFF_WAVE := 2500.0
+const BAY_NOISE := Vector2(0.05, 0.6)
 const CLIFF_RUN := 4.0
 const CLIFF_FADE := 0.1
 const CLIFF_LOOK := 2000.0
+## The water's edge the bays' noise is read at (_shore_point) is found by the
+## shore's fall over SHORE_PROBE metres either way, taken as no less than
+## SHORE_FLAT's root a metre where the field lies flatter, in SHORE_STEPS Newton
+## steps. One is exact where the coast runs straight. By a convex corner of the
+## water's edge (a coastal cell with one corner inland, where the field is a
+## product) one step slides the point along the coast half as fast as `d` goes
+## inland, and a bay's side then rises faster than the shore and folds a pit
+## behind the cliff top (ALLOROR-29, WorldRecipe.from_seed(139), had one behind
+## a strip of top 250 m wide); three steps take it into the corner instead.
+## Where the shore's fall turns at a cell's edge the point slides along the coast
+## as `d` crosses it too, over about twice SHORE_PROBE. Probing one way only, or
+## 50 m either way, folded a few pits or notches on ALLOROR-29 and TAROR-91 (the
+## world of seed 248); 25 m either way folded none on them, WADIS or RINNU-63.
+const SHORE_PROBE := 25.0
+const SHORE_FLAT := 0.01
+const SHORE_STEPS := 3
+## Under a cliff the beach rises from sea level at the water's edge BAY_RISE
+## metres over its first BAY_SHORE metres of S_SHORE (the waterline's damp band
+## lies along that rise), and stands level behind it to the cliff's foot: a
+## little over the sea, so the sea's water never lies flat on it. Under a metre,
+## so a cliff's foot is within a metre of sea level at a headland and in a bay.
+const BAY_RISE := 0.8
+const BAY_SHORE := 60.0
 ## The sea's waterline: wet sand (damp) where the ground stands from DAMP_BAND.x
 ## metres under sea level to DAMP_BAND.y over it. The ground's height is only
 ## looked at where the base is within DAMP_LOOK metres of sea level, more than
@@ -279,11 +313,13 @@ var _legacy_half := 0.0
 var _fields := PackedFloat64Array()
 ## A planned desert's: by cell, the kinds of shape listed near it
 ## (PlanShapes.kinds); and the noises of its detail close up, its own: the
-## plains' roll, the mountains' ridged peaks and the terraces' wander.
+## plains' roll, the mountains' ridged peaks, the terraces' wander and the sea
+## cliffs' bays.
 var _near_kinds := PackedByteArray()
 var _roll: FastNoiseLite
 var _peaks: FastNoiseLite
 var _wander: FastNoiseLite
+var _bays: FastNoiseLite
 
 var _continents := FastNoiseLite.new()
 var _hills := FastNoiseLite.new()
@@ -356,6 +392,7 @@ func _init(p_recipe: WorldRecipe) -> void:
 		_wander = _simplex(&"plan_terraces", 2)
 		_peaks = _simplex(&"plan_peaks", MOUNTAIN_OCTAVES)
 		_peaks.fractal_type = FastNoiseLite.FRACTAL_RIDGED
+		_bays = _simplex(&"plan_bays", 1)
 		_planned_range()
 	_take_stamps()
 
@@ -797,7 +834,8 @@ func _peak(d: Vector3) -> float:
 ## CLIFF_LOOK of the water where a range or a plateau may meet it, whose fields
 ## are `f` (a sample's): on a range's coast its base held to the water's edge
 ## (PlanMap.held), and where the coast is a cliff (_cliff_share) the face from
-## the cliff line, CLIFF_IN inland, down over CLIFF_RUN to sea level.
+## the cliff line (_cliff_line) down over CLIFF_RUN to the beach at its foot
+## (_beach).
 func _cliff(d: Vector3, f: PackedFloat64Array, ground: float) -> float:
 	var share := smoothstep(0.0, CLIFF_FADE, f[WorldPlan.S_PLATEAU])
 	if f[WorldPlan.S_MOUNTAIN] > 0.0:
@@ -806,9 +844,51 @@ func _cliff(d: Vector3, f: PackedFloat64Array, ground: float) -> float:
 			ground += held * (_map.held(WorldPlan.S_BASE, WorldPlan.S_SHORE, d) - f[WorldPlan.S_BASE])
 		share = maxf(share, held)
 	var shore := f[WorldPlan.S_SHORE]
-	if shore >= CLIFF_IN or share <= 0.0:
+	if shore >= CLIFF_BAY or share <= 0.0:
 		return ground
-	return lerpf(ground, sea_level, share * minf((CLIFF_IN - shore) / CLIFF_RUN, 1.0))
+	var line := _cliff_line(d)
+	if shore >= line:
+		return ground
+	return lerpf(ground, _beach(shore), share * minf((line - shore) / CLIFF_RUN, 1.0))
+
+## Where a sea cliff's line stands at the unit direction `d`: metres of S_SHORE
+## inland of the water's edge, CLIFF_IN at a headland to CLIFF_BAY at the back of
+## a bay, by the bays' noise (CLIFF_WAVE, BAY_NOISE) read at the water's edge `d`
+## faces (_shore_point): so where the coast runs straight the line moves only
+## along it, never inland, and the way up from the water crosses it once.
+func _cliff_line(d: Vector3) -> float:
+	var edge := _shore_point(d)
+	var bay := smoothstep(BAY_NOISE.x, BAY_NOISE.y, absf(_bays.get_noise_3dv(edge * (radius / CLIFF_WAVE))))
+	return CLIFF_IN + (CLIFF_BAY - CLIFF_IN) * bay
+
+## The point of the water's edge a planned desert's unit direction `d` faces: `d`
+## moved down the shore's field (S_SHORE) by its metres over the field's fall,
+## SHORE_STEPS Newton steps to S_SHORE 0. The fall is by central differences
+## SHORE_PROBE metres either way along the three axes, so it turns smoothly
+## everywhere, over the shore's cell edges and the cube's face edges alike, and
+## with it the point and the line; and on a cell's product by a convex corner
+## it is near exact, where differences one way are not, and fold the cliff.
+## Each step reads the field seven times: the steps are most of a cliff coast's
+## height (about 20 µs each).
+func _shore_point(d: Vector3) -> Vector3:
+	var h := SHORE_PROBE / radius
+	var x := Vector3(h, 0.0, 0.0)
+	var y := Vector3(0.0, h, 0.0)
+	var z := Vector3(0.0, 0.0, h)
+	for step in SHORE_STEPS:
+		var rise := Vector3(
+			_map.at(WorldPlan.S_SHORE, d + x) - _map.at(WorldPlan.S_SHORE, d - x),
+			_map.at(WorldPlan.S_SHORE, d + y) - _map.at(WorldPlan.S_SHORE, d - y),
+			_map.at(WorldPlan.S_SHORE, d + z) - _map.at(WorldPlan.S_SHORE, d - z)) / (2.0 * SHORE_PROBE)
+		rise -= d * rise.dot(d)
+		var shore := _map.at(WorldPlan.S_SHORE, d)
+		d = (d - rise * (shore / (maxf(rise.length_squared(), SHORE_FLAT) * radius))).normalized()
+	return d
+
+## The height of the beach under a sea cliff `shore` metres (S_SHORE) inland of
+## the water's edge: rising from sea level BAY_RISE over BAY_SHORE, then level.
+func _beach(shore: float) -> float:
+	return sea_level + BAY_RISE * smoothstep(0.0, BAY_SHORE, shore)
 
 ## How much of a cliff a planned desert's coast is at the unit direction `d`,
 ## whose fields are `f` (a sample's): 1 where a range's weight (held to the
@@ -896,10 +976,20 @@ func _planned_ground(d: Vector3, out: PackedFloat64Array) -> StringName:
 	var plateau := out[WorldPlan.S_PLATEAU]
 	var shore := out[WorldPlan.S_SHORE]
 	if shore > 0.0:
-		if shore < CLIFF_IN:
-			if shore >= CLIFF_IN - CLIFF_RUN and _cliff_share(d, out) >= 0.5:
-				return &"rock"
-		elif plateau >= WorldPlan.PLATEAU_FROM:
+		# Seaward of a cliff's line, its face and the beach at its foot.
+		var under := false
+		if shore < CLIFF_BAY and (plateau > 0.0 or out[WorldPlan.S_MOUNTAIN] > 0.0):
+			var share := _cliff_share(d, out)
+			if share > 0.0:
+				var line := _cliff_line(d)
+				under = shore < line
+				if under and share >= 0.5:
+					if shore >= line - CLIFF_RUN:
+						return &"rock"
+					if is_nan(height):
+						height = _planned_height(d)
+					return &"damp" if _damp(height) else &"ground_low"
+		if not under and plateau >= WorldPlan.PLATEAU_FROM:
 			return _terrace_ground(d, plateau)
 		if plateau > 0.0 and plateau < WorldPlan.PLATEAU_FROM and _tower_stand(d) > 0.0:
 			return &"rock"

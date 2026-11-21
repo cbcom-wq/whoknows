@@ -1328,7 +1328,7 @@ static func _in_discs(d: Vector3, discs: Array[Vector4]) -> bool:
 ## it is not in the region (depth 1), else inside (depth 2: the edge band is two
 ## cells deep); a sea's cells beside it leave it inside, so where a region meets
 ## the sea it has no edge band and stands whole to the water, where it ends in a
-## cliff (WorldTerrain.CLIFF_IN). A corner with every cell round it in the region
+## cliff (WorldTerrain._cliff_line). A corner with every cell round it in the region
 ## or a sea is as deep as the shallowest of the region's, any other (on the
 ## outline) is 0 deep. At every corner a region's cells touch, S_PLATEAU_TOP is
 ## its top; S_PLATEAU is smoothstep(0, 1, depth over PLATEAU_EDGE_CELLS); and the

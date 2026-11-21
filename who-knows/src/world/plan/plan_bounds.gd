@@ -4,7 +4,7 @@ extends RefCounted
 ## Works out the plan's bounds (docs/superpowers/specs/2026-11-19-wadis-land-design.md
 ## §5.4 step 8, §8.3): the least and most height under each cell, which the
 ## streaming culls by (WorldPlan.bounds_of). Run once while the plan is built,
-## last; the constants it uses are WorldPlan's.
+## last; the constants it uses are WorldPlan's, and WorldTerrain.CLIFF_BAY.
 
 var plan: WorldPlan
 
@@ -25,9 +25,10 @@ static func corner_values(map: PlanMap) -> Array[PackedFloat32Array]:
 ## allow (a sea corner, or a mountain's, counts the open ground too); under it,
 ## the lowest floor of any canyon listed near the cell; up to a plateau's top
 ## and its DETAIL_REACH in every cell with plateau country; up to sea level in
-## every cell with a corner under it (the water is drawn there); and over every
-## cell within a kept
-## disc's radius and blend, today's desert's range, KEPT_LOW to KEPT_HIGH.
+## every cell with a corner under it (the water is drawn there), and down to it
+## in every cell with a corner within WorldTerrain.CLIFF_BAY of the water (a sea
+## cliff's bay and its beach); and over every cell within a kept disc's radius
+## and blend, today's desert's range, KEPT_LOW to KEPT_HIGH.
 ## `cv` is corner_values'.
 func set_bounds(recipe: WorldRecipe, dirs: PackedVector3Array, cv: Array[PackedFloat32Array]) -> void:
 	var shore := cv[WorldPlan.S_SHORE]
@@ -71,6 +72,10 @@ func set_bounds(recipe: WorldRecipe, dirs: PackedVector3Array, cv: Array[PackedF
 		for c in wet.size():
 			if wet[c] < 0.0:
 				high[c] = maxf(high[c], plan.sea_level)
+			# A sea cliff's bay lays its beach a little over sea level up to
+			# WorldTerrain.CLIFF_BAY inland of the water.
+			if wet[c] < WorldTerrain.CLIFF_BAY:
+				low[c] = minf(low[c], plan.sea_level)
 	for keep: Dictionary in recipe.keeps:
 		_widen_to_kept(keep, dirs, low, high)
 	plan.map.set_bounds(low, high)

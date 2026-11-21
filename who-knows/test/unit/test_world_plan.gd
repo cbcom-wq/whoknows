@@ -1043,7 +1043,7 @@ func _nearest_range(p: WorldPlan, d: Vector3) -> int:
 	return at
 
 ## A plateau's top stands flat at its own top, ground_high, but for where it
-## meets the sea: from its cliff line (WorldTerrain.CLIFF_IN) to the water.
+## meets the sea: from its cliff line (WorldTerrain._cliff_line) to the water.
 func test_a_plateau_s_top_stands_flat_at_its_own_top():
 	var t := WorldTerrain.new(_wadis())
 	var f := PackedFloat64Array(); f.resize(WorldPlan.S_SIZE)
@@ -1052,7 +1052,7 @@ func test_a_plateau_s_top_stands_flat_at_its_own_top():
 	for d in _dirs(20000):
 		t.plan.sample(d, f)
 		if f[WorldPlan.S_PLATEAU] < 1.0 or f[WorldPlan.S_CANYON] < INF or f[WorldPlan.S_KEEP] > 0.0 \
-				or f[WorldPlan.S_SHORE] < WorldTerrain.CLIFF_IN:
+				or f[WorldPlan.S_SHORE] < t._cliff_line(d):
 			continue
 		tops += 1
 		if t.height_at(d) != f[WorldPlan.S_PLATEAU_TOP] or t.ground_at(d, 0.0) != &"ground_high":
@@ -1208,9 +1208,9 @@ func _brute_cut(p: WorldPlan, d: Vector3) -> Vector2:
 
 ## Where a range or a plateau meets the sea it ends in a cliff: walking to the
 ## water from CLIFF_SPOTS seeded spots on each kind of such coast, the ground
-## falls from the cliff line (WorldTerrain.CLIFF_IN) at least CLIFF_DROP metres
-## to within a metre of sea level over at most CLIFF_RUN_MOST metres, its face
-## rock.
+## falls from the cliff line (WorldTerrain._cliff_line, where the walk crosses
+## it) at least CLIFF_DROP metres to within a metre of sea level over at most
+## CLIFF_RUN_MOST metres, its face rock.
 const CLIFF_SPOTS := 40
 const CLIFF_DROP := 50.0
 const CLIFF_RUN_MOST := 30.0
@@ -1229,13 +1229,14 @@ func test_ranges_and_plateaus_meet_the_sea_in_cliffs():
 		var foot := Vector3.ZERO
 		var foot_m := 0.0
 		var m := 0.0
-		while m < 400.0:
+		while m < CLIFF_LOOK_M:
 			var q := _across(d, fall, m, radius)
 			var shore := p.map.at(WorldPlan.S_SHORE, q)
-			if shore >= WorldTerrain.CLIFF_IN + 0.5:
+			var line := t._cliff_line(q)
+			if shore >= line + 0.5:
 				top = q
 				top_m = m
-			elif shore <= WorldTerrain.CLIFF_IN - WorldTerrain.CLIFF_RUN - 0.5:
+			elif shore <= line - WorldTerrain.CLIFF_RUN - 0.5:
 				foot = q
 				foot_m = m
 				break
@@ -1251,11 +1252,12 @@ func test_ranges_and_plateaus_meet_the_sea_in_cliffs():
 		var face := _across(d, fall, 0.5 * (top_m + foot_m), radius)
 		assert_eq(t.ground_at(face, 0.0), &"rock", "its face is rock")
 
-## `n` seeded spots CLIFF_IN + 10 to CLIFF_IN + 150 metres inland on coasts
-## where a range (its mountains' weight held to the water, PlanMap.held, half or
-## more) or a plateau's top meets the sea, out of the kept discs and the
-## canyons: drawn from the cells within 1.5 km of the water with either near.
-## Only a range's coast if `kind` is &"range", a plateau's if &"plateau".
+## `n` seeded spots 10 to 150 metres (of S_SHORE) inland of the cliff line
+## (WorldTerrain._cliff_line) on coasts where a range (its mountains' weight held
+## to the water, PlanMap.held, half or more) or a plateau's top meets the sea, out
+## of the kept discs and the canyons: drawn from the cells within 1.5 km of the
+## water with either near. Only a range's coast if `kind` is &"range", a
+## plateau's if &"plateau".
 func _cliff_spots(t: WorldTerrain, n: int, kind := &"") -> Array[Vector3]:
 	var p := t.plan
 	var f := PackedFloat64Array(); f.resize(WorldPlan.S_SIZE)
@@ -1279,8 +1281,10 @@ func _cliff_spots(t: WorldTerrain, n: int, kind := &"") -> Array[Vector3]:
 		var d := CubeSphere.direction(key.x, r.x + rng.randf() * r.z, r.y + rng.randf() * r.z)
 		p.sample(d, f)
 		var shore := f[WorldPlan.S_SHORE]
-		if shore < WorldTerrain.CLIFF_IN + 10.0 or shore > WorldTerrain.CLIFF_IN + 150.0 \
-				or f[WorldPlan.S_KEEP] > 0.0 or f[WorldPlan.S_CANYON] < INF:
+		if shore > WorldTerrain.CLIFF_BAY + 150.0 or f[WorldPlan.S_KEEP] > 0.0 or f[WorldPlan.S_CANYON] < INF:
+			continue
+		var line := t._cliff_line(d)
+		if shore < line + 10.0 or shore > line + 150.0:
 			continue
 		var on_top := f[WorldPlan.S_PLATEAU] >= 1.0
 		if on_top and kind != &"range" \
@@ -1297,6 +1301,282 @@ func _shore_fall(p: WorldPlan, d: Vector3, radius: float) -> Vector3:
 	var gx := p.map.at(WorldPlan.S_SHORE, _across(d, e1, 1.0, radius)) - p.map.at(WorldPlan.S_SHORE, _across(d, e1, -1.0, radius))
 	var gy := p.map.at(WorldPlan.S_SHORE, _across(d, e2, 1.0, radius)) - p.map.at(WorldPlan.S_SHORE, _across(d, e2, -1.0, radius))
 	return -(e1 * gx + e2 * gy).normalized()
+
+## A cliff's line wanders along the coast (the wadis land spec §6, Checkpoint 1):
+## headlands where it stands at the water, bays where it steps back behind a
+## beach, never a ruler-straight wall. Along WANDER_WALKS seeded walks of each kind
+## of cliff coast (_cliff_walks), the line's distance inland of the water
+## (_cliff_line_from) spreads at least WANDER_SPREAD metres, farthest less nearest,
+## in every WANDER_WINDOW metres of the walk, and somewhere along each walk it is
+## within HEADLAND_MOST metres of the water.
+const WANDER_WALKS := 3
+const WANDER_WALK := 5000.0
+const WANDER_STEP := 100.0
+const WANDER_WINDOW := 3000.0
+const WANDER_SPREAD := 150.0
+const HEADLAND_MOST := 60.0
+
+func test_sea_cliffs_wander_in_headlands_and_bays():
+	var t := WorldTerrain.new(_wadis())
+	var window := int(WANDER_WINDOW / WANDER_STEP) + 1
+	for kind: StringName in [&"range", &"plateau"]:
+		var walks := _cliff_walks(t, kind, WANDER_WALKS)
+		assert_eq(walks.size(), WANDER_WALKS, "walks along %s cliffs" % kind)
+		for walk: Array in walks:
+			var inland: Array[float] = []
+			for q: Vector3 in walk:
+				inland.append(float(_cliff_line_from(t, q)[0]))
+			var least := INF
+			var flat := 0
+			for a in inland.size() - window + 1:
+				var part := inland.slice(a, a + window)
+				var spread: float = part.max() - part.min()
+				least = minf(least, spread)
+				if spread < WANDER_SPREAD:
+					flat += 1
+			gut.p("%s cliff: the line %.0f to %.0f m inland, the least spread over %.0f m %.0f m" % [
+				kind, inland.min(), inland.max(), WANDER_WINDOW, least])
+			assert_lt(inland.max(), INF, "%s cliff: a face found from every point of the walk" % kind)
+			assert_eq(flat, 0, "%s cliff: windows where the line wanders under %.0f m" % [kind, WANDER_SPREAD])
+			assert_lte(inland.min(), HEADLAND_MOST, "a headland on the %s cliff" % kind)
+
+## A bay has a beach (spec §6, Checkpoint 1): from each point of the walks where
+## the cliff line stands BAY_FROM metres or more inland, up the way to its nearest
+## face a metre at a time to the face's foot (where the ground first rises a metre
+## in one), the ground never stands under sea level, is never rock short of the
+## foot's last BAY_FOOT_SLACK metres, and at the foot stands BAY_FOOT.x to
+## BAY_FOOT.y metres over the sea: never flat ground at the water's level, where
+## the sea's water will lie.
+const BAY_FROM := 150.0
+const BAY_FOOT := Vector2(0.5, 4.0)
+const BAY_FOOT_SLACK := 2.0
+const BAY_POINTS_LEAST := 20
+
+func test_a_bay_has_a_beach_between_the_cliff_and_the_water():
+	var t := WorldTerrain.new(_wadis())
+	var p := t.plan
+	var radius := t.radius
+	var bays := 0
+	for kind: StringName in [&"range", &"plateau"]:
+		for walk: Array in _cliff_walks(t, kind, WANDER_WALKS):
+			for q: Vector3 in walk:
+				var line := _cliff_line_from(t, q)
+				var line_m: float = line[0]
+				if line_m < BAY_FROM or line_m == INF:
+					continue
+				bays += 1
+				var way: Vector3 = line[1]
+				var heights: Array[float] = [t.height_at(q)]
+				while heights.size() < line_m + 1.0:
+					var next := t.height_at(_across(q, way, heights.size(), radius))
+					if next - heights[-1] >= 1.0:
+						break
+					heights.append(next)
+				var foot := heights.size() - 1
+				var under := 0
+				var rock := 0
+				for m in heights.size():
+					if heights[m] < p.sea_level:
+						under += 1
+					if m < foot - BAY_FOOT_SLACK and t.ground_at(_across(q, way, m, radius), 0.0) == &"rock":
+						rock += 1
+				assert_eq(under, 0, "%s bay: beach points under the sea" % kind)
+				assert_eq(rock, 0, "%s bay: beach points of rock" % kind)
+				assert_between(heights[foot] - p.sea_level, BAY_FOOT.x, BAY_FOOT.y, "%s bay: the beach at the foot, %.0f m in" % [kind, foot])
+	gut.p("%d bay points" % bays)
+	assert_gt(bays, BAY_POINTS_LEAST, "bay points along the walks")
+
+## A cliff stands once: up the shore's rise from the water the ground crosses the
+## cliff line (WorldTerrain._cliff_line) once, onto the top, and never falls back
+## under it into a pit behind. The line is read at the water's edge a point faces
+## (_shore_point), and by a convex corner of the water's edge (a coastal cell with
+## three corners on the water, where S_SHORE is a product and rises slowly) that
+## point slides along the coast as one goes inland, so the line can outrun the
+## shore there, most near the corner, where the shore rises slowest (with one
+## Newton step ALLOROR-29, seed 139, had a pit behind a strip of top 250 m wide,
+## up from 50 m of coast some 200 m from a corner). From every FOLD_SPACING metres
+## of each water side of every such cell, out to FOLD_NEAR from its corner, on a
+## cliff coast (its share CLIFF_SHARE_LEAST or more) of WADIS and of the worlds of
+## FOLD_SEEDS, FOLD_STEP metres at a time to S_SHORE CLIFF_BAY.
+const FOLD_SEEDS := [139]
+const FOLD_SPACING := 15.0
+const FOLD_NEAR := 450.0
+const FOLD_STEP := 12.0
+const FOLD_LOOK := 3000.0
+const CLIFF_SHARE_LEAST := 0.05
+
+func test_a_cliff_top_has_no_pit_behind_it():
+	var recipes: Array[WorldRecipe] = [_wadis()]
+	for s: int in FOLD_SEEDS:
+		recipes.append(WorldRecipe.from_seed(s))
+	for r in recipes:
+		var t := WorldTerrain.new(r)
+		var p := t.plan
+		var radius := t.radius
+		var f := PackedFloat64Array(); f.resize(WorldPlan.S_SIZE)
+		var corners := 0
+		var walks := 0
+		var folds := 0
+		for index in CubeSphere.FACES * PlanMap.CELLS * PlanMap.CELLS:
+			var key := PlanShapes.cell_key(index)
+			var rr := CubeSphere.node_rect(key)
+			var wet: Array[Vector3] = []
+			var dry := Vector3.ZERO
+			for c in 4:
+				var at := CubeSphere.direction(key.x, rr.x + (c & 1) * rr.z, rr.y + (c >> 1) * rr.z)
+				if absf(p.map.at(WorldPlan.S_SHORE, at)) < 0.01:
+					wet.append(at)
+				elif p.map.at(WorldPlan.S_SHORE, at) > 0.0:
+					dry = at
+			if wet.size() != 3 or dry == Vector3.ZERO:
+				continue
+			# The water's corner across from the dry one, and its two water sides.
+			var tip := wet[0]
+			for w in wet:
+				if w.angle_to(dry) > tip.angle_to(dry):
+					tip = w
+			var counted := false
+			for w in wet:
+				if w == tip:
+					continue
+				for k in int(FOLD_NEAR / FOLD_SPACING):
+					var q := _onto_shore(p, tip.slerp(w, (k + 0.5) * FOLD_SPACING / (tip.angle_to(w) * radius)), radius)
+					p.sample(q, f)
+					if f[WorldPlan.S_KEEP] > 0.0 or f[WorldPlan.S_CANYON] < INF or t._cliff_share(q, f) < CLIFF_SHARE_LEAST:
+						continue
+					if not counted:
+						corners += 1
+						counted = true
+					walks += 1
+					var above := false
+					var crossings := 0
+					var m := 0.0
+					while m < FOLD_LOOK:
+						var shore := p.map.at(WorldPlan.S_SHORE, q)
+						if shore >= WorldTerrain.CLIFF_BAY:
+							break
+						if (shore >= t._cliff_line(q)) != above:
+							above = not above
+							crossings += 1
+						var rise := _shore_rise(p, q, radius)
+						if rise.length_squared() < 1e-8:
+							break
+						q = _across(q, rise.normalized(), FOLD_STEP, radius)
+						m += FOLD_STEP
+					if crossings > 1:
+						folds += 1
+		gut.p("%s: %d walks up from %d convex corners of cliff coast, %d folded" % [r.name, walks, corners, folds])
+		assert_gt(walks, 0, "%s: walks from convex corners of its cliff coasts" % r.name)
+		assert_eq(folds, 0, "%s: walks that fall back under the cliff line" % r.name)
+
+## On land, just off the water: the S_SHORE a walk along a coast keeps to.
+const WALK_SHORE := 2.0
+## A walk's steps between its points, and the most it looks for a cliff's face.
+const WALK_STRIDE := 10.0
+const CLIFF_LOOK_M := 1500.0
+
+## Up to `n` walks along coasts of `kind` (&"range" or &"plateau") where the land
+## meets the sea in a cliff: each from a seeded spot of _cliff_spots, set on its
+## water's edge, WANDER_WALK metres along the coast with a point every
+## WANDER_STEP, the land on its left or, if that way leaves the cliff coast before
+## the end, on its right; a spot whose walk leaves it both ways is passed over.
+func _cliff_walks(t: WorldTerrain, kind: StringName, n: int) -> Array:
+	var out := []
+	for d in _cliff_spots(t, CLIFF_SPOTS, kind):
+		var walk := _coast_walk(t, d, 1.0, kind)
+		if walk.is_empty():
+			walk = _coast_walk(t, d, -1.0, kind)
+		if not walk.is_empty():
+			out.append(walk)
+			if out.size() == n:
+				break
+	return out
+
+## A walk along the water's edge (S_SHORE at WALK_SHORE) from `d`, WALK_STRIDE
+## metres at a time, the land on its left if `way` is 1 and on its right if -1: a
+## point every WANDER_STEP over WANDER_WALK, each on a cliff coast of `kind`
+## (_on_cliff_coast); empty if it leaves one first.
+func _coast_walk(t: WorldTerrain, d: Vector3, way: float, kind: StringName) -> Array[Vector3]:
+	var p := t.plan
+	var radius := t.radius
+	var f := PackedFloat64Array(); f.resize(WorldPlan.S_SIZE)
+	var q := _onto_shore(p, d, radius)
+	var out: Array[Vector3] = [q]
+	var gone := 0.0
+	while out.size() <= int(WANDER_WALK / WANDER_STEP):
+		var along := q.cross(_shore_rise(p, q, radius)).normalized() * way
+		q = _onto_shore(p, _across(q, along, WALK_STRIDE, radius), radius)
+		gone += WALK_STRIDE
+		if gone >= out.size() * WANDER_STEP - 0.5 * WALK_STRIDE:
+			if not _on_cliff_coast(p, q, kind, f):
+				return []
+			out.append(q)
+	return out
+
+## Whether `d` is on a coast of `kind` where the land meets the sea in a cliff,
+## as _cliff_spots counts one (a plateau's top, or a range's weight held to the
+## water half or more), out of the kept discs and the canyons.
+func _on_cliff_coast(p: WorldPlan, d: Vector3, kind: StringName, f: PackedFloat64Array) -> bool:
+	p.sample(d, f)
+	if f[WorldPlan.S_KEEP] > 0.0 or f[WorldPlan.S_CANYON] < INF:
+		return false
+	if kind == &"plateau":
+		return f[WorldPlan.S_PLATEAU] >= 1.0
+	return p.map.held(WorldPlan.S_MOUNTAIN, WorldPlan.S_SHORE, d) >= 0.5
+
+## `d` moved along the shore's rise to where S_SHORE is WALK_SHORE.
+func _onto_shore(p: WorldPlan, d: Vector3, radius: float) -> Vector3:
+	for i in 8:
+		var off := p.map.at(WorldPlan.S_SHORE, d) - WALK_SHORE
+		if absf(off) < 0.01:
+			break
+		var rise := _shore_rise(p, d, radius)
+		if rise.length_squared() < 1e-8:
+			break
+		d = _across(d, rise.normalized(), -off / rise.length(), radius)
+	return d
+
+## The plan's S_SHORE's rise at `d`, per metre, as a tangent: inland.
+func _shore_rise(p: WorldPlan, d: Vector3, radius: float) -> Vector3:
+	var e1 := d.cross(Vector3.UP if absf(d.y) < 0.9 else Vector3.RIGHT).normalized()
+	var e2 := d.cross(e1)
+	var gx := p.map.at(WorldPlan.S_SHORE, _across(d, e1, 1.0, radius)) - p.map.at(WorldPlan.S_SHORE, _across(d, e1, -1.0, radius))
+	var gy := p.map.at(WorldPlan.S_SHORE, _across(d, e2, 1.0, radius)) - p.map.at(WorldPlan.S_SHORE, _across(d, e2, -1.0, radius))
+	return (e1 * gx + e2 * gy) * 0.5
+
+## [metres, unit tangent at `q`]: how far from `q`, on the water's edge, the
+## nearest point of a cliff's face stands, and the way to it. Over a fan of rays
+## round the shore's rise, 75° either way in 15° steps (nearest the rise first),
+## the first point each reaches, to half a metre, where the ground stands half
+## CLIFF_DROP over the sea; INF if none within CLIFF_LOOK_M.
+func _cliff_line_from(t: WorldTerrain, q: Vector3) -> Array:
+	var p := t.plan
+	var radius := t.radius
+	var up := _shore_rise(p, q, radius).normalized()
+	var side := q.cross(up).normalized()
+	var over := p.sea_level + 0.5 * CLIFF_DROP
+	var best := INF
+	var best_way := up
+	for k in 11:
+		var a := deg_to_rad(15.0 * ((k + 1) >> 1) * (1.0 if k % 2 == 1 else -1.0))
+		var way := (up * cos(a) + side * sin(a)).normalized()
+		var m := 0.0
+		while m <= minf(best, CLIFF_LOOK_M):
+			if t.height_at(_across(q, way, m, radius)) >= over:
+				var lo := maxf(m - 5.0, 0.0)
+				var hi := m
+				while hi - lo > 0.5:
+					var mid := 0.5 * (lo + hi)
+					if t.height_at(_across(q, way, mid, radius)) >= over:
+						hi = mid
+					else:
+						lo = mid
+				if hi < best:
+					best = hi
+					best_way = way
+				break
+			m += 5.0
+	return [best, best_way]
 
 func test_canyon_walls_step_up_and_meet_the_ground_with_no_seam():
 	var t := WorldTerrain.new(_wadis())
@@ -1680,11 +1960,22 @@ func _keys_at_depths(t: WorldTerrain, depths: Array, n: int) -> Array[Vector4i]:
 		var out_m: float = rng.randf_range(c.half_floor[i], c.half_floor[i] + c.rim[i] * WorldPlan.CANYON_WALL_RUN)
 		var off := (1.0 if rng.randf() < 0.5 else -1.0) * out_m / radius
 		spots.append((at * cos(off) + across * sin(off)).normalized())
-	# On the cliff line itself, and over its face.
+	# On the cliff line itself, and over its face; and where the line stands
+	# BAY_FROM or more inland, on the bay's beach, halfway to the water and by
+	# the cliff's foot.
+	var bays := 0
 	for d in _cliff_spots(t, SPOTS):
 		var fall := _shore_fall(p, d, radius)
+		var shore := p.map.at(WorldPlan.S_SHORE, d)
+		var line := t._cliff_line(d)
 		spots.append(d)
-		spots.append(_across(d, fall, p.map.at(WorldPlan.S_SHORE, d) - WorldTerrain.CLIFF_IN + 5.0, radius))
+		spots.append(_across(d, fall, shore - line + 5.0, radius))
+		if line >= BAY_FROM:
+			bays += 1
+			var foot := line - WorldTerrain.CLIFF_RUN
+			spots.append(_across(d, fall, shore - 0.5 * foot, radius))
+			spots.append(_across(d, fall, shore - foot + 2.0, radius))
+	assert_gt(bays, 4, "spots behind a bay")
 	for d in spots:
 		for depth in [8, 10]:
 			out.append(CubeSphere.key_for(d, depth))
