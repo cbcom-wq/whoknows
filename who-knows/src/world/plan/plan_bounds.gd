@@ -23,8 +23,10 @@ static func corner_values(map: PlanMap) -> Array[PackedFloat32Array]:
 ## Sets the map's bounds (§5.4 step 8, §8.3): by cell, the base's corners' least
 ## less, and most plus, the most DETAIL_REACH of every land a corner's fields
 ## allow (a sea corner, or a mountain's, counts the open ground too); under it,
-## the lowest floor of any canyon listed near the cell; up to sea level in every
-## cell with a corner under it (the water is drawn there); and over every cell within a kept
+## the lowest floor of any canyon listed near the cell; up to a plateau's top
+## and its DETAIL_REACH in every cell with plateau country; up to sea level in
+## every cell with a corner under it (the water is drawn there); and over every
+## cell within a kept
 ## disc's radius and blend, today's desert's range, KEPT_LOW to KEPT_HIGH.
 ## `cv` is corner_values'.
 func set_bounds(recipe: WorldRecipe, dirs: PackedVector3Array, cv: Array[PackedFloat32Array]) -> void:
@@ -52,6 +54,16 @@ func set_bounds(recipe: WorldRecipe, dirs: PackedVector3Array, cv: Array[PackedF
 	var high := PackedFloat32Array()
 	plan.map.cell_range(WorldPlan.S_BASE, low, high, reach)
 	plan.shapes.lower_by_canyons(low)
+	# A plateau stands at its top to the water's edge, whose corners stay at sea
+	# level (the cliff's foot): up to the top in every cell with plateau country.
+	var least := PackedFloat32Array()
+	var tops := PackedFloat32Array()
+	plan.map.cell_range(WorldPlan.S_PLATEAU_TOP, least, tops)
+	var weights := PackedFloat32Array()
+	plan.map.cell_range(WorldPlan.S_PLATEAU, least, weights)
+	for c in high.size():
+		if weights[c] >= WorldPlan.PLATEAU_FROM:
+			high[c] = maxf(high[c], tops[c] + plateau_reach)
 	if plan.sea_level > -INF:
 		var wet := PackedFloat32Array()
 		var spare := PackedFloat32Array()

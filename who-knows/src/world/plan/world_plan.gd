@@ -129,9 +129,11 @@ const RANGE_TRIES := 32
 ## cells, the ranges' flanks and the kept discs, though it may reach the coast,
 ## where it ends in a cliff. Its centre starts at least PLATEAU_INLAND_CELLS
 ## cells inland, and its outline is pushed in and out by a noise PLATEAU_WAVE
-## metres across, up to PLATEAU_ROUGH times a round region's radius.
+## metres across, up to PLATEAU_ROUGH times a round region's radius. Several small
+## regions rather than a few big ones, so that from over open ground one is more
+## often in sight (the spec's §3).
 const PLATEAU_TOP := Vector2(100.0, 400.0)
-const PLATEAU_REGIONS := Vector2i(3, 6)
+const PLATEAU_REGIONS := Vector2i(7, 10)
 const PLATEAU_WAVE := 12000.0
 const PLATEAU_ROUGH := 0.4
 const PLATEAU_INLAND_CELLS := 3.0
@@ -158,7 +160,7 @@ const MOUNTAINS_FROM := 0.5
 ## and Task 10's bounds test proves the detail stays within it. Where a
 ## canyon's walls end, they stand at least this far over the base, so they top
 ## the ground there, detail and all.
-const DETAIL_REACH := {Land.DUNES: 45.0, Land.PLAINS: 12.0, Land.PLATEAU: 60.0, Land.MOUNTAINS: 300.0, Land.SEA: 10.0}
+const DETAIL_REACH := {Land.DUNES: 45.0, Land.PLAINS: 12.0, Land.PLATEAU: 60.0, Land.MOUNTAINS: 450.0, Land.SEA: 10.0}
 
 ## The canyons (§5.4 step 6, §6). Each of the `canyons` dial's sets out in
 ## plateau country (a cell of a region's flat top) or, CANYON_FROM_RANGE of the
@@ -210,6 +212,13 @@ const CANYON_GRADE := 0.1
 ## CANYON_RIM_SPARE metres past the ground it found, so on rising ground it
 ## settles in a few looks instead of creeping up on it.
 const CANYON_WALL_RUN := 1.5
+## The walls climb in steps (PlanShapes.wall_rise) CANYON_WALL_STEP metres up,
+## each a near-sheer riser and then a ledge CANYON_WALL_LEDGE of the step's run:
+## never under the straight wall above, and at most CANYON_WALL_STEP times
+## CANYON_WALL_LEDGE over it. Where canyons meet, the one whose stepped walls
+## stand lowest is the ground (PlanShapes.canyon_at).
+const CANYON_WALL_STEP := 30.0
+const CANYON_WALL_LEDGE := 0.6
 const CANYON_RIM_LOOKS := 32
 const CANYON_RIM_SPARE := 1.0
 ## A canyon's cells keep this many metres more than a kept disc's radius and
@@ -1315,15 +1324,18 @@ static func _in_discs(d: Vector3, discs: Array[Vector4]) -> bool:
 	return false
 
 ## Lays shapes.plateaus on the map, and lists each region near its cells and
-## the cells beside them. A cell is on its region's edge if a cell beside it is
-## not in the region (depth 1), else inside (depth 2: the edge band is two cells
-## deep); a corner with every cell round it in a region is as deep as the
-## shallowest of them, any other (on the outline) is 0 deep. At every corner a
-## region's cells touch, S_PLATEAU_TOP is its top; S_PLATEAU is smoothstep(0,
-## 1, depth over PLATEAU_EDGE_CELLS); and the base is lerped toward the top by
-## it. `canon` and `full` are by k the k standing for a corner's copies and how
-## many cells meet there. Regions share no corner (_take), so a corner has one
-## owner.
+## the cells beside them. A cell is on its region's edge if a land cell beside
+## it is not in the region (depth 1), else inside (depth 2: the edge band is two
+## cells deep); a sea's cells beside it leave it inside, so where a region meets
+## the sea it has no edge band and stands whole to the water, where it ends in a
+## cliff (WorldTerrain.CLIFF_IN). A corner with every cell round it in the region
+## or a sea is as deep as the shallowest of the region's, any other (on the
+## outline) is 0 deep. At every corner a region's cells touch, S_PLATEAU_TOP is
+## its top; S_PLATEAU is smoothstep(0, 1, depth over PLATEAU_EDGE_CELLS); and the
+## base is lerped toward the top by it, but for a corner on the water's edge,
+## which stays at sea level: the cliff's foot. `canon` and `full` are by k the k
+## standing for a corner's copies and how many cells meet there. Regions share
+## no corner (_take), so a corner has one owner.
 func _lay_plateaus(canon: PackedInt32Array, full: PackedByteArray) -> void:
 	if shapes.plateaus.is_empty():
 		return
@@ -1336,6 +1348,13 @@ func _lay_plateaus(canon: PackedInt32Array, full: PackedByteArray) -> void:
 	for r in shapes.plateaus.size():
 		for c: int in shapes.plateaus[r].cells:
 			region[c] = r + 1
+	# By cell, 1 for a sea's.
+	var wet := PackedByteArray()
+	wet.resize(cells)
+	wet.fill(0)
+	for sea: Dictionary in shapes.seas:
+		for c: int in sea.cells:
+			wet[c] = 1
 	# By cell, the last region listed near it.
 	var listed := PackedInt32Array()
 	listed.resize(cells)
@@ -1350,6 +1369,13 @@ func _lay_plateaus(canon: PackedInt32Array, full: PackedByteArray) -> void:
 	var owner := PackedInt32Array()
 	owner.resize(canon.size())
 	owner.fill(0)
+	# By canon k: how many sea cells meet there.
+	var sea_meet := PackedByteArray()
+	sea_meet.resize(canon.size())
+	sea_meet.fill(0)
+	for sea: Dictionary in shapes.seas:
+		for c: int in sea.cells:
+			_touch(c, sea_meet, canon, 1)
 	var touched := PackedInt32Array()
 	var near := PackedInt32Array()
 	near.resize(4)
@@ -1360,7 +1386,7 @@ func _lay_plateaus(canon: PackedInt32Array, full: PackedByteArray) -> void:
 			var depth := 2
 			for e in 4:
 				var o := near[e]
-				if region[o] != r + 1:
+				if region[o] != r + 1 and wet[o] == 0:
 					depth = 1
 				if listed[o] != r:
 					listed[o] = r
@@ -1382,11 +1408,11 @@ func _lay_plateaus(canon: PackedInt32Array, full: PackedByteArray) -> void:
 		var j := (k / up) % up
 		var top: float = shapes.plateaus[owner[k] - 1].top
 		var w := 0.0
-		if meet[k] == full[k]:
+		if meet[k] + sea_meet[k] == full[k]:
 			w = smoothstep(0.0, 1.0, float(shallow[k]) / PLATEAU_EDGE_CELLS)
 		map.set_corner(S_PLATEAU_TOP, face, i, j, top)
 		map.set_corner(S_PLATEAU, face, i, j, w)
-		if w > 0.0:
+		if w > 0.0 and sea_meet[k] == 0:
 			map.set_corner(S_BASE, face, i, j, lerpf(map.corner(S_BASE, face, i, j), top, w))
 
 ## Draws the dials' canyons into shapes.canyons (§5.4 step 6), then their

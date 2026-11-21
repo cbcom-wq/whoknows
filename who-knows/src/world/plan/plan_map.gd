@@ -104,6 +104,27 @@ func at(field: int, dir: Vector3) -> float:
 	# NaN only where an INF corner had no weight: as far as INF.
 	return s if s == s else INF
 
+## `field` at `dir` from only those of its cell's corners where `over` (another
+## field) is more than 0, bilinear over them and weighed back up to the whole:
+## NAN where none is. The land's side of a coastal cell (`over` the shore), held
+## to the water's edge instead of falling to the corners on it. Where every
+## corner is, at()'s value, but for rounding.
+func held(field: int, over: int, dir: Vector3) -> float:
+	var cell := _locate(dir)
+	var fu := cell.y
+	var fv := cell.z
+	var k := int(cell.x) * fields
+	var up := SIDE * fields
+	var sum := 0.0
+	var weight := 0.0
+	for e in 4:
+		var at := k + (up if e >= 2 else 0) + (fields if e & 1 else 0)
+		if _values[at + over] > 0.0:
+			var w := (fu if e & 1 else 1.0 - fu) * (fv if e >= 2 else 1.0 - fv)
+			sum += _values[at + field] * w
+			weight += w
+	return sum / weight if weight > 0.0 else NAN
+
 ## Every field at `dir` into `out` (fields long), each as at() gives it, to the
 ## bit, or only the first `count` of them, and gives back the number of the
 ## cell it falls in (as cell_number does). Where it falls (_locate) and the

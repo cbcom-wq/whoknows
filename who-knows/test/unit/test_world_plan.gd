@@ -285,10 +285,13 @@ func test_plateaus_stand_on_their_tops_and_keep_off_ranges_and_keeps():
 				if w <= 0.0:
 					continue
 				assert_eq(m.corner(WorldPlan.S_MOUNTAIN, face, i, j), 0.0, "no plateau on a range's flank")
-				assert_gt(m.corner(WorldPlan.S_SHORE, face, i, j), 0.0, "no plateau at sea")
+				# A region may stand whole to the water's edge (its cliff's foot,
+				# at sea level), never out at sea.
+				var shore := m.corner(WorldPlan.S_SHORE, face, i, j)
+				assert_gte(shore, 0.0, "no plateau at sea")
 				var top := m.corner(WorldPlan.S_PLATEAU_TOP, face, i, j)
 				assert_between(top, 100.0, 400.0)
-				if w == 1.0:
+				if w == 1.0 and shore > 0.0:
 					lifted += 1
 					assert_almost_eq(m.corner(WorldPlan.S_BASE, face, i, j), top, 0.01)
 				var d := m.corner_dir(face, i, j)
@@ -502,8 +505,10 @@ func test_a_canyons_walls_top_the_ground_and_its_detail_where_they_end():
 	# Leaving a canyon's reach makes no seam: there, either side of every point
 	# of its path, its walls stand over the base and the most detail the land
 	# there may add (DETAIL_REACH), so close-up detail cannot open one.
+	# Both sides of each of the canyons' path points: some 400 points with the
+	# plateau regions WorldPlan.PLATEAU_REGIONS draws.
 	var walls := _walls_short(_wadis().plan())
-	assert_gt(walls.y, 800)
+	assert_gt(walls.y, 700)
 	assert_eq(walls.x, 0, "walls under the ground and its detail where they end")
 
 func test_every_rim_settles_on_wadis_and_a_handful_of_worlds():
@@ -974,26 +979,71 @@ func test_from_300_m_something_stands_on_the_horizon():
 	gut.p("%d of %d spots over open ground see something on the horizon from 300 m" % [hits, spots.size()])
 	assert_gt(float(hits) / spots.size(), 0.8)
 
+## A range's peaks stand sharp (the wadis land spec §6): of the ground within a
+## third of a range's half-width of its spine, at least ROCK_SHARE is past
+## ROCK_SLOPE, so rock; and its spine is a crest standing clear of its flanks,
+## at four spine points in five at least CREST_CLEAR metres over the mean of the
+## ground CREST_LOOK metres either side across it.
+const ROCK_SHARE := 0.25
+const CREST_CLEAR := 15.0
+const CREST_LOOK := 150.0
+
 func test_a_range_s_peaks_stand_sharp_with_rock_faces():
 	var t := WorldTerrain.new(_wadis())
+	var p := t.plan
+	var radius := t.radius
 	var f := PackedFloat64Array(); f.resize(WorldPlan.S_SIZE)
 	var rng := RandomNumberGenerator.new(); rng.seed = 97
+	var points := 0
 	var steep := 0
-	var tallest := 0.0
-	for k in 500:
+	while points < 400:
 		var d := _dir(rng)
-		t.plan.sample(d, f)
-		while f[WorldPlan.S_KEEP] > 0.0 or f[WorldPlan.S_CANYON] < INF \
+		p.sample(d, f)
+		if f[WorldPlan.S_KEEP] > 0.0 or f[WorldPlan.S_CANYON] < INF or f[WorldPlan.S_SHORE] < 400.0 \
 				or WorldPlan.land_in(f) != WorldPlan.Land.MOUNTAINS:
-			d = _dir(rng)
-			t.plan.sample(d, f)
+			continue
+		var cell := p.map.cell_of(d)
+		var spine := p.shapes.ridge_m(d, cell)
+		var half: float = p.shapes.ranges[_nearest_range(p, d)].half_width
+		if spine.x > half / 3.0:
+			continue
+		points += 1
 		if _slope(t, d, 5.0) > WorldTerrain.ROCK_SLOPE:
 			steep += 1
-		tallest = maxf(tallest, t.height_at(d) - f[WorldPlan.S_BASE])
-	gut.p("%d of 500 points on the mountains past ROCK_SLOPE; peaks up to %.0f m over the base" % [steep, tallest])
-	assert_gt(steep, 15, "some of a range's faces are rock")
-	assert_gt(tallest, 100.0, "its peaks stand over the base")
+	gut.p("%d of %d points by a spine past ROCK_SLOPE" % [steep, points])
+	assert_gt(float(steep) / points, ROCK_SHARE, "a range's ground near its spine is rock")
+	var clear: Array[float] = []
+	for r: Dictionary in p.shapes.ranges:
+		var path: PackedVector3Array = r.spine
+		for k in range(1, path.size() - 2):
+			var q := path[k].lerp(path[k + 1], rng.randf()).normalized()
+			if p.keep_weight(q) > 0.0 or p.nearest_shore_m(q) < 1000.0 or p.shapes.canyon_at(q, p.map.cell_number(q)).x < INF:
+				continue
+			var across := q.cross(path[k + 1] - path[k]).normalized()
+			var side := 0.5 * (t.height_at(_across(q, across, CREST_LOOK, radius)) \
+				+ t.height_at(_across(q, across, -CREST_LOOK, radius)))
+			clear.append(t.height_at(q) - side)
+	clear.sort()
+	gut.p("crests over their flanks %.0f m either side: a fifth under %.1f m, the median %.1f m" \
+		% [CREST_LOOK, clear[clear.size() / 5], clear[clear.size() / 2]])
+	assert_gt(clear.size(), 100)
+	assert_gt(clear[clear.size() / 5], CREST_CLEAR, "a range's spine stands clear of its flanks")
 
+## The index of the range whose spine passes nearest `d`.
+func _nearest_range(p: WorldPlan, d: Vector3) -> int:
+	var best := INF
+	var at := 0
+	for i in p.shapes.ranges.size():
+		var path: PackedVector3Array = p.shapes.ranges[i].spine
+		for k in path.size():
+			var a := d.angle_to(path[k])
+			if a < best:
+				best = a
+				at = i
+	return at
+
+## A plateau's top stands flat at its own top, ground_high, but for where it
+## meets the sea: from its cliff line (WorldTerrain.CLIFF_IN) to the water.
 func test_a_plateau_s_top_stands_flat_at_its_own_top():
 	var t := WorldTerrain.new(_wadis())
 	var f := PackedFloat64Array(); f.resize(WorldPlan.S_SIZE)
@@ -1001,7 +1051,8 @@ func test_a_plateau_s_top_stands_flat_at_its_own_top():
 	var off := 0
 	for d in _dirs(20000):
 		t.plan.sample(d, f)
-		if f[WorldPlan.S_PLATEAU] < 1.0 or f[WorldPlan.S_CANYON] < INF or f[WorldPlan.S_KEEP] > 0.0:
+		if f[WorldPlan.S_PLATEAU] < 1.0 or f[WorldPlan.S_CANYON] < INF or f[WorldPlan.S_KEEP] > 0.0 \
+				or f[WorldPlan.S_SHORE] < WorldTerrain.CLIFF_IN:
 			continue
 		tops += 1
 		if t.height_at(d) != f[WorldPlan.S_PLATEAU_TOP] or t.ground_at(d, 0.0) != &"ground_high":
@@ -1024,6 +1075,8 @@ func test_boulders_gather_at_the_feet_of_ranges_and_plateaus():
 		var plateau := f[WorldPlan.S_PLATEAU]
 		if f[WorldPlan.S_SHORE] > 0.0 and plateau < WorldPlan.PLATEAU_FROM \
 				and (plateau > 0.0 or (mountain >= WorldTerrain.MOUNTAIN_TALUS.x and mountain < WorldTerrain.MOUNTAIN_TALUS.y)):
+			if plateau > 0.0 and t._tower_stand(d) > 0.0:
+				continue
 			feet += 1
 			if not t.in_talus(d):
 				bare += 1
@@ -1051,7 +1104,7 @@ func test_the_planned_ground_wears_the_desert_s_colours_and_its_waterline_is_dam
 	for g in [&"ground_low", &"ground_high", &"dust", &"damp"]:
 		assert_true(seen.has(g), "some ground is %s" % g)
 	# Along the coast the ground is damp where it stands in the band by the water
-	# (on the beaches: a range's, a plateau's or a canyon's own colours come first).
+	# (on the beaches: a cliff's face and a canyon's own colours come first).
 	var rng := RandomNumberGenerator.new(); rng.seed = 83
 	var coast := 0
 	var damp := 0
@@ -1060,7 +1113,7 @@ func test_the_planned_ground_wears_the_desert_s_colours_and_its_waterline_is_dam
 		var d := _dir(rng)
 		t.plan.sample(d, f)
 		if f[WorldPlan.S_KEEP] > 0.0 or absf(f[WorldPlan.S_SHORE]) >= 150.0 or f[WorldPlan.S_CANYON] < INF \
-				or f[WorldPlan.S_MOUNTAIN] >= WorldPlan.MOUNTAINS_FROM or f[WorldPlan.S_PLATEAU] >= WorldPlan.PLATEAU_FROM:
+				or f[WorldPlan.S_MOUNTAIN] > 0.0 or f[WorldPlan.S_PLATEAU] > 0.0:
 			continue
 		coast += 1
 		var h := t.height_at(d) - t.plan.sea_level
@@ -1074,6 +1127,177 @@ func test_the_planned_ground_wears_the_desert_s_colours_and_its_waterline_is_dam
 	assert_gt(damp, 100)
 	assert_eq(dry, 0, "points damp out of the band by the water, or in it and not")
 
+## Where a branch joins its parent, the ground is never over the lowest of every
+## canyon's floor and stepped walls (worked out by brute force), and is that
+## floor where it is one: no canyon's riser stands on another's floor. The
+## branch's floor runs level onto its parent's. Within JOIN_SLACK metres: the
+## terrain's canyon parts are 32-bit floats.
+const JOIN_REACH := 1500.0
+const JOIN_SLACK := 0.01
+
+func test_where_canyons_meet_the_ground_is_their_lowest_cut():
+	var t := WorldTerrain.new(_wadis())
+	var p := t.plan
+	var radius := t.radius
+	var rng := RandomNumberGenerator.new(); rng.seed = 101
+	var joins := 0
+	var floors := 0
+	for c: Dictionary in p.shapes.canyons:
+		if not c.has("joins"):
+			continue
+		joins += 1
+		var path: PackedVector3Array = c.path
+		var end := path[path.size() - 1]
+		var over := 0
+		var off_floor := 0
+		for k in 600:
+			var d := _off(end, sqrt(rng.randf()) * JOIN_REACH / radius, rng)
+			if p.keep_weight(d) > 0.0:
+				continue
+			var cut := _brute_cut(p, d)
+			if cut.x == INF:
+				continue
+			var h := t.height_at(d)
+			if h > cut.x + JOIN_SLACK:
+				over += 1
+			if cut.y <= 0.0:
+				floors += 1
+				if absf(h - cut.x) > JOIN_SLACK:
+					off_floor += 1
+		assert_eq(over, 0, "points by a join over the lowest cut")
+		assert_eq(off_floor, 0, "points on a floor by a join not at that floor")
+		var parent_floor := _brute_cut(p, end)
+		assert_almost_eq(t.height_at(end), parent_floor.x, JOIN_SLACK, "the join is at its parent's floor")
+		# The branch's last JOIN_REACH metres along its centreline, level enough.
+		var along := 0.0
+		for s in range(path.size() - 1, 0, -1):
+			along += path[s].angle_to(path[s - 1]) * radius
+			if along > JOIN_REACH:
+				break
+			if p.keep_weight(path[s - 1]) == 0.0:
+				assert_lt(_slope(t, path[s - 1], 5.0), deg_to_rad(10.0), "the branch's floor by its join")
+	assert_gt(joins, 0, "the world's canyons have a branch")
+	assert_gt(floors, 50)
+
+## Vector2(the lowest cut of every canyon at `d`: of each canyon, at the nearest
+## point of its path whose walls reach `d`, its floor plus its stepped walls'
+## rise, by every segment of every canyon; the metres past that canyon's floor's
+## edge), or Vector2(INF, 0) where no canyon's walls reach.
+func _brute_cut(p: WorldPlan, d: Vector3) -> Vector2:
+	var radius := p.shapes.radius_m
+	var lowest := Vector2(INF, 0.0)
+	for c: Dictionary in p.shapes.canyons:
+		var path: PackedVector3Array = c.path
+		var best := INF
+		var cut := Vector2(INF, 0.0)
+		for s in path.size() - 1:
+			var a := path[s]
+			var ab := path[s + 1] - a
+			var t := clampf((d - a).dot(ab) / ab.length_squared(), 0.0, 1.0)
+			var chord := d.distance_to(a + ab * t)
+			var metres := d.angle_to(a + ab * t) * radius
+			var half := lerpf(c.half_floor[s], c.half_floor[s + 1], t)
+			var rim := lerpf(c.rim[s], c.rim[s + 1], t)
+			if chord < best and metres <= half + rim * WorldPlan.CANYON_WALL_RUN:
+				best = chord
+				var bed := lerpf(c.floor[s], c.floor[s + 1], t)
+				cut = Vector2(bed + PlanShapes.wall_rise(metres - half), metres - half)
+		if cut.x < lowest.x:
+			lowest = cut
+	return lowest
+
+## Where a range or a plateau meets the sea it ends in a cliff: walking to the
+## water from CLIFF_SPOTS seeded spots on each kind of such coast, the ground
+## falls from the cliff line (WorldTerrain.CLIFF_IN) at least CLIFF_DROP metres
+## to within a metre of sea level over at most CLIFF_RUN_MOST metres, its face
+## rock.
+const CLIFF_SPOTS := 40
+const CLIFF_DROP := 50.0
+const CLIFF_RUN_MOST := 30.0
+
+func test_ranges_and_plateaus_meet_the_sea_in_cliffs():
+	var t := WorldTerrain.new(_wadis())
+	var p := t.plan
+	var radius := t.radius
+	var spots := _cliff_spots(t, CLIFF_SPOTS, &"range")
+	spots.append_array(_cliff_spots(t, CLIFF_SPOTS, &"plateau"))
+	for d in spots:
+		# Down the shore's fall, half a metre at a time, to past the cliff's foot.
+		var fall := _shore_fall(p, d, radius)
+		var top := Vector3.ZERO
+		var top_m := 0.0
+		var foot := Vector3.ZERO
+		var foot_m := 0.0
+		var m := 0.0
+		while m < 400.0:
+			var q := _across(d, fall, m, radius)
+			var shore := p.map.at(WorldPlan.S_SHORE, q)
+			if shore >= WorldTerrain.CLIFF_IN + 0.5:
+				top = q
+				top_m = m
+			elif shore <= WorldTerrain.CLIFF_IN - WorldTerrain.CLIFF_RUN - 0.5:
+				foot = q
+				foot_m = m
+				break
+			m += 0.5
+		assert_ne(foot, Vector3.ZERO, "the walk reaches the cliff's foot")
+		if foot == Vector3.ZERO:
+			continue
+		var high := t.height_at(top)
+		var low := t.height_at(foot)
+		assert_gt(high - p.sea_level, CLIFF_DROP, "the cliff stands over the water")
+		assert_between(low, p.sea_level - 0.001, p.sea_level + 1.0, "its foot is at the water")
+		assert_lt(foot_m - top_m, CLIFF_RUN_MOST, "it falls sheer")
+		var face := _across(d, fall, 0.5 * (top_m + foot_m), radius)
+		assert_eq(t.ground_at(face, 0.0), &"rock", "its face is rock")
+
+## `n` seeded spots CLIFF_IN + 10 to CLIFF_IN + 150 metres inland on coasts
+## where a range (its mountains' weight held to the water, PlanMap.held, half or
+## more) or a plateau's top meets the sea, out of the kept discs and the
+## canyons: drawn from the cells within 1.5 km of the water with either near.
+## Only a range's coast if `kind` is &"range", a plateau's if &"plateau".
+func _cliff_spots(t: WorldTerrain, n: int, kind := &"") -> Array[Vector3]:
+	var p := t.plan
+	var f := PackedFloat64Array(); f.resize(WorldPlan.S_SIZE)
+	var cells: Array[Vector4i] = []
+	for index in CubeSphere.FACES * PlanMap.CELLS * PlanMap.CELLS:
+		var key := PlanShapes.cell_key(index)
+		var r := CubeSphere.node_rect(key)
+		var mid := CubeSphere.direction(key.x, r.x + 0.5 * r.z, r.y + 0.5 * r.z)
+		p.sample(mid, f)
+		var plateau := f[WorldPlan.S_PLATEAU] > 0.0 and kind != &"range"
+		var range_near := f[WorldPlan.S_MOUNTAIN] > 0.0 and kind != &"plateau"
+		if absf(f[WorldPlan.S_SHORE]) < 1500.0 and (plateau or range_near):
+			cells.append(key)
+	var rng := RandomNumberGenerator.new(); rng.seed = 103
+	var out: Array[Vector3] = []
+	var tries := 0
+	while out.size() < n and tries < 200000 and not cells.is_empty():
+		tries += 1
+		var key := cells[rng.randi_range(0, cells.size() - 1)]
+		var r := CubeSphere.node_rect(key)
+		var d := CubeSphere.direction(key.x, r.x + rng.randf() * r.z, r.y + rng.randf() * r.z)
+		p.sample(d, f)
+		var shore := f[WorldPlan.S_SHORE]
+		if shore < WorldTerrain.CLIFF_IN + 10.0 or shore > WorldTerrain.CLIFF_IN + 150.0 \
+				or f[WorldPlan.S_KEEP] > 0.0 or f[WorldPlan.S_CANYON] < INF:
+			continue
+		var on_top := f[WorldPlan.S_PLATEAU] >= 1.0
+		if on_top and kind != &"range" \
+				or not on_top and kind != &"plateau" and p.map.held(WorldPlan.S_MOUNTAIN, WorldPlan.S_SHORE, d) >= 0.5:
+			out.append(d)
+	assert_eq(out.size(), n, "spots on cliff coasts %s" % kind)
+	return out
+
+## The unit tangent at `d` down which the plan's S_SHORE falls fastest: toward
+## the water.
+func _shore_fall(p: WorldPlan, d: Vector3, radius: float) -> Vector3:
+	var e1 := d.cross(Vector3.UP if absf(d.y) < 0.9 else Vector3.RIGHT).normalized()
+	var e2 := d.cross(e1)
+	var gx := p.map.at(WorldPlan.S_SHORE, _across(d, e1, 1.0, radius)) - p.map.at(WorldPlan.S_SHORE, _across(d, e1, -1.0, radius))
+	var gy := p.map.at(WorldPlan.S_SHORE, _across(d, e2, 1.0, radius)) - p.map.at(WorldPlan.S_SHORE, _across(d, e2, -1.0, radius))
+	return -(e1 * gx + e2 * gy).normalized()
+
 func test_canyon_walls_step_up_and_meet_the_ground_with_no_seam():
 	var t := WorldTerrain.new(_wadis())
 	var p := t.plan
@@ -1082,20 +1306,26 @@ func test_canyon_walls_step_up_and_meet_the_ground_with_no_seam():
 	var kinds := {}
 	var walls := 0
 	var profiles := 0
-	while profiles < 60:
+	while profiles < 120:
+		# Half the profiles from a point of a path, half from between two, where
+		# the floor and rim are lerped.
 		var c: Dictionary = p.shapes.canyons[rng.randi_range(0, p.shapes.canyons.size() - 1)]
-		var i := rng.randi_range(1, c.path.size() - 2)
-		var at: Vector3 = c.path[i]
-		var across: Vector3 = at.cross(c.path[i + 1] - c.path[i - 1]).normalized()
+		var path: PackedVector3Array = c.path
+		var i := rng.randi_range(1, path.size() - 2)
+		var along := 0.0 if profiles % 2 == 0 else rng.randf()
+		var at := path[i].lerp(path[i + 1], along).normalized()
+		var ahead := path[i + 1] - path[i - 1] if along == 0.0 else path[i + 1] - path[i]
+		var across := at.cross(ahead).normalized()
 		var side := 1.0 if rng.randf() < 0.5 else -1.0
-		var reach: float = c.half_floor[i] + c.rim[i] * WorldPlan.CANYON_WALL_RUN
+		var reach: float = lerpf(c.half_floor[i], c.half_floor[i + 1], along) \
+			+ lerpf(c.rim[i], c.rim[i + 1], along) * WorldPlan.CANYON_WALL_RUN
 		if p.keep_weight(at) > 0.0:
 			continue
 		profiles += 1
 		var inside := _across(at, across, side * (reach - 0.05), radius)
 		var outside := _across(at, across, side * (reach + 0.05), radius)
 		assert_almost_eq(t.height_at(inside), t.height_at(outside), 0.25, "the ground where the walls end")
-		var m: float = c.half_floor[i] + 1.0
+		var m: float = lerpf(c.half_floor[i], c.half_floor[i + 1], along) + 1.0
 		while m < reach - 1.0:
 			var g := t.ground_at(_across(at, across, side * m, radius), 0.0)
 			kinds[g] = kinds.get(g, 0) + 1
@@ -1319,7 +1549,8 @@ func _nearest_on(path: PackedVector3Array, d: Vector3) -> Vector3:
 ## What canyon_at should give at `d`, every segment of every canyon tried: of
 ## each canyon, the nearest point of its path whose walls reach `d` (its floor's
 ## half-width and CANYON_WALL_RUN times its rim); of those, the one whose cut
-## stands lowest at `d` (its floor, and the walls' rise past the floor's edge).
+## stands lowest at `d` (its floor, and its stepped walls' rise past the
+## floor's edge, PlanShapes.wall_rise).
 ## Nearest by the chord, as canyon_at measures, so where two points of a path
 ## are as near as makes no odds (inside a bend) both pick the same.
 func _brute_canyon(p: WorldPlan, d: Vector3) -> Vector3:
@@ -1343,7 +1574,7 @@ func _brute_canyon(p: WorldPlan, d: Vector3) -> Vector3:
 				best = chord
 				var bed := lerpf(c.floor[s], c.floor[s + 1], t)
 				got = Vector3(metres / half, bed, rim)
-				cut = bed + maxf(metres - half, 0.0) / WorldPlan.CANYON_WALL_RUN
+				cut = bed + PlanShapes.wall_rise(metres - half)
 		if cut < lowest:
 			lowest = cut
 			out = got
@@ -1449,6 +1680,11 @@ func _keys_at_depths(t: WorldTerrain, depths: Array, n: int) -> Array[Vector4i]:
 		var out_m: float = rng.randf_range(c.half_floor[i], c.half_floor[i] + c.rim[i] * WorldPlan.CANYON_WALL_RUN)
 		var off := (1.0 if rng.randf() < 0.5 else -1.0) * out_m / radius
 		spots.append((at * cos(off) + across * sin(off)).normalized())
+	# On the cliff line itself, and over its face.
+	for d in _cliff_spots(t, SPOTS):
+		var fall := _shore_fall(p, d, radius)
+		spots.append(d)
+		spots.append(_across(d, fall, p.map.at(WorldPlan.S_SHORE, d) - WorldTerrain.CLIFF_IN + 5.0, radius))
 	for d in spots:
 		for depth in [8, 10]:
 			out.append(CubeSphere.key_for(d, depth))
@@ -1478,24 +1714,42 @@ func _open_ground(t: WorldTerrain, n: int) -> Array[Vector3]:
 ## Metres between the samples _horizon_feature takes along a bearing.
 const HORIZON_STEP := 250.0
 
-## True if, `altitude` metres over the ground at `d`, something stands within
-## the horizon on one of 36 bearings: a sample, every HORIZON_STEP out to the
-## horizon, whose land is not open ground (a range, a plateau or the sea), that
-## a canyon's walls reach, or whose ground stands 60 m over the spot's.
+## True if, from `altitude` metres over the ground at `d`, something can be
+## seen on one of 36 bearings: a sample, every HORIZON_STEP out to as far as the
+## plan's highest ground could show over the curve, whose land is not open
+## ground (a range, a plateau or the sea, its water at sea level), that a
+## canyon's walls reach, or whose ground stands 60 m over the spot's, and whose
+## elevation from the eye is HORIZON_CLEAR or more over every nearer sample's.
+const HORIZON_CLEAR := 0.05
+
 func _horizon_feature(t: WorldTerrain, d: Vector3, altitude: float) -> bool:
+	var p := t.plan
 	var r := t.radius
-	var reach := r * acos(r / (r + altitude))
 	var here := t.height_at(d)
+	var eye := r + here + altitude
+	var highest := -INF
+	for face in CubeSphere.FACES:
+		highest = maxf(highest, p.bounds_of(Vector4i(face, 0, 0, 0)).y)
+	var reach := sqrt(2.0 * r * altitude) + sqrt(2.0 * r * maxf(highest - here, 0.0))
+	var clear := deg_to_rad(HORIZON_CLEAR)
 	var f := PackedFloat64Array(); f.resize(WorldPlan.S_SIZE)
 	for b in 36:
+		var over := -INF
 		var m := HORIZON_STEP
 		while m <= reach:
 			var q := _at(d, m, deg_to_rad(b * 10.0), r)
-			t.plan.sample(q, f)
+			p.sample(q, f)
 			var land := WorldPlan.land_in(f)
-			if (land != WorldPlan.Land.DUNES and land != WorldPlan.Land.PLAINS) or f[WorldPlan.S_CANYON] < INF:
+			var h := t.height_at(q)
+			if land == WorldPlan.Land.SEA:
+				h = maxf(h, p.sea_level)
+			var angle := m / r
+			var rise := atan2((r + h) * cos(angle) - eye, (r + h) * sin(angle))
+			var feature := (land != WorldPlan.Land.DUNES and land != WorldPlan.Land.PLAINS) \
+				or f[WorldPlan.S_CANYON] < INF or h > here + 60.0
+			if feature and rise >= over + clear:
 				return true
-			if t.height_at(q) > here + 60.0:
-				return true
+			over = maxf(over, rise)
 			m += HORIZON_STEP
 	return false
+

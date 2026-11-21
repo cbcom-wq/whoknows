@@ -179,6 +179,17 @@ func lower_by_canyons(low: PackedFloat32Array) -> void:
 		if _near_from[c + 1] > _near_from[c]:
 			low[c] = minf(low[c], canyon_floor_low(c))
 
+## A canyon's walls' rise over its floor `past` metres out from the floor's edge
+## (none on the floor): steps WorldPlan.CANYON_WALL_STEP metres up, each its
+## riser and then its ledge (CANYON_WALL_LEDGE of the step's run), so never under
+## the straight wall, past / CANYON_WALL_RUN. From any thread.
+static func wall_rise(past: float) -> float:
+	if past <= 0.0:
+		return 0.0
+	var t := past / (WorldPlan.CANYON_WALL_STEP * WorldPlan.CANYON_WALL_RUN)
+	var k := floorf(t)
+	return WorldPlan.CANYON_WALL_STEP * (k + minf((t - k) / (1.0 - WorldPlan.CANYON_WALL_LEDGE), 1.0))
+
 ## The canyon at `d`, a unit direction in cell number `cell` (cell_index's):
 ## Vector3(metres from its centreline over its floor's half-width, at most 1
 ## on the floor; its floor's height; its rim, metres over the floor), what
@@ -186,9 +197,10 @@ func lower_by_canyons(low: PackedFloat32Array) -> void:
 ## 0) where no canyon's walls reach. Of each canyon near the cell, the nearest
 ## point of its path whose walls reach `d` (the floor's half-width and
 ## WorldPlan.CANYON_WALL_RUN times the rim there); where two canyons reach it,
-## the one whose cut stands lowest at `d`: its floor plus the walls' rise past
-## the floor's edge, so where canyons meet, the deeper's floor and walls cut
-## through the other's. From any thread; allocates nothing.
+## the one whose cut stands lowest at `d`: its floor plus its stepped walls'
+## rise past the floor's edge (wall_rise), the ground the terrain lays there, so
+## where canyons meet, the deeper's floor and walls cut through the other's.
+## From any thread; allocates nothing.
 func canyon_at(d: Vector3, cell: int) -> Vector3:
 	var c := canyon_parts_at(d, cell)
 	if c.x == INF:
@@ -237,7 +249,7 @@ func canyon_parts_at(d: Vector3, cell: int) -> Vector4:
 		var bed: PackedFloat32Array = c.floor
 		var w := lerpf(half[at], half[at + 1], at_t)
 		var f := lerpf(bed[at], bed[at + 1], at_t)
-		var cut := f + maxf(metres - w, 0.0) / run
+		var cut := f + wall_rise(metres - w)
 		if cut < lowest:
 			lowest = cut
 			out = Vector4(metres, w, f, lerpf(rim[at], rim[at + 1], at_t))
