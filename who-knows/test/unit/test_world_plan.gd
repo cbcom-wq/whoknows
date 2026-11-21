@@ -1098,12 +1098,15 @@ func test_a_butte_has_a_flat_top_and_sheer_rock_sides():
 
 ## Where a butte gives the ground back there is no seam: across its apron's end
 ## and its reach's edge, along SEAM_BEARINGS bearings, the ground between points
-## SEAM_STEP apart never rises or falls SEAM_JUMP. (Open ground off the plateaus'
-## edge bands and the canyons, all a butte stands on, climbs under 0.32 m a metre
-## at its 99th percentile: its dunes' lee faces.)
+## SEAM_STEP apart never rises or falls SEAM_JUMP. A step in the ground shows
+## whole between two points however close; a slope shows in proportion to their
+## gap. Open ground off the plateaus' edge bands and the canyons, all a butte
+## stands on, climbs 0.47 m a metre at its steepest (a dune's lee face), 0.12 m
+## a SEAM_STEP: it would take a slope of 1 (45 degrees) to rise SEAM_JUMP, and a
+## step of SEAM_JUMP or more fails however gentle the ground round it.
 const SEAM_BEARINGS := 8
-const SEAM_STEP := 1.0
-const SEAM_JUMP := 0.5
+const SEAM_STEP := 0.25
+const SEAM_JUMP := 0.25
 
 func test_a_butte_gives_the_ground_back_without_a_seam():
 	# For each of WADIS's buttes, along SEAM_BEARINGS bearings: out from its top's
@@ -1148,7 +1151,8 @@ func test_a_butte_gives_the_ground_back_without_a_seam():
 				worst = maxf(worst, jump)
 				if jump >= SEAM_JUMP:
 					seams += 1
-	gut.p("%d runs across buttes' apron ends and reach edges: a metre's step rises or falls %.3f m at most" % [runs, worst])
+	gut.p("%d runs across buttes' apron ends and reach edges: a %.2f m step rises or falls %.3f m at most, %.3f m under %.2f" % [
+		runs, SEAM_STEP, worst, SEAM_JUMP - worst, SEAM_JUMP])
 	assert_gt(runs, 1000)
 	assert_eq(seams, 0, "runs with a seam")
 	# And on any world: by a butte's reach (BUTTE_SAND or more past its face) the
