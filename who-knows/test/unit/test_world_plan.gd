@@ -1478,23 +1478,25 @@ func test_a_cliff_top_has_no_pit_behind_it():
 ## read at the water's edge each point faces (WorldTerrain._shore_point), moves
 ## no more than LINE_STEP_MOST in a metre, so no Newton step there overshoots to
 ## another shore's bays; S_SHORE no more than SHORE_STEP_MOST (the plan's field,
-## drawn out or in over a cell). On the cliff coasts (_on_cliff_coast) of WADIS
-## and the worlds of SEAM_SEEDS (WADIS's coasts never cross a face's edge; theirs
-## do, SEAM_FACE_EDGES_LEAST times or more), from every point where a cell's edge
+## drawn out over a cell: 1.62 by a cube's corner on TOMERKA-79). On the cliff
+## coasts (_on_cliff_coast) of WADIS and the worlds of SEAM_SEEDS (WADIS's coasts
+## never cross a face's edge; theirs do, SEAM_FACE_EDGES_LEAST times or more; and
+## TOMERKA-79's cells are under CLIFF_BAY, WorldTerrain.bay_depth), from every
+## point where a cell's edge
 ## crosses the line (_seam_crossings), SEAM_HALF metres either way at 1 m across
 ## the edge and down the shore's fall; and along the coast, the contour of S_SHORE
 ## through every SEAM_ALONG-th of them, SEAM_HALF_ALONG metres either way. (The
 ## line moves up to 6.6 m in a metre, on TAROR-91, where it slides round a convex
-## corner; a Newton step of twice its length moved it 15 to 106 m, and a beach a
+## corner; a Newton step of twice its length moved it 15 to 106 m, a beach a
 ## twentieth short of whole within CLIFF_IN less CLIFF_RUN of the water stepped
-## 2.9 m over the face's fall.)
-const SEAM_SEEDS := [139, 248]
+## 2.9 m over the face's fall, and TOMERKA-79's bays CLIFF_BAY deep moved it 32.6.)
+const SEAM_SEEDS := [139, 248, 71]
 const SEAM_HALF := 30
 const SEAM_ALONG := 5
 const SEAM_HALF_ALONG := 150
 const SEAM_SLACK := 1.0
 const LINE_STEP_MOST := 10.0
-const SHORE_STEP_MOST := 1.6
+const SHORE_STEP_MOST := 1.8
 const SEAM_FACE_EDGES_LEAST := 3
 
 func test_a_cliff_coast_is_seamless_over_cell_and_face_edges():
@@ -1503,53 +1505,71 @@ func test_a_cliff_coast_is_seamless_over_cell_and_face_edges():
 		recipes.append(WorldRecipe.from_seed(s))
 	var face_edges := 0
 	for r in recipes:
-		var t := WorldTerrain.new(r)
-		var p := t.plan
-		var radius := t.radius
-		var crossings := _seam_crossings(t)
-		var most := [0.0, 0.0, -INF]
-		var bad := 0
-		var turns := 0
-		var on_faces := 0
-		for i in crossings.size():
-			var q: Vector3 = crossings[i][0]
-			if crossings[i][2]:
-				on_faces += 1
-			for way: Vector3 in [q.cross(crossings[i][1]).normalized(), _shore_fall(p, q, radius)]:
-				var path: Array[Vector3] = []
-				for m in range(-SEAM_HALF, SEAM_HALF + 1):
-					path.append(_across(q, way, m, radius))
-				bad += _seam_steps(t, path, most)
-			if i % SEAM_ALONG != 0:
-				continue
-			# Along the coast: the contour through q, back then on.
-			var shore := p.map.at(WorldPlan.S_SHORE, q)
-			var coast: Array[Vector3] = [q]
-			for side: float in [-1.0, 1.0]:
-				var at := q
-				var half: Array[Vector3] = []
-				for m in SEAM_HALF_ALONG:
-					var along := at.cross(_shore_rise(p, at, radius)).normalized() * side
-					at = _onto_shore(p, _across(at, along, 1.0, radius), radius, shore)
-					half.append(at)
-				if side < 0.0:
-					half.reverse()
-					half.append_array(coast)
-					coast = half
-				else:
-					coast.append_array(half)
-			for k in coast.size() - 1:
-				if (p.map.at(WorldPlan.S_SHORE, coast[k]) >= t._cliff_line(coast[k])) \
-						!= (p.map.at(WorldPlan.S_SHORE, coast[k + 1]) >= t._cliff_line(coast[k + 1])):
-					turns += 1
-			bad += _seam_steps(t, coast, most)
-		face_edges += on_faces
+		var seams := _seams(WorldTerrain.new(r))
+		var most: Array = seams[3]
+		face_edges += seams[1]
 		gut.p("%s: %d crossings of the cliff line with cell edges (%d on face edges), the face crossed %d times along the coast; the line moves up to %.2f m in a metre, S_SHORE %.2f, the ground over the face's fall by %.2f m" % [
-			r.name, crossings.size(), on_faces, turns, most[0], most[1], most[2]])
-		assert_gt(crossings.size(), 0, "%s: cell edges crossing its cliff lines" % r.name)
-		assert_gt(turns, 0, "%s: the face crossed along the coast" % r.name)
-		assert_eq(bad, 0, "%s: metre steps by cliff lines over the face's fall, LINE_STEP_MOST or SHORE_STEP_MOST" % r.name)
+			r.name, seams[0], seams[1], seams[2], most[0], most[1], most[2]])
+		assert_gt(seams[0], 0, "%s: cell edges crossing its cliff lines" % r.name)
+		assert_gt(seams[2], 0, "%s: the face crossed along the coast" % r.name)
+		assert_eq(seams[4], 0, "%s: metre steps by cliff lines over the face's fall, LINE_STEP_MOST or SHORE_STEP_MOST" % r.name)
 	assert_gte(face_edges, SEAM_FACE_EDGES_LEAST, "cube face edges crossing cliff lines")
+
+## test_a_cliff_coast_is_seamless's walks over `t`'s cliff coasts: [crossings,
+## those on face edges, the face's crossings along the coast, [the line's largest
+## metre step, S_SHORE's, the ground's most over the face's fall], the steps
+## that break its bounds]. Each walk keeps to the cliff coast (_on_cliff_coast,
+## either kind) about its crossing: off it, a plateau's edge band steps down in
+## its own sheer terraces.
+func _seams(t: WorldTerrain) -> Array:
+	var p := t.plan
+	var radius := t.radius
+	var f := PackedFloat64Array(); f.resize(WorldPlan.S_SIZE)
+	var on_coast := func(d: Vector3) -> bool:
+		return _on_cliff_coast(p, d, &"range", f) or _on_cliff_coast(p, d, &"plateau", f)
+	var crossings := _seam_crossings(t)
+	var most := [0.0, 0.0, -INF]
+	var bad := 0
+	var turns := 0
+	var on_faces := 0
+	for i in crossings.size():
+		var q: Vector3 = crossings[i][0]
+		if crossings[i][2]:
+			on_faces += 1
+		for way: Vector3 in [q.cross(crossings[i][1]).normalized(), _shore_fall(p, q, radius)]:
+			var path: Array[Vector3] = [q]
+			for side in [-1, 1]:
+				for m in range(1, SEAM_HALF + 1):
+					var at := _across(q, way, side * m, radius)
+					if not on_coast.call(at):
+						break
+					if side < 0:
+						path.push_front(at)
+					else:
+						path.append(at)
+			bad += _seam_steps(t, path, most)
+		if i % SEAM_ALONG != 0:
+			continue
+		# Along the coast: the contour through q, back then on.
+		var shore := p.map.at(WorldPlan.S_SHORE, q)
+		var coast: Array[Vector3] = [q]
+		for side: float in [-1.0, 1.0]:
+			var at := q
+			for m in SEAM_HALF_ALONG:
+				var along := at.cross(_shore_rise(p, at, radius)).normalized() * side
+				at = _onto_shore(p, _across(at, along, 1.0, radius), radius, shore)
+				if not on_coast.call(at):
+					break
+				if side < 0.0:
+					coast.push_front(at)
+				else:
+					coast.append(at)
+		for k in coast.size() - 1:
+			if (p.map.at(WorldPlan.S_SHORE, coast[k]) >= t._cliff_line(coast[k])) \
+					!= (p.map.at(WorldPlan.S_SHORE, coast[k + 1]) >= t._cliff_line(coast[k + 1])):
+				turns += 1
+		bad += _seam_steps(t, coast, most)
+	return [crossings.size(), on_faces, turns, most, bad]
 
 ## [point, the edge's unit tangent there, whether the edge is a cube face's]:
 ## where a cell's edge crosses the cliff line (S_SHORE at WorldTerrain._cliff_line)
@@ -1633,16 +1653,21 @@ func _seam_steps(t: WorldTerrain, path: Array[Vector3], most: Array) -> int:
 			bad += 1
 	return bad
 
-## A sea cliff's bay lays its beach a little over sea level up to CLIFF_BAY of
-## S_SHORE inland of the water (WorldTerrain._beach), and where a world's cells
-## are smaller than that a cell can lie all on land within it: PlanBounds holds
-## every cell with a corner under CLIFF_BAY down to sea level. Without that, 53
-## such cells of TOMERKA-79 (BAY_BOUNDS_SEED, 15.7 km across, cells of 386 m)
-## stood over it; none of WADIS's or ALLOROR-29's, whose cells are 1.3 km or more.
+## A sea cliff's bay lays its beach a little over sea level up to the world's bay
+## depth (WorldTerrain.bay_depth) of S_SHORE inland of the water
+## (WorldTerrain._beach), and where a world's cells are small a cell can lie all
+## on land within it: PlanBounds holds every cell with a corner under the bay
+## depth down to sea level. With bays CLIFF_BAY deep, 53 such cells of
+## TOMERKA-79 (BAY_BOUNDS_SEED, 15.7 km across, cells of 386 m) stood over it
+## without that; with bays no deeper than its cells allow, none on it or on
+## fifteen more worlds of 15 to 55 km, so this holds the beach to the bounds
+## however PlanBounds comes to.
 const BAY_BOUNDS_SEED := 71
 
 func test_the_bounds_hold_a_bays_beach_where_cells_are_small():
-	var p := WorldRecipe.from_seed(BAY_BOUNDS_SEED).plan()
+	var r := WorldRecipe.from_seed(BAY_BOUNDS_SEED)
+	var p := r.plan()
+	var bay := WorldTerrain.bay_depth(r.radius_m)
 	var nearest := PackedFloat32Array()
 	var farthest := PackedFloat32Array()
 	p.map.cell_range(WorldPlan.S_SHORE, nearest, farthest)
@@ -1650,16 +1675,16 @@ func test_the_bounds_hold_a_bays_beach_where_cells_are_small():
 	var dry := 0
 	var over := 0
 	for index in nearest.size():
-		if nearest[index] >= WorldTerrain.CLIFF_BAY:
+		if nearest[index] >= bay:
 			continue
 		near += 1
 		if nearest[index] >= 0.0:
 			dry += 1
 		if p.bounds_of(PlanShapes.cell_key(index)).x > p.sea_level:
 			over += 1
-	gut.p("%d cells with a corner within CLIFF_BAY of the water, %d of them all on land" % [near, dry])
-	assert_gt(dry, 0, "cells all on land within CLIFF_BAY of the water")
-	assert_eq(over, 0, "cells within CLIFF_BAY of the water whose low bound stands over sea level")
+	gut.p("%d cells with a corner within %.0f m of the water, %d of them all on land" % [near, bay, dry])
+	assert_gt(dry, 0, "cells all on land within the bay depth of the water")
+	assert_eq(over, 0, "cells within the bay depth of the water whose low bound stands over sea level")
 
 ## On land, just off the water: the S_SHORE a walk along a coast keeps to.
 const WALK_SHORE := 2.0

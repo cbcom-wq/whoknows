@@ -201,16 +201,24 @@ const TOWER_EASE := 0.1
 ## CLIFF_WAVE metres across read along the water's edge, eased from headland to
 ## bay as its size goes from BAY_NOISE.x to BAY_NOISE.y: a headland wherever the
 ## noise passes zero, every kilometre or few, and between them bays of every
-## width and depth. CLIFF_BAY stays well inside a coastal cell (on WADIS the
-## first corner off the water is 985 m or more inland of it), and PlanBounds
-## holds every cell within CLIFF_BAY of the water down to sea level. A coast is
-## all cliff where the land's mountains' weight (PlanMap.held: its cell's inland
-## corners', held to the water) or its plateau's is CLIFF_FADE or more, and none
-## where there is none. A range's base is held to the water the same way, since
-## its cell's corners on the water's edge stand at sea level. Only looked for
-## within CLIFF_LOOK metres of the water.
+## width and depth. A bay's back stays well inside a coastal cell (on WADIS the
+## first corner off the water is 985 m or more inland of it): on a world whose
+## plan's cells are small, no deeper than BAY_CELL of a cell's edge (bay_depth),
+## since deeper the water's edge a point faces (_shore_point) is found through
+## cells whose field rises slowly, a Newton step runs on two cells and more, and
+## the line jumps about the back of the bay in slots of beach a few metres wide
+## (TOMERKA-79, WorldRecipe.from_seed(71), cells of 386 m: the line moved 32.6 m
+## in a metre with bays CLIFF_BAY deep, 3.0 at 0.75 of a cell, 2.4 at 0.7; and
+## KASEN-88, seed 1812, 145 m, then 20.9 at 0.8, 9.0 at 0.75 and 6.9 at 0.7).
+## PlanBounds holds every cell within the bay depth of the water down to sea
+## level. A coast is all cliff where the land's mountains' weight (PlanMap.held:
+## its cell's inland corners', held to the water) or its plateau's is CLIFF_FADE
+## or more, and none where there is none. A range's base is held to the water
+## the same way, since its cell's corners on the water's edge stand at sea level.
+## Only looked for within CLIFF_LOOK metres of the water.
 const CLIFF_IN := 40.0
 const CLIFF_BAY := 400.0
+const BAY_CELL := 0.7
 const CLIFF_WAVE := 2500.0
 const BAY_NOISE := Vector2(0.05, 0.6)
 const CLIFF_RUN := 4.0
@@ -320,6 +328,8 @@ var _roll: FastNoiseLite
 var _peaks: FastNoiseLite
 var _wander: FastNoiseLite
 var _bays: FastNoiseLite
+## The back of a bay on this world: bay_depth.
+var _bay_depth := CLIFF_BAY
 
 var _continents := FastNoiseLite.new()
 var _hills := FastNoiseLite.new()
@@ -393,6 +403,7 @@ func _init(p_recipe: WorldRecipe) -> void:
 		_peaks = _simplex(&"plan_peaks", MOUNTAIN_OCTAVES)
 		_peaks.fractal_type = FastNoiseLite.FRACTAL_RIDGED
 		_bays = _simplex(&"plan_bays", 1)
+		_bay_depth = bay_depth(radius)
 		_planned_range()
 	_take_stamps()
 
@@ -846,7 +857,7 @@ func _cliff(d: Vector3, f: PackedFloat64Array, ground: float) -> float:
 			ground += held * (_map.held(WorldPlan.S_BASE, WorldPlan.S_SHORE, d) - f[WorldPlan.S_BASE])
 		share = maxf(share, held)
 	var shore := f[WorldPlan.S_SHORE]
-	if shore >= CLIFF_BAY or share <= 0.0:
+	if shore >= _bay_depth or share <= 0.0:
 		return ground
 	if shore <= CLIFF_IN - CLIFF_RUN:
 		return lerpf(ground, _beach(shore), share)
@@ -863,7 +874,14 @@ func _cliff(d: Vector3, f: PackedFloat64Array, ground: float) -> float:
 func _cliff_line(d: Vector3) -> float:
 	var edge := _shore_point(d)
 	var bay := smoothstep(BAY_NOISE.x, BAY_NOISE.y, absf(_bays.get_noise_3dv(edge * (radius / CLIFF_WAVE))))
-	return CLIFF_IN + (CLIFF_BAY - CLIFF_IN) * bay
+	return CLIFF_IN + (_bay_depth - CLIFF_IN) * bay
+
+## How far inland of the water's edge (metres of S_SHORE) the back of a bay
+## stands on a planned desert of `p_radius`: CLIFF_BAY, or on a world whose plan's
+## cells are small BAY_CELL of a cell's edge (CubeSphere.edge_m at
+## PlanMap.PLAN_DEPTH) and never under CLIFF_IN.
+static func bay_depth(p_radius: float) -> float:
+	return clampf(BAY_CELL * CubeSphere.edge_m(p_radius, PlanMap.PLAN_DEPTH), CLIFF_IN, CLIFF_BAY)
 
 ## The point of the water's edge a planned desert's unit direction `d` faces: `d`
 ## moved down the shore's field (S_SHORE) by its metres over the field's fall,
@@ -982,7 +1000,7 @@ func _planned_ground(d: Vector3, out: PackedFloat64Array) -> StringName:
 	if shore > 0.0:
 		# Seaward of a cliff's line, its face and the beach at its foot.
 		var under := false
-		if shore < CLIFF_BAY and (plateau > 0.0 or out[WorldPlan.S_MOUNTAIN] > 0.0):
+		if shore < _bay_depth and (plateau > 0.0 or out[WorldPlan.S_MOUNTAIN] > 0.0):
 			var share := _cliff_share(d, out)
 			if share > 0.0:
 				# Nearer the water than any line's face, under it wherever it stands.
