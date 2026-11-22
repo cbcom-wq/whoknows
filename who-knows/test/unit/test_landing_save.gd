@@ -462,10 +462,12 @@ func test_a_ship_woken_landed_off_is_checked_once_its_footprint_is_solid():
 ## Dune crests near `from` on the desert, up to `most` of them: walking out
 ## in 4 m steps on eight bearings in turn, up to 8 km, each top along the
 ## wind with the ground at least 0.5 m lower 12 m either side, level along the
-## crest (within 0.1 m 12 m either way), on the open dunes (below the tower
-## band). Unit directions.
+## crest (within 0.1 m 12 m either way), on the open dunes (_open_dunes). Unit
+## directions.
 static func _crests(t: WorldTerrain, from: Vector3, most: int) -> Array[Vector3]:
 	var out: Array[Vector3] = []
+	var f := PackedFloat64Array()
+	f.resize(WorldPlan.S_SIZE)
 	var a := from.cross(Vector3.UP if absf(from.y) < 0.9 else Vector3.RIGHT).normalized()
 	var b := from.cross(a)
 	for k in 8:
@@ -474,7 +476,7 @@ static func _crests(t: WorldTerrain, from: Vector3, most: int) -> Array[Vector3]
 		while i < 2000:
 			i += 1
 			var d := (from + way * (i * 4.0 / t.radius)).normalized()
-			if t.continent_at(d) >= WorldTerrain.MESA_FROM - WorldTerrain.TOWER_BAND - WorldTerrain.MESA_EDGE:
+			if not _open_dunes(t, d, f):
 				continue
 			var w := t.wind_at(d)
 			var h := t.height_at(d)
@@ -494,6 +496,67 @@ static func _crests(t: WorldTerrain, from: Vector3, most: int) -> Array[Vector3]
 			i += 25
 	return out
 
+## Whether the unit direction `d` on `t` is on the open dunes, where the dunes
+## stand whole. On today's desert ground, and inside a kept disc where the
+## ground is mostly today's, that is below the tower band. On a planned desert
+## it is where WorldTerrain._plan_dunes times pole_fade reaches DUNE_SEA_STAND:
+## off the plan's plains, beaches, ranges and plateaus. `f` is scratch for a
+## plan's sample. The dunes must stand whole, as today's open dunes do: the
+## Warden's crest needs every metre of their height.
+const DUNE_SEA_STAND := 0.999
+
+static func _open_dunes(t: WorldTerrain, d: Vector3, f: PackedFloat64Array) -> bool:
+	if t.plan == null or t._kept(d) > 0.5:
+		return t.continent_at(d) < WorldTerrain.MESA_FROM - WorldTerrain.TOWER_BAND - WorldTerrain.MESA_EDGE
+	t.plan.sample(d, f)
+	return t._plan_dunes(f) * WorldTerrain.pole_fade(d.dot(t.wind_axis)) >= DUNE_SEA_STAND
+
+## Where to look for crests on `t` near `from`. On today's desert ground that
+## is `from` itself. On a planned desert it is the nearest open dune ground
+## (_open_dunes) to `from`. The search walks rings DUNE_SEA_STEP m apart, out
+## to DUNE_SEA_REACH, on DUNE_SEA_BEARINGS bearings each, and takes the first
+## bearing on the nearest ring that has one. On planned WADIS the hop's point
+## is on a plateau, about 19 km from the nearest dune sea.
+const DUNE_SEA_STEP := 250.0
+const DUNE_SEA_BEARINGS := 32
+const DUNE_SEA_REACH := 40000.0
+
+static func _dune_sea_near(t: WorldTerrain, from: Vector3) -> Vector3:
+	if t.plan == null:
+		return from
+	var f := PackedFloat64Array()
+	f.resize(WorldPlan.S_SIZE)
+	var a := from.cross(Vector3.UP if absf(from.y) < 0.9 else Vector3.RIGHT).normalized()
+	var b := from.cross(a)
+	var ring := 0.0
+	while ring <= DUNE_SEA_REACH:
+		var angle := ring / t.radius
+		for k in DUNE_SEA_BEARINGS:
+			var way := a * cos(k * TAU / DUNE_SEA_BEARINGS) + b * sin(k * TAU / DUNE_SEA_BEARINGS)
+			var d := (from * cos(angle) + way * sin(angle)).normalized()
+			if _open_dunes(t, d, f):
+				return d
+		ring += DUNE_SEA_STEP
+	return from
+
+## Puts the starter, at rest and upright, the hop's height (FlightTest.hop_off)
+## over the unit direction `dir` from `_planet`'s middle. Then brings the
+## origin along and the worlds up to date, as the hop does. `_up` is `dir`
+## after.
+func _starter_over(dir: Vector3) -> void:
+	var hull := _starter.exterior
+	var along := dir.cross(Vector3.UP if absf(dir.y) < 0.9 else Vector3.RIGHT).normalized()
+	hull.linear_velocity = Vector3.ZERO
+	hull.angular_velocity = Vector3.ZERO
+	hull.global_transform = Transform3D(Basis(along, dir, along.cross(dir).normalized()),
+		_centre() + dir * (_planet.radius + _root.hop_off(_planet)))
+	var p := hull.global_position
+	_universe.shift(Vector3(snappedf(p.x, Universe.STEP), snappedf(p.y, Universe.STEP), snappedf(p.z, Universe.STEP)))
+	_root.star_system.place_all()
+	_root.star_system.whereabouts.look()
+	await wait_physics_frames(2)
+	_up = dir
+
 ## Final review I4, on a world: a ship landed astride a dune's crest -- its
 ## stance plane 2 cm over the highest ground under its footprint's corners,
 ## the crest top under its middle more than RESTORE_SLACK higher -- restored
@@ -505,6 +568,13 @@ func test_restored_landed_astride_a_crest_stays_put():
 	await _to_a_world()
 	var surface: WorldSurface = (_root.star_system.proxy(_planet.id) as BodyProxy).surface()
 	var t := surface.terrain
+	# On a planned desert the hop's point may be off the dunes: the starter
+	# goes over the nearest dune sea first, so the Warden lands within reach
+	# of it, well short of Fleet.SLEEP_AT.
+	var sea := _dune_sea_near(t, _up)
+	gut.p("crests looked for from %.2f km off the hop's point" % (sea.angle_to(_up) * t.radius / 1000.0))
+	if sea != _up:
+		await _starter_over(sea)
 	var ship := _fleet.spawn(_root.library.grid(&"warden"),
 		Transform3D(_starter.exterior.global_basis, _starter.exterior.global_position + _starter.exterior.global_basis.x * 300.0))
 	assert_not_null(ship, "the Warden spawned")
@@ -536,6 +606,8 @@ func test_restored_landed_astride_a_crest_stays_put():
 			break
 	gut.p("astride a crest: the crest top %.2f m over the highest of the Warden's footprint's corners (best %.2f)" % [
 		best if not found else -_world_gravity().solid_altitude_at(monitor.footprint(place.basis.y)[0]) - highest, best])
+	if found:
+		gut.p("the crest %.2f km from where the starter is over" % (place.basis.y.normalized().angle_to(_up) * t.radius / 1000.0))
 	assert_true(found, "a crest whose top stands over the footprint's corners by %.1f m" % RESTORE_SLACK_PLUS)
 	ship.exterior.global_transform = place
 	ship.exterior.linear_velocity = Vector3.ZERO

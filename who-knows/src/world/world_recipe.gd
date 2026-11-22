@@ -20,7 +20,8 @@ enum Atmosphere { NONE, THIN, THICK }
 
 ## Part of a world's identity: bumped whenever a seed's world changes.
 ## 3: a quarter of planets with air became deserts (desert world spec §7.4).
-const GENERATOR_VERSION := 3
+## 4: desert worlds get a plan, so their ground may change (wadis land spec).
+const GENERATOR_VERSION := 4
 ## The archetypes the terrain draw can pick: all but DUNES.
 const DRAWN_ARCHETYPES := 4
 ## The share of planets with air that are deserts.
@@ -59,6 +60,17 @@ var atmosphere: Atmosphere
 ## first. Empty unless a design fills it; read-only once built, since every
 ## thread's terrain reads it.
 var stamps: Array[TerrainStamp] = []
+## The design's `plan` section, raw (SystemDesign): dial pins, `keep` and `pins`.
+var plan_pins := {}
+## Discs where the ground stays as it always was: {"place", "dir", "radius", "blend"}.
+var keeps: Array[Dictionary] = []
+## Every designed place's unit direction, by place id.
+var pin_places := {}
+## False: a desert draws its old ground everywhere, as inside a kept disc.
+var planned := true
+
+var _plan_lock := Mutex.new()
+var _plan: WorldPlan
 
 static func from_seed(p_seed: int, p_kind := Kind.PLANET) -> WorldRecipe:
 	var r := WorldRecipe.new()
@@ -81,6 +93,34 @@ static func from_seed(p_seed: int, p_kind := Kind.PLANET) -> WorldRecipe:
 
 func is_desert() -> bool:
 	return archetype == Archetype.DUNES
+
+## This world's plan: null unless it is a planned desert. Built on the first
+## call, from any thread; every later call returns the same object.
+func plan() -> WorldPlan:
+	if not is_desert() or not planned:
+		return null
+	_plan_lock.lock()
+	if _plan == null:
+		_plan = WorldPlan.build(self)
+	var out := _plan
+	_plan_lock.unlock()
+	return out
+
+## Starts building this world's plan on a worker thread, and returns the task
+## to wait on (WorkerThreadPool.wait_for_task_completion), or -1 when there is
+## nothing to start: not a planned desert, or its plan is already built. The
+## build is plan() itself, so a caller arriving mid-build waits on the lock and
+## gets the same object, and nothing is built twice. Whoever starts a task waits
+## for it before the world can be freed.
+func start_plan() -> int:
+	if not is_desert() or not planned:
+		return -1
+	_plan_lock.lock()
+	var built := _plan != null
+	_plan_lock.unlock()
+	if built:
+		return -1
+	return WorkerThreadPool.add_task(plan, false, "world plan")
 
 ## Metres above `radius_m` where this world's air ends: below it gravity holds
 ## the avatar, loose items and NPCs (the desert world spec §5.1, §6.1). Ships

@@ -5,9 +5,11 @@ extends RefCounted
 ## §7.2; the world scale spec §5.1): a faceted icosphere, flat-shaded, each
 ## face one colour. A world's far mesh is sampled from its WorldTerrain -- the
 ## same heights, patterns and craters its surface has up close -- so the
-## hand-over to the surface changes a pixel or two. The star is one colour of
-## its palette in broad shade patches. No texture, no noise on the surface
-## itself: shape and flat colour carry it.
+## hand-over to the surface changes a pixel or two. Each point stands on the
+## surface (WorldTerrain.surface_at), so a planned desert's sea lies flat at sea
+## level and its ranges stand over it (the wadis land spec §7.2). The star is
+## one colour of its palette in broad shade patches. No texture, no noise on
+## the surface itself: shape and flat colour carry it.
 ##
 ## Meshes are radius one; a proxy scales them.
 
@@ -29,7 +31,7 @@ static func mesh(body: SystemBody, detail: int) -> ArrayMesh:
 	var lifted := PackedVector3Array()
 	lifted.resize(dirs.size())
 	for i in dirs.size():
-		lifted[i] = dirs[i] if terrain == null else dirs[i] * (1.0 + terrain.height_at(dirs[i]) / terrain.radius)
+		lifted[i] = dirs[i] if terrain == null else dirs[i] * (1.0 + terrain.surface_at(dirs[i]) / terrain.radius)
 	# One patch size for the whole mesh, from the detail's nominal edge (an
 	# icosahedron's edge for unit radius, halved per subdivision), so the shade
 	# field is one consistent field and not one per lifted face.
@@ -53,6 +55,8 @@ static func mesh(body: SystemBody, detail: int) -> ArrayMesh:
 		var colour: Color
 		if terrain == null:
 			colour = _star_colour(body, shades, mid)
+		elif terrain.sea_level > -INF and terrain.height_at(mid) < terrain.sea_level:
+			colour = _sea_colour(terrain)
 		else:
 			colour = terrain.colour_at(mid, n.angle_to(mid), patch)
 		positions.append_array(PackedVector3Array([a, b, c]))
@@ -80,6 +84,12 @@ static func material(star: bool) -> StandardMaterial3D:
 			m.disable_fog = true
 		_materials[star] = m
 	return _materials[star]
+
+## A face over the sea: opaque, one flat colour, never shade patches (the wadis
+## land spec §7.2). Its own colours by depth, sea_shallow to sea_deep, come
+## with the desert palette's sea keys; until then its ground_low.
+static func _sea_colour(terrain: WorldTerrain) -> Color:
+	return terrain.palette[&"ground_low"]
 
 static func _star_shades(body: SystemBody) -> FastNoiseLite:
 	var shades := FastNoiseLite.new()

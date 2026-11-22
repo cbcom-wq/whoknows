@@ -13,6 +13,9 @@ extends RefCounted
 ## lon or place + at ([east, north] in that place's frame), radius, edge, level,
 ## raise, keep, floor, depth, height (a mesa's top over its level), ground.
 ## Place keys: id, name, lat, lon, heading, beacon.
+## Plan keys (a desert only): the dials sea, seas, mountains, ranges, plateaus,
+## canyons, peak, oases and buttes; keep, a list of {place, radius, blend} discs that
+## keep today's ground; pins, a Dictionary of placement wishes for the plan.
 
 const DIR := "res://data/systems"
 
@@ -20,7 +23,17 @@ const TWEAK_KEYS: Array[String] = ["name", "radius", "gravity", "palette", "arch
 const STAMP_KEYS: Array[String] = ["id", "kind", "lat", "lon", "place", "at", "radius", "edge", "level",
 	"raise", "keep", "floor", "depth", "height", "stretch", "heading", "wobble", "ground"]
 const PLACE_KEYS: Array[String] = ["id", "name", "lat", "lon", "heading", "beacon"]
-const BODY_KEYS: Array[String] = ["tweak", "stamps", "places"]
+const BODY_KEYS: Array[String] = ["tweak", "stamps", "places", "plan"]
+## The plan section's keys: the dials, the kept discs and the pins.
+## A literal, since GDScript will not add arrays in a constant; a test holds it
+## equal to PlanDials.NAMES + ["keep", "pins"].
+const PLAN_KEYS: Array[String] = ["sea", "seas", "mountains", "ranges", "plateaus", "canyons", "peak", "oases",
+	"buttes", "keep", "pins"]
+## Each dial's allowed range in a file: the rolls' span, with 0 allowed for
+## shares and counts.
+const PLAN_RANGES := {"sea": Vector2(0.0, 0.25), "seas": Vector2(0.0, 2.0), "mountains": Vector2(0.0, 0.15),
+	"ranges": Vector2(0.0, 5.0), "plateaus": Vector2(0.0, 0.30), "canyons": Vector2(0.0, 6.0),
+	"peak": Vector2(600.0, 2500.0), "oases": Vector2(0.0, 8.0), "buttes": Vector2(0.0, 6.0)}
 ## A stamp's kind as the file spells it.
 const KINDS := {"flatten": TerrainStamp.Kind.FLATTEN, "basin": TerrainStamp.Kind.BASIN,
 	"mesa": TerrainStamp.Kind.MESA}
@@ -111,6 +124,19 @@ func apply_to(recipe: WorldRecipe, body_id: StringName) -> void:
 	if tweak.has("atmosphere") and WorldRecipe.Atmosphere.has(str(tweak["atmosphere"])):
 		recipe.atmosphere = WorldRecipe.Atmosphere[str(tweak["atmosphere"])]
 	recipe.stamps.append_array(_stamps(body_id, recipe.radius_m, PackedStringArray()))
+	var places := places_on(body_id)
+	for place in places:
+		recipe.pin_places[place.id] = place.dir()
+	var plan: Dictionary = _section(body_id, "plan", {})
+	recipe.plan_pins = plan.duplicate(true)
+	var keep: Array = plan.get("keep", []) if plan.get("keep", []) is Array else []
+	for entry: Variant in keep:
+		if not entry is Dictionary:
+			continue
+		for place in places:
+			if str(place.id) == str(entry.get("place", "")):
+				recipe.keeps.append({"place": place.id, "dir": place.dir(),
+					"radius": float(entry.get("radius", 0.0)), "blend": float(entry.get("blend", 0.0))})
 
 func places_on(body_id: StringName) -> Array[PlaceDesign]:
 	var out: Array[PlaceDesign] = []
@@ -143,6 +169,7 @@ func problems(system: SystemRecipe) -> PackedStringArray:
 				out.append("%s: unknown key %s" % [body_id, key])
 		var tweak: Dictionary = _section(body_id, "tweak", {})
 		out.append_array(_tweak_problems(body_id, tweak))
+		out.append_array(_plan_problems(body_id, tweak, body.recipe))
 		var radius := float(tweak.get("radius", body.recipe.radius_m))
 		var palette_index := _palette_index(str(tweak["palette"])) if tweak.has("palette") else body.recipe.palette
 		var palette: Dictionary = SpacePalette.WORLDS[palette_index] if palette_index >= 0 else {}
@@ -172,6 +199,44 @@ static func _palette_index(palette_name: String) -> int:
 		if SpacePalette.WORLDS[i][&"name"] == StringName(palette_name):
 			return i
 	return -1
+
+func _plan_problems(body_id: StringName, tweak: Dictionary, base: WorldRecipe) -> PackedStringArray:
+	var out := PackedStringArray()
+	if not bodies[body_id].has("plan"):
+		return out
+	var plan: Variant = bodies[body_id]["plan"]
+	if not plan is Dictionary:
+		out.append("%s: plan is not an object" % body_id)
+		return out
+	var desert := base.is_desert()
+	if tweak.has("archetype") and WorldRecipe.Archetype.has(str(tweak["archetype"])):
+		desert = WorldRecipe.Archetype[str(tweak["archetype"])] == WorldRecipe.Archetype.DUNES
+	if not desert:
+		out.append("%s: only a desert takes a plan" % body_id)
+	for key: String in plan:
+		if not PLAN_KEYS.has(key):
+			out.append("%s: unknown plan key %s" % [body_id, key])
+		elif PLAN_RANGES.has(key):
+			var v: Variant = plan[key]
+			var r: Vector2 = PLAN_RANGES[key]
+			if not (v is float or v is int) or float(v) < r.x or float(v) > r.y:
+				out.append("%s: plan %s is %s, outside %s to %s" % [body_id, key, v, r.x, r.y])
+	var places := places_on(body_id)
+	var keep: Variant = plan.get("keep", [])
+	if not keep is Array:
+		out.append("%s: plan keep is not a list" % body_id)
+		keep = []
+	for entry: Variant in keep:
+		if not entry is Dictionary:
+			out.append("%s: a plan keep is not an object" % body_id)
+			continue
+		if not places.any(func(p: PlaceDesign) -> bool: return str(p.id) == str(entry.get("place", ""))):
+			out.append("%s: plan keep names place %s, which is not on it" % [body_id, entry.get("place", "")])
+		if float(entry.get("radius", 0.0)) <= 0.0 or float(entry.get("blend", 0.0)) < 0.0:
+			out.append("%s: plan keep needs a radius over 0 and a blend of 0 or more" % body_id)
+	if not plan.get("pins", {}) is Dictionary:
+		out.append("%s: plan pins is not an object" % body_id)
+	return out
 
 func _tweak_problems(body_id: StringName, tweak: Dictionary) -> PackedStringArray:
 	var out := PackedStringArray()

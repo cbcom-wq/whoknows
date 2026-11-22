@@ -60,7 +60,7 @@ func test_selection_from_the_centre_is_sane():
 	var sel := WorldSurface.select(R, RELIEF, _depth, Vector3.ZERO, {}, {})
 	for k: Vector4i in sel[0]:
 		assert_lte(k.y, _depth)
-	assert_eq(WorldSurface.horizon_reach(R, RELIEF, 0.0), INF)
+	assert_eq(WorldSurface.horizon_reach(R, -RELIEF * 0.5, RELIEF * 0.5, 0.0), INF)
 
 func test_height_at_callable_is_honoured():
 	# With a height callable providing +500 m, focus at R + 502 m sees the finest
@@ -88,6 +88,241 @@ func test_bounds_cache_respects_height_at():
 	# Use same bounds with height_at; ground should be lifted and key should be a leaf
 	var with_height: Array[Vector4i] = WorldSurface.select(R, RELIEF, _depth, at, {}, bounds, height_at_func)[0]
 	assert_true(with_height.has(key), "finest chunk is a leaf when bounds are reused with height_at")
+
+# --- the plan's bounds (the wadis land spec §8.3) -------------------------------
+
+## WADIS (1337's p3), its plan built once for all of these.
+var _wadis_recipe: WorldRecipe
+
+func _wadis() -> WorldRecipe:
+	if _wadis_recipe == null:
+		_wadis_recipe = SystemRecipe.from_seed(1337).body(&"p3").recipe
+	return _wadis_recipe
+
+static func _random_dir(rng: RandomNumberGenerator) -> Vector3:
+	while true:
+		var v := Vector3(rng.randf_range(-1, 1), rng.randf_range(-1, 1), rng.randf_range(-1, 1))
+		if v.length() > 0.1 and v.length() <= 1.0:
+			return v.normalized()
+	return Vector3.UP
+
+## `per` foci at each of `altitudes` metres over the surface (the ground, or the
+## sea): over the highest and the lowest of 4,000 directions tried (a range, the
+## sea), the rest anywhere, by a fixed seed.
+func _focuses(t: WorldTerrain, altitudes: Array, per: int) -> Array[Vector3]:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 811
+	var high := Vector3.UP
+	var low := Vector3.UP
+	var most := -INF
+	var least := INF
+	for i in 4000:
+		var d := _random_dir(rng)
+		var h := t.height_at(d)
+		if h > most:
+			most = h
+			high = d
+		if h < least:
+			least = h
+			low = d
+	var out: Array[Vector3] = []
+	for altitude: float in altitudes:
+		for i in per:
+			var d := high if i == 0 else low if i == 1 else _random_dir(rng)
+			out.append(d * (t.radius + t.surface_at(d) + altitude))
+	return out
+
+## Directions of `n` points on the surface (the ground, or the water over it) in
+## sight from `focus` by the horizon the cull itself assumes: the way there never
+## dips under the lowest ground, the plan's least or the lowest point tried if
+## that is lower. Tried evenly over the cap a point as high as the plan's most
+## could be seen in, eight times `n` of them; the farthest in sight kept, where
+## a cull that bounds too little would first leave ground out.
+func _ground_in_sight(t: WorldTerrain, focus: Vector3, n: int) -> Array[Vector3]:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(focus.x * 7.0 + focus.y * 13.0 + focus.z)
+	var up := focus.normalized()
+	var a := up.cross(Vector3.UP if absf(up.y) < 0.9 else Vector3.RIGHT).normalized()
+	var b := up.cross(a)
+	var high := t.radius + t.highest
+	var low := t.radius + t.lowest
+	var cap := PI if focus.length() <= low else acos(low / focus.length()) + acos(low / high)
+	var tried: Array[Vector3] = []
+	var lowest := t.lowest
+	for i in n * 8:
+		var c := rng.randf_range(cos(cap), 1.0)
+		var phi := rng.randf() * TAU
+		var d := (up * c + (a * cos(phi) + b * sin(phi)) * sqrt(maxf(1.0 - c * c, 0.0))).normalized()
+		var h := t.height_at(d)
+		lowest = minf(lowest, h)
+		tried.append(d * (t.radius + maxf(h, t.sea_level)))
+	var ball := t.radius + lowest
+	var seen: Array[Vector3] = []
+	for p in tried:
+		var way := p - focus
+		var s := clampf(-focus.dot(way) / way.length_squared(), 0.0, 1.0)
+		if (focus + way * s).length() >= ball:
+			seen.append(p)
+	seen.sort_custom(func(p: Vector3, q: Vector3) -> bool:
+		return p.distance_squared_to(focus) > q.distance_squared_to(focus))
+	var out: Array[Vector3] = []
+	for p in seen.slice(0, n):
+		out.append(p.normalized())
+	return out
+
+static func _set_of(keys: Array) -> Dictionary:
+	var out := {}
+	for k: Vector4i in keys:
+		out[k] = true
+	return out
+
+## Whether some node in `drawn` (a set of leaves) holds the direction `d`.
+static func _covered(drawn: Dictionary, d: Vector3, depth_max: int) -> bool:
+	var k := CubeSphere.key_for(d, depth_max)
+	for depth in range(depth_max, -1, -1):
+		var shift := depth_max - depth
+		if drawn.has(Vector4i(k.x, depth, k.z >> shift, k.w >> shift)):
+			return true
+	return false
+
+## The wadis land spec §7.1: the surface every flying thing knows is the
+## higher of the ground and the sea; with no sea (sea_level -INF) the ground.
+func test_the_surface_is_the_higher_of_the_ground_and_the_sea():
+	var wadis := WorldTerrain.new(_wadis())
+	assert_eq(wadis.sea_level, wadis.plan.sea_level, "WADIS's sea level is its plan's")
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 17
+	var wet := 0
+	for i in 2000:
+		var d := _random_dir(rng)
+		var h := wadis.height_at(d)
+		if h < wadis.sea_level:
+			wet += 1
+			assert_eq(wadis.surface_at(d), wadis.sea_level, "over the seabed, the water")
+		else:
+			assert_eq(wadis.surface_at(d), h, "on land, the ground")
+	assert_gt(wet, 0, "some of WADIS is sea")
+	var dry: WorldRecipe = null
+	for s in 10000:
+		var r := WorldRecipe.from_seed(s)
+		if r.is_desert() and PlanDials.roll(r.seed, r.radius_m).sea == 0.0:
+			dry = r
+			break
+	for t: WorldTerrain in [WorldTerrain.new(_planet().recipe), WorldTerrain.new(_desert().recipe),
+			WorldTerrain.new(dry)]:
+		assert_eq(t.sea_level, -INF, "%s: no sea" % t.recipe.name)
+		for i in 50:
+			var d := _random_dir(rng)
+			assert_eq(t.surface_at(d), t.height_at(d), "%s: the ground" % t.recipe.name)
+
+## A focus `altitude` metres over the surface at `_up`.
+func _over(t: WorldTerrain, altitude: float) -> Vector3:
+	return _up * (t.radius + t.surface_at(_up) + altitude)
+
+## The cull never leaves out ground the focus can see: every node's bound holds
+## its ground, and the horizon reaches past the highest of it. The bounds must
+## never under-bound.
+func test_plan_bounds_never_cull_ground_in_sight():
+	var t := WorldTerrain.new(_wadis())
+	var depth_max := CubeSphere.depth_for(t.radius)
+	var seen := 0
+	var nearest_the_reach := 0.0
+	for focus in _focuses(t, [30.0, 300.0, 2000.0, 10000.0], 20):
+		var drawn := _set_of(WorldSurface.select_for(t, focus)[0])
+		var sight := _ground_in_sight(t, focus, 500)
+		assert_gt(sight.size(), 100, "%.0f m up: ground in sight" % t.altitude_of(focus))
+		var reach := WorldSurface.horizon_reach(t.radius, t.lowest, t.highest, focus.length())
+		var missed := 0
+		for d in sight:
+			if not _covered(drawn, d, depth_max):
+				missed += 1
+			var p := d * (t.radius + t.surface_at(d))
+			nearest_the_reach = maxf(nearest_the_reach, p.distance_to(focus) / reach)
+		seen += sight.size()
+		assert_eq(missed, 0, "%.0f m up at %s: ground in sight left out" % [t.altitude_of(focus), focus.normalized()])
+	gut.p("%d points of ground in sight from 80 foci, all drawn; the farthest %.2f of the way to the horizon's reach" % [
+		seen, nearest_the_reach])
+
+## The bound itself never under-bounds: every point of a planned node's ground,
+## and of the water over it, lies in its cull sphere, at every depth from a
+## face to the finest, its corners and edges too; and within the lowest and
+## highest the horizon reaches by. (Seen from a focus, far nodes are so coarse
+## that a bound or a horizon kilometres short still leaves no ground in sight
+## out, as a scratch run found: so this is the test that would catch one.)
+func test_a_planned_nodes_bound_holds_its_ground_and_its_water():
+	var t := WorldTerrain.new(_wadis())
+	var depth_max := CubeSphere.depth_for(t.radius)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 23
+	var keys: Array[Vector4i] = []
+	for i in 300:
+		keys.append(CubeSphere.key_for(_random_dir(rng), rng.randi_range(0, depth_max)))
+	# The highest and lowest ground of 4,000 directions, at every depth: a peak's
+	# and the seabed's nodes.
+	for p in _focuses(t, [0.0], 2):
+		for depth in depth_max + 1:
+			keys.append(CubeSphere.key_for(p, depth))
+	var worst := -INF
+	var least := INF
+	var most := -INF
+	for key in keys:
+		var b := WorldSurface.bound_of(key, t.radius, t.relief, {}, Callable(), t.plan)
+		var centre: Vector3 = b[0]
+		var cull: float = b[1]
+		var rect := CubeSphere.node_rect(key)
+		var out := 0
+		for j in 9:
+			for i in 9:
+				var d := CubeSphere.direction(key.x, rect.x + rect.z * i / 8.0, rect.y + rect.z * j / 8.0)
+				for h: float in [t.height_at(d), t.surface_at(d)]:
+					least = minf(least, h)
+					most = maxf(most, h)
+					var by := (d * (t.radius + h)).distance_to(centre) - cull
+					worst = maxf(worst, by)
+					if by > 0.0:
+						out += 1
+		assert_eq(out, 0, "%s: ground outside its bound" % key)
+	gut.p("%d nodes: their ground at most %.1f m inside their bounds' edge; %.0f to %.0f m, the horizon's %.0f to %.0f" % [
+		keys.size(), -worst, least, most, t.lowest, t.highest])
+	assert_gte(least, t.lowest, "no ground under the lowest")
+	assert_lte(most, t.highest, "nor over the highest")
+
+func test_plan_bounds_cull_more_than_the_relief_pad():
+	var t := WorldTerrain.new(_wadis())
+	var depth_max := CubeSphere.depth_for(t.radius)
+	for altitude: float in [30.0, 300.0, 2000.0, 10000.0]:
+		var focus := _over(t, altitude)
+		var planned := WorldSurface.select_for(t, focus)
+		var padded := WorldSurface.select(t.radius, t.relief, depth_max, focus, {}, {}, t.height_at)
+		gut.p("%.0f m up: %d leaves, %d split by the plan's bounds; %d leaves, %d split by the relief pad" % [
+			altitude, (planned[0] as Array).size(), (planned[1] as Dictionary).size(),
+			(padded[0] as Array).size(), (padded[1] as Dictionary).size()])
+	var focus := _over(t, 300.0)
+	assert_lt(WorldSurface.select_for(t, focus)[0].size(),
+		WorldSurface.select(t.radius, t.relief, depth_max, focus, {}, {})[0].size())
+
+## Rock worlds, and a desert drawn as it always was, keep today's relief pad
+## (§8): select_for is today's select with the terrain's heights, to the key.
+func test_select_for_a_world_with_no_plan_is_todays_select():
+	var desert := SystemRecipe.from_seed(1337).body(&"p3").recipe
+	desert.planned = false
+	for recipe: WorldRecipe in [_planet().recipe, desert]:
+		var t := WorldTerrain.new(recipe)
+		assert_null(t.plan)
+		var depth_max := CubeSphere.depth_for(t.radius)
+		for altitude: float in [30.0, 2000.0]:
+			var focus := _up * (t.radius + t.height_at(_up) + altitude)
+			var was := {}
+			var bounds := {}
+			var today := WorldSurface.select(t.radius, t.relief, depth_max, focus, was, bounds, t.height_at)
+			var got := WorldSurface.select_for(t, focus, was, {})
+			assert_eq(got[0], today[0], "%s, %.0f m up: the same leaves" % [recipe.name, altitude])
+			assert_eq((got[1] as Dictionary).keys(), (today[1] as Dictionary).keys(), "and the same split")
+			# Again, from the last split, with the same bounds cache.
+			var moved := focus + _up.cross(Vector3.UP).normalized() * 40.0
+			today = WorldSurface.select(t.radius, t.relief, depth_max, moved, today[1], bounds, t.height_at)
+			got = WorldSurface.select_for(t, moved, got[1], {})
+			assert_eq(got[0], today[0], "%s, %.0f m up, moved: the same leaves" % [recipe.name, altitude])
 
 # --- the node (§5.3, §5.4) ----------------------------------------------------
 
@@ -759,12 +994,17 @@ func test_a_ghosted_hull_is_left_alone():
 
 # --- the floor at a lip (final review I1) --------------------------------------
 
-## 1337's desert, p3: its mesas' risers are near-sheer, so at a lip the finest
-## chunk's triangles cut the convex edge metres under height_at.
+## 1337's desert, p3, on today's ground (`planned = false`): its mesas' risers
+## are near-sheer, so at a lip the finest chunk's triangles cut the convex edge
+## metres under height_at. The mesas and towers live on inside the plan's kept
+## discs; a system of its own, so `_planet()`'s is left as it is.
+var _desert_system: SystemRecipe
+
 func _desert() -> SystemBody:
-	if _system == null:
-		_system = SystemRecipe.from_seed(1337)
-	return _system.body(&"p3")
+	if _desert_system == null:
+		_desert_system = SystemRecipe.from_seed(1337)
+		_desert_system.body(&"p3").recipe.planned = false
+	return _desert_system.body(&"p3")
 
 ## A point on the ground the collision has (a finest chunk's triangle, found
 ## as GroundCover finds it) where that triangle is more than `under` m under

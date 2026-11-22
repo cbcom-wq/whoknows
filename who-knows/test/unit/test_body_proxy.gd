@@ -119,6 +119,39 @@ func test_the_far_mesh_is_lifted_by_the_real_ground():
 		var p := positions[i]
 		assert_almost_eq(p.length(), 1.0 + t.height_at(p) / t.radius, 1e-4)
 
+## The wadis land spec §7, §8: WADIS's far mesh is lifted to its surface, the
+## higher of the ground and the sea, so its sea lies flat at sea level, one
+## colour, and its ranges stand over it.
+func test_the_far_mesh_shows_the_sea_flat_and_the_ranges():
+	var b := _system.body(&"p3")
+	var t := WorldTerrain.new(b.recipe)
+	var arrays := BodyLook.mesh(b, BodyLook.FAR_DETAIL).surface_get_arrays(0)
+	var positions: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var colours: PackedColorArray = arrays[Mesh.ARRAY_COLOR]
+	var flat := 1.0 + t.sea_level / t.radius
+	var water: Color = t.palette[&"ground_low"]
+	var sea_faces := 0
+	var highest := -INF
+	for f in range(0, positions.size(), 3):
+		var wet := 0
+		for i in range(f, f + 3):
+			var p := positions[i]
+			var h := t.height_at(p)
+			assert_almost_eq(p.length(), 1.0 + t.surface_at(p) / t.radius, 2e-6, "lifted to the surface")
+			highest = maxf(highest, h)
+			if h < t.sea_level - 1.0:
+				wet += 1
+				assert_almost_eq(p.length(), flat, 1e-6, "under the sea, the water's level")
+		var mid := (positions[f] + positions[f + 1] + positions[f + 2]).normalized()
+		if wet == 3 and t.height_at(mid) < t.sea_level:
+			sea_faces += 1
+			assert_almost_eq(colours[f].r, water.r, 0.004, "a sea face is the sea's colour")
+			assert_almost_eq(colours[f].g, water.g, 0.004)
+			assert_almost_eq(colours[f].b, water.b, 0.004)
+	gut.p("WADIS from afar: %d faces of sea; the highest point %.0f m" % [sea_faces, highest])
+	assert_gt(sea_faces, 20, "the sea shows")
+	assert_gt(highest, 800.0, "and a range stands over the dunes")
+
 func test_near_a_world_its_surface_takes_over():
 	var b := _planet()
 	var p := _proxy(b)

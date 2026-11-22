@@ -8,6 +8,8 @@ extends GutTest
 const N := CubeSphere.QUADS
 
 var _system: SystemRecipe
+## WADIS on today's desert ground (`planned = false`): its talus below the
+## mesas and towers, and its open dunes, live on inside the plan's kept discs.
 var _desert_t: WorldTerrain
 var _rolling_t: WorldTerrain
 
@@ -16,7 +18,9 @@ func before_all():
 	RockMesh.warm()
 	GroundCover.grass_mesh()
 	_system = SystemRecipe.from_seed(1337)
-	_desert_t = WorldTerrain.new(_system.body(&"p3").recipe)
+	var desert := _system.body(&"p3").recipe
+	desert.planned = false
+	_desert_t = WorldTerrain.new(desert)
 	var k := 1
 	while true:
 		var r := WorldRecipe.from_seed(k)
@@ -489,10 +493,11 @@ static func _correlation(xs: Array[float], ys: Array[float]) -> float:
 const STAMP_RADIUS := 120.0
 
 ## `p3` with a FLATTEN of STAMP_RADIUS on the middle of talus key `key`, and
-## the same world without it: [stamped terrain, bare terrain, the stamp].
+## the same world without it: [stamped terrain, bare terrain, the stamp]. Both
+## on today's ground, like `_desert_t`, where the talus is.
 func _stamped(key: Vector4i) -> Array:
 	var seed: int = _system.body(&"p3").seed
-	var r := WorldRecipe.from_seed(seed)
+	var r := _todays(seed)
 	var s := TerrainStamp.new()
 	s.id = &"test_flat"
 	s.kind = TerrainStamp.Kind.FLATTEN
@@ -500,7 +505,13 @@ func _stamped(key: Vector4i) -> Array:
 	s.radius = STAMP_RADIUS
 	s.edge = 150.0
 	r.stamps.append(s)
-	return [WorldTerrain.new(r), WorldTerrain.new(WorldRecipe.from_seed(seed)), s]
+	return [WorldTerrain.new(r), WorldTerrain.new(_todays(seed)), s]
+
+## The world of `seed` alone, on today's ground (no plan).
+static func _todays(seed: int) -> WorldRecipe:
+	var r := WorldRecipe.from_seed(seed)
+	r.planned = false
+	return r
 
 ## The finest keys within `reach` chunks of `key` on its face.
 static func _round(key: Vector4i, reach: int) -> Array[Vector4i]:
