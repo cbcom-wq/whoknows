@@ -435,6 +435,9 @@ func test_a_rebuild_while_landed_keeps_the_ramp_down():
 	await _scene()
 	await _over_flat_ground(0.02)
 	_ship.landing.restore_landed()
+	# It may have set down by itself over the flat ground, its ramp still
+	# swinging (WADIS's planned land): restored, it finishes on the next tick.
+	await wait_physics_frames(1)
 	var before := _ramp()
 	assert_true(before.is_down())
 	_ship._rebuild_everything()
