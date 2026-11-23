@@ -92,6 +92,9 @@ var _lost := false
 ## launched with --new-game resumes the save it lost back to rather than
 ## setting it aside again.
 const BACK_TO_SAVE := &"back_to_save"
+## Set by the dev reset (F9) before its reload: the new game begins over Wadoo's
+## oasis rather than in space at the entry (the owner's request, 2026-11-22).
+const START_AT_WADOO := &"start_at_wadoo"
 
 var _reticle: Reticle
 var _interact_prompt := ""
@@ -148,6 +151,9 @@ var hop_index := -1
 ## moon, so you are near it.
 const HOP_OFF := 3000.0
 const HOP_INSIDE := 200.0
+## A new game starts this far over the oasis's floor (Wadoo), m: near enough to
+## see the village, and clear of its walls and palms.
+const WADOO_START_OFF := 150.0
 ## A save from another world generator brings every ship along, lined up this
 ## far apart beside the starter (many ships spec §6.3).
 const RESTART_ROW := 300.0
@@ -850,6 +856,11 @@ func _wire_universe(saved: Dictionary) -> void:
 			_restore_you(saved.get("avatar", {}), false)
 	_stream.start(_universe, start)
 	_wire_star_system()
+	# Only the dev reset asks for it (START_AT_WADOO); a launch keeps the entry.
+	var at_oasis := bool(get_tree().get_meta(START_AT_WADOO, false))
+	get_tree().remove_meta(START_AT_WADOO)
+	if at_oasis and not resumed:
+		_start_by_wadoo()
 	if same_world:
 		places.from_dict(saved.get("places", {}))
 	_wire_salvage(saved if same_world else {}, _same_generator(saved, "salvage"))
@@ -1707,6 +1718,7 @@ func _ask_reset() -> void:
 			_saved_tag.say("F9 AGAIN: NEW GAME", RESET_WINDOW)
 		return
 	new_game()
+	get_tree().set_meta(START_AT_WADOO, true)
 	get_tree().reload_current_scene.call_deferred()
 
 ## Starts over, as a launch with `-- --new-game` would: the save is set aside
@@ -1743,7 +1755,26 @@ func hop(step: int) -> bool:
 	hop_index = posmod(hop_index + step, system.bodies.size())
 	var b := system.bodies[hop_index]
 	var out := Vector3.BACK if b == system.star else system.star.point.minus(b.point).normalized()
-	var at := b.point.plus(out * (b.radius + hop_off(b)))
+	_put_hull(b.point.plus(out * (b.radius + hop_off(b))), out)
+	return true
+
+## A new game begins over Wadoo's oasis (the owner's request): the ship at rest
+## WADOO_START_OFF over the oasis's floor, nose down at it, as hop() puts it over
+## a body. Left alone when the system has no oasis, so the start stays the entry.
+func _start_by_wadoo() -> void:
+	var place := places.design(WadooSource.PLACE) if places != null else null
+	if place == null:
+		return
+	var body := system.body(place.body_id)
+	if body == null or body.recipe == null:
+		return
+	var floor_point := PlaceField.ground_point(place, body, star_system.whereabouts.terrain_of(body))
+	var out := place.dir()
+	_put_hull(floor_point.plus(out * WADOO_START_OFF), out)
+
+## Puts the ship's hull at rest at `at` (universe), nose down along `-out`, and
+## lets the origin, rocks, worlds and air follow at once, as at the start.
+func _put_hull(at: UniversePoint, out: Vector3) -> void:
 	var hull := aboard.exterior
 	hull.linear_velocity = Vector3.ZERO
 	hull.angular_velocity = Vector3.ZERO
@@ -1756,7 +1787,6 @@ func hop(step: int) -> bool:
 	star_system.whereabouts.look()
 	_stream.update(0.0, true)
 	air_mood.snap()
-	return true
 
 func _process(_delta: float) -> void:
 	if not _universe_readout.visible or _universe.focus == null:
