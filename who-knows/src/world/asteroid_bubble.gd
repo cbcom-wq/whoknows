@@ -128,6 +128,9 @@ func _near_paths() -> Dictionary:
 			# Big rocks are fixed; up close AsteroidDetails makes them solid.
 			if tier == AsteroidRecipe.Tier.GIANT:
 				continue
+			# No rock of this tier loaded anywhere: none is near any path.
+			if not stream.rocks_loaded(tier):
+				continue
 			var grow := reach + AsteroidRecipe.BOUND * AsteroidRecipe.D_MAX[tier] * AsteroidRecipe.STRETCH_MAX
 			var box := AABB(a, Vector3.ZERO).expand(b).grow(grow)
 			var cells := stream.cells_in(tier, box)
