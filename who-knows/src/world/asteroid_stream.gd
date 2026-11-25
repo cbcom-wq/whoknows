@@ -72,6 +72,9 @@ var _pictures: Node3D
 var _started := false
 var _start_point: UniversePoint
 var _cells: Array[Dictionary] = [{}, {}, {}]
+## Per tier: how many loaded cells hold any rock. Far from every belt and ring
+## (on a world, say) all are empty, and the near scans skip their tier.
+var _rock_cells: Array[int] = [0, 0, 0]
 var _wanted: Array[Dictionary] = [{}, {}, {}]
 var _blocks: Array[Dictionary] = [{}, {}, {}]
 var _block_cells: Array[Dictionary] = [{}, {}, {}]
@@ -283,6 +286,11 @@ func loaded_rocks(tier: int, cell: Vector3i) -> Array[AsteroidRock]:
 
 func loaded_count(tier: int) -> int:
 	return _cells[tier].size()
+
+## True when any loaded cell of `tier` holds a rock. When none does, nothing
+## of that tier can be near: AsteroidDetails and AsteroidBubble skip it.
+func rocks_loaded(tier: int) -> bool:
+	return _rock_cells[tier] > 0
 
 ## The loaded cells of `tier` overlapping an engine-space box.
 func cells_in(tier: int, box: AABB) -> Array[Vector3i]:
@@ -535,7 +543,10 @@ func _collect(focus: UniversePoint, all_now: bool) -> void:
 		cell.rocks = job.rocks
 		cell.packed = job.packed
 		cell.ids = job.ids
+		_forget_rocks(job.tier, job.cell)
 		_cells[job.tier][job.cell] = cell
+		if not cell.rocks.is_empty():
+			_rock_cells[job.tier] += 1
 		var b := block_of(job.cell)
 		if not _block_cells[job.tier].has(b):
 			_block_cells[job.tier][b] = {}
@@ -549,12 +560,19 @@ func _collect(focus: UniversePoint, all_now: bool) -> void:
 				late_by_tier[job.tier] += 1
 
 func _unload(tier: int, c: Vector3i) -> void:
+	_forget_rocks(tier, c)
 	_cells[tier].erase(c)
 	var b := block_of(c)
 	if _block_cells[tier].has(b):
 		_block_cells[tier][b].erase(c)
 	_dirty[tier][b] = true
 	bubble.cell_unloaded(tier, c)
+
+## Takes a loaded cell's rocks off the count, before it is dropped or replaced.
+func _forget_rocks(tier: int, c: Vector3i) -> void:
+	var old: _Cell = _cells[tier].get(c)
+	if old != null and not old.rocks.is_empty():
+		_rock_cells[tier] -= 1
 
 func _rebuild_dirty(focus: UniversePoint, all_now: bool) -> void:
 	var order := []

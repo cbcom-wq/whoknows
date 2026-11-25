@@ -77,9 +77,10 @@ func finish() -> void:
 ## Big rocks within FAR of an anchor: id -> [rock, distance to its bounds].
 func _near() -> Dictionary:
 	var out := {}
-	if stream.universe == null:
-		return out
 	var tier := AsteroidRecipe.Tier.GIANT
+	# No big rock loaded anywhere (on a world far from every belt): none is near.
+	if stream.universe == null or not stream.rocks_loaded(tier):
+		return out
 	var widest := AsteroidRecipe.BOUND * AsteroidRecipe.D_MAX[tier] * AsteroidRecipe.STRETCH_MAX
 	for node in stream.get_tree().get_nodes_in_group(AsteroidStream.SPACE_ANCHOR):
 		var anchor := node as Node3D
@@ -88,8 +89,11 @@ func _near() -> Dictionary:
 		var at := anchor.global_position
 		var box := AABB(at, Vector3.ZERO).grow(FAR + widest)
 		for cell in stream.cells_in(tier, box):
+			var rocks := stream.loaded_rocks(tier, cell)
+			if rocks.is_empty():
+				continue
 			var corner := stream.cell_origin(tier, cell)
-			for rock in stream.loaded_rocks(tier, cell):
+			for rock in rocks:
 				var d := (corner + rock.local).distance_to(at) - rock.radius
 				var id := rock.id()
 				if d < FAR and (not out.has(id) or d < float(out[id][1])):

@@ -137,3 +137,53 @@ func test_travelling_never_asks_for_a_cell_too_late():
 		_stream.finish_jobs()
 		_stream.update(0.0)
 	assert_eq(_stream.late_by_tier, [0, 0, 0] as Array[int], "every cell was asked for before it could be seen")
+
+## Every loaded cell of `stream`'s `tier`, by hand: does any hold a rock?
+static func _any_loaded_rock(stream: AsteroidStream, tier: int) -> bool:
+	var cells: Dictionary = (stream.get("_cells") as Array)[tier]
+	for c: Vector3i in cells:
+		if not stream.loaded_rocks(tier, c).is_empty():
+			return true
+	return false
+
+func test_rocks_loaded_says_whether_any_loaded_cell_holds_a_rock():
+	for tier in AsteroidRecipe.TIERS:
+		assert_eq(_stream.rocks_loaded(tier), _any_loaded_rock(_stream, tier), "tier %d at the start" % tier)
+	assert_true(_stream.rocks_loaded(T.GIANT), "you start by a big rock")
+	# Far off, past every tier's UNLOAD: what was loaded is gone, and the count with it.
+	_focus.global_position += Vector3(200000.0, 0, 0)
+	_universe.check()
+	_stream.update(0.0, true)
+	for tier in AsteroidRecipe.TIERS:
+		assert_eq(_stream.rocks_loaded(tier), _any_loaded_rock(_stream, tier), "tier %d after moving on" % tier)
+	_focus.global_position -= Vector3(200000.0, 0, 0)
+	_universe.check()
+	_stream.update(0.0, true)
+	for tier in AsteroidRecipe.TIERS:
+		assert_eq(_stream.rocks_loaded(tier), _any_loaded_rock(_stream, tier), "tier %d back at the start" % tier)
+
+## On WADIS (p3 of system 1337) there is no belt near: the cells round you load,
+## every one empty, so nothing has rocks to look through (the owner's question,
+## 2026-11-23: the rock scans cost the world ~0.5 ms a frame for nothing).
+func test_on_a_world_far_from_any_belt_no_rocks_are_loaded():
+	var system := SystemRecipe.from_seed(1337)
+	var wadis := system.body(&"p3")
+	var at := wadis.point.plus(Vector3.UP * (wadis.radius + 2.0))
+	var world := Node3D.new()
+	add_child_autofree(world)
+	var universe := Universe.new()
+	world.add_child(universe)
+	var focus := Node3D.new()
+	world.add_child(focus)
+	focus.add_to_group(Universe.EXTERIOR_SPACE)
+	universe.set_focus(focus)
+	universe.origin = at
+	var stream := AsteroidStream.new()
+	stream.seed = system.seed
+	stream.shapes = system.asteroid_shapes()
+	world.add_child(stream)
+	stream.start(universe, null)
+	for tier in AsteroidRecipe.TIERS:
+		assert_gt(stream.loaded_count(tier), 0, "tier %d loads round you" % tier)
+		assert_false(stream.rocks_loaded(tier), "tier %d: no rock anywhere loaded" % tier)
+		assert_false(_any_loaded_rock(stream, tier), "tier %d by hand" % tier)
